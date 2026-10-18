@@ -27,6 +27,12 @@ public sealed class UserSessionBinding(
 {
     private IHost? _dataHost;
 
+    /// <summary>A service started but never contacted (a host that died before its window,
+    /// a start nobody followed up) has no OwnerWatcher yet - that lives in the data host. Bound
+    /// the wait so it does not sit as a SYSTEM process forever; same limit as the data host's
+    /// ownerless idle (OwnerWatcher.OwnerlessIdleLimit).</summary>
+    private static readonly TimeSpan UnboundWaitLimit = TimeSpan.FromMinutes(5);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         string pipeName = PipeServer.ResolvePipeName();
@@ -34,10 +40,19 @@ public sealed class UserSessionBinding(
         byte[]? firstRequest;
         try
         {
+            using var waitLimit = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            waitLimit.CancelAfter(UnboundWaitLimit);
             while (true)
             {
                 firstConnection = WindowsServiceMode.CreatePipe(pipeName);
-                await firstConnection.WaitForConnectionAsync(stoppingToken);
+                try { await firstConnection.WaitForConnectionAsync(waitLimit.Token); }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    logger.LogInformation("No program connected for {Minutes:N0} minutes; stopping", UnboundWaitLimit.TotalMinutes);
+                    firstConnection.Dispose();
+                    serviceLifetime.StopApplication();
+                    return;
+                }
 
                 // The request must be READ before the client can be impersonated: Windows refuses
                 // ImpersonateNamedPipeClient until data has arrived on the pipe (error 1368).

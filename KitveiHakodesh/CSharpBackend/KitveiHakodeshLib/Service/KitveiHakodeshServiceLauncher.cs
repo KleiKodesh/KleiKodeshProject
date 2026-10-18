@@ -5,6 +5,7 @@ using System.IO;
 using System.ServiceProcess;
 using System.Threading;
 using System.Threading.Tasks;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodeshLib.Service
 {
@@ -12,10 +13,12 @@ namespace KitveiHakodeshLib.Service
     /// Brings the KitveiHakodesh service up when no instance is listening on the pipe - and,
     /// for the installed product, installs or repairs it when that is what stands in the way.
     ///
-    /// The service is a hard dependency of every hosted process. In order:
-    ///   1. Listening already: nothing to do.
-    ///   2. Registered with Windows (KitveiHakodeshSvc): start it (no prompt - starting is granted
-    ///      to every user).
+    /// The service is a hard dependency of every hosted process. The installed version always
+    /// wins: no console copy may serve while the product's service is registered. In order:
+    ///   1. Registered with Windows (KitveiHakodeshSvc) and not running: start it (no prompt -
+    ///      starting is granted to every user), even when a console copy is listening - the
+    ///      service ends that copy as it comes up. Running or coming up: wait for its pipe.
+    ///   2. Not registered, listening already (a console copy, dev): nothing to do.
     ///   3. Not started, and the product's service exe is installed
     ///      (%LocalAppData%\KleiKodesh\KitveiHakodeshService): install / repair it - its
     ///      <c>--install</c> run elevated (one UAC prompt) re-registers it, enabled - then start
@@ -25,11 +28,13 @@ namespace KitveiHakodeshLib.Service
     ///   5. Neither (a dev checkout, a portable copy): spawn the exe as a console process tied to
     ///      this one (KHS_OWNER_PID), exactly as the dev server does. No prompt ever.
     ///
-    /// The UAC prompt is never raised unasked: data requests and the startup warm-up call with
-    /// allowElevation false and only start or spawn; the page's banner says the service needs
-    /// installing, and its button (host action retryService ->
-    /// <see cref="AllowAnotherRepairAttempt"/>) runs the elevated step. Never two prompts at
-    /// once: one gate in this process, a machine-wide mutex across processes.
+    /// The UAC prompt is raised unasked ONCE per user: the window's warm-up on the first launch
+    /// that finds the product installed but unregistered (AppSettingsRegistry
+    /// ServiceInstallPromptShown). Data requests only start or spawn (allowElevation false).
+    /// After that the user asks: the settings page's "install the service" row
+    /// (<see cref="InstallServiceAsync"/>) or the banner's "try again" (host action retryService
+    /// -> <see cref="AllowAnotherRepairAttempt"/>). Never two prompts at once: one gate in this
+    /// process, a machine-wide mutex across processes.
     /// The failure carries a <see cref="KitveiHakodeshServiceUnavailableReason"/> so the page can
     /// say what is wrong.
     /// </summary>
@@ -51,6 +56,8 @@ namespace KitveiHakodeshLib.Service
         private static DateTime _lastStartFailureUtc = DateTime.MinValue;
         private static bool _elevationAttempted;
         private static KitveiHakodeshServiceUnavailableReason? _lastElevationFailure;
+        // The user pressed the banner's "try again": the next elevation ignores the one-prompt flag.
+        private static bool _userAskedForPrompt;
 
         private readonly string _pipeName;
 
@@ -65,6 +72,7 @@ namespace KitveiHakodeshLib.Service
             _lastStartFailureUtc = DateTime.MinValue;
             _elevationAttempted = false;
             _lastElevationFailure = null;
+            _userAskedForPrompt = true;
         }
 
         /// <summary>
@@ -92,7 +100,14 @@ namespace KitveiHakodeshLib.Service
         /// </summary>
         public async Task EnsureRunningAsync(CancellationToken cancellationToken, bool allowElevation = true)
         {
-            if (IsListening()) return;
+            // Listening is enough only when the listener can be the installed service - or there
+            // is none to prefer. A console copy serving beside a stopped registration is replaced.
+            bool registered = false;
+            if (IsListening())
+            {
+                registered = _pipeName == KitveiHakodeshServicePipeChannel.DefaultPipeName && IsRegistered();
+                if (!registered || IsInstalledServiceRunning()) return;
+            }
 
             // A start that just failed is not retried by every request queued behind it, each
             // waiting the full startup timeout: they fail fast for a few seconds instead.
@@ -109,33 +124,51 @@ namespace KitveiHakodeshLib.Service
             {
                 await machineGate.Acquired.ConfigureAwait(false);
 
-                // Another caller (here or in another process) may have brought it up meanwhile.
-                if (IsListening()) return;
-
                 // A private pipe name means a spawner asked for an instance of its own.
                 if (_pipeName != KitveiHakodeshServicePipeChannel.DefaultPipeName)
                 {
+                    if (IsListening()) return;
                     await SpawnAsync(FindExecutable(), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
+                registered = IsRegistered();
+                if (registered)
+                {
+                    // The installed version first, whatever is listening: SCM status, not the
+                    // pipe, says it is up (a console copy's pipe would satisfy a pipe check), then
+                    // a pipe. While it ends the copy it replaces (up to ~17 s) that may still be the
+                    // copy's pipe: a request caught mid-swap fails once and the page retries it.
+                    if (await StartRegisteredAndWaitRunningAsync(cancellationToken).ConfigureAwait(false)
+                        && await WaitForPipeAsync(cancellationToken).ConfigureAwait(false)) return;
+                    // Still coming up (a long shutdown of the copy it replaces): never "repair" a
+                    // service that is on its way - that would stop, delete and recreate it.
+                    if (IsInstalledServiceRunning())
+                    {
+                        if (await WaitForPipeAsync(cancellationToken).ConfigureAwait(false)) return;
+                        throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
+                            "The KitveiHakodesh service is running but did not open its pipe in time.");
+                    }
+                }
+                // Another caller (here or in another process) may have brought a copy up meanwhile.
+                else if (IsListening()) return;
+
                 string installedExe = InstalledExecutable();
-                bool registered = IsRegistered();
-
-                if (registered && await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
-
                 if (installedExe != null)
                 {
                     // Registered but will not start (disabled, a broken or moved registration),
                     // or never registered: install / repair it from the installed exe, then start
-                    // it. Only when asked (the banner button): a data request or the startup
-                    // warm-up must never raise a UAC prompt by itself.
-                    if (allowElevation)
+                    // it. Unasked only once per user (the first launch); afterwards only when the
+                    // user asks - the banner button or the settings row. A data request never.
+                    if (allowElevation && (_userAskedForPrompt || !AppSettingsRegistry.GetServiceInstallPromptShown()))
                     {
+                        // Marked BEFORE the prompt: a crash or kill mid-prompt must not ask forever.
+                        AppSettingsRegistry.SetServiceInstallPromptShown();
                         try
                         {
                             await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
-                            if (await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
+                            if (await StartRegisteredAndWaitRunningAsync(cancellationToken).ConfigureAwait(false)
+                                && await WaitForPipeAsync(cancellationToken).ConfigureAwait(false)) return;
                         }
                         catch (KitveiHakodeshServiceUnavailableException) { /* declined or failed: fall back below */ }
                     }
@@ -143,6 +176,7 @@ namespace KitveiHakodeshLib.Service
                     // No service: a console copy of the installed exe serves this user meanwhile,
                     // so the app keeps working (without the file index, which needs the service's
                     // MFT access). Once the service runs it ends that copy and takes over.
+                    if (IsListening()) return;
                     await SpawnAsync(installedExe, cancellationToken).ConfigureAwait(false);
                     return;
                 }
@@ -156,6 +190,7 @@ namespace KitveiHakodeshLib.Service
                 if (executable == null)
                     throw Unavailable(KitveiHakodeshServiceUnavailableReason.NotInstalled,
                         "The KitveiHakodesh service is not installed and " + ExecutableName + " was not found.");
+                if (IsListening()) return;
                 await SpawnAsync(executable, cancellationToken).ConfigureAwait(false);
             }
             // Every failed start is remembered, so queued data requests fail fast instead of each
@@ -168,6 +203,9 @@ namespace KitveiHakodeshLib.Service
             }
             finally
             {
+                // The banner's "try again" grants one prompt; it must not outlive this attempt
+                // (a later unasked warm-up in this process would otherwise prompt again).
+                _userAskedForPrompt = false;
                 Gate.Release();
             }
             }
@@ -200,8 +238,8 @@ namespace KitveiHakodeshLib.Service
             try
             {
                 await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
-                // Not TryStartRegisteredAsync: that is satisfied by ANY listener on the pipe, and
-                // here the console copy is one. Start the service and wait for the SCM to say so.
+                // SCM status, not the pipe: a pipe check is satisfied by ANY listener, and here
+                // the console copy is one. Start the service and wait for the SCM to say so.
                 if (!await StartRegisteredAndWaitRunningAsync(cancellationToken).ConfigureAwait(false))
                     throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
                         "The KitveiHakodesh service was installed but will not start.");
@@ -209,6 +247,14 @@ namespace KitveiHakodeshLib.Service
             finally { Gate.Release(); }
         }
 
+        /// <summary>
+        /// Starts the registered service and waits for the SCM to report it Running. The status
+        /// is re-read while waiting, and a service that becomes Stopped meanwhile is started:
+        /// right after it stops itself (last owner gone, database-path change) Windows reports
+        /// StopPending for a moment, and a single read would wait out the whole timeout and
+        /// then "repair" a perfectly good registration. False only when Windows refuses the
+        /// start, or it never reaches Running in time.
+        /// </summary>
         private static async Task<bool> StartRegisteredAndWaitRunningAsync(CancellationToken cancellationToken)
         {
             DateTime deadline = DateTime.UtcNow + StartupTimeout;
@@ -216,11 +262,12 @@ namespace KitveiHakodeshLib.Service
             {
                 using (var controller = new ServiceController(InstalledServiceName))
                 {
-                    if (controller.Status == ServiceControllerStatus.Stopped) controller.Start();
                     while (DateTime.UtcNow < deadline)
                     {
                         controller.Refresh();
-                        if (controller.Status == ServiceControllerStatus.Running) return true;
+                        ServiceControllerStatus status = controller.Status;
+                        if (status == ServiceControllerStatus.Running) return true;
+                        if (status == ServiceControllerStatus.Stopped) controller.Start();
                         await Task.Delay(150, cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -254,45 +301,6 @@ namespace KitveiHakodeshLib.Service
         }
 
         /// <summary>
-        /// Starts the registered service and waits for its pipe. False only when Windows refuses
-        /// the start, or it is running and never opens the pipe - the caller decides whether to
-        /// repair.
-        ///
-        /// The status is re-read while waiting, and a stopped service is started again: right
-        /// after the service restarts itself (database-path change) Windows can still report it
-        /// running while it is on its way down, and a single read would wait out the whole timeout
-        /// and then "repair" a perfectly good registration.
-        /// </summary>
-        private async Task<bool> TryStartRegisteredAsync(CancellationToken cancellationToken)
-        {
-            DateTime deadline = DateTime.UtcNow + StartupTimeout;
-            try
-            {
-                using (var controller = new ServiceController(InstalledServiceName))
-                {
-                    while (DateTime.UtcNow < deadline)
-                    {
-                        if (IsListening()) return true;
-
-                        controller.Refresh();
-                        ServiceControllerStatus status = controller.Status;
-                        if (status == ServiceControllerStatus.Stopped)
-                            controller.Start();
-                        await Task.Delay(150, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-            }
-            catch (Exception ex) when (
-                ex is InvalidOperationException ||
-                ex is System.ServiceProcess.TimeoutException ||
-                ex is Win32Exception)
-            {
-                return false;
-            }
-            return IsListening();
-        }
-
-        /// <summary>
         /// Runs <c>KitveiHakodeshService.exe --install</c> elevated: registers (or re-registers)
         /// the service. One UAC prompt, at most once per process until the user asks to retry.
         /// </summary>
@@ -302,6 +310,7 @@ namespace KitveiHakodeshLib.Service
                 throw Unavailable(_lastElevationFailure ?? KitveiHakodeshServiceUnavailableReason.StartFailed,
                     "The KitveiHakodesh service could not be installed or repaired in this session.");
             _elevationAttempted = true;
+            _userAskedForPrompt = false;
 
             var startInfo = new ProcessStartInfo(installedExe, "--install")
             {

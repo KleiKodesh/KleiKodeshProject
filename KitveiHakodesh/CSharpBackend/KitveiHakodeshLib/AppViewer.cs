@@ -564,10 +564,14 @@ namespace KitveiHakodeshLib
                 new KitveiHakodeshLib.Service.KitveiHakodeshServiceSelfStartingChannel(
                     new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
                     serviceLauncher));
-            // Start it now rather than on the first data call, so the page's first requests
-            // find it listening instead of paying the start on the hot path. Never with a UAC
-            // prompt: one popping up unasked while the window opens lands behind Word; the
-            // install / repair prompt waits for a real request or the banner's "try again".
+            // The first thing this window does: bring the service up, so the page's first requests
+            // find it listening instead of paying the start on the hot path. Every window, every
+            // time - the service stops itself when nobody uses it, so "already running" is never
+            // assumed; a second Word pane finds it listening and returns at once. This is also the
+            // one place that may raise the "install the service?" UAC prompt unasked, on the first
+            // launch that finds the product installed but unregistered (the launcher's per-user
+            // flag); it runs here, after the window exists, so the prompt has an owner window
+            // instead of opening behind as a flashing taskbar button.
             // A console instance of the service (dev, portable) lives as long as some program uses
             // it: this window counts until it closes (Service/KitveiHakodeshServiceOwnership). The
             // plain pipe channel, not the self-starting one: a heartbeat must not revive a
@@ -578,7 +582,7 @@ namespace KitveiHakodeshLib
             {
                 try
                 {
-                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false);
+                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None);
                     KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.RegisterNow();
                 }
                 catch { /* the page's first request reports it */ }

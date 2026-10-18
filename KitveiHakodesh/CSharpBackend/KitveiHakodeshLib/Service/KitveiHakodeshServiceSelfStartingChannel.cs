@@ -30,8 +30,9 @@ namespace KitveiHakodeshLib.Service
             }
             catch (KitveiHakodeshServiceUnavailableException)
             {
-                // Never with an admin prompt: a data request only STARTS the service. Installing or
-                // repairing it asks the user first - the page's banner, then host action retryService.
+                // Never with an admin prompt: a data request only STARTS the service. The one
+                // unasked prompt is the window's warm-up (AppViewer); after that the user asks -
+                // the settings row, or the banner's "try again" (host action retryService).
                 await _launcher.EnsureRunningAsync(cancellationToken, allowElevation: false).ConfigureAwait(false);
                 return await _inner.CallAsync(requestEnvelope, cancellationToken).ConfigureAwait(false);
             }
@@ -45,8 +46,7 @@ namespace KitveiHakodeshLib.Service
             }
             catch (KitveiHakodeshServiceUnavailableException)
             {
-                // Never with an admin prompt: a data request only STARTS the service. Installing or
-                // repairing it asks the user first - the page's banner, then host action retryService.
+                // Never with an admin prompt - see CallAsync.
                 await _launcher.EnsureRunningAsync(cancellationToken, allowElevation: false).ConfigureAwait(false);
                 return await _inner.OpenStreamAsync(requestEnvelope, cancellationToken).ConfigureAwait(false);
             }

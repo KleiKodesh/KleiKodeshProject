@@ -17,7 +17,8 @@ namespace KitveiHakodeshLib.Service
     ///   • when the last window closes: <c>releaseOwner</c>, and the service exits at once if no
     ///     other program is registered. A program that crashes never says goodbye; the service
     ///     notices on its own poll.
-    /// The installed Windows service accepts and ignores both ops.
+    /// The installed Windows service honours both ops exactly as a console copy does (the
+    /// service's OwnerWatcher): it stops itself once no program owns it.
     ///
     /// Process-wide and reference-counted: the Word add-in can have several task panes.
     /// Best effort throughout - ownership never blocks or fails the app.
