@@ -153,6 +153,7 @@ export async function pickLocalFile(
       }>('openLocalFile', { path: filePath })
       if (!r?.handle) {
         if (r?.cancelled) return null // user pressed ביטול — tab already reset, stay quiet
+        console.error('[bridge] openLocalFile returned no handle', { filePath, reply: r })
         if (!isDirect)
           emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || 'פתיחת הקובץ נכשלה' })
         return null
@@ -185,7 +186,8 @@ export async function pickLocalFile(
       // Converted: the caller finalizes the placeholder from this reply
       // (finalizeConvertingFromReply), mirroring the hosted cached-conversion path.
       return { url, fileName: servedName, filePath }
-    } catch {
+    } catch (err) {
+      console.error('[bridge] pickLocalFile failed', err)
       return null
     } finally {
       _pendingPickOpenInNewTab = null
@@ -235,7 +237,10 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
         'openLocalFile',
         { path: filePath },
       )
-      if (!r?.handle) return null
+      if (!r?.handle) {
+        console.error('[bridge] restoreLocalFile: openLocalFile returned no handle', { filePath, reply: r })
+        return null
+      }
       // The service reports what it will actually serve: a converted Word doc comes back as
       // *.pdf (Word) or *.html (Office-free fallback) — the viewer route must follow suit.
       const servedExt = r.fileName?.toLowerCase().endsWith('.html') ? '.html' : '.pdf'
@@ -248,12 +253,16 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
         ? `/khs-file/${r.folderHandle}/${encodeURIComponent(r.fileName ?? '')}`
         : `/khs-file/${r.handle}`
       return { url, kind }
-    } catch {
+    } catch (err) {
+      console.error('[bridge] restoreLocalFile failed', { filePath }, err)
       return null
     }
   }
   const res = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath })
-  if (res.error || !res.url) return null
+  if (res.error || !res.url) {
+    console.error('[bridge] restoreLocalFile failed in the host', { filePath, reply: res })
+    return null
+  }
   return { url: res.url }
 }
 
@@ -371,8 +380,10 @@ export async function restoreHbPdf(
       triggerHbDownload(bookId, bookTitle, '', tabId, localFolder, navigator.onLine)
       return { redownload: true }
     }
+    console.error('[hb-download] restoreHbPdf: no PDF and no redownload', { bookId, reply: r })
     return null
-  } catch {
+  } catch (err) {
+    console.error('[hb-download] restoreHbPdf failed', { bookId }, err)
     return null
   }
 }
