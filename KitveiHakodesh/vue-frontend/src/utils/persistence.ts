@@ -100,7 +100,6 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-lastread': null,
   'app-search-cache': null,
   'app-dict-cache': null,
-  'app-catalog-toc-cache': null,
   'app-frequent-folders': null,
 }
 
@@ -306,18 +305,6 @@ export function idbDictionaryCacheSet<T>(key: string, value: T): Promise<void> {
 }
 export function idbDictionaryCacheDelete(key: string): Promise<void> {
   return dbDelete('app-dict-cache', key)
-}
-
-// ── Catalog TOC search cache DB ───────────────────────────────────────────────
-
-export function idbCatalogTocCacheGet<T>(key: string): Promise<T | null> {
-  return dbGet<T>('app-catalog-toc-cache', key)
-}
-export function idbCatalogTocCacheSet<T>(key: string, value: T): Promise<void> {
-  return dbSet('app-catalog-toc-cache', key, value)
-}
-export function idbCatalogTocCacheDelete(key: string): Promise<void> {
-  return dbDelete('app-catalog-toc-cache', key)
 }
 
 // ── Tabs DB ───────────────────────────────────────────────────────────────────

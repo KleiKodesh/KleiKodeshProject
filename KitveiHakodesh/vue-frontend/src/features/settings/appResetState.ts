@@ -105,7 +105,6 @@ async function clearAllLocalStorage(): Promise<void> {
     dropRecentlyOpenedDb(),
     dropDatabase('app-search-cache'),
     dropDatabase('app-dict-cache'),
-    dropDatabase('app-catalog-toc-cache'),
     dropDatabase('app-frequent-folders'),
   ])
   await dropRemainingAppDatabases()
