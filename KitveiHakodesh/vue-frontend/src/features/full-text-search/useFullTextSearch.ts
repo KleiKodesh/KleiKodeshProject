@@ -8,7 +8,8 @@
  * previous search when a new one starts. Hits are NUMBERS ONLY (see FullTextSearchResult):
  * book id + TOC entry id, a snippet descriptor, and ids into the search's matched-term
  * table, which streams once per search (`newTerms` per frame) and is resolved here
- * (matchedTermsOf). Titles, TOC paths and snippet HTML are built per rendered row.
+ * (matchedTermsOf, from the term id of each snippet mark). Titles, TOC paths and snippet
+ * HTML are built per rendered row.
  */
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -19,6 +20,7 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
 import { bookTitleOf } from './fullTextSearchReferences'
 import { seedLineTexts } from './fullTextSearchSnippets'
+import { matchedTermIdsOf } from './fullTextSearchTypes'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -40,7 +42,7 @@ interface SearchStreamChunk {
   ready: boolean
   results: FullTextSearchResult[]
   /** Matched-term strings first seen in this frame, in id order — appended to the
-   *  search's term table, which the hits' `termIds` index into. */
+   *  search's term table, which the hits' mark term ids index into. */
   newTerms?: string[]
   /** Snippet line texts (line id -> text) for the search's first hits, riding on the frame
    *  (not on the hits): seeded into the snippet cache so the first screen paints without a
@@ -100,26 +102,26 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Results stream in catalog order since the FTS5 index; entries cached before that are
       // in line-id order (and from the old index), so they must not match.
       'catalog',
-      // Hits are numbers only (snippet descriptor, tocEntryId, termIds) since the on-demand
+      // Hits are numbers only (snippet descriptor, tocEntryId) since the on-demand
       // snippets/references. Entries cached in the earlier shapes (snippet HTML, or the
       // descriptor with per-hit strings) must not match — they are discarded by LRU
       // eviction, never migrated.
       'num',
-      // Marks became (start, length, termId) triples and termIds per-hit distinct ids
-      // (stride-2 entries would render wrong).
-      'mk3',
+      // Marks are (start, length, termId) triples and the hit's matched term ids are read
+      // off them (no per-hit termIds field any more; stride-2 entries would render wrong).
+      'mk3t',
     ]
       .filter(Boolean)
       .join('|')
   }
 
   const results = shallowRef<FullTextSearchResult[]>([])
-  /** The current result set's matched-term table (hit.termIds index into it). */
+  /** The current result set's matched-term table (the hits' mark term ids index into it). */
   let searchTerms: string[] = []
   /** The concrete index terms that matched a hit — what the book view highlights. */
   function matchedTermsOf(hit: FullTextSearchResult): string[] {
     const out: string[] = []
-    for (const id of hit.termIds ?? []) {
+    for (const id of matchedTermIdsOf(hit)) {
       const term = searchTerms[id]
       if (term !== undefined) out.push(term)
     }

@@ -253,7 +253,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 Score = window.Score,
                 WordDistance = window.WordDistance,
             };
-            built.SnippetLineIds.Add(hit.LineId);
+            built.SnippetLineIds = new[] { hit.LineId };
             CopySnippetDescriptor(built, in window, terms);
             return true;
         }
@@ -263,28 +263,28 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// of <see cref="FtsHit.SnippetLineIds"/> joined by single spaces, which the caller has
         /// already set. The page rebuilds the HTML from that text only for the rows it renders.
         /// Copied, not referenced: the engine's mark ranges view per-thread scratch that the
-        /// next locate overwrites. Reuses the hit's own lists, so this allocates nothing.
+        /// next locate overwrites. One exactly-sized array per hit.
         ///
         /// The engine's marks name their term by the query's own ordinal; here that becomes
-        /// the search-wide <see cref="FtsTermTable"/> id (the page's term table), and the
-        /// hit's <see cref="FtsHit.TermIds"/> are the distinct ids of ITS marks — the 1-3 terms
-        /// that actually occur in this line, never the query's whole expansion.
+        /// the search-wide <see cref="FtsTermTable"/> id (the page's term table) — so the
+        /// marks also say which 1-3 concrete terms occur in this line, and nothing else
+        /// has to.
         /// </summary>
         private static void CopySnippetDescriptor(FtsHit hit, in SnippetDescriptor window, FtsTermTable terms)
         {
             hit.SnippetStart = window.SnapStart;
             hit.SnippetEnd = window.SnapEnd;
-            hit.SnippetMarks.Clear();
-            hit.TermIds.Clear();
             var marks = window.MarkRanges;
-            for (int i = 0; i + 2 < marks.Count; i += SnippetDescriptor.MarkStride)
+            int tripleCount = marks.Count / SnippetDescriptor.MarkStride;
+            var copied = tripleCount == 0 ? Array.Empty<int>() : new int[tripleCount * SnippetDescriptor.MarkStride];
+            for (int t = 0; t < tripleCount; t++)
             {
-                int termId = terms.IdOf(window.MatchedTermAt(marks[i + 2]));
-                hit.SnippetMarks.Add(marks[i]);
-                hit.SnippetMarks.Add(marks[i + 1]);
-                hit.SnippetMarks.Add(termId);
-                if (!hit.TermIds.Contains(termId)) hit.TermIds.Add(termId);
+                int i = t * SnippetDescriptor.MarkStride;
+                copied[i] = marks[i];
+                copied[i + 1] = marks[i + 1];
+                copied[i + 2] = terms.IdOf(window.MatchedTermAt(marks[i + 2]));
             }
+            hit.SnippetMarks = copied;
             hit.SnippetFlags = (window.LeadingEllipsis ? FtsHit.SnippetFlagLeadingEllipsis : 0)
                              | (window.TrailingEllipsis ? FtsHit.SnippetFlagTrailingEllipsis : 0);
         }
@@ -351,10 +351,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 {
                     // The text the engine joined: previous + ' ' + line + ' ' + next, empty sides
                     // dropped — i.e. exactly these ids' texts joined by single spaces.
-                    hit.SnippetLineIds.Clear();
-                    hit.SnippetLineIds.AddRange(previousIds);
-                    hit.SnippetLineIds.Add(match.LineId);
-                    hit.SnippetLineIds.AddRange(nextIds);
+                    var lineIds = new int[previousIds.Count + 1 + nextIds.Count];
+                    previousIds.CopyTo(lineIds, 0);
+                    lineIds[previousIds.Count] = match.LineId;
+                    nextIds.CopyTo(lineIds, previousIds.Count + 1);
+                    hit.SnippetLineIds = lineIds;
                     CopySnippetDescriptor(hit, in extended, terms);
                 }
             });
