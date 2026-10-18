@@ -577,15 +577,6 @@ public sealed partial class SeforimDbCatalogIndex
         return false;
     }
 
-    /// <summary>
-    /// True when EVERY query token landed in the book's own title/TOC path or its author,
-    /// rather than only in the category path.
-    ///
-    /// The membership test MIRRORS <see cref="BuildQuery"/>: per token, satisfied when SOME
-    /// alternative is fully present, each word by its own form or any variant. Testing only the
-    /// canonical alternative demotes exactly the hits this key exists to promote — many
-    /// abbreviation keys are ambiguous, and some carry their self-alternative in a later slot.
-    /// </summary>
     /// <summary>The stored path minus its book-title head (and the " / " after it). A pre-v21
     /// segment has no title-length field; it splits at the first " / " instead, which is only
     /// wrong for a title that itself contains " / ", and only until the rebuild lands.</summary>
@@ -598,6 +589,15 @@ public sealed partial class SeforimDbCatalogIndex
         return titleLength >= 0 && cut <= fullTocPath.Length ? fullTocPath.Substring(cut) : fullTocPath;
     }
 
+    /// <summary>
+    /// True when EVERY query token landed in the book's own title/TOC path or its author,
+    /// rather than only in the category path.
+    ///
+    /// The membership test MIRRORS <see cref="BuildQuery"/>: per token, satisfied when SOME
+    /// alternative is fully present, each word by its own form or any variant. Testing only the
+    /// canonical alternative demotes exactly the hits this key exists to promote — many
+    /// abbreviation keys are ambiguous, and some carry their self-alternative in a later slot.
+    /// </summary>
     private static bool MatchesOnTitleOrAuthor(
         Document doc, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants)
     {
