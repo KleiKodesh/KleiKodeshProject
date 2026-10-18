@@ -7,7 +7,6 @@ using FtsLib.SeforimDb;
 using FtsLib.Snippets;
 // Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
 using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
-using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
@@ -81,19 +80,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         /// <summary>
         /// How many leading hits of a search get their snippet line texts sent along
-        /// (<see cref="FtsStreamChunk.LineTexts"/> / <see cref="FtsSearchResult.LineTexts"/>)
-        /// so the first screen renders without a round-trip. About a screenful or two; the
-        /// rest is fetched on demand by the page for the rows it renders.
+        /// (<see cref="SeforimDbFtsHitBatch.LineTexts"/>, then <see cref="FtsStreamChunk.LineTexts"/>
+        /// / <see cref="FtsSearchResult.LineTexts"/>) so the first screen renders without a
+        /// round-trip. About a screenful or two; the rest is fetched on demand by the page
+        /// for the rows it renders. The texts are the ones the batch fetched to snippet — the
+        /// matched lines' content and the neighbour lines a short window was extended over —
+        /// so seeding reads nothing.
         /// </summary>
         public const int SeedLineTextHitCount = 100;
-
-        private readonly SeforimDbQueries _queries;
-
-        /// <param name="queries">For the snippet line texts seeded onto the first frames.</param>
-        public SeforimDbFtsSearcher(SeforimDbQueries queries)
-        {
-            _queries = queries ?? throw new ArgumentNullException(nameof(queries));
-        }
 
         /// <summary>
         /// Runs a search and yields each finished batch of hits, in engine order, until the
@@ -111,7 +105,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// query order.</param>
         /// <param name="contextWords">Words of context requested per side of the match.</param>
         /// <param name="expandKetiv">Engine-side ketiv/qere expansion.</param>
-        public IEnumerable<List<FtsHit>> SearchInBatches(
+        public IEnumerable<SeforimDbFtsHitBatch> SearchInBatches(
             SeforimDbFtsEngine engine,
             string query,
             int maxWordDistance,
@@ -133,6 +127,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             Action<string>? stage = onStage == null ? null : s => { if (s != last) { last = s; onStage(s); } };
 
             int batchIndex = 0;
+            int seedLeft = SeedLineTextHitCount;
             var batch = new List<SearchResult>(FirstBatchSize);
 
             foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken,
@@ -142,17 +137,18 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 batch.Add(hit);
                 if (batch.Count < BatchSizeAt(batchIndex)) continue;
 
-                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, cancellationToken, stage);
+                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
                 batch.Clear();
                 batchIndex++;
-                if (built.Count > 0) yield return built;
+                seedLeft = Math.Max(0, seedLeft - built.Hits.Count);
+                if (built.Hits.Count > 0) yield return built;
                 stage?.Invoke("fetch");   // engine only reports its first fetch
             }
 
             if (batch.Count > 0)
             {
-                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, cancellationToken, stage);
-                if (built.Count > 0) yield return built;
+                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
+                if (built.Hits.Count > 0) yield return built;
             }
         }
 
@@ -162,14 +158,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// word-distance filter applied, short windows extended over neighbour lines. Book id
         /// and TOC entry id come with the engine match (the corpus reads them in the content
         /// fetch — <see cref="FtsDocumentPlacement"/>), so no query is needed to finish a hit.
+        /// The first <paramref name="seedLineTextHitCount"/> passing hits also get their
+        /// snippet line texts attached, from the content in hand.
         /// </summary>
-        private List<FtsHit> BuildBatch(
+        private SeforimDbFtsHitBatch BuildBatch(
             SeforimDbFtsEngine engine,
             IReadOnlyList<SearchResult> results,
             bool requireOrdered,
             int contextWords,
             int maxWordDistance,
             FtsTermTable terms,
+            int seedLineTextHitCount,
             CancellationToken cancellationToken,
             Action<string>? onStage = null)
         {
@@ -189,13 +188,37 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             });
 
             onStage?.Invoke("enrich");
-            ExtendShortWindowsWithNeighbourLines(engine, results, built, windowWords, requireOrdered,
-                                                 contextWords, terms, cancellationToken);
+            var neighbourTextsById = ExtendShortWindowsWithNeighbourLines(
+                engine, results, built, windowWords, requireOrdered, contextWords, terms, cancellationToken);
 
             var passing = new List<FtsHit>(results.Count);
-            foreach (var hit in built)
-                if (hit != null) passing.Add(hit);
-            return passing;
+            var lineTexts = new Dictionary<int, string>();
+            for (int i = 0; i < built.Length; i++)
+            {
+                if (built[i] is not { } hit) continue;
+                passing.Add(hit);
+                if (passing.Count <= seedLineTextHitCount)
+                    CollectSnippetLineTexts(hit, results[i].Content, neighbourTextsById, lineTexts);
+            }
+            return new SeforimDbFtsHitBatch(passing, lineTexts);
+        }
+
+        /// <summary>
+        /// Adds the texts of one hit's snippet lines to <paramref name="lineTexts"/>: the matched
+        /// line's own content, and any neighbour line the window was extended over, from the
+        /// texts that extension already had in hand. An id neither has (cannot happen for a
+        /// descriptor built here) is left out; the page fetches what it lacks on demand.
+        /// </summary>
+        private static void CollectSnippetLineTexts(
+            FtsHit hit, string matchedLineContent,
+            Dictionary<int, string>? neighbourTextsById, Dictionary<int, string> lineTexts)
+        {
+            foreach (int id in hit.SnippetLineIds)
+            {
+                if (lineTexts.ContainsKey(id)) continue;
+                if (id == hit.LineId) lineTexts[id] = matchedLineContent;
+                else if (neighbourTextsById != null && neighbourTextsById.TryGetValue(id, out var text)) lineTexts[id] = text;
+            }
         }
 
         /// <summary>
@@ -283,7 +306,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// spaces between — so a descriptor's offsets land on the same characters the page
         /// re-joins (JoinWithNeighbourLines).
         /// </summary>
-        private static void ExtendShortWindowsWithNeighbourLines(
+        /// <returns>The neighbour lines' texts by line id — what seeding the first hits' line
+        /// texts draws on — or null when the batch had nothing short.</returns>
+        private static Dictionary<int, string>? ExtendShortWindowsWithNeighbourLines(
             SeforimDbFtsEngine engine,
             IReadOnlyList<SearchResult> results,
             FtsHit?[] built,
@@ -300,10 +325,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 if (results[i].Placement.BookId == 0) continue;   // no placement: nothing to extend over
                 (shortIndexes ??= new List<int>()).Add(i);
             }
-            if (shortIndexes == null) return;
+            if (shortIndexes == null) return null;
 
             var linesByPosition = CollectNeighbourLines(engine, results, shortIndexes);
-            if (linesByPosition.Count == 0) return;
+            if (linesByPosition.Count == 0) return null;
             var index = engine.Index;
 
             Parallel.ForEach(shortIndexes, new ParallelOptions { CancellationToken = cancellationToken }, i =>
@@ -333,6 +358,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     CopySnippetDescriptor(hit, in extended, terms);
                 }
             });
+
+            var textsById = new Dictionary<int, string>(linesByPosition.Count);
+            foreach (var line in linesByPosition.Values) textsById[line.Id] = line.Text;
+            return textsById;
         }
 
         /// <summary>
@@ -387,29 +416,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 joined = joined == null ? line.Text : joined + " " + line.Text;
             }
             return joined ?? string.Empty;
-        }
-
-        /// <summary>
-        /// The texts of the snippet lines of the first <paramref name="count"/> hits, keyed
-        /// by line id — what a transport attaches to the frame carrying those hits. One
-        /// batched query; an id the DB no longer has is simply absent.
-        /// </summary>
-        public Dictionary<int, string> FetchSnippetLineTexts(IReadOnlyList<FtsHit> hits, int count)
-        {
-            var texts = new Dictionary<int, string>();
-            if (hits == null || hits.Count == 0 || count <= 0) return texts;
-            var ids = new List<int>();
-            var seen = new HashSet<int>();
-            int n = Math.Min(count, hits.Count);
-            for (int i = 0; i < n; i++)
-            {
-                var hit = hits[i];
-                if (hit.SnippetLineIds.Count == 0) { if (seen.Add(hit.LineId)) ids.Add(hit.LineId); continue; }
-                foreach (int id in hit.SnippetLineIds) if (seen.Add(id)) ids.Add(id);
-            }
-            foreach (var row in _queries.GetLineContents(ids))
-                texts[row.Id] = row.Content ?? string.Empty;
-            return texts;
         }
     }
 }

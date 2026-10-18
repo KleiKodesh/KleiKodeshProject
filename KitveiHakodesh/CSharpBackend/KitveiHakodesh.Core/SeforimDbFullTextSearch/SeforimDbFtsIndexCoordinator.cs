@@ -69,16 +69,12 @@ public sealed class SeforimDbFtsIndexCoordinator
         _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
     private SeforimDbFtsIndexer? _indexer;
 
-    /// <summary>Snippeting, the word-distance filter, short-snippet embellishment and the
-    /// book/TOC enrichment every hit carries — all Core's, and the same code the hosted app
-    /// runs, so one query cannot come back ranked or rendered differently in the two apps.
-    /// Enrichment needs corpus queries, hence the SeforimDbQueries.</summary>
-    private SeforimDbFtsSearcher Searcher =>
-        _searcher ??= new SeforimDbFtsSearcher(_searcherQueries = new SeforimDbQueries(_dbPath));
+    /// <summary>Snippeting, the word-distance filter and short-snippet embellishment — all
+    /// Core's, and the same code the hosted app runs, so one query cannot come back ranked or
+    /// rendered differently in the two apps. Book id and TOC entry id ride on the engine's
+    /// content fetch, so the searcher needs no queries of its own.</summary>
+    private SeforimDbFtsSearcher Searcher => _searcher ??= new SeforimDbFtsSearcher();
     private SeforimDbFtsSearcher? _searcher;
-    /// <summary>The searcher's corpus queries, kept so an idle release can drop their catalog
-    /// cache (see <see cref="ReleaseIdleResources"/>).</summary>
-    private SeforimDbQueries? _searcherQueries;
 
     /// <summary>One-shot searches (<see cref="Search"/>) in flight. Streaming searches are
     /// tracked by <c>_sessions</c>; these are not, so they get their own counter. Changed
@@ -201,7 +197,6 @@ public sealed class SeforimDbFtsIndexCoordinator
             if (_isIndexing || !_sessions.IsEmpty || _activeOneShotSearches > 0) return false;
             bool released = _engine?.IsOpen == true;
             _engine?.Invalidate();
-            _searcherQueries?.ClearCatalogCache();
             return released;
         }
     }
@@ -731,16 +726,16 @@ public sealed class SeforimDbFtsIndexCoordinator
             // it gets exactly the same parallel snippeting, short-snippet embellishment and
             // enrichment as the streaming path.
             var terms = new FtsTermTable();
-            foreach (var built in Searcher.SearchInBatches(
+            foreach (var batch in Searcher.SearchInBatches(
                          GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms))
             {
-                result.Results.AddRange(built);
+                result.Results.AddRange(batch.Hits);
+                foreach (var entry in batch.LineTexts) result.LineTexts[entry.Key] = entry.Value;
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
             if (cap > 0 && result.Results.Count > cap)
                 result.Results.RemoveRange(cap, result.Results.Count - cap);
             result.Terms = terms.All();
-            result.LineTexts = Searcher.FetchSnippetLineTexts(result.Results, SeforimDbFtsSearcher.SeedLineTextHitCount);
         }
         catch (Exception ex)
         {
@@ -892,15 +887,10 @@ public sealed class SeforimDbFtsIndexCoordinator
         // the leading SeedLineTextHitCount hits of the search with their snippet line texts,
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
-        int seedLeft = SeforimDbFtsSearcher.SeedLineTextHitCount;
-        foreach (var built in Searcher.SearchInBatches(
+        foreach (var batch in Searcher.SearchInBatches(
                      GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms, ct, onStage))
         {
-            var lineTexts = seedLeft > 0
-                ? Searcher.FetchSnippetLineTexts(built, seedLeft)
-                : new Dictionary<int, string>();
-            seedLeft = Math.Max(0, seedLeft - built.Count);
-            await onBatch(built, terms.TakeNewTerms(), lineTexts);
+            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.LineTexts);
         }
     }
 
