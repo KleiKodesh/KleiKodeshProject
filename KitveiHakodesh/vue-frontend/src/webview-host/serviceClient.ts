@@ -189,14 +189,14 @@ export async function serviceCall<T = unknown>(
   args: object = {},
   signal?: AbortSignal,
 ): Promise<T> {
+  const t0 = performance.now()
+  console.debug(`[service] -> ${op}`, args)
   const res = await postRpc('/rpc', encodeRequest(op, args), signal)
   if (!res.ok) {
     const msg = `service '${op}' failed: ${res.status} ${res.statusText}`
     console.error(`[service] ${msg}\n${await res.text().catch(() => '')}`)
     throw new Error(msg)
   }
-  const t0 = performance.now()
-  console.debug(`[service] -> ${op}`, args)
   const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
   if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' error`)
   // An op that caught its own failure still answers Ok; Detail carries the exception.
@@ -217,9 +217,10 @@ export function serviceCallVoid(op: string, args: object = {}): void {
 
 /**
  * The hosted leg of serviceStream. WebView2 cannot deliver a response body progressively, so
- * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes each
- * frame to the page as a `serviceStreamFrame` message (base64 of the pipe frame's envelope)
- * and finishes with `serviceStreamEnd`. The stream id is chosen HERE and sent with the POST,
+ * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes them
+ * to the page as `serviceStreamFrames` messages — an array of base64 pipe-frame envelopes, every
+ * frame that arrived since the previous message — and finishes with `serviceStreamEnd`. The
+ * stream id is chosen HERE and sent with the POST,
  * so the listener below is registered before the first frame can possibly arrive. Aborting
  * posts `/rpc-stream-cancel`, which closes the pipe — the service's cancel signal.
  */
@@ -238,14 +239,17 @@ async function* hostedRelayStream<T>(
   let wake: (() => void) | null = null
   const notify = () => { wake?.(); wake = null }
 
+  const decodeBase64Frame = (b64: unknown): Uint8Array => {
+    const bin = atob(String(b64 ?? ''))
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return bytes
+  }
   const unregister = onWebviewEvent((msg) => {
     if (msg.streamId !== streamId) return
-    if (msg.event === 'serviceStreamFrame') {
-      const b64 = String(msg.frame ?? '')
-      const bin = atob(b64)
-      const bytes = new Uint8Array(bin.length)
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-      queue.push(bytes)
+    if (msg.event === 'serviceStreamFrames') {
+      const frames = Array.isArray(msg.frames) ? (msg.frames as unknown[]) : []
+      for (const b64 of frames) queue.push(decodeBase64Frame(b64))
       notify()
     } else if (msg.event === 'serviceStreamEnd') {
       ended = true
@@ -315,13 +319,13 @@ export async function* serviceStream<T = unknown>(
     yield* hostedRelayStream<T>(op, args, signal)
     return
   }
+  console.debug(`[service] -> stream ${op}`, args)
   const res = await postRpc('/rpc-stream', encodeRequest(op, args), signal)
   if (!res.ok || !res.body) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
 
   const reader = res.body.getReader()
   let buf = new Uint8Array(0)
   try {
-  console.debug(`[service] -> stream ${op}`, args)
     for (;;) {
       const { value, done } = await reader.read()
       if (done) break
