@@ -506,8 +506,8 @@ export type CatalogTocHit = {
   bookId: number
   /** -1 = no resolved line. */
   lineIndex: number
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
