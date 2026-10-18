@@ -20,6 +20,18 @@ Never assert facts about the codebase, database, runtime state, or system config
 
 A statement presented as a fact but derived from absence of evidence ("I didn't find X, therefore X doesn't exist") is a guess. Mark it as uncertain and verify before acting on it.
 
+## Speed Is Canon
+
+Everything in the app must feel instant. Speed is a top-priority requirement, not a nice-to-have, and it applies to every layer: service queries, the wire, decoding, reactivity, rendering, and persistence.
+
+- First paint of any view and the first screen of any result set must be immediate; the rest streams or loads lazily behind it.
+- Never do per-row work that could be done once (per-hit strings, per-row DB round-trips, per-frame copies, per-scroll-tick writes).
+- Data crossing the wire or going into persistence carries ids and numbers, not derivable strings. Resolve titles, paths and labels from the catalog at render time.
+- Large lists are `shallowRef`/`markRaw`, never deep reactive. Never copy a large payload more than once (no JSON round-trips, no transform-by-copy of decoded replies).
+- Persistence writes are coalesced and off the hot path (debounced, flushed on hide/unload). Nothing writes on every scroll tick or keystroke.
+- Never trade speed for a result cap: correctness of the full result set stays; make the pipeline faster instead.
+- When adding a feature, state its cost on the hot path. If a change makes something slower, say so before making it.
+
 ## Virtual Scroller Rules
 
 `@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management.
