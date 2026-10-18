@@ -102,13 +102,12 @@ namespace KitveiHakodeshLib.Service
 
             await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             // Machine-wide too: Word and the standalone app must not both prompt or both spawn.
-            using (var machineGate = new Mutex(false, @"Global\KitveiHakodeshService-launch-" + _pipeName))
+            // Disposing it releases the mutex on the thread that took it (see ThreadOwnedMutex).
+            using (var machineGate = new ThreadOwnedMutex(@"Global\KitveiHakodeshService-launch-" + _pipeName, TimeSpan.FromMinutes(3)))
             {
-            bool machineGateHeld = false;
             try
             {
-                try { machineGateHeld = machineGate.WaitOne(TimeSpan.FromMinutes(3)); }
-                catch (AbandonedMutexException) { machineGateHeld = true; }
+                await machineGate.Acquired.ConfigureAwait(false);
 
                 // Another caller (here or in another process) may have brought it up meanwhile.
                 if (IsListening()) return;
@@ -169,7 +168,6 @@ namespace KitveiHakodeshLib.Service
             }
             finally
             {
-                if (machineGateHeld) machineGate.ReleaseMutex();
                 Gate.Release();
             }
             }
@@ -445,6 +443,49 @@ namespace KitveiHakodeshLib.Service
                 break;
             }
             return null;
+        }
+
+        /// <summary>
+        /// A named Mutex taken and released on its own dedicated thread. A Mutex must be released
+        /// by the thread that took it, and the launch gate is held across awaits that resume on
+        /// another thread ("Object synchronization method was called from an unsynchronized block
+        /// of code"). A Mutex, not a Semaphore, so a holder that crashed is seen at once
+        /// (AbandonedMutexException) instead of blocking the next caller until the timeout.
+        /// </summary>
+        private sealed class ThreadOwnedMutex : IDisposable
+        {
+            private readonly Mutex _mutex;
+            private readonly ManualResetEventSlim _release = new ManualResetEventSlim(false);
+            private readonly TaskCompletionSource<bool> _acquired =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly Thread _owner;
+
+            public ThreadOwnedMutex(string name, TimeSpan timeout)
+            {
+                _mutex = new Mutex(false, name);
+                _owner = new Thread(() =>
+                {
+                    bool held;
+                    try { held = _mutex.WaitOne(timeout); }
+                    catch (AbandonedMutexException) { held = true; }
+                    catch (Exception ex) { _acquired.TrySetException(ex); return; }
+                    _acquired.TrySetResult(held);
+                    _release.Wait();
+                    if (held) _mutex.ReleaseMutex();
+                }) { IsBackground = true, Name = "KHS launch gate" };
+                _owner.Start();
+            }
+
+            /// <summary>True once held; false when the timeout passed (the caller goes ahead anyway).</summary>
+            public Task<bool> Acquired => _acquired.Task;
+
+            public void Dispose()
+            {
+                _release.Set();
+                _owner.Join();
+                _mutex.Dispose();
+                _release.Dispose();
+            }
         }
     }
 }
