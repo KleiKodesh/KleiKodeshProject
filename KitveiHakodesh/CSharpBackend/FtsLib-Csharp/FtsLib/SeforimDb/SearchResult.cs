@@ -39,6 +39,12 @@ namespace FtsLib.SeforimDb
         /// </summary>
         internal Snippets.PreparedQueryGroups Prepared { get; }
 
+        /// <summary>
+        /// Where the line sits (book, position, TOC entry) when the corpus is an
+        /// <see cref="IFtsPlacedCorpus"/>; all zero otherwise.
+        /// </summary>
+        public FtsDocumentPlacement Placement { get; }
+
         public SearchResult(int lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
@@ -62,6 +68,17 @@ namespace FtsLib.SeforimDb
             : this(lineId, bookTitle, content, matchedGroups, originalGroupCount)
         {
             Prepared = prepared;
+        }
+
+        internal SearchResult(int lineId, string bookTitle, string content,
+            System.Collections.Generic.IReadOnlyList<
+                System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
+            int originalGroupCount,
+            Snippets.PreparedQueryGroups prepared,
+            FtsDocumentPlacement placement)
+            : this(lineId, bookTitle, content, matchedGroups, originalGroupCount, prepared)
+        {
+            Placement = placement;
         }
 
         public override string ToString() => $"[{LineId}] {BookTitle}";
