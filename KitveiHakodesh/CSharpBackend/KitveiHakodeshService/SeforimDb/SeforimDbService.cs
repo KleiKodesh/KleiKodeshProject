@@ -136,8 +136,8 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LinkTargetRow> GetLinkTargetForSourceLineAndBook(int sourceLineId, int targetBookId) =>
         Run(() => _queries.GetLinkTargetForSourceLineAndBook(sourceLineId, targetBookId), new List<LinkTargetRow>(), "getLinkTargetForSourceLineAndBook");
 
-    public List<TocPathRow> GetTocPathsForLines(List<int> lineIds) =>
-        Run(() => _queries.GetTocPathsForLines(lineIds), new List<TocPathRow>(), "getTocPathsForLines");
+    public TocPathsForLinesResult GetTocPathsForLines(List<int> lineIds) =>
+        Run(() => _queries.GetTocPathsForLines(lineIds), new TocPathsForLinesResult(), "getTocPathsForLines");
 
     public List<EnclosingTocPathRow> GetEnclosingTocPathForLineRanges(List<int> triples) =>
         Run(() => _queries.GetEnclosingTocPathForLineRanges(triples), new List<EnclosingTocPathRow>(), "getEnclosingTocPathForLineRanges");

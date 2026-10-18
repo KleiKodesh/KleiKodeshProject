@@ -566,25 +566,48 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC paths & line→book/index helpers ──────────────────────────────────────
 
-        public List<TocPathRow> GetTocPathsForLines(List<int> lineIds)
+        /// <summary>Lines → their TOC entry, plus each distinct entry's path once. Lines of one
+        /// section share an entry, so the path walk (and the wire) is per entry, not per line.</summary>
+        public TocPathsForLinesResult GetTocPathsForLines(List<int> lineIds)
         {
-            var list = new List<TocPathRow>();
-            if (lineIds is null || lineIds.Count == 0) return list;
+            var result = new TocPathsForLinesResult();
+            if (lineIds is null || lineIds.Count == 0) return result;
             using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLines(lineIds.Count);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
+            var entryIds = new List<int>();
+            using (var cmd = conn.CreateCommand())
             {
-                list.Add(new TocPathRow
+                cmd.CommandText = SeforimDbSqlStrings.GetTocEntryForLines(lineIds.Count);
+                BindList(cmd, "p", lineIds);
+                using var r = cmd.ExecuteReader();
+                var seen = new HashSet<int>();
+                while (r.Read())
                 {
-                    LineId = r.GetInt32(0),
-                    BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
-                });
+                    int entryId = r.GetInt32(2);
+                    result.Lines.Add(new LineTocEntryRow
+                    {
+                        LineId = r.GetInt32(0),
+                        BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                        TocEntryId = entryId,
+                    });
+                    if (seen.Add(entryId)) entryIds.Add(entryId);
+                }
             }
-            return list;
+            if (entryIds.Count == 0) return result;
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForTocEntries(entryIds.Count);
+                BindList(cmd, "e", entryIds);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    result.Paths.Add(new TocEntryPathRow
+                    {
+                        TocEntryId = r.GetInt32(0),
+                        Path = r.IsDBNull(1) ? "" : r.GetString(1),
+                    });
+                }
+            }
+            return result;
         }
 
         /// <summary>triples = flat [groupKey, firstLineId, lastLineId, …].</summary>
