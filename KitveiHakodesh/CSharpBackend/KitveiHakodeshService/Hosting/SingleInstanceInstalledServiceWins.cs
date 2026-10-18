@@ -13,9 +13,11 @@ namespace KitveiHakodeshService.Hosting;
 ///              pipe (a portable app's console copy, a leftover from an earlier install)
 ///              before it opens the pipe, and again once it is open.
 ///   console  - steps aside while the installed service is running, or when another console
-///              copy already serves the shared pipe. A registered service that is stopped,
-///              disabled or broken does not stop it: the hosts then repair the service and run
-///              a console copy meanwhile (KitveiHakodeshServiceLauncher).
+///              copy already serves the shared pipe. A registered service that is merely
+///              stopped is STARTED instead (Authenticated Users hold SERVICE_START) and the
+///              console copy steps aside for it: the installed version serves whenever it can.
+///              Only a disabled or broken registration lets a console copy serve: the hosts
+///              then repair the service and run that copy meanwhile (KitveiHakodeshServiceLauncher).
 ///
 /// A copy on a private pipe (KHS_PIPE_NAME, the Vite dev plugin's "KitveiHakodesh.&lt;pid&gt;")
 /// asked for an instance of its own and is left alone. Which process holds which pipe is
@@ -88,6 +90,11 @@ public static class SingleInstanceInstalledServiceWins
             reason = "the installed service " + WindowsServiceMode.ServiceName + " is running";
             return false;
         }
+        if (TryStartInstalledService())
+        {
+            reason = "the installed service " + WindowsServiceMode.ServiceName + " is registered; started it instead";
+            return false;
+        }
 
         _consoleInstance = new Mutex(true, @"Global\KitveiHakodeshService-console-" + PipeServer.DefaultPipeName, out bool createdNew);
         if (!createdNew)
@@ -110,6 +117,21 @@ public static class SingleInstanceInstalledServiceWins
             return controller.Status is ServiceControllerStatus.Running or ServiceControllerStatus.StartPending;
         }
         catch { return false; }
+    }
+
+    /// <summary>A registered, stopped service is started (SERVICE_START is granted to every
+    /// user by ServiceRegistration). False when it is not registered, disabled, or Windows
+    /// refused - then a console copy may serve.</summary>
+    private static bool TryStartInstalledService()
+    {
+        try
+        {
+            using var controller = new ServiceController(WindowsServiceMode.ServiceName);
+            if (controller.Status != ServiceControllerStatus.Stopped) return controller.Status is ServiceControllerStatus.Running or ServiceControllerStatus.StartPending;
+            controller.Start();
+            return true;
+        }
+        catch { return false; } // not registered, disabled (start refused), or no access
     }
 
     /// <summary>Our pipes on this machine: the shared one and every private one. Listing the
@@ -140,7 +162,11 @@ public static class SingleInstanceInstalledServiceWins
             using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
             pipe.Connect(2_000);
             if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out uint pid)) pid = 0;
-            if (shutdown)
+            // The second sweep runs with our own acceptors armed, so this connection can land on
+            // US. A shutdown frame written before looking at the pid told the service to stop
+            // itself a second after it came up (event log: start/stop pairs 1-2 s apart). An
+            // empty probe is harmless: a connection without a request binds to nothing.
+            if (shutdown && pid != 0 && pid != Environment.ProcessId)
             {
                 byte[] frame = ShutdownFrame;
                 pipe.Write(BitConverter.GetBytes(frame.Length));

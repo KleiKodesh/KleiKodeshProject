@@ -112,8 +112,8 @@ function openExcludedFolders() {
 
     <SettingRow
       v-if="serviceInstallOffer"
-      label="שירות כתבי הקודש"
-      hint="התוכנה פועלת ללא שירות Windows, ולכן חיפוש קבצים במסמכי המחשב כבוי. התקנת השירות תבקש אישור מנהל פעם אחת."
+      label="שירות Windows (מומלץ)"
+      hint="מפעיל את הספרייה ברקע כשירות Windows: הפעלה מהירה יותר, אינדקס חיפוש קבצים במסמכי המחשב, והשירות נשאר מוכן בין וורד לתוכנה. ההתקנה תבקש אישור מנהל פעם אחת."
     >
       <button class="manage-btn" :disabled="installing" @click="runInstallService">
         {{ installing ? 'מתקין...' : 'התקן שירות' }}

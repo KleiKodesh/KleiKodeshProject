@@ -162,6 +162,18 @@ namespace KitveiHakodesh.Core.Settings
         public static string GetBorderColor() => Get(AppKitveiHakodesh, "Appearance", "BorderColor", "");
         public static void SetBorderColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "BorderColor", hex);
 
+        // ── Service ───────────────────────────────────────────────────────────────────
+        // The one unasked "install the service?" prompt a host may raise, on the first launch
+        // that finds the product installed but its service not registered. Afterwards the
+        // settings page's row is the only way. Missing value = not shown yet (a full clean
+        // wipes it, so a clean reinstall asks once again).
+
+        public static bool GetServiceInstallPromptShown() =>
+            Get(AppKitveiHakodesh, "Service", "InstallPromptShown", "0") == "1";
+
+        public static void SetServiceInstallPromptShown() =>
+            Set(AppKitveiHakodesh, "Service", "InstallPromptShown", "1");
+
         // ── Helpers ───────────────────────────────────────────────────────────────────
 
         private static int ReadInt(string section, string key, int fallback) =>
