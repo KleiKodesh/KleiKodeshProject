@@ -17649,6 +17649,19 @@ class Toolbar {
 
 ;// ./web/view_history.js
 const DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
+// Scroll-driven writes are coalesced: onUpdateViewarea calls setMultiple on every
+// scroll tick, and each call used to JSON.stringify the whole history database into
+// localStorage. Instances with a pending write are flushed when the frame is hidden
+// or torn down so the last position is never lost to the delay.
+const VIEW_HISTORY_WRITE_DELAY_MS = 250;
+const pendingViewHistoryWrites = new Set();
+function flushPendingViewHistoryWrites() {
+  for (const history of pendingViewHistoryWrites) history._flushWrite();
+}
+window.addEventListener("pagehide", flushPendingViewHistoryWrites);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushPendingViewHistoryWrites();
+});
 class ViewHistory {
   constructor(fingerprint, cacheSize = DEFAULT_VIEW_HISTORY_CACHE_SIZE) {
     this.fingerprint = fingerprint;
@@ -17683,13 +17696,27 @@ class ViewHistory {
     const databaseStr = JSON.stringify(this.database);
     localStorage.setItem("pdfjs.history", databaseStr);
   }
+  // Trailing-timer coalescing for the scroll-driven set/setMultiple writes; the
+  // one-shot setSync below still writes through immediately.
+  _scheduleWrite() {
+    if (this._writeTimer) return;
+    pendingViewHistoryWrites.add(this);
+    this._writeTimer = setTimeout(() => this._flushWrite(), VIEW_HISTORY_WRITE_DELAY_MS);
+  }
+  _flushWrite() {
+    if (!this._writeTimer) return;
+    clearTimeout(this._writeTimer);
+    this._writeTimer = null;
+    pendingViewHistoryWrites.delete(this);
+    this._writeToStorage();
+  }
   async _readFromStorage() {
     return localStorage.getItem("pdfjs.history");
   }
   async set(name, val) {
     await this._initializedPromise;
     this.file[name] = val;
-    return this._writeToStorage();
+    this._scheduleWrite();
   }
   setSync(name, val) {
     // Discrete one-shot settings (unlike scrolling, which re-fires constantly)
@@ -17701,7 +17728,9 @@ class ViewHistory {
       return false;
     }
     this.file[name] = val;
-    this._writeToStorage();
+    // A pending coalesced write is folded into this one.
+    if (this._writeTimer) this._flushWrite();
+    else this._writeToStorage();
     return true;
   }
   async setMultiple(properties) {
@@ -17709,7 +17738,7 @@ class ViewHistory {
     for (const name in properties) {
       this.file[name] = properties[name];
     }
-    return this._writeToStorage();
+    this._scheduleWrite();
   }
   async get(name, defaultValue) {
     await this._initializedPromise;
@@ -18779,6 +18808,9 @@ const PDFViewerApplication = {
       this.pdfDocumentProperties?.setDocument(null);
     }
     this.pdfLinkService.externalLinkEnabled = true;
+    // The next document's ViewHistory reads the store from localStorage as it is
+    // constructed, so a coalesced write still pending here must land first.
+    this.store?._flushWrite();
     this.store = null;
     this.isInitialViewSet = false;
     this.url = "";
