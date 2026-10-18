@@ -272,9 +272,16 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// the matched line joined with its surrounding lines from the same book, and points
         /// the descriptor at those line ids.
         ///
-        /// One batched neighbour fetch covers every short line in the batch, and only those
-        /// hits re-locate (across cores). A batch with nothing short pays nothing — no query,
-        /// no work — and a broad query's typical batch has only about one short line in six.
+        /// The neighbours are the lines at (bookId, lineIndex ± 1..<see cref="NeighborLineRadius"/>).
+        /// Results arrive in catalog order, so most of those lines are other hits of the SAME
+        /// batch whose content is already in hand; only the rest are fetched, in one statement
+        /// per batch (<see cref="SeforimDbFtsCorpus.FetchLinesAtBookPositions"/>). A batch
+        /// with nothing short pays nothing, and a broad query's typical batch has only about
+        /// one short line in six.
+        ///
+        /// Joined exactly as before — each side's non-empty lines in document order, single
+        /// spaces between — so a descriptor's offsets land on the same characters the page
+        /// re-joins (JoinWithNeighbourLines).
         /// </summary>
         private static void ExtendShortWindowsWithNeighbourLines(
             SeforimDbFtsEngine engine,
@@ -287,29 +294,29 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             CancellationToken cancellationToken)
         {
             List<int>? shortIndexes = null;
-            List<int>? shortLineIds = null;
             for (int i = 0; i < built.Length; i++)
             {
                 if (built[i] == null || windowWords[i] >= contextWords) continue;
+                if (results[i].Placement.BookId == 0) continue;   // no placement: nothing to extend over
                 (shortIndexes ??= new List<int>()).Add(i);
-                (shortLineIds ??= new List<int>()).Add(results[i].LineId);
             }
-            if (shortLineIds == null) return;
+            if (shortIndexes == null) return;
 
-            // Through Core's own corpus rather than the engine's FetchNeighborContext: the
-            // descriptor must name the neighbour lines BY ID, which the engine API drops.
-            IDictionary<int, SeforimDbFtsNeighbourLines> neighbours;
-            using (var corpus = engine.OpenCorpus())
-                neighbours = corpus.FetchNeighbourLines(shortLineIds, NeighborLineRadius);
-            if (neighbours.Count == 0) return;
+            var linesByPosition = CollectNeighbourLines(engine, results, shortIndexes);
+            if (linesByPosition.Count == 0) return;
             var index = engine.Index;
 
-            Parallel.ForEach(shortIndexes!, new ParallelOptions { CancellationToken = cancellationToken }, i =>
+            Parallel.ForEach(shortIndexes, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (!neighbours.TryGetValue(results[i].LineId, out var context)) return;
+                var match = results[i];
+                var previousIds = new List<int>(NeighborLineRadius);
+                var nextIds = new List<int>(NeighborLineRadius);
+                string previous = JoinNeighbourSide(linesByPosition, match.Placement, -NeighborLineRadius, -1, previousIds);
+                string next = JoinNeighbourSide(linesByPosition, match.Placement, 1, NeighborLineRadius, nextIds);
+                if (previous.Length == 0 && next.Length == 0) return;
 
                 var extended = index.LocateSnippetWindowOverNeighbourLines(
-                    results[i], context.Previous, context.Next, requireOrdered, contextWords);
+                    match, previous, next, requireOrdered, contextWords);
 
                 // Only the snippet descriptor is swapped in: score and word distance stay as
                 // computed on the matched line itself, because those are the relevance keys and
@@ -320,12 +327,66 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     // The text the engine joined: previous + ' ' + line + ' ' + next, empty sides
                     // dropped — i.e. exactly these ids' texts joined by single spaces.
                     hit.SnippetLineIds.Clear();
-                    hit.SnippetLineIds.AddRange(context.PreviousIds);
-                    hit.SnippetLineIds.Add(results[i].LineId);
-                    hit.SnippetLineIds.AddRange(context.NextIds);
+                    hit.SnippetLineIds.AddRange(previousIds);
+                    hit.SnippetLineIds.Add(match.LineId);
+                    hit.SnippetLineIds.AddRange(nextIds);
                     CopySnippetDescriptor(hit, in extended, terms);
                 }
             });
+        }
+
+        /// <summary>
+        /// The neighbour lines of the batch's short hits, keyed by (bookId, lineIndex): first
+        /// whatever the batch already fetched (its own results), then ONE corpus fetch for the
+        /// positions still missing. Lines of the batch that are not neighbours of a short hit
+        /// are not collected.
+        /// </summary>
+        private static Dictionary<(int BookId, int LineIndex), (int Id, string Text)> CollectNeighbourLines(
+            SeforimDbFtsEngine engine, IReadOnlyList<SearchResult> results, List<int> shortIndexes)
+        {
+            var wanted = new HashSet<(int BookId, int LineIndex)>(shortIndexes.Count * 2 * NeighborLineRadius);
+            foreach (int i in shortIndexes)
+            {
+                var at = results[i].Placement;
+                for (int delta = -NeighborLineRadius; delta <= NeighborLineRadius; delta++)
+                    if (delta != 0) wanted.Add((at.BookId, at.LineIndex + delta));
+            }
+
+            var linesByPosition = new Dictionary<(int BookId, int LineIndex), (int Id, string Text)>(wanted.Count);
+            foreach (var result in results)
+            {
+                var key = (result.Placement.BookId, result.Placement.LineIndex);
+                if (wanted.Contains(key)) linesByPosition[key] = (result.LineId, result.Content);
+            }
+
+            if (linesByPosition.Count < wanted.Count)
+            {
+                var missing = new List<(int BookId, int LineIndex)>(wanted.Count - linesByPosition.Count);
+                foreach (var key in wanted)
+                    if (!linesByPosition.ContainsKey(key)) missing.Add(key);
+                using var corpus = engine.OpenCorpus();
+                foreach (var line in corpus.FetchLinesAtBookPositions(missing))
+                    linesByPosition[(line.BookId, line.LineIndex)] = (line.Id, line.Text);
+            }
+            return linesByPosition;
+        }
+
+        /// <summary>One side of a short hit's neighbours: the non-empty lines at lineIndex +
+        /// <paramref name="firstDelta"/>..<paramref name="lastDelta"/> (document order), their
+        /// texts joined by single spaces, their ids appended to <paramref name="idsOut"/>.</summary>
+        private static string JoinNeighbourSide(
+            Dictionary<(int BookId, int LineIndex), (int Id, string Text)> linesByPosition,
+            FtsDocumentPlacement at, int firstDelta, int lastDelta, List<int> idsOut)
+        {
+            string? joined = null;
+            for (int delta = firstDelta; delta <= lastDelta; delta++)
+            {
+                if (!linesByPosition.TryGetValue((at.BookId, at.LineIndex + delta), out var line)) continue;
+                if (line.Text.Length == 0) continue;
+                idsOut.Add(line.Id);
+                joined = joined == null ? line.Text : joined + " " + line.Text;
+            }
+            return joined ?? string.Empty;
         }
 
         /// <summary>
