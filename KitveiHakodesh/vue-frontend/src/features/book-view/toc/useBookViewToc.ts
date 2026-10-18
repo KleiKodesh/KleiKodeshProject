@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, watch } from 'vue'
+import { ref, shallowRef, markRaw, computed, watch } from 'vue'
 import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
 import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
@@ -63,7 +63,7 @@ function stripBookTitleRoot(
 }
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
-  const tocEntries = ref<TocEntry[]>([])
+  const tocEntries = shallowRef<TocEntry[]>(markRaw([]))
   const altTocSections = shallowRef<AltTocSection[]>([])
   const selectedAltTocStructureId = ref<number | null>(null)
   const loading = ref(false)
@@ -103,11 +103,11 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     try {
       const entries = await getAllTocEntries(id)
       const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
-      tocEntries.value = stripped
+      tocEntries.value = markRaw(stripped)
       tocSearchTree.value = new SearchableTree(stripped)
     } catch (e) {
       // TOC load failed — show the book with no TOC rather than a blank page
-      tocEntries.value = []
+      tocEntries.value = markRaw([])
       tocSearchTree.value = new SearchableTree([])
       error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
     } finally {
