@@ -6,8 +6,8 @@
  * per hit may be a string. What a row DISPLAYS is resolved on demand, by id, for rendered
  * rows only: the book title from `booksDataStore.allBooksMap` and the TOC path from the
  * book's TOC (fullTextSearchReferences.ts), the snippet from its line texts
- * (fullTextSearchSnippets.ts), the matched terms from the search's term table
- * (useFullTextSearch's matchedTermsOf).
+ * (fullTextSearchSnippets.ts), the matched terms from the search's term table via the
+ * term id of each `snippetMarks` triple (useFullTextSearch's matchedTermsOf).
  *
  * Mirror of FtsHit in SeforimDbFtsModels.cs (the service's wire type).
  */
@@ -34,11 +34,6 @@ export interface FullTextSearchResult {
   snippetMarks: number[]
   /** Bit flags — see SNIPPET_FLAG_LEADING_ELLIPSIS / SNIPPET_FLAG_TRAILING_ELLIPSIS. */
   snippetFlags: number
-  /** Ids into the search's term table of the concrete index terms that occur in THIS hit's
-   *  marks (e.g. the one fuzzy expansion of a `~` query word that this line contains — not
-   *  the raw query, not the whole expansion): distinct, typically 1-3. The strings travel
-   *  once per search, never per hit; useFullTextSearch resolves them (matchedTermsOf). */
-  termIds: number[]
 }
 
 /** "…" before the snippet window — it starts mid-text. */
@@ -47,6 +42,22 @@ export const SNIPPET_FLAG_LEADING_ELLIPSIS = 1
 export const SNIPPET_FLAG_TRAILING_ELLIPSIS = 2
 /** Ints per entry of `snippetMarks`: start, length, termId. */
 export const SNIPPET_MARK_STRIDE = 3
+
+/**
+ * The distinct ids (into the search's term table) of the concrete index terms that occur in
+ * this hit's marks — e.g. the one fuzzy expansion of a `~` query word this line contains, not
+ * the raw query, not the whole expansion: typically 1-3. Read off the marks' third ints; the
+ * service does not send them separately.
+ */
+export function matchedTermIdsOf(hit: FullTextSearchResult): number[] {
+  const marks = hit.snippetMarks ?? []
+  const ids: number[] = []
+  for (let i = SNIPPET_MARK_STRIDE - 1; i < marks.length; i += SNIPPET_MARK_STRIDE) {
+    const id = marks[i]
+    if (id !== undefined && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
 
 /**
  * Reason codes for a failed search, returned by C# in the searchError event

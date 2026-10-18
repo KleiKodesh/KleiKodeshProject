@@ -35,7 +35,7 @@ import type { FullTextSearchResult } from '@/features/full-text-search/fullTextS
 
 export interface SearchCacheEntry {
   results: FullTextSearchResult[]
-  /** The search's matched-term table — what each hit's `termIds` index into. */
+  /** The search's matched-term table — what each hit's snippet-mark term ids index into. */
   terms: string[]
   /** True when the stream finished (not cancelled or interrupted). */
   complete: boolean

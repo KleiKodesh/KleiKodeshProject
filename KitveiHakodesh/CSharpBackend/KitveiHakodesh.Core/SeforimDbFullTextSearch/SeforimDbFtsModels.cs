@@ -4,12 +4,14 @@ using MessagePack;
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
     /// <summary>
-    /// One full-text hit, ready for the frontend: the engine's match plus the corpus-side
-    /// enrichment (book id, TOC path) the searcher adds, so no consumer ever needs a second
-    /// round-trip to display a result.
+    /// One full-text hit, ready for the frontend: the engine's match plus its book id and TOC
+    /// entry id, so no consumer ever needs a second round-trip to display a result.
     ///
     /// A wire type — the property names are the payload keys and must not change casually.
-    /// The `Ready`/`Done`/`Error` envelopes these ride in stay with each transport.
+    /// The `Ready`/`Done`/`Error` envelopes these ride in stay with each transport. Numbers
+    /// only, and the two arrays are sized exactly: a broad search sends hundreds of thousands
+    /// of these, so there is no list slack and nothing derivable (the matched term ids are
+    /// read off <see cref="SnippetMarks"/> by the page).
     /// </summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class FtsHit
@@ -38,7 +40,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         /// <remarks>The matched line alone, or — for a short window extended over its
         /// neighbours — its non-empty same-book neighbour lines around it, in document order.</remarks>
-        public List<int> SnippetLineIds { get; set; } = new List<int>();
+        public int[] SnippetLineIds { get; set; } = System.Array.Empty<int>();
 
         /// <summary>Raw char offsets of the rendered window in the joined text.</summary>
         public int SnippetStart { get; set; }
@@ -46,8 +48,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         /// <summary>Highlights as flat (start, length, termId) triples — raw char offsets into
         /// the joined text, in document order, plus the id (into the search's
-        /// <see cref="FtsTermTable"/>) of the term that mark matched.</summary>
-        public List<int> SnippetMarks { get; set; } = new List<int>();
+        /// <see cref="FtsTermTable"/>) of the concrete index term that mark matched. The
+        /// distinct term ids of a hit (the 1-3 fuzzy/wildcard expansions that actually occur
+        /// in this line — what the book view highlights) are every third int here; they are
+        /// not sent separately.</summary>
+        public int[] SnippetMarks { get; set; } = System.Array.Empty<int>();
 
         /// <summary>Bit flags: <see cref="SnippetFlagLeadingEllipsis"/> ("…" before the
         /// window — it starts mid-text), <see cref="SnippetFlagTrailingEllipsis"/> ("…" after
@@ -57,20 +62,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         public const int SnippetFlagLeadingEllipsis = 1;
         public const int SnippetFlagTrailingEllipsis = 2;
-
-        /// <summary>
-        /// The concrete index terms that occur in THIS line's snippet marks (the fuzzy/wildcard
-        /// expansions that actually matched here — typically 1-3, never the query's whole
-        /// expansion), distinct, as ids into the search's <see cref="FtsTermTable"/> — the
-        /// strings travel once per search (<see cref="FtsStreamChunk.NewTerms"/> /
-        /// <see cref="FtsSearchResult.Terms"/>), never per hit. The book view highlights them.
-        /// </summary>
-        public List<int> TermIds { get; set; } = new List<int>();
     }
 
     /// <summary>
     /// One search's matched-term strings, numbered in first-seen order. Hits carry ids into
-    /// it (<see cref="FtsHit.TermIds"/>); a transport sends the strings once — streamed as
+    /// it (the term id of each <see cref="FtsHit.SnippetMarks"/> triple); a transport sends the strings once — streamed as
     /// they appear (<see cref="TakeNewTerms"/>) or whole at the end (<see cref="All"/>).
     /// Thread-safe: hits are built across cores. Reads are lock-free — a search has a
     /// handful of distinct terms but millions of marks, so after the first few hits every
@@ -158,7 +154,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public bool Ready { get; set; }
         public string? Error { get; set; }
         public List<FtsHit> Results { get; set; } = new List<FtsHit>();
-        /// <summary>The matched-term strings <see cref="FtsHit.TermIds"/> index into.</summary>
+        /// <summary>The matched-term strings the hits' mark term ids index into.</summary>
         public List<string> Terms { get; set; } = new List<string>();
         /// <summary>Snippet line texts (line id -> text) for the FIRST hits, so the page can
         /// render their snippets without a fetch. Per result set, never per hit — hits stay
@@ -175,7 +171,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public bool Ready { get; set; } = true;
         public List<FtsHit> Results { get; set; } = new List<FtsHit>();
         /// <summary>Matched-term strings first seen in this frame, in id order: the receiver
-        /// appends them to its table, which <see cref="FtsHit.TermIds"/> index into.</summary>
+        /// appends them to its table, which the hits' mark term ids index into.</summary>
         public List<string> NewTerms { get; set; } = new List<string>();
         /// <summary>Snippet line texts (line id -> text) riding on the FRAME, for the first
         /// hits of the search only (<see cref="SeforimDbFtsSearcher.SeedLineTextHitCount"/>):
