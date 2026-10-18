@@ -76,8 +76,8 @@ interface CatalogTocServiceHit {
   bookId: number
   /** -1 = no resolved line. */
   lineIndex: number
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
@@ -243,12 +243,8 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       if (hit.level === 0) {
         if (books.length < MAX_RESULTS_PER_SOURCE) books.push({ source: 'catalog', book })
       } else if (tocItems.length < MAX_RESULTS_PER_SOURCE) {
-        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book
-        // title itself, so show only the TOC part. Navigation is line-based.
-        const titlePrefix = `${book.title} / `
-        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
-          ? hit.fullTocPath.slice(titlePrefix.length)
-          : hit.fullTocPath
+        // Navigation is line-based.
+        const tocPath = hit.tocPath
         tocItems.push({
           uid: `toc-${hit.bookId}-${hit.treeOrder}`,
           kind: 'toc',

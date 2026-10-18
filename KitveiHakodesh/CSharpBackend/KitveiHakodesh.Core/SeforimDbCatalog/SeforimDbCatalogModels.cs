@@ -8,7 +8,13 @@ public sealed class CatalogTocHit
     public int BookId { get; set; }
     /// <summary>-1 when the entry has no resolved line.</summary>
     public int LineIndex { get; set; }
-    /// <summary>Display path: the book title, then " / "-joined TOC segments.</summary>
+    /// <summary>Display path WITHOUT the book title: the " / "-joined TOC segments ("" for a
+    /// book-title hit). The client prefixes the title from its own catalog, so the title is
+    /// not sent once per hit.</summary>
+    public string TocPath { get; set; } = "";
+    /// <summary>Internal (not on the wire): the stored path INCLUDING the title — the text the
+    /// ranking rules measure and the per-pass dedup key.</summary>
+    [MessagePack.IgnoreMember]
     public string FullTocPath { get; set; } = "";
     /// <summary>0 = book title, 1+ = TOC depth. First sort key.</summary>
     public int Level { get; set; }

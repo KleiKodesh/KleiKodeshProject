@@ -335,11 +335,13 @@ public sealed partial class SeforimDbCatalogIndex
             ct.ThrowIfCancellationRequested();
             int docId = ordered[i].DocId;
             var doc = searcher.Doc(docId);
+            string fullTocPath = doc.Get(FieldFullTocPath) ?? "";
             hits.Add(new CatalogTocHit
             {
                 BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
                 LineIndex = doc.GetField(FieldLineIndex)?.GetInt32Value() ?? -1,
-                FullTocPath = doc.Get(FieldFullTocPath) ?? "",
+                FullTocPath = fullTocPath,
+                TocPath = PathWithoutTitle(doc, fullTocPath, ordered[i].Level),
                 Level = ordered[i].Level,
                 TreeOrder = ordered[i].TreeOrder,
                 IsLiteral = ordered[i].IsLiteral,
@@ -584,6 +586,18 @@ public sealed partial class SeforimDbCatalogIndex
     /// canonical alternative demotes exactly the hits this key exists to promote — many
     /// abbreviation keys are ambiguous, and some carry their self-alternative in a later slot.
     /// </summary>
+    /// <summary>The stored path minus its book-title head (and the " / " after it). A pre-v21
+    /// segment has no title-length field; it splits at the first " / " instead, which is only
+    /// wrong for a title that itself contains " / ", and only until the rebuild lands.</summary>
+    private static string PathWithoutTitle(Document doc, string fullTocPath, int level)
+    {
+        if (level == 0) return "";
+        int titleLength = doc.GetField(FieldTitleLength)?.GetInt32Value()
+            ?? fullTocPath.IndexOf(" / ", StringComparison.Ordinal);
+        int cut = titleLength + 3;
+        return titleLength >= 0 && cut <= fullTocPath.Length ? fullTocPath.Substring(cut) : fullTocPath;
+    }
+
     private static bool MatchesOnTitleOrAuthor(
         Document doc, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants)
     {

@@ -79,6 +79,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldLineIndex = "l";
     private const string FieldLevel = "v";
     private const string FieldTreeOrder = "o";
+    private const string FieldTitleLength = "t";   // chars of the book title at the head of "p"
     private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
     private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
     private const string FieldStructureDv = "sdv"; // numeric doc-values (truncation group)
@@ -185,8 +186,12 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// no structure field, so the doc-values read falls back to 0 for every doc and the
     /// truncation collapses to the old per-book behavior meanwhile. Old results, never
     /// wrong paths — and OpenMode.CREATE means a reader is all-v19 or all-v20, never a
-    /// mix.</summary>
-    public const string IndexFormatVersion = "v20";
+    /// mix.
+    /// v21: each doc also stores the LENGTH of the book title at the head of its path, so the
+    /// searcher can hand the client the path without the title (the title is prefixed client-
+    /// side from the catalog). Full rebuild, same no-downtime window as v20; the searcher falls
+    /// back to splitting at the first " / " while a pre-v21 index is still serving.</summary>
+    public const string IndexFormatVersion = "v21";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -344,6 +349,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 bookId: b.Id,
                 lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
                 fullTocPath: b.Title,
+                titleLength: b.Title.Length,
                 level: 0,
                 treeOrder: TreeOrder(b.Id),
                 structureId: RegularTocStructureId));
@@ -491,6 +497,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         bookId: book.Id,
                         lineIndex: lineIndex,
                         fullTocPath: path,
+                        titleLength: book.Title.Length,
                         level: chapterLevel + 1,
                         treeOrder: treeOrder(book.Id),
                         // Generated from the regular TOC's chapters, so they truncate
@@ -548,8 +555,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// the order rule's reference text) and stored (the display path). Catalog path and
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
-        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int level, long treeOrder,
-        int structureId)
+        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int titleLength, int level,
+        long treeOrder, int structureId)
     {
         var doc = new Document
         {
@@ -558,6 +565,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             new StoredField(FieldLineIndex, lineIndex),
             new StoredField(FieldLevel, level),
             new StoredField(FieldTreeOrder, treeOrder),
+            new StoredField(FieldTitleLength, titleLength),
             // Level + TreeOrder ALSO as numeric doc-values: column-stored, so the sort
             // that decides which docs to materialize can read them per-doc without
             // decompressing the (expensive) stored-fields blob. This is what lets the
@@ -619,6 +627,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 bookId: book.Id,
                 lineIndex: row.LineIndex,
                 fullTocPath: path,
+                titleLength: book.Title.Length,
                 level: level,
                 treeOrder: treeOrder(book.Id),
                 structureId: structureId));

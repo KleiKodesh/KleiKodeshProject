@@ -42,8 +42,8 @@ export type SearchFsItem = BookFsItem | TocFsItem
 type CatalogTocServiceHit = {
   bookId: number
   lineIndex: number // -1 = no resolved line
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
@@ -83,13 +83,9 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
       if (hit.level === 0) {
         items.push({ uid: `b-${book.id}`, kind: 'book', book })
       } else {
-        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book title
-        // itself, so show only the TOC part. Navigation is line-based (tocEntryId is
-        // no longer carried by the index).
-        const titlePrefix = `${book.title} / `
-        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
-          ? hit.fullTocPath.slice(titlePrefix.length)
-          : hit.fullTocPath
+        // The UI prepends the book title itself. Navigation is line-based (tocEntryId
+        // is no longer carried by the index).
+        const tocPath = hit.tocPath
         items.push({
           uid: `toc-${hit.bookId}-${hit.treeOrder}`,
           kind: 'toc',
