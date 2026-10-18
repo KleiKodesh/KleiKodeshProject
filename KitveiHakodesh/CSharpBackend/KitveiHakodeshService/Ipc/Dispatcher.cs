@@ -720,7 +720,7 @@ public sealed class Dispatcher(
                 case "getTocPathsForLines":
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new TocPathsResult { Rows = seforim.GetTocPathsForLines(a.LineIds) }));
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetTocPathsForLines(a.LineIds)));
                 }
 
                 case "getEnclosingTocPathForLineRanges":

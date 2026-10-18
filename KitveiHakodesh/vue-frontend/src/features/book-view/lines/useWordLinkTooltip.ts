@@ -226,13 +226,13 @@ export function useWordLinkTooltip(
       // it after these would put four round-trips in series behind a 250ms hover.
       // Its failure is not fatal — it only costs the section — so it is caught
       // individually rather than taking the whole preview down with it.
-      const [contentRows, tocRows, entries] = await Promise.all([
+      const [contentRows, tocPathByLine, entries] = await Promise.all([
         getLineContents([target.lineId]),
         getTocPathsForLines([target.lineId]),
         loadSectionTocEntries(target.bookId).catch(() => [] as TocEntry[]),
       ])
       content = contentRows[0]?.content ?? ''
-      tocPath = tocRows[0]?.tocPath ?? ''
+      tocPath = tocPathByLine.get(target.lineId) ?? ''
       tocEntries = entries
     } catch {
       return

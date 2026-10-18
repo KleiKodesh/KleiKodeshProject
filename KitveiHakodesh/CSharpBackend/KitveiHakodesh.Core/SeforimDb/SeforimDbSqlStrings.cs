@@ -329,35 +329,42 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC paths & line→book/index helpers (search + commentary labels) ─────────
 
-        /// <summary>Full TOC path (root→leaf, ' '-joined, book-title root stripped) per line id.</summary>
-        public static string GetTocPathsForLines(int count) => $@"
-            WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
-              SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
-              FROM line_toc lt
-              JOIN tocEntry te ON te.id = lt.tocEntryId
+        /// <summary>The TOC entry (and book) each line id sits under.</summary>
+        public static string GetTocEntryForLines(int count) => $@"
+            SELECT lt.lineId, te.bookId, lt.tocEntryId
+            FROM line_toc lt
+            JOIN tocEntry te ON te.id = lt.tocEntryId
+            WHERE lt.lineId IN ({InPlaceholders("p", count)})
+            ORDER BY lt.lineId, lt.tocEntryId";
+
+        /// <summary>Full TOC path (root→leaf, ' '-joined, book-title root stripped) per TOC entry id.</summary>
+        public static string GetTocPathsForTocEntries(int count) => $@"
+            WITH RECURSIVE ancestors(entryId, bookId, id, parentId, text, depth) AS (
+              SELECT te.id, te.bookId, te.id, te.parentId, tt.text, 0
+              FROM tocEntry te
               JOIN tocText tt ON tt.id = te.textId
-              WHERE lt.lineId IN ({InPlaceholders("p", count)})
+              WHERE te.id IN ({InPlaceholders("e", count)})
               UNION ALL
-              SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+              SELECT a.entryId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
               FROM ancestors a
               JOIN tocEntry te ON te.id = a.parentId
               JOIN tocText tt ON tt.id = te.textId
             ),
             ordered AS (
-              SELECT a.lineId, a.bookId, a.text, a.depth,
-                     MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+              SELECT a.entryId, a.text, a.depth,
+                     MAX(a.depth) OVER (PARTITION BY a.entryId) AS maxDepth,
                      b.title AS bookTitle
               FROM ancestors a
               JOIN book b ON b.id = a.bookId
             )
-            SELECT lineId, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
+            SELECT entryId, group_concat(text, ' ') AS path
             FROM (
-              SELECT lineId, bookId, text
+              SELECT entryId, text
               FROM ordered
               WHERE NOT (depth = maxDepth AND text = bookTitle)
-              ORDER BY lineId, depth DESC
+              ORDER BY entryId, depth DESC
             )
-            GROUP BY lineId";
+            GROUP BY entryId";
 
         /// <summary>Deepest common-ancestor TOC path covering both endpoints of each (groupKey, first, last)
         /// range. Bind interleaved triples: (@g0,@f0,@l0),(@g1,@f1,@l1)…</summary>

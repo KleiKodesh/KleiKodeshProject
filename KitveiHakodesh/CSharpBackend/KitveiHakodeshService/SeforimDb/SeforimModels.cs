@@ -177,9 +177,6 @@ public sealed class LinkTargetResult { public List<LinkTargetRow> Rows { get; se
 // ── TOC paths & line→book/index helpers ────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocPathsResult { public List<TocPathRow> Rows { get; set; } = new(); }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class EnclosingTocPathArgs { public List<int> Triples { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

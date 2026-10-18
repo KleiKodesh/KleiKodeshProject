@@ -253,8 +253,23 @@ export async function getLinkTargetForSourceLineAndBook(
 
 // ── TOC paths & line→book/index helpers ───────────────────────────────────────
 
-export async function getTocPathsForLines(lineIds: number[]): Promise<{ lineId: number; bookId: number; tocPath: string }[]> {
-  return (await seforimOp<{ rows: { lineId: number; bookId: number; tocPath: string }[] }>('getTocPathsForLines', { lineIds })).rows
+/**
+ * TOC path per line id. The wire carries each line's TOC entry id and each distinct
+ * entry's path once (lines of a section share an entry); this expands that back into
+ * the per-line map every caller wants. Lines with no TOC entry are absent.
+ */
+export async function getTocPathsForLines(lineIds: number[]): Promise<Map<number, string>> {
+  const { lines, paths } = await seforimOp<{
+    lines: { lineId: number; bookId: number; tocEntryId: number }[]
+    paths: { tocEntryId: number; path: string }[]
+  }>('getTocPathsForLines', { lineIds })
+  const pathByEntry = new Map(paths.map((p) => [p.tocEntryId, p.path]))
+  const pathByLine = new Map<number, string>()
+  for (const line of lines) {
+    const path = pathByEntry.get(line.tocEntryId)
+    if (path !== undefined && !pathByLine.has(line.lineId)) pathByLine.set(line.lineId, path)
+  }
+  return pathByLine
 }
 
 /** triples = flat [groupKey, firstLineId, lastLineId, …]. */

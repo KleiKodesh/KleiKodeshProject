@@ -243,8 +243,21 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LinkTargetRow { public int TargetLineId { get; set; } public int LineIndex { get; set; } }
 
+    /// <summary>Which TOC entry a requested line sits under. The path TEXT is not here: lines of one
+    /// section share an entry, so the text rides once per entry in <see cref="TocEntryPathRow"/>.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
-    public sealed class TocPathRow { public int LineId { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
+    public sealed class LineTocEntryRow { public int LineId { get; set; } public int BookId { get; set; } public int TocEntryId { get; set; } }
+
+    /// <summary>Full TOC path (root to leaf, space-joined, book-title root stripped) of one entry.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class TocEntryPathRow { public int TocEntryId { get; set; } public string Path { get; set; } = ""; }
+
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class TocPathsForLinesResult
+    {
+        public List<LineTocEntryRow> Lines { get; set; } = new();
+        public List<TocEntryPathRow> Paths { get; set; } = new();
+    }
 
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }

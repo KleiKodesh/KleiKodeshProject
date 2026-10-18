@@ -28,8 +28,7 @@ export function useCommentaryTocPaths(
       .filter((id): id is number => id != null && id > 0)
     if (!lineIds.length) return
 
-    const rows = await getTocPathsForLines(lineIds)
-    const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
+    const pathsByLineId = await getTocPathsForLines(lineIds)
     const resolved = new Map<string, string>()
     for (const g of groupList) {
       const lineId = g.lines[0]?.lineId
@@ -89,8 +88,7 @@ export function useCommentaryTocPaths(
     // Fall back to the single-line query for groups with only one real line.
     if (singleLineGroups.length > 0) {
       const lineIds = singleLineGroups.map((g) => g.lineId)
-      const rows = await getTocPathsForLines(lineIds)
-      const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
+      const pathsByLineId = await getTocPathsForLines(lineIds)
       for (const { lineId, key } of singleLineGroups) {
         const tocPath = pathsByLineId.get(lineId)
         if (tocPath) resolved.set(key, tocPath)
