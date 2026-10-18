@@ -2,6 +2,7 @@ using KitveiHakodeshLib.Service;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -24,11 +25,15 @@ namespace KitveiHakodeshLib.Bridge
     ///   <c>POST /rpc</c>            one pipe round-trip; the reply is the HTTP response body.
     ///   <c>POST /rpc-stream?id=X</c> the streaming ops. WebView2 cannot stream a response body
     ///                               progressively (the body must be complete when the deferral
-    ///                               ends), so the frames are instead PUSHED to the page one by
-    ///                               one as <c>serviceStreamFrame</c> messages carrying the
-    ///                               stream id X, followed by <c>serviceStreamEnd</c>. The page
-    ///                               chooses X before it POSTs, so its listener is in place
-    ///                               before the first frame can arrive.
+    ///                               ends), so the frames are instead PUSHED to the page as
+    ///                               <c>serviceStreamFrames</c> messages carrying the stream id X
+    ///                               and an array of base64 frames, followed by
+    ///                               <c>serviceStreamEnd</c>. One message per UI-thread turn,
+    ///                               not per frame: every frame that arrived while the previous
+    ///                               message was still crossing rides in the next one (see
+    ///                               <see cref="StreamFramesToPage"/>). The page chooses X before
+    ///                               it POSTs, so its listener is in place before the first
+    ///                               frame can arrive.
     ///   <c>POST /rpc-stream-cancel?id=X</c> closes X's pipe - the service's cancel signal.
     ///   <c>POST /rpc-stream-ack?id=X&amp;n=N</c> the page consumed N more frames of X. Pushing is
     ///                               fire-and-forget, so without these credits the pipe's
@@ -202,23 +207,26 @@ namespace KitveiHakodeshLib.Bridge
             }
         }
 
-        /// <summary>Reads frames off one streaming connection and pushes each to the page.
-        /// Runs on the thread pool; WebBridge marshals every push onto the UI thread in order.</summary>
+        /// <summary>Reads frames off one streaming connection and hands them to the page.
+        /// Runs on the thread pool; <see cref="StreamFramesToPage"/> batches them onto the UI
+        /// thread in order.</summary>
         private async Task PumpFramesToPageAsync(string streamId, Stream frames)
         {
             string error = null;
             _streamCredits.TryGetValue(streamId, out SemaphoreSlim credits);
+            var toPage = new StreamFramesToPage(this, streamId);
             try
             {
                 while (true)
                 {
                     // Wait for the page to catch up before reading on, so the pipe (and with it
-                    // the service) is held back instead of the page's memory filling up.
+                    // the service) is held back instead of the page's memory filling up. A credit
+                    // per frame also bounds what one message can carry: StreamFrameWindow frames.
                     if (credits != null) await credits.WaitAsync().ConfigureAwait(false);
                     byte[] frame = await KitveiHakodeshServiceFrameProtocol
                         .ReadFrameAsync(frames, CancellationToken.None).ConfigureAwait(false);
                     if (frame == null) break; // the service closed: the stream is complete
-                    _bridge.PushEvent(new { @event = "serviceStreamFrame", streamId, frame = Convert.ToBase64String(frame) });
+                    toPage.Add(Convert.ToBase64String(frame));
                 }
             }
             catch (Exception ex)
@@ -230,7 +238,83 @@ namespace KitveiHakodeshLib.Bridge
             finally
             {
                 CloseStream(streamId);
-                _bridge.PushEvent(new { @event = "serviceStreamEnd", streamId, error });
+                toPage.End(error);
+            }
+        }
+
+        /// <summary>
+        /// The frames of one stream on their way to the page, coalesced: a frame is queued and
+        /// ONE flush is scheduled on the UI thread; every frame the pump reads before that
+        /// flush runs joins the same <c>serviceStreamFrames</c> message. So a stream that
+        /// outruns the UI thread sends one web message (one JSON, one BeginInvoke, one
+        /// PostWebMessageAsJson, one parse in the page) per UI-thread turn instead of per
+        /// frame, and a stream the page keeps up with still delivers every frame at once.
+        /// The end marker goes through the same flush, after whatever frames are queued, so
+        /// <c>serviceStreamEnd</c> can never overtake a frame.
+        /// </summary>
+        private sealed class StreamFramesToPage
+        {
+            private readonly ServiceRpcRelay _relay;
+            private readonly string _streamId;
+            private readonly object _gate = new object();
+            private List<string> _frames = new List<string>();
+            private bool _flushScheduled;
+            private bool _ended;
+            private string _endError;
+
+            public StreamFramesToPage(ServiceRpcRelay relay, string streamId)
+            {
+                _relay = relay;
+                _streamId = streamId;
+            }
+
+            public void Add(string base64Frame)
+            {
+                lock (_gate)
+                {
+                    _frames.Add(base64Frame);
+                    ScheduleFlush();
+                }
+            }
+
+            public void End(string error)
+            {
+                lock (_gate)
+                {
+                    _ended = true;
+                    _endError = error;
+                    ScheduleFlush();
+                }
+            }
+
+            // Under _gate. One flush in flight at a time: a second one would only split what
+            // the first is about to send.
+            private void ScheduleFlush()
+            {
+                if (_flushScheduled) return;
+                _flushScheduled = true;
+                _relay._uiContext.Post(_ => Flush(), null);
+            }
+
+            // UI thread. Takes everything queued so far; a frame added after this snapshot
+            // schedules the next flush itself.
+            private void Flush()
+            {
+                List<string> frames;
+                bool ended;
+                string endError;
+                lock (_gate)
+                {
+                    frames = _frames;
+                    _frames = new List<string>();
+                    ended = _ended;
+                    endError = _endError;
+                    _flushScheduled = false;
+                }
+                if (frames.Count > 0)
+                    _relay._bridge.PushEvent(new { @event = "serviceStreamFrames", streamId = _streamId, frames });
+                if (ended)
+                    _relay._bridge.PushEvent(new { @event = "serviceStreamEnd", streamId = _streamId, error = endError });
             }
         }
 
