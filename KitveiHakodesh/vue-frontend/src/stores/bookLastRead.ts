@@ -1,4 +1,4 @@
-import { dbGet, dbSet, dbDelete, dbHasKey, dbCount, dbListEntries } from '@/utils/persistence'
+import { dbGet, dbSet, dbDelete, dbCount, dbListEntries } from '@/utils/persistence'
 
 /**
  * The `app-lastread` slice of persistence — where the reader last was in a book.
@@ -51,9 +51,13 @@ export interface LastReadState {
 /** On-disk cap. Every book the user has ever opened lands here, so it needs a bound. */
 const DISK_MAX = 1000
 
-// In-memory count of lastread entries — avoids a full DB key scan on every scroll save.
-// Initialised to -1 (unknown); first write counts the real value once.
+// In-memory UPPER BOUND on the number of lastread entries, so a save costs one put and
+// no probe. -1 = unknown; the first write counts once. After that every book id not yet
+// written this session bumps the bound (it MAY already exist on disk - that is what
+// makes it a bound, not a count), and only when the bound reaches the cap is the real
+// count taken before evicting. Ids written this session are known to exist.
 let diskCount = -1
+const writtenThisSession = new Set<number>()
 
 function readLastRead(bookId: number): Promise<LastReadState | null> {
   return dbGet<LastReadState>(LASTREAD_DB, `lastread:${bookId}`)
@@ -62,20 +66,16 @@ function readLastRead(bookId: number): Promise<LastReadState | null> {
 async function writeLastRead(bookId: number, value: LastReadState): Promise<void> {
   const key = `lastread:${bookId}`
 
-  // Check if this key already exists — if so, the count stays the same
-  const existing = await dbHasKey(LASTREAD_DB, key)
-
   await dbSet(LASTREAD_DB, key, { ...value, savedAt: Date.now() })
 
-  if (!existing) {
-    if (diskCount === -1) {
-      // First write after boot — count the real number of entries once
-      diskCount = await dbCount(LASTREAD_DB)
-    } else {
-      diskCount++
-    }
+  if (!writtenThisSession.has(bookId)) {
+    writtenThisSession.add(bookId)
+    diskCount = diskCount === -1 ? await dbCount(LASTREAD_DB) : diskCount + 1
   }
 
+  if (diskCount <= DISK_MAX) return
+  // The bound reached the cap: take the real count before deciding to evict.
+  diskCount = await dbCount(LASTREAD_DB)
   if (diskCount <= DISK_MAX) return
 
   // Over the cap — evict the LEAST RECENTLY SAVED entries. Reading every value is only
@@ -86,6 +86,8 @@ async function writeLastRead(bookId: number, value: LastReadState): Promise<void
   entries.sort((a, b) => (a[1]?.savedAt ?? 0) - (b[1]?.savedAt ?? 0))
   const keysToDelete = entries.slice(0, diskCount - DISK_MAX).map(([k]) => k)
   await Promise.all(keysToDelete.map((k) => dbDelete(LASTREAD_DB, k)))
+  // An evicted id written again later is a NEW entry and must bump the bound again.
+  for (const k of keysToDelete) writtenThisSession.delete(Number(k.slice('lastread:'.length)))
   diskCount -= keysToDelete.length
 }
 
