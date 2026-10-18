@@ -11,7 +11,7 @@ import { initPdfThemeObserver } from './theme/themes'
 import { dbReady, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
-import { useLocalFileStore } from './stores/localFileStore'
+import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
@@ -68,19 +68,12 @@ function warmBooksDataInBackground() {
 // answer so a missing library does not fire queries that can only fail.
 void probeDbReady().then(warmBooksDataInBackground)
 
-// Restore persisted local file tabs after mount so the UI paints immediately.
-// PDF/HTML tabs render their loading placeholder right away; the virtual URL
-// is filled in asynchronously once the C# bridge confirms the file is ready.
-const localFileStore = useLocalFileStore()
 // Register the host-search listener before 'appReady' is posted below, so any search
 // request queued C#-side (context menu clicked before Vue mounted) is delivered.
 useHostSearchStore()
-const tabStore = useTabStore()
-void Promise.all(
-  tabStore.tabs
-    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view' || t.route === '/txt-view')
-    .map((t) => localFileStore.restoreTab(t.id)),
-)
+// Restore persisted local file tabs after mount so the UI paints immediately: only the
+// active tab per pane now, the rest when first shown (see localFileTabLazyRestore).
+restoreLocalFileTabsLazily()
 
 // Signal C# that the Vue app has fully mounted and all event listeners are registered.
 // C# uses this to dispatch any pending file path from an "Open With" launch — this
