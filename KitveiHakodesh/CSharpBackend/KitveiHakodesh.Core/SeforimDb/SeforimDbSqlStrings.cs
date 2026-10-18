@@ -633,6 +633,25 @@ namespace KitveiHakodesh.Core.SeforimDb
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>
+        /// The lines at a set of (bookId, lineIndex) positions — one row-value IN over the
+        /// (bookId, lineIndex) index, so a whole batch's neighbour lines cost one round-trip.
+        /// Parameters go in pairs: @p0,@p1 = first position, @p2,@p3 = second, and so on.
+        /// A position with no line is simply absent.
+        /// </summary>
+        internal static string FtsFetchLinesAtBookPositions(SeforimDbSchema schema, int positionCount)
+        {
+            var values = new System.Text.StringBuilder(positionCount * 12);
+            for (int i = 0; i < positionCount; i++)
+            {
+                if (i > 0) values.Append(',');
+                values.Append("(@p").Append(2 * i).Append(",@p").Append(2 * i + 1).Append(')');
+            }
+            return "SELECT l.id, l.bookId, l.lineIndex, " + C_ContentColumn(schema, "l") +
+                   " FROM line l" + C_ContentJoin(schema, "l") +
+                   " WHERE (l.bookId, l.lineIndex) IN (VALUES " + values + ")";
+        }
+
+        /// <summary>
         /// Neighbour lines for one chunk of matched ids: m is the matched line, n every line in
         /// the SAME BOOK within ±@radius rows by lineIndex, excluding m itself. Returns the
         /// matched id, the signed delta, the neighbour's content and (last, so readers of the
