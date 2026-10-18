@@ -15,6 +15,7 @@ import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
+import { attachPdfLoadErrorReporting } from './usePdfLoadErrorReporting'
 
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
@@ -160,6 +161,7 @@ function onIframeLoad() {
   iframeContentWindow.value = contentWindow
   attachIframeWheelRelay()
   if (contentWindow) {
+    attachPdfLoadErrorReporting(contentWindow, paneNavigation.activeTab.localFileVirtualUrl ?? null)
     pageTracking.attach(contentWindow)
     pdfContextMenu.attach(contentWindow)
   }
