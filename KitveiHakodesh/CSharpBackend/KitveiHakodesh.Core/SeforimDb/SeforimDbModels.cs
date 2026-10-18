@@ -250,9 +250,6 @@ namespace KitveiHakodesh.Core.SeforimDb
     public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
 
     [MessagePackObject(keyAsPropertyName: true)]
-    public sealed class LineTocEntryRow { public int LineId { get; set; } public int BookId { get; set; } public int TocEntryId { get; set; } }
-
-    [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LineBookRow { public int LineId { get; set; } public int BookId { get; set; } }
 
     [MessagePackObject(keyAsPropertyName: true)]

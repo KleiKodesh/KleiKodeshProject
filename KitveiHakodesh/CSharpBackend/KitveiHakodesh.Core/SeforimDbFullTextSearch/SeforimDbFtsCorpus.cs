@@ -30,7 +30,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// queries and wrong for an indexing scan that streams millions of rows over one handle.
     /// Different lifetime, different class.
     /// </summary>
-    public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus
+    public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus, IFtsPlacedCorpus
     {
         /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.
         /// How many ids a fetch is asked for at a time is the CALLER's decision (the searcher's
@@ -165,11 +165,20 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
-        /// <summary>Search-result content. The Title slot of the corpus seam is left empty on
-        /// purpose: Core enriches hits with their book ID instead and never reads the engine's
-        /// title, so joining it here was a cost per matched line for nothing. The engine's own
-        /// diagnostics run over the test corpus, which does fill it.</summary>
+        /// <summary>Search-result content without placement - the plain corpus seam. The
+        /// Title slot is left empty on purpose: Core enriches hits with their book ID instead
+        /// and never reads the engine's title. The engine's own diagnostics run over the test
+        /// corpus, which does fill it.</summary>
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
+        {
+            foreach (var (id, text, _) in FetchPlacedDocuments(ids)) yield return (id, text, "");
+        }
+
+        /// <summary>Search-result content plus each line's placement (book id, lineIndex, own
+        /// TOC entry), from the one `line` row the content fetch reads - what lets the
+        /// searcher finish a hit without a second query. See
+        /// <see cref="SeforimDbSqlStrings.FtsFetchPlacedLines"/>.</summary>
+        public IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids)
         {
             var chunk = new List<int>(SqliteInListChunkSize);
 
@@ -181,25 +190,31 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 chunk.Add(id);
                 if (chunk.Count == SqliteInListChunkSize)
                 {
-                    foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
+                    foreach (var row in FetchPlacedChunk(command, parameterNames, chunk)) yield return row;
                     chunk.Clear();
                 }
             }
 
             if (chunk.Count > 0)
-                foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
+                foreach (var row in FetchPlacedChunk(command, parameterNames, chunk)) yield return row;
         }
 
-        private IEnumerable<(int Id, string Text, string Title)> FetchChunk(
+        private IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedChunk(
             SqliteCommand command, string[] parameterNames, List<int> ids)
         {
-            command.CommandText = SeforimDbSqlStrings.FtsFetchLines(_schema, ids.Count);
+            command.CommandText = SeforimDbSqlStrings.FtsFetchPlacedLines(_schema, ids.Count);
             for (int i = 0; i < ids.Count; i++)
                 command.Parameters[parameterNames[i]].Value = ids[i];
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), "");
+            {
+                var placement = new FtsDocumentPlacement(
+                    bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+                    lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
+                    tocEntryId: reader.GetInt32(4));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), placement);
+            }
         }
 
         public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(

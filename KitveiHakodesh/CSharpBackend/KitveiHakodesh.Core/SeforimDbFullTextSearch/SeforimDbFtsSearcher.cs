@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using FtsLib;
 using FtsLib.SeforimDb;
 using FtsLib.Snippets;
 // Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
@@ -13,7 +14,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// <summary>
     /// SEARCHES the full-text index and turns the engine's raw matches into finished
     /// <see cref="FtsHit"/>s — snippet windows located, filtered, short windows extended over
-    /// neighbour lines, and enriched. Feeding the index
+    /// neighbour lines. Feeding the index
     /// is <see cref="SeforimDbFtsIndexer"/>'s job; the match/rank/snippet ALGORITHMS are
     /// FtsLib's, and this class only decides what to do with their output.
     ///
@@ -31,7 +32,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     {
         // ── Batch plan ─────────────────────────────────────────────────────────────
         // ONE plan for the whole pipeline: the engine fetches content in batches of exactly
-        // the size the searcher snippets, so a batch is fetched, snippeted, enriched and
+        // the size the searcher snippets, so a batch is fetched, snippeted, extended and
         // handed on as one unit. Small batches first — the first screen is on the wire
         // after one fetch of 256 lines — then larger ones, because a broad query has
         // hundreds of thousands of batches to go and every batch pays fixed costs (a
@@ -64,9 +65,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             return Math.Min(size, MaxBatchSize);
         }
 
-        /// <summary>SQLite's default variable limit is 999; IN-lists are chunked under it.</summary>
-        private const int SqliteInListChunkSize = 999;
-
         /// <summary>
         /// How many lines of context to pull per side when extending a short snippet window
         /// (same book only). Two fills the snippet's visual space (~4 clamped lines) and reaches
@@ -91,8 +89,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         private readonly SeforimDbQueries _queries;
 
-        /// <param name="queries">For enrichment — hits leave here carrying their book id and
-        /// TOC entry id; the page resolves titles and TOC paths from those on demand.</param>
+        /// <param name="queries">For the snippet line texts seeded onto the first frames.</param>
         public SeforimDbFtsSearcher(SeforimDbQueries queries)
         {
             _queries = queries ?? throw new ArgumentNullException(nameof(queries));
@@ -162,8 +159,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <summary>
         /// One batch, engine matches → finished hits: snippet windows located across all cores
         /// (thread-safe — the engine's window locator is per-thread), order preserved, the
-        /// word-distance filter applied, short windows extended over neighbour lines, and the
-        /// survivors enriched with book id + TOC entry id.
+        /// word-distance filter applied, short windows extended over neighbour lines. Book id
+        /// and TOC entry id come with the engine match (the corpus reads them in the content
+        /// fetch — <see cref="FtsDocumentPlacement"/>), so no query is needed to finish a hit.
         /// </summary>
         private List<FtsHit> BuildBatch(
             SeforimDbFtsEngine engine,
@@ -197,7 +195,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             var passing = new List<FtsHit>(results.Count);
             foreach (var hit in built)
                 if (hit != null) passing.Add(hit);
-            EnrichHits(passing);
             return passing;
         }
 
@@ -228,8 +225,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             built = new FtsHit
             {
                 LineId = hit.LineId,
-                BookId = 0,                          // enrichment fills this
-                TocEntryId = 0,                      // enrichment fills this
+                BookId = hit.Placement.BookId,
+                TocEntryId = hit.Placement.TocEntryId,
                 Score = window.Score,
                 WordDistance = window.WordDistance,
             };
@@ -352,34 +349,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             foreach (var row in _queries.GetLineContents(ids))
                 texts[row.Id] = row.Content ?? string.Empty;
             return texts;
-        }
-
-        /// <summary>
-        /// Fills each hit's book id and TOC entry id so results leave Core COMPLETE. One
-        /// batched query per 999 hits (SQLite's variable limit), straight off the line
-        /// table: a line with no TOC entry (custom books) keeps TocEntryId 0 but still gets
-        /// its book.
-        /// </summary>
-        private void EnrichHits(List<FtsHit> hits)
-        {
-            if (hits.Count == 0) return;
-
-            var byLine = new Dictionary<int, LineTocEntryRow>(hits.Count);
-            var lineIds = new List<int>(SqliteInListChunkSize);
-            for (int start = 0; start < hits.Count; start += SqliteInListChunkSize)
-            {
-                lineIds.Clear();
-                int end = Math.Min(hits.Count, start + SqliteInListChunkSize);
-                for (int i = start; i < end; i++) lineIds.Add(hits[i].LineId);
-                foreach (var row in _queries.GetTocEntryIdsForLines(lineIds)) byLine[row.LineId] = row;
-            }
-            if (byLine.Count == 0) return;
-            foreach (var hit in hits)
-            {
-                if (!byLine.TryGetValue(hit.LineId, out var row)) continue;
-                hit.BookId = row.BookId;
-                hit.TocEntryId = row.TocEntryId;
-            }
         }
     }
 }

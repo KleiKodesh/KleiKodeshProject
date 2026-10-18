@@ -416,16 +416,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY groupKey";
         }
 
-        /// <summary>bookId for a batch of line ids (fallback when line_toc has no entry).</summary>
-        /// <summary>Book id + TOC entry id per line (FTS hit enrichment). The TOC entry is the
-        /// line's own line_toc row (one per line); 0 when the line has none — the page resolves
-        /// the entry's path from the book's TOC on demand.</summary>
-        public static string GetTocEntryIdsForLines(int count) => $@"
-            SELECT l.id AS lineId, l.bookId, lt.tocEntryId
-            FROM line l
-            LEFT JOIN line_toc lt ON lt.lineId = l.id
-            WHERE l.id IN ({InPlaceholders("p", count)})";
-
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
@@ -626,13 +616,20 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id LIMIT -1 OFFSET @skip";
 
-        /// <summary>One chunk of search-result rows: id + content only. No book title: hits
-        /// leave the searcher carrying their book ID (see SeforimDbFtsSearcher.EnrichHits) and
-        /// the page resolves titles from that, so a title per fetched line was a join paid
-        /// for every matched line and read by nothing. IN-list sized to the chunk.</summary>
-        internal static string FtsFetchLines(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, " + C_ContentColumn(schema, "l") +
+        /// <summary>One chunk of search-result rows: id, content, and the line's PLACEMENT -
+        /// bookId, lineIndex and its own TOC entry (0 when it has none) - read off the same
+        /// `line` row the content fetch visits anyway, so hits leave the searcher complete
+        /// without a second query per batch. No book title: the page resolves titles from the
+        /// book id. The TOC entry comes from `line_toc` when the database has it (the
+        /// authoritative source; `line.tocEntryId` is NULL for most lines), else from that
+        /// column, else 0. IN-list sized to the chunk.</summary>
+        internal static string FtsFetchPlacedLines(SeforimDbSchema schema, int count) =>
+            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex, " +
+            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
+             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
+             : "0") +
             " FROM line l" + C_ContentJoin(schema, "l") +
+            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>

@@ -251,14 +251,19 @@ namespace FtsLib.Fts5
             if (ids.Count == 0) yield break;
             // A corpus may return a batch in its own order (by id); results go out in the
             // index's order, which is the order of ids.
-            var byId = new Dictionary<int, (string Content, string Title)>(ids.Count);
-            foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
-                byId[lineId] = (content, bookTitle);
+            // A placed corpus gives each line's book / position / TOC entry in the same read.
+            var byId = new Dictionary<int, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
+            if (corpus is IFtsPlacedCorpus placed)
+                foreach (var (lineId, content, placement) in placed.FetchPlacedDocuments(ids))
+                    byId[lineId] = (content, "", placement);
+            else
+                foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
+                    byId[lineId] = (content, bookTitle, default);
             foreach (int lineId in ids)
             {
                 ct.ThrowIfCancellationRequested();
                 if (byId.TryGetValue(lineId, out var row))
-                    yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared);
+                    yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared, row.Placement);
             }
         }
 

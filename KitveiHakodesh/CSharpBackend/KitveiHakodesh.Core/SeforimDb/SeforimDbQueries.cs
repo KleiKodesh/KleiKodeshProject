@@ -615,25 +615,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        public List<LineTocEntryRow> GetTocEntryIdsForLines(List<int> lineIds)
-        {
-            var list = new List<LineTocEntryRow>();
-            if (lineIds is null || lineIds.Count == 0) return list;
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetTocEntryIdsForLines(lineIds.Count);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new LineTocEntryRow
-                {
-                    LineId = r.GetInt32(0),
-                    BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    TocEntryId = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                });
-            return list;
-        }
-
         public List<LineBookRow> GetBookIdsForLines(List<int> lineIds)
         {
             var list = new List<LineBookRow>();
