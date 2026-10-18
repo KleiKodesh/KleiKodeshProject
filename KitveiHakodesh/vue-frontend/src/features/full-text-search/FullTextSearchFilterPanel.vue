@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { computed, ref, shallowRef, markRaw, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import {
   IconMinimize20Regular,
@@ -39,7 +39,7 @@ const booksStore = useBooksDataStore()
 const bookListRef = ref<InstanceType<typeof FullTextSearchFilterBookList> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const inputText = ref('')
-const filteredBooks = ref<BookRow[]>([])
+const filteredBooks = shallowRef<BookRow[]>(markRaw([]))
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
 
@@ -173,9 +173,9 @@ function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[]
 
 const runSearch = useDebounceFn(() => {
   const books = computeFilteredBooks(props.atFilters, inputText.value)
-  filteredBooks.value = props.hasSearched
+  filteredBooks.value = markRaw(props.hasSearched
     ? books.filter((b) => (props.resultCounts.get(b.id) ?? 0) > 0)
-    : books
+    : books)
 }, 150)
 
 watch(
