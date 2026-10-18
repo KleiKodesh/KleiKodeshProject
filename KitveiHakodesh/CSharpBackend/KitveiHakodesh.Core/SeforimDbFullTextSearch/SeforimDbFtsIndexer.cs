@@ -3,8 +3,7 @@ using System.IO;
 using System.Threading;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
-// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
-// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
+// Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
 using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
 using KitveiHakodesh.Core.SeforimDb;
 

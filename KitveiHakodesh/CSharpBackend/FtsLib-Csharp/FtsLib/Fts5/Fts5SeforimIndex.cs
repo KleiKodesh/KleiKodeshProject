@@ -10,10 +10,10 @@ using System.Threading;
 namespace FtsLib.Fts5
 {
     /// <summary>
-    /// TEMPORARY (FTS5 trial in the service): a drop-in for <see cref="SeforimIndex"/> — the
-    /// same public members Core calls, with SQLite FTS5 doing the search. Core selects it with a
-    /// `using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;` alias; removing those aliases
-    /// restores FtsLib's own engine.
+    /// The SQLite FTS5 engine behind Core's full-text search: a drop-in for
+    /// <see cref="SeforimIndex"/> — the same public members Core calls, with FTS5 doing the
+    /// search. Core binds to it with a `using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;`
+    /// alias; FtsLib's own engine stays available for its tests and benchmarks.
     ///
     /// Index files (<see cref="Fts5Index"/>) live directly in the index directory. The line
     /// table is built in place and committed in batches, so searches see every committed

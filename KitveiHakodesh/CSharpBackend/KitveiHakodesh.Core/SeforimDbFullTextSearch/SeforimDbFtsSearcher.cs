@@ -4,8 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FtsLib.SeforimDb;
 using FtsLib.Snippets;
-// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
-// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
+// Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
 using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
 using KitveiHakodesh.Core.SeforimDb;
 
@@ -183,7 +182,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (TryBuildHitCore(index, results[i], requireOrdered, contextWords, maxWordDistance, terms,
+                if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, terms,
                         out FtsHit? hit, out int words))
                 {
                     built[i] = hit;
@@ -191,146 +190,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
             });
 
-            // The tail — extend the short windows, then enrich — is the same work a host
-            // that batches on its own rhythm needs, so it lives in one place.
             onStage?.Invoke("enrich");
-            FinishBatchCore(engine, results, built, windowWords, requireOrdered, contextWords,
-                            terms, cancellationToken);
+            ExtendShortWindowsWithNeighbourLines(engine, results, built, windowWords, requireOrdered,
+                                                 contextWords, terms, cancellationToken);
 
             var passing = new List<FtsHit>(results.Count);
             foreach (var hit in built)
                 if (hit != null) passing.Add(hit);
+            EnrichHits(passing);
             return passing;
         }
 
         /// <summary>
-        /// The engine's matches, with its mid-merge refusal translated into Core's own type so
-        /// a host never has to name an engine exception.
-        /// </summary>
-        private static IEnumerable<SearchResult> Matches(
-            SeforimIndex index, string query, bool expandKetiv, CancellationToken cancellationToken)
-        {
-            IEnumerator<SearchResult> walker;
-            try
-            {
-                walker = index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken)
-                              .GetEnumerator();
-            }
-            catch (FtsLib.Indexing.IndexMergingException ex)
-            {
-                throw new SeforimDbFtsIndexMergingException(
-                    "The full-text index is merging and cannot answer searches right now.", ex);
-            }
-
-            using (walker)
-            {
-                while (true)
-                {
-                    try
-                    {
-                        if (!walker.MoveNext()) yield break;
-                    }
-                    catch (FtsLib.Indexing.IndexMergingException ex)
-                    {
-                        throw new SeforimDbFtsIndexMergingException(
-                            "The full-text index is merging and cannot answer searches right now.", ex);
-                    }
-                    yield return walker.Current;
-                }
-            }
-        }
-
-        /// <summary>
-        /// A hit on its way to a caller that batches on its own rhythm: the finished hit, plus
-        /// the two things <see cref="FinishPendingBatch"/> still needs to complete it — the
-        /// engine match it came from and its window word count.
-        ///
-        /// Core's own type, so the engine's result type never crosses into a host.
-        /// </summary>
-        public readonly struct PendingHit
-        {
-            internal PendingHit(SearchResult match, FtsHit hit, int windowWords)
-            {
-                Match = match;
-                Hit = hit;
-                WindowWords = windowWords;
-            }
-
-            /// <summary>Internal: the engine match, needed only to re-locate a short window over
-            /// its neighbour lines.</summary>
-            internal SearchResult Match { get; }
-
-            /// <summary>The finished hit. Still missing book id and TOC entry id until the batch
-            /// it belongs to is finished.</summary>
-            public FtsHit Hit { get; }
-
-            internal int WindowWords { get; }
-        }
-
-        /// <summary>
-        /// Streams finished hits ONE AT A TIME, in engine order, for a host that batches on its
-        /// own rhythm — the hosted app flushes at 1, 2, 4, 8, 16 results and then on a timer, so
-        /// the first result reaches the user immediately.
-        ///
-        /// Hits that fail the match or word-distance filters are skipped, so a caller only sees
-        /// keepers. Each one still needs <see cref="FinishBatch"/> run over whatever batch the
-        /// caller assembles — that is where short windows are extended and every hit gets
-        /// its book id and TOC entry id.
-        ///
-        /// The engine's own result type never leaves Core — see <see cref="PendingHit"/>.
-        /// </summary>
-        public IEnumerable<PendingHit> SearchHitByHit(
-            SeforimDbFtsEngine engine,
-            string query,
-            int maxWordDistance,
-            bool requireOrdered,
-            int contextWords,
-            bool expandKetiv,
-            FtsTermTable terms,
-            CancellationToken cancellationToken = default)
-        {
-            if (engine == null) throw new ArgumentNullException(nameof(engine));
-            if (terms == null) throw new ArgumentNullException(nameof(terms));
-            if (string.IsNullOrWhiteSpace(query)) yield break;
-
-            var index = engine.Index;
-            // IndexMergingException is translated below, at the one place a host would see it.
-            foreach (var match in Matches(index, query, expandKetiv, cancellationToken))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (TryBuildHitCore(index, match, requireOrdered, contextWords, maxWordDistance, terms,
-                                    out FtsHit? hit, out int windowWords))
-                {
-                    yield return new PendingHit(match, hit!, windowWords);
-                }
-            }
-        }
-
-        /// <summary>
         /// One engine match → one finished hit, or false when it does not pass the match and
-        /// word-distance filters.
-        ///
-        /// Public because a host may batch on a different rhythm than
-        /// <see cref="SearchInBatches"/>: the hosted app flushes at 1, 2, 4, 8, 16 results and
-        /// then on a timer, so the user sees the first result immediately. The per-hit WORK is
-        /// the same either way, and that is what must not exist twice.
-        ///
-        /// <paramref name="windowWordCount"/> is what decides whether the window is "short"
-        /// and worth extending — see <see cref="ExtendShortWindowsWithNeighbourLines"/>.
+        /// word-distance filters. <paramref name="windowWordCount"/> is what decides whether
+        /// the window is "short" and worth extending — see
+        /// <see cref="ExtendShortWindowsWithNeighbourLines"/>.
         /// </summary>
-        public static bool TryBuildHit(
-            SeforimDbFtsEngine engine,
-            SearchResult hit,
-            bool requireOrdered,
-            int contextWords,
-            int maxWordDistance,
-            FtsTermTable terms,
-            out FtsHit? built,
-            out int windowWordCount)
-            => TryBuildHitCore(engine.Index, hit, requireOrdered, contextWords, maxWordDistance, terms,
-                               out built, out windowWordCount);
-
-        private static bool TryBuildHitCore(
+        private static bool TryBuildHit(
             SeforimIndex index,
             SearchResult hit,
             bool requireOrdered,
@@ -390,77 +267,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
             hit.SnippetFlags = (window.LeadingEllipsis ? FtsHit.SnippetFlagLeadingEllipsis : 0)
                              | (window.TrailingEllipsis ? FtsHit.SnippetFlagTrailingEllipsis : 0);
-        }
-
-        /// <summary>
-        /// Finishes a batch a caller assembled itself — the hosted app's progressive flush
-        /// does. Exactly the tail of <see cref="SearchInBatches"/>: the batch's short windows
-        /// are extended over their neighbouring lines, then every hit is enriched with its
-        /// book id and TOC entry id, so hits leave Core COMPLETE however they were batched.
-        ///
-        /// The arrays are parallel, one entry per hit, and <paramref name="windowWords"/> holds
-        /// what <see cref="TryBuildHit"/> reported. <paramref name="terms"/> is the same table the
-        /// hits were built against — a re-located window names its terms through it.
-        /// </summary>
-        public void FinishBatch(
-            SeforimDbFtsEngine engine,
-            IReadOnlyList<SearchResult> results,
-            FtsHit?[] built,
-            int[] windowWords,
-            bool requireOrdered,
-            int contextWords,
-            FtsTermTable terms,
-            CancellationToken cancellationToken = default)
-            => FinishBatchCore(engine, results, built, windowWords, requireOrdered,
-                               contextWords, terms, cancellationToken);
-
-        /// <summary>
-        /// Finishes a batch a host assembled from <see cref="SearchHitByHit"/>: extends the
-        /// short windows over their neighbouring lines, then gives every hit its book id and
-        /// TOC path. The hits are completed IN PLACE.
-        /// </summary>
-        public void FinishPendingBatch(
-            SeforimDbFtsEngine engine,
-            IReadOnlyList<PendingHit> pending,
-            bool requireOrdered,
-            int contextWords,
-            FtsTermTable terms,
-            CancellationToken cancellationToken = default)
-        {
-            if (engine == null) throw new ArgumentNullException(nameof(engine));
-            if (pending == null || pending.Count == 0) return;
-
-            var matches = new SearchResult[pending.Count];
-            var built = new FtsHit?[pending.Count];
-            var windowWords = new int[pending.Count];
-            for (int i = 0; i < pending.Count; i++)
-            {
-                matches[i] = pending[i].Match;
-                built[i] = pending[i].Hit;
-                windowWords[i] = pending[i].WindowWords;
-            }
-
-            FinishBatchCore(engine, matches, built, windowWords, requireOrdered,
-                            contextWords, terms, cancellationToken);
-        }
-
-        /// <summary>The same tail, for callers inside Core that already hold the engine.</summary>
-        private void FinishBatchCore(
-            SeforimDbFtsEngine engine,
-            IReadOnlyList<SearchResult> results,
-            FtsHit?[] built,
-            int[] windowWords,
-            bool requireOrdered,
-            int contextWords,
-            FtsTermTable terms,
-            CancellationToken cancellationToken)
-        {
-            ExtendShortWindowsWithNeighbourLines(engine, results, built, windowWords, requireOrdered,
-                                                 contextWords, terms, cancellationToken);
-
-            var passing = new List<FtsHit>(built.Length);
-            foreach (var hit in built) if (hit != null) passing.Add(hit);
-            EnrichHits(passing);
         }
 
         /// <summary>

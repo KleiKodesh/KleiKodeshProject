@@ -12,7 +12,7 @@ using System.Threading;
 namespace FtsLib.Fts5
 {
     /// <summary>
-    /// PROTOTYPE search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
+    /// Search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
     /// SearchPipeline: QueryParser groups (AND across groups, OR within), the production
     /// wildcard / fuzzy / grammar / ketiv expansion rules, AND across groups and OR within, results
     /// in the index's order (catalog order for an IFtsOrderedCorpus, else ascending line ids), content fetched from the corpus, and FtsLib's snippet pipeline — the same
