@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -278,6 +279,11 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string? DecodeColumn(DbDataReader reader, int ordinal)
         {
             if (reader == null) throw new ArgumentNullException(nameof(reader));
+            // GetValue is the cheapest read Microsoft.Data.Sqlite offers for a blob: one copy
+            // out of SQLite's buffer. GetBytes/GetStream go through the same cached copy
+            // (then copy again) unless the blob table's own rowid is in the SELECT, which the
+            // sidecar join does not have. The decode below is what no longer copies: it
+            // decompresses into a pooled buffer and builds the string straight from it.
             return reader.IsDBNull(ordinal) ? null : Decode(reader.GetValue(ordinal));
         }
 
@@ -290,8 +296,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string DecodeColumnOrEmpty(DbDataReader reader, int ordinal)
             => DecodeColumn(reader, ordinal) ?? string.Empty;
 
-        /// <summary>Decodes one frame. Only reachable on a compressed codec.</summary>
-        private string DecodeFrame(byte[] frame)
+        /// <summary>Decodes one frame. Only reachable on a compressed codec. The decompressed
+        /// bytes live in a pooled buffer only as long as it takes to build the string.</summary>
+        private string DecodeFrame(ReadOnlySpan<byte> frame)
         {
             var decompressorsByDictionaryId = _decompressorsByDictionaryId
                 ?? throw new SeforimDbContentCodecException(
@@ -330,25 +337,32 @@ namespace KitveiHakodesh.Core.SeforimDb
                     "A line declares a decompressed size of " + declaredSize +
                     " bytes, beyond the " + MaximumLineBytes + "-byte limit for a single line.");
 
-            var destination = new byte[(int)declaredSize];
-
-            int written;
+            int capacity = (int)declaredSize;
+            byte[] destination = ArrayPool<byte>.Shared.Rent(capacity);
             try
             {
-                written = decompressor.Unwrap(frame, destination);
+                int written;
+                try
+                {
+                    written = decompressor.Unwrap(frame, destination.AsSpan(0, capacity));
+                }
+                catch (Exception exception)
+                {
+                    throw new SeforimDbContentCodecException(
+                        "A line's compressed content could not be decompressed: " + exception.Message);
+                }
+
+                if (written < 0 || written > capacity)
+                    throw new SeforimDbContentCodecException(
+                        "A line decompressed to " + written + " bytes, which does not fit the " +
+                        capacity + " bytes its frame header allowed for.");
+
+                return Encoding.UTF8.GetString(destination.AsSpan(0, written));
             }
-            catch (Exception exception)
+            finally
             {
-                throw new SeforimDbContentCodecException(
-                    "A line's compressed content could not be decompressed: " + exception.Message);
+                ArrayPool<byte>.Shared.Return(destination);
             }
-
-            if (written < 0 || written > destination.Length)
-                throw new SeforimDbContentCodecException(
-                    "A line decompressed to " + written + " bytes, which does not fit the " +
-                    destination.Length + " bytes its frame header allowed for.");
-
-            return Encoding.UTF8.GetString(destination, 0, written);
         }
 
         /// <summary>
@@ -371,27 +385,32 @@ namespace KitveiHakodesh.Core.SeforimDb
             // Base64 of the frame magic 28 B5 2F FD always begins "KLUv", whatever follows.
             if (text.Length < 8 || !text.StartsWith("KLUv", StringComparison.Ordinal)) return false;
 
-            byte[] frame;
+            // Base64 decodes to at most 3 bytes per 4 characters; a pooled buffer of that
+            // size holds the frame for exactly as long as the decode takes.
+            byte[] frame = ArrayPool<byte>.Shared.Rent(text.Length / 4 * 3 + 3);
             try
             {
-                frame = Convert.FromBase64String(text);
-            }
-            catch (FormatException)
-            {
-                // Begins with those four characters but is not base64 - genuinely just text.
-                return false;
-            }
+                if (!Convert.TryFromBase64String(text, frame, out int frameLength))
+                {
+                    // Begins with those four characters but is not base64 - genuinely just text.
+                    return false;
+                }
 
-            try
-            {
-                decoded = DecodeFrame(frame);
-                return true;
+                try
+                {
+                    decoded = DecodeFrame(frame.AsSpan(0, frameLength));
+                    return true;
+                }
+                catch (SeforimDbContentCodecException)
+                {
+                    // Decoded to bytes that are not a frame this database can read. Treat the
+                    // value as the text it claimed to be rather than failing the whole page.
+                    return false;
+                }
             }
-            catch (SeforimDbContentCodecException)
+            finally
             {
-                // Decoded to bytes that are not a frame this database can read. Treat the
-                // value as the text it claimed to be rather than failing the whole page.
-                return false;
+                ArrayPool<byte>.Shared.Return(frame);
             }
         }
 
@@ -429,7 +448,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// bits say how wide the dictionary id field is (0 = absent, 1 = one byte, 2 = two
         /// bytes, 3 = four bytes). The library's frames use the two-byte form.
         /// </summary>
-        private static uint ReadFrameDictionaryId(byte[] frame)
+        private static uint ReadFrameDictionaryId(ReadOnlySpan<byte> frame)
         {
             const uint FrameMagic = 0xFD2FB528;
 
