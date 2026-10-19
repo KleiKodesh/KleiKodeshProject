@@ -1,0 +1,145 @@
+name: Build test installer (private CI probe)
+
+# Private testing infrastructure for the yrdnyl@9900.co.il fork only.
+# This workflow is NOT part of the upstream multi-library-support PR; it lives on its
+# own branch (ci/build-test-installer) so it never touches the feature branch under
+# review. Its job is to answer, empirically, how far a GitHub-hosted windows-latest
+# runner can get toward producing a real KleiKodesh installer that includes the
+# multi-library-support changes, and — regardless of how far the full build gets —
+# to always build & run the pure .NET console verifier for the new multi-library
+# logic (KitveiHakodeshService.Tests --multilib), which needs no VSTO/Office.
+
+on:
+  push:
+    branches:
+      - ci/build-test-installer
+  workflow_dispatch: {}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: the real thing. Tries to reproduce rebuild-all.ps1 end to end,
+  # including the VSTO add-in (KleiKodeshVsto.csproj) and the WPF installer
+  # (Build/Installer/KleiKodeshVstoInstallerWpf.csproj). KleiKodeshVsto.csproj
+  # references Office/Word PIAs (Microsoft.Office.Interop.Word, Office,
+  # Version=15.0.0.0) via <EmbedInteropTypes> and imports
+  # Microsoft.VisualStudio.Tools.Office.targets (the VSTO SDK). Those PIAs are
+  # normally installed to the GAC by Office itself or by the Visual Studio
+  # "Office/SharePoint development" workload — neither is preinstalled on
+  # windows-latest. This job is allowed to fail (continue-on-error on the build
+  # step) so job 2 still runs and reports results either way.
+  # ---------------------------------------------------------------------------
+  full-installer-build:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Report available Office/VSTO components (diagnostic)
+        shell: pwsh
+        run: |
+          Write-Host "---- Looking for VSTO SDK targets ----"
+          Get-ChildItem "C:\Program Files*\Microsoft Visual Studio" -Recurse -Filter "Microsoft.VisualStudio.Tools.Office.targets" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host $_.FullName }
+          Write-Host "---- Looking for Office Interop PIAs in the GAC ----"
+          Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "Microsoft.Office.Interop.Word*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host $_.FullName }
+          Write-Host "(Empty output above means the VSTO workload / Office PIAs are not present on this runner.)"
+
+      - name: Restore NuGet packages (VSTO add-in uses packages.config)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $nuget = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\NuGet\NuGet.exe"
+          if (-not (Test-Path $nuget)) { $nuget = "nuget" }
+          & $nuget restore KleiKodeshProject.slnx -NonInteractive 2>&1 | Write-Host
+
+      - name: Attempt full rebuild (rebuild-all.ps1, Release only)
+        id: rebuild
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          # rebuild-all.ps1 hardcodes the VS2022-era MSBuild path on the author's machine;
+          # point it at whatever MSBuild setup-msbuild just put on PATH instead.
+          $msbuildPath = (Get-Command msbuild).Source
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"'), ('"' + $msbuildPath + '"') |
+            Set-Content rebuild-all.ps1
+          ./rebuild-all.ps1 -Release
+          "exitcode=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Collect whatever build output exists
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact-staging | Out-Null
+          $candidates = @(
+            "Build\Installer\bin\Release",
+            "Build\Installer\bin\Release-x64",
+            "Build\Installer\bin\Release-x86",
+            "KleiKodeshVsto\bin\Release",
+            "KleiKodeshVsto\publish"
+          )
+          foreach ($c in $candidates) {
+            if (Test-Path $c) {
+              $dest = Join-Path "artifact-staging" ($c -replace '[\\/]', '_')
+              Copy-Item $c $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          "Staged paths:"
+          Get-ChildItem artifact-staging -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+
+      - name: Upload installer/build output (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-installer-build-output
+          path: artifact-staging/**
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Job 2: the always-works fallback. KitveiHakodeshService, KitveiHakodesh.Core
+  # and KitveiHakodeshService.Tests are plain SDK-style net10.0-windows console
+  # projects with no Office/VSTO dependency at all, so this builds and runs with
+  # nothing but the .NET SDK. --multilib runs MultiLibraryVerify, the empirical
+  # check for the actual multi-library-support logic from PR #309.
+  # ---------------------------------------------------------------------------
+  core-multilib-verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj
+
+      - name: Build (Release)
+        run: dotnet build KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj -c Release --no-restore
+
+      - name: Run multi-library verification
+        id: multilib
+        run: dotnet run --project KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj -c Release --no-build -- --multilib
+
+      - name: Upload test build output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-multilib-verify-output
+          path: |
+            KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/bin/Release/**
+            KitveiHakodesh/CSharpBackend/KitveiHakodeshService/bin/Release/**
+          if-no-files-found: warn
+          retention-days: 14
