@@ -295,7 +295,8 @@ namespace Nakdan.UI
         /// IsVisibleChanged / Unloaded), so a hidden pane costs one bool check
         /// per selection change.
         /// </summary>
-        public bool Live { get; set; }
+        public Func<bool> IsPaneVisible { get; set; }
+        public bool Live => IsPaneVisible?.Invoke() ?? true;
 
         public bool SuggestionsEnabled
         {
@@ -313,6 +314,7 @@ namespace Nakdan.UI
                     AttachSelection();
                     ScheduleSuggestionsUpdate();
                 }
+                else DetachSelection();
             }
         }
 
@@ -333,21 +335,31 @@ namespace Nakdan.UI
 
         /// <summary>
         /// Subscribes to Application.WindowSelectionChange, once (covers
-        /// document switches). Called from the view's Loaded.
+        /// document switches) while the toggle is on; the toggle detaches it.
         /// </summary>
         public void AttachSelection()
         {
-            if (_selectionSubscribed || VstoHelper.Application == null) return;
+            if (_selectionSubscribed || !_suggestionsEnabled || VstoHelper.Application == null) return;
             try
             {
-                VstoHelper.Application.WindowSelectionChange += _ =>
-                {
-                    if (_suppressSelectionChange) return;
-                    if (Live && _suggestionsEnabled) ScheduleSuggestionsUpdate();
-                };
+                VstoHelper.Application.WindowSelectionChange += OnWindowSelectionChange;
                 _selectionSubscribed = true;
             }
             catch { }
+        }
+
+        private void DetachSelection()
+        {
+            if (!_selectionSubscribed) return;
+            try { VstoHelper.Application.WindowSelectionChange -= OnWindowSelectionChange; }
+            catch { }
+            _selectionSubscribed = false;
+        }
+
+        private void OnWindowSelectionChange(Word.Selection sel)
+        {
+            if (_suppressSelectionChange) return;
+            if (Live && _suggestionsEnabled) ScheduleSuggestionsUpdate();
         }
 
         /// <summary>Coalesces a burst of selection changes into one fetch.</summary>
@@ -474,6 +486,7 @@ namespace Nakdan.UI
             Word.Range range = _suggestionRange;
             Word.UndoRecord undo = null;
             bool started = false;
+            Word.Range next = null;
             _suppressSelectionChange = true;
             try
             {
@@ -487,6 +500,7 @@ namespace Nakdan.UI
                 started = true;
                 range.Text = option;
                 _suggestionWord = option;
+                next = FindNextWord(range);
             }
             catch
             {
@@ -500,8 +514,34 @@ namespace Nakdan.UI
                 Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
                 {
                     _suppressSelectionChange = false;
+                    // Advance: selecting the next word fetches its options.
+                    if (next != null)
+                        try { next.Select(); } catch { }
                 }), DispatcherPriority.Background);
             }
+        }
+
+
+        /// <summary>The next word after <paramref name="range"/> that holds a letter, trailing spaces trimmed; null at the end.</summary>
+        private static Word.Range FindNextWord(Word.Range range)
+        {
+            Word.Range r = range.Duplicate;
+            for (int i = 0; i < 20; i++)
+            {
+                Word.Range w = r.Next(Word.WdUnits.wdWord, 1);
+                if (w == null) return null;
+                string t = w.Text ?? string.Empty;
+                foreach (char c in t)
+                {
+                    if (char.IsLetter(c))
+                    {
+                        w.MoveEndWhile("  ", Word.WdConstants.wdBackward);
+                        return w;
+                    }
+                }
+                r = w;
+            }
+            return null;
         }
 
         // ── Helpers ───────────────────────────────────────────
