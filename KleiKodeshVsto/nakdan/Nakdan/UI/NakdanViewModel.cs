@@ -79,8 +79,11 @@ namespace Nakdan.UI
 
             // ── Nikud suggestions ─────────────────────────────────
             WordOptions = new ObservableCollection<string>();
-            _suggestionsEnabled = SettingsManager.GetBool("Nakdan", "SuggestionsEnabled", false);
+            WordOptions.CollectionChanged += (_, __) => { OnPropertyChanged(nameof(HasWordOptions)); OnPropertyChanged(nameof(SuggestionsHint)); };
             ApplyWordOptionCommand   = new RelayCommand<string>(ApplyWordOption);
+            ShowSuggestionsCommand   = new RelayCommand(ShowSuggestions, () => !IsBusy);
+            NextWordCommand          = new RelayCommand(() => SelectWordAndShowSuggestions(true),  () => !IsBusy);
+            PreviousWordCommand      = new RelayCommand(() => SelectWordAndShowSuggestions(false), () => !IsBusy);
         }
 
         // ── Bindable properties ────────────────────────────────
@@ -274,52 +277,21 @@ namespace Nakdan.UI
         }
 
         // ── Nikud suggestions ─────────────────────────────────
-        //  When on and the pane is visible, a settled Word selection of a
-        //  single Hebrew word fetches Dicta's alternative vocalizations for it
+        //  On explicit request (button / next-prev / Ctrl+arrows), the Word
+        //  selection's single Hebrew word fetches Dicta's alternative vocalizations for it
         //  (in its sentence context); clicking one replaces the word.
 
         private readonly DictaApiClient _suggestionsApi = new DictaApiClient();
-        private bool   _suggestionsEnabled;
         private string _suggestionsStatus;
-        private bool   _selectionSubscribed;
-        private bool   _suppressSelectionChange;
-        private DispatcherTimer _selectionDebounce;
         private CancellationTokenSource _suggestionsCts;
         private Word.Range _suggestionRange;
         private string     _suggestionWord;
 
         public ObservableCollection<string> WordOptions { get; }
 
-        /// <summary>
-        /// False while the pane is hidden or torn down (the view flips it from
-        /// IsVisibleChanged / Unloaded), so a hidden pane costs one bool check
-        /// per selection change.
-        /// </summary>
-        public Func<bool> IsPaneVisible { get; set; }
-        public bool Live => IsPaneVisible?.Invoke() ?? true;
-
-        public bool SuggestionsEnabled
-        {
-            get => _suggestionsEnabled;
-            set
-            {
-                if (_suggestionsEnabled == value) return;
-                _suggestionsEnabled = value;
-                OnPropertyChanged(nameof(SuggestionsEnabled));
-                OnPropertyChanged(nameof(SuggestionsToggleText));
-                SettingsManager.Save("Nakdan", "SuggestionsEnabled", value);
-                ResetSuggestions(string.Empty);
-                if (value)
-                {
-                    AttachSelection();
-                    ScheduleSuggestionsUpdate();
-                }
-                else DetachSelection();
-            }
-        }
-
-        public string SuggestionsToggleText =>
-            _suggestionsEnabled ? "כבה הצעות ניקוד" : "הפעל הצעות ניקוד";
+        public ICommand ShowSuggestionsCommand { get; }
+        public ICommand NextWordCommand        { get; }
+        public ICommand PreviousWordCommand    { get; }
 
         public string SuggestionsStatus
         {
@@ -332,80 +304,27 @@ namespace Nakdan.UI
             }
         }
         public bool HasSuggestionsStatus => !string.IsNullOrEmpty(_suggestionsStatus);
+        public bool HasWordOptions => WordOptions.Count > 0;
+        public string SuggestionsHint => HasWordOptions
+            ? "לחיצה על הצעה מחליפה את המילה ועוברת לבאה."
+            : "בחרו מילה במסמך ולחצו הצג.";
 
-        /// <summary>
-        /// Subscribes to selection changes, once, while the toggle is on;
-        /// the toggle detaches the application-level hooks.
-        /// </summary>
-        public void AttachSelection()
-        {
-            if (_selectionSubscribed || !_suggestionsEnabled || VstoHelper.Application == null) return;
-            try
-            {
-                // Proven path in this add-in (DocDesign): the VSTO document's
-                // SelectionChange, re-hooked per document on DocumentChange.
-                // WindowSelectionChange stays as a second source; the debounce
-                // folds the duplicates.
-                VstoHelper.Application.DocumentChange += HookActiveDocument;
-                VstoHelper.Application.WindowSelectionChange += OnWindowSelectionChange;
-                _selectionSubscribed = true;
-                HookActiveDocument();
-            }
-            catch { }
-        }
+        /// <summary>Explicit request: fetch options for the word at the selection, even if it is the same word.</summary>
+        public void ShowSuggestions() => UpdateSuggestionsAsync(true);
 
-        private void DetachSelection()
-        {
-            if (!_selectionSubscribed) return;
-            try
-            {
-                VstoHelper.Application.DocumentChange -= HookActiveDocument;
-                VstoHelper.Application.WindowSelectionChange -= OnWindowSelectionChange;
-            }
-            catch { }
-            _selectionSubscribed = false;
-            // Per-document VSTO handlers stay attached but go inert (gated on the toggle).
-        }
-
-        // Documents whose VSTO SelectionChange is hooked; hooked once each.
-        private readonly HashSet<Word.Document> _hookedDocs = new HashSet<Word.Document>();
-
-        private void HookActiveDocument()
+        /// <summary>Select the logically next (forward) / previous word, then show its options.</summary>
+        private void SelectWordAndShowSuggestions(bool forward)
         {
             try
             {
-                Word.Document doc = VstoHelper.Application.ActiveDocument;
-                if (doc == null || VstoHelper.ApplicationFactory == null || !_hookedDocs.Add(doc)) return;
-                VstoHelper.ApplicationFactory.GetVstoObject(doc).SelectionChange += (_, __) => OnSelectionMoved();
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) return;
+                Word.Range target = FindAdjacentWord(sel.Range, forward);
+                if (target == null) return;
+                target.Select();
             }
-            catch { }
-        }
-
-        private void OnWindowSelectionChange(Word.Selection sel) => OnSelectionMoved();
-
-        private void OnSelectionMoved()
-        {
-            if (_suppressSelectionChange) return;
-            if (Live && _suggestionsEnabled) ScheduleSuggestionsUpdate();
-        }
-
-        /// <summary>Coalesces a burst of selection changes into one fetch.</summary>
-        public void ScheduleSuggestionsUpdate()
-        {
-            if (_selectionDebounce == null)
-            {
-                _selectionDebounce = new DispatcherTimer(DispatcherPriority.Background)
-                {
-                    Interval = TimeSpan.FromMilliseconds(300)
-                };
-                _selectionDebounce.Tick += (_, __) =>
-                {
-                    _selectionDebounce.Stop();
-                    if (Live && _suggestionsEnabled) UpdateSuggestionsAsync();
-                };
-            }
-            _selectionDebounce.Stop();
-            _selectionDebounce.Start();
+            catch { return; }
+            UpdateSuggestionsAsync(true);
         }
 
         private void ResetSuggestions(string status)
@@ -423,7 +342,7 @@ namespace Nakdan.UI
         private static bool IsWordChar(char c) =>
             char.IsLetter(c) || (c >= '֑' && c <= 'ׇ') || c == '"' || c == '\'' || c == '׳' || c == '״';
 
-        private async void UpdateSuggestionsAsync()
+        private async void UpdateSuggestionsAsync(bool force = false)
         {
             Word.Range wordRange;
             string word, context;
@@ -455,9 +374,9 @@ namespace Nakdan.UI
                 if (!hasHebrew) { ResetSuggestions(string.Empty); return; }
 
                 // Same word as last time — keep the current list.
-                if (_suggestionRange != null && word == _suggestionWord
+                if (!force && _suggestionRange != null && word == _suggestionWord
                     && _suggestionRange.Start == wordRange.Start && _suggestionRange.End == wordRange.End)
-                    return;
+                return;
 
                 // Context = containing sentence, capped around the word.
                 Word.Range sentence = wordRange.Sentences[1];
@@ -500,7 +419,7 @@ namespace Nakdan.UI
                 foreach (string o in options) WordOptions.Add(o);
                 SuggestionsStatus = options.Count == 0 ? "אין הצעות למילה זו" : string.Empty;
             }
-            catch (Exception)
+            catch
             {
                 if (cts.IsCancellationRequested) return;
                 SuggestionsStatus = "לא ניתן לטעון הצעות (בדוק חיבור לאינטרנט)";
@@ -514,7 +433,6 @@ namespace Nakdan.UI
             Word.UndoRecord undo = null;
             bool started = false;
             Word.Range next = null;
-            _suppressSelectionChange = true;
             try
             {
                 if (range.Text != _suggestionWord)
@@ -537,14 +455,12 @@ namespace Nakdan.UI
             {
                 if (started)
                     try { undo.EndCustomRecord(); } catch { }
-                // Let the selection change raised by the edit drain before re-arming.
-                Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
-                {
-                    _suppressSelectionChange = false;
-                    // Advance: selecting the next word fetches its options.
-                    if (next != null)
-                        try { next.Select(); } catch { }
-                }), DispatcherPriority.Background);
+            }
+            // Advance: select the next word and show its options right away.
+            if (next != null)
+            {
+                try { next.Select(); } catch { return; }
+                UpdateSuggestionsAsync(true);
             }
         }
 
@@ -557,8 +473,8 @@ namespace Nakdan.UI
 
         /// <summary>
         /// Ctrl+Right / Ctrl+Left from the pane: select the next / previous word in
-        /// Word. Visual like Word — in an RTL paragraph Left is forward. Always on
-        /// (navigation), selecting the word feeds the suggestions hook.
+        /// Word. Visual like Word — in an RTL paragraph Left is forward. Then shows
+        /// the new word's suggestions.
         /// </summary>
         public bool MoveToAdjacentWord(bool rightArrow)
         {
@@ -574,12 +490,13 @@ namespace Nakdan.UI
                 Word.Range target = FindAdjacentWord(sel.Range, forward);
                 if (target == null) return true;
                 target.Select();
-                return true;
             }
             catch
             {
                 return false;
             }
+            UpdateSuggestionsAsync(true);
+            return true;
         }
 
         private static Word.Range FindAdjacentWord(Word.Range range, bool forward)
