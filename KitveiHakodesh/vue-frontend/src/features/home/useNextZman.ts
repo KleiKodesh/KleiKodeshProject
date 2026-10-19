@@ -36,22 +36,6 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   { key: 'tzeit', label: 'צאת הכוכבים' },
 ]
 
-/** The subset used to pick "the next zman" — short labels for the compact bar. */
-const NEXT_LABELS: Partial<Record<keyof CalendarZmanim, string>> = {
-  chatzotNight: 'חצות הלילה',
-  alot: 'עלות השחר',
-  misheyakir: 'משיכיר',
-  sunrise: 'הנץ החמה',
-  sofShmaGra: 'סו״ז ק״ש',
-  sofTfillaGra: 'סו״ז תפילה',
-  chatzot: 'חצות היום',
-  minchaGedola: 'מנחה גדולה',
-  minchaKetana: 'מנחה קטנה',
-  plag: 'פלג המנחה',
-  sunset: 'שקיעה',
-  tzeit: 'צאת הכוכבים',
-}
-
 /**
  * Minutes-remaining thresholds that drive the color cue. Kept tight so the
  * warning only kicks in when the zman is genuinely close — not tens of minutes
@@ -151,10 +135,9 @@ export function useNextZman() {
     // in here. Search today's ordered zmanim, then roll into tomorrow's once all
     // passed, so the bar always has an upcoming zman to show.
     for (const src of [cachedToday, cachedTomorrow]) {
-      for (const { key } of ZMAN_ORDER) {
+      for (const { key, label } of ZMAN_ORDER) {
         const zman = src[key]
-        const label = NEXT_LABELS[key]
-        if (!zman || !label) continue
+        if (!zman) continue
         const t = zman.time
         if (t.getTime() > current.getTime()) {
           const minutesUntil = Math.max(0, Math.round((t.getTime() - current.getTime()) / 60000))
