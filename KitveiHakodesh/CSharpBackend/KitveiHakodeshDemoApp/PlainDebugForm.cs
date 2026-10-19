@@ -35,6 +35,12 @@ namespace KitveiHakodeshDemoApp
                 _viewer.OpenFileFromPath(initialFilePath);
         }
 
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            if (!e.Cancel) _viewer.CloseAfterPersistenceFlush(this, e);
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing) _viewer?.Dispose();

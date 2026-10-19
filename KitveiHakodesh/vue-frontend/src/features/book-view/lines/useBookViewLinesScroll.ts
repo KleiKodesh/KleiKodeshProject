@@ -22,6 +22,7 @@
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
 import type { LineItem } from './useBookViewLinesTable'
 import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
@@ -404,7 +405,10 @@ export function useBookViewLinesScroll(
     return result
   }
 
-  function savePos() {
+  // Returns the last-read put so a host flush (persistenceFlush.ts) can wait for it;
+  // every other caller is fire-and-forget. The per-tab state put is the same kind of
+  // write to the same driver, so one of the two is enough to wait on.
+  function savePos(): Promise<void> | undefined {
     // Mid-flight programmatic positions are transient — persisting one would
     // overwrite the reader's real place with wherever a jump happened to be
     // passing through.
@@ -425,7 +429,7 @@ export function useBookViewLinesScroll(
       toc,
       versionTitle,
     })
-    tabStore.setLastReadPos(bookId, {
+    return tabStore.setLastReadPos(bookId, {
       ...position,
       selectedLineId: props.selectedLineId,
       // Zoom rides along here too, so reopening a book in a new tab restores the
@@ -445,9 +449,13 @@ export function useBookViewLinesScroll(
   useEventListener(document, 'visibilitychange', () => {
     if (document.visibilityState === 'hidden') savePos()
   })
-  useEventListener(window, 'beforeunload', savePos)
+  useEventListener(window, 'beforeunload', () => { savePos() })
+  // The WebView2 hosts fire neither of those when they close their window; they ask
+  // for the position through window.__khsFlushPersistence instead.
+  const unregisterHostFlush = registerPositionCapture(savePos)
 
   onBeforeUnmount(() => {
+    unregisterHostFlush()
     scrollTeardown = true
     cancelStabilize?.()
     saveSuppressed = false

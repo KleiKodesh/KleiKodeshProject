@@ -703,9 +703,10 @@ export const useTabStore = defineStore('tabs', () => {
   // Locations are plain data, so the list persists whole. Deep watch: positions are
   // folded into existing entries in place by captureCurrentPosition.
   let pendingRecentsWorkspaceId = ''
-  const recentsWrite = useCoalescedWrite(() => {
-    void saveRecentLocations(pendingRecentsWorkspaceId, recentLocations.value)
-  })
+  // The put's promise is handed back so a host flush can wait for it to land.
+  const recentsWrite = useCoalescedWrite(() =>
+    saveRecentLocations(pendingRecentsWorkspaceId, recentLocations.value),
+  )
   watch(
     recentLocations,
     () => {

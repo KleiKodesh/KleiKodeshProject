@@ -126,6 +126,12 @@ namespace KitveiHakodeshLib
         private HostLink _pendingOpenBook;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
+        // Completed by the page's 'persistenceFlushed' message while FlushPersistenceAsync
+        // is waiting for it; null the rest of the time.
+        private TaskCompletionSource<bool> _persistenceFlushAck;
+        // CloseAfterPersistenceFlush has already run for the host form: the next close
+        // goes straight through.
+        private bool _hostCloseFlushDone;
 
 
         // ── Public API ──────────────────────────────────────────────────────────────
@@ -241,6 +247,69 @@ namespace KitveiHakodeshLib
             string json = await _webView.CoreWebView2.ExecuteScriptAsync(
                 "window.getSelection().toString()");
             return JsonSerializer.Deserialize<string>(json) ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Asks the page to write out everything it still owes to storage (coalesced tab
+        /// list and recents writes, the open book's reading position) and waits for its
+        /// ack. Call before disposing the control: closing a WinForms window fires none
+        /// of the page's unload events, so a write still sitting in its trailing timer
+        /// would be lost. Bounded by <paramref name="timeoutMs"/>; normally a few ms.
+        /// Never throws; returns at once when the page is gone or not loaded.
+        /// UI thread only (ExecuteScriptAsync).
+        /// </summary>
+        public async Task FlushPersistenceAsync(int timeoutMs = 500)
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
+
+            var ack = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _persistenceFlushAck = ack;
+            try
+            {
+                var deadline = Task.Delay(timeoutMs);
+                // The page answers 'pending' synchronously and posts 'persistenceFlushed'
+                // once its IndexedDB puts have landed. Anything else (no such function:
+                // a page that never mounted, or a navigation away from the app) means
+                // there is nothing to wait for.
+                Task<string> script = _webView.CoreWebView2.ExecuteScriptAsync(
+                    "typeof window.__khsFlushPersistence==='function'?window.__khsFlushPersistence():'none'");
+                Task first = await Task.WhenAny(script, ack.Task, deadline);
+                if (first == script && script.Status == TaskStatus.RanToCompletion && script.Result == "\"pending\"")
+                    await Task.WhenAny(ack.Task, deadline);
+            }
+            catch (Exception) { /* WebView2 torn down mid-flight: nothing left to flush */ }
+            finally
+            {
+                _persistenceFlushAck = null;
+            }
+        }
+
+        /// <summary>
+        /// Call from the host form's FormClosing (after any other work the handler does).
+        /// The first close is cancelled, <see cref="FlushPersistenceAsync"/> runs, and the
+        /// form is closed again once the page has acked (or the bound has passed); that
+        /// second close goes straight through. No message pumping: the wait is an ordinary
+        /// await on the UI thread, so the close is delayed by the ack and nothing else.
+        /// A Windows shutdown is never held - the flush is fired and the close proceeds.
+        /// </summary>
+        public async void CloseAfterPersistenceFlush(Form form, FormClosingEventArgs e)
+        {
+            if (form == null || e == null || e.Cancel || _hostCloseFlushDone) return;
+            _hostCloseFlushDone = true;
+            if (e.CloseReason == CloseReason.WindowsShutDown)
+            {
+                _ = FlushPersistenceAsync();
+                return;
+            }
+
+            e.Cancel = true;
+            await FlushPersistenceAsync();
+            try
+            {
+                // Closed by the user again while we waited: nothing left to do.
+                if (!form.IsDisposed) form.Close();
+            }
+            catch (Exception) { /* the form went away during the wait */ }
         }
 
         /// <summary>
