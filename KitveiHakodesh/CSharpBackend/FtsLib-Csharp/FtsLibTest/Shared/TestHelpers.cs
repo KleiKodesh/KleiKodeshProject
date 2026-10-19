@@ -106,5 +106,19 @@ namespace FtsLibTest
             elapsed.TotalSeconds > 0
                 ? $"{count / elapsed.TotalSeconds:N0}/s"
                 : "—";
+
+        /// <summary>The seforim database to test against: the app's copy, else one next to the binary.</summary>
+        internal static string ResolveDbPath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string[] candidates =
+            {
+                Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "seforim.db"),
+            };
+            foreach (var p in candidates)
+                if (File.Exists(p)) return p;
+            return candidates[0];
+        }
     }
 }

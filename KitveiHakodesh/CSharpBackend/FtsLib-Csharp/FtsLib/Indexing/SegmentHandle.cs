@@ -3,33 +3,9 @@ using System.IO;
 
 namespace FtsLib.Indexing
 {
-    /// <summary>Location of one term's posting data within a segment.</summary>
-    internal sealed class SegmentChunk
-    {
-        public readonly SegmentHandle Seg;
-        /// <summary>Byte offset of the skip table in the .dat file (0 when no skip table).</summary>
-        public readonly long SkipOffset;
-        /// <summary>Number of skip entries (triplets). 0 means no skip table.</summary>
-        public readonly int  SkipCount;
-        /// <summary>Byte offset of the posting data in the .dat file.</summary>
-        public readonly long Offset;
-        public readonly int  Length;
-        public readonly int  Count;
-
-        public SegmentChunk(SegmentHandle seg, long skipOffset, int skipCount,
-                            long offset, int length, int count)
-        {
-            Seg        = seg;
-            SkipOffset = skipOffset;
-            SkipCount  = skipCount;
-            Offset     = offset;
-            Length     = length;
-            Count      = count;
-        }
-    }
-
     /// <summary>
-    /// Holds open resources for one segment pair (.dat + .db).
+    /// Holds open resources for one term dictionary pair (.dat + .db) — the FTS5 engine's
+    /// terms.db/terms.dat, read by the expanders through <see cref="Conn"/>.
     ///
     /// The .dat posting file is read via a plain <see cref="FileStream"/> with a
     /// lock-guarded Seek+Read so that concurrent searches sharing the same handle
@@ -38,16 +14,12 @@ namespace FtsLib.Indexing
     /// contains many large segments, producing "Not enough memory resources" errors.
     ///
     /// The FileStream is opened with <c>FileShare.Read | FileShare.Delete</c>:
-    ///   - FileShare.Delete allows the segment merger (or another process) to call
+    ///   - FileShare.Delete allows a dictionary merge (or another process) to call
     ///     File.Delete on the .dat file while this handle is still open.  On Windows,
     ///     FILE_SHARE_DELETE unlinks the directory entry but the file content remains
     ///     accessible through the existing handle until all handles are closed.
     ///   - FileShare.Read allows multiple concurrent SegmentHandles to open the same
     ///     file simultaneously.
-    ///
-    /// Disposal order still matters: <see cref="Search.IndexReader.Dispose"/> disposes
-    /// all SegmentHandles before it releases the <see cref="SearchLease"/>, ensuring
-    /// file handles are fully closed before the merger's write lock is released.
     /// </summary>
     internal sealed class SegmentHandle : IDisposable
     {
@@ -154,39 +126,6 @@ namespace FtsLib.Indexing
                 _datStream.Dispose();
                 throw;
             }
-        }
-
-        /// <summary>
-        /// Reads this segment's persisted docId→corpus rows (doc_source table)
-        /// on the already-open connection. Empty for segments that predate the
-        /// table — the caller's identity fallback covers them. Same
-        /// probe-then-read discipline as <see cref="SegmentStore.ReadDocSourceRows"/>:
-        /// a missing table is normal, a failing read on a present table is not.
-        /// Not thread-safe (shares Conn with term lookups) — call from the
-        /// search thread that owns the reader, as LookupTerm does.
-        /// </summary>
-        public System.Collections.Generic.List<DocSourceRange> ReadDocSources()
-        {
-            var rows = new System.Collections.Generic.List<DocSourceRange>();
-            using (var probe = Conn.CreateCommand())
-            {
-                probe.CommandText =
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='doc_source'";
-                if (Convert.ToInt64(probe.ExecuteScalar()) == 0)
-                    return rows;
-            }
-            using (var cmd = Conn.CreateCommand())
-            {
-                cmd.CommandText =
-                    "SELECT doc_lo, doc_hi, source, src_lo FROM doc_source ORDER BY doc_lo";
-                using (var r = cmd.ExecuteReader())
-                {
-                    while (r.Read())
-                        rows.Add(new DocSourceRange(
-                            r.GetInt32(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
-                }
-            }
-            return rows;
         }
 
         /// <summary>

@@ -1,7 +1,7 @@
 namespace FtsLib.SeforimDb
 {
     /// <summary>
-    /// One row returned by <see cref="SeforimIndex.Search"/>.
+    /// One row returned by <see cref="FtsLib.Fts5.Fts5SeforimIndex.Search"/>.
     /// Immutable — all properties are set at construction time.
     /// </summary>
     public sealed class SearchResult

@@ -1,7 +1,6 @@
 using System;
 using FtsLib.SeforimDb;
-// Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
+using FtsLib.Fts5;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
@@ -31,7 +30,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly string _indexPath;
         private readonly string _seforimDbPath;
 
-        private SeforimIndex? _index;
+        private Fts5SeforimIndex? _index;
         private bool _disposed;
 
         /// <param name="indexPath">The index directory.</param>
@@ -56,7 +55,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// A host that could reach the engine would be back to passing it around, which is the
         /// coupling this type exists to remove.
         /// </summary>
-        internal SeforimIndex Index
+        internal Fts5SeforimIndex Index
         {
             get
             {
@@ -67,7 +66,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     // factory (not an instance) is what IFtsCorpus requires: a search returns a
                     // LAZY sequence that must outlive this call, and concurrent searches cannot
                     // share one connection — so the engine opens one per operation and disposes it.
-                    return _index ?? (_index = new SeforimIndex(
+                    return _index ?? (_index = new Fts5SeforimIndex(
                         _indexPath,
                         () => new SeforimDbFtsCorpus(_seforimDbPath)));
                 }
@@ -127,7 +126,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// only wants to decide whether to show a progress bar.
         /// </summary>
         public static bool IsBuildInProgress(string indexPath) =>
-            SeforimIndex.IsBuildInProgress(indexPath);
+            Fts5SeforimIndex.IsBuildInProgress(indexPath);
 
         /// <summary>
         /// Drops the open engine so the next caller opens a fresh one.

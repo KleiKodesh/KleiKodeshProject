@@ -155,14 +155,13 @@ namespace FtsLib.Search
         public static List<string> Expand(string                       word,
                                           bool                         expandPrefixes,
                                           bool                         expandSuffixes,
-                                          IReadOnlyList<SegmentHandle> segments,
-                                          TermChunkCache               cache = null)
+                                          IReadOnlyList<SegmentHandle> segments)
         {
             if (string.IsNullOrEmpty(word))
                 return new List<string>();
 
             var candidates = BuildCandidates(word, expandPrefixes, expandSuffixes);
-            return Verify(candidates, segments, cache);
+            return Verify(candidates, segments);
         }
 
         // ── Candidate generation ──────────────────────────────────────
@@ -249,14 +248,9 @@ namespace FtsLib.Search
         /// Filters <paramref name="candidates"/> to those that exist in at least one
         /// segment's term_index, using exact equality (same strategy as KetivExpander).
         ///
-        /// Every candidate is probed against EVERY segment (no early exit once
-        /// confirmed): the probe also piggybacks the chunk metadata into
-        /// <paramref name="cache"/> (F01), and a cached chunk list must cover all
-        /// segments containing the term or resolve would silently drop postings.
         /// </summary>
         private static List<string> Verify(HashSet<string>              candidates,
-                                            IReadOnlyList<SegmentHandle> segments,
-                                            TermChunkCache               cache = null)
+                                            IReadOnlyList<SegmentHandle> segments)
         {
             var confirmed = new HashSet<string>(StringComparer.Ordinal);
             var results   = new List<string>(candidates.Count);
@@ -276,12 +270,6 @@ namespace FtsLib.Search
                         using (var reader = cmd.ExecuteReader())
                         {
                             if (!reader.Read()) continue;
-                            cache?.Add(candidate, new SegmentChunk(seg,
-                                reader.GetInt64(0),
-                                reader.GetInt32(1),
-                                reader.GetInt64(2),
-                                reader.GetInt32(3),
-                                reader.GetInt32(4)));
                             if (confirmed.Add(candidate))
                                 results.Add(candidate);
                         }

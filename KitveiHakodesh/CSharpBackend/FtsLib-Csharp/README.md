@@ -18,16 +18,16 @@ Both repos share the same local files. There is no automatic sync between them.
 
 A full-text search library for a Hebrew/Aramaic seforim database (~5.4M lines, SQLite). Answers one question: **which lines contain all the search terms?**
 
-Built on a custom LSM-style segment index with delta+varint compressed posting lists and skip-list accelerated intersection.
+Built on SQLite FTS5 (`FtsLib/Fts5/`): a line table indexed by FTS5, plus a term dictionary with an FM-index and trigram sidecar for wildcard and fuzzy expansion. The older custom segment engine (`SeforimIndex`) was removed; see git history.
 
 ---
 
 ## Quick start
 
 ```csharp
-var index = new SeforimIndex(indexPath, dbPath);
+var index = new Fts5SeforimIndex(indexPath, () => new MyCorpus(dbPath)); // IFtsCorpus
 
-// Build once (~17 min for full DB)
+// Build once
 index.BuildIndex(onProgress: n => Console.WriteLine($"{n} lines indexed"));
 
 // Search
@@ -58,7 +58,7 @@ Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. 
 
 ---
 
-## API — `SeforimIndex`
+## API — `Fts5SeforimIndex`
 
 ### `BuildIndex`
 
@@ -66,7 +66,7 @@ Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. 
 index.BuildIndex(limit: 0, onProgress: n => { ... });
 ```
 
-`limit: 0` = all lines. Blocking. Crash-safe (WAL recovery on restart).
+`limit: 0` = all lines. Blocking. An interrupted build resumes after the last committed line.
 
 ### `Search`
 
@@ -88,13 +88,6 @@ var ids     = index.SearchIds(query, filterIds: myLineIds);
 Semantics: `null` = search everything (default); an empty collection matches
 nothing; duplicates and unknown IDs are fine (negative IDs are ignored).
 
-The filter is applied *inside* the posting intersection, not on the output —
-a small filter set becomes the driver of the intersection (candidate-driven
-probing, same idea as Lucene's cost-sorted `FILTER` clause), so heavy
-wildcard/fuzzy queries get **faster** when filtered, never slower than
-post-filtering the results yourself. Verified with `FtsLibTest.exe filtertest full`:
-`בני*` drops 343 ms → 62 ms with a ~1k-ID filter; `*כי* ביצחק` 6.7 s → 4.1 s
-(the remainder is term expansion, which no filter can skip).
 
 **`SearchResult` properties:**
 
@@ -113,9 +106,6 @@ is produced; the consumer renders (see `FtsLib/Snippets/README.md`).
 ```csharp
 // Preferred — uses pre-computed matched terms (no extra DB fetch)
 SnippetDescriptor window = index.LocateSnippetWindow(result);
-
-// Fallback — re-parses query; use when you have a lineId but no SearchResult
-SnippetDescriptor window = index.LocateSnippetWindow(lineId, query);
 ```
 
 **`SnippetDescriptor` properties:**

@@ -9,7 +9,6 @@ produced on the search path — the consumer (the page) renders from the descrip
 |---|---|---|
 | `SnippetWindowLocator.cs` | `SnippetWindowLocator` | Finds the tightest window, expands it by context words, records mark ranges |
 | `SnippetDescriptor.cs` | `SnippetDescriptor` | The result: window offsets, mark ranges, ellipsis flags, scores |
-| `SnippetHtmlRenderer.cs` | `SnippetHtmlRenderer` | Reference rendering of a descriptor to `<mark>` HTML — tests/diagnostics only |
 | `PreparedQueryGroups.cs` | `PreparedQueryGroups` | The query's term→group map, built once per query |
 
 ## Algorithm
@@ -45,7 +44,6 @@ Holds only scratch buffers; zero per-call allocation. One instance per thread.
 ## Rendering
 
 The page rebuilds the HTML from the source text and the descriptor
-(`vue-frontend/.../fullTextSearchSnippets.ts`). `SnippetHtmlRenderer.Render(source, descriptor)`
 is the reference implementation the port must match: window with tags and `{X}` paragraph
 markers stripped, each mark range wrapped in `<mark>`, "…" on each cut side.
 

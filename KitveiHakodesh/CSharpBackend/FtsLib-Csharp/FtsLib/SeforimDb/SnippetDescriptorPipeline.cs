@@ -87,7 +87,7 @@ namespace FtsLib.SeforimDb
         /// The hot path: locates from a query-level <see cref="PreparedQueryGroups"/>
         /// prepared once per query — per-line cost is independent of how many terms the
         /// query expanded to. Used by
-        /// <see cref="SeforimIndex.LocateSnippetWindow(SearchResult, bool, int)"/>.
+        /// <see cref="FtsLib.Fts5.Fts5SeforimIndex.LocateSnippetWindow(SearchResult, bool, int)"/>.
         /// </summary>
         internal static SnippetDescriptor Locate(
             string              content,
@@ -166,29 +166,5 @@ namespace FtsLib.SeforimDb
             return descriptor;
         }
 
-        // ── Fallback path: fetch content from DB ──────────────────────
-
-        /// <summary>
-        /// Fetches content from the DB then locates. Only used by
-        /// <see cref="SeforimIndex.LocateSnippetWindow(int,string)"/> when the caller has a
-        /// line ID but no <see cref="SearchResult"/> with content (e.g. a direct lookup by ID
-        /// outside the normal search flow).
-        /// </summary>
-        internal static SnippetDescriptor LocateFromDb(
-            int                   lineId,
-            IReadOnlyList<string> queryTerms,
-            Func<IFtsCorpus>      openCorpus,
-            int                   contextWords = DefaultContextWords)
-        {
-            if (queryTerms == null || queryTerms.Count == 0)
-                return SnippetDescriptor.NoMatch;
-
-            using (var corpus = openCorpus())
-            {
-                string content = corpus.GetDocumentText(lineId);
-                if (content == null) return SnippetDescriptor.NoMatch;
-                return Locate(content, queryTerms, contextWords);
-            }
-        }
     }
 }
