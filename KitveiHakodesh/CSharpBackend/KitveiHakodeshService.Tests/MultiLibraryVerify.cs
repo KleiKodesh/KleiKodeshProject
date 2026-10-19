@@ -26,10 +26,15 @@
 //   9. SeforimDbAdditionalLibraries' own parsing/counter logic (ParseEntries, SerializeEntries,
 //      NextIndexFrom) round-trips and never reuses a retired index — tested directly via
 //      InternalsVisibleTo, without touching the real Windows registry.
+//  10. CONCURRENCY REGRESSION: several Add() calls fired at once (Task.Run) against the REAL
+//      registry-backed settings all get UNIQUE indices — no two concurrent RPC calls (two app
+//      windows, say) can silently lose one library to a shared counter race. The only block
+//      here that touches the real registry; backs up and restores the prior state around it.
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.SeforimDb;
 using KitveiHakodesh.Core.Settings;
@@ -268,6 +273,70 @@ namespace KitveiHakodeshService.Tests
                         Fail("NextIndexFrom did not treat missing/invalid/non-positive counters as 'first slot' and a valid counter as itself");
                     else
                         Ok("NextIndexFrom: unset/invalid -> slot 1; a real counter value passes through unchanged");
+                }
+
+                // ── 10. CONCURRENCY REGRESSION: concurrent Add() calls on the REAL
+                //      registry-backed settings must each get a UNIQUE index. PipeServer handles
+                //      every RPC connection on its own fire-and-forget task, so two
+                //      addAdditionalSeforimLibrary/pickAdditionalSeforimLibrary calls landing
+                //      close together (two app windows, say) run Add() concurrently. Before the
+                //      lock in Add(), both could read the SAME NextIndex counter before either
+                //      wrote it back, handing out the SAME index to two different libraries —
+                //      both report success, but SeforimDbAttachedLibraries.Resolve de-duplicates
+                //      by index ("first one in the list wins"), so the second library silently
+                //      vanishes on the next restart, with no error anywhere.
+                //
+                //      This is the ONLY block in this file that touches the REAL Windows
+                //      registry (SeforimDbAdditionalLibraries always persists there — it has no
+                //      test seam). It backs up the exact prior state first and restores it in a
+                //      finally, success or failure, so a developer or CI agent who already has
+                //      real additional libraries configured sees them untouched afterward.
+                {
+                    var backupEntries = SeforimDbAdditionalLibraries.GetAllEntriesRaw();
+                    int backupNextIndex = SeforimDbAdditionalLibraries.PeekNextIndexForTest();
+                    try
+                    {
+                        SeforimDbAdditionalLibraries.Clear();
+
+                        const int concurrentAdds = 8;
+                        var concurrentPaths = new string[concurrentAdds];
+                        for (int i = 0; i < concurrentAdds; i++)
+                        {
+                            concurrentPaths[i] = Path.Combine(dir, $"concurrent-{i}.db");
+                            BuildLibrary(concurrentPaths[i], $"קטגוריה {i}", $"ספר {i}", $"תוכן {i}", bookId: 1);
+                        }
+
+                        var outcomes = new SeforimDbAdditionalLibraries.AddOutcome[concurrentAdds];
+                        var tasks = new Task[concurrentAdds];
+                        for (int i = 0; i < concurrentAdds; i++)
+                        {
+                            int captured = i;
+                            tasks[captured] = Task.Run(() =>
+                                outcomes[captured] = SeforimDbAdditionalLibraries.Add(concurrentPaths[captured]));
+                        }
+                        Task.WaitAll(tasks);
+
+                        if (outcomes.Any(o => o != SeforimDbAdditionalLibraries.AddOutcome.Added))
+                        {
+                            Fail($"a concurrent Add() call failed unexpectedly: {string.Join(", ", outcomes)}");
+                        }
+                        else
+                        {
+                            var entriesAfter = SeforimDbAdditionalLibraries.GetAllEntriesRaw();
+                            int distinctIndices = entriesAfter.Select(e => e.Index).Distinct().Count();
+                            if (entriesAfter.Count != concurrentAdds || distinctIndices != concurrentAdds)
+                                Fail($"{concurrentAdds} concurrent Add() calls produced {entriesAfter.Count} entries with only " +
+                                     $"{distinctIndices} distinct indices — index collision under concurrency " +
+                                     "(a library was silently lost, exactly the bug this test exists to catch)");
+                            else
+                                Ok($"{concurrentAdds} concurrent Add() calls on the real registry-backed settings " +
+                                   "all received unique indices — no lost update");
+                        }
+                    }
+                    finally
+                    {
+                        SeforimDbAdditionalLibraries.RestoreForTest(backupEntries, backupNextIndex);
+                    }
                 }
             }
             catch (Exception ex)

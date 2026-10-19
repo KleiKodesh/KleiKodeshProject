@@ -46,6 +46,23 @@ namespace KitveiHakodesh.Core.Settings
         private const char Separator = ';';
         private const char IndexPathSeparator = '|';
 
+        /// <summary>
+        /// Guards every read-modify-write of the two registry values below (entries + the next
+        /// index counter). The service handles each RPC connection on its own task
+        /// (PipeServer's acceptor loops are fire-and-forget), so two
+        /// <c>addAdditionalSeforimLibrary</c>/<c>pickAdditionalSeforimLibrary</c> calls arriving
+        /// close together — two app windows, or any two callers — run <see cref="Add"/>
+        /// concurrently on different threads. Without this lock both reads
+        /// <see cref="ReadNextIndex"/> could see the SAME counter value before either write lands,
+        /// handing out the SAME index to two different libraries: both calls report success, but
+        /// <see cref="SeforimDbAttachedLibraries.Resolve"/> de-duplicates by index ("first one in
+        /// the list wins"), so one of the two libraries silently vanishes on the next restart —
+        /// no error, nothing in the result either caller got back. In-process only: this does not
+        /// protect against two SEPARATE service processes writing the same registry key at once,
+        /// which is not a configuration this app runs in.
+        /// </summary>
+        private static readonly object Lock = new();
+
         /// <summary>One configured additional library: its persisted, never-reused id-space slot
         /// and its path. See the class remarks for why the index is not just "position in the
         /// list".</summary>
@@ -119,18 +136,25 @@ namespace KitveiHakodesh.Core.Settings
                 return AddOutcome.InvalidCharacters;
 
             string full = TryFullPath(path);
-            var current = GetAllEntriesRaw();
-            if (current.Any(e => string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)))
-                return AddOutcome.AlreadyConfigured;
 
-            int index = ReadNextIndex();
-            if (index > SeforimDbLibraryId.MaxLibraryIndex)
-                return AddOutcome.SlotsExhausted;
+            // The whole read-check-write sequence is one critical section — see Lock's remarks.
+            // In particular, ReadNextIndex()'s read and the write of the incremented counter must
+            // happen as one unit, or two concurrent Adds can both read the same counter value.
+            lock (Lock)
+            {
+                var current = GetAllEntriesRaw();
+                if (current.Any(e => string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)))
+                    return AddOutcome.AlreadyConfigured;
 
-            AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName,
-                (index + 1).ToString(CultureInfo.InvariantCulture));
-            Save(current.Append(new Entry(index, path)));
-            return AddOutcome.Added;
+                int index = ReadNextIndex();
+                if (index > SeforimDbLibraryId.MaxLibraryIndex)
+                    return AddOutcome.SlotsExhausted;
+
+                AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName,
+                    (index + 1).ToString(CultureInfo.InvariantCulture));
+                Save(current.Append(new Entry(index, path)));
+                return AddOutcome.Added;
+            }
         }
 
         /// <summary>Removes a configured path (case-insensitive, by full path). Returns false
@@ -140,12 +164,19 @@ namespace KitveiHakodesh.Core.Settings
         {
             string path = SeforimDbLibrarySwitcher.NormalizePath(rawPath);
             string full = TryFullPath(path);
-            var current = GetAllEntriesRaw();
-            var remaining = current.Where(e => !string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (remaining.Length == current.Count) return false;
 
-            Save(remaining);
-            return true;
+            // Same reasoning as Add's lock: reading the current list and writing the filtered
+            // result must be one unit, or a concurrent Add's new entry could be read here and
+            // then overwritten away by this call's Save (a lost update), or vice versa.
+            lock (Lock)
+            {
+                var current = GetAllEntriesRaw();
+                var remaining = current.Where(e => !string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (remaining.Length == current.Count) return false;
+
+                Save(remaining);
+                return true;
+            }
         }
 
         /// <summary>Forgets every additional library AND resets the index counter. Unlike
@@ -153,14 +184,39 @@ namespace KitveiHakodesh.Core.Settings
         /// feature's state, equivalent to a fresh install, not the removal of one library.</summary>
         public static void Clear()
         {
-            AppSettingsRegistry.Set(RegistryApp, RegistrySection, RegistryValueName, "");
-            AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName, "");
+            lock (Lock)
+            {
+                AppSettingsRegistry.Set(RegistryApp, RegistrySection, RegistryValueName, "");
+                AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName, "");
+            }
         }
 
         private static int ReadNextIndex()
         {
             string raw = AppSettingsRegistry.Get(RegistryApp, RegistrySection, NextIndexValueName, "");
             return NextIndexFrom(raw);
+        }
+
+        /// <summary>The next index this install would hand out right now — for a test that needs
+        /// to back it up before touching the real registry (see <see cref="RestoreForTest"/>) and
+        /// restore it afterward. Not for production use: every real caller goes through
+        /// <see cref="Add"/>, which reads and advances it atomically under <see cref="Lock"/>.</summary>
+        internal static int PeekNextIndexForTest() => ReadNextIndex();
+
+        /// <summary>Writes <paramref name="entries"/> and <paramref name="nextIndex"/> directly,
+        /// bypassing every check <see cref="Add"/> makes. Exists ONLY so a test that must exercise
+        /// the real registry-backed <see cref="Add"/>/<see cref="Remove"/> (their locking, in
+        /// particular, cannot be tested any other way) can restore exactly what it backed up
+        /// first — success or failure — rather than leaving a developer's or CI agent's real
+        /// configured libraries altered by a test run.</summary>
+        internal static void RestoreForTest(IReadOnlyList<Entry> entries, int nextIndex)
+        {
+            lock (Lock)
+            {
+                Save(entries);
+                AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName,
+                    nextIndex.ToString(CultureInfo.InvariantCulture));
+            }
         }
 
         /// <summary>The counter logic alone, without touching the registry — so it can be unit
