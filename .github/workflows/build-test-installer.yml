@@ -62,7 +62,20 @@ jobs:
           # `dotnet restore`. Don't guess a bundled-with-VS path (it moves between VS
           # images/versions) — just grab the real thing.
           Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "$env:RUNNER_TEMP\nuget.exe"
-          & "$env:RUNNER_TEMP\nuget.exe" restore KleiKodeshProject.slnx -NonInteractive 2>&1 | Write-Host
+
+          # `nuget restore KleiKodeshProject.slnx` puts every package under a single
+          # repo-root .\packages — but these projects don't share one packages folder;
+          # each packages.config's own csproj imports "..\packages\...targets" relative
+          # to ITS OWN directory (sibling .sln files like WebSitesLib's own .sln, or
+          # pre-solution-consolidation history). Restore each packages.config into the
+          # specific "..\packages" folder its project actually references, instead of
+          # one shared location nothing points at.
+          Get-ChildItem -Recurse -Filter "packages.config" | ForEach-Object {
+            $projectDir = $_.Directory.FullName
+            $packagesDir = Join-Path (Split-Path $projectDir -Parent) "packages"
+            Write-Host "Restoring $($_.FullName) -> $packagesDir"
+            & "$env:RUNNER_TEMP\nuget.exe" restore $_.FullName -PackagesDirectory $packagesDir -NonInteractive 2>&1 | Write-Host
+          }
 
       - name: Attempt full rebuild (rebuild-all.ps1, Release only)
         id: rebuild
