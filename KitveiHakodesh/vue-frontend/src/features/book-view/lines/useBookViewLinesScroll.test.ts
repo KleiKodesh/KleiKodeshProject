@@ -1,0 +1,120 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createApp, ref, nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
+
+// Same host stubs as tabStore.test.ts: a native-tabs host is what makes openTab add
+// a tab (the single-tab path navigates in place instead).
+vi.mock('@/webview-host/bridge', () => ({
+  hasNativeChromeTabs: true,
+  navigatesDestinationsInPlace: false,
+  disposeLocalFileHost: vi.fn(),
+  getHbLocalFolderFromRegistry: vi.fn(async () => null),
+  setHbLocalFolderInRegistry: vi.fn(async () => undefined),
+}))
+vi.mock('@/webview-host/seforimApi', () => ({
+  getWordLinkTargetsForBook: vi.fn(async () => null),
+}))
+vi.mock('@/stores/recentlyOpenedStore', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/stores/recentlyOpenedStore')>()
+  return { ...original, useRecentlyOpenedStore: () => ({ trackNavigation: vi.fn() }) }
+})
+
+const idb = vi.hoisted(() => ({ tabPuts: [] as string[], lastReadPuts: [] as string[] }))
+vi.mock('@/utils/persistence', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/utils/persistence')>()
+  return {
+    ...original,
+    idbTabsGet: async () => null,
+    idbTabsSet: async (key: string) => { idb.tabPuts.push(key) },
+    idbTabsDelete: async () => undefined,
+    idbTabsDeleteByPrefix: async () => undefined,
+    dbGet: async () => null,
+    dbSet: async (db: string, key: string) => { if (db === 'app-lastread') idb.lastReadPuts.push(key) },
+    dbDelete: async () => undefined,
+    dbCount: async () => 0,
+    dbListEntries: async () => [],
+  }
+})
+
+import { useTabStore } from '@/stores/tabStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
+import { useBookViewLinesScroll } from './useBookViewLinesScroll'
+
+const BOOK_ID = 7
+
+/** Mounts the composable the way BookViewLinesContent does, on a scroller sitting at line 3. */
+function mountScroll(tabId: string) {
+  const scroller = document.createElement('div')
+  let scroll!: ReturnType<typeof useBookViewLinesScroll>
+  const app = createApp({
+    setup() {
+      scroll = useBookViewLinesScroll(
+        ref(scroller),
+        () => ({ scrollToIndex: vi.fn(), scrollToOffset: vi.fn() }) as never,
+        () => [{ index: 3, start: 0, size: 20, end: 20, key: 3, lane: 0 }],
+        () => [],
+        {},
+        { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
+        () => undefined,
+        () => undefined,
+      )
+      return () => null
+    },
+  })
+  app.mount(document.createElement('div'))
+  return { app, scroll }
+}
+
+/**
+ * The position save runs from two places when a book view leaves: the tab close
+ * captures it while the view is still mounted (recents, last-read), and the view's
+ * own unmount saves again. For a closed tab the second must not repeat the first.
+ */
+describe('useBookViewLinesScroll position save on unmount', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    idb.tabPuts.length = 0
+    idb.lastReadPuts.length = 0
+  })
+
+  it('a tab close writes last-read exactly once: the capture, not the unmount after it', async () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const { app } = mountScroll(tab.id)
+
+    store.closeTab(tab.id)
+    expect(idb.lastReadPuts).toEqual([`lastread:${BOOK_ID}`])
+
+    app.unmount()
+    await nextTick()
+    expect(idb.lastReadPuts).toEqual([`lastread:${BOOK_ID}`])
+    // The capture's per-tab put (deleted by the close right after); the unmount adds none.
+    expect(idb.tabPuts.filter((k) => k.startsWith(`book:default:${tab.id}:`))).toEqual([`book:default:${tab.id}:${BOOK_ID}`])
+  })
+
+  it('a close inside a suppressed window (mid programmatic jump) saves on unmount instead', async () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const { app, scroll } = mountScroll(tab.id)
+
+    scroll.suppressPositionSave()
+    store.closeTab(tab.id)
+    expect(idb.lastReadPuts).toEqual([])
+
+    app.unmount()
+    await nextTick()
+    expect(idb.lastReadPuts).toEqual([`lastread:${BOOK_ID}`])
+  })
+
+  it('a view leaving while its tab stays open still saves on unmount', async () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const { app } = mountScroll(tab.id)
+
+    app.unmount()
+    await nextTick()
+    expect(idb.lastReadPuts).toEqual([`lastread:${BOOK_ID}`])
+    expect(idb.tabPuts).toContain(`book:default:${tab.id}:${BOOK_ID}`)
+  })
+})

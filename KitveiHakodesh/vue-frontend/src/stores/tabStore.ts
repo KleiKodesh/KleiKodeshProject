@@ -576,10 +576,12 @@ export const useTabStore = defineStore('tabs', () => {
    * at all. Wrapping the writer is the narrowest hook: every position save in the
    * app already goes through it.
    *
-   * A save for a tab that has left the list is dropped. A closing tab's view still
-   * runs its unmount save after the tab is gone — by then disposeClosedTab has
-   * captured that same position and deleted the tab's state, so the write would only
-   * resurrect one orphan `book:`/`tab:` record that nothing ever reads or deletes.
+   * A save for a tab that has left the list is dropped. A closing tab's view unmounts
+   * after the tab is gone — by then disposeClosedTab has captured that same position
+   * and deleted the tab's state, so a write would only resurrect one orphan
+   * `book:`/`tab:` record that nothing ever reads or deletes. The book view's own
+   * unmount save already skips a closed tab (useBookViewLinesScroll, by isOpenTab);
+   * this is the backstop for every other writer.
    */
   function isOpenTab(tabId: string): boolean {
     return tabs.value.some((t) => t.id === tabId)
@@ -667,9 +669,9 @@ export const useTabStore = defineStore('tabs', () => {
   function disposeClosedTab(id: string) {
     // The tab's view is still mounted: have it save where the reader is NOW, so the
     // capture below folds the closing position into the recents row. The view's own
-    // unmount save runs after the tab has left the list - too late for recents, and
-    // its per-tab write is dropped (setBookViewStateTracked) so it cannot bring back
-    // the state deleted below.
+    // unmount save runs after the tab has left the list - too late for recents - and
+    // skips itself for a closed tab (isOpenTab), so it neither repeats the last-read
+    // put nor brings back the state deleted below.
     capturePositionsForTab(id)
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
@@ -679,7 +681,7 @@ export const useTabStore = defineStore('tabs', () => {
     // ever one), which means deleteAllStateForTab cannot reach it. Read the route
     // BEFORE the tab is gone.
     if (tabs.value.find((t) => t.id === id)?.route === '/settings') clearSettingsViewState()
-    // Deferred: closing a tab unmounts its book view, and that unmount runs one
+    // Deferred: closing a tab unmounts its book view, and that unmount may run one
     // last savePos() which reads the commentary check-trees. Dropping them inline
     // would make that final save write an empty filter over the last-read record,
     // so the reader's ticks would vanish on reopening the book.
@@ -1105,7 +1107,7 @@ export const useTabStore = defineStore('tabs', () => {
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
     // Deferred for the same reason as the drop in disposeClosedTab: the closing
-    // views have not unmounted yet, and their final savePos() still needs to read
+    // views have not unmounted yet, and a final savePos() may still need to read
     // the check-trees. Snapshot the live ids now — by the time this runs the tab
     // list may have moved on.
     const liveIds = tabs.value.map((t) => t.id)
@@ -1410,6 +1412,7 @@ export const useTabStore = defineStore('tabs', () => {
     setTabViewState: setTabViewStateTracked,
     getBookViewState,
     setBookViewState: setBookViewStateTracked,
+    isOpenTab,
     clearBookViewState,
     togglePdfViewerTitleBar,
   }

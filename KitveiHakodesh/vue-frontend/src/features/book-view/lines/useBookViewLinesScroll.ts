@@ -450,7 +450,11 @@ export function useBookViewLinesScroll(
   // WebView2 hosts (which fire none of those), and the tab's own close (by tab id)
   // all take the position through this one registration - see persistenceFlush.ts
   // for why the position must be captured BEFORE the coalesced stores flush.
-  const unregisterHostFlush = registerPositionCapture(savePos, tabId)
+  let lastCaptureSuppressed = false
+  const unregisterHostFlush = registerPositionCapture(() => {
+    lastCaptureSuppressed = saveSuppressed
+    return savePos()
+  }, tabId)
 
   onBeforeUnmount(() => {
     unregisterHostFlush()
@@ -461,7 +465,14 @@ export function useBookViewLinesScroll(
       clearTimeout(saveSuppressTimer)
       saveSuppressTimer = null
     }
-    savePos()
+    // A view leaving while its tab stays open (tab switch, navigation within the
+    // tab) has only this save. A closed tab's view unmounts after the tab has left
+    // the list, and the close already captured this same position (disposeClosedTab
+    // -> capturePositionsForTab): saving again would only repeat the last-read put
+    // (the per-tab put the store drops anyway). The one exception is a close that
+    // fell inside a suppressed window - that capture wrote nothing, so this is its
+    // save, as it was before the close-time capture existed.
+    if (tabStore.isOpenTab(tabId) || lastCaptureSuppressed) savePos()
   })
 
   // ── Scroll handler ──────────────────────────────────────────────────────────
