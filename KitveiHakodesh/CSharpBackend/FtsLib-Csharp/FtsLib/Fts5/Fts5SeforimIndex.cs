@@ -23,8 +23,7 @@ namespace FtsLib.Fts5
     /// </summary>
     public sealed class Fts5SeforimIndex
     {
-        /// <summary>The file whose presence means a searchable index — what the "segments
-        /// exist" checks look for while this engine is wired in.</summary>
+        /// <summary>The file whose presence means a searchable index.</summary>
         public const string IndexFileName = Fts5Index.LinesDbName;
 
         public const int DefaultContextWords = SnippetDescriptorPipeline.DefaultContextWords;

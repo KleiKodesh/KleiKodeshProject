@@ -10,11 +10,11 @@ namespace FtsLib.Indexing
     /// The .dat posting file is read via a plain <see cref="FileStream"/> with a
     /// lock-guarded Seek+Read so that concurrent searches sharing the same handle
     /// do not race on the stream position.  A memory-mapped approach was used
-    /// previously but exhausts the 32-bit virtual address space when the index
-    /// contains many large segments, producing "Not enough memory resources" errors.
+    /// previously but exhausts the 32-bit virtual address space on large files,
+    /// producing "Not enough memory resources" errors.
     ///
     /// The FileStream is opened with <c>FileShare.Read | FileShare.Delete</c>:
-    ///   - FileShare.Delete allows a dictionary merge (or another process) to call
+    ///   - FileShare.Delete allows a rebuild (or another process) to call
     ///     File.Delete on the .dat file while this handle is still open.  On Windows,
     ///     FILE_SHARE_DELETE unlinks the directory entry but the file content remains
     ///     accessible through the existing handle until all handles are closed.
@@ -52,7 +52,7 @@ namespace FtsLib.Indexing
                     // restore can preserve them), and a stale sidecar maps trigram
                     // hits to the wrong rowids — candidate loss that survives the
                     // LIKE confirm. Mismatch (incl. pre-binding sidecars, which
-                    // carry 0) → fall back to LIKE until the next force merge
+                    // carry 0) → fall back to LIKE until the next index build
                     // rebuilds the sidecar.
                     if (_trigram != null)
                     {
@@ -102,12 +102,11 @@ namespace FtsLib.Indexing
 
             try
             {
-                // Pooling=false: this is a live per-segment read handle. When the segment
-                // is superseded by a merge, disposing this SegmentHandle must release the OS
-                // file handle to the .db *immediately* so the merger can delete the source.
+                // Pooling=false: disposing this SegmentHandle must release the OS file
+                // handle to the .db *immediately* so a rebuild can delete or replace it.
                 // Microsoft.Data.Sqlite pools by default — a pooled connection keeps the
                 // handle open after Dispose, which makes the merge's File.Delete fail with
-                // "used by another process" (aborts the whole index build).
+                // "used by another process".
                 Conn = new Microsoft.Data.Sqlite.SqliteConnection(
                     new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
                     {
