@@ -22,6 +22,7 @@
  */
 import { encode as mpEncode, decode as mpDecode, Decoder } from '@msgpack/msgpack'
 import { onWebviewEvent } from './seforimDb'
+import { serviceCallEnded, serviceCallStarted } from './serviceIdle'
 import {
   isPersistentReason,
   markServiceAvailable,
@@ -208,6 +209,15 @@ export async function serviceCall<T = unknown>(
   args: object = {},
   signal?: AbortSignal,
 ): Promise<T> {
+  serviceCallStarted()
+  try {
+    return await serviceCallCore<T>(op, args, signal)
+  } finally {
+    serviceCallEnded()
+  }
+}
+
+async function serviceCallCore<T>(op: string, args: object, signal?: AbortSignal): Promise<T> {
   const t0 = performance.now()
   console.debug(`[service] -> ${op}`, args)
   const res = await postRpc('/rpc', encodeRequest(op, args), signal)

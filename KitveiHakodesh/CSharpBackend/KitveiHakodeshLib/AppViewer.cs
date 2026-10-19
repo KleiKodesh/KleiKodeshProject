@@ -303,6 +303,7 @@ namespace KitveiHakodeshLib
             }
 
             e.Cancel = true;
+            if (form.WindowState != FormWindowState.Minimized) await SaveSnapshotAsync();
             await FlushPersistenceAsync();
             try
             {
@@ -361,9 +362,14 @@ namespace KitveiHakodeshLib
         // Stored as a readonly field so it is captured before InitAsync runs.
         private readonly string _webCacheFolder;
 
-        public AppViewer(string webCacheFolder = "webcache")
+        /// <param name="snapshotSplash">
+        /// Show the page as it looked when the window last closed instead of the logo
+        /// splash (see AppViewerSplash). Off for the VSTO pane.
+        /// </param>
+        public AppViewer(string webCacheFolder = "webcache", bool snapshotSplash = false)
         {
             _webCacheFolder = webCacheFolder;
+            _snapshotSplash = snapshotSplash;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -30,12 +30,18 @@ namespace KitveiHakodeshLib
         private readonly Timer _timer;
         private readonly string _versionText;
         private readonly Font _versionFont;
+        // Snapshot mode: _logo is a capture of the page, drawn pixel for pixel with no
+        // dots, no version line and no timer.
+        private readonly bool _isSnapshot;
 
-        public SplashOverlay(Image logo, string versionText = null)
+        public SplashOverlay(Image logo, string versionText = null, bool isSnapshot = false)
         {
             _logo = logo;
-            _versionText = versionText;
-            _versionFont = new Font("Segoe UI", 12f);
+            _isSnapshot = isSnapshot;
+            _versionText = isSnapshot ? null : versionText;
+            if (!isSnapshot) _versionFont = new Font("Segoe UI", 12f);
+            // The page is not interactive yet: say so on hover too.
+            if (isSnapshot) Cursor = Cursors.AppStarting;
 
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
@@ -44,7 +50,7 @@ namespace KitveiHakodeshLib
 
             _timer = new Timer { Interval = 16 };
             _timer.Tick += OnTick;
-            _timer.Start();
+            if (!isSnapshot) _timer.Start();
         }
 
         public void FadeOut()
@@ -97,6 +103,18 @@ namespace KitveiHakodeshLib
 
             int w = Width, h = Height, cx = w / 2, cy = h / 2;
 
+            if (_isSnapshot)
+            {
+                g.Clear(BackColor);
+                // Explicit pixel rectangles: DrawImageUnscaled / DrawImage(img, x, y) rescale
+                // by the PNG's stored DPI, which blurs it. Anchored top-right — the app is
+                // RTL, so a resized window keeps its right-hand chrome in place.
+                if (_logo != null)
+                    g.DrawImage(_logo, new Rectangle(w - _logo.Width, 0, _logo.Width, _logo.Height),
+                        0, 0, _logo.Width, _logo.Height, GraphicsUnit.Pixel);
+                return;
+            }
+
             // ── Background ───────────────────────────────────────────────────────
             Color bg = BackColor;
             using (var b = new SolidBrush(Color.FromArgb(a, bg)))
@@ -118,11 +136,29 @@ namespace KitveiHakodeshLib
             }
 
             // ── Bouncing dots ─────────────────────────────────────────────────────
-            // Matches Vue LoadingAnimation.vue: 1.2s, peak at 40% of cycle, scale 0.6→1
-            float totalW = (DotCount - 1) * DotSpacing;
-            float startX = cx - totalW / 2f;
-            float dotsY  = cy + 108f;
+            DrawDots(g, cx, cy + 108f);
 
+            // ── Version stamp ─────────────────────────────────────────────────────
+            // Unobtrusive current-version line at the bottom edge — updates install
+            // silently, so this is where the user can passively see what they're on.
+            // Muted 55%-alpha text, white on dark backgrounds / black on light.
+            if (!string.IsNullOrEmpty(_versionText))
+            {
+                bool darkBg = BackColor.GetBrightness() < 0.5f;
+                var baseCol = darkBg ? Color.White : Color.Black;
+                var textCol = Color.FromArgb((int)(_alpha * 255 * 0.55f), baseCol);
+
+                var size = g.MeasureString(_versionText, _versionFont);
+                using (var brush = new SolidBrush(textCol))
+                    g.DrawString(_versionText, _versionFont, brush,
+                        cx - size.Width / 2f, h - size.Height - 14f);
+            }
+        }
+
+        // Matches Vue LoadingAnimation.vue: 1.2s, peak at 40% of cycle, scale 0.6→1
+        private void DrawDots(Graphics g, float cx, float dotsY)
+        {
+            float startX = cx - (DotCount - 1) * DotSpacing / 2f;
             for (int i = 0; i < DotCount; i++)
             {
                 // position in cycle 0..2π, offset by dot's delay
@@ -141,22 +177,6 @@ namespace KitveiHakodeshLib
 
                 using (var brush = new SolidBrush(Color.FromArgb(dotA, AR, AG, AB)))
                     g.FillEllipse(brush, dx - r, dotsY - r, r * 2, r * 2);
-            }
-
-            // ── Version stamp ─────────────────────────────────────────────────────
-            // Unobtrusive current-version line at the bottom edge — updates install
-            // silently, so this is where the user can passively see what they're on.
-            // Muted 55%-alpha text, white on dark backgrounds / black on light.
-            if (!string.IsNullOrEmpty(_versionText))
-            {
-                bool darkBg = BackColor.GetBrightness() < 0.5f;
-                var baseCol = darkBg ? Color.White : Color.Black;
-                var textCol = Color.FromArgb((int)(_alpha * 255 * 0.55f), baseCol);
-
-                var size = g.MeasureString(_versionText, _versionFont);
-                using (var brush = new SolidBrush(textCol))
-                    g.DrawString(_versionText, _versionFont, brush,
-                        cx - size.Width / 2f, h - size.Height - 14f);
             }
         }
 
