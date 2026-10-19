@@ -154,7 +154,7 @@
                           FontSize="12"
                           HorizontalAlignment="Stretch"
                           Margin="0,12,0,4"/>
-            <TextBlock Text="כשמופעל, בחירת מילה במסמך תציג כאן אפשרויות ניקוד חלופיות. לחיצה על אפשרות תחליף את המילה."
+            <TextBlock Text="בחרו מילה במסמך לקבלת חלופות ניקוד; לחיצה מחליפה. Ctrl+חצים: מילה הבאה/קודמת."
                        FontSize="11"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource TextSecBrush}"
