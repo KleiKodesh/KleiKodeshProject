@@ -87,28 +87,48 @@ const MAX_PLACEHOLDER_LINES = 4 // the .snippet clamp
  * Raw descriptor chars per rendered line, measured from filled snippets at the
  * current width and font. The raw window counts tags and markers the rendered text
  * drops, so the em estimate alone over-counts lines on most rows; this ratio
- * absorbs both. Reset on every width / font change and re-measured from the next
- * render that has enough filled, unclamped snippets on screen.
+ * absorbs both. Rolling: every filled, unclamped row the virtualizer renders adds
+ * one sample (deduped by row index), so the first screen does not freeze a skewed
+ * ratio. Running sums keep each sample O(1). Reset on width / font change and on a
+ * new search.
  */
 const calibratedCharsPerLine = ref<number | null>(null)
-watch([contentWidth, fontPx], () => { calibratedCharsPerLine.value = null })
 const MIN_CALIBRATION_SAMPLES = 3
+/** Dedupe set is cleared at this size; the running sums are kept. */
+const MAX_SAMPLED_INDICES = 4096
+const sampledRowIndices = new Set<number>()
+let sampledRawChars = 0
+let sampledLines = 0
+let sampleCount = 0
+function resetCharsPerLineCalibration() {
+  sampledRowIndices.clear()
+  sampledRawChars = 0
+  sampledLines = 0
+  sampleCount = 0
+  calibratedCharsPerLine.value = null
+}
+watch([contentWidth, fontPx, () => props.searchQuery], resetCharsPerLineCalibration)
 function calibrateCharsPerLine() {
-  if (calibratedCharsPerLine.value != null || !scrollEl.value) return
-  let rawTotal = 0
-  let lineTotal = 0
-  let samples = 0
+  if (!scrollEl.value) return
+  let added = false
   for (const el of scrollEl.value.querySelectorAll<HTMLElement>('.snippet[data-raw-chars]')) {
+    const rowIndex = Number(el.dataset.rowIndex)
+    if (sampledRowIndices.has(rowIndex)) continue
     const lineHeight = parseFloat(getComputedStyle(el).lineHeight)
     if (!lineHeight) continue
     const lines = Math.round(el.scrollHeight / lineHeight)
     if (lines < 1 || lines > MAX_PLACEHOLDER_LINES) continue // clamped rows hide their real length
+    if (sampledRowIndices.size >= MAX_SAMPLED_INDICES) sampledRowIndices.clear()
+    sampledRowIndices.add(rowIndex)
     // A row of n lines holds between n-1 and n lines' worth of chars: count it as n - 0.5.
-    rawTotal += Number(el.dataset.rawChars)
-    lineTotal += lines - 0.5
-    samples++
+    sampledRawChars += Number(el.dataset.rawChars)
+    sampledLines += lines - 0.5
+    sampleCount++
+    added = true
   }
-  if (samples >= MIN_CALIBRATION_SAMPLES && rawTotal > 0) calibratedCharsPerLine.value = rawTotal / lineTotal
+  if (added && sampleCount >= MIN_CALIBRATION_SAMPLES && sampledRawChars > 0) {
+    calibratedCharsPerLine.value = sampledRawChars / sampledLines
+  }
 }
 onUpdated(calibrateCharsPerLine)
 const charsPerLine = computed(() => {
@@ -658,7 +678,7 @@ defineExpose({
                 :reseed="() => reseedPreview(results[vRow.index]!)"
               />
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :data-raw-chars="rawSnippetChars(results[vRow.index]!)" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
+              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :data-raw-chars="rawSnippetChars(results[vRow.index]!)" :data-row-index="vRow.index" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
               <div v-else class="snippet-placeholder">
                 <div
                   v-for="(barWidth, barIndex) in placeholderBars(results[vRow.index]!)"
