@@ -213,6 +213,13 @@ jobs:
             Set-Content rebuild-all.ps1
           (Get-Content rebuild-all.ps1) -replace [regex]::Escape('/p:Configuration=$config'), '/p:Configuration=$config /p:MSBuildPath="$msbuild"' |
             Set-Content rebuild-all.ps1
+          # rebuild-all.ps1 deletes every bin/obj folder in the repo as its very first step,
+          # which wipes out the restore we already did for the FluentChromeTabs stub (it's
+          # SDK-style but, being outside this repo in the real world, isn't itself in
+          # $projects, so it never gets re-restored by the script's own SDK-restore loop).
+          # Add it to $projects so that loop picks it up and restores it again after the clean.
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"WpfLib/WpfLib.csproj",'), '"WpfLib/WpfLib.csproj", "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj",' |
+            Set-Content rebuild-all.ps1
           ./rebuild-all.ps1 -Release
           "exitcode=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
