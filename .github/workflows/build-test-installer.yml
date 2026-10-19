@@ -43,6 +43,16 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install Vue frontend dependencies
+        shell: pwsh
+        run: |
+          # KitveiHakodesh.targets' BuildVue target runs `npm run build` straight in the
+          # C# build (no install step of its own) — it assumes node_modules is already
+          # there, true on the maintainer's machine but not on a fresh checkout. Without
+          # this, every project that pulls in KitveiHakodeshDemoApp/KleiKodeshVsto fails
+          # with MSB3073 the moment it tries to build the Vue frontend.
+          npm ci --prefix KitveiHakodesh/vue-frontend
+
       - name: Report available Office/VSTO components (diagnostic)
         shell: pwsh
         run: |
