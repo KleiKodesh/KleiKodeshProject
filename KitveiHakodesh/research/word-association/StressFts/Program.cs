@@ -121,7 +121,7 @@ var bands = new (string Name, List<string> Words)[]
     ("hyper(800+)",         Band(800, int.MaxValue, 12)),
 };
 
-var index = new SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
+var index = new FtsLib.Fts5.Fts5SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
 
 (long Count, double Ms) RunSearch(string q, int timeBudgetMs = 30000)
 {

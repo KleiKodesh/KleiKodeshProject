@@ -24,7 +24,7 @@ namespace FtsLibTest
             int maxLines = args.Length > 1 && int.TryParse(args[1], out var ml) ? ml : 400000;
             int reps = args.Length > 2 && int.TryParse(args[2], out var rp) ? rp : 21;
 
-            string db = BuildTest.ResolveDbPath();
+            string db = TestHelpers.ResolveDbPath();
             var sb = new StringBuilder();
             using (var c = new SqliteConnection($"Data Source={db};Mode=ReadOnly;Cache=Shared"))
             {

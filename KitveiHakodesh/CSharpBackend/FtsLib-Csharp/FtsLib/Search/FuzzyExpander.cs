@@ -81,8 +81,7 @@ namespace FtsLib.Search
         public static List<string> Expand(
             string                       term,
             int                          maxDistance,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache = null)
+            IReadOnlyList<SegmentHandle> segments)
         {
             if (maxDistance > MaxAllowedDistance) maxDistance = MaxAllowedDistance;
             if (maxDistance < 1)                  maxDistance = 1;
@@ -97,8 +96,8 @@ namespace FtsLib.Search
             else if (term.Length >= 2 * (maxDistance + 1)) n = 2;
 
             Dictionary<string, long> candidates = n > 0
-                ? QueryByNgrams(BuildNgrams(term, n), segments, cache)
-                : QueryByLengthWindow(term, maxDistance, segments, cache);
+                ? QueryByNgrams(BuildNgrams(term, n), segments)
+                : QueryByLengthWindow(term, maxDistance, segments);
 
             // Phase 2: Levenshtein confirmation. The actual distance is kept so
             // the cap can prefer the closest matches.
@@ -179,8 +178,7 @@ namespace FtsLib.Search
 
         private static Dictionary<string, long> QueryByNgrams(
             List<string>                 ngrams,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache)
+            IReadOnlyList<SegmentHandle> segments)
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
 
@@ -227,12 +225,6 @@ namespace FtsLib.Search
                             int    count = reader.GetInt32(5);
                             results.TryGetValue(t, out long total);
                             results[t] = total + count;
-                            cache?.Add(t, new SegmentChunk(seg,
-                                reader.GetInt64(1),
-                                reader.GetInt32(2),
-                                reader.GetInt64(3),
-                                reader.GetInt32(4),
-                                count));
                         }
                 }
             }
@@ -283,8 +275,7 @@ namespace FtsLib.Search
         private static Dictionary<string, long> QueryByLengthWindow(
             string                       term,
             int                          maxDistance,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache)
+            IReadOnlyList<SegmentHandle> segments)
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
             int lo = term.Length - maxDistance; if (lo < 1) lo = 1;
@@ -309,12 +300,6 @@ namespace FtsLib.Search
                             int    count = reader.GetInt32(5);
                             results.TryGetValue(t, out long total);
                             results[t] = total + count;
-                            cache?.Add(t, new SegmentChunk(seg,
-                                reader.GetInt64(1),
-                                reader.GetInt32(2),
-                                reader.GetInt64(3),
-                                reader.GetInt32(4),
-                                count));
                         }
                 }
             }

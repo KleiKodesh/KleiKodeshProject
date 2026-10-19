@@ -6,8 +6,7 @@ namespace FtsLib.Snippets
     /// <summary>
     /// Locates the snippet window in a line of raw HTML for a prepared query and describes it
     /// as offsets — see <see cref="SnippetDescriptor"/>. Emits NO text: no HTML, no stripped
-    /// copy, no string at all. Rendering is the consumer's job (the page), and
-    /// <see cref="SnippetHtmlRenderer"/> shows exactly how the offsets are meant to be read.
+    /// copy, no string at all. Rendering is the consumer's job (the page).
     ///
     /// Single pass — the raw HTML is scanned exactly once:
     ///   1. <see cref="TokenStream"/> tokenizes it, producing tokens with raw character

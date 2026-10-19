@@ -12,8 +12,8 @@ using System.Threading;
 namespace FtsLib.Fts5
 {
     /// <summary>
-    /// Search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
-    /// SearchPipeline: QueryParser groups (AND across groups, OR within), the production
+    /// Search over an <see cref="Fts5Index"/>, with the semantics of FtsLib's former segment
+    /// engine: QueryParser groups (AND across groups, OR within), the production
     /// wildcard / fuzzy / grammar / ketiv expansion rules, AND across groups and OR within, results
     /// in the index's order (catalog order for an IFtsOrderedCorpus, else ascending line ids), content fetched from the corpus, and FtsLib's snippet pipeline — the same
     /// results, with only FtsLib's own limits (expansion caps, wildcard budgets, anchor and
@@ -105,7 +105,7 @@ namespace FtsLib.Fts5
             d.TermsByRowId = d.Handle.Conn.CreateCommand();
         }
 
-        // ── Public API (mirrors SeforimIndex) ─────────────────────────
+        // ── Public API ────────────────────────────────────────────────
 
         /// <summary>Content batch size when the caller passes no plan of its own.</summary>
         const int DefaultContentBatchSize = 256;
@@ -139,13 +139,13 @@ namespace FtsLib.Fts5
             onStage?.Invoke("lookup");
             var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
 
-            IFtsCorpus corpus = null;   // opened on the first hit, like SearchPipeline
+            IFtsCorpus corpus = null;   // opened on the first hit
             try
             {
                 int batchIndex = 0;
                 int batchSize = Math.Max(1, batchSizeAt?.Invoke(batchIndex) ?? DefaultContentBatchSize);
                 var batch = new List<int>(batchSize);
-                int taken = 0;              // cap counts ids, as SearchPipeline does
+                int taken = 0;              // cap counts ids
                 foreach (int id in StreamIds(plan, ct))
                 {
                     batch.Add(id);
@@ -169,7 +169,7 @@ namespace FtsLib.Fts5
         }
 
         public static SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
-                                                            int contextWords = SeforimIndex.DefaultContextWords)
+                                                            int contextWords = SnippetDescriptorPipeline.DefaultContextWords)
         {
             if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
             var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
@@ -195,7 +195,7 @@ namespace FtsLib.Fts5
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) return null;
 
-            HashSet<int> filter = null;   // same keep-set rule as SearchPipeline.BuildFilter
+            HashSet<int> filter = null;   // null = everything, empty = nothing, negatives ignored
             if (filterIds != null)
             {
                 filter = new HashSet<int>();
@@ -396,8 +396,8 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>
-        /// Copy of SearchPipeline.ExpandGroup (FtsLib/SeforimDb/SearchPipeline.cs), with the
-        /// IndexReader calls replaced by the same production expanders over terms.db.
+        /// Expands one query group to literal terms with the production expanders over the
+        /// term dictionaries (ported from the former segment engine's ExpandGroup).
         /// </summary>
         List<string> ExpandGroup(QueryGroup group, bool expandKetiv, CancellationToken ct, out bool hardMiss)
         {
@@ -436,7 +436,7 @@ namespace FtsLib.Fts5
                     }
                     else
                     {
-                        expanded = HebrewWildcardExpander.Expand(alt.Pattern, _termSegments, null, out bool rejected);
+                        expanded = HebrewWildcardExpander.Expand(alt.Pattern, _termSegments, out bool rejected);
                         if (!rejected) anyRealConstraint = true;
                     }
                 }

@@ -26,7 +26,7 @@ namespace FtsLib.Search
     ///   MinAnchorLength (2): the non-wildcard anchor must be at least 2 chars.
     ///   Patterns like "*ל" or "מ*" are rejected immediately — they would expand
     ///   to tens of thousands of terms.  Rejection is reported via the
-    ///   <c>out bool rejected</c> overload of <see cref="Expand(string,IReadOnlyList{SegmentHandle},TermChunkCache,out bool)"/>:
+    ///   <c>out bool rejected</c> overload of <see cref="Expand(string,IReadOnlyList{SegmentHandle},out bool)"/>:
     ///   the caller skips a REJECTED pattern's group, but treats a supported
     ///   pattern that matched nothing as an unsatisfiable constraint.
     ///
@@ -120,12 +120,11 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short, the '?' count
         /// exceeds <see cref="MaxOptionalChars"/>, or nothing survives the filter.
         /// </summary>
-        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
-                                          TermChunkCache cache = null)
-            => Expand(pattern, segments, cache, out _);
+        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments)
+            => Expand(pattern, segments, out _);
 
         /// <summary>
-        /// As <see cref="Expand(string,IReadOnlyList{SegmentHandle},TermChunkCache)"/>,
+        /// As <see cref="Expand(string,IReadOnlyList{SegmentHandle})"/>,
         /// additionally reporting via <paramref name="rejected"/> whether the pattern
         /// was UNSUPPORTED (anchor shorter than <see cref="MinAnchorLength"/>, or more
         /// than <see cref="MaxOptionalChars"/> '?' operators) — the documented
@@ -133,8 +132,7 @@ namespace FtsLib.Search
         /// matched nothing, which is a real constraint the caller must treat as an
         /// unsatisfiable group (whole query returns empty), never as a slot to drop.
         /// </summary>
-        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
-                                          TermChunkCache cache, out bool rejected)
+        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments, out bool rejected)
         {
             rejected = false;
             bool hasOptional = pattern.IndexOf('?') >= 0;
@@ -148,7 +146,7 @@ namespace FtsLib.Search
                     rejected = true;
                     return new List<string>();
                 }
-                return ExpandStar(pattern, segments, cache);
+                return ExpandStar(pattern, segments);
             }
 
             // Count '?' operators (after normalising away no-op ones).
@@ -179,12 +177,12 @@ namespace FtsLib.Search
 
                 if (sub.IndexOf('*') >= 0)
                 {
-                    foreach (var kv in ExpandStarCore(sub, segments, cache))
+                    foreach (var kv in ExpandStarCore(sub, segments))
                         if (!merged.ContainsKey(kv.Key))
                             merged[kv.Key] = kv.Value;
                 }
                 else if (!merged.ContainsKey(sub) &&
-                         TryLookupLiteral(sub, segments, cache, out long count))
+                         TryLookupLiteral(sub, segments, out long count))
                 {
                     merged[sub] = count;
                 }
@@ -214,9 +212,8 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short or nothing survives
         /// the filter.
         /// </summary>
-        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments,
-                                              TermChunkCache cache = null)
-            => CapTerms(ExpandStarCore(pattern, segments, cache));
+        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments)
+            => CapTerms(ExpandStarCore(pattern, segments));
 
         /// <summary>
         /// Uncapped '*' expansion. Returns each surviving term with its total
@@ -224,8 +221,7 @@ namespace FtsLib.Search
         /// break length ties in favour of the more frequent term.
         /// </summary>
         private static Dictionary<string, long> ExpandStarCore(string pattern,
-                                                               IReadOnlyList<SegmentHandle> segments,
-                                                               TermChunkCache cache)
+                                                               IReadOnlyList<SegmentHandle> segments)
         {
             int anchorLen = AnchorLength(pattern);
 
@@ -290,12 +286,6 @@ namespace FtsLib.Search
                             int    count = reader.GetInt32(5);
                             raw.TryGetValue(term, out long total);
                             raw[term] = total + count;
-                            cache?.Add(term, new SegmentChunk(seg,
-                                reader.GetInt64(1),   // skip_offset
-                                reader.GetInt32(2),   // skip_count
-                                reader.GetInt64(3),   // offset
-                                reader.GetInt32(4),   // length
-                                count));              // count
                         }
                 }
             }
@@ -511,12 +501,9 @@ namespace FtsLib.Search
 
         /// <summary>
         /// Looks up an exact term across all segments, reporting its total document
-        /// count. Probes EVERY segment (no early exit) so the cached chunk list is
-        /// complete — a cache entry missing a segment would silently drop that
-        /// segment's postings at resolve time.
+        /// count. Probes EVERY segment (no early exit) so the count covers all of them.
         /// </summary>
-        private static bool TryLookupLiteral(string term, IReadOnlyList<SegmentHandle> segments,
-                                             TermChunkCache cache, out long totalCount)
+        private static bool TryLookupLiteral(string term, IReadOnlyList<SegmentHandle> segments, out long totalCount)
         {
             totalCount = 0;
 
@@ -538,12 +525,6 @@ namespace FtsLib.Search
                             found = true;
                             int count = reader.GetInt32(4);
                             totalCount += count;
-                            cache?.Add(term, new SegmentChunk(seg,
-                                reader.GetInt64(0),
-                                reader.GetInt32(1),
-                                reader.GetInt64(2),
-                                reader.GetInt32(3),
-                                count));
                         }
                 }
             }
@@ -629,13 +610,6 @@ namespace FtsLib.Search
             }
             return sb.ToString();
         }
-
-        /// <summary>
-        /// Returns the pattern with all '*' and '?' characters removed — used as the
-        /// fallback literal when expansion yields no results.
-        /// </summary>
-        public static string StripWildcard(string pattern)
-            => pattern.Replace("*", string.Empty).Replace("?", string.Empty);
 
         // ── Helpers ──────────────────────────────────────────────────
 

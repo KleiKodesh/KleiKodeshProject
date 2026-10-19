@@ -5,8 +5,7 @@ using System.Threading.Tasks;
 using FtsLib;
 using FtsLib.SeforimDb;
 using FtsLib.Snippets;
-// Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
+using FtsLib.Fts5;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
@@ -76,7 +75,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// Words of context a snippet shows per side when the caller does not say. The engine's
         /// default, surfaced here so a host can offer it without referencing the engine.
         /// </summary>
-        public const int DefaultContextWords = SeforimIndex.DefaultContextWords;
+        public const int DefaultContextWords = Fts5SeforimIndex.DefaultContextWords;
 
         /// <summary>
         /// How many leading hits of a search get their snippet line texts sent along
@@ -228,7 +227,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <see cref="ExtendShortWindowsWithNeighbourLines"/>.
         /// </summary>
         private static bool TryBuildHit(
-            SeforimIndex index,
+            Fts5SeforimIndex index,
             SearchResult hit,
             bool requireOrdered,
             int contextWords,

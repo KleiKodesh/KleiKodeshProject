@@ -14,11 +14,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// (<see cref="IFtsCorpus"/>) — Core reads the lines, the engine indexes and searches them,
     /// and the engine's own built-in reader is never used.
     ///
-    /// This is step 2 of the gradual FtsLib boundary (MIGRATION-PLAN slice 4b): construct
-    /// <c>SeforimIndex(indexPath, () => new SeforimDbFtsCorpus(dbPath))</c> and the engine opens
-    /// no content database of its own. Callers still on <c>SeforimIndex(indexPath, dbPath)</c>
-    /// keep working; the two routes build byte-identical indexes because these queries are
-    /// ports of the built-in reader's, kept semantically identical on purpose.
+    /// The engine is constructed as
+    /// <c>Fts5SeforimIndex(indexPath, () => new SeforimDbFtsCorpus(dbPath))</c> and opens no
+    /// content database of its own.
     ///
     /// ONE CONNECTION PER INSTANCE, ONE INSTANCE PER OPERATION — that is the seam's contract
     /// (see IFtsCorpus: lazy result sequences need the corpus to outlive the call, and

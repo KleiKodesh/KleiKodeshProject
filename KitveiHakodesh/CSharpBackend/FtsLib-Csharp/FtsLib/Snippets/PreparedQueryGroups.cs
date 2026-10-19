@@ -106,19 +106,6 @@ namespace FtsLib.Snippets
             => _termToGroups.TryGetValue(term.ToString(), out entry);
 #endif
 
-        /// <summary>True when <paramref name="term"/> is one of the query's terms —
-        /// the highlight-membership test.</summary>
-        public bool ContainsTerm(string term)
-            => _termToGroups.ContainsKey(term);
-
-        /// <summary>Span overload for the highlight-membership test — see TryGetGroups.</summary>
-        public bool ContainsTerm(System.ReadOnlySpan<char> term)
-#if NET9_0_OR_GREATER
-            => _spanLookup.ContainsKey(term);
-#else
-            => _termToGroups.ContainsKey(term.ToString());
-#endif
-
         // ── Factories ─────────────────────────────────────────────────
 
         /// <summary>

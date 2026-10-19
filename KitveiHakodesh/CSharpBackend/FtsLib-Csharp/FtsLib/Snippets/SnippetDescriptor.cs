@@ -10,7 +10,7 @@ namespace FtsLib.Snippets
     /// <see cref="MarkRanges"/> are raw char offsets into the string the locator was given
     /// (a matched line, or that line joined with its neighbours by single spaces). A consumer
     /// holding that text rebuilds the highlighted snippet from this alone — the page does it
-    /// in the browser; <see cref="SnippetHtmlRenderer"/> is the reference rendering.
+    /// in the browser.
     /// </summary>
     public readonly struct SnippetDescriptor
     {
@@ -60,7 +60,7 @@ namespace FtsLib.Snippets
         ///
         /// A VIEW over the locator's reused scratch buffer: valid only until the next
         /// <see cref="SnippetWindowLocator.Locate"/> on the same locator (one per thread in
-        /// the pipeline). Copy it out — <see cref="CopyMarkRangesTo"/> — before locating again.
+        /// the pipeline). Copy it out before locating again.
         /// (<see cref="MatchedTermAt"/> reads the query's immutable prepared terms and stays
         /// valid for the query's lifetime.)
         /// </summary>
@@ -85,13 +85,6 @@ namespace FtsLib.Snippets
             LeadingEllipsis  = leadingEllipsis;
             TrailingEllipsis = trailingEllipsis;
             MarkRanges       = markRanges ?? System.Array.Empty<int>();
-        }
-
-        /// <summary>Appends <see cref="MarkRanges"/> to <paramref name="target"/> — the way to
-        /// keep the marks past the next locate.</summary>
-        public void CopyMarkRangesTo(List<int> target)
-        {
-            for (int i = 0; i < MarkRanges.Count; i++) target.Add(MarkRanges[i]);
         }
 
         /// <summary>The query term a mark's term ordinal (every third int of

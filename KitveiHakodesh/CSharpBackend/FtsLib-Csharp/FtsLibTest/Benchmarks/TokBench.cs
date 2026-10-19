@@ -24,7 +24,7 @@ namespace FtsLibTest
             int maxLines = args.Length > 1 && int.TryParse(args[1], out var ml) ? ml : 200000;
             int reps = args.Length > 2 && int.TryParse(args[2], out var rp) ? rp : 5;
 
-            string db = BuildTest.ResolveDbPath();
+            string db = TestHelpers.ResolveDbPath();
             Console.WriteLine($"tokbench: loading up to {maxLines:N0} lines from {db}");
 
             var docs = new List<string>(maxLines);

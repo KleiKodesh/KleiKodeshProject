@@ -204,7 +204,7 @@ public sealed class SeforimDbFtsIndexCoordinator
 
     private bool SegmentsExist()
     {
-        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, FtsLib.Fts5.Fts5SeforimIndex.IndexFileName).Length > 0; } // TEMPORARY (FTS5 trial): was "seg_*.dat"
+        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, FtsLib.Fts5.Fts5SeforimIndex.IndexFileName).Length > 0; }
         catch { return false; }
     }
 
@@ -261,7 +261,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             // resuming a watermark that belongs to a different database permanently skips every
             // line below it (the 2026-07-28 incident, where a DB swap under an incomplete build
             // left the whole chumash-parshanut corpus unsearchable).
-            // TEMPORARY (FTS5 trial): the trial kept its index in a separate "FtsIndexFts5"
+            // Migration: the FTS5 trial kept its index in a separate "FtsIndexFts5"
             // folder; the index lives in "FtsIndex" again (an old FtsLib index there is wiped by
             // Prepare). Best effort — a folder still held open is retried next start.
             try
@@ -871,12 +871,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>The search pipeline shared by streaming and one-shot paths: content fetch
     /// STREAMS from one SQLite reader (sequential I/O, overlaps with snippeting); snippet
     /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
-    /// enriched batch is handed to <paramref name="onBatch"/> in order.
-    ///
-    /// NOTE: a whole-set parallel fetch (SeforimIndex.SearchParallel) is ~2x faster at the
-    /// fetch step in isolation (see FetchBenchTest), but its up-front barrier delays the
-    /// first paint — streaming + parallel snippet wins on first-result latency, which is
-    /// what the search feels like. SearchParallel stays available as a bulk-fetch API.</summary>
+    /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
         CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
