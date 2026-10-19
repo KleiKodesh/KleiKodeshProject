@@ -43,6 +43,33 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Add VS "Office/SharePoint development" workload (VSTO tooling)
+        shell: pwsh
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          # Microsoft.VisualStudio.Tools.Office.targets is present out of the box (it ships
+          # with core MSBuild), but the actual VSTO code-gen/ClickOnce-manifest tooling
+          # (Microsoft.VisualStudio.Tools.Applications.Hosting.dll) only comes with the
+          # "Office/SharePoint development" VS workload, which windows-latest's preinstalled
+          # VS Build Tools does NOT include by default. The image does ship the VS Installer
+          # itself, so the existing install can be modified in place to add it, same as any
+          # other optional workload/component.
+          $vsInstaller = Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" -ErrorAction SilentlyContinue
+          if (-not $vsInstaller) {
+            Write-Host "vs_installer.exe not found — skipping workload add, build will likely fail at VSTO manifest generation."
+          } else {
+            # msbuild.exe lives at <VSInstall>\MSBuild\Current\Bin\MSBuild.exe
+            $vsInstallPath = (Get-Item (Get-Command msbuild).Source).Directory.Parent.Parent.Parent.FullName
+            Write-Host "Modifying VS install at $vsInstallPath to add the Office workload..."
+            Start-Process -FilePath $vsInstaller.FullName -ArgumentList @(
+              "modify",
+              "--installPath", "`"$vsInstallPath`"",
+              "--add", "Microsoft.VisualStudio.Workload.Office",
+              "--quiet", "--norestart", "--wait"
+            ) -Wait -PassThru | Select-Object -ExpandProperty ExitCode | ForEach-Object { Write-Host "vs_installer exit code: $_" }
+          }
+
       - name: Install Vue frontend dependencies
         shell: pwsh
         run: |
