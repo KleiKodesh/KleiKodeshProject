@@ -25,9 +25,23 @@ function getTitle(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : item.book.title
 }
 
+/**
+ * Set when this item came from an additional (attached) library rather than
+ * the main one. Tiles have no secondary text line (only an icon + short
+ * label), so the tooltip is the only surface left to carry this — without it
+ * a same-named folder/book from an attached library is indistinguishable
+ * from the main library's, and the user clicks the wrong one.
+ */
+function getLibraryLabel(item: FsItem): string | null | undefined {
+  return item.kind === 'folder' ? item.node.libraryLabel : item.book.libraryLabel
+}
+
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
+  const label = getLibraryLabel(item)
+  const title = getTitle(item)
+  const titledTooltip = label ? `${title} · ${label}` : title
+  return item.kind === 'folder' ? titledTooltip : withNewTabHint(titledTooltip)
 }
 
 

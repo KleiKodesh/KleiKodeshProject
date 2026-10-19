@@ -30,6 +30,16 @@ function getTooltip(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
+/**
+ * Set when this item came from an additional (attached) library rather than
+ * the main one. Shown as a badge next to the title so a folder or book that
+ * happens to share its name with one in the main library is distinguishable —
+ * otherwise the user clicks the wrong one and finds none of their content.
+ */
+function getLibraryLabel(item: FsItem): string | null | undefined {
+  return item.kind === 'folder' ? item.node.libraryLabel : item.book.libraryLabel
+}
+
 // Combobox model (see useInputListNavigation): DOM focus stays in the page's
 // search input, which forwards its keydown here to move a highlight through this
 // list. Nothing here may take focus, or the caret leaves the field mid-type.
@@ -84,6 +94,7 @@ function selectItem(index: number, event?: MouseEvent) {
         </span>
         <span class="title">{{ getTitle(item) }}</span>
         <span v-if="item.kind === 'book' && item.book.authors" class="author-tag">{{ item.book.authors }}</span>
+        <span v-if="getLibraryLabel(item)" class="author-tag library-tag">{{ getLibraryLabel(item) }}</span>
       </div>
     </div>
   </div>
@@ -152,5 +163,12 @@ function selectItem(index: number, event?: MouseEvent) {
   text-overflow: ellipsis;
   max-width: 40%;
   flex-shrink: 0;
+}
+/* Same pill, tinted with the warning color (already used for folder icons /
+   additional-library affordances elsewhere) so it reads as "other source"
+   rather than just another author tag. */
+.library-tag {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
 }
 </style>

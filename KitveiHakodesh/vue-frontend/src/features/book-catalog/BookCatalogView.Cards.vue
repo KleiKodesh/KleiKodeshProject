@@ -27,11 +27,19 @@ function activateIndex(index: number, openInNewTab = false) {
     : emit('selectBook', item.book, openInNewTab)
 }
 
-/** Secondary line: book count for a folder, authors for a book. */
+/**
+ * Secondary line: book count for a folder, authors for a book — with the
+ * source library appended when the item came from an additional (attached)
+ * library, not the main one. Without this, a same-named folder/book from an
+ * attached library is visually identical to the main library's, and a user
+ * who clicks the wrong one finds none of their content and gives up.
+ */
 function getSecondaryLine(item: FsItem): string {
-  if (item.kind === 'book') return item.book.authors ?? ''
+  if (item.kind === 'book') {
+    return [item.book.authors, item.book.libraryLabel].filter(Boolean).join(' · ')
+  }
   const count = item.node.subtreeBookIds?.length ?? 0
-  return count ? `${count} ספרים` : ''
+  return [count ? `${count} ספרים` : '', item.node.libraryLabel].filter(Boolean).join(' · ')
 }
 
 const cards = computed((): CardData[] =>
