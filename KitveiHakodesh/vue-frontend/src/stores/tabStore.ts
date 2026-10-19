@@ -575,14 +575,25 @@ export const useTabStore = defineStore('tabs', () => {
    * recents, so the row keeps the position the reader had on arrival — usually none
    * at all. Wrapping the writer is the narrowest hook: every position save in the
    * app already goes through it.
+   *
+   * A save for a tab that has left the list is dropped. A closing tab's view still
+   * runs its unmount save after the tab is gone — by then disposeClosedTab has
+   * captured that same position and deleted the tab's state, so the write would only
+   * resurrect one orphan `book:`/`tab:` record that nothing ever reads or deletes.
    */
+  function isOpenTab(tabId: string): boolean {
+    return tabs.value.some((t) => t.id === tabId)
+  }
+
   function setBookViewStateTracked(tabId: string, bookId: number, state: Parameters<typeof setBookViewState>[2]) {
+    if (!isOpenTab(tabId)) return Promise.resolve()
     const result = setBookViewState(tabId, bookId, state)
     captureCurrentPosition(tabId)
     return result
   }
 
   function setTabViewStateTracked(tabId: string, state: Parameters<typeof setTabViewState>[1]) {
+    if (!isOpenTab(tabId)) return Promise.resolve()
     const result = setTabViewState(tabId, state)
     captureCurrentPosition(tabId)
     return result
@@ -656,8 +667,9 @@ export const useTabStore = defineStore('tabs', () => {
   function disposeClosedTab(id: string) {
     // The tab's view is still mounted: have it save where the reader is NOW, so the
     // capture below folds the closing position into the recents row. The view's own
-    // unmount save runs after the tab has left the list, when captureCurrentPosition
-    // can no longer find the tab - on its own it left recents at the previous save.
+    // unmount save runs after the tab has left the list - too late for recents, and
+    // its per-tab write is dropped (setBookViewStateTracked) so it cannot bring back
+    // the state deleted below.
     capturePositionsForTab(id)
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
