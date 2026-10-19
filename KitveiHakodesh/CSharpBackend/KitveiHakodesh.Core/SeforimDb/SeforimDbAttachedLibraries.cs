@@ -1,18 +1,19 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodesh.Core.SeforimDb
 {
     /// <summary>
     /// Makes the additional libraries configured in
-    /// <see cref="KitveiHakodesh.Core.Settings.SeforimDbAdditionalLibraries"/> show up, via
-    /// SQLite's own ATTACH DATABASE, as extra schemas on the SAME connection the primary
-    /// seforim.db queries already use — rather than opening a second connection or merging files
-    /// on disk.
+    /// <see cref="SeforimDbAdditionalLibraries"/> show up, via SQLite's own ATTACH DATABASE, as
+    /// extra schemas on the SAME connection the primary seforim.db queries already use — rather
+    /// than opening a second connection or merging files on disk.
     ///
     /// WHY ATTACH, NOT A MERGED FILE: the primary seforim.db is replaced wholesale by
     /// Otzaria/Zayit on every update; a merged copy would need rebuilding on every one of those
@@ -21,14 +22,19 @@ namespace KitveiHakodesh.Core.SeforimDb
     /// can corrupt it or the additional libraries, which are also opened read-only.
     ///
     /// Every row read from table `t` of an attached library is reached as `lib3.t` in the SQL —
-    /// see <see cref="SeforimDbSqlStrings"/>. A path's alias and index are its POSITION in the
-    /// resolved list, not persisted anywhere: nothing stores "lib3", only a global row id (see
-    /// <see cref="SeforimDbLibraryId"/>), which embeds the index, and the index is recomputed
-    /// from the same ordered settings list every time.
-    /// </summary>
-    /// <summary>Public because <see cref="SeforimDbQueries.AttachedLibraries"/> exposes
+    /// see <see cref="SeforimDbSqlStrings"/>. A library's alias and index come straight from its
+    /// <see cref="SeforimDbAdditionalLibraries.Entry.Index"/> — the PERSISTED slot
+    /// <see cref="SeforimDbAdditionalLibraries"/> assigned it when it was added, never the
+    /// library's position in whatever subset of configured libraries happens to be attachable
+    /// right now. See that class's remarks for why position-based indexing is a correctness bug,
+    /// not a style choice: it lets an unrelated library's removal (or a disconnected network
+    /// drive) silently reassign another library's ids out from under a user's existing
+    /// highlights and bookmarks.
+    ///
+    /// Public because <see cref="SeforimDbQueries.AttachedLibraries"/> exposes
     /// <see cref="Library"/> for diagnostics and settings UIs in other assemblies (the service),
-    /// even though attaching itself is an internal detail of how queries reach those libraries.</summary>
+    /// even though attaching itself is an internal detail of how queries reach those libraries.
+    /// </summary>
     public static class SeforimDbAttachedLibraries
     {
         /// <summary>The tables a library must have to answer the catalog queries this feature
@@ -66,42 +72,74 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
-        /// The configured additional paths that exist, look schema-compatible, and fit within
-        /// <see cref="SeforimDbLibraryId.MaxLibraryIndex"/>, in stable order. Pure and cheap
-        /// after the first call per path (see <see cref="CompatibilityCache"/>) — does not open
-        /// a connection to the primary database and does not ATTACH anything; that is
+        /// The configured entries that exist and look schema-compatible (required tables present,
+        /// and every id in them fits inside its own band — see <see cref="MaxIdFits"/>), resolved
+        /// to the schema alias each one's PERSISTED index names it. Pure and cheap after the
+        /// first call per path (see <see cref="CompatibilityCache"/>) — does not open a
+        /// connection to the primary database and does not ATTACH anything; that is
         /// <see cref="EnsureAttached"/>'s job, run per connection.
+        ///
+        /// An entry whose index is out of range (0, negative, or beyond
+        /// <see cref="SeforimDbLibraryId.MaxLibraryIndex"/> — a hand-edited or corrupted registry
+        /// value) or that DUPLICATES an index already used by an earlier entry in the same list
+        /// is skipped: either would mean two libraries fighting over the same ATTACH alias and
+        /// the same id band, which is exactly the collision this whole scheme exists to prevent.
         /// </summary>
-        public static IReadOnlyList<Library> Resolve(IReadOnlyList<string> configuredPaths)
+        public static IReadOnlyList<Library> Resolve(IReadOnlyList<SeforimDbAdditionalLibraries.Entry> configuredLibraries)
         {
-            var result = new List<Library>(configuredPaths.Count);
-            int index = 1; // 0 is reserved for the primary database (schema "main")
-            foreach (var path in configuredPaths)
+            var result = new List<Library>(configuredLibraries.Count);
+            var usedIndices = new HashSet<int>();
+            foreach (var entry in configuredLibraries)
             {
-                if (index > SeforimDbLibraryId.MaxLibraryIndex) break;
-                if (!IsCompatible(path)) continue;
+                if (entry.Index < 1 || entry.Index > SeforimDbLibraryId.MaxLibraryIndex) continue;
+                if (!usedIndices.Add(entry.Index)) continue;
+                if (!IsCompatible(entry.Path)) continue;
 
-                result.Add(new Library(path, "lib" + index, index, LabelFor(path)));
-                index++;
+                result.Add(new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path)));
             }
             return result;
         }
 
         /// <summary>
         /// ATTACHes every library in <paramref name="libraries"/> to <paramref name="connection"/>
-        /// that is not already attached to it. Checked via PRAGMA database_list rather than
-        /// attached unconditionally, because Microsoft.Data.Sqlite pools physical connections:
-        /// the connection handed to a logical Open() may be one this code already attached
-        /// everything to for an earlier caller, and ATTACHing the same alias twice is an error.
+        /// under its alias, (re)attaching only when needed. Checked via PRAGMA database_list
+        /// rather than attached unconditionally, because Microsoft.Data.Sqlite POOLS physical
+        /// connections by connection string: the connection handed to a logical Open() may be
+        /// one this code already attached everything to for an EARLIER caller, and ATTACHing the
+        /// same alias twice is an error.
+        ///
+        /// Checking that the alias is attached is not enough on its own, though — the pool is
+        /// keyed on the PRIMARY database's path alone, so two SeforimDbQueries instances pointed
+        /// at the same primary path but DIFFERENT additional libraries can be handed the exact
+        /// same physical connection. Without comparing the attached file too, the second
+        /// instance would see "lib1 is already attached" and silently keep querying the FIRST
+        /// instance's library under that alias. So every alias's CURRENT file is compared against
+        /// the one it should hold, and a mismatch is corrected with a DETACH + re-ATTACH.
         /// </summary>
         public static void EnsureAttached(SqliteConnection connection, IReadOnlyList<Library> libraries)
         {
             if (libraries.Count == 0) return;
 
-            var already = AttachedAliases(connection);
+            var attachedFileByAlias = AttachedFiles(connection);
             foreach (var library in libraries)
             {
-                if (already.Contains(library.Alias)) continue;
+                if (attachedFileByAlias.TryGetValue(library.Alias, out var attachedFile))
+                {
+                    if (SamePath(attachedFile, library.Path)) continue; // already correct
+
+                    try
+                    {
+                        using var detach = connection.CreateCommand();
+                        detach.CommandText = "DETACH DATABASE " + library.Alias;
+                        detach.ExecuteNonQuery();
+                    }
+                    catch (SqliteException)
+                    {
+                        // A detach can fail if a statement elsewhere on this connection still has
+                        // the schema open; the ATTACH right below will then fail too and is
+                        // caught the same way as any other attach failure.
+                    }
+                }
 
                 using var attach = connection.CreateCommand();
                 // ATTACH does not accept a bound parameter in place of the path in every SQLite
@@ -123,15 +161,23 @@ namespace KitveiHakodesh.Core.SeforimDb
             }
         }
 
-        private static HashSet<string> AttachedAliases(SqliteConnection connection)
+        /// <summary>Every schema currently attached to <paramref name="connection"/>, alias to
+        /// backing file path (empty for a schema with no file, e.g. an in-memory "main").</summary>
+        private static Dictionary<string, string> AttachedFiles(SqliteConnection connection)
         {
-            var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var byAlias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             using var command = connection.CreateCommand();
             command.CommandText = "PRAGMA database_list";
             using var reader = command.ExecuteReader();
             while (reader.Read())
-                aliases.Add(reader.GetString(1));
-            return aliases;
+                byAlias[reader.GetString(1)] = reader.IsDBNull(2) ? "" : reader.GetString(2);
+            return byAlias;
+        }
+
+        private static bool SamePath(string a, string b)
+        {
+            try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+            catch { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
         }
 
         private static bool IsCompatible(string path)
@@ -153,7 +199,21 @@ namespace KitveiHakodesh.Core.SeforimDb
             try
             {
                 using var connection = Common.SqliteConnectionFactory.OpenCorpusProbe(path);
-                return RequiredTables.All(table => SeforimDbSchema.TableExists(connection, table));
+                if (!RequiredTables.All(table => SeforimDbSchema.TableExists(connection, table)))
+                    return false;
+
+                // The required tables exist, but do their OWN ids actually fit the band this
+                // library's index will offset them into? A library built independently of
+                // seforim.db has no reason to respect SeforimDbLibraryId.OffsetUnit, and a local
+                // id that reaches or exceeds it would land inside the NEXT library's band (or
+                // overflow int32 outright) once ToGlobal adds the offset — silently returning
+                // another library's book, or none, for some ids. Checked on every id-bearing
+                // table this feature actually namespaces, not just `line` (the biggest one):
+                // `book`/`category` are namespaced too and a library could plausibly have more
+                // categories than lines in a degenerate case.
+                return MaxIdFits(connection, "book")
+                    && MaxIdFits(connection, "category")
+                    && MaxIdFits(connection, "line");
             }
             catch
             {
@@ -161,6 +221,20 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // permissions). Not compatible; not fatal to the primary database.
                 return false;
             }
+        }
+
+        /// <summary>True when every id in <paramref name="table"/> is small enough to sit inside
+        /// one library's private id-space band without reaching the next one — see
+        /// <see cref="SeforimDbLibraryId"/>.</summary>
+        private static bool MaxIdFits(SqliteConnection connection, string table)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT MAX(id) FROM {table}";
+            object? result = command.ExecuteScalar();
+            if (result is null || result is DBNull) return true; // an empty table has nothing to collide
+
+            long maxId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+            return maxId >= 0 && maxId < SeforimDbLibraryId.OffsetUnit;
         }
 
         private static string LabelFor(string path)

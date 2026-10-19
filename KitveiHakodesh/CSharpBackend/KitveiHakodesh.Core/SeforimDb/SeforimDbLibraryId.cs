@@ -14,14 +14,27 @@ namespace KitveiHakodesh.Core.SeforimDb
     /// N * <see cref="OffsetUnit"/>.
     ///
     /// OffsetUnit is deliberately generous rather than tight: a real seforim.db has, at the time
-    /// of writing, on the order of a few million rows in its largest table (line). 500 million
-    /// leaves two more orders of magnitude of headroom before a local id could collide with the
-    /// next library's band, at the cost of fitting only <see cref="MaxLibraryIndex"/> attached
-    /// libraries inside int32 — ample for this feature's first version.
+    /// of writing, on the order of a few million rows in its largest table (line). 50 million
+    /// leaves well over an order of magnitude of headroom before a local id could collide with
+    /// the next library's band — and <see cref="SeforimDbAttachedLibraries"/> refuses to attach
+    /// a library whose own ids do not actually fit, rather than trusting this headroom blindly —
+    /// while still leaving room for <see cref="MaxLibraryIndex"/> distinct library SLOTS inside
+    /// int32.
+    ///
+    /// A "slot" here is a PERSISTED index assigned once, by
+    /// <see cref="KitveiHakodesh.Core.Settings.SeforimDbAdditionalLibraries"/>, when a path is
+    /// first added — never recomputed from the current list of configured or attached libraries.
+    /// A library's index therefore never changes because an EARLIER library was removed or is
+    /// temporarily unavailable (a disconnected network drive, say): if it did, every annotation
+    /// and bookmark that embeds a global id built from that index would silently start pointing
+    /// at a different library's book the next time the service restarted. Once assigned, an
+    /// index is retired when its library is removed — never reused for a different path — which
+    /// is why MaxLibraryIndex is a lifetime budget of slots for this install, not merely "how
+    /// many libraries can be attached at once".
     /// </summary>
     internal static class SeforimDbLibraryId
     {
-        public const int OffsetUnit = 500_000_000;
+        public const int OffsetUnit = 50_000_000;
 
         /// <summary>The highest library index an id can address without overflowing int32.</summary>
         public const int MaxLibraryIndex = int.MaxValue / OffsetUnit; // 4

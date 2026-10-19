@@ -1,5 +1,6 @@
 // Ad-hoc live verification for ATTACH-based multiple seforim libraries
-// (KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries / SeforimDbLibraryId):
+// (KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries / SeforimDbLibraryId /
+// KitveiHakodesh.Core.Settings.SeforimDbAdditionalLibraries):
 //
 //   1. With no additional libraries configured, the catalog and content behave exactly as
 //      before — same ids, no LibraryLabel.
@@ -11,14 +12,27 @@
 //      correct books — the whole point of SeforimDbLibraryId's offset.
 //   4. An additional library missing a required table (no `line`) is skipped — it does not
 //      appear in AttachedLibraries and does not break reading the primary database.
-//   5. Removing an additional library's path from settings makes a NEW SeforimDbQueries
-//      instance stop seeing it (settings are read once per instance, exactly like the
-//      primary path) without disturbing the primary database's own ids or content.
+//   5. Removing an additional library makes a NEW SeforimDbQueries instance stop seeing it,
+//      without disturbing the primary database's own ids or content.
+//   6. ID-DRIFT REGRESSION (the bug a position-based index had): with TWO additional libraries
+//      (A at persisted slot 1, B at persisted slot 2), removing A must NOT change B's slot — B's
+//      global book id must be IDENTICAL before and after A is gone. This is exactly the failure
+//      mode that would silently reassign a user's saved highlights to the wrong book.
+//   7. A library whose own ids reach OffsetUnit is refused (not attached) rather than silently
+//      colliding with the next library's band.
+//   8. A library using the split line-content shape (line_content/zstd_dict) still appears in
+//      the catalog, but reading its lines throws a clear NotSupportedException instead of
+//      guessing at a codec built for a different connection's dictionaries.
+//   9. SeforimDbAdditionalLibraries' own parsing/counter logic (ParseEntries, SerializeEntries,
+//      NextIndexFrom) round-trips and never reuses a retired index — tested directly via
+//      InternalsVisibleTo, without touching the real Windows registry.
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodeshService.Tests
 {
@@ -35,12 +49,20 @@ namespace KitveiHakodeshService.Tests
             string primaryPath = Path.Combine(dir, "seforim.db");
             string additionalPath = Path.Combine(dir, "personal.db");
             string incompatiblePath = Path.Combine(dir, "incompatible.db");
+            string libraryAPath = Path.Combine(dir, "libraryA.db");
+            string libraryBPath = Path.Combine(dir, "libraryB.db");
+            string oversizedIdPath = Path.Combine(dir, "oversized.db");
+            string splitContentPath = Path.Combine(dir, "split.db");
 
             try
             {
-                BuildLibrary(primaryPath, categoryTitle: "ספרי הראשי", bookTitle: "ספר ראשי", lineText: "תוכן ראשי");
-                BuildLibrary(additionalPath, categoryTitle: "ספרי האישי", bookTitle: "ספר אישי", lineText: "תוכן אישי");
+                BuildLibrary(primaryPath, categoryTitle: "ספרי הראשי", bookTitle: "ספר ראשי", lineText: "תוכן ראשי", bookId: 1);
+                BuildLibrary(additionalPath, categoryTitle: "ספרי האישי", bookTitle: "ספר אישי", lineText: "תוכן אישי", bookId: 1);
                 BuildIncompatibleFile(incompatiblePath);
+                BuildLibrary(libraryAPath, categoryTitle: "קטגוריית A", bookTitle: "ספר A", lineText: "תוכן A", bookId: 1);
+                BuildLibrary(libraryBPath, categoryTitle: "קטגוריית B", bookTitle: "ספר B", lineText: "תוכן B", bookId: 1);
+                BuildLibrary(oversizedIdPath, categoryTitle: "חריג", bookTitle: "ספר חריג", lineText: "תוכן חריג", bookId: SeforimDbLibraryIdOffsetUnitForTest);
+                BuildSplitContentLibrary(splitContentPath);
 
                 // ── 1. No additional libraries: unchanged behaviour ─────────────────────
                 {
@@ -136,6 +158,117 @@ namespace KitveiHakodeshService.Tests
                     else
                         Ok("a fresh instance without the additional library sees only the primary catalog");
                 }
+
+                // ── 6. ID-DRIFT REGRESSION: removing an EARLIER library must not move a
+                //      LATER one's slot. This is the exact bug the persisted Entry.Index design
+                //      (SeforimDbAdditionalLibraries) exists to prevent — a position-based index
+                //      would renumber B from slot 2 to slot 1 the moment A disappears, silently
+                //      reassigning every id a user's saved highlights might reference. ─────────
+                {
+                    var entryA = new SeforimDbAdditionalLibraries.Entry(1, libraryAPath);
+                    var entryB = new SeforimDbAdditionalLibraries.Entry(2, libraryBPath);
+
+                    var withBoth = new SeforimDbQueries(primaryPath, new[] { entryA, entryB });
+                    var bookB_before = withBoth.GetAllBooks().SingleOrDefault(b => b.LibraryLabel == "libraryB");
+                    if (bookB_before is null)
+                    {
+                        Fail("setup: library B's book was not found with both A and B attached");
+                    }
+                    else
+                    {
+                        // A is "removed" (or merely unavailable) — B's entry is passed with the
+                        // SAME index it always had, exactly as a real Settings-backed read would
+                        // produce after SeforimDbAdditionalLibraries.Remove(pathOfA).
+                        var withoutA = new SeforimDbQueries(primaryPath, new[] { entryB });
+                        var bookB_after = withoutA.GetAllBooks().SingleOrDefault(b => b.LibraryLabel == "libraryB");
+
+                        if (bookB_after is null)
+                            Fail("library B's book vanished once A was removed");
+                        else if (bookB_after.Id != bookB_before.Id)
+                            Fail($"ID DRIFT: library B's book id changed from {bookB_before.Id} to {bookB_after.Id} " +
+                                 "after an unrelated earlier library was removed — this is the bug this test exists to catch");
+                        else
+                            Ok($"library B keeps its global book id ({bookB_after.Id}) after library A is removed — no id drift");
+
+                        // And B's lines must still be readable under that SAME id.
+                        if (bookB_after is not null)
+                        {
+                            var lines = withoutA.GetLinesPaged(bookB_after.Id, 10, 0);
+                            if (lines.Count != 1 || lines[0].Content != "תוכן B")
+                                Fail($"library B's lines unreadable (or wrong) after A was removed: {Dump(lines)}");
+                            else
+                                Ok("library B's lines still read correctly by the same id after A was removed");
+                        }
+                    }
+                }
+
+                // ── 7. A library whose own ids reach OffsetUnit is refused, not attached ─
+                {
+                    var queries = new SeforimDbQueries(primaryPath, new[] { oversizedIdPath });
+                    if (queries.AttachedLibraries.Count != 0)
+                        Fail($"a library with an id >= OffsetUnit was attached anyway: {Dump(queries.AttachedLibraries.Select(l => l.Path))}");
+                    else
+                        Ok("a library whose own id reaches OffsetUnit is refused (would collide with the next band)");
+                }
+
+                // ── 8. Split line-content shape: catalog works, reading lines throws ────
+                {
+                    var queries = new SeforimDbQueries(primaryPath, new[] { splitContentPath });
+                    if (queries.AttachedLibraries.Count != 1)
+                    {
+                        Fail($"split-content library was not attached at all (expected it to attach for catalog purposes): {queries.AttachedLibraries.Count}");
+                    }
+                    else
+                    {
+                        var book = queries.GetAllBooks().SingleOrDefault(b => b.LibraryLabel == "split");
+                        if (book is null)
+                        {
+                            Fail("split-content library's book is missing from the catalog");
+                        }
+                        else
+                        {
+                            Ok("split-content library still appears in the catalog (book/category work without touching line text)");
+                            bool threw = false;
+                            try { queries.GetLinesPaged(book.Id, 10, 0); }
+                            catch (NotSupportedException) { threw = true; }
+                            if (!threw)
+                                Fail("GetLinesPaged on a split-content attached library did not throw NotSupportedException — it would have returned wrong/garbage content instead");
+                            else
+                                Ok("GetLinesPaged on a split-content attached library throws NotSupportedException instead of guessing");
+                        }
+                    }
+                }
+
+                // ── 9. SeforimDbAdditionalLibraries' pure parsing/counter logic ──────────
+                {
+                    var roundTrip = new[]
+                    {
+                        new SeforimDbAdditionalLibraries.Entry(1, @"C:\a\personal.db"),
+                        new SeforimDbAdditionalLibraries.Entry(5, @"C:\b\second.db"),
+                    };
+                    string serialized = SeforimDbAdditionalLibraries.SerializeEntries(roundTrip);
+                    var parsed = SeforimDbAdditionalLibraries.ParseEntries(serialized);
+                    if (parsed.Count != 2 || parsed[0].Index != 1 || parsed[0].Path != @"C:\a\personal.db"
+                        || parsed[1].Index != 5 || parsed[1].Path != @"C:\b\second.db")
+                        Fail($"ParseEntries(SerializeEntries(x)) did not round-trip: '{serialized}' -> {parsed.Count} entries");
+                    else
+                        Ok("SerializeEntries/ParseEntries round-trip correctly, including a non-contiguous index (5)");
+
+                    var withGarbage = SeforimDbAdditionalLibraries.ParseEntries("1|ok.db;garbage;0|zero.db;-1|neg.db;2|");
+                    if (withGarbage.Count != 1 || withGarbage[0].Index != 1 || withGarbage[0].Path != "ok.db")
+                        Fail($"ParseEntries did not drop malformed segments cleanly: {withGarbage.Count} entries");
+                    else
+                        Ok("ParseEntries drops malformed segments (no separator, index <= 0, empty path) without failing the whole read");
+
+                    if (SeforimDbAdditionalLibraries.NextIndexFrom(null) != 1
+                        || SeforimDbAdditionalLibraries.NextIndexFrom("") != 1
+                        || SeforimDbAdditionalLibraries.NextIndexFrom("not a number") != 1
+                        || SeforimDbAdditionalLibraries.NextIndexFrom("0") != 1
+                        || SeforimDbAdditionalLibraries.NextIndexFrom("7") != 7)
+                        Fail("NextIndexFrom did not treat missing/invalid/non-positive counters as 'first slot' and a valid counter as itself");
+                    else
+                        Ok("NextIndexFrom: unset/invalid -> slot 1; a real counter value passes through unchanged");
+                }
             }
             catch (Exception ex)
             {
@@ -149,10 +282,17 @@ namespace KitveiHakodeshService.Tests
             return failures;
         }
 
+        // Mirrors KitveiHakodesh.Core.SeforimDb.SeforimDbLibraryId.OffsetUnit without depending on
+        // an internal constant from a test that is meant to exercise PUBLIC/behavioural surface —
+        // if the real constant ever changes, this test will simply need the same update to stay
+        // meaningful, which is an acceptable coupling for an id right at the boundary.
+        private const int SeforimDbLibraryIdOffsetUnitForTest = 50_000_000;
+
         /// <summary>A minimal seforim-shaped database: one category, one book in it, one line.
         /// Schema-compatible (has book/category/line/author/book_author), which is exactly what
-        /// SeforimDbAttachedLibraries checks for.</summary>
-        private static void BuildLibrary(string dbPath, string categoryTitle, string bookTitle, string lineText)
+        /// SeforimDbAttachedLibraries checks for. <paramref name="bookId"/> lets a test build a
+        /// library whose own id does not start at 1 (the OffsetUnit boundary case).</summary>
+        private static void BuildLibrary(string dbPath, string categoryTitle, string bookTitle, string lineText, int bookId)
         {
             using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ConnectionString);
             conn.Open();
@@ -173,8 +313,8 @@ namespace KitveiHakodeshService.Tests
             Exec(conn, $"INSERT INTO category(id, parentId, title, level) VALUES (1, NULL, '{categoryTitle}', 0)");
             Exec(conn, $@"INSERT INTO book(id, categoryId, title, orderIndex, hasTeamim, totalLines,
                 hasTargumConnection, hasReferenceConnection, hasSourceConnection, hasCommentaryConnection, hasOtherConnection)
-                VALUES (1, 1, '{bookTitle}', 0, 0, 1, 0, 0, 0, 0, 0)");
-            Exec(conn, $"INSERT INTO line(id, bookId, lineIndex, content) VALUES (1, 1, 0, '{lineText}')");
+                VALUES ({bookId}, 1, '{bookTitle}', 0, 0, 1, 0, 0, 0, 0, 0)");
+            Exec(conn, $"INSERT INTO line(id, bookId, lineIndex, content) VALUES (1, {bookId}, 0, '{lineText}')");
         }
 
         /// <summary>A valid SQLite file that is NOT seforim-shaped (no `line` table) — must be
@@ -188,6 +328,37 @@ namespace KitveiHakodeshService.Tests
             cmd.ExecuteNonQuery();
         }
 
+        /// <summary>A seforim-shaped database using the SPLIT line-content shape (SeforimLibrary
+        /// schema 6+): `line` has no `content` column, the text lives in `line_content` instead.
+        /// Catalog-compatible (book/category/author tables are normal), but line-text reads must
+        /// be refused for an ATTACHed library — see SeforimDbQueries.GetLinesPagedFromAttachedLibrary.</summary>
+        private static void BuildSplitContentLibrary(string dbPath)
+        {
+            using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ConnectionString);
+            conn.Open();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    CREATE TABLE category(id INTEGER PRIMARY KEY, parentId INTEGER, title TEXT, level INTEGER);
+                    CREATE TABLE book(id INTEGER PRIMARY KEY, categoryId INTEGER, title TEXT, orderIndex INTEGER,
+                        hasTeamim INTEGER, totalLines INTEGER, hasTargumConnection INTEGER, hasReferenceConnection INTEGER,
+                        hasSourceConnection INTEGER, hasCommentaryConnection INTEGER, hasOtherConnection INTEGER);
+                    CREATE TABLE author(id INTEGER PRIMARY KEY, name TEXT);
+                    CREATE TABLE book_author(bookId INTEGER, authorId INTEGER);
+                    CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, lineIndex INTEGER);
+                    CREATE TABLE line_content(id INTEGER PRIMARY KEY, content TEXT);
+                ";
+                cmd.ExecuteNonQuery();
+            }
+
+            Exec(conn, "INSERT INTO category(id, parentId, title, level) VALUES (1, NULL, 'פיצול', 0)");
+            Exec(conn, @"INSERT INTO book(id, categoryId, title, orderIndex, hasTeamim, totalLines,
+                hasTargumConnection, hasReferenceConnection, hasSourceConnection, hasCommentaryConnection, hasOtherConnection)
+                VALUES (1, 1, 'ספר מפוצל', 0, 0, 1, 0, 0, 0, 0, 0)");
+            Exec(conn, "INSERT INTO line(id, bookId, lineIndex) VALUES (1, 1, 0)");
+            Exec(conn, "INSERT INTO line_content(id, content) VALUES (1, 'תוכן מפוצל')");
+        }
+
         private static void Exec(SqliteConnection conn, string sql)
         {
             using var cmd = conn.CreateCommand();
@@ -195,7 +366,7 @@ namespace KitveiHakodeshService.Tests
             cmd.ExecuteNonQuery();
         }
 
-        private static string Dump<T>(System.Collections.Generic.IEnumerable<T> items) =>
+        private static string Dump<T>(IEnumerable<T> items) =>
             string.Join(" | ", items.Select(i => i!.ToString()));
     }
 }

@@ -19,25 +19,53 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>Finds the user's database the way the app does — the saved setting first,
         /// then the known install locations — and attaches every additional library configured
-        /// in <see cref="SeforimDbAdditionalLibraries"/> alongside it.</summary>
+        /// in <see cref="SeforimDbAdditionalLibraries"/> alongside it, each in its PERSISTED
+        /// id-space slot (<see cref="SeforimDbAdditionalLibraries.Entry.Index"/>).</summary>
         public SeforimDbQueries()
-            : this(SeforimDbPathResolver.Resolve().Path, SeforimDbAdditionalLibraries.GetAll())
+            : this(SeforimDbPathResolver.Resolve().Path, SeforimDbAdditionalLibraries.GetAllEntries())
         {
         }
 
         /// <param name="databasePath">An explicit path, or null for "no database configured".</param>
-        public SeforimDbQueries(string? databasePath) : this(databasePath, Array.Empty<string>())
+        public SeforimDbQueries(string? databasePath)
+            : this(databasePath, Array.Empty<SeforimDbAdditionalLibraries.Entry>())
         {
         }
 
         /// <param name="databasePath">An explicit path, or null for "no database configured".</param>
-        /// <param name="additionalLibraryPaths">Extra seforim-shaped databases to ATTACH alongside
-        /// it — see <see cref="SeforimDbAttachedLibraries"/>. A path that does not exist or does
-        /// not look schema-compatible is silently skipped, exactly like a missing primary path.</param>
+        /// <param name="additionalLibraryPaths">
+        /// Convenience overload for callers that do not need a PERSISTED id-space slot per path —
+        /// tests, or ad-hoc embedding. Each path gets a POSITIONAL index (1, 2, ... in the order
+        /// given), which is only as stable as the caller's own list: passing a different list (or
+        /// the same paths in a different order) on the next call changes every id built from it.
+        /// Production code goes through the parameterless constructor instead, which reads
+        /// <see cref="SeforimDbAdditionalLibraries.GetAllEntries"/> — see that class's remarks for
+        /// why a recomputed position is a correctness bug once a library can be removed, not just
+        /// a style choice.
+        /// </param>
         public SeforimDbQueries(string? databasePath, IReadOnlyList<string> additionalLibraryPaths)
+            : this(databasePath, ToPositionalEntries(additionalLibraryPaths))
+        {
+        }
+
+        /// <param name="databasePath">An explicit path, or null for "no database configured".</param>
+        /// <param name="additionalLibraries">Extra seforim-shaped databases to ATTACH alongside
+        /// it, each already carrying the id-space slot it should use — see
+        /// <see cref="SeforimDbAttachedLibraries"/>. An entry whose path does not exist or does
+        /// not look schema-compatible is silently skipped, exactly like a missing primary path.</param>
+        public SeforimDbQueries(string? databasePath, IReadOnlyList<SeforimDbAdditionalLibraries.Entry> additionalLibraries)
         {
             _databasePath = databasePath;
-            _attachedLibraries = SeforimDbAttachedLibraries.Resolve(additionalLibraryPaths ?? Array.Empty<string>());
+            _attachedLibraries = SeforimDbAttachedLibraries.Resolve(
+                additionalLibraries ?? Array.Empty<SeforimDbAdditionalLibraries.Entry>());
+        }
+
+        private static IReadOnlyList<SeforimDbAdditionalLibraries.Entry> ToPositionalEntries(IReadOnlyList<string> paths)
+        {
+            var entries = new SeforimDbAdditionalLibraries.Entry[paths.Count];
+            for (int i = 0; i < paths.Count; i++)
+                entries[i] = new SeforimDbAdditionalLibraries.Entry(i + 1, paths[i]);
+            return entries;
         }
 
         /// <summary>The additional libraries actually attached (existing, schema-compatible, and
