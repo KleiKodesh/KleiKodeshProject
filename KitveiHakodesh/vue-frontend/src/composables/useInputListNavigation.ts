@@ -149,15 +149,19 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     if (!count) return false
 
     const ctrl = event.ctrlKey || event.metaKey
+    // Alt+Left/Right is the title-bar back/forward shortcut (useAppTitleBarShortcuts);
+    // the input's keydown runs before that window listener, so the arrows
+    // must let Alt through here too.
+    const modified = ctrl || event.altKey
     const isGrid = !!options.getColumnsPerRow
     const rowStep = Math.max(1, options.getColumnsPerRow?.() ?? 1)
 
-    if (event.code === 'ArrowDown' && !ctrl) {
+    if (event.code === 'ArrowDown' && !modified) {
       event.preventDefault()
       moveTo(activeIndex.value < 0 ? 0 : stepDown(activeIndex.value, rowStep, count, isGrid))
       return true
     }
-    if (event.code === 'ArrowUp' && !ctrl) {
+    if (event.code === 'ArrowUp' && !modified) {
       event.preventDefault()
       moveTo(activeIndex.value < 0 ? count - 1 : stepUp(activeIndex.value, rowStep, count, isGrid))
       return true
@@ -181,7 +185,7 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
       isGrid &&
       activeIndex.value >= 0 &&
       (event.code === 'ArrowLeft' || event.code === 'ArrowRight') &&
-      !ctrl
+      !modified
     ) {
       const step = event.code === 'ArrowLeft' ? 1 : -1
       event.preventDefault()
