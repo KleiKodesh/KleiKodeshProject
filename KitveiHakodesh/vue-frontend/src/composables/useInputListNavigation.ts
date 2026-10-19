@@ -15,9 +15,10 @@ import type { Virtualizer } from '@tanstack/vue-virtual'
 //   ArrowDown / ArrowUp   — move the highlight (down enters at the first item,
 //                           up enters at the last, per the APG pattern). One
 //                           visual ROW at a time when getColumnsPerRow is given.
-//   ArrowLeft / ArrowRight — GRIDS ONLY (getColumnsPerRow given): step within the
-//                           row. Lists leave them alone: they are the caret keys,
-//                           and a list row is a whole row already.
+//   ArrowLeft / ArrowRight — GRIDS ONLY (getColumnsPerRow given), and only once
+//                           something is highlighted: step within the row.
+//                           Until Down/Up has entered the grid they stay the
+//                           input's caret keys. Lists leave them alone always.
 //   PageDown / PageUp     — move the highlight a chunk at a time
 //   Ctrl+Home / Ctrl+End  — jump to the first / last item (plain Home/End stay
 //                           caret keys, as a text field demands)
@@ -166,14 +167,25 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     // needs to edit the query they are typing. `getColumnsPerRow` is what says
     // "this is a grid", so it gates them.
     //
+    // Even in a grid they stay caret keys until the user has ENTERED the grid
+    // with ArrowDown/ArrowUp (activeIndex >= 0): before that the field is
+    // plainly being edited, and stealing left/right would make the caret
+    // unmovable. Callers reset activeIndex to -1 on a new query, which hands
+    // the keys back to the caret.
+    //
     // The page is RTL: the visually NEXT tile is to the LEFT, so ArrowLeft
     // advances and ArrowRight goes back. (Reading `dir` off the container would
     // handle both directions, but this app is RTL throughout and an untested
     // LTR branch is worse than an honest assumption.)
-    if (isGrid && (event.code === 'ArrowLeft' || event.code === 'ArrowRight') && !ctrl) {
+    if (
+      isGrid &&
+      activeIndex.value >= 0 &&
+      (event.code === 'ArrowLeft' || event.code === 'ArrowRight') &&
+      !ctrl
+    ) {
       const step = event.code === 'ArrowLeft' ? 1 : -1
       event.preventDefault()
-      moveTo(activeIndex.value < 0 ? 0 : activeIndex.value + step)
+      moveTo(activeIndex.value + step)
       return true
     }
     if (event.code === 'PageDown') {
