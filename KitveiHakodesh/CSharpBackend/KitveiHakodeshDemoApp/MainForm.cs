@@ -97,6 +97,9 @@ namespace KitveiHakodeshDemoApp
         {
             AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
+            // The page's pending persistence writes go out before the WebView2 is
+            // disposed: the first close is held for the page's ack, the second runs through.
+            _viewer.CloseAfterPersistenceFlush(this, e);
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)

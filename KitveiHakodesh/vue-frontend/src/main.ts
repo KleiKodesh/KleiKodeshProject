@@ -15,6 +15,7 @@ import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
+import { installHostPersistenceFlush } from './webview-host/persistenceFlush'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -79,6 +80,9 @@ restoreLocalFileTabsLazily()
 // C# uses this to dispatch any pending file path from an "Open With" launch — this
 // replaces the unreliable fixed 1500ms delay that would drop the event on slow machines.
 if (hasHostBridge) {
+  // The host closes its window without firing pagehide/beforeunload; this is how it
+  // asks for every pending persistence write first (AppViewer.FlushPersistenceAsync).
+  installHostPersistenceFlush()
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
 }
 

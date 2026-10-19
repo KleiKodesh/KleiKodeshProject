@@ -79,6 +79,7 @@ namespace KitveiHakodeshLib
                         case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
+                        case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
