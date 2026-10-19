@@ -223,8 +223,14 @@ jobs:
           $msbuildPath = (Get-Command msbuild).Source
           (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"'), ('"' + $msbuildPath + '"') |
             Set-Content rebuild-all.ps1
-          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('/p:Configuration=$config'), '/p:Configuration=$config /p:MSBuildPath="$msbuild"' |
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('/p:Configuration=$config'), '/p:Configuration=$config /p:MSBuildPath="$msbuild" /p:SignManifests=false' |
             Set-Content rebuild-all.ps1
+          # KleiKodeshVsto.csproj (SignManifests=true, ManifestCertificateThumbprint=...)
+          # signs its ClickOnce/VSTO manifest with a specific cert whose PRIVATE KEY
+          # (KleiKodesh_TemporaryKey.pfx) is -- correctly -- not committed to git, so no
+          # runner can ever have it without the maintainer supplying it as a secret. This
+          # produces an unsigned build purely so CI can verify the add-in and installer
+          # actually compile; it is not a substitute for a real signed release build.
           # rebuild-all.ps1 deletes every bin/obj folder in the repo as its very first step,
           # which wipes out the restore we already did for the FluentChromeTabs stub (it's
           # SDK-style but, being outside this repo in the real world, isn't itself in
