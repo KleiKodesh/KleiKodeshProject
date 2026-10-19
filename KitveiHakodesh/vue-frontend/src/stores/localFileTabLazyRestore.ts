@@ -29,6 +29,13 @@ export function restoreLocalFileTabsLazily(): void {
     void localFileStore.restoreTab(tabId)
   }
 
+  // The tabs on screen now, before any watcher exists: with `immediate: true` the
+  // callback below would run inside `watch()` itself, before `stop` is assigned, and a
+  // session whose only file tab is the active one (one PDF open) then threw on `stop()`.
+  restoreIfAwaiting(tabStore.activeTabId)
+  restoreIfAwaiting(tabStore.pane2ActiveTabId)
+  if (awaitingRestore.size === 0) return
+
   const stop = watch(
     [() => tabStore.activeTabId, () => tabStore.pane2ActiveTabId],
     ([activeId, pane2ActiveId]) => {
@@ -36,6 +43,5 @@ export function restoreLocalFileTabsLazily(): void {
       restoreIfAwaiting(pane2ActiveId)
       if (awaitingRestore.size === 0) stop()
     },
-    { immediate: true },
   )
 }
