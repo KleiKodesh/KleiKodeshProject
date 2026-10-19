@@ -3,8 +3,7 @@ using System.IO;
 using System.Threading;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
-// Core's engine is SQLite FTS5 (FtsLib.Fts5): see FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
+using FtsLib.Fts5;
 using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
@@ -52,15 +51,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // results stream in the order the app shows the library; fts3 rowids were line ids.
         // fts5 (2026-10-14): tree order walks a category's subcategories before its own books,
         // as the catalog view lists them — fts4 positions are in the old order.
-        public const string IndexFormatVersion = "fts5";
+        // fts6 (2026-10-19): tree order puts a folder's BASE texts ahead of its subfolders and
+        // negative-orderIndex ("mefarshim") folders after their siblings, so a text's lines
+        // come before its commentaries' — fts5 positions are in the folders-first order.
+        public const string IndexFormatVersion = "fts6";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";
         private const string ResumeWatermarkFileName = "build.progress";
-        // TEMPORARY (FTS5 trial): FtsLib's pattern is "seg_*.dat".
-        private const string SegmentFilePattern = SeforimIndex.IndexFileName;
-        // TEMPORARY (FTS5 trial): FtsLib's own segment files. Finding one means the folder
-        // holds an index of the OLD engine, whatever its stamps say — see Prepare.
+        private const string SegmentFilePattern = Fts5SeforimIndex.IndexFileName;
+        // The OLD engine's segment files (FtsLib's own engine, removed). Finding one means the
+        // folder holds an index of the old engine, whatever its stamps say — see Prepare.
         private const string FtsLibSegmentFilePattern = "seg_*.dat";
 
         /// <summary>Progress is reported every this-many lines — often enough for a live
@@ -150,15 +151,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             var plan = new SeforimDbFtsIndexPlan();
 
-            // TEMPORARY (FTS5 trial): an index built by FtsLib's own engine is unusable here,
+            // Migration: an index built by FtsLib's old segment engine is unusable here,
             // whatever its stamps claim. The format bump to fts4 catches every stamped one; this
             // catches the rest — no stamp, a legacy stamp, or a half-built FtsLib index — which
             // the checks below would not even see as index state, because SegmentFilePattern
             // now names the FTS5 file. Left in place it would also hold ~650 MB of dead segments.
-            // Only while the engine is NOT FtsLib's own: removing the SeforimIndex alias makes
-            // SegmentFilePattern "seg_*.dat" again and switches this off by itself — otherwise it
-            // would wipe every valid FtsLib index on every start.
-            if (SegmentFilePattern != FtsLibSegmentFilePattern && HasFtsLibSegments())
+            if (HasFtsLibSegments())
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
