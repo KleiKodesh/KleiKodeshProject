@@ -167,6 +167,12 @@ jobs:
           }
           '@ | Set-Content "ChromeTabs/FluentChromeTabs/Stub.cs"
 
+          # It's an SDK-style project but isn't in rebuild-all.ps1's $projects list (the
+          # real one lives outside this repo entirely), so its own restore step there never
+          # runs -> NETSDK1004 (missing obj/project.assets.json) the first time MSBuild
+          # tries to build it as a dependency.
+          dotnet restore "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj"
+
       - name: Restore NuGet packages (VSTO add-in uses packages.config)
         shell: pwsh
         continue-on-error: true
