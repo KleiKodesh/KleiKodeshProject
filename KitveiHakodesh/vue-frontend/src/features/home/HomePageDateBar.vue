@@ -346,8 +346,6 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   padding: 8px 16px;
   font-size: 11.5px;
   color: var(--text-secondary);
-  /* Same surface as the book-view toolbar. */
-  background: var(--bg-toolbar);
   overflow: hidden;
   white-space: nowrap;
 }
