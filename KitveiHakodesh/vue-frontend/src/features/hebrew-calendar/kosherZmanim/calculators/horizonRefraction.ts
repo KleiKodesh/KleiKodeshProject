@@ -63,7 +63,7 @@ export function horizonRefractionDegrees(
   elevation: number,
 ): number {
   const israel = isInIsrael(latitude, longitude)
-  const atmosphere = atmosphereFor(latitude, israel, isWinter(latitude, month))
+  const atmosphere = atmosphereFor(latitude, israel, isWinter(climate, israel, latitude, month))
   const correction = israel ? ISRAEL : ELSEWHERE
   const min = climate.minimum[month]!
   const celsius = morning ? min : min + correction.eveningShare * (climate.maximum[month]! - min)
@@ -91,10 +91,20 @@ function atmosphereFor(latitude: number, israel: boolean, winter: boolean): Atmo
   return winter ? AtmosphereModels.MIDLATITUDE_WINTER : AtmosphereModels.MIDLATITUDE_SUMMER
 }
 
-/** November to April north of the equator, May to October south of it. */
-function isWinter(latitude: number, month: number): boolean {
-  const northern = latitude >= 0 ? month : (month + 6) % 12
-  return northern >= 10 || northern <= 3
+/**
+ * Israel: November to April. Elsewhere the season follows the city's own climate, month by month:
+ * winter when the month's mean temperature is at or below the yearly average of the monthly means
+ * (matches itimlabina.co.il, e.g. Kyiv/Mexico City winter October-March, London/New York November-April).
+ * A flat climate (no data, e.g. STANDARD_CLIMATE) falls back to November-April, mirrored south of the equator.
+ */
+function isWinter(climate: ItimLabinaClimate, israel: boolean, latitude: number, month: number): boolean {
+  const flat = climate.mean.every((mean) => mean === climate.mean[0])
+  if (israel || flat) {
+    const northern = latitude >= 0 ? month : (month + 6) % 12
+    return northern >= 10 || northern <= 3
+  }
+  const yearly = climate.mean.reduce((sum, mean) => sum + mean, 0) / 12
+  return climate.mean[month]! <= yearly
 }
 
 function dipNumerator(elevation: number): number {
