@@ -54,6 +54,7 @@ public sealed class OwnerRegistry(
         DateTime? started = StartTimeOf(pid);
         if (started is null) return;
         _owners[pid] = started.Value;
+        Volatile.Write(ref _lastDeferral, null); // a later ownerless stretch reports its deferral afresh
         logger.LogInformation("Owner {Pid} registered ({Count} owner(s))", pid, _owners.Count);
     }
 
@@ -86,17 +87,32 @@ public sealed class OwnerRegistry(
             StopSoon($"no program has used it for {OwnerlessIdleLimit.TotalMinutes:N0} minutes");
     }
 
-    /// <summary>Background work a stop would cut short. While true the stop is deferred; the
-    /// watcher's next poll tries again.</summary>
-    private bool IsBusy =>
-        fts.IsBusy || catalogToc.IsBusy || localFiles.IsBusy || updater.IsBusy || hebrewBooksCatalog.IsBusy;
+    /// <summary>The first background job a stop would cut short, or null. While one runs the
+    /// stop is deferred; the watcher's next poll tries again.</summary>
+    private string? BusyWith() =>
+        fts.IsBusy ? "full-text index"
+        : catalogToc.IsBusy ? "catalog index"
+        : localFiles.IsBusy ? "local-file index"
+        : updater.IsBusy ? "update check"
+        : hebrewBooksCatalog.IsBusy ? "HebrewBooks catalog walk"
+        : null;
+
+    /// <summary>The last deferral logged, so a long job is reported once, not every poll.</summary>
+    private string? _lastDeferral;
 
     private void StopSoon(string why) =>
         _ = Task.Run(async () =>
         {
             await Task.Delay(StopGrace);
             if (!_owners.IsEmpty) return;
-            if (IsBusy) return; // long-running work in progress; PruneExited retries on the next poll
+            string? busy = BusyWith();
+            if (busy is not null)
+            {
+                // Long-running work in progress; PruneExited retries on the next poll.
+                if (Interlocked.Exchange(ref _lastDeferral, busy) != busy)
+                    logger.LogInformation("Stop deferred: {Busy} is running", busy);
+                return;
+            }
             logger.LogInformation("Stopping: {Why}", why);
             lifetime.StopApplication();
         });

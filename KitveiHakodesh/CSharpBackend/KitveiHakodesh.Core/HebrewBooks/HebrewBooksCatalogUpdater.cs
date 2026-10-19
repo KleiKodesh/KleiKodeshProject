@@ -129,7 +129,9 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
             return DateTime.TryParse(
                 stamp, CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind | DateTimeStyles.AdjustToUniversal,
+                // RoundtripKind cannot be combined with AdjustToUniversal (TryParse throws);
+                // AssumeUniversal covers a stamp written without its trailing Z.
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
                 out DateTime parsed)
                 ? parsed
                 : (DateTime?)null;
