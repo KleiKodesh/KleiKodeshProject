@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Common;
@@ -14,19 +15,35 @@ namespace KitveiHakodesh.Core.SeforimDb
     public sealed partial class SeforimDbQueries
     {
         private readonly string? _databasePath;
+        private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _attachedLibraries;
 
         /// <summary>Finds the user's database the way the app does — the saved setting first,
-        /// then the known install locations.</summary>
+        /// then the known install locations — and attaches every additional library configured
+        /// in <see cref="SeforimDbAdditionalLibraries"/> alongside it.</summary>
         public SeforimDbQueries()
-            : this(SeforimDbPathResolver.Resolve().Path)
+            : this(SeforimDbPathResolver.Resolve().Path, SeforimDbAdditionalLibraries.GetAll())
         {
         }
 
         /// <param name="databasePath">An explicit path, or null for "no database configured".</param>
-        public SeforimDbQueries(string? databasePath)
+        public SeforimDbQueries(string? databasePath) : this(databasePath, Array.Empty<string>())
+        {
+        }
+
+        /// <param name="databasePath">An explicit path, or null for "no database configured".</param>
+        /// <param name="additionalLibraryPaths">Extra seforim-shaped databases to ATTACH alongside
+        /// it — see <see cref="SeforimDbAttachedLibraries"/>. A path that does not exist or does
+        /// not look schema-compatible is silently skipped, exactly like a missing primary path.</param>
+        public SeforimDbQueries(string? databasePath, IReadOnlyList<string> additionalLibraryPaths)
         {
             _databasePath = databasePath;
+            _attachedLibraries = SeforimDbAttachedLibraries.Resolve(additionalLibraryPaths ?? Array.Empty<string>());
         }
+
+        /// <summary>The additional libraries actually attached (existing, schema-compatible, and
+        /// within the id-space limit) — for diagnostics and for a settings UI to show which
+        /// configured paths are live right now.</summary>
+        public IReadOnlyList<SeforimDbAttachedLibraries.Library> AttachedLibraries => _attachedLibraries;
 
         /// <summary>The resolved path, or null when none was found. A non-null value is not a
         /// promise the file is still there — see <see cref="IsAvailable"/>.</summary>
@@ -55,7 +72,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             GetLinesPaged(1, 1, 0);
         }
 
-        /// <summary>Opens a read-only connection, or throws if there is nothing to open.</summary>
+        /// <summary>Opens a read-only connection to the primary database with every configured
+        /// additional library ATTACHed alongside it, or throws if there is no primary database
+        /// to open. An additional library that failed to attach on THIS connection (see
+        /// <see cref="SeforimDbAttachedLibraries.EnsureAttached"/>) does not fail the primary
+        /// open — only queries that reach into its schema are affected.</summary>
         private SqliteConnection Open()
         {
             if (string.IsNullOrWhiteSpace(_databasePath))
@@ -64,7 +85,9 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (!File.Exists(_databasePath))
                 throw SeforimDbUnavailableException.NotOnDisk(_databasePath!);
 
-            return SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
+            var connection = SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
+            SeforimDbAttachedLibraries.EnsureAttached(connection, _attachedLibraries);
+            return connection;
         }
 
         /// <summary>
@@ -93,9 +116,15 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>True if <paramref name="table"/> has a column named <paramref name="column"/>.</summary>
         private static bool ColumnExists(SqliteConnection connection, string table, string column)
+            => ColumnExists(connection, "main", table, column);
+
+        /// <summary>Same check against an ATTACHed schema (<paramref name="schema"/> is a SQLite
+        /// schema name — "main" or one of the aliases <see cref="SeforimDbAttachedLibraries"/>
+        /// assigns), via the schema-qualified pragma form <c>PRAGMA schema.table_info(table)</c>.</summary>
+        private static bool ColumnExists(SqliteConnection connection, string schema, string table, string column)
         {
             using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info({table})";
+            command.CommandText = $"PRAGMA {schema}.table_info({table})";
             using var reader = command.ExecuteReader();
             while (reader.Read())
                 if (string.Equals(reader.GetString(1), column, StringComparison.Ordinal)) return true;

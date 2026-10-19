@@ -388,6 +388,57 @@ public sealed class Dispatcher(
                     }));
                 }
 
+                // Extra seforim-shaped libraries ATTACHed alongside the primary database (see
+                // KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries). Unlike the primary
+                // path above, there is no "custom vs default" distinction — every entry here is
+                // the user's own choice — and no native picker op yet; a settings page gets there
+                // via its own folder/file dialog and passes the chosen path as a string.
+                case "getAdditionalSeforimLibraries":
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                    }));
+
+                case "addAdditionalSeforimLibrary":
+                {
+                    var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
+                    string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
+                    bool added = SeforimDbLocator.AddAdditionalLibrary(p);
+                    if (!added)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = p.Length == 0 ? "empty path" : "already configured, or contains ';'",
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
+                    }));
+                }
+
+                case "removeAdditionalSeforimLibrary":
+                {
+                    var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
+                    string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
+                    bool removed = SeforimDbLocator.RemoveAdditionalLibrary(p);
+                    if (!removed)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = "not configured",
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
+                    }));
+                }
+
                 case "locateDocuments":
                 {
                     var args = MsgPack.De<LocateDocumentsArgs>(req.Args);

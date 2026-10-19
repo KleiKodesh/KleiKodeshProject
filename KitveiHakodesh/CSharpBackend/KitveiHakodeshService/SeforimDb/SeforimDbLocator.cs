@@ -42,4 +42,20 @@ public static class SeforimDbLocator
     public static void SaveRegistryPath(string path) => SeforimDbPathResolver.SavePath(path);
 
     public static void ClearRegistryPath() => SeforimDbPathResolver.ClearSavedPath();
+
+    // ── Additional libraries ─────────────────────────────────────────────────────
+    // Thin adapter over SeforimDbAdditionalLibraries, same reasoning as the primary path above:
+    // one registry-backed setting, read and written identically everywhere.
+
+    /// <summary>Every configured additional library path, exactly as stored (no existence check
+    /// — a settings page shows a broken entry rather than silently dropping it).</summary>
+    public static System.Collections.Generic.IReadOnlyList<string> GetAdditionalLibraryPaths() =>
+        SeforimDbAdditionalLibraries.GetAllRaw();
+
+    /// <summary>Adds a path. False when it was empty, already configured, or contains the ';'
+    /// separator the setting is stored with.</summary>
+    public static bool AddAdditionalLibrary(string path) => SeforimDbAdditionalLibraries.Add(path);
+
+    /// <summary>Removes a configured path. False when it was not configured.</summary>
+    public static bool RemoveAdditionalLibrary(string path) => SeforimDbAdditionalLibraries.Remove(path);
 }

@@ -1,4 +1,10 @@
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodeshService.Ipc;
+// Alias, not a plain `using KitveiHakodesh.Core.Settings`: this file's own namespace chain
+// (KitveiHakodeshService.KitveiHakodesh.*) already binds the simple name "KitveiHakodesh" to
+// itself, which would shadow the global root namespace of the same name at any unqualified
+// use below.
+using CoreSettings = KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodeshService.SeforimDb;
 
@@ -21,6 +27,43 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     /// <summary>Whether there is a database to read — false when the user has chosen none, or
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
+
+    /// <summary>Every additional library CONFIGURED (not just the ones live right now) with its
+    /// current status, for a settings page. <see cref="AdditionalLibraryRow.Attached"/> true
+    /// means Core actually ATTACHes it on the live connection today — see
+    /// <see cref="SeforimDbQueries.AttachedLibraries"/>.</summary>
+    public List<AdditionalLibraryRow> GetAdditionalLibraries()
+    {
+        var attached = _queries.AttachedLibraries;
+        var rows = new List<AdditionalLibraryRow>();
+        foreach (var path in CoreSettings.SeforimDbAdditionalLibraries.GetAllRaw())
+        {
+            SeforimDbAttachedLibraries.Library? live = null;
+            foreach (var library in attached)
+            {
+                if (string.Equals(library.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    live = library;
+                    break;
+                }
+            }
+
+            rows.Add(new AdditionalLibraryRow
+            {
+                Path = path,
+                Exists = FileExists(path),
+                Attached = live is not null,
+                Label = live?.Label ?? System.IO.Path.GetFileNameWithoutExtension(path),
+            });
+        }
+        return rows;
+    }
+
+    private static bool FileExists(string path)
+    {
+        try { return System.IO.File.Exists(path); }
+        catch { return false; }
+    }
 
     /// <summary>
     /// Client-triggered warm-up — called by an app when IT loads (never at service boot; boot

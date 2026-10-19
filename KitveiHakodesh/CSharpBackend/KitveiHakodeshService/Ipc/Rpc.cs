@@ -216,6 +216,42 @@ public sealed class DbPathResult
     public string? Error { get; set; }
 }
 
+/// <summary>Args for <c>addAdditionalSeforimLibrary</c> / <c>removeAdditionalSeforimLibrary</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class AdditionalLibraryArgs
+{
+    public string? Path { get; set; }
+}
+
+/// <summary>One configured additional seforim-shaped library, as reported to a settings page —
+/// see KitveiHakodesh.Core.Settings.SeforimDbAdditionalLibraries.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class AdditionalLibraryRow
+{
+    public string Path { get; set; } = "";
+    public bool Exists { get; set; }
+    /// <summary>True once this path is actually ATTACHed to the live connection (exists, has the
+    /// required tables, and fit within the id-space limit). False with <see cref="Exists"/> true
+    /// means it is configured but failed the schema check.</summary>
+    public bool Attached { get; set; }
+    public string Label { get; set; } = "";
+}
+
+/// <summary>Result for every additional-library op: the FULL, current list, so a settings page
+/// always re-renders from one source of truth rather than patching its own state.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class AdditionalLibrariesResult
+{
+    public List<AdditionalLibraryRow> Libraries { get; set; } = new();
+    /// <summary><c>addAdditionalSeforimLibrary</c> only: why the path was not added (empty,
+    /// already configured, or contains the ';' the setting is stored with).</summary>
+    public string? Error { get; set; }
+    /// <summary>True once a change was persisted — same restart-to-apply contract as
+    /// <see cref="DbPathResult.Restarting"/>, because the service resolves its attached
+    /// libraries once, at construction, exactly like the primary path.</summary>
+    public bool Restarting { get; set; }
+}
+
 /// <summary>Args for the <c>hbSearch</c> op (HebrewBooks catalog search).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class HbSearchArgs
