@@ -73,6 +73,14 @@
                 <TextBlock Text="הסר טעמים מטקסט" VerticalAlignment="Center"/>
             </Button>
 
+            <!-- Remove nikkud and cantillations from selection -->
+            <Button Style="{StaticResource ActionButton}"
+                    Command="{Binding RemoveNikkudAndCantillationsCommand}"
+                    Margin="0,0,0,12"
+                    ToolTip="הסר ניקוד וטעמים מהטקסט המסומן">
+                <TextBlock Text="הסר ניקוד וטעמים" VerticalAlignment="Center"/>
+            </Button>
+
             <!-- ─────────────────────────────────────────────────
                  GENRE SELECTOR
             ───────────────────────────────────────────────── -->
