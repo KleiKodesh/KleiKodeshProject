@@ -334,16 +334,22 @@ namespace Nakdan.UI
         public bool HasSuggestionsStatus => !string.IsNullOrEmpty(_suggestionsStatus);
 
         /// <summary>
-        /// Subscribes to Application.WindowSelectionChange, once (covers
-        /// document switches) while the toggle is on; the toggle detaches it.
+        /// Subscribes to selection changes, once, while the toggle is on;
+        /// the toggle detaches the application-level hooks.
         /// </summary>
         public void AttachSelection()
         {
             if (_selectionSubscribed || !_suggestionsEnabled || VstoHelper.Application == null) return;
             try
             {
+                // Proven path in this add-in (DocDesign): the VSTO document's
+                // SelectionChange, re-hooked per document on DocumentChange.
+                // WindowSelectionChange stays as a second source; the debounce
+                // folds the duplicates.
+                VstoHelper.Application.DocumentChange += HookActiveDocument;
                 VstoHelper.Application.WindowSelectionChange += OnWindowSelectionChange;
                 _selectionSubscribed = true;
+                HookActiveDocument();
             }
             catch { }
         }
@@ -351,12 +357,33 @@ namespace Nakdan.UI
         private void DetachSelection()
         {
             if (!_selectionSubscribed) return;
-            try { VstoHelper.Application.WindowSelectionChange -= OnWindowSelectionChange; }
+            try
+            {
+                VstoHelper.Application.DocumentChange -= HookActiveDocument;
+                VstoHelper.Application.WindowSelectionChange -= OnWindowSelectionChange;
+            }
             catch { }
             _selectionSubscribed = false;
+            // Per-document VSTO handlers stay attached but go inert (gated on the toggle).
         }
 
-        private void OnWindowSelectionChange(Word.Selection sel)
+        // Documents whose VSTO SelectionChange is hooked; hooked once each.
+        private readonly HashSet<Word.Document> _hookedDocs = new HashSet<Word.Document>();
+
+        private void HookActiveDocument()
+        {
+            try
+            {
+                Word.Document doc = VstoHelper.Application.ActiveDocument;
+                if (doc == null || VstoHelper.ApplicationFactory == null || !_hookedDocs.Add(doc)) return;
+                VstoHelper.ApplicationFactory.GetVstoObject(doc).SelectionChange += (_, __) => OnSelectionMoved();
+            }
+            catch { }
+        }
+
+        private void OnWindowSelectionChange(Word.Selection sel) => OnSelectionMoved();
+
+        private void OnSelectionMoved()
         {
             if (_suppressSelectionChange) return;
             if (Live && _suggestionsEnabled) ScheduleSuggestionsUpdate();
