@@ -16,6 +16,12 @@ public sealed class CatalogTocHit
     /// ranking rules measure and the per-pass dedup key.</summary>
     [MessagePack.IgnoreMember]
     public string FullTocPath { get; set; } = "";
+
+    /// <summary>Internal (not on the wire): <see cref="FullTocPath"/> tokenized ONCE at
+    /// materialization; every ranking key reads this list instead of re-tokenizing the path
+    /// (five times per hit, a thousand hits per keystroke, was the search's own cost).</summary>
+    [MessagePack.IgnoreMember]
+    public List<string> PathTokens { get; set; } = [];
     /// <summary>0 = book title, 1+ = TOC depth. First sort key.</summary>
     public int Level { get; set; }
     /// <summary>Catalog tree position + original TOC order. Third sort key.</summary>
@@ -35,6 +41,44 @@ public sealed class CatalogTocHit
     [MessagePack.IgnoreMember]
     public bool QueryInOrder { get; set; }
 
+    /// <summary>Internal (not on the wire): the query NAMES this hit's book — every word of the
+    /// book title is a query word (the query's words all being present is
+    /// <see cref="MatchesTitleOrAuthor"/>). For a level-0 hit that is an exact title: "Tur"
+    /// for the query "Tur", not "Kapei Aharon al Tur". For a TOC hit it means the user typed
+    /// the book and an address in it: "Tur Orach Chaim" is Tur's own section before a
+    /// commentary whose title merely contains those words. Ranks right below
+    /// MatchesTitleOrAuthor; ties break on the shorter title (<see cref="TitleTokenCount"/>).</summary>
+    [MessagePack.IgnoreMember]
+    public bool TitleCovered { get; set; }
+
+    /// <summary>Internal (not on the wire): DISTINCT title words, meaningful when
+    /// <see cref="TitleCovered"/>: the title that explains more of the query wins — "Levush
+    /// Mordechai Bava Metzia" (4) over the TOC row "Levush Mordechai / Bava Metzia" whose
+    /// title covers 2.</summary>
+    [MessagePack.IgnoreMember]
+    public int TitleDistinctWords { get; set; }
+
+    /// <summary>Internal (not on the wire): how far the title's word count is from the
+    /// query's, so that among covered titles explaining equally much the one sized like the
+    /// query wins: "Machaneh Yisrael" for that query, "Machaneh Yisrael (Yisrael)" when the
+    /// user typed that.</summary>
+    [MessagePack.IgnoreMember]
+    public int TitleLengthGap { get; set; }
+
+    /// <summary>Internal (not on the wire): every word of the hit's own LEAF segment (the
+    /// title for a level-0 hit) is a query word — the address typed IS this entry: "Shemini"
+    /// before "Shemini Atzeret".</summary>
+    [MessagePack.IgnoreMember]
+    public bool LeafCovered { get; set; }
+
+    /// <summary>Internal (not on the wire): how many of the query's words, COUNTED WITH
+    /// REPETITION, the whole stored path holds. The per-book truncation keeps the entries
+    /// holding the most: for "Rambam al Mishnah Eruvin mishnah 5" the path "perek 1 / mishnah
+    /// 5" holds "mishnah" twice as the query does, while "perek 5" holds it once — so the
+    /// typed address wins over the shallower entry that merely shares the "5".</summary>
+    [MessagePack.IgnoreMember]
+    public int WordsMatched { get; set; }
+
     /// <summary>Internal (not on the wire): how many DISTINCT query words this hit's own path
     /// contains. Ranks above <see cref="WordSpan"/>, because a span is only meaningful between
     /// hits that found equally many words.</summary>
@@ -47,9 +91,11 @@ public sealed class CatalogTocHit
     [MessagePack.IgnoreMember]
     public int WordSpan { get; set; }
 
-    /// <summary>Internal (not on the wire): the query was typed with a quoted acronym and this
-    /// hit's own stored text carries the same one. Separates an author acronym from the ordinary
-    /// word it strips to — see SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKey.</summary>
+    /// <summary>Internal (not on the wire): a BOOK-TITLE hit (level 0) whose stored title carries
+    /// the quoted acronym the query was typed with. Separates an author acronym from the ordinary
+    /// word it strips to — see SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKey. Never set
+    /// on a TOC hit: a chapter that merely cites the acronym must not outrank the book the
+    /// acronym names (typing shu"a wants Shulchan Aruch, not every TOC line quoting it).</summary>
     [MessagePack.IgnoreMember]
     public bool QuotedFormMatch { get; set; }
 

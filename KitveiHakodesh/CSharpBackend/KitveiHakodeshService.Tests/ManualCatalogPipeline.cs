@@ -1,3 +1,4 @@
+using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodeshService.Tests;
 
@@ -102,6 +103,8 @@ public static class ManualCatalogPipeline
         public int CategoryId;
         public string Title = "";
         public string? Authors;
+        public bool IsBaseBook;
+        public bool IsDependent;
         public int TreeOrder;
         public string ParentPath = "";
 
@@ -173,12 +176,17 @@ public static class ManualCatalogPipeline
 
     // ── Catalog tree (bookCatalogTree.ts buildTree + assignFullPaths) ───────────
 
-    /// <summary>Assigns TreeOrder + ParentPath exactly like the frontend: category tree
-    /// in load order, custom (negative-id) entries last per level, orphaned books under
-    /// a synthetic "ספרים נוספים" root appended after the real roots.</summary>
+    /// <summary>TreeOrder from the ONE shared computation (Core's SeforimDbBookTreeOrder, the
+    /// same the service ships to the frontend and both indexes sort by); ParentPath from a
+    /// walk of the same tree, with orphaned books under a synthetic last root.</summary>
     public static void AssignTreeOrderAndPaths(
         List<(int Id, int? ParentId, string Title)> categoriesInLoadOrder, List<Book> booksInLoadOrder)
     {
+        var treeOrder = SeforimDbBookTreeOrder.Compute(
+            categoriesInLoadOrder.ConvertAll(c => new SeforimDbBookTreeOrder.CategoryInput(c.Id, c.ParentId, c.Title)),
+            booksInLoadOrder.ConvertAll(b => new SeforimDbBookTreeOrder.BookInput(b.Id, b.CategoryId, b.Title, b.IsBaseBook, b.IsDependent)));
+        foreach (var b in booksInLoadOrder) b.TreeOrder = treeOrder[b.Id];
+
         var nodes = new Dictionary<int, CatNode>();
         var nodeOrder = new List<CatNode>();
         foreach (var c in categoriesInLoadOrder)
@@ -213,18 +221,13 @@ public static class ManualCatalogPipeline
         if (orphaned.Count > 0)
             roots.Add(new CatNode { Id = -999999, ParentId = null, Title = "ספרים נוספים", Books = orphaned });
 
-        int counter = 0;
         void Walk(List<CatNode> level, string parentPath)
         {
             foreach (var node in level)
             {
                 string nodePath = parentPath.Length > 0 ? parentPath + " / " + node.Title : node.Title;
-                Walk(node.Children, nodePath);   // subcategories before own books, as the catalog shows
-                foreach (var book in node.Books)
-                {
-                    book.TreeOrder = counter++;
-                    book.ParentPath = nodePath;
-                }
+                Walk(node.Children, nodePath);
+                foreach (var book in node.Books) book.ParentPath = nodePath;
             }
         }
         Walk(roots, "");

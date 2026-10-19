@@ -105,23 +105,37 @@ export function assignSubtreeBookIds(nodes: CategoryNode[]): void {
   }
 }
 
-export function assignFullPaths(
-  nodes: CategoryNode[],
-  parentPath = '',
-  counter = { n: 0 },
-  orderedBooks: BookRow[] = [],
-): BookRow[] {
+/**
+ * Fills `parentPath` on every book and returns all books sorted by `treeOrder`.
+ *
+ * `treeOrder` is NOT computed here. It is the library-wide precedence the service computes
+ * once (SeforimDbBookTreeOrder.cs: a folder's base texts, then its subfolders, then its other
+ * books) and ships on each row, so catalog search, full-text results and the commentary panel
+ * all rank by the same number. A book without one (a custom, negative-id book the server never
+ * saw) is numbered after the last server value, in tree position, so every book has one.
+ */
+export function assignFullPaths(nodes: CategoryNode[]): BookRow[] {
+  const inTreePosition: BookRow[] = []
+  walkPaths(nodes, '', inTreePosition)
+
+  let next = 0
+  for (const book of inTreePosition)
+    if (book.treeOrder !== undefined && book.treeOrder >= next) next = book.treeOrder + 1
+  for (const book of inTreePosition)
+    if (book.treeOrder === undefined) book.treeOrder = next++
+
+  return inTreePosition.sort((a, b) => a.treeOrder! - b.treeOrder!)
+}
+
+function walkPaths(nodes: CategoryNode[], parentPath: string, out: BookRow[]): void {
   for (const node of nodes) {
     const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
-    // Subcategories before the node's own books — the order the catalog view lists them.
-    assignFullPaths(node.children, nodePath, counter, orderedBooks)
+    walkPaths(node.children, nodePath, out)
     for (const book of node.books) {
-      book.treeOrder = counter.n++
       book.parentPath = nodePath
-      orderedBooks.push(book)
+      out.push(book)
     }
   }
-  return orderedBooks
 }
 
 const PERIOD_KEYWORDS: [string, string][] = [

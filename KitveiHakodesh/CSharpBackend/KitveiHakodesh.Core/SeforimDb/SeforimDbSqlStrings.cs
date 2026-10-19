@@ -17,9 +17,16 @@ namespace KitveiHakodesh.Core.SeforimDb
     {
         // ── Categories ──────────────────────────────────────────────────────────────
 
+        /// <summary>Sibling order within a level: orderIndex, except that a NEGATIVE orderIndex
+        /// sorts AFTER every non-negative one. The library marks its "mefarshim" subfolders with
+        /// -5 — a commentaries folder belongs below the text it comments on, not above it (the
+        /// Otzaria app reads the sign the same way). Shared by the browse query and the
+        /// tree-order query so the catalog view and every ranking agree.</summary>
+        private const string CategorySiblingOrder = "CASE WHEN orderIndex < 0 THEN 1 ELSE 0 END, orderIndex";
+
         /// <summary>All categories flat — the frontend builds the tree in memory once.</summary>
         public static string GetAllCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title, level FROM category ORDER BY level, orderIndex"
+            ? "SELECT id, parentId, title, level FROM category ORDER BY level, " + CategorySiblingOrder
             : "SELECT id, parentId, title, level FROM category ORDER BY level";
 
         // ── Books ────────────────────────────────────────────────────────────────────
@@ -698,17 +705,21 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE te.bookId = @b
             ORDER BY te.id";
 
-        /// <summary>Same order the frontend loads categories in (level, then orderIndex when
-        /// the column exists) — the catalog tree-order computation depends on it. Distinct
-        /// from GetAllCategories above: different SELECT list, different reader.</summary>
+        /// <summary>Same order the frontend loads categories in (level, then the sibling order
+        /// above when the column exists) — the catalog tree-order computation depends on it.
+        /// Distinct from GetAllCategories above: different SELECT list, different reader.</summary>
         internal static string CatalogIndexCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title FROM category ORDER BY level, orderIndex"
+            ? "SELECT id, parentId, title FROM category ORDER BY level, " + CategorySiblingOrder
             : "SELECT id, parentId, title FROM category ORDER BY level";
 
         /// <summary>Distinct from GetAllBooks above: no hasTeamim, and the index consumes the
-        /// columns positionally in this order.</summary>
-        internal const string CatalogIndexBooks = @"
-            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors
+        /// columns positionally in this order. The last two columns feed the tree order
+        /// (<see cref="SeforimDb.SeforimDbBookTreeOrder"/>): a library whose schema lacks them
+        /// gets 0 / NULL, i.e. no base-text promotion.</summary>
+        internal static string CatalogIndexBooks(bool hasIsBaseBook, bool hasDependenceType) => $@"
+            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors,
+                   {(hasIsBaseBook ? "b.isBaseBook" : "0")} AS isBaseBook,
+                   {(hasDependenceType ? "b.dependenceType" : "NULL")} AS dependenceType
             FROM book b
             LEFT JOIN book_author ba ON ba.bookId = b.id
             LEFT JOIN author a ON a.id = ba.authorId
@@ -732,10 +743,20 @@ namespace KitveiHakodesh.Core.SeforimDb
             LEFT JOIN line l ON l.id = te.lineId
             ORDER BY te.bookId, te.id";
 
-        /// <summary>All alt-TOC entries ordered by structure — one group per structure.</summary>
+        /// <summary>All alt-TOC entries ordered by structure — one group per structure. The last
+        /// column flags an entry that repeats a REGULAR TOC entry of the same book: same text and
+        /// same line, or same text when the alt entry has no line of its own (a section heading
+        /// such as an alt root "Orach Chaim" over the regular one). The "Chapters" structures are
+        /// 96% such repeats, and indexing them put the same address in the results twice. ~4s on
+        /// the shipped library (idx_toc_line / idx_toc_book).</summary>
         internal const string CatalogIndexAltTocRowsAllStructures = @"
-            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex
+            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex,
+                   EXISTS (SELECT 1 FROM tocEntry te
+                           WHERE te.bookId = s.bookId AND te.textId = ae.textId
+                             AND (te.lineId = ae.lineId OR ae.lineId IS NULL))
+                   AS dupOfRegular
             FROM alt_toc_entry ae
+            JOIN alt_toc_structure s ON s.id = ae.structureId
             JOIN tocText tt ON tt.id = ae.textId
             LEFT JOIN line l ON l.id = ae.lineId
             ORDER BY ae.structureId, ae.id";
