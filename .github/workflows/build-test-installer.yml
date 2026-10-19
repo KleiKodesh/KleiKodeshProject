@@ -58,9 +58,11 @@ jobs:
         shell: pwsh
         continue-on-error: true
         run: |
-          $nuget = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\NuGet\NuGet.exe"
-          if (-not (Test-Path $nuget)) { $nuget = "nuget" }
-          & $nuget restore KleiKodeshProject.slnx -NonInteractive 2>&1 | Write-Host
+          # The old-style (packages.config) projects need the classic nuget.exe, not
+          # `dotnet restore`. Don't guess a bundled-with-VS path (it moves between VS
+          # images/versions) — just grab the real thing.
+          Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "$env:RUNNER_TEMP\nuget.exe"
+          & "$env:RUNNER_TEMP\nuget.exe" restore KleiKodeshProject.slnx -NonInteractive 2>&1 | Write-Host
 
       - name: Attempt full rebuild (rebuild-all.ps1, Release only)
         id: rebuild
@@ -68,9 +70,16 @@ jobs:
         continue-on-error: true
         run: |
           # rebuild-all.ps1 hardcodes the VS2022-era MSBuild path on the author's machine;
-          # point it at whatever MSBuild setup-msbuild just put on PATH instead.
+          # point it at whatever MSBuild setup-msbuild just put on PATH instead. Also pass
+          # MSBuildPath=<same path> on every invocation: Build/Installer/*.csproj's
+          # ResolveVstoPackPaths target re-detects MSBuild itself by probing a short list of
+          # VS18/VS2022 install paths and leaves $(MSBuildPath) empty (-> exit 9009) on any
+          # other VS image/version; pre-setting the property short-circuits those Condition
+          # checks since they only fire when it's still blank.
           $msbuildPath = (Get-Command msbuild).Source
           (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"'), ('"' + $msbuildPath + '"') |
+            Set-Content rebuild-all.ps1
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('/p:Configuration=$config'), '/p:Configuration=$config /p:MSBuildPath="$msbuild"' |
             Set-Content rebuild-all.ps1
           ./rebuild-all.ps1 -Release
           "exitcode=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
