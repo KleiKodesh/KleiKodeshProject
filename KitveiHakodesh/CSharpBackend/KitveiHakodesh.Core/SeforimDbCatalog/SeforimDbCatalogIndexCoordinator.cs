@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodesh.Core.SeforimDbCatalog
 {
@@ -74,6 +75,14 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         /// <summary>The last "database not ready" reason logged, so a status poll per keystroke
         /// logs a wait once, not on every call.</summary>
         private string? _lastNotReadyReason;
+
+        /// <summary>Why the index last started building, and when; null until a build starts.</summary>
+        public IndexBuildReason? LastBuildReason => _lastBuildReason;
+        private volatile IndexBuildReason? _lastBuildReason;
+
+        /// <summary>A reason known before EnsureIndex runs (a reset, a change seen while running,
+        /// a retry), which its own stamp compare could not tell. Guarded by _lock.</summary>
+        private string? _pendingBuildReason;
 
         private int _failedBuilds;
         private bool _resetInFlight;
@@ -258,10 +267,14 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                     return;
                 }
 
+                string reason = _pendingBuildReason
+                    ?? (opened ? SeforimDb.SeforimDbContentFingerprint.DescribeChange(index.ActiveHash, currentHash) ?? "stale"
+                               : "no index yet");
+                _pendingBuildReason = null;
+                _lastBuildReason = IndexBuildReason.Now(reason);
                 _log(CatalogIndexLogLevel.Information,
-                    opened
-                        ? "catalog TOC index is stale (seforim DB changed) — rebuilding in the background, serving the old index meanwhile"
-                        : "catalog TOC index missing — building",
+                    "catalog TOC index building: " + reason
+                        + (opened ? " (serving the old index meanwhile)" : ""),
                     null);
 
                 _buildStarted = true;
@@ -308,7 +321,11 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 }
                 else if (failures < MaxBuildAttempts)
                 {
-                    lock (_lock) { _buildStarted = false; }
+                    lock (_lock)
+                    {
+                        _buildStarted = false;
+                        _pendingBuildReason = $"retrying after a failed build ({failures} of {MaxBuildAttempts})";
+                    }
                 }
                 else
                 {
@@ -350,6 +367,8 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 // Re-arm EnsureIndex (it is latched to once-per-process), then let it do the
                 // stamp compare and background build it already knows how to do.
                 _buildStarted = false;
+                _pendingBuildReason = "changed while running: "
+                    + (SeforimDb.SeforimDbContentFingerprint.DescribeChange(active, current) ?? "stale");
             }
             EnsureIndex();
             return true;
@@ -430,6 +449,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 lock (_lock) { _resetInFlight = false; }
             }
             _log(CatalogIndexLogLevel.Information, "catalog TOC index reset — rebuilding", null);
+            lock (_lock) { _pendingBuildReason = "reset requested"; }
             EnsureIndex();
         }
 
@@ -512,6 +532,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 BuiltBooks = BuiltBooks,
                 TotalBooks = TotalBooks,
                 DbMissing = DatabasePath == null,
+                BuildReason = _lastBuildReason,
             };
         }
 

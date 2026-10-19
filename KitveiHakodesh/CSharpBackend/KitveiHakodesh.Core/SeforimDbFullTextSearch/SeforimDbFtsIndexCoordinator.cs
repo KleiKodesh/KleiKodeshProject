@@ -1,3 +1,4 @@
+using KitveiHakodesh.Core.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -290,11 +291,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                     "FTS provenance stamp is an older format — keeping the completed index", null);
 
             if (plan.WipedStaleState)
-            {
-                _log(FtsIndexLogLevel.Information,
-                    "FTS index is stale (seforim DB changed or provenance unknown) — wiping for rebuild", null);
                 _engine?.Invalidate(); // never let an already-open engine answer over the wiped directory
-            }
 
             // A completed service-owned build against the CURRENT DB → ready, no rebuild.
             if (plan.IsReady)
@@ -303,6 +300,9 @@ public sealed class SeforimDbFtsIndexCoordinator
                 _buildStarted = true;
                 return;
             }
+
+            NoteBuildReason(_pendingBuildReason ?? plan.BuildReason ?? "build needed");
+            _pendingBuildReason = null;
 
             _buildStarted = true;
             _isIndexing = true;
@@ -468,18 +468,18 @@ public sealed class SeforimDbFtsIndexCoordinator
         // must cancel and restart rather than append the new DB's lines onto the old DB's
         // segments. No stamp means nothing built yet, and an older-format stamp is not
         // comparable; both answer "not stale" so a live index is never wiped over them.
-        bool stale;
-        try { stale = Indexer.IsIndexStale(); } catch { return false; }
-        if (!stale) return false;
+        string? staleBecause;
+        try { staleBecause = Indexer.WhyIndexIsStale(); } catch { return false; }
+        if (staleBecause == null) return false;
 
-        _log(FtsIndexLogLevel.Information, "FTS: seforim DB changed while running — wiping and rebuilding", null);
-        ResetIndex(); // cancels the in-flight build, wipes, re-arms, and rebuilds
+        ResetIndex("changed while running: " + staleBecause); // cancels the in-flight build, wipes, re-arms, and rebuilds
         return true;
     }
 
     /// <summary>Wipe the FTS index and rebuild it from scratch (dev "reset search index").
     /// Runs on a background thread and returns immediately — progress is streamed.</summary>
-    public void ResetIndex()
+    /// <param name="reason">Why, for the log and the status (<see cref="LastBuildReason"/>).</param>
+    public void ResetIndex(string reason = "reset requested")
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
         if (_shuttingDown) return; // a late watcher callback must not wipe the index on the way out
@@ -499,6 +499,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                 return;
             }
             _resetInFlight = true;
+            _pendingBuildReason = reason;
         }
 
         // Report "indexing, 0%" from the moment the reset is REQUESTED, not from whenever the
@@ -917,8 +918,23 @@ public sealed class SeforimDbFtsIndexCoordinator
             foreach (var ch in _progressSubs) ch.Writer.TryWrite(true);
     }
 
+    /// <summary>Why the index last started building, and when; null until a build starts.</summary>
+    public IndexBuildReason? LastBuildReason => _lastBuildReason;
+    private volatile IndexBuildReason? _lastBuildReason;
+
+    /// <summary>A reset's reason, carried to the build EnsureIndexing starts after the wipe
+    /// (whose own plan would only say "no index yet").</summary>
+    private string? _pendingBuildReason;
+
+    private void NoteBuildReason(string reason)
+    {
+        _lastBuildReason = IndexBuildReason.Now(reason);
+        _log(FtsIndexLogLevel.Information, "FTS index building: " + reason, null);
+    }
+
     private FtsIndexStatus Snapshot() => new()
     {
+        BuildReason = _lastBuildReason,
         IsReady = _isReady,
         IsIndexing = _isIndexing,
         Percentage = Math.Round(_pct, 1),

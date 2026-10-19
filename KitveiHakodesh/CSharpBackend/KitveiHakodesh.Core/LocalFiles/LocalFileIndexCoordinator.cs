@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodesh.Core.LocalFiles;
 
@@ -85,6 +86,14 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// </summary>
     private volatile string? _buildStatusMessage;
 
+    /// <summary>Why the index last (re)built from scratch — a full crawl of a drive, or a
+    /// reindex — and when; null while every start only caught up from the journal.</summary>
+    public IndexBuildReason? LastBuildReason => _lastBuildReason;
+    private volatile IndexBuildReason? _lastBuildReason;
+
+    /// <summary>A reindex's reason, carried to the build that follows it.</summary>
+    private string? _pendingBuildReason;
+
     /// <summary>
     /// Placeholder status for the window between a build being queued and the crawler
     /// emitting its first progress message. English and diagnostic, like every other
@@ -103,7 +112,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     {
         // _index is assigned only after the build completes, so a non-null index means
         // ready. Checking it first keeps the common (warm) case a single field read.
-        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false };
+        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false, BuildReason = _lastBuildReason };
 
         // Read the task ONCE: it can be replaced (by a reindex) or nulled (by a faulted
         // build being dropped) between reads, and a torn view here would be reported as a
@@ -119,6 +128,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         {
             IsBuilding = build is not null && !build.IsCompleted,
             Message = _buildStatusMessage,
+            BuildReason = _lastBuildReason,
         };
     }
 
@@ -220,6 +230,8 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         // The flag was already raised by EnsureIndexAsync when it queued this build; here we
         // only refine it with real progress. Cleared in the finally: once the crawl is over
         // the caller is waiting on the watchers below, not on the index, and that wait is short.
+        var crawlReasons = new List<string>();
+        string? pending = Interlocked.Exchange(ref _pendingBuildReason, null);
         try
         {
             index.Build(
@@ -228,7 +240,8 @@ public sealed class LocalFileIndexCoordinator : IDisposable
                     _buildStatusMessage = msg;
                     _log(LocalFileIndexLogLevel.Debug, "[LocalFileIndex] " + msg, null);
                 },
-                CancellationToken.None);
+                CancellationToken.None,
+                crawlReasons.Add);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -239,6 +252,12 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         finally
         {
             _buildStatusMessage = null;
+            if (pending != null || crawlReasons.Count > 0)
+            {
+                string reason = pending ?? "full crawl — " + string.Join("; ", crawlReasons);
+                _lastBuildReason = IndexBuildReason.Now(reason);
+                _log(LocalFileIndexLogLevel.Information, "[LocalFileIndex] index built: " + reason, null);
+            }
         }
 
         // Start the live USN journal update loop now that the initial build is done.
@@ -255,7 +274,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
             // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
             _ = Task.Run(async () =>
             {
-                try { await ReindexAsync(CancellationToken.None); }
+                try { await ReindexAsync(CancellationToken.None, "live update failed: " + message); }
                 catch (Exception rebuildEx)
                 {
                     _log(LocalFileIndexLogLevel.Error, "[LocalFileIndex] Rebuild after live-update failure failed", rebuildEx);
@@ -431,8 +450,10 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// Wipe the index and trigger a full rebuild. Fire-and-forget — the rebuild
     /// runs in the background; the next search call will block until it finishes.
     /// </summary>
-    public async Task ReindexAsync(CancellationToken ct)
+    /// <param name="reason">Why, for the log and the status (<see cref="LastBuildReason"/>).</param>
+    public async Task ReindexAsync(CancellationToken ct, string reason = "reindex requested")
     {
+        Volatile.Write(ref _pendingBuildReason, reason);
         // Dispose the current index so the writer lock is released, then rebuild.
         await _buildGate.WaitAsync(ct);
         try

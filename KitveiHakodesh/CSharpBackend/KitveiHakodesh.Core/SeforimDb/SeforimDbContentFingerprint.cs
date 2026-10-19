@@ -81,6 +81,44 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
+        /// Why <paramref name="recorded"/> (what an index was built from) differs from
+        /// <paramref name="current"/>, in words for a log line: the index format, the database
+        /// path, or which parts of the database's content. Null when they are equal.
+        /// </summary>
+        public static string? DescribeChange(string? recorded, string current)
+        {
+            if (string.Equals(recorded, current, StringComparison.OrdinalIgnoreCase)) return null;
+            if (recorded == null) return "the existing index has no provenance stamp";
+            if (IsLegacy(recorded)) return "the existing index has a pre-" + FormatTag + " stamp";
+
+            string[] was = recorded.Split('|'), now = current.Split('|');
+            int wasTag = Array.IndexOf(was, FormatTag), nowTag = Array.IndexOf(now, FormatTag);
+            string wasPrefix = string.Join("|", was, 0, Math.Max(wasTag, 0));
+            string nowPrefix = string.Join("|", now, 0, Math.Max(nowTag, 0));
+            if (wasTag < 0 || nowTag < 0 || wasPrefix != nowPrefix)
+                return $"index format changed ({wasPrefix} -> {nowPrefix})";
+
+            string wasPath = wasTag + 1 < was.Length ? was[wasTag + 1] : "";
+            string nowPath = nowTag + 1 < now.Length ? now[nowTag + 1] : "";
+            if (!string.Equals(wasPath, nowPath, StringComparison.OrdinalIgnoreCase))
+                return $"seforim DB path changed ({wasPath} -> {nowPath})";
+
+            // The rest are key=value parts (schema=, line=, book=, tail=, dbv=, release=) or "missing".
+            var changed = new System.Collections.Generic.List<string>();
+            var wasParts = new System.Collections.Generic.HashSet<string>(was, StringComparer.OrdinalIgnoreCase);
+            var nowParts = new System.Collections.Generic.HashSet<string>(now, StringComparer.OrdinalIgnoreCase);
+            foreach (string part in now)
+                if (!wasParts.Contains(part)) changed.Add(KeyOf(part));
+            foreach (string part in was)
+                if (!nowParts.Contains(part) && !changed.Contains(KeyOf(part))) changed.Add(KeyOf(part));
+            return changed.Count == 0
+                ? "seforim DB content changed"
+                : "seforim DB content changed (" + string.Join(", ", changed) + ")";
+
+            static string KeyOf(string part) { int eq = part.IndexOf('='); return eq < 0 ? part : part.Substring(0, eq); }
+        }
+
+        /// <summary>
         /// True for a value written before this FORMAT existed. Such a value can never compare
         /// equal to a current one, so treating it as a mismatch would wipe a good index on the
         /// first launch after the format changed. Read it as "provenance unknown": keep a

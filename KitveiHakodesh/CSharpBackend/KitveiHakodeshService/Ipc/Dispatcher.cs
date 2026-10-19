@@ -43,7 +43,8 @@ public sealed class Dispatcher(
     private static bool IsHousekeepingOp(string op) => op is
         "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
         or "getSeforimDbPath" or "getUpdateStatus"
-        or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress";
+        or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress"
+        or "indexBuildReasons";
 
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
@@ -817,6 +818,16 @@ public sealed class Dispatcher(
 
                 case "catalogTocStatus":
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
+
+                // Why each index last (re)built — polled by the frontend, which logs each new
+                // reason to its console. Read-only: never starts a build.
+                case "indexBuildReasons":
+                    return RpcResponse.Ok(MsgPack.Ser(new global::KitveiHakodesh.Core.Common.IndexBuildReasons
+                    {
+                        FullTextSearch = fts.Coordinator.LastBuildReason,
+                        CatalogToc = catalogToc.Coordinator.LastBuildReason,
+                        LocalFiles = locator.LastBuildReason,
+                    }));
 
                 case "catalogTocResetIndex":
                     catalogToc.ResetIndex();

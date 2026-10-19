@@ -31,6 +31,8 @@ public sealed class LocalFileIndexService : IDisposable
 
     public LocalFileIndexStatusResult GetIndexStatus() => _coordinator.GetIndexStatus();
 
+    public global::KitveiHakodesh.Core.Common.IndexBuildReason? LastBuildReason => _coordinator.LastBuildReason;
+
     public Task<LocateDocumentsResult> LocateAsync(string query, int max, CancellationToken ct) =>
         _coordinator.LocateAsync(query, max, ct);
 

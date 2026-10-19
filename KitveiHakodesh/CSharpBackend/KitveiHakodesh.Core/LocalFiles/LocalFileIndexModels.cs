@@ -36,4 +36,8 @@ public sealed class LocalFileIndexStatusResult
     /// <summary>The crawler's latest progress line (English, diagnostic). The UI shows its
     /// own wording; this is detail, not display text.</summary>
     public string? Message { get; set; }
+
+    /// <summary>Why the index last built from scratch, and when; null if every start so far
+    /// only caught up from the journal.</summary>
+    public KitveiHakodesh.Core.Common.IndexBuildReason? BuildReason { get; set; }
 }
