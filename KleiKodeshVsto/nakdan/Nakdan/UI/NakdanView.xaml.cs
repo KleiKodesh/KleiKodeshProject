@@ -52,13 +52,8 @@ namespace Nakdan.UI
             {
                 if (DataContext is NakdanViewModel vm)
                 {
-                    vm.Live = (bool)e.NewValue;
-                    if (vm.Live && vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
+                    if ((bool)e.NewValue && vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
                 }
-            };
-            Unloaded += (_, __) =>
-            {
-                if (DataContext is NakdanViewModel vm) vm.Live = false;
             };
 
             // Refresh styles when control becomes visible — deferred so it doesn't
@@ -95,7 +90,7 @@ namespace Nakdan.UI
                 if (DataContext is NakdanViewModel vm)
                 {
                     vm.RefreshActiveStylesAction();
-                    vm.Live = IsVisible;
+                    vm.IsPaneVisible = () => IsVisible;
                     vm.AttachSelection();
                     if (vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
                 }
