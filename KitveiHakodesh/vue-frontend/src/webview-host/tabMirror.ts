@@ -1,3 +1,4 @@
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { computed, ref, watch } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -36,7 +37,8 @@ import type { MirroredTab } from './bridge'
 
 /** "title · tocPath" — the string shown in the dropdown row and tab tooltip. */
 function listTitleFor(t: Tab): string {
-  return t.tocPath ? `${t.title} · ${t.tocPath}` : t.title
+  const title = catalogBookTitle(t)
+  return t.tocPath ? `${title} · ${t.tocPath}` : title
 }
 
 export function initTabMirror(): void {
@@ -83,7 +85,7 @@ export function initTabMirror(): void {
         .sort((a, b) => Number(a.id) - Number(b.id))
         .map((t): MirroredTab => ({
           id: t.id,
-          title: t.title,
+          title: catalogBookTitle(t),
           // Full breadcrumb for the native tab-list dropdown and tab tooltip; the
           // strip caption itself is always the plain title.
           listTitle: listTitleFor(t),

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
@@ -238,7 +239,7 @@ function getTabIcon(route: string): FileIconInfo {
             'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
           }"
           data-nav-item
-          :title="withNewTabHint(tab.tocPath ? `${tab.title} · ${tab.tocPath}` : tab.title)"
+          :title="withNewTabHint(tab.tocPath ? `${catalogBookTitle(tab)} · ${tab.tocPath}` : catalogBookTitle(tab))"
           @click="emit('selectTab', tab.id, wantsNewTab($event))"
           @auxclick.middle="emit('selectTab', tab.id, wantsNewTab($event))"
         >
@@ -248,7 +249,7 @@ function getTabIcon(route: string): FileIconInfo {
             :style="getTabIcon(tab.route).color ? { color: getTabIcon(tab.route).color } : undefined"
           />
           <span class="global-search-dropdown__item-title">
-            {{ tab.title }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
+            {{ catalogBookTitle(tab) }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
           </span>
           <!-- Forgets the location. Closes nothing: locations and tabs are
                independent, so this is "remove from history". -->
