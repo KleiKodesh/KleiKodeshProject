@@ -24,6 +24,12 @@ export interface BookRow {
   title: string
   hasTeamim?: number | null // 1 if the book has cantillation marks, 0/null if not
   authors?: string | null
+  /**
+   * The book's precedence in the library, computed ONCE by the service
+   * (SeforimDbBookTreeOrder.cs) and shared with the catalog and full-text indexes, so every
+   * ranking here ties on the same order. Optional only for custom (negative-id) books, which
+   * the server never sees; `assignFullPaths` numbers those after the last server value.
+   */
   treeOrder?: number
   parentPath?: string // category path without the book title — used for display in search results
   period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.

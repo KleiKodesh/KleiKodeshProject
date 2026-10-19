@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Settings;
 
@@ -100,6 +101,14 @@ namespace KitveiHakodesh.Core.SeforimDb
                     Authors = r.IsDBNull(4) ? null : r.GetString(4),
                 });
             }
+            r.Close();
+
+            // The precedence every consumer ranks by, computed ONCE here (not in the frontend,
+            // not per index) and shipped on the row; rows go out in that order.
+            var treeOrder = SeforimDbBookTreeOrder.Load(conn);
+            foreach (var row in list)
+                row.TreeOrder = treeOrder.TryGetValue(row.Id, out int o) ? o : int.MaxValue;
+            list = list.OrderBy(b => b.TreeOrder).ToList();
 
             if (list.Count > 0)
                 lock (_catalogCacheLock) _booksCache ??= list;

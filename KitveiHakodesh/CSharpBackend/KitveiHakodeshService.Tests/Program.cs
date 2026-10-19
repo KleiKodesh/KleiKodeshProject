@@ -30,6 +30,10 @@ bool watcherMode = false;
 bool variantMode = false;
 bool abbrevMode = false;
 var ktivSimQueries = new List<string>();
+bool treeOrderSelfTest = false;
+string? treeOrderDump = null;
+string? exhaustiveOut = null;
+int exhLevels = 2, exhEvery = 1, exhShard = 0, exhShards = 1;
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -45,6 +49,12 @@ for (int i = 0; i < args.Length; i++)
         case "--variant": variantMode = true; break;
         case "--abbrev": abbrevMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
+        case "--treeorder-selftest": treeOrderSelfTest = true; break;
+        case "--treeorder-dump": treeOrderDump = args[++i]; break;
+        case "--exhaustive": exhaustiveOut = args[++i]; break;
+        case "--exh-levels": exhLevels = int.Parse(args[++i]); break;
+        case "--exh-every": exhEvery = int.Parse(args[++i]); break;
+        case "--exh-shard": { var p = args[++i].Split('/'); exhShard = int.Parse(p[0]); exhShards = int.Parse(p[1]); break; }
     }
 }
 
@@ -62,6 +72,8 @@ if (abbrevProblems.Count > 0)
 
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
+if (treeOrderSelfTest)
+    return TreeOrderCheck.SelfTest() == 0 ? 0 : 1;
 if (variantMode)
     // Normalised to 0/1 like the line above: Run() returns a failure COUNT, and an
     // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
@@ -84,6 +96,10 @@ indexPath ??= Path.Combine(AppContext.BaseDirectory, "CatalogTocIndex.test");
 
 if (ktivSimQueries.Count > 0)
     return KtivTiebreakSim.Run(dbPath, indexPath, ktivSimQueries.ToArray());
+if (treeOrderDump is not null)
+    return TreeOrderCheck.Dump(dbPath, treeOrderDump);
+if (exhaustiveOut is not null)
+    return ExhaustiveRecall.Run(dbPath, indexPath, exhaustiveOut, exhLevels, exhEvery, exhShard, exhShards);
 
 if (abbrevMode)
     return AbbrevVerify.Run(dbPath, indexPath);
@@ -118,7 +134,7 @@ static string Describe(CatalogTocTextRules.QueryToken t) =>
         ("ש\"ע", "שולחן ערוך"),
         ("ש״ע", "שולחן ערוך"),
         ("ש''ע", "שולחן ערוך"),
-        ("קיצור ש''ע ילקוט יוסף", "קיצור שולחן ערוך ילקוט שמעוני יוסף"),
+        ("קיצור ש''ע ילקוט יוסף", "קיצור שולחן ערוך ילקוט יוסף"),   // an unquoted key stays literal at index time (yalkut yosef is not yalkut shimoni)
         ("שלחן", "שולחן"),
         ("פירוש שו\"ע אבן העזר", "פירוש שולחן ערוך אבן העזר"),
         ("הלכות שו\"ע החדשות", "הלכות שולחן ערוך החדשות"),
@@ -243,6 +259,13 @@ static string Describe(CatalogTocTextRules.QueryToken t) =>
 
         Console.WriteLine("rebuild-trigger check: OK (real changes detected incl. stealth edits + WAL; reads ignored)");
     }
+    catch (KitveiHakodesh.Core.SeforimDb.SeforimDbUnreadableException)
+    {
+        // Since 7ba49716 the stamp is a CONTENT fingerprint of a readable SQLite database and
+        // throws for anything else; the plain-text fixture files above are not one. Reported,
+        // not fatal, so the index build and the ordering checks below still run.
+        Fail("trigger: fixture uses plain files, but the stamp now requires a SQLite DB (test fixture needs rewriting)");
+    }
     finally
     {
         try { Directory.Delete(dir, recursive: true); } catch { }
@@ -343,8 +366,9 @@ using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
 
     using (var cmd = conn.CreateCommand())
     {
+        // Same sibling order as Core's CatalogIndexCategories: a negative orderIndex last.
         cmd.CommandText = hasOrderIndex
-            ? "SELECT id, parentId, title FROM category ORDER BY level, orderIndex"
+            ? "SELECT id, parentId, title FROM category ORDER BY level, CASE WHEN orderIndex < 0 THEN 1 ELSE 0 END, orderIndex"
             : "SELECT id, parentId, title FROM category ORDER BY level";
         using var r = cmd.ExecuteReader();
         while (r.Read())
@@ -353,8 +377,12 @@ using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
 
     using (var cmd = conn.CreateCommand())
     {
-        cmd.CommandText = @"
-            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors
+        bool hasBase = TreeOrderCheck.ColumnExists(conn, "book", "isBaseBook");
+        bool hasDep = TreeOrderCheck.ColumnExists(conn, "book", "dependenceType");
+        cmd.CommandText = $@"
+            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors,
+                   {(hasBase ? "b.isBaseBook" : "0")} AS isBaseBook,
+                   {(hasDep ? "b.dependenceType" : "NULL")} AS dependenceType
             FROM book b
             LEFT JOIN book_author ba ON ba.bookId = b.id
             LEFT JOIN author a ON a.id = ba.authorId
@@ -368,6 +396,8 @@ using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
                 CategoryId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
                 Title = r.IsDBNull(2) ? "" : r.GetString(2),
                 Authors = r.IsDBNull(3) ? null : r.GetString(3),
+                IsBaseBook = !r.IsDBNull(4) && r.GetInt32(4) != 0,
+                IsDependent = !r.IsDBNull(5) && r.GetString(5).Trim().Length > 0,
             });
     }
 

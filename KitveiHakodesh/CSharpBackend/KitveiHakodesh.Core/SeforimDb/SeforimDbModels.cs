@@ -94,6 +94,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Title { get; set; } = "";
         public int? HasTeamim { get; set; }
         public string? Authors { get; set; }
+        /// <summary>The book's precedence in the library (<see cref="SeforimDbBookTreeOrder"/>):
+        /// the one order every ranking — catalog search, full-text results, commentary
+        /// panel — ties on. Rows are returned sorted by it.</summary>
+        public int TreeOrder { get; set; }
     }
 
     /// <summary>Single-book metadata — matches BookInfo in webview-host/queries.types.ts.</summary>

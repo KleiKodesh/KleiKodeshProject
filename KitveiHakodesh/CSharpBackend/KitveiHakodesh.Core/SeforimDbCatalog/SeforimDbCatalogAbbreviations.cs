@@ -133,7 +133,7 @@ internal static class SeforimDbCatalogAbbreviations
         ["מהרים"] = new[] { new[] { "יצחק", "מאיר", "אלתר" }, new[] { "מהרים" } },
         ["מהרל"] = new[] { new[] { "מהרל" } },
         ["מהרץ חיות"] = new[] { new[] { "צבי", "הירש", "חיות" } },
-        ["מהרשא"] = new[] { new[] { "חדושי", "אגדות" }, new[] { "חדושי", "הלכות" }, new[] { "מהרשא" } },
+        ["מהרשא"] = new[] { new[] { "מהרשא" } },   // self only: the volumes' own titles say halachot / aggadot
         ["מהרשא חדושי אגדות"] = new[] { new[] { "חידושי", "אגדות" } },
         ["מהרשא חדושי הלכות"] = new[] { new[] { "חדושי", "הלכות" } },
         ["מהרשל"] = new[] { new[] { "מהרשל" } },
@@ -289,5 +289,7 @@ internal static class SeforimDbCatalogAbbreviations
         ["תקוז"] = new[] { new[] { "תיקוני", "זוהר" } },
         ["תרגום אונקלוס"] = new[] { new[] { "תרגום", "אונקלוס" } },
         ["תרגום יונתן"] = new[] { new[] { "תרגום", "יונתן" } },
+        // s"q = seif katan: TOC entries write it both ways, so each must find the other.
+        ["סק"] = new[] { new[] { "סעיף", "קטן" } },
     };
 }
