@@ -250,6 +250,9 @@ public sealed class AdditionalLibrariesResult
     /// <see cref="DbPathResult.Restarting"/>, because the service resolves its attached
     /// libraries once, at construction, exactly like the primary path.</summary>
     public bool Restarting { get; set; }
+    /// <summary><c>pickAdditionalSeforimLibrary</c> only: the user dismissed the native dialog,
+    /// so nothing was persisted.</summary>
+    public bool Cancelled { get; set; }
 }
 
 /// <summary>Args for the <c>hbSearch</c> op (HebrewBooks catalog search).</summary>

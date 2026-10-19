@@ -85,30 +85,52 @@ namespace KitveiHakodesh.Core.Settings
         public static IReadOnlyList<string> GetAll() =>
             GetAllEntries().Select(e => e.Path).ToArray();
 
+        /// <summary>Why <see cref="Add"/> did or didn't add a path — distinct reasons so a
+        /// caller (a settings page) can say something more useful than "failed". Note that
+        /// neither "file doesn't exist" nor "wrong schema" is one of these: <see cref="Add"/>
+        /// does not check either, by design (see its remarks) — a configured-but-not-yet-live
+        /// path is reported instead via <see cref="GetAllEntries"/> vs. <see cref="GetAllEntriesRaw"/>,
+        /// and schema compatibility only via <see cref="SeforimDbAttachedLibraries.Resolve"/>'s
+        /// result (what a settings page would show as "Attached: false").</summary>
+        public enum AddOutcome
+        {
+            Added,
+            EmptyPath,
+            /// <summary>Contains ';' or '|' — cannot be represented in the stored format.</summary>
+            InvalidCharacters,
+            AlreadyConfigured,
+            /// <summary>This install has handed out every id-space slot it can ever address —
+            /// see <see cref="SeforimDbLibraryId.MaxLibraryIndex"/>. Removing a library does NOT
+            /// free its slot (by design — see the class remarks), so this is a lifetime budget,
+            /// not a concurrent-libraries limit.</summary>
+            SlotsExhausted,
+        }
+
         /// <summary>Adds <paramref name="path"/> if it is not already present (case-insensitive,
         /// by full path) and does not contain either separator. Does not require the file to
         /// exist yet — a user may add a path before restoring the file, exactly like the primary
         /// path setting. The new entry's index comes from the ever-increasing counter, never from
         /// "one more than however many are configured right now" — see the class remarks.</summary>
-        public static bool Add(string? rawPath)
+        public static AddOutcome Add(string? rawPath)
         {
             string path = SeforimDbLibrarySwitcher.NormalizePath(rawPath);
-            if (path.Length == 0 || path.IndexOf(Separator) >= 0 || path.IndexOf(IndexPathSeparator) >= 0)
-                return false;
+            if (path.Length == 0) return AddOutcome.EmptyPath;
+            if (path.IndexOf(Separator) >= 0 || path.IndexOf(IndexPathSeparator) >= 0)
+                return AddOutcome.InvalidCharacters;
 
             string full = TryFullPath(path);
             var current = GetAllEntriesRaw();
             if (current.Any(e => string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)))
-                return false;
+                return AddOutcome.AlreadyConfigured;
 
             int index = ReadNextIndex();
             if (index > SeforimDbLibraryId.MaxLibraryIndex)
-                return false; // this install has handed out every slot it can ever address — see SeforimDbLibraryId
+                return AddOutcome.SlotsExhausted;
 
             AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName,
                 (index + 1).ToString(CultureInfo.InvariantCulture));
             Save(current.Append(new Entry(index, path)));
-            return true;
+            return AddOutcome.Added;
         }
 
         /// <summary>Removes a configured path (case-insensitive, by full path). Returns false

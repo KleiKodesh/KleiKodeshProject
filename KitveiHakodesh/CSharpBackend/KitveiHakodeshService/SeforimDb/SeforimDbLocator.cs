@@ -52,9 +52,10 @@ public static class SeforimDbLocator
     public static System.Collections.Generic.IReadOnlyList<string> GetAdditionalLibraryPaths() =>
         SeforimDbAdditionalLibraries.GetAllRaw();
 
-    /// <summary>Adds a path. False when it was empty, already configured, or contains the ';'
-    /// separator the setting is stored with.</summary>
-    public static bool AddAdditionalLibrary(string path) => SeforimDbAdditionalLibraries.Add(path);
+    /// <summary>Adds a path. See <see cref="SeforimDbAdditionalLibraries.AddOutcome"/> for why
+    /// it might not have been added.</summary>
+    public static SeforimDbAdditionalLibraries.AddOutcome AddAdditionalLibrary(string path) =>
+        SeforimDbAdditionalLibraries.Add(path);
 
     /// <summary>Removes a configured path. False when it was not configured.</summary>
     public static bool RemoveAdditionalLibrary(string path) => SeforimDbAdditionalLibraries.Remove(path);

@@ -391,24 +391,55 @@ public sealed class Dispatcher(
                 // Extra seforim-shaped libraries ATTACHed alongside the primary database (see
                 // KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries). Unlike the primary
                 // path above, there is no "custom vs default" distinction — every entry here is
-                // the user's own choice — and no native picker op yet; a settings page gets there
-                // via its own folder/file dialog and passes the chosen path as a string.
+                // the user's own choice.
                 case "getAdditionalSeforimLibraries":
                     return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
                     {
                         Libraries = seforim.GetAdditionalLibraries(),
                     }));
 
+                // Dev-mode native open-file dialog for an additional library, then persist —
+                // the dev equivalent of the hosted app's own native picker action, exactly like
+                // pickSeforimDbPath is to the primary path's picker above. Reuses the SAME file
+                // filter/title; the difference from pickSeforimDbPath is entirely in what happens
+                // to the chosen path afterwards (added to the list, not switched to).
+                case "pickAdditionalSeforimLibrary":
+                {
+                    string? picked = await NativeFilePicker.PickAsync(
+                        NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle);
+                    if (picked is null)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Cancelled = true,
+                        }));
+
+                    var pickerOutcome = SeforimDbLocator.AddAdditionalLibrary(picked);
+                    if (pickerOutcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = AdditionalLibraryErrorMessage(pickerOutcome),
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
+                    }));
+                }
+
                 case "addAdditionalSeforimLibrary":
                 {
                     var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
                     string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
-                    bool added = SeforimDbLocator.AddAdditionalLibrary(p);
-                    if (!added)
+                    var outcome = SeforimDbLocator.AddAdditionalLibrary(p);
+                    if (outcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
                         return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
                         {
                             Libraries = seforim.GetAdditionalLibraries(),
-                            Error = p.Length == 0 ? "empty path" : "already configured, or contains ';'",
+                            Error = AdditionalLibraryErrorMessage(outcome),
                         }));
 
                     RestartSoon();
@@ -938,6 +969,18 @@ public sealed class Dispatcher(
                 logger.LogInformation("Copied user settings {Source} -> {Destination}", source, destination),
             onCarryOverFailed: ex =>
                 logger.LogWarning(ex, "Could not carry user settings over to the new library"));
+
+    /// <summary>A stable, English, machine-readable reason string for an additional-library
+    /// op's <see cref="AdditionalLibrariesResult.Error"/> — the settings page maps this to its
+    /// own (Hebrew) wording, same convention as every other error string in this dispatcher.</summary>
+    private static string AdditionalLibraryErrorMessage(SeforimDbAdditionalLibraries.AddOutcome outcome) => outcome switch
+    {
+        SeforimDbAdditionalLibraries.AddOutcome.EmptyPath => "empty path",
+        SeforimDbAdditionalLibraries.AddOutcome.InvalidCharacters => "path contains ';' or '|'",
+        SeforimDbAdditionalLibraries.AddOutcome.AlreadyConfigured => "already configured",
+        SeforimDbAdditionalLibraries.AddOutcome.SlotsExhausted => "no more library slots available",
+        _ => "could not add library",
+    };
 
     private static UpdateStatusResult ReadUpdateStatus()
     {

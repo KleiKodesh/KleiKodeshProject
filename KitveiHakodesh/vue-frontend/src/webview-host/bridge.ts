@@ -1138,6 +1138,84 @@ export async function clearDbPath(): Promise<string | null> {
   }
 }
 
+// ── Additional seforim libraries (settings page) ───────────────────────────────
+// Extra seforim-shaped databases ATTACHed ALONGSIDE the primary one above (see
+// KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries) — a personal library built
+// offline, say. Same registry-owned, restart-to-apply contract as the primary path: every
+// add/remove persists and restarts the service so it re-resolves which libraries to attach.
+
+export interface AdditionalLibraryInfo {
+  path: string
+  /** The file is actually there right now. False usually means it moved or was deleted. */
+  exists: boolean
+  /** The service is actually ATTACHing this library today (exists, matches the required
+   *  seforim.db table shape, and its own ids fit the id-space it was given). False with
+   *  `exists` true means the file is there but failed that check. */
+  attached: boolean
+  /** Display label (the file name without its extension) — NOT an identifier. */
+  label: string
+}
+
+export interface AdditionalLibrariesResult {
+  libraries: AdditionalLibraryInfo[]
+  /** Set only when the op that produced this result did nothing — see the op's own doc. */
+  error?: string
+  /** The service is restarting to apply a change that was just persisted. */
+  restarting?: boolean
+  /** `pickAdditionalSeforimLibrary` only: the user dismissed the native dialog. */
+  cancelled?: boolean
+}
+
+/** Every configured additional library and its current status. */
+export async function getAdditionalSeforimLibraries(): Promise<AdditionalLibraryInfo[]> {
+  try {
+    const result = await serviceCall<AdditionalLibrariesResult>('getAdditionalSeforimLibraries')
+    return result?.libraries ?? []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Add a typed/pasted path. Does not require the file to exist yet (same as the primary path
+ * field) — `exists`/`attached` on the returned list say whether it works right now.
+ * `error` is set (and nothing persisted) when the path was empty, already configured, has a
+ * ';' or '|' in it, or this install has used up every id-space slot it can ever address.
+ */
+export async function addAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
+  return serviceCall<AdditionalLibrariesResult>('addAdditionalSeforimLibrary', { path })
+}
+
+/** Remove a configured path. */
+export async function removeAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
+  return serviceCall<AdditionalLibrariesResult>('removeAdditionalSeforimLibrary', { path })
+}
+
+/**
+ * Show the native open-file dialog for an additional library and persist it if chosen.
+ * Null means the user cancelled or it failed outright (not the same as an `error` result,
+ * which still carries the current list).
+ *
+ * Hosted: reuses the exact SAME native dialog action as the primary DB path picker — it only
+ * ever returns a filesystem path, persistence always goes through the RPC below, so there is
+ * nothing primary-path-specific to avoid reusing. Dev: the service shows the dialog on its own
+ * desktop and persists in one step, mirroring pickDbPath's dev branch above.
+ */
+export async function pickAdditionalSeforimLibrary(): Promise<AdditionalLibrariesResult | null> {
+  try {
+    if (typeof window.__webviewAction === 'function') {
+      const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
+      if (picked?.cancelled || picked?.error || !picked?.path) return null
+      return await addAdditionalSeforimLibrary(picked.path)
+    }
+    const result = await serviceCall<AdditionalLibrariesResult>('pickAdditionalSeforimLibrary')
+    if (result?.cancelled) return null
+    return result
+  } catch {
+    return null
+  }
+}
+
 /**
  * Clear the persisted HebrewBooks local folder setting (saves an empty string to the registry).
  */
