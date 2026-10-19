@@ -149,9 +149,10 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     if (!count) return false
 
     const ctrl = event.ctrlKey || event.metaKey
-    // Alt+Left/Right is the title-bar back/forward shortcut (useAppTitleBarShortcuts);
-    // the input's keydown runs before that window listener, so the arrows
-    // must let Alt through here too.
+    // Alt+Left/Right is the title-bar back/forward shortcut. Its window
+    // listener is capture-phase and stops propagation, so Alt+Arrow never
+    // reaches here in practice; excluding Alt keeps this handler correct on
+    // its own rather than relying on that.
     const modified = ctrl || event.altKey
     const isGrid = !!options.getColumnsPerRow
     const rowStep = Math.max(1, options.getColumnsPerRow?.() ?? 1)
