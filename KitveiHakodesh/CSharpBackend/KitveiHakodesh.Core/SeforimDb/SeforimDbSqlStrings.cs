@@ -18,9 +18,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         // ── Categories ──────────────────────────────────────────────────────────────
 
         /// <summary>All categories flat — the frontend builds the tree in memory once.</summary>
-        public static string GetAllCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title, level FROM category ORDER BY level, orderIndex"
-            : "SELECT id, parentId, title, level FROM category ORDER BY level";
+        public static string GetAllCategories(bool hasOrderIndex) => GetAllCategories(hasOrderIndex, "main");
+
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>. <paramref name="schema"/> is "main" or one
+        /// of the "lib{N}" aliases.</summary>
+        public static string GetAllCategories(bool hasOrderIndex, string schema) => hasOrderIndex
+            ? $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level, orderIndex"
+            : $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level";
 
         // ── Books ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +39,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY b.id
             ORDER BY b.orderIndex";
 
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
+        public static string GetAllBooksIn(string schema) => $@"
+            SELECT b.id, b.categoryId, b.title, b.hasTeamim,
+                   group_concat(a.name, ', ') AS authors
+            FROM {schema}.book b
+            LEFT JOIN {schema}.book_author ba ON ba.bookId = b.id
+            LEFT JOIN {schema}.author a ON a.id = ba.authorId
+            GROUP BY b.id
+            ORDER BY b.orderIndex";
+
         /// <summary>Single book by id — totalLines for virtual-scroll init + has* flags for the toolbar.</summary>
         public const string GetBookById = @"
             SELECT totalLines, hasTeamim,
@@ -42,12 +58,35 @@ namespace KitveiHakodesh.Core.SeforimDb
             FROM book
             WHERE id = @id";
 
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
+        public static string GetBookByIdIn(string schema) => $@"
+            SELECT totalLines, hasTeamim,
+                   hasTargumConnection, hasReferenceConnection, hasSourceConnection,
+                   hasCommentaryConnection, hasOtherConnection
+            FROM {schema}.book
+            WHERE id = @id";
+
         // ── Lines ─────────────────────────────────────────────────────────────────
 
         /// <summary>A page of lines for streaming load.</summary>
         public static string GetLinesPaged(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
             FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.bookId = @bookId
+            ORDER BY l.lineIndex
+            LIMIT @limit OFFSET @offset";
+
+        /// <summary>
+        /// Same query against an ATTACHed library's schema, for the plain (non-split,
+        /// non-compressed) content shape only — the only shape additional libraries support
+        /// reading in this version, see <see cref="SeforimDbAttachedLibraries"/> and
+        /// <see cref="SeforimDbQueries.GetLinesPaged"/>. Callers must have already checked
+        /// <c>!schema.HasSplitLineContent</c>; there is no sidecar join here to qualify.
+        /// </summary>
+        public static string GetLinesPagedIn(string librarySchema) => $@"
+            SELECT l.id, l.lineIndex, l.content
+            FROM {librarySchema}.line l
             WHERE l.bookId = @bookId
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";

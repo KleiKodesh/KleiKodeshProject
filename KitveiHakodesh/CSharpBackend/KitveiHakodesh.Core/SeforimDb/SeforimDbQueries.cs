@@ -44,26 +44,37 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             var list = new List<CategoryRow>();
             using var conn = Open();
+            AppendCategories(conn, "main", null, 0, list);
+            foreach (var library in _attachedLibraries)
+                AppendCategories(conn, library.Alias, library.Label, library.Index, list);
+
+            if (list.Count > 0)
+                lock (_catalogCacheLock) _categoriesCache ??= list;
+            return list;
+        }
+
+        /// <summary>Reads every category from one schema ("main" or an attached library's alias)
+        /// and appends it to <paramref name="list"/>, offsetting ids per
+        /// <see cref="SeforimDbLibraryId"/> so main and attached rows never collide.</summary>
+        private static void AppendCategories(SqliteConnection conn, string schema, string? libraryLabel, int libraryIndex, List<CategoryRow> list)
+        {
             // Detect the optional orderIndex column at query time (mirrors the
             // frontend's ensureCategorySchema()).
-            bool hasOrder = ColumnExists(conn, "category", "orderIndex");
+            bool hasOrder = ColumnExists(conn, schema, "category", "orderIndex");
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetAllCategories(hasOrder);
+            cmd.CommandText = SeforimDbSqlStrings.GetAllCategories(hasOrder, schema);
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
                 list.Add(new CategoryRow
                 {
-                    Id = r.GetInt32(0),
-                    ParentId = r.IsDBNull(1) ? null : r.GetInt32(1),
+                    Id = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                    ParentId = r.IsDBNull(1) ? null : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
                     Title = r.IsDBNull(2) ? "" : r.GetString(2),
                     Level = r.IsDBNull(3) ? 0 : r.GetInt32(3),
+                    LibraryLabel = libraryLabel,
                 });
             }
-
-            if (list.Count > 0)
-                lock (_catalogCacheLock) _categoriesCache ??= list;
-            return list;
         }
 
         public List<BookRow> GetAllBooks()
@@ -73,58 +84,85 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             var list = new List<BookRow>();
             using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetAllBooks;
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-            {
-                list.Add(new BookRow
-                {
-                    Id = r.GetInt32(0),
-                    CategoryId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    Title = r.IsDBNull(2) ? "" : r.GetString(2),
-                    HasTeamim = r.IsDBNull(3) ? null : r.GetInt32(3),
-                    Authors = r.IsDBNull(4) ? null : r.GetString(4),
-                });
-            }
+            AppendBooks(conn, SeforimDbSqlStrings.GetAllBooks, null, 0, list);
+            foreach (var library in _attachedLibraries)
+                AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(library.Alias), library.Label, library.Index, list);
 
             if (list.Count > 0)
                 lock (_catalogCacheLock) _booksCache ??= list;
             return list;
         }
 
+        /// <summary>Runs a books query against one schema and appends its rows to
+        /// <paramref name="list"/>, offsetting ids exactly like <see cref="AppendCategories"/>.</summary>
+        private static void AppendBooks(SqliteConnection conn, string sql, string? libraryLabel, int libraryIndex, List<BookRow> list)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new BookRow
+                {
+                    Id = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                    CategoryId = r.IsDBNull(1) ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
+                    Title = r.IsDBNull(2) ? "" : r.GetString(2),
+                    HasTeamim = r.IsDBNull(3) ? null : r.GetInt32(3),
+                    Authors = r.IsDBNull(4) ? null : r.GetString(4),
+                    LibraryLabel = libraryLabel,
+                });
+            }
+        }
+
         // ── Book + lines ──────────────────────────────────────────────────────────
 
         public BookInfo? GetBookById(int id)
         {
-            BookInfo? book = null;
+            var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(id);
+
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetBookById;
-            cmd.Parameters.AddWithValue("@id", id);
-            using var r = cmd.ExecuteReader();
-            if (r.Read())
+            if (libraryIndex == 0)
             {
-                book = new BookInfo
-                {
-                    TotalLines = r.IsDBNull(0) ? 0 : r.GetInt32(0),
-                    HasTeamim = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    HasTargumConnection = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                    HasReferenceConnection = r.IsDBNull(3) ? 0 : r.GetInt32(3),
-                    HasSourceConnection = r.IsDBNull(4) ? 0 : r.GetInt32(4),
-                    HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
-                    HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
-                };
+                cmd.CommandText = SeforimDbSqlStrings.GetBookById;
             }
-            return book;
+            else
+            {
+                var library = FindAttached(libraryIndex);
+                // The id's library is no longer attached (removed from settings, or its file
+                // moved between the catalog being cached and this call) — not found, same as
+                // any other id nothing matches.
+                if (library is not { } found) return null;
+                cmd.CommandText = SeforimDbSqlStrings.GetBookByIdIn(found.Alias);
+            }
+
+            cmd.Parameters.AddWithValue("@id", localId);
+            using var r = cmd.ExecuteReader();
+            if (!r.Read()) return null;
+
+            return new BookInfo
+            {
+                TotalLines = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                HasTeamim = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                HasTargumConnection = r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                HasReferenceConnection = r.IsDBNull(3) ? 0 : r.GetInt32(3),
+                HasSourceConnection = r.IsDBNull(4) ? 0 : r.GetInt32(4),
+                HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
+                HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
+            };
         }
 
         /// <param name="versionId">0 for the book's own text; a book_version id to read the
         /// page through that version's overlay instead. See
         /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and
-        /// does not replace.</param>
+        /// does not replace. Version overlays are a main-database-only feature for now — see
+        /// the guard below.</param>
         public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0)
         {
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex != 0)
+                return GetLinesPagedFromAttachedLibrary(libraryIndex, localBookId, limit, offset, versionId);
+
             var list = new List<LineRow>();
             using var conn = Open();
             using var codec = CodecFor(conn);
@@ -151,6 +189,64 @@ namespace KitveiHakodesh.Core.SeforimDb
                 });
             }
             return list;
+        }
+
+        /// <summary>
+        /// Lines for a book that belongs to an attached library (see
+        /// <see cref="SeforimDbAttachedLibraries"/>), rather than the primary seforim.db.
+        ///
+        /// Restricted to the PLAIN content shape (not split into `line_content`, not
+        /// zstd-compressed) — this version's codec caching (<see cref="SeforimDbLineContentCodec"/>)
+        /// keys dictionaries by the PRIMARY connection's own data source, which is wrong for an
+        /// attached schema, so wiring compressed/split attached libraries through it would risk
+        /// silently decoding one library's lines with another's dictionary. A library in either
+        /// of those shapes still appears in the catalog (<see cref="GetAllBooks"/>); only reading
+        /// its text throws, clearly, instead of guessing.
+        /// </summary>
+        private List<LineRow> GetLinesPagedFromAttachedLibrary(int libraryIndex, int localBookId, int limit, int offset, int versionId)
+        {
+            var library = FindAttached(libraryIndex);
+            if (library is not { } found) return new List<LineRow>();
+
+            if (versionId > 0)
+                throw new NotSupportedException(
+                    "Version overlays are not supported for books from an additional library " +
+                    $"('{found.Label}'); only the primary seforim.db has version_line rows.");
+
+            using var conn = Open();
+            var schema = SeforimDbSchema.ForDatabase(conn, found.Path, found.Alias);
+            if (schema.HasSplitLineContent || schema.HasCompressedContent)
+                throw new NotSupportedException(
+                    $"The additional library '{found.Label}' stores line text in a shape " +
+                    "(split/compressed, SeforimLibrary schema 6+) that is not yet supported for " +
+                    "additional libraries — only the primary seforim.db reads that shape today.");
+
+            var list = new List<LineRow>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLinesPagedIn(found.Alias);
+            cmd.Parameters.AddWithValue("@bookId", localBookId);
+            cmd.Parameters.AddWithValue("@limit", limit);
+            cmd.Parameters.AddWithValue("@offset", offset);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new LineRow
+                {
+                    Id = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                    LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                });
+            }
+            return list;
+        }
+
+        /// <summary>The attached library with this index, or null when it is not (or no longer)
+        /// attached — removed from settings, or its file moved since the catalog was cached.</summary>
+        private SeforimDbAttachedLibraries.Library? FindAttached(int libraryIndex)
+        {
+            foreach (var library in _attachedLibraries)
+                if (library.Index == libraryIndex) return library;
+            return null;
         }
 
         /// <summary>

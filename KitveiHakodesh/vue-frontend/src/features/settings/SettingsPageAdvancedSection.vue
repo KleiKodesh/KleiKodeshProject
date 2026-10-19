@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
 import SettingsExcludedFoldersDialog from './SettingsExcludedFoldersDialog.vue'
+import SettingsAdditionalLibrariesDialog from './SettingsAdditionalLibrariesDialog.vue'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -84,6 +85,16 @@ const isExcludedFoldersDialogOpen = ref(false)
 function openExcludedFolders() {
   isExcludedFoldersDialogOpen.value = true
 }
+
+// ── Additional seforim libraries ──────────────────────────────────────────────
+// Extra seforim.db-shaped libraries ATTACHed alongside the primary database above (a personal
+// library built offline, say) — additive only, never a replacement for the primary path field.
+
+const isAdditionalLibrariesDialogOpen = ref(false)
+
+function openAdditionalLibraries() {
+  isAdditionalLibrariesDialogOpen.value = true
+}
 </script>
 
 <template>
@@ -122,6 +133,13 @@ function openExcludedFolders() {
     </SettingRow>
 
     <SettingRow
+      label="ספריות נוספות"
+      hint="ספריות seforim.db נוספות (למשל אוסף אישי) שייטענו לצד מסד הנתונים הראשי, לעיון וקריאה. שינוי כאן מפעיל מחדש את שירות הנתונים."
+    >
+      <button class="manage-btn" @click="openAdditionalLibraries">ניהול ספריות נוספות</button>
+    </SettingRow>
+
+    <SettingRow
       label="החרג תיקיות מחיפוש הקבצים"
       hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
     >
@@ -131,6 +149,11 @@ function openExcludedFolders() {
     <SettingsExcludedFoldersDialog
       v-if="isExcludedFoldersDialogOpen"
       @close="isExcludedFoldersDialogOpen = false"
+    />
+
+    <SettingsAdditionalLibrariesDialog
+      v-if="isAdditionalLibrariesDialogOpen"
+      @close="isAdditionalLibrariesDialogOpen = false"
     />
   </div>
 </template>
