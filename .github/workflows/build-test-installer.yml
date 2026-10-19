@@ -125,6 +125,8 @@ jobs:
                   public string CloseTabsToTheRightMenuText { get; set; }
 
                   public int StripHeight { get; set; }
+                  public int TabHeight { get; set; }
+                  public bool ShowTabListButton { get; set; }
                   public bool StripVisible { get; set; }
                   public int SelectedTabGroup { get; set; }
                   public bool SplitStrip { get; set; }
