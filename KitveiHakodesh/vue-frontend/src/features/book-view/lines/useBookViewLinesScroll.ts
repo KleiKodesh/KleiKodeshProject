@@ -446,13 +446,11 @@ export function useBookViewLinesScroll(
     (visible) => { if (!visible) savePos() },
   )
 
-  useEventListener(document, 'visibilitychange', () => {
-    if (document.visibilityState === 'hidden') savePos()
-  })
-  useEventListener(window, 'beforeunload', () => { savePos() })
-  // The WebView2 hosts fire neither of those when they close their window; they ask
-  // for the position through window.__khsFlushPersistence instead.
-  const unregisterHostFlush = registerPositionCapture(savePos)
+  // Hidden / reload / close in the browser, window.__khsFlushPersistence in the
+  // WebView2 hosts (which fire none of those), and the tab's own close (by tab id)
+  // all take the position through this one registration - see persistenceFlush.ts
+  // for why the position must be captured BEFORE the coalesced stores flush.
+  const unregisterHostFlush = registerPositionCapture(savePos, tabId)
 
   onBeforeUnmount(() => {
     unregisterHostFlush()

@@ -15,7 +15,7 @@ import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
-import { installHostPersistenceFlush } from './webview-host/persistenceFlush'
+import { installBrowserPersistenceFlush, installHostPersistenceFlush } from './webview-host/persistenceFlush'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -25,6 +25,10 @@ await checkAndExecPendingReset()
 // stay above the store init below: it finishes the wipe in place, so the stores then
 // read the cleaned state on this boot rather than needing another reload.
 await checkAndExecPendingDbSwitchCleanup()
+
+// Before any store or view exists: hide / reload / close flush every pending
+// persistence write from here, position captures first (persistenceFlush.ts).
+installBrowserPersistenceFlush()
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia)

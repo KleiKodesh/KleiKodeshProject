@@ -1,7 +1,10 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
 import { ref, watch, nextTick } from 'vue'
 import {
+  capturePositionsForTab,
   flushAllPersistence,
+  installBrowserPersistenceFlush,
   registerPendingWriter,
   registerPositionCapture,
 } from './persistenceFlush'
@@ -57,6 +60,38 @@ describe('flushAllPersistence', () => {
       expect(otherRan).toBe(true)
     } finally {
       u1(); u2(); u3()
+    }
+  })
+
+  it('capturePositionsForTab runs only the captures registered for that tab', () => {
+    const ran: string[] = []
+    const u1 = registerPositionCapture(() => { ran.push('a') }, 'tab-a')
+    const u2 = registerPositionCapture(() => { ran.push('b') }, 'tab-b')
+    const u3 = registerPositionCapture(() => { ran.push('none') })
+    try {
+      capturePositionsForTab('tab-a')
+      expect(ran).toEqual(['a'])
+    } finally {
+      u1(); u2(); u3()
+    }
+  })
+
+  it('the browser leave signals run captures before writers', async () => {
+    installBrowserPersistenceFlush()
+    const order: string[] = []
+    const state = ref(0)
+    const stop = watch(state, () => { order.push('watcher') })
+    const unregisterCapture = registerPositionCapture(() => { state.value++; order.push('capture') })
+    const unregisterWriter = registerPendingWriter(() => { order.push('writer') })
+    try {
+      window.dispatchEvent(new Event('pagehide'))
+      await nextTick()
+      await nextTick()
+      expect(order).toEqual(['capture', 'watcher', 'writer'])
+    } finally {
+      stop()
+      unregisterCapture()
+      unregisterWriter()
     }
   })
 
