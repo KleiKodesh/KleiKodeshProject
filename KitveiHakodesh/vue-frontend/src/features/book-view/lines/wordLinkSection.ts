@@ -24,6 +24,7 @@
  * caller falls back to the single-line preview.
  */
 import { getAllTocEntries, getLinesPaged } from '@/webview-host/seforimApi'
+import { findOpenTabToc } from '../toc/openTabTocRegistry'
 import type { LineRow, TocEntry } from '@/webview-host/queries.types'
 
 /**
@@ -79,8 +80,9 @@ function findSectionEnd(
  * Exposed separately so the caller can start it in parallel with its own fetches
  * instead of paying for it in series — it depends on nothing but the book id.
  */
-export function loadSectionTocEntries(bookId: number): Promise<TocEntry[]> {
-  return getAllTocEntries(bookId)
+export async function loadSectionTocEntries(bookId: number): Promise<TocEntry[]> {
+  // A tab that has this book open already holds its TOC — use it instead of refetching.
+  return (await findOpenTabToc(bookId)) ?? getAllTocEntries(bookId)
 }
 
 /**
