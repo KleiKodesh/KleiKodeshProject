@@ -48,16 +48,6 @@ namespace Nakdan.UI
             Loaded += OnLoaded;
             PreviewKeyDown += OnPreviewKeyDown;
 
-            // Nikud suggestions: the selection hook is live only while the pane
-            // is on screen (the VM also gates on its toggle).
-            IsVisibleChanged += (_, e) =>
-            {
-                if (DataContext is NakdanViewModel vm)
-                {
-                    if ((bool)e.NewValue && vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
-                }
-            };
-
             // Refresh styles when control becomes visible — deferred so it doesn't
             // block the visibility transition itself
             IsVisibleChanged += (_, e) =>
@@ -80,7 +70,8 @@ namespace Nakdan.UI
             };
         }
 
-        // Ctrl+Left / Ctrl+Right: move the Word selection word by word, like Word.
+        // Ctrl+Left / Ctrl+Right: move the Word selection word by word, like Word,
+        // then show the new word's suggestions (done inside MoveToAdjacentWord).
         // Pane text inputs keep their own caret behaviour.
         void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -101,12 +92,7 @@ namespace Nakdan.UI
             Dispatcher.BeginInvoke(new System.Action(() =>
             {
                 if (DataContext is NakdanViewModel vm)
-                {
                     vm.RefreshActiveStylesAction();
-                    vm.IsPaneVisible = () => IsVisible;
-                    vm.AttachSelection();
-                    if (vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
-                }
             }), DispatcherPriority.ApplicationIdle);
         }
     }

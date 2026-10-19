@@ -146,21 +146,42 @@
             <!-- ─────────────────────────────────────────────────
                  NIKUD SUGGESTIONS — alternatives for the selected word
             ───────────────────────────────────────────────── -->
-            <ToggleButton Style="{StaticResource CheckedToggle}"
-                          IsChecked="{Binding SuggestionsEnabled, Mode=TwoWay}"
-                          Content="{Binding SuggestionsToggleText}"
-                          Height="28"
-                          Padding="8,0"
-                          FontSize="12"
-                          HorizontalAlignment="Stretch"
-                          Margin="0,12,0,4"/>
-            <TextBlock Text="בחרו מילה במסמך לקבלת חלופות ניקוד; לחיצה מחליפה. Ctrl+חצים: מילה הבאה/קודמת."
+            <TextBlock Text="הצעות ניקוד"
+                       Style="{StaticResource SectionLabel}"
+                       Margin="0,12,0,4"/>
+            <!-- Pane is RightToLeft: column 0 renders rightmost (next on the right). -->
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Style="{StaticResource ActionButton}"
+                        Command="{Binding NextWordCommand}">
+                    <TextBlock Text="מילה הבאה" VerticalAlignment="Center"/>
+                </Button>
+                <Button Grid.Column="1"
+                        Style="{StaticResource ActionButton}"
+                        Command="{Binding ShowSuggestionsCommand}"
+                        Margin="6,0,6,0"
+                        Padding="14,0"
+                        ToolTip="הצג חלופות ניקוד למילה המסומנת">
+                    <TextBlock Text="הצג" VerticalAlignment="Center"/>
+                </Button>
+                <Button Grid.Column="2"
+                        Style="{StaticResource ActionButton}"
+                        Command="{Binding PreviousWordCommand}">
+                    <TextBlock Text="מילה הקודמת" VerticalAlignment="Center"/>
+                </Button>
+            </Grid>
+            <TextBlock Text="{Binding SuggestionsHint}"
                        FontSize="11"
                        TextWrapping="Wrap"
                        Foreground="{StaticResource TextSecBrush}"
                        Margin="0,0,0,6"/>
 
-            <StackPanel Visibility="{Binding SuggestionsEnabled, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
                 <TextBlock Text="{Binding SuggestionsStatus}"
                            Visibility="{Binding HasSuggestionsStatus, Converter={StaticResource BoolToVis}}"
                            FontSize="12"
