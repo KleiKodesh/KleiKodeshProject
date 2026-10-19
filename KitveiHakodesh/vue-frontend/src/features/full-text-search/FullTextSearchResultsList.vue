@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, onUpdated, nextTick } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onUpdated, onScopeDispose, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener, useElementSize } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
@@ -528,10 +529,8 @@ function savePos() {
   emit('saveScroll', pos)
 }
 
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') savePos()
-})
-useEventListener(window, 'beforeunload', savePos)
+// Browser hide/unload and the host's close all run through the shared flush.
+onScopeDispose(registerPositionCapture(savePos))
 onBeforeUnmount(() => {
   programmaticScrolling = false
   savePos()

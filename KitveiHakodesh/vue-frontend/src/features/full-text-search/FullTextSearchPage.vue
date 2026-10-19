@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import PageCard from '@/components/PageCard.vue'
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useEventListener, useMediaQuery } from '@vueuse/core'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useFullTextSearch } from './useFullTextSearch'
@@ -419,16 +420,11 @@ onMounted(async () => {
   searchBarRef.value?.focus({ silent: true, selectAll: true })
 })
 
-// Save filter state whenever the page goes hidden or is unmounted.
+// Save filter state whenever the page goes hidden, the host closes, or the page unmounts.
+// The shared flush (persistenceFlush) covers browser hide/unload AND the WebView2 host's
+// close, which fires no browser event; unmount is handled below.
 // /search is keyed by tabId so unmount = this tab's search instance is gone (tab switched or closed).
-// Tab close triggers closeTab() which deletes the IDB key anyway, but saving first is harmless.
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') saveFilterState()
-})
-// Reload safety net: the synchronous localStorage mirror inside saveFilterState is the part
-// that must land during teardown; running it from beforeunload guarantees it even if the
-// visibilitychange ordering varies. Idempotent with the handler above.
-useEventListener(window, 'beforeunload', () => { saveFilterState() })
+onScopeDispose(registerPositionCapture(() => saveFilterState(), tabId))
 onBeforeUnmount(() => {
   // Stop the backend search. This page is NOT kept alive — it unmounts on a tab switch,
   // on a same-tab navigation to another route, and on tab close. Without this, the C#
