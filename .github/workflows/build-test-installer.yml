@@ -286,6 +286,30 @@ jobs:
               Copy-Item $c $dest -Recurse -Force -ErrorAction SilentlyContinue
             }
           }
+
+          # KleiKodeshVsto.csproj imports KitveiHakodesh.targets too, so it's supposed to
+          # get its OWN copy of the Vue dist under its OutDir\KitveiHakodesh — but when the
+          # VSTO manifest step throws (the known signing-tooling gap), MSBuild aborts the
+          # Build target before that AfterTargets="Build" sync runs, so KleiKodeshVsto's
+          # staged output ends up missing the UI entirely even though it compiled. Every
+          # project importing those targets gets an identical dist, so when KleiKodeshVsto's
+          # own copy didn't make it, backfill it from a sibling project that DID finish
+          # (KitveiHakodeshDemoApp succeeds — no VSTO manifest involved) rather than ship an
+          # artifact with a compiled add-in but no UI inside it.
+          $vstoStagedUi = "artifact-staging\KleiKodeshVsto_bin_Release\KitveiHakodesh"
+          $demoAppUi    = "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\bin\Release\KitveiHakodesh"
+          if ((Test-Path "artifact-staging\KleiKodeshVsto_bin_Release") -and -not (Test-Path $vstoStagedUi) -and (Test-Path $demoAppUi)) {
+            Write-Host "Backfilling Vue UI dist into the VSTO add-in's staged output from KitveiHakodeshDemoApp's build..."
+            Copy-Item $demoAppUi $vstoStagedUi -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          # Bundle the local install/restore test script + its README INTO this same
+          # artifact (not a separate upload) so one zip download has everything needed to
+          # actually try the build, per the user's choice to skip a signed .vsto/.msi and
+          # use a plain xcopy-deploy + registry script instead.
+          Copy-Item ".github\ci-assets\install-test-build.ps1" "artifact-staging\install-test-build.ps1" -Force
+          Copy-Item ".github\ci-assets\README-TEST.md" "artifact-staging\README-TEST.md" -Force
+
           "Staged paths:"
           Get-ChildItem artifact-staging -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
 
