@@ -163,6 +163,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
                 plan.IsReady = false;
+                plan.BuildReason = "an index from the old FtsLib engine was found";
                 return plan;
             }
 
@@ -186,6 +187,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 return plan;
             }
 
+            string? change = SeforimDbContentFingerprint.DescribeChange(recordedStamp, currentStamp);
             if (SeforimDbContentFingerprint.IsLegacy(recordedStamp) && completedBuild)
             {
                 plan.KeptUnverifiableCompletedIndex = true;
@@ -196,9 +198,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
+                plan.BuildReason = change;
             }
 
             plan.IsReady = File.Exists(completedStampPath) && SegmentsExist();
+            if (!plan.IsReady && plan.BuildReason == null)
+                plan.BuildReason = hasIndexState ? "resuming an interrupted build" : "no index yet";
             return plan;
         }
 
@@ -330,9 +335,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
-        /// Whether the index no longer matches the database — the live-change check the DB
+        /// Why the index no longer matches the database, in words; null when it still does — the live-change check the DB
         /// watcher calls while the app runs. READ-ONLY and cheap (two file reads and a
-        /// fingerprint); acting on a true answer — cancelling a build, wiping, rebuilding —
+        /// fingerprint); acting on an answer — cancelling a build, wiping, rebuilding —
         /// is the orchestrator's move.
         ///
         /// Checks fts.ver first and falls back to fts.src, because a database swapped
@@ -342,17 +347,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// stamp is not comparable, and calling it "changed" would wipe a live index over a
         /// format change, so it reads as not-stale; the next build re-stamps it.
         /// </summary>
-        public bool IsIndexStale()
+        public string? WhyIndexIsStale()
         {
             string? builtFrom = ReadStamp(Path.Combine(_indexPath, CompletedStampFileName))
                              ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
-            if (builtFrom == null) return false;
-            if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return false;
+            if (builtFrom == null) return null;
+            if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return null;
 
             string current;
             try { current = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion); }
-            catch (SeforimDbUnreadableException) { return false; }   // cannot tell — not stale
-            return !string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase);
+            catch (SeforimDbUnreadableException) { return null; }   // cannot tell — not stale
+            return SeforimDbContentFingerprint.DescribeChange(builtFrom, current);
         }
 
         /// <summary>
@@ -393,5 +398,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <summary>The seforim DB could not be read at the moment of the check, so its stamp
         /// could not be compared. Nothing was wiped; a completed index is still ready.</summary>
         public bool DbUnreadable { get; set; }
+
+        /// <summary>Why a build follows (stale stamp in words, an interrupted build, no index
+        /// yet); null when the index is ready.</summary>
+        public string? BuildReason { get; set; }
     }
 }

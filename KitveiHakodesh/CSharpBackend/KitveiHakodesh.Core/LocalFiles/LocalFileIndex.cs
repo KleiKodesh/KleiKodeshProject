@@ -114,9 +114,11 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// Smart startup: if a USN cursor exists for every drive, applies only the
         /// delta since the last run (fast — seconds). Falls back to a full MFT
         /// rebuild for any drive whose cursor is missing or stale.
-        /// <paramref name="progress"/> receives a status string at each milestone.
+        /// <paramref name="progress"/> receives a status string at each milestone;
+        /// <paramref name="fullCrawlReason"/> says, per drive, why it was crawled in full.
         /// </summary>
-        public void Build(Action<string> progress = null, CancellationToken ct = default)
+        public void Build(Action<string> progress = null, CancellationToken ct = default,
+                          Action<string> fullCrawlReason = null)
         {
             var drives = LocalFileIndexMftCrawler.GetNtfsDrives();
             if (drives.Count == 0)
@@ -162,6 +164,11 @@ namespace KitveiHakodesh.Core.LocalFiles
                     }
 
                     progress?.Invoke($"{letter}: journal cursor stale, rebuilding…");
+                    fullCrawlReason?.Invoke($"{letter}: journal cursor stale or unreadable");
+                }
+                else
+                {
+                    fullCrawlReason?.Invoke($"{letter}: no saved journal cursor (first build, or an earlier run had no journal access)");
                 }
                 // Full rebuild for this drive: MFT crawl with automatic fallback to
                 // a recursive directory walk when the MFT is blocked or yields nothing.

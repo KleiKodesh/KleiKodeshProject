@@ -82,4 +82,8 @@ public sealed class CatalogTocStatus
     public int BuiltBooks { get; set; }
     public int TotalBooks { get; set; }
     public bool DbMissing { get; set; }
+
+    /// <summary>Why the index last started building, and when; null if it never has in this
+    /// process.</summary>
+    public KitveiHakodesh.Core.Common.IndexBuildReason? BuildReason { get; set; }
 }

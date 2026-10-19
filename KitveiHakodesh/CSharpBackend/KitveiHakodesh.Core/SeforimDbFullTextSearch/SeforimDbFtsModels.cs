@@ -145,6 +145,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// an ETA.</summary>
         public int MergePassesDone { get; set; }
         public int MergePassesExpected { get; set; }
+
+        /// <summary>Why the index last started building, and when; null if it never has in
+        /// this process.</summary>
+        public KitveiHakodesh.Core.Common.IndexBuildReason? BuildReason { get; set; }
     }
 
     /// <summary>FTS result set. <c>Ready</c> is false while the index is still building.</summary>
