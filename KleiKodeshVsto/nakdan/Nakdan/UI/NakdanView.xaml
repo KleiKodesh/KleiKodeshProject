@@ -144,6 +144,54 @@
             </Popup>
 
             <!-- ─────────────────────────────────────────────────
+                 NIKUD SUGGESTIONS — alternatives for the selected word
+            ───────────────────────────────────────────────── -->
+            <ToggleButton Style="{StaticResource CheckedToggle}"
+                          IsChecked="{Binding SuggestionsEnabled, Mode=TwoWay}"
+                          Content="{Binding SuggestionsToggleText}"
+                          Height="28"
+                          Padding="8,0"
+                          FontSize="12"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,12,0,4"/>
+            <TextBlock Text="כשמופעל, בחירת מילה במסמך תציג כאן אפשרויות ניקוד חלופיות. לחיצה על אפשרות תחליף את המילה."
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource TextSecBrush}"
+                       Margin="0,0,0,6"/>
+
+            <StackPanel Visibility="{Binding SuggestionsEnabled, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding SuggestionsStatus}"
+                           Visibility="{Binding HasSuggestionsStatus, Converter={StaticResource BoolToVis}}"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecBrush}"
+                           Margin="0,0,0,6"/>
+                <ItemsControl ItemsSource="{Binding WordOptions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel FlowDirection="RightToLeft"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding}"
+                                    Command="{Binding DataContext.ApplyWordOptionCommand,
+                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    FontFamily="David, Times New Roman"
+                                    FontSize="18"
+                                    FlowDirection="RightToLeft"
+                                    Padding="10,2"
+                                    Margin="0,0,6,6"
+                                    Cursor="Hand"
+                                    ToolTip="החלף את המילה בניקוד זה"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- ─────────────────────────────────────────────────
                  STATUS / BUSY BLOCK — always visible at bottom
                  Label on top, status area below.
                  When inactive: dimmed with prompt text.
