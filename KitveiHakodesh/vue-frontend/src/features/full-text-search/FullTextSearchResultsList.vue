@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onUpdated, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -82,18 +82,50 @@ const { width: contentWidth } = useElementSize(measureEl)
 /** Average advance of a Hebrew text glyph (letters + spaces), in em. */
 const AVG_CHAR_EM = 0.5
 const MAX_PLACEHOLDER_LINES = 4 // the .snippet clamp
+/**
+ * Raw descriptor chars per rendered line, measured from filled snippets at the
+ * current width and font. The raw window counts tags and markers the rendered text
+ * drops, so the em estimate alone over-counts lines on most rows; this ratio
+ * absorbs both. Reset on every width / font change and re-measured from the next
+ * render that has enough filled, unclamped snippets on screen.
+ */
+const calibratedCharsPerLine = ref<number | null>(null)
+watch([contentWidth, fontPx], () => { calibratedCharsPerLine.value = null })
+const MIN_CALIBRATION_SAMPLES = 3
+function calibrateCharsPerLine() {
+  if (calibratedCharsPerLine.value != null || !scrollEl.value) return
+  let rawTotal = 0
+  let lineTotal = 0
+  let samples = 0
+  for (const el of scrollEl.value.querySelectorAll<HTMLElement>('.snippet[data-raw-chars]')) {
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight)
+    if (!lineHeight) continue
+    const lines = Math.round(el.scrollHeight / lineHeight)
+    if (lines < 1 || lines > MAX_PLACEHOLDER_LINES) continue // clamped rows hide their real length
+    // A row of n lines holds between n-1 and n lines' worth of chars: count it as n - 0.5.
+    rawTotal += Number(el.dataset.rawChars)
+    lineTotal += lines - 0.5
+    samples++
+  }
+  if (samples >= MIN_CALIBRATION_SAMPLES && rawTotal > 0) calibratedCharsPerLine.value = rawTotal / lineTotal
+}
+onUpdated(calibrateCharsPerLine)
 const charsPerLine = computed(() => {
+  if (calibratedCharsPerLine.value != null) return Math.max(10, calibratedCharsPerLine.value)
   const width = contentWidth.value
   if (!width) return 60
   return Math.max(10, Math.floor(width / (fontPx.value * AVG_CHAR_EM)))
 })
+function rawSnippetChars(hit: FullTextSearchResult): number {
+  return Math.max(1, (hit.snippetEnd ?? 0) - (hit.snippetStart ?? 0))
+}
 /**
  * Widths (as CSS percentages) of the placeholder bars for a hit: full bars for the whole
  * lines, and a shorter last bar sized by the remainder — never narrower than a fifth
  * of the row, never a hairline. A one-line snippet gets its own short bar.
  */
 function placeholderBars(hit: FullTextSearchResult): string[] {
-  const chars = Math.max(1, (hit.snippetEnd ?? 0) - (hit.snippetStart ?? 0))
+  const chars = rawSnippetChars(hit)
   const perLine = charsPerLine.value
   const lines = Math.min(MAX_PLACEHOLDER_LINES, Math.max(1, Math.ceil(chars / perLine)))
   const bars: string[] = []
@@ -627,7 +659,7 @@ defineExpose({
                 :reseed="() => reseedPreview(results[vRow.index]!)"
               />
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
+              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :data-raw-chars="rawSnippetChars(results[vRow.index]!)" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
               <div v-else class="snippet-placeholder">
                 <div
                   v-for="(barWidth, barIndex) in placeholderBars(results[vRow.index]!)"
