@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { onLongPress } from '@vueuse/core'
 import { IconArrowRight20Regular, IconArrowLeft20Regular } from '@iconify-prerendered/vue-fluent'
 import { useAppShellPane } from '@/composables/useAppShellPane'
@@ -40,7 +41,7 @@ const listItems = computed(() => {
     const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
     return {
       index,
-      label: entry.tocPath ? entry.title + ' · ' + entry.tocPath : entry.title,
+      label: entry.tocPath ? catalogBookTitle(entry) + ' · ' + entry.tocPath : catalogBookTitle(entry),
       iconComponent: icon.icon20,
       iconColor: icon.color,
     }

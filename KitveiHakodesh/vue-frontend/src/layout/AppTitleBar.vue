@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent, watch, nextTick } from 'vue'
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { useResizeObserver } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
@@ -102,6 +103,8 @@ const navBtnRef = ref<HTMLElement | null>(null)
 // bookViewStore.isBookViewActive and isTxtViewActive read from tabStore.activeTab (pane 1).
 // For pane 2 we compute these directly from the pane's active tab.
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
+/** Catalog title for a catalog book, the stored title otherwise (see catalogBookTitle). */
+const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(activeTab.value) : ''))
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
 // A click always enters search mode; the address-bar dropdown lists recent
@@ -110,8 +113,8 @@ const barTitleHint = 'לחץ לניווט מהיר ולמקומות אחרוני
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
-    ? activeTab.value.title + ' · ' + activeTab.value.tocPath
-    : activeTab.value?.title
+    ? activeTabTitle.value + ' · ' + activeTab.value.tocPath
+    : activeTabTitle.value
   return full ? full + '\n' + barTitleHint : barTitleHint
 })
 
@@ -375,7 +378,7 @@ useAppTitleBarShortcuts({
       <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
       <AppTitleBarTocBreadcrumb
         v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
-        :book-title="activeTab?.title ?? ''"
+        :book-title="activeTabTitle"
         :segments="tocBreadcrumbSegments"
         :root-toc-entries="tocBreadcrumbRootTocEntries"
         :root-pdf-entries="tocBreadcrumbRootPdfEntries"
@@ -386,7 +389,7 @@ useAppTitleBarShortcuts({
            bridge has not registered yet. plainSegmentLabels is route-gated by the
            composable, so a non-TOC route never renders one. -->
       <template v-else>
-        <span class="bar-title-name">{{ activeTab?.title }}</span>
+        <span class="bar-title-name">{{ activeTabTitle }}</span>
         <template v-for="segment in tocBreadcrumbPlainLabels" :key="segment">
           <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
           <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
