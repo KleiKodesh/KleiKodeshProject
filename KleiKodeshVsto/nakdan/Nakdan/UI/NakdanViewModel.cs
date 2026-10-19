@@ -6,9 +6,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Word = Microsoft.Office.Interop.Word;
 using WpfLib.ViewModels;
 
 namespace Nakdan.UI
@@ -74,6 +76,11 @@ namespace Nakdan.UI
             RemoveNikkudAndCantillationsCommand = new RelayCommand(RemoveNikkudAndCantillations, () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
+
+            // ── Nikud suggestions ─────────────────────────────────
+            WordOptions = new ObservableCollection<string>();
+            _suggestionsEnabled = SettingsManager.GetBool("Nakdan", "SuggestionsEnabled", false);
+            ApplyWordOptionCommand   = new RelayCommand<string>(ApplyWordOption);
         }
 
         // ── Bindable properties ────────────────────────────────
@@ -149,6 +156,7 @@ namespace Nakdan.UI
         public ICommand RemoveNikkudAndCantillationsCommand { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
+        public ICommand ApplyWordOptionCommand   { get; }
 
         // ── Command implementations ───────────────────────────
         private void VowelizeSelection()
@@ -263,6 +271,237 @@ namespace Nakdan.UI
             await System.Threading.Tasks.Task.Delay(StatusAutoHideDelayMs);
             StatusMessage = string.Empty;
             HasError = false;
+        }
+
+        // ── Nikud suggestions ─────────────────────────────────
+        //  When on and the pane is visible, a settled Word selection of a
+        //  single Hebrew word fetches Dicta's alternative vocalizations for it
+        //  (in its sentence context); clicking one replaces the word.
+
+        private readonly DictaApiClient _suggestionsApi = new DictaApiClient();
+        private bool   _suggestionsEnabled;
+        private string _suggestionsStatus;
+        private bool   _selectionSubscribed;
+        private bool   _suppressSelectionChange;
+        private DispatcherTimer _selectionDebounce;
+        private CancellationTokenSource _suggestionsCts;
+        private Word.Range _suggestionRange;
+        private string     _suggestionWord;
+
+        public ObservableCollection<string> WordOptions { get; }
+
+        /// <summary>
+        /// False while the pane is hidden or torn down (the view flips it from
+        /// IsVisibleChanged / Unloaded), so a hidden pane costs one bool check
+        /// per selection change.
+        /// </summary>
+        public bool Live { get; set; }
+
+        public bool SuggestionsEnabled
+        {
+            get => _suggestionsEnabled;
+            set
+            {
+                if (_suggestionsEnabled == value) return;
+                _suggestionsEnabled = value;
+                OnPropertyChanged(nameof(SuggestionsEnabled));
+                OnPropertyChanged(nameof(SuggestionsToggleText));
+                SettingsManager.Save("Nakdan", "SuggestionsEnabled", value);
+                ResetSuggestions(string.Empty);
+                if (value)
+                {
+                    AttachSelection();
+                    ScheduleSuggestionsUpdate();
+                }
+            }
+        }
+
+        public string SuggestionsToggleText =>
+            _suggestionsEnabled ? "כבה הצעות ניקוד" : "הפעל הצעות ניקוד";
+
+        public string SuggestionsStatus
+        {
+            get => _suggestionsStatus;
+            private set
+            {
+                _suggestionsStatus = value;
+                OnPropertyChanged(nameof(SuggestionsStatus));
+                OnPropertyChanged(nameof(HasSuggestionsStatus));
+            }
+        }
+        public bool HasSuggestionsStatus => !string.IsNullOrEmpty(_suggestionsStatus);
+
+        /// <summary>
+        /// Subscribes to Application.WindowSelectionChange, once (covers
+        /// document switches). Called from the view's Loaded.
+        /// </summary>
+        public void AttachSelection()
+        {
+            if (_selectionSubscribed || VstoHelper.Application == null) return;
+            try
+            {
+                VstoHelper.Application.WindowSelectionChange += _ =>
+                {
+                    if (_suppressSelectionChange) return;
+                    if (Live && _suggestionsEnabled) ScheduleSuggestionsUpdate();
+                };
+                _selectionSubscribed = true;
+            }
+            catch { }
+        }
+
+        /// <summary>Coalesces a burst of selection changes into one fetch.</summary>
+        public void ScheduleSuggestionsUpdate()
+        {
+            if (_selectionDebounce == null)
+            {
+                _selectionDebounce = new DispatcherTimer(DispatcherPriority.Background)
+                {
+                    Interval = TimeSpan.FromMilliseconds(300)
+                };
+                _selectionDebounce.Tick += (_, __) =>
+                {
+                    _selectionDebounce.Stop();
+                    if (Live && _suggestionsEnabled) UpdateSuggestionsAsync();
+                };
+            }
+            _selectionDebounce.Stop();
+            _selectionDebounce.Start();
+        }
+
+        private void ResetSuggestions(string status)
+        {
+            _suggestionsCts?.Cancel();
+            _suggestionsCts = null;
+            _suggestionRange = null;
+            _suggestionWord = null;
+            WordOptions.Clear();
+            SuggestionsStatus = status;
+        }
+
+        private static bool IsHebrewLetter(char c) => c >= 'א' && c <= 'ת';
+
+        private static bool IsWordChar(char c) =>
+            char.IsLetter(c) || (c >= '֑' && c <= 'ׇ') || c == '"' || c == '\'' || c == '׳' || c == '״';
+
+        private async void UpdateSuggestionsAsync()
+        {
+            Word.Range wordRange;
+            string word, context;
+            int offset;
+            try
+            {
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) { ResetSuggestions(string.Empty); return; }
+
+                wordRange = sel.Range.Duplicate;
+                wordRange.Expand(Word.WdUnits.wdWord);
+
+                // Trim leading/trailing spaces and punctuation.
+                string text = wordRange.Text ?? string.Empty;
+                int lead = 0, trail = 0;
+                while (lead < text.Length && !IsWordChar(text[lead])) lead++;
+                while (trail < text.Length - lead && !IsWordChar(text[text.Length - 1 - trail])) trail++;
+                if (lead + trail >= text.Length) { ResetSuggestions(string.Empty); return; }
+                wordRange.SetRange(wordRange.Start + lead, wordRange.End - trail);
+                word = wordRange.Text ?? string.Empty;
+
+                // Skip multi-word selections and non-Hebrew words.
+                bool hasHebrew = false;
+                foreach (char c in word)
+                {
+                    if (char.IsWhiteSpace(c)) { ResetSuggestions(string.Empty); return; }
+                    if (IsHebrewLetter(c)) hasHebrew = true;
+                }
+                if (!hasHebrew) { ResetSuggestions(string.Empty); return; }
+
+                // Same word as last time — keep the current list.
+                if (_suggestionRange != null && word == _suggestionWord
+                    && _suggestionRange.Start == wordRange.Start && _suggestionRange.End == wordRange.End)
+                    return;
+
+                // Context = containing sentence, capped around the word.
+                Word.Range sentence = wordRange.Sentences[1];
+                int ctxStart = sentence.Start, ctxEnd = sentence.End;
+                const int MaxContext = 300;
+                if (ctxEnd - ctxStart > MaxContext)
+                {
+                    int half = Math.Max(0, (MaxContext - word.Length) / 2);
+                    ctxStart = Math.Max(ctxStart, wordRange.Start - half);
+                    ctxEnd = Math.Min(ctxEnd, ctxStart + MaxContext);
+                    if (ctxEnd < wordRange.End) ctxEnd = wordRange.End;
+                }
+                Word.Document doc = wordRange.Document;
+                context = doc.Range(ctxStart, ctxEnd).Text ?? string.Empty;
+
+                // Range character counts can diverge from string length (fields,
+                // hidden marks), so locate the word near its expected index.
+                string before = doc.Range(ctxStart, wordRange.Start).Text ?? string.Empty;
+                offset = context.IndexOf(word, Math.Min(before.Length, context.Length), StringComparison.Ordinal);
+                if (offset < 0) offset = context.IndexOf(word, StringComparison.Ordinal);
+                if (offset < 0) { context = word; offset = 0; }
+            }
+            catch
+            {
+                ResetSuggestions(string.Empty);
+                return;
+            }
+
+            ResetSuggestions("טוען הצעות…");
+            _suggestionRange = wordRange;
+            _suggestionWord = word;
+            var cts = new CancellationTokenSource();
+            _suggestionsCts = cts;
+            string genre = (_selectedGenre?.Genre ?? DictaGenre.Modern).ToString().ToLowerInvariant();
+
+            try
+            {
+                List<string> options = await _suggestionsApi.GetWordOptionsAsync(context, offset, genre, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                foreach (string o in options) WordOptions.Add(o);
+                SuggestionsStatus = options.Count == 0 ? "אין הצעות למילה זו" : string.Empty;
+            }
+            catch (Exception)
+            {
+                if (cts.IsCancellationRequested) return;
+                SuggestionsStatus = "לא ניתן לטעון הצעות (בדוק חיבור לאינטרנט)";
+            }
+        }
+
+        private void ApplyWordOption(string option)
+        {
+            if (string.IsNullOrEmpty(option) || _suggestionRange == null) return;
+            Word.Range range = _suggestionRange;
+            Word.UndoRecord undo = null;
+            bool started = false;
+            _suppressSelectionChange = true;
+            try
+            {
+                if (range.Text != _suggestionWord)
+                {
+                    ResetSuggestions("המילה השתנתה — בחר אותה שוב");
+                    return;
+                }
+                undo = VstoHelper.Application.UndoRecord;
+                undo.StartCustomRecord("הצעת ניקוד");
+                started = true;
+                range.Text = option;
+                _suggestionWord = option;
+            }
+            catch
+            {
+                SuggestionsStatus = "ההחלפה נכשלה";
+            }
+            finally
+            {
+                if (started)
+                    try { undo.EndCustomRecord(); } catch { }
+                // Let the selection change raised by the edit drain before re-arming.
+                Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
+                {
+                    _suppressSelectionChange = false;
+                }), DispatcherPriority.Background);
+            }
         }
 
         // ── Helpers ───────────────────────────────────────────

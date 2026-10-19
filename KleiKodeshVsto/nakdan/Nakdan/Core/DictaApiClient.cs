@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -30,7 +31,67 @@ namespace Nakdan.Core
             if (string.IsNullOrWhiteSpace(text))
                 return text;
 
-            var payload = new
+            var payload = BuildPayload(text, genre);
+
+            JsonArray data = await PostNakdanAsync(payload, cancellationToken);
+            return ExtractNiqqud(data);
+        }
+
+        /// <summary>
+        /// Returns the alternative vocalizations Dicta offers for the token that
+        /// covers <paramref name="offset"/> in <paramref name="context"/>, in
+        /// Dicta's order, de-duplicated (first wins), capped at 10.
+        /// </summary>
+        public async Task<List<string>> GetWordOptionsAsync(
+            string context,
+            int offset,
+            string genre = "modern",
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(context) || offset < 0 || offset >= context.Length)
+                return result;
+
+            JsonArray data = await PostNakdanAsync(BuildPayload(context, genre), cancellationToken);
+
+            int pos = 0;
+            foreach (JsonNode item in data)
+            {
+                if (!(item is JsonObject itemObj))
+                    continue;
+
+                string str = itemObj["str"]?.GetValue<string>() ?? string.Empty;
+                int start = pos;
+                pos += str.Length;
+                if (offset < start || offset >= pos)
+                    continue;
+
+                JsonArray optionsArr = (itemObj["nakdan"] as JsonObject)?["options"] as JsonArray;
+                if (optionsArr == null)
+                    return result;
+
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (JsonNode opt in optionsArr)
+                {
+                    string w = (opt as JsonObject)?["w"]?.GetValue<string>();
+                    if (string.IsNullOrEmpty(w))
+                        continue;
+                    w = w.Replace("|", "").Replace("ֽ", "");
+                    if (w.Length == 0 || !seen.Add(w))
+                        continue;
+                    result.Add(w);
+                    if (result.Count >= 10)
+                        break;
+                }
+                return result;
+            }
+
+            return result;
+        }
+
+        private static object BuildPayload(string text, string genre)
+        {
+            return new
             {
                 task = "nakdan",
                 data = text,
@@ -44,7 +105,16 @@ namespace Nakdan.Core
                 matchpartial = true,
                 userData = "gave permission"
             };
+        }
 
+        /// <summary>
+        /// POSTs the payload to each Dicta endpoint in turn; returns the response's
+        /// "data" array from the first that succeeds.
+        /// </summary>
+        private async Task<JsonArray> PostNakdanAsync(
+            object payload,
+            CancellationToken cancellationToken)
+        {
             string body = JsonSerializer.Serialize(payload);
             Exception lastError = null;
             bool isNetworkError = false;
@@ -80,7 +150,7 @@ namespace Nakdan.Core
                         throw new InvalidOperationException(
                             $"Expected 'data' field to be an array, got {dataNode?.GetType().Name ?? "null"}");
 
-                    return ExtractNiqqud(dataArr);
+                    return dataArr;
                 }
                 catch (HttpRequestException ex)
                 {

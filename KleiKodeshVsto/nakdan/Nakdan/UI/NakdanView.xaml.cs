@@ -46,6 +46,21 @@ namespace Nakdan.UI
         {
             Loaded += OnLoaded;
 
+            // Nikud suggestions: the selection hook is live only while the pane
+            // is on screen (the VM also gates on its toggle).
+            IsVisibleChanged += (_, e) =>
+            {
+                if (DataContext is NakdanViewModel vm)
+                {
+                    vm.Live = (bool)e.NewValue;
+                    if (vm.Live && vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
+                }
+            };
+            Unloaded += (_, __) =>
+            {
+                if (DataContext is NakdanViewModel vm) vm.Live = false;
+            };
+
             // Refresh styles when control becomes visible — deferred so it doesn't
             // block the visibility transition itself
             IsVisibleChanged += (_, e) =>
@@ -78,7 +93,12 @@ namespace Nakdan.UI
             Dispatcher.BeginInvoke(new System.Action(() =>
             {
                 if (DataContext is NakdanViewModel vm)
+                {
                     vm.RefreshActiveStylesAction();
+                    vm.Live = IsVisible;
+                    vm.AttachSelection();
+                    if (vm.SuggestionsEnabled) vm.ScheduleSuggestionsUpdate();
+                }
             }), DispatcherPriority.ApplicationIdle);
         }
     }
