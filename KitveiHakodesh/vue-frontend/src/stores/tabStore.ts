@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, nextTick } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
 import { useCoalescedWrite } from '@/composables/useCoalescedWrite'
+import { capturePositionsForTab } from '@/webview-host/persistenceFlush'
 import { tabsListKey } from './workspaceStore'
 import { useWorkspaceStore } from './workspaceStore'
 import {
@@ -653,6 +654,11 @@ export const useTabStore = defineStore('tabs', () => {
    * state destroyed. Recents itself is untouched: the location outlives the tab.
    */
   function disposeClosedTab(id: string) {
+    // The tab's view is still mounted: have it save where the reader is NOW, so the
+    // capture below folds the closing position into the recents row. The view's own
+    // unmount save runs after the tab has left the list, when captureCurrentPosition
+    // can no longer find the tab - on its own it left recents at the previous save.
+    capturePositionsForTab(id)
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
     dropHistory(id)
