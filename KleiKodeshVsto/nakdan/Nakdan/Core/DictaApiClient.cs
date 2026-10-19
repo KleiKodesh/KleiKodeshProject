@@ -14,6 +14,7 @@ namespace Nakdan.Core
     {
         private static readonly string[] DictaEndpoints =
         {
+            "https://nakdan-u2-1a.loadbalancer.dicta.org.il/api",
             "https://nakdan-u1-0.loadbalancer.dicta.org.il/api",
             "https://nakdan-5-1.loadbalancer.dicta.org.il/api"
         };
