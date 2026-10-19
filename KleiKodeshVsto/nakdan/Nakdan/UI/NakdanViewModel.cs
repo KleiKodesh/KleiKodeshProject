@@ -71,6 +71,7 @@ namespace Nakdan.UI
             VowelizeSelectionCommand = new RelayCommand(VowelizeSelection,  () => !IsBusy);
             RemoveNikkudCommand      = new RelayCommand(RemoveNikkud,       () => !IsBusy);
             RemoveCantillationsCommand = new RelayCommand(RemoveCantillations, () => !IsBusy);
+            RemoveNikkudAndCantillationsCommand = new RelayCommand(RemoveNikkudAndCantillations, () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
         }
@@ -145,6 +146,7 @@ namespace Nakdan.UI
         public ICommand VowelizeSelectionCommand { get; }
         public ICommand RemoveNikkudCommand      { get; }
         public ICommand RemoveCantillationsCommand { get; }
+        public ICommand RemoveNikkudAndCantillationsCommand { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
 
@@ -214,6 +216,27 @@ namespace Nakdan.UI
             {
                 _nakdanWrapper.RemoveCantillations();
                 SetStatus("הטעמים הוסרו ✓", false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                IsBusy = false;
+                await AutoHideStatusAsync();
+            }
+        }
+
+        private async void RemoveNikkudAndCantillations()
+        {
+            SetStatus(string.Empty, false);
+            IsBusy = true;
+
+            try
+            {
+                _nakdanWrapper.RemoveNikkudAndCantillations();
+                SetStatus("הניקוד והטעמים הוסרו ✓", false);
             }
             catch (Exception ex)
             {

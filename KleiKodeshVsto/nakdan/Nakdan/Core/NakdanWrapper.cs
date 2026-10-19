@@ -106,12 +106,41 @@ namespace Nakdan.Core
             find.Execute(Replace: Word.WdReplace.wdReplaceAll);
 
             // Build a range string with the actual first and last cantillation characters
-            // U+0591 (Etnahta) through U+05AF (Masora Circle)
+            // U+0591 (Etnahta) through U+05AF (Masora Circle), plus meteg U+05BD
             string first = "\u0591";
             string last = "\u05AF";
-            find.Text = "[" + first + "-" + last + "׀]";
+            find.Text = "[" + first + "-" + last + "\u05BD׀]";
             find.Replacement.Text = "";
             find.Execute(Replace: Word.WdReplace.wdReplaceAll);         
+        }
+
+        // ════════════════════════════════════════════════════════
+        //  Remove nikkud AND cantillations from current selection
+        //  in one character-class pass
+        // ════════════════════════════════════════════════════════
+        public void RemoveNikkudAndCantillations()
+        {
+            Word.Selection selection = Helpers.VstoHelper.Application.Selection;
+
+            if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
+                string.IsNullOrWhiteSpace(selection.Range.Text))
+                throw new InvalidOperationException(
+                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הניקוד והטעמים.");
+
+            var find = selection.Range.Find;
+            find.MatchWildcards = true;
+            find.Wrap = Word.WdFindWrap.wdFindStop;
+
+            // Paseq between thin spaces collapses to one space (same as RemoveCantillations)
+            find.Text = " ׀ ";
+            find.Replacement.Text = " ";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+
+            // U+0591..U+05BD is contiguous: cantillation (0591-05AF) + nikkud (05B0-05BC) + meteg (05BD).
+            // Plus paseq U+05C0 and shin/sin dots U+05C1, U+05C2 (same as RemoveNikkud's ^0209^0210).
+            find.Text = "[\u0591-\u05BD\u05C0\u05C1\u05C2]";
+            find.Replacement.Text = "";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
         }
 
         // ════════════════════════════════════════════════════════
