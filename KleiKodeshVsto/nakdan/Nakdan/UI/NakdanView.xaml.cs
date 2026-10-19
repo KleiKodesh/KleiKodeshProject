@@ -3,6 +3,7 @@ using Nakdan.Helpers;
 using Nakdan.WdStyles;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace Nakdan.UI
@@ -45,6 +46,7 @@ namespace Nakdan.UI
         void SetupStyleRefresh()
         {
             Loaded += OnLoaded;
+            PreviewKeyDown += OnPreviewKeyDown;
 
             // Nikud suggestions: the selection hook is live only while the pane
             // is on screen (the VM also gates on its toggle).
@@ -76,6 +78,17 @@ namespace Nakdan.UI
                         vm.RefreshActiveStylesAction();
                     }), DispatcherPriority.ApplicationIdle);
             };
+        }
+
+        // Ctrl+Left / Ctrl+Right: move the Word selection word by word, like Word.
+        // Pane text inputs keep their own caret behaviour.
+        void OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Left && e.Key != Key.Right) return;
+            if (Keyboard.Modifiers != ModifierKeys.Control) return;
+            if (e.OriginalSource is TextBox || e.OriginalSource is ComboBox) return;
+            if (DataContext is NakdanViewModel vm && vm.MoveToAdjacentWord(e.Key == Key.Right))
+                e.Handled = true;
         }
 
         void OnLoaded(object sender, RoutedEventArgs e)

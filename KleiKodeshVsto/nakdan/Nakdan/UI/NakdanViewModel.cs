@@ -523,12 +523,46 @@ namespace Nakdan.UI
 
 
         /// <summary>The next word after <paramref name="range"/> that holds a letter, trailing spaces trimmed; null at the end.</summary>
-        private static Word.Range FindNextWord(Word.Range range)
+        private static Word.Range FindNextWord(Word.Range range) => FindAdjacentWord(range, true);
+
+        /// <summary>The previous word before <paramref name="range"/> that holds a letter, trailing spaces trimmed; null at the start.</summary>
+        private static Word.Range FindPreviousWord(Word.Range range) => FindAdjacentWord(range, false);
+
+        /// <summary>
+        /// Ctrl+Right / Ctrl+Left from the pane: select the next / previous word in
+        /// Word. Visual like Word — in an RTL paragraph Left is forward. Always on
+        /// (navigation), selecting the word feeds the suggestions hook.
+        /// </summary>
+        public bool MoveToAdjacentWord(bool rightArrow)
+        {
+            try
+            {
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) return false;
+                bool rtl = false;
+                try { rtl = sel.ParagraphFormat.ReadingOrder == Word.WdReadingOrder.wdReadingOrderRtl; } catch { }
+                if (!rtl)
+                    try { rtl = sel.Paragraphs[1].ReadingOrder == Word.WdReadingOrder.wdReadingOrderRtl; } catch { }
+                bool forward = rtl ? !rightArrow : rightArrow;
+                Word.Range target = FindAdjacentWord(sel.Range, forward);
+                if (target == null) return true;
+                target.Select();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static Word.Range FindAdjacentWord(Word.Range range, bool forward)
         {
             Word.Range r = range.Duplicate;
             for (int i = 0; i < 20; i++)
             {
-                Word.Range w = r.Next(Word.WdUnits.wdWord, 1);
+                Word.Range w = forward
+                    ? r.Next(Word.WdUnits.wdWord, 1)
+                    : r.Previous(Word.WdUnits.wdWord, 1);
                 if (w == null) return null;
                 string t = w.Text ?? string.Empty;
                 foreach (char c in t)
