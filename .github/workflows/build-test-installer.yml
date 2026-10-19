@@ -1,0 +1,338 @@
+name: Build test installer (private CI probe)
+
+# Private testing infrastructure for the yrdnyl@9900.co.il fork only.
+# This workflow is NOT part of the upstream multi-library-support PR; it lives on its
+# own branch (ci/build-test-installer) so it never touches the feature branch under
+# review. Its job is to answer, empirically, how far a GitHub-hosted windows-latest
+# runner can get toward producing a real KleiKodesh installer that includes the
+# multi-library-support changes, and — regardless of how far the full build gets —
+# to always build & run the pure .NET console verifier for the new multi-library
+# logic (KitveiHakodeshService.Tests --multilib), which needs no VSTO/Office.
+
+on:
+  push:
+    branches:
+      - ci/build-test-installer
+  workflow_dispatch: {}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: the real thing. Tries to reproduce rebuild-all.ps1 end to end,
+  # including the VSTO add-in (KleiKodeshVsto.csproj) and the WPF installer
+  # (Build/Installer/KleiKodeshVstoInstallerWpf.csproj). KleiKodeshVsto.csproj
+  # references Office/Word PIAs (Microsoft.Office.Interop.Word, Office,
+  # Version=15.0.0.0) via <EmbedInteropTypes> and imports
+  # Microsoft.VisualStudio.Tools.Office.targets (the VSTO SDK). Those PIAs are
+  # normally installed to the GAC by Office itself or by the Visual Studio
+  # "Office/SharePoint development" workload — neither is preinstalled on
+  # windows-latest. This job is allowed to fail (continue-on-error on the build
+  # step) so job 2 still runs and reports results either way.
+  # ---------------------------------------------------------------------------
+  full-installer-build:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Add VS "Office/SharePoint development" workload (VSTO tooling)
+        shell: pwsh
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          # Microsoft.VisualStudio.Tools.Office.targets is present out of the box (it ships
+          # with core MSBuild), but the actual VSTO code-gen/ClickOnce-manifest tooling
+          # (Microsoft.VisualStudio.Tools.Applications.Hosting.dll) only comes with the
+          # "Office/SharePoint development" VS workload, which windows-latest's preinstalled
+          # VS Build Tools does NOT include by default. The image does ship the VS Installer
+          # itself, so the existing install can be modified in place to add it, same as any
+          # other optional workload/component.
+          $vsInstaller = Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" -ErrorAction SilentlyContinue
+          if (-not $vsInstaller) {
+            Write-Host "vs_installer.exe not found — skipping workload add, build will likely fail at VSTO manifest generation."
+          } else {
+            # msbuild.exe lives at <VSInstall>\MSBuild\Current\Bin\MSBuild.exe
+            $vsInstallPath = (Get-Item (Get-Command msbuild).Source).Directory.Parent.Parent.Parent.FullName
+            Write-Host "Modifying VS install at $vsInstallPath to add the Office workload..."
+            Start-Process -FilePath $vsInstaller.FullName -ArgumentList @(
+              "modify",
+              "--installPath", "`"$vsInstallPath`"",
+              "--add", "Microsoft.VisualStudio.Workload.Office",
+              "--quiet", "--norestart", "--wait"
+            ) -Wait -PassThru | Select-Object -ExpandProperty ExitCode | ForEach-Object { Write-Host "vs_installer exit code: $_" }
+          }
+
+      - name: Install Vue frontend dependencies
+        shell: pwsh
+        run: |
+          # KitveiHakodesh.targets' BuildVue target runs `npm run build` straight in the
+          # C# build (no install step of its own) — it assumes node_modules is already
+          # there, true on the maintainer's machine but not on a fresh checkout. Without
+          # this, every project that pulls in KitveiHakodeshDemoApp/KleiKodeshVsto fails
+          # with MSB3073 the moment it tries to build the Vue frontend.
+          npm ci --prefix KitveiHakodesh/vue-frontend
+
+      - name: Report available Office/VSTO components (diagnostic)
+        shell: pwsh
+        run: |
+          Write-Host "---- Looking for VSTO SDK targets ----"
+          Get-ChildItem "C:\Program Files*\Microsoft Visual Studio" -Recurse -Filter "Microsoft.VisualStudio.Tools.Office.targets" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host $_.FullName }
+          Write-Host "---- Looking for Office Interop PIAs in the GAC ----"
+          Get-ChildItem "C:\Windows\assembly" -Recurse -Filter "Microsoft.Office.Interop.Word*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host $_.FullName }
+          Write-Host "(Empty output above means the VSTO workload / Office PIAs are not present on this runner.)"
+
+      - name: Generate FluentChromeTabs CI-only compile stub
+        shell: pwsh
+        run: |
+          # FluentChromeTabs (ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj, referenced
+          # from KitveiHakodeshLib.csproj and the solution) is NOT in this git repository at
+          # all — the root .gitignore says "/ChromeTabs/ — ChromeTabs is its own repository,
+          # not tracked from here". It isn't a submodule either and no clone URL for it is
+          # recorded anywhere in this repo's history, so a from-scratch checkout of ANY
+          # branch (this one, feature/multi-library-support, or master) cannot build
+          # KitveiHakodeshLib, let alone the VSTO add-in or installer, without it.
+          #
+          # This writes a minimal, behavior-free stand-in with matching type/member names
+          # (built from reading ChromeTabsMirror.cs's actual usage) so this diagnostic job
+          # can see past that point — specifically, whether the Office/VSTO PIA question is
+          # ALSO a blocker on this runner. It is never committed to the repository and has
+          # no bearing on whether the real tab strip behaves correctly.
+          New-Item -ItemType Directory -Force -Path "ChromeTabs/FluentChromeTabs" | Out-Null
+
+          @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net48</TargetFramework>
+              <OutputType>Library</OutputType>
+              <UseWindowsForms>true</UseWindowsForms>
+              <Nullable>disable</Nullable>
+              <AssemblyName>FluentChromeTabs</AssemblyName>
+              <RootNamespace>FluentChromeTabs</RootNamespace>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj"
+
+          @'
+          using System;
+          using System.Collections.Generic;
+          using System.Drawing;
+          using System.Windows.Forms;
+
+          namespace FluentChromeTabs
+          {
+              public enum FluentChromeTabsTheme { Light, Dark }
+
+              public class FluentTab
+              {
+                  public object Tag { get; set; }
+                  public string Title { get; set; }
+                  public string ListTitle { get; set; }
+                  public Image Icon { get; set; }
+                  public int Group { get; set; }
+                  public bool Highlighted { get; set; }
+              }
+
+              public class FluentTabEventArgs : EventArgs { public FluentTab Tab { get; set; } }
+              public class FluentTabClosingEventArgs : EventArgs { public FluentTab Tab { get; set; } public bool Cancel { get; set; } }
+              public class NewTabRequestedEventArgs : EventArgs { public bool Cancel { get; set; } public int Group { get; set; } }
+              public class FluentTabGroupEventArgs : EventArgs { public FluentTab Tab { get; set; } public int Group { get; set; } }
+
+              public class FluentChromeTabsForm : Form
+              {
+                  public bool AllowTabDetach { get; set; }
+                  public bool ExitOnLastTabClose { get; set; }
+                  public string TabListOpenTabsHeader { get; set; }
+                  public string MinimizeToolTip { get; set; }
+                  public string MaximizeToolTip { get; set; }
+                  public string RestoreToolTip { get; set; }
+                  public string CloseToolTip { get; set; }
+                  public string CloseTabMenuText { get; set; }
+                  public string CloseOtherTabsMenuText { get; set; }
+                  public string CloseTabsToTheLeftMenuText { get; set; }
+                  public string CloseTabsToTheRightMenuText { get; set; }
+
+                  public int StripHeight { get; set; }
+                  public int TabHeight { get; set; }
+                  public bool ShowTabListButton { get; set; }
+                  public bool StripVisible { get; set; }
+                  public int SelectedTabGroup { get; set; }
+                  public bool SplitStrip { get; set; }
+                  public double SplitRatio { get; set; }
+                  public Color? AccentColor { get; set; }
+                  public Color? SplitDividerColor { get; set; }
+                  public Color CustomThemeColor { get; set; }
+                  public FluentChromeTabsTheme Theme { get; set; }
+
+                  private readonly List<FluentTab> _tabs = new List<FluentTab>();
+                  public IEnumerable<FluentTab> Tabs => _tabs;
+                  public FluentTab SelectedTab { get; set; }
+
+                  public event EventHandler<FluentTabEventArgs> SelectedTabChanged;
+                  public event EventHandler<FluentTabClosingEventArgs> TabClosing;
+                  public event EventHandler<NewTabRequestedEventArgs> NewTabRequested;
+                  public event EventHandler SplitRatioChanged;
+                  public event EventHandler<FluentTabGroupEventArgs> TabDraggedToGroup;
+
+                  public FluentTab AddTab(string title)
+                  {
+                      var tab = new FluentTab { Title = title };
+                      _tabs.Add(tab);
+                      return tab;
+                  }
+
+                  public void CloseTab(FluentTab tab) => _tabs.Remove(tab);
+                  public void ShowTabListMenu(int group, int quickSwitchStep) { }
+                  public void SetSplitDividerPixels(int left, int width) { }
+
+                  protected void RaiseUnused()
+                  {
+                      SelectedTabChanged?.Invoke(this, new FluentTabEventArgs());
+                      TabClosing?.Invoke(this, new FluentTabClosingEventArgs());
+                      NewTabRequested?.Invoke(this, new NewTabRequestedEventArgs());
+                      SplitRatioChanged?.Invoke(this, EventArgs.Empty);
+                      TabDraggedToGroup?.Invoke(this, new FluentTabGroupEventArgs());
+                  }
+              }
+          }
+          '@ | Set-Content "ChromeTabs/FluentChromeTabs/Stub.cs"
+
+          # It's an SDK-style project but isn't in rebuild-all.ps1's $projects list (the
+          # real one lives outside this repo entirely), so its own restore step there never
+          # runs -> NETSDK1004 (missing obj/project.assets.json) the first time MSBuild
+          # tries to build it as a dependency.
+          dotnet restore "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj"
+
+      - name: Restore NuGet packages (VSTO add-in uses packages.config)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          # The old-style (packages.config) projects need the classic nuget.exe, not
+          # `dotnet restore`. Don't guess a bundled-with-VS path (it moves between VS
+          # images/versions) — just grab the real thing.
+          Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "$env:RUNNER_TEMP\nuget.exe"
+
+          # `nuget restore KleiKodeshProject.slnx` puts every package under a single
+          # repo-root .\packages — but these projects don't share one packages folder;
+          # each packages.config's own csproj imports "..\packages\...targets" relative
+          # to ITS OWN directory (sibling .sln files like WebSitesLib's own .sln, or
+          # pre-solution-consolidation history). Restore each packages.config into the
+          # specific "..\packages" folder its project actually references, instead of
+          # one shared location nothing points at.
+          Get-ChildItem -Recurse -Filter "packages.config" | ForEach-Object {
+            $projectDir = $_.Directory.FullName
+            $packagesDir = Join-Path (Split-Path $projectDir -Parent) "packages"
+            Write-Host "Restoring $($_.FullName) -> $packagesDir"
+            & "$env:RUNNER_TEMP\nuget.exe" restore $_.FullName -PackagesDirectory $packagesDir -NonInteractive 2>&1 | Write-Host
+          }
+
+      - name: Attempt full rebuild (rebuild-all.ps1, Release only)
+        id: rebuild
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          # rebuild-all.ps1 hardcodes the VS2022-era MSBuild path on the author's machine;
+          # point it at whatever MSBuild setup-msbuild just put on PATH instead. Also pass
+          # MSBuildPath=<same path> on every invocation: Build/Installer/*.csproj's
+          # ResolveVstoPackPaths target re-detects MSBuild itself by probing a short list of
+          # VS18/VS2022 install paths and leaves $(MSBuildPath) empty (-> exit 9009) on any
+          # other VS image/version; pre-setting the property short-circuits those Condition
+          # checks since they only fire when it's still blank.
+          $msbuildPath = (Get-Command msbuild).Source
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"'), ('"' + $msbuildPath + '"') |
+            Set-Content rebuild-all.ps1
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('/p:Configuration=$config'), '/p:Configuration=$config /p:MSBuildPath="$msbuild" /p:SignManifests=false' |
+            Set-Content rebuild-all.ps1
+          # KleiKodeshVsto.csproj (SignManifests=true, ManifestCertificateThumbprint=...)
+          # signs its ClickOnce/VSTO manifest with a specific cert whose PRIVATE KEY
+          # (KleiKodesh_TemporaryKey.pfx) is -- correctly -- not committed to git, so no
+          # runner can ever have it without the maintainer supplying it as a secret. This
+          # produces an unsigned build purely so CI can verify the add-in and installer
+          # actually compile; it is not a substitute for a real signed release build.
+          # rebuild-all.ps1 deletes every bin/obj folder in the repo as its very first step,
+          # which wipes out the restore we already did for the FluentChromeTabs stub (it's
+          # SDK-style but, being outside this repo in the real world, isn't itself in
+          # $projects, so it never gets re-restored by the script's own SDK-restore loop).
+          # Add it to $projects so that loop picks it up and restores it again after the clean.
+          (Get-Content rebuild-all.ps1) -replace [regex]::Escape('"WpfLib/WpfLib.csproj",'), '"WpfLib/WpfLib.csproj", "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj",' |
+            Set-Content rebuild-all.ps1
+          ./rebuild-all.ps1 -Release
+          "exitcode=$LASTEXITCODE" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Collect whatever build output exists
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact-staging | Out-Null
+          $candidates = @(
+            "Build\Installer\bin\Release",
+            "Build\Installer\bin\Release-x64",
+            "Build\Installer\bin\Release-x86",
+            "KleiKodeshVsto\bin\Release",
+            "KleiKodeshVsto\publish"
+          )
+          foreach ($c in $candidates) {
+            if (Test-Path $c) {
+              $dest = Join-Path "artifact-staging" ($c -replace '[\\/]', '_')
+              Copy-Item $c $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          "Staged paths:"
+          Get-ChildItem artifact-staging -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+
+      - name: Upload installer/build output (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-installer-build-output
+          path: artifact-staging/**
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Job 2: the always-works fallback. KitveiHakodeshService, KitveiHakodesh.Core
+  # and KitveiHakodeshService.Tests are plain SDK-style net10.0-windows console
+  # projects with no Office/VSTO dependency at all, so this builds and runs with
+  # nothing but the .NET SDK. --multilib runs MultiLibraryVerify, the empirical
+  # check for the actual multi-library-support logic from PR #309.
+  # ---------------------------------------------------------------------------
+  core-multilib-verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj
+
+      - name: Build (Release)
+        run: dotnet build KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj -c Release --no-restore
+
+      - name: Run multi-library verification
+        id: multilib
+        run: dotnet run --project KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj -c Release --no-build -- --multilib
+
+      - name: Upload test build output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-multilib-verify-output
+          path: |
+            KitveiHakodesh/CSharpBackend/KitveiHakodeshService.Tests/bin/Release/**
+            KitveiHakodesh/CSharpBackend/KitveiHakodeshService/bin/Release/**
+          if-no-files-found: warn
+          retention-days: 14

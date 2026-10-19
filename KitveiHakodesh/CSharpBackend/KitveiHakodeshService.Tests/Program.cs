@@ -29,6 +29,7 @@ bool benchMode = false;
 bool watcherMode = false;
 bool variantMode = false;
 bool abbrevMode = false;
+bool multiLibMode = false;
 var ktivSimQueries = new List<string>();
 for (int i = 0; i < args.Length; i++)
 {
@@ -44,6 +45,7 @@ for (int i = 0; i < args.Length; i++)
         case "--watcher": watcherMode = true; break;
         case "--variant": variantMode = true; break;
         case "--abbrev": abbrevMode = true; break;
+        case "--multilib": multiLibMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
     }
 }
@@ -66,6 +68,8 @@ if (variantMode)
     // Normalised to 0/1 like the line above: Run() returns a failure COUNT, and an
     // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
     return VariantVerify.Run() == 0 ? 0 : 1;
+if (multiLibMode)
+    return MultiLibraryVerify.Run() == 0 ? 0 : 1;
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))
