@@ -12,6 +12,7 @@ import { shallowRef } from 'vue'
 import { useOtzariaAddinBridge } from './useOtzariaAddinBridge'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
+import MessageBanner from '@/components/MessageBanner.vue'
 
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
