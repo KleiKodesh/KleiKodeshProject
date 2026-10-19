@@ -3,7 +3,10 @@ using KitveiHakodesh.Core.Settings;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace KitveiHakodeshLib
 {
@@ -40,6 +43,9 @@ namespace KitveiHakodeshLib
         // icon vocabulary; needed to re-stamp every tab when the set is resent on a DPI
         // change.
         private readonly Dictionary<string, string> _iconKeyByTabId = new Dictionary<string, string>();
+
+        // Last snapshot applied from Vue — what SaveSession writes for the next launch.
+        private TabsStateChangedEventArgs _lastState;
 
         public ChromeTabsMirror(FluentChromeTabsForm form, AppViewer viewer)
         {
@@ -206,6 +212,7 @@ namespace KitveiHakodeshLib
         {
             if (_form.IsDisposed) return;
 
+            _lastState = e;
             _syncing = true;
             try
             {
@@ -292,6 +299,99 @@ namespace KitveiHakodeshLib
             {
                 _syncing = false;
             }
+        }
+
+        // ── Session: last tabs shown again at startup ───────────────────────────────
+        //
+        // The strip is otherwise empty until WebView2 and Vue are up. The last snapshot
+        // (and the favicons) are saved on close and applied at startup as a stand-in;
+        // Vue's first real snapshot then reconciles over it by tab id.
+
+        private sealed class SessionTab
+        {
+            public string Id { get; set; }
+            public string Title { get; set; }
+            public string ListTitle { get; set; }
+            public string IconKey { get; set; }
+            public int Pane { get; set; }
+        }
+
+        private sealed class Session
+        {
+            public List<SessionTab> Tabs { get; set; }
+            public string ActiveTabId { get; set; }
+            public string Pane2ActiveTabId { get; set; }
+            public bool SplitView { get; set; }
+            public int FocusedPane { get; set; }
+            public double SplitFraction { get; set; }
+            public Dictionary<string, string> IconsPngBase64 { get; set; }
+        }
+
+        public void SaveSession(string path)
+        {
+            TabsStateChangedEventArgs s = _lastState;
+            if (s == null) return;
+            try
+            {
+                var session = new Session
+                {
+                    Tabs = s.Tabs.Select(t => new SessionTab
+                    {
+                        Id = t.Id, Title = t.Title, ListTitle = t.ListTitle, IconKey = t.IconKey, Pane = t.Pane,
+                    }).ToList(),
+                    ActiveTabId = s.ActiveTabId,
+                    Pane2ActiveTabId = s.Pane2ActiveTabId,
+                    SplitView = s.SplitView,
+                    FocusedPane = s.FocusedPane,
+                    SplitFraction = s.SplitFraction,
+                    IconsPngBase64 = new Dictionary<string, string>(),
+                };
+                foreach (var pair in _tabIcons)
+                    using (var ms = new MemoryStream())
+                    {
+                        pair.Value.Save(ms, ImageFormat.Png);
+                        session.IconsPngBase64[pair.Key] = Convert.ToBase64String(ms.ToArray());
+                    }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, JsonSerializer.Serialize(session));
+            }
+            catch (Exception) { /* a missing session only means an empty strip at startup */ }
+        }
+
+        public void RestoreSession(string path)
+        {
+            Session session;
+            try
+            {
+                if (!File.Exists(path)) return;
+                session = JsonSerializer.Deserialize<Session>(File.ReadAllText(path));
+            }
+            catch (Exception) { return; }
+            if (session?.Tabs == null || session.Tabs.Count == 0) return;
+
+            if (session.IconsPngBase64 != null)
+            {
+                var icons = new Dictionary<string, Image>();
+                foreach (var pair in session.IconsPngBase64)
+                {
+                    try { icons[pair.Key] = Image.FromStream(new MemoryStream(Convert.FromBase64String(pair.Value))); }
+                    catch (Exception) { }
+                }
+                _tabIcons = icons;
+            }
+
+            Reconcile(new TabsStateChangedEventArgs(
+                session.Tabs.Select(t => new MirroredTabInfo
+                {
+                    Id = t.Id, Title = t.Title, ListTitle = t.ListTitle, IconKey = t.IconKey, Pane = t.Pane,
+                }).ToList(),
+                session.ActiveTabId,
+                session.Pane2ActiveTabId,
+                session.SplitView,
+                session.FocusedPane,
+                session.SplitFraction,
+                -1, 0));
         }
 
         // ── Theme ───────────────────────────────────────────────────────────────────

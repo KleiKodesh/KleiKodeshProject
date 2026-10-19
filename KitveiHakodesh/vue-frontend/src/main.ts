@@ -16,6 +16,7 @@ import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
 import { installBrowserPersistenceFlush, installHostPersistenceFlush } from './webview-host/persistenceFlush'
+import { whenStartupContentDrawn } from './webview-host/serviceIdle'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -88,6 +89,11 @@ if (hasHostBridge) {
   // asks for every pending persistence write first (AppViewer.FlushPersistenceAsync).
   installHostPersistenceFlush()
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
+  // The desktop host keeps its last-session snapshot up until this: hiding it on
+  // 'appReady' would show the restored view empty while its content is still loading.
+  void whenStartupContentDrawn().then(() =>
+    window.chrome?.webview?.postMessage({ id: '0', action: 'contentReady' }),
+  )
 }
 
 // DEV-only test hook: lets the Playwright rigs open a local file and inspect

@@ -60,7 +60,9 @@ namespace KitveiHakodeshLib
                 _firstNavigationSettled = true;
                 // Hide the splash regardless of success — a failed navigation still shows the
                 // WebView error page, which is more useful than an infinite splash screen.
-                _HideSplash();
+                // A snapshot stays up until the page reports its content drawn
+                // ('contentReady'): hiding it earlier shows the restored view empty, then refilled.
+                if (!_snapshotSplash) _HideSplash();
                 // Put OS focus on the web content on first load so trackpad/keyboard gestures
                 // (e.g. swipe-to-switch-tab) work immediately without the user clicking the page.
                 FocusWebContent();
