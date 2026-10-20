@@ -36,7 +36,7 @@ namespace FtsLib.Search
         //
         // Sources: standard Biblical/Rabbinic Hebrew grammar.
         //   Single:   ו ב כ ל מ ש ה + ד for aramaic
-        //   Double:   וב וכ ול ום וש וה מה שה לה כש מש לכ
+        //   Double:   וב וכ ול ומ וש וה מה שה לה כש מש לכ
         //   Triple:   ובש ולש וכש ומש ולכ ומה ושה ולה וכה מהש לכש
         //   Quad:     ולכש ומהש ובשה
         //
@@ -65,7 +65,7 @@ namespace FtsLib.Search
             "\u05D5\u05D1",               // וב
             "\u05D5\u05DB",               // וכ
             "\u05D5\u05DC",               // ול
-            "\u05D5\u05DE",               // ום
+            "\u05D5\u05DE",               // ומ
             "\u05D5\u05E9",               // וש
             "\u05D5\u05D4",               // וה
             "\u05DE\u05D4",               // מה

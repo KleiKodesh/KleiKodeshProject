@@ -198,7 +198,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// (same text, same line) are no longer indexed; line-less alt parents take their first
     /// child's line; a numeral after a counter word (perek mb) is no longer expanded as an
     /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
-    public const string IndexFormatVersion = "v22";
+    // v23: root TOC entries are stripped only when they add no word beyond the title.
+    public const string IndexFormatVersion = "v23";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -697,7 +698,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         if (string.IsNullOrEmpty(bookTitle) || rows.Count == 0) return rows;
         var rootIds = new HashSet<int>();
         foreach (var r in rows)
-            if (r.ParentId is null && SeforimDbCatalogTextNormalizer.IsTitleVariant(bookTitle, r.Text))
+            if (r.ParentId is null && SeforimDbCatalogTextNormalizer.IsTitleRepeat(bookTitle, r.Text))
                 rootIds.Add(r.Id);
         if (rootIds.Count == 0) return rows;
 

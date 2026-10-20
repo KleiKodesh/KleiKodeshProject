@@ -313,7 +313,10 @@ public sealed partial class SeforimDbCatalogIndex
 
         // Word list for the query-token-order tiebreak (see RunPass).
         var orderWords = new List<string>(tokens.Count);
-        foreach (var t in tokens) orderWords.AddRange(t.Alternatives[0]);
+        // The typed words, not an expansion: "bamidbar" typed is the word bamidbar, and
+        // ordering on its expansion "Bamidbar Rabbah" put a second "rabbah" in the sequence
+        // that no path has — every hit failed the order test, so word order decided nothing.
+        foreach (var t in tokens) orderWords.AddRange(t.RankingWords);
 
         // The quoted acronyms the user actually typed, if any. Measured against each HIT's own
         // STORED text at materialization — the stored strings keep their quote glyphs, only the
@@ -411,6 +414,7 @@ public sealed partial class SeforimDbCatalogIndex
                 TitleDistinctWords = DistinctFound(titleTokens, queryWords),
                 TitleLengthGap = Math.Abs(titleTokens.Count - queryWordCount),
                 LeafCovered = IsCovered(leafTokens, queryWords),
+                LeafAddsWord = ordered[i].Level > 0 && IsCovered(leafTokens, queryWords) && leafTokens.Exists(w => !titleTokens.Contains(w)),
                 WordsMatched = CountMatched(pathTokens, queryCounts, variants),
             });
         }
@@ -499,8 +503,11 @@ public sealed partial class SeforimDbCatalogIndex
                 || (h.WordsMatched == best.Matched && h.Level < best.Level))
                 bestByStructure[key] = (h.WordsMatched, h.Level);
         }
+        // An entry whose OWN name is what was typed (LeafCovered) is never trimmed: a book with
+        // "daf 8" in its first edition and again under "second edition" must show both.
         hits.RemoveAll(h =>
         {
+            if (h.LeafAddsWord) return false;
             var best = bestByStructure[(h.IsLiteral, h.BookId, h.StructureId)];
             return h.WordsMatched < best.Matched || h.Level > best.Level;
         });

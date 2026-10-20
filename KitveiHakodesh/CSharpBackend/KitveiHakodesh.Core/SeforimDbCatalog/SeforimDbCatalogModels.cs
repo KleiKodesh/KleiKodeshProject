@@ -71,6 +71,12 @@ public sealed class CatalogTocHit
     [MessagePack.IgnoreMember]
     public bool LeafCovered { get; set; }
 
+    /// <summary>Internal (not on the wire): <see cref="LeafCovered"/> AND the leaf holds a typed
+    /// word that is not a title word — the entry is an address the user typed, not a TOC line
+    /// that merely repeats the title ("Chavruta, hagahot" under "Hagahot al Chavruta").</summary>
+    [MessagePack.IgnoreMember]
+    public bool LeafAddsWord { get; set; }
+
     /// <summary>Internal (not on the wire): how many of the query's words, COUNTED WITH
     /// REPETITION, the whole stored path holds. The per-book truncation keeps the entries
     /// holding the most: for "Rambam al Mishnah Eruvin mishnah 5" the path "perek 1 / mishnah

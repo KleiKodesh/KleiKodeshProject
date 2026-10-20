@@ -100,13 +100,26 @@ public static class ExhaustiveRecall
         }
 
         // T1/T2: TOC entries at levels 1..maxLevel.
-        string PathOf(Toc t)
+        // The path a user would type: a root entry that only repeats the title is left out
+        // (the index strips it too), so the title is never typed twice.
+        string PathOf(Toc t, string title)
         {
             var parts = new List<string>();
             for (Toc? cur = t; cur != null; cur = cur.ParentId is { } pid && toc.TryGetValue(pid, out var p) ? p : null)
-                if (cur.Level > 0) parts.Add(cur.Text);
+            {
+                if (cur.Level <= 0) continue;
+                bool isRoot = cur.ParentId is not { } rp || !toc.TryGetValue(rp, out var rpe) || rpe.Level <= 0;
+                if (isRoot && cur != t && SeforimDbCatalogTextNormalizer.IsTitleRepeat(title, cur.Text)) continue;
+                parts.Add(cur.Text);
+            }
             parts.Reverse();
             return string.Join(" ", parts);
+        }
+        static bool EndsWith(List<string> a, List<string> b)
+        {
+            if (b.Count == 0 || a.Count < b.Count) return false;
+            for (int i = 0; i < b.Count; i++) if (a[a.Count - b.Count + i] != b[i]) return false;
+            return true;
         }
         int n = 0;
         foreach (var t in toc.Values)
@@ -115,19 +128,29 @@ public static class ExhaustiveRecall
             if (t.Level > 1 && (n++ % every) != 0) continue;
             if ((seq++ % shards) != shard) continue;
             if (!books.TryGetValue(t.BookId, out var title) || string.IsNullOrWhiteSpace(title)) continue;
-            bool Expected(CatalogTocHit h) => h.BookId == t.BookId && h.LineIndex == t.LineIndex;
-            // "title + leaf" repeats across parents (perek 1 halacha 4, perek 3 halacha 4): any
-            // entry of the same book whose leaf is that text is what the user asked for.
-            string leaf = t.Text.Trim();
+            // An entry that only repeats the title is not indexed: the book itself is the answer.
+            bool titleRepeat = t.Level == 1 && SeforimDbCatalogTextNormalizer.IsTitleRepeat(title, t.Text);
+            string path = PathOf(t, title);
+            var pathTokens = SeforimDbCatalogTextNormalizer.Tokenize(path);
+            var leafTokens = SeforimDbCatalogTextNormalizer.Tokenize(t.Text);
+            // Same address, compared as normalized words: a data duplicate differing by a space,
+            // or a daf whose amud the index splits into a child, is still what was typed.
+            bool Expected(CatalogTocHit h) => h.BookId == t.BookId
+                && (titleRepeat || h.LineIndex == t.LineIndex || EndsWith(SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath), pathTokens)
+                    || (EndsWith(SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath), leafTokens) && EndsWith(pathTokens, SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath))));
+            // "title + leaf" repeats across parents (perek 1 halacha 4, perek 3 halacha 4; daf 128
+            // in each Zohar volume): any entry of the same book whose path ends in that leaf.
             bool ExpectedLeaf(CatalogTocHit h) => h.BookId == t.BookId
-                && (h.LineIndex == t.LineIndex || LastSegment(h.TocPath) == leaf);
+                && (titleRepeat || h.LineIndex == t.LineIndex || EndsWith(SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath), leafTokens)
+                    || EndsWith(SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath), [.. leafTokens, "\u05E2\u05DE\u05D5\u05D3", "\u05D0"])
+                    || EndsWith(SeforimDbCatalogTextNormalizer.Tokenize(h.TocPath), [.. leafTokens, "\u05E2\u05DE\u05D5\u05D3", "\u05D1"]));
 
             var hits1 = index.Search(title + " " + t.Text);
             Record("T1", t.BookId, t.Id, t.Level, hits1, ExpectedLeaf, t.LineIndex);
 
             if (t.Level > 1)
             {
-                var hits2 = index.Search(title + " " + PathOf(t));
+                var hits2 = index.Search(title + " " + path);
                 Record("T2", t.BookId, t.Id, t.Level, hits2, Expected, t.LineIndex);
             }
         }
