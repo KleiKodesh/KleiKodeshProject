@@ -23,6 +23,7 @@ namespace FtsLib.Tokenization
         private bool _inTag;
         private bool _tagNameDone;   // first space seen — attribute chars must not join the name
         private int  _wordStart;     // raw index of first letter in current word
+        private int  _wordVisibleStart; // visible chars before the first letter of the current word
         private int  _visibleCount;  // cumulative visible chars up to current position
 
         // ── Entry point ──────────────────────────────────────────────
@@ -131,7 +132,10 @@ namespace FtsLib.Tokenization
                         Flush(i); // emits the completed run (if len 2..29), resets the buffer
 
                     if (_buffer.Length == 0)
+                    {
                         _wordStart = i; // first letter of a new word
+                        _wordVisibleStart = _visibleCount;
+                    }
 
                     _buffer.Append(c);
                     _visibleCount++;
@@ -160,9 +164,13 @@ namespace FtsLib.Tokenization
         {
             if (_buffer.Length > 1 && _buffer.Length < 30)
             {
-                // Pass the visible count at the start of this word.
-                int visibleStart = _visibleCount - _buffer.Length;
-                OnWord(_wordStart, rawEnd, visibleStart);
+                // Pass the visible count at the start of this word, recorded when its
+                // first letter arrived. Deriving it as _visibleCount - _buffer.Length was
+                // wrong for any word with quotes (רש"י, or a trailing quote as in יצחק"):
+                // the count includes the quotes, the buffer holds letters only, so the
+                // start came out late by the number of quotes. That shifted the context
+                // trim of long snippets (found by the tantivy-engine parity run).
+                OnWord(_wordStart, rawEnd, _wordVisibleStart);
             }
 
             _buffer.Clear();
