@@ -325,13 +325,19 @@ namespace KitveiHakodesh.Core.SeforimDb
             LIMIT 1";
         }
 
-        /// <summary>Target line id + lineIndex for the first link from a source line to a target book.</summary>
+        /// <summary>Target line id + lineIndex for the first link from a source line to a target book.
+        /// A line can link to the same book both as its commentary and by a lateral REFERENCE/OTHER
+        /// link to some other place (Berachot 45a links Rashi on 45a AND Rashi on 20b), so the
+        /// commentary-shaped links win, then the earliest target line - never the raw row order.</summary>
         public const string GetLinkTargetForSourceLineAndBook = @"
             SELECT lk.targetLineId, ln.lineIndex
             FROM link lk
             JOIN line ln ON ln.id = lk.targetLineId
+            LEFT JOIN connection_type ct ON ct.id = lk.connectionTypeId
             WHERE lk.sourceLineId = @sourceLineId
               AND lk.targetBookId = @targetBookId
+            ORDER BY CASE WHEN ct.name IN ('COMMENTARY', 'SUPER_COMMENTARY', 'TARGUM') THEN 0 ELSE 1 END,
+                     ln.lineIndex
             LIMIT 1";
 
         // ── TOC paths & line→book/index helpers (search + commentary labels) ─────────
