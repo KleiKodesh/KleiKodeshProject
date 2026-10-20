@@ -56,6 +56,7 @@ public sealed class OwnerRegistry(
         _owners[pid] = started.Value;
         Volatile.Write(ref _lastDeferral, null); // a later ownerless stretch reports its deferral afresh
         logger.LogInformation("Owner {Pid} registered ({Count} owner(s))", pid, _owners.Count);
+        updater.RequestCheck();
     }
 
     /// <summary>The owner is going away; stops the service at once when it was the last one.</summary>
