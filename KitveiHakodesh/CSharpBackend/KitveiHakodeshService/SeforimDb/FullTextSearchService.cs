@@ -1,4 +1,5 @@
 using KitveiHakodesh.Core.SeforimDbFullTextSearch;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodeshService.SeforimDb;
 
@@ -19,6 +20,12 @@ public sealed class FullTextSearchService
     {
         string? envIndexPath = Environment.GetEnvironmentVariable("FTS_INDEX_PATH");
         bool external = !string.IsNullOrWhiteSpace(envIndexPath);
+
+        // Resolved ONCE, deliberately — same reasoning as the primary database path just below:
+        // addAdditionalSeforimLibrary/removeAdditionalSeforimLibrary already restart the service
+        // (see DbChangeWatcher), so a fresh process re-resolves the whole set from scratch.
+        var additionalLibraries = SeforimDbAdditionalLibraries.GetAllEntries();
+
         _coordinator = new SeforimDbFtsIndexCoordinator(
             databasePath: SeforimDbLocator.Resolve(),
             indexPath: external ? envIndexPath! : Path.Combine(AppContext.BaseDirectory, "FtsIndex"),
@@ -33,7 +40,8 @@ public sealed class FullTextSearchService
                     default: logger.LogInformation(ex, "{Message}", message); break;
                 }
             },
-            relatedFormExpander: expansion.Expander);
+            relatedFormExpander: expansion.Expander,
+            additionalLibraries: additionalLibraries);
     }
 
     /// <summary>The Core coordinator, for the DB change watcher's rebuild policy.</summary>

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using FtsLib;
 using FtsLib.SeforimDb;
+using KitveiHakodesh.Core.SeforimDb;
 // TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
 // Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
 using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
@@ -31,13 +34,23 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly object _lock = new object();
         private readonly string _indexPath;
         private readonly string _seforimDbPath;
+        /// <summary>Every additional library to fold into the corpus this engine indexes and
+        /// searches, already resolved by <see cref="SeforimDbAttachedLibraries.Resolve"/> —
+        /// empty for the overwhelmingly common single-library case.</summary>
+        private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
 
         private SeforimIndex _index;
         private bool _disposed;
 
         /// <param name="indexPath">The index directory.</param>
-        /// <param name="seforimDbPath">The library the index is built from.</param>
-        public SeforimDbFtsEngine(string indexPath, string seforimDbPath)
+        /// <param name="seforimDbPath">The PRIMARY library the index is built from.</param>
+        /// <param name="additionalLibraries">Extra libraries to fold into the same index/search,
+        /// so a book from an additional library is as findable as one from the primary
+        /// database — see <see cref="CompositeFtsCorpus"/>. Null/empty keeps the exact single-
+        /// corpus behaviour this type always had.</param>
+        public SeforimDbFtsEngine(
+            string indexPath, string seforimDbPath,
+            IReadOnlyList<SeforimDbAttachedLibraries.Library>? additionalLibraries = null)
         {
             if (string.IsNullOrWhiteSpace(indexPath))
                 throw new ArgumentException("indexPath is required", nameof(indexPath));
@@ -46,9 +59,19 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             _indexPath = indexPath;
             _seforimDbPath = seforimDbPath;
+            _additionalLibraries = additionalLibraries ?? Array.Empty<SeforimDbAttachedLibraries.Library>();
         }
 
         public string IndexPath => _indexPath;
+
+        /// <summary>The corpus this engine indexes/searches: the plain single-database reader
+        /// when there are no additional libraries (unchanged cost and behaviour), or a
+        /// <see cref="CompositeFtsCorpus"/> folding every additional library in alongside the
+        /// primary when there are.</summary>
+        private IFtsCorpus OpenCorpus() =>
+            _additionalLibraries.Count == 0
+                ? new SeforimDbFtsCorpus(_seforimDbPath)
+                : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries);
 
         /// <summary>
         /// The engine, opened on first use.
@@ -68,9 +91,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     // factory (not an instance) is what IFtsCorpus requires: a search returns a
                     // LAZY sequence that must outlive this call, and concurrent searches cannot
                     // share one connection — so the engine opens one per operation and disposes it.
-                    return _index ?? (_index = new SeforimIndex(
-                        _indexPath,
-                        () => new SeforimDbFtsCorpus(_seforimDbPath)));
+                    return _index ?? (_index = new SeforimIndex(_indexPath, OpenCorpus));
                 }
             }
         }

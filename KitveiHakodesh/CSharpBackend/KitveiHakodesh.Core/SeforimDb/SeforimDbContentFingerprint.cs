@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Common;
@@ -65,6 +66,41 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             try { return head + "len=" + new FileInfo(databasePath).Length; }
             catch (Exception) { return head + "unreadable"; }
+        }
+
+        /// <summary>
+        /// Fingerprints <paramref name="primaryPath"/> PLUS every additional library ATTACHed
+        /// alongside it (see <see cref="SeforimDbAttachedLibraries"/>), so an index built over
+        /// several sources rebuilds when ANY of them changes -- not just the primary database.
+        ///
+        /// Also changes whenever the SET of additional libraries changes (one added, removed, or
+        /// swapped for a different path at the same slot): each library's stamp is prefixed with
+        /// its persisted id-space index, so adding/removing one shifts the whole combined value
+        /// even if every individual file's content fingerprint is unchanged. That is
+        /// deliberate -- a changed library set changes what the index must cover, and the
+        /// service/hosted-app restart this feature already requires on add/remove (see
+        /// SeforimDbAdditionalLibraries' remarks) means the next build simply redoes the whole
+        /// thing from scratch, exactly like a changed primary database does today.
+        ///
+        /// Libraries are folded in by their PERSISTED index, sorted ascending, so the combined
+        /// stamp does not depend on the order <paramref name="additionalLibraries"/> happens to
+        /// be enumerated in.
+        /// </summary>
+        public static string ComputeAll(
+            string primaryPath,
+            IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries,
+            string prefix = "")
+        {
+            string combined = Compute(primaryPath, prefix);
+            if (additionalLibraries is null || additionalLibraries.Count == 0) return combined;
+
+            var ordered = new List<SeforimDbAttachedLibraries.Library>(additionalLibraries);
+            ordered.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+            var sb = new System.Text.StringBuilder(combined);
+            foreach (var library in ordered)
+                sb.Append("||lib").Append(library.Index).Append('=').Append(Compute(library.Path));
+            return sb.ToString();
         }
 
         /// <summary>

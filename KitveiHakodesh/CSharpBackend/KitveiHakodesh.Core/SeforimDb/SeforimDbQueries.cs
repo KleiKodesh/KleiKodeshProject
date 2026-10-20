@@ -745,23 +745,59 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC paths & line→book/index helpers ──────────────────────────────────────
 
+        /// <summary>
+        /// Groups a batch of GLOBAL ids (see <see cref="SeforimDbLibraryId"/>) by the library
+        /// that owns them, resolved to LOCAL ids ready to bind into that library's own schema.
+        /// Shared by every multi-library batch lookup below — a full-text search hit or a line
+        /// range can span the primary database and any number of attached libraries at once.
+        /// </summary>
+        private static Dictionary<int, List<int>> GroupByLibrary(List<int> globalIds)
+        {
+            var byLibrary = new Dictionary<int, List<int>>();
+            foreach (int id in globalIds)
+            {
+                var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(id);
+                if (!byLibrary.TryGetValue(libraryIndex, out var localIds))
+                    byLibrary[libraryIndex] = localIds = new List<int>();
+                localIds.Add(localId);
+            }
+            return byLibrary;
+        }
+
         public List<TocPathRow> GetTocPathsForLines(List<int> lineIds)
         {
             var list = new List<TocPathRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLines(lineIds.Count);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
+
+            // One query per library the ids actually touch — see GroupByLibrary. The common
+            // case (every id from the primary database) runs exactly the query and binding this
+            // method always ran; an id from an attached library runs the same recursive CTE
+            // against that library's own schema and translates lineId/bookId back to global.
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(lineIds))
             {
-                list.Add(new TocPathRow
+                using var cmd = conn.CreateCommand();
+                if (libraryIndex == 0)
                 {
-                    LineId = r.GetInt32(0),
-                    BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
-                });
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLines(localIds.Count);
+                }
+                else
+                {
+                    var library = FindAttached(libraryIndex);
+                    if (library is not { } found) continue; // no longer attached — nothing to resolve
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLinesIn(found.Alias, localIds.Count);
+                }
+                BindList(cmd, "p", localIds);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    list.Add(new TocPathRow
+                    {
+                        LineId = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                        BookId = r.IsDBNull(1) ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
+                        TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
+                    });
+                }
             }
             return list;
         }
@@ -799,25 +835,56 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<LineBookRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetBookIdsForLines(lineIds.Count);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new LineBookRow { LineId = r.GetInt32(0), BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1) });
+
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(lineIds))
+            {
+                using var cmd = conn.CreateCommand();
+                if (libraryIndex == 0)
+                {
+                    cmd.CommandText = SeforimDbSqlStrings.GetBookIdsForLines(localIds.Count);
+                }
+                else
+                {
+                    var library = FindAttached(libraryIndex);
+                    if (library is not { } found) continue;
+                    cmd.CommandText = SeforimDbSqlStrings.GetBookIdsForLinesIn(found.Alias, localIds.Count);
+                }
+                BindList(cmd, "p", localIds);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    list.Add(new LineBookRow
+                    {
+                        LineId = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                        BookId = r.IsDBNull(1) ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
+                    });
+            }
             return list;
         }
 
         public List<LineIndexRow> GetLineIndexFromLineId(int lineId)
         {
+            var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(lineId);
             var list = new List<LineIndexRow>();
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLineIndexFromLineId;
-            cmd.Parameters.AddWithValue("@id", lineId);
+            if (libraryIndex == 0)
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetLineIndexFromLineId;
+            }
+            else
+            {
+                var library = FindAttached(libraryIndex);
+                if (library is not { } found) return list;
+                cmd.CommandText = SeforimDbSqlStrings.GetLineIndexFromLineIdIn(found.Alias);
+            }
+            cmd.Parameters.AddWithValue("@id", localId);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new LineIndexRow { LineIndex = r.IsDBNull(0) ? 0 : r.GetInt32(0), BookId = r.IsDBNull(1) ? 0 : r.GetInt32(1) });
+                list.Add(new LineIndexRow
+                {
+                    LineIndex = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                    BookId = r.IsDBNull(1) ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
+                });
             return list;
         }
 

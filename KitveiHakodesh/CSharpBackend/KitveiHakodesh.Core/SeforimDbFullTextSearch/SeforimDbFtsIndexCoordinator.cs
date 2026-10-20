@@ -2,9 +2,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
@@ -41,6 +43,13 @@ public sealed class SeforimDbFtsIndexCoordinator
     private readonly Action<FtsIndexLogLevel, string, Exception?> _log;
     /// <summary>The related-form query rewrite (expandRelated). Null = queries pass through.</summary>
     private readonly SeforimDbFtsRelatedFormExpander? _expander;
+    /// <summary>Every additional library to fold into the index/search alongside the primary
+    /// database, resolved ONCE at construction — see <see cref="SeforimDbAttachedLibraries.Resolve"/>
+    /// and <see cref="CompositeFtsCorpus"/>. Matches the primary database's own "resolved once,
+    /// a restart re-resolves" lifetime (see the class remarks): the RPC flow that adds/removes an
+    /// additional library already restarts the service, so re-resolving here per-call would only
+    /// ever observe the SAME value a restart already refreshes.</summary>
+    private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
 
     /// <param name="databasePath">The seforim DB to index and search; null when none was found.</param>
     /// <param name="indexPath">Where the index lives.</param>
@@ -49,16 +58,23 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <param name="log">The host's log sink.</param>
     /// <param name="relatedFormExpander">Rewrites a query with related forms when a search asks
     /// for expandRelated; null leaves queries unexpanded.</param>
+    /// <param name="additionalLibraries">Extra seforim-shaped libraries to fold into this index
+    /// and its searches alongside the primary database — see
+    /// <see cref="SeforimDbAdditionalLibraries"/>. Null/empty keeps this type's exact
+    /// single-library behaviour (same stamp, same corpus, same cost).</param>
     public SeforimDbFtsIndexCoordinator(
         string? databasePath, string indexPath, bool indexIsExternal,
         Action<FtsIndexLogLevel, string, Exception?> log,
-        SeforimDbFtsRelatedFormExpander? relatedFormExpander = null)
+        SeforimDbFtsRelatedFormExpander? relatedFormExpander = null,
+        IReadOnlyList<SeforimDbAdditionalLibraries.Entry>? additionalLibraries = null)
     {
         _expander = relatedFormExpander;
         _dbPath = databasePath;
         _indexPath = indexPath;
         _external = indexIsExternal;
         _log = log;
+        _additionalLibraries = SeforimDbAttachedLibraries.Resolve(
+            additionalLibraries ?? Array.Empty<SeforimDbAdditionalLibraries.Entry>());
     }
 
     /// <summary>The build mechanics — the at-start and at-completion stamps, resume state,
@@ -66,15 +82,18 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// so both legs stamp and resume an index identically. Only built once there is a database
     /// to index; RunBuild is never reached without one.</summary>
     private SeforimDbFtsIndexer Indexer =>
-        _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
+        _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!, _additionalLibraries);
     private SeforimDbFtsIndexer? _indexer;
 
     /// <summary>Snippeting, the word-distance filter, short-snippet embellishment and the
     /// book/TOC enrichment every hit carries — all Core's, and the same code the hosted app
     /// runs, so one query cannot come back ranked or rendered differently in the two apps.
-    /// Enrichment needs corpus queries, hence the SeforimDbQueries.</summary>
+    /// Enrichment needs corpus queries, hence the SeforimDbQueries — given the SAME resolved
+    /// additional libraries as the index itself, so a hit's global line id (which may be an
+    /// additional library's) resolves to its real book/TOC path instead of nothing.</summary>
     private SeforimDbFtsSearcher Searcher =>
-        _searcher ??= new SeforimDbFtsSearcher(new SeforimDbQueries(_dbPath));
+        _searcher ??= new SeforimDbFtsSearcher(new SeforimDbQueries(
+            _dbPath, _additionalLibraries.Select(l => new SeforimDbAdditionalLibraries.Entry(l.Index, l.Path)).ToArray()));
     private SeforimDbFtsSearcher? _searcher;
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external;
@@ -172,7 +191,7 @@ public sealed class SeforimDbFtsIndexCoordinator
 
     private SeforimDbFtsEngine GetEngine()
     {
-        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(_indexPath, _dbPath!); }
+        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(_indexPath, _dbPath!, _additionalLibraries); }
     }
 
     /// <summary>

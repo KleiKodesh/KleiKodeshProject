@@ -494,9 +494,52 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
+        /// <summary>Same as <see cref="GetTocPathsForLines"/>, against an ATTACHed library's
+        /// schema (see <see cref="SeforimDbAttachedLibraries"/>) — bind LOCAL line ids, not
+        /// global ones; the caller translates <c>lineId</c>/<c>bookId</c> back to global ids on
+        /// the way out.</summary>
+        public static string GetTocPathsForLinesIn(string schema, int count) => $@"
+            WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
+              SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
+              FROM {schema}.line_toc lt
+              JOIN {schema}.tocEntry te ON te.id = lt.tocEntryId
+              JOIN {schema}.tocText tt ON tt.id = te.textId
+              WHERE lt.lineId IN ({InPlaceholders("p", count)})
+              UNION ALL
+              SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+              FROM ancestors a
+              JOIN {schema}.tocEntry te ON te.id = a.parentId
+              JOIN {schema}.tocText tt ON tt.id = te.textId
+            ),
+            ordered AS (
+              SELECT a.lineId, a.bookId, a.text, a.depth,
+                     MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+                     b.title AS bookTitle
+              FROM ancestors a
+              JOIN {schema}.book b ON b.id = a.bookId
+            )
+            SELECT lineId, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
+            FROM (
+              SELECT lineId, bookId, text
+              FROM ordered
+              WHERE NOT (depth = maxDepth AND text = bookTitle)
+              ORDER BY lineId, depth DESC
+            )
+            GROUP BY lineId";
+
+        /// <summary>Same as <see cref="GetBookIdsForLines"/>, against an ATTACHed library's
+        /// schema — bind LOCAL line ids; the caller translates both columns back to global ids.</summary>
+        public static string GetBookIdsForLinesIn(string schema, int count) =>
+            $"SELECT id AS lineId, bookId FROM {schema}.line WHERE id IN ({InPlaceholders("p", count)})";
+
         /// <summary>lineIndex + bookId for a single line id (open book at position after FTS).</summary>
         public const string GetLineIndexFromLineId =
             "SELECT lineIndex, bookId FROM line WHERE id = @id LIMIT 1";
+
+        /// <summary>Same as <see cref="GetLineIndexFromLineId"/>, against an ATTACHed library's
+        /// schema — bind the LOCAL line id; the caller translates bookId back to global.</summary>
+        public static string GetLineIndexFromLineIdIn(string schema) =>
+            $"SELECT lineIndex, bookId FROM {schema}.line WHERE id = @id LIMIT 1";
 
         // ── Dictionary sources living in the seforim DB (מצודת ציון, מלבי״ם, מנחם, ערוך) ──
 

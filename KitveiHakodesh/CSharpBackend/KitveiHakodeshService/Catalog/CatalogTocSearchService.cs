@@ -1,6 +1,7 @@
 namespace KitveiHakodeshService.Catalog;
 
 using KitveiHakodeshService.SeforimDb;
+using global::KitveiHakodesh.Core.Settings;
 
 // global:: because this project has its own KitveiHakodeshService.KitveiHakodesh namespace,
 // which would otherwise shadow the root one.
@@ -29,6 +30,7 @@ public sealed class CatalogTocSearchService
         // a switch made elsewhere restarts it (see DbChangeWatcher), so the fresh process
         // re-resolves everything.
         string? databasePath = SeforimDbLocator.Resolve();
+        var additionalLibraries = SeforimDbAdditionalLibraries.GetAllEntries();
 
         _coordinator = new CatalogIndexCoordinator(
             resolveDatabasePath: () => databasePath,
@@ -41,7 +43,8 @@ public sealed class CatalogTocSearchService
                     case CatalogIndexLogLevel.Warning: logger.LogWarning(ex, "{Message}", message); break;
                     default: logger.LogInformation("{Message}", message); break;
                 }
-            });
+            },
+            additionalLibraries: additionalLibraries);
     }
 
     private static string ResolveIndexPath()
