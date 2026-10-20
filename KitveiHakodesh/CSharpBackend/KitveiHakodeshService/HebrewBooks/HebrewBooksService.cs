@@ -108,7 +108,7 @@ public sealed class HebrewBooksService
             // Core carries the bare status number; the sentence around it is the host's wording.
             // The frontend prefixes its own "the download failed:" so this is the reason only.
             CoreHebrewBooks.HebrewBookAcquireFailure.HttpStatus =>
-                new HbAcquireResult(null, false, $"HTTP {result.Detail}"),
+                new HbAcquireResult(null, false, $"HTTP {result.HttpStatusCode}"),
 
             // Banner gets the exception's first line ("Type: message"); the console gets all of it.
             _ => new HbAcquireResult(null, false, result.Detail?.Split('\n')[0].Trim() ?? "download failed"),
