@@ -549,8 +549,6 @@ public static class SeforimDbCatalogTextNormalizer
         return words;
     }
 
-    /// <summary>Fuzzy title comparison for root stripping: shorter word set must be a
-    /// subset of the longer with ≥ 0.6 length ratio. Port of isTitleVariant().</summary>
     /// <summary>True when a root TOC entry only repeats the book title: a title variant that
     /// adds no word of its own. "Rosh Yosef al Chullin, chelek 1" is a variant of "Rosh Yosef
     /// al Chullin" but carries "chelek 1", so it is NOT a repeat and must stay in the index.</summary>
@@ -563,6 +561,8 @@ public static class SeforimDbCatalogTextNormalizer
         return true;
     }
 
+    /// <summary>Fuzzy title comparison for root stripping: shorter word set must be a
+    /// subset of the longer with ≥ 0.6 length ratio. Port of isTitleVariant().</summary>
     public static bool IsTitleVariant(string bookTitle, string rootText)
     {
         var bt = NormTitleWords(bookTitle);

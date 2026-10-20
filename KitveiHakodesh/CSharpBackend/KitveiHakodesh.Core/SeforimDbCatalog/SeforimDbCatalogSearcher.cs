@@ -503,7 +503,7 @@ public sealed partial class SeforimDbCatalogIndex
                 || (h.WordsMatched == best.Matched && h.Level < best.Level))
                 bestByStructure[key] = (h.WordsMatched, h.Level);
         }
-        // An entry whose OWN name is what was typed (LeafCovered) is never trimmed: a book with
+        // An entry whose OWN name holds a typed word beyond the title (LeafAddsWord) is never trimmed: a book with
         // "daf 8" in its first edition and again under "second edition" must show both.
         hits.RemoveAll(h =>
         {
