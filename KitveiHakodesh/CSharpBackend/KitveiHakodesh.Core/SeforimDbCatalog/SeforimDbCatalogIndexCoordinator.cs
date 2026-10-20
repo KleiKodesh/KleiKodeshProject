@@ -210,7 +210,11 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         {
             lock (_lock)
             {
-                return _index ??= new SeforimDbCatalogIndex(_indexPath, databasePath, _additionalLibraries);
+                return _index ??= new SeforimDbCatalogIndex(_indexPath, databasePath, _additionalLibraries)
+                {
+                    SourceSkipped = (path, ex) => _log(CatalogIndexLogLevel.Warning,
+                        $"catalog TOC index: additional library '{path}' is unreadable - skipped, the primary index is unaffected", ex),
+                };
             }
         }
 

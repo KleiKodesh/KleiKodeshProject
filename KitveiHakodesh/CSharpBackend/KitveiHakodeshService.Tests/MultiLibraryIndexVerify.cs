@@ -262,6 +262,130 @@ namespace KitveiHakodeshService.Tests
                             Ok("SeforimDbFtsIndexer.IsIndexStale() detects a library added since the index was built, at the real mechanism level (not just the fingerprint function)");
                     }
                 }
+
+                // ── 7. Multi-book / multi-line fixture with OVERLAPPING LOCAL ids ───────────
+                {
+                    string mp = Path.Combine(dir, "multi-primary.db");
+                    string ma = Path.Combine(dir, "multi-personal.db");
+                    // Both libraries use the SAME local book ids (1,2) and line ids (1..5).
+                    BuildMultiLibrary(mp, "ראשי", extraWord: "כסף");
+                    BuildMultiLibrary(ma, "אישי", extraWord: "זהב");
+                    var entries = new[] { new SeforimDbAdditionalLibraries.Entry(1, ma) };
+                    var libs = SeforimDbAttachedLibraries.Resolve(entries);
+                    var q = new SeforimDbQueries(mp, entries);
+                    var allBooks = q.GetAllBooks();
+
+                    using var corpus = new TestableCompositeFtsCorpus(mp, libs);
+                    var full = corpus.ReadDocumentsInResultOrder(0);
+                    bool ascending = full.Zip(full.Skip(1), (a, b) => a.Id < b.Id).All(x => x);
+                    if (corpus.CountDocuments() != 10 || full.Count != 10 || !ascending
+                        || full.Select(f => f.Id).Distinct().Count() != 10)
+                        Fail($"multi-line fixture: expected 10 distinct strictly-ascending ids, got [{string.Join(",", full.Select(f => f.Id))}] (count {corpus.CountDocuments()})");
+                    else
+                        Ok("overlapping LOCAL ids (books 1-2, lines 1-5 in BOTH libraries) yield 10 distinct, strictly ascending GLOBAL ids");
+
+                    bool resumeOk = true;
+                    for (int skip = 0; skip <= 10; skip++)
+                    {
+                        var tail = corpus.ReadDocumentsInResultOrder(skip);
+                        if (!tail.Select(t => t.Id).SequenceEqual(full.Skip(skip).Select(f => f.Id))) { resumeOk = false; Fail($"resume skip={skip} did not equal the suffix of the full order"); }
+                    }
+                    if (resumeOk) Ok("resume at EVERY position 0..10 (mid-library, exactly at the library boundary, mid-second-library) equals the suffix of the full order");
+
+                    var fetched = corpus.FetchDocuments(full.Select(f => f.Id)).ToDictionary(r => r.Id);
+                    bool fetchOk = fetched.Count == 10 && full.All(f => fetched[f.Id].Text == f.Text)
+                        && fetched.Where(kv => kv.Key >= SeforimDbLibraryId.OffsetUnit).All(kv => kv.Value.Text.Contains("אישי"))
+                        && fetched.Where(kv => kv.Key < SeforimDbLibraryId.OffsetUnit).All(kv => kv.Value.Text.Contains("ראשי"));
+                    if (!fetchOk) Fail("FetchDocuments mixed up colliding local ids between libraries");
+                    else Ok("FetchDocuments never mixes colliding local ids across libraries");
+
+                    string idx = Path.Combine(dir, "FtsMulti");
+                    var indexer = new SeforimDbFtsIndexer(idx, mp, libs);
+                    using var engine = new SeforimDbFtsEngine(idx, mp, libs);
+                    indexer.Build(engine);
+                    var searcher = new SeforimDbFtsSearcher(new SeforimDbQueries(mp, entries));
+                    var gold = searcher.SearchInBatches(engine, "זהב", 0, false, 6, false).SelectMany(b => b).ToList();
+                    var addBook2 = allBooks.Single(b => b.LibraryLabel == "multi-personal" && b.Title.StartsWith("בטא"));
+                    var common = searcher.SearchInBatches(engine, "חמור", 0, false, 6, false).SelectMany(b => b).ToList();
+                    if (gold.Count != 1 || gold[0].BookId != addBook2.Id || gold[0].LineId != SeforimDbLibraryId.ToGlobal(1, 5))
+                        Fail($"multi-book FTS: expected exactly line {SeforimDbLibraryId.ToGlobal(1, 5)} in book {addBook2.Id}, got {Dump(gold.Select(h => (h.LineId, h.BookId)))}");
+                    else if (common.Count != 10 || common.Select(h => h.LineId).Distinct().Count() != 10)
+                        Fail($"multi-book FTS: word in all 10 lines returned {common.Count} hits");
+                    else
+                        Ok("multi-book FTS: a word unique to library 1's second book resolves to that exact book/line; a word in all 10 lines returns 10 distinct hits");
+                }
+
+                // ── 8. FAILURE ISOLATION: a bad additional library must never degrade the primary ──
+                {
+                    string good = Path.Combine(dir, "iso-primary.db");
+                    BuildLibraryWithToc(good, "קטגוריה", "ספר יחיד ראשי", "תוכן יחיד ראשי", "פרק יחיד", 1);
+                    string wrongCols = Path.Combine(dir, "iso-wrongcols.db");
+                    BuildWrongColumnsLibrary(wrongCols);
+                    string corrupt = Path.Combine(dir, "iso-corrupt.db");
+                    File.WriteAllBytes(corrupt, Enumerable.Range(0, 5000).Select(i => (byte)(i * 31 + 7)).ToArray());
+                    string truncated = Path.Combine(dir, "iso-truncated.db");
+                    BuildLibraryWithToc(truncated + ".full", "קט", "ספר קטוע", "תוכן קטוע", "פרק", 1);
+                    SqliteConnection.ClearAllPools();
+                    var fullBytes = File.ReadAllBytes(truncated + ".full");
+                    File.WriteAllBytes(truncated, fullBytes.Take(fullBytes.Length / 2).ToArray());
+                    string noContent = Path.Combine(dir, "iso-nocontent.db");
+                    BuildNoContentLibrary(noContent);
+
+                    var entries = new[]
+                    {
+                        new SeforimDbAdditionalLibraries.Entry(1, wrongCols),
+                        new SeforimDbAdditionalLibraries.Entry(2, corrupt),
+                        new SeforimDbAdditionalLibraries.Entry(3, truncated),
+                        new SeforimDbAdditionalLibraries.Entry(4, noContent),
+                    };
+                    var libs = SeforimDbAttachedLibraries.Resolve(entries);
+                    if (libs.Any(l => l.Index == 1 || l.Index == 2 || l.Index == 3))
+                        Fail($"probe admitted a wrong-columns/corrupt/truncated library: [{string.Join(",", libs.Select(l => l.Index))}]");
+                    else
+                        Ok($"probe rejects wrong-columns, corrupt and truncated libraries up front (attached: [{string.Join(",", libs.Select(l => l.Index))}])");
+
+                    // FTS: the no-text library passes the catalog probe but must be excluded
+                    // BEFORE enumeration, with stable counts across operations.
+                    var skipped = new List<string>();
+                    using (var c1 = new CompositeFtsCorpus(good, libs, (p, e) => skipped.Add(p)))
+                    using (var c2 = new CompositeFtsCorpus(good, libs, (p, e) => skipped.Add(p)))
+                    {
+                        if (c1.CountDocuments() != 1 || c2.CountDocuments() != 1 || c1.ReadDocumentsInResultOrder(0).Count() != 1)
+                            Fail($"unreadable library changed the corpus: counts {c1.CountDocuments()}/{c2.CountDocuments()}");
+                        else if (!skipped.Contains(noContent))
+                            Fail("the no-text library was not reported as skipped");
+                        else
+                            Ok("FTS corpus excludes a library whose text cannot be read BEFORE enumeration; counts identical across two operations");
+                    }
+
+                    string fidx = Path.Combine(dir, "FtsIso");
+                    var indexer = new SeforimDbFtsIndexer(fidx, good, libs);
+                    using var engine = new SeforimDbFtsEngine(fidx, good, libs);
+                    bool built = false; Exception? buildEx = null;
+                    try { built = indexer.Build(engine); } catch (Exception ex) { buildEx = ex; }
+                    if (buildEx != null || !built || indexer.IsIndexStale()
+                        || new SeforimDbFtsIndexer(fidx, good, SeforimDbAttachedLibraries.Resolve(entries)).IsIndexStale())
+                        Fail($"FTS build with bad additional libraries failed or left an unstable stamp: built={built} ex={buildEx} stale={indexer.IsIndexStale()}");
+                    else
+                    {
+                        var hits = new SeforimDbFtsSearcher(new SeforimDbQueries(good, entries)).SearchInBatches(engine, "יחיד", 0, false, 6, false).SelectMany(b => b).ToList();
+                        if (hits.Count == 0) Fail("primary FTS not searchable when bad additional libraries are configured");
+                        else Ok("primary FTS index builds, is searchable, and its stamp is stable across a fresh resolve with bad libraries configured");
+                    }
+
+                    var catSkipped = new List<string>();
+                    using var cat = new SeforimDbCatalogIndex(Path.Combine(dir, "CatIso"), good, libs) { SourceSkipped = (p, e) => catSkipped.Add(p) };
+                    string h1 = SeforimDbCatalogIndex.ComputeDbHash(good, libs);
+                    string h2 = SeforimDbCatalogIndex.ComputeDbHash(good, SeforimDbAttachedLibraries.Resolve(entries));
+                    Exception? catEx = null; int docs = 0;
+                    try { docs = cat.BuildAndSwitch(h1); } catch (Exception ex) { catEx = ex; }
+                    if (catEx != null || docs == 0 || h1 != h2)
+                        Fail($"catalog build with bad libraries: ex={catEx} docs={docs} stableHash={h1 == h2}");
+                    else if (cat.Search("יחיד", CancellationToken.None).Count == 0)
+                        Fail("primary catalog not searchable when bad additional libraries are configured");
+                    else
+                        Ok($"primary catalog index builds and is searchable with bad libraries configured; hash stable across runs; skipped sources reported: {catSkipped.Count}");
+                }
             }
             catch (Exception ex)
             {
@@ -326,6 +450,51 @@ namespace KitveiHakodeshService.Tests
             Exec(conn, $"INSERT INTO tocText(id, text) VALUES (1, '{tocText}')");
             Exec(conn, $"INSERT INTO tocEntry(id, bookId, parentId, textId, lineId, level, hasChildren) VALUES (1, {bookId}, NULL, 1, 1, 1, 0)");
             Exec(conn, "INSERT INTO line_toc(lineId, tocEntryId) VALUES (1, 1)");
+        }
+
+        /// <summary>Two books with LOCAL ids identical in every library built with this helper
+        /// (books 1-2; lines 1-3 in book 1, 4-5 in book 2); <paramref name="tag"/> and
+        /// <paramref name="extraWord"/> make the text distinguishable (extraWord only in line 5).</summary>
+        private static void BuildMultiLibrary(string dbPath, string tag, string extraWord)
+        {
+            BuildLibraryWithToc(dbPath, "קטגוריה " + tag, "אלפא " + tag, $"חמור {tag} א", "פרק", 1);
+            using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ConnectionString);
+            conn.Open();
+            Exec(conn, "UPDATE book SET totalLines = 3");
+            Exec(conn, $"INSERT INTO line(id, bookId, lineIndex, content) VALUES (2, 1, 1, 'חמור {tag} ב'), (3, 1, 2, 'חמור {tag} ג')");
+            Exec(conn, $@"INSERT INTO book(id, categoryId, title, orderIndex, hasTeamim, totalLines,
+                hasTargumConnection, hasReferenceConnection, hasSourceConnection, hasCommentaryConnection, hasOtherConnection)
+                VALUES (2, 1, 'בטא {tag}', 1, 0, 2, 0, 0, 0, 0, 0)");
+            Exec(conn, $"INSERT INTO line(id, bookId, lineIndex, content) VALUES (4, 2, 0, 'חמור {tag} ד'), (5, 2, 1, 'חמור {tag} {extraWord}')");
+        }
+
+        /// <summary>Right table names, WRONG columns (no line.lineIndex, no book.title).</summary>
+        private static void BuildWrongColumnsLibrary(string dbPath)
+        {
+            using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ConnectionString);
+            conn.Open();
+            Exec(conn, @"CREATE TABLE category(id INTEGER PRIMARY KEY, name TEXT);
+                CREATE TABLE book(id INTEGER PRIMARY KEY, name TEXT);
+                CREATE TABLE author(id INTEGER PRIMARY KEY, name TEXT);
+                CREATE TABLE book_author(bookId INTEGER, authorId INTEGER);
+                CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, content TEXT);");
+            Exec(conn, "INSERT INTO book(id, name) VALUES (1, 'x'); INSERT INTO line(id, bookId, content) VALUES (1, 1, 'x')");
+        }
+
+        /// <summary>Catalog-compatible (passes the probe) but with NO line text anywhere: no
+        /// line.content and no line_content - the full-text corpus cannot read it.</summary>
+        private static void BuildNoContentLibrary(string dbPath)
+        {
+            using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ConnectionString);
+            conn.Open();
+            Exec(conn, @"CREATE TABLE category(id INTEGER PRIMARY KEY, parentId INTEGER, title TEXT, level INTEGER);
+                CREATE TABLE book(id INTEGER PRIMARY KEY, categoryId INTEGER, title TEXT, orderIndex INTEGER,
+                    hasTeamim INTEGER, totalLines INTEGER, hasTargumConnection INTEGER, hasReferenceConnection INTEGER,
+                    hasSourceConnection INTEGER, hasCommentaryConnection INTEGER, hasOtherConnection INTEGER);
+                CREATE TABLE author(id INTEGER PRIMARY KEY, name TEXT);
+                CREATE TABLE book_author(bookId INTEGER, authorId INTEGER);
+                CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, lineIndex INTEGER);");
+            Exec(conn, "INSERT INTO category VALUES (1, NULL, 'ק', 0); INSERT INTO book VALUES (1, 1, 'ספר בלי טקסט', 0, 0, 1, 0,0,0,0,0); INSERT INTO line VALUES (1, 1, 0)");
         }
 
         private static void Exec(SqliteConnection conn, string sql)

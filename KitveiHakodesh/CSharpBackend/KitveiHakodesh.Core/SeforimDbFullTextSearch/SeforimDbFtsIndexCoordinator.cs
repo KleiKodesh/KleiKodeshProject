@@ -189,9 +189,18 @@ public sealed class SeforimDbFtsIndexCoordinator
         catch { return false; }
     }
 
+    private int _skipLogged;   // log an unreadable additional library once, not per search
+
     private SeforimDbFtsEngine GetEngine()
     {
-        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(_indexPath, _dbPath!, _additionalLibraries); }
+        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(
+            _indexPath, _dbPath!, _additionalLibraries,
+            onLibrarySkipped: (path, ex) =>
+            {
+                if (Interlocked.Exchange(ref _skipLogged, 1) == 0)
+                    _log(FtsIndexLogLevel.Warning,
+                $"FTS: additional library '{path}' is unreadable - skipped, the primary index is unaffected", ex);
+            }); }
     }
 
     /// <summary>

@@ -62,7 +62,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// file cannot be opened right now (moved, mid-rebuild) is skipped for this corpus
         /// instance exactly like an attach failure is skipped elsewhere in this feature — it
         /// simply contributes nothing to this build/search rather than failing the whole corpus.</param>
-        public CompositeFtsCorpus(string primaryDbPath, IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries)
+        public CompositeFtsCorpus(
+            string primaryDbPath, IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries,
+            Action<string, Exception>? onLibrarySkipped = null)
         {
             _sources = new List<Source>(1 + (additionalLibraries?.Count ?? 0))
             {
@@ -73,15 +75,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             foreach (var library in additionalLibraries.OrderBy(l => l.Index))
             {
+                SeforimDbFtsCorpus? corpus = null;
                 try
                 {
-                    _sources.Add(new Source(library.Index, new SeforimDbFtsCorpus(library.Path)));
+                    corpus = new SeforimDbFtsCorpus(library.Path);
+                    // Prove the line text is actually readable BEFORE this library joins the
+                    // corpus, so a library that passed the catalog-level probe but cannot serve
+                    // text (corrupt page, missing content column/table) is excluded up front and
+                    // never fails mid-enumeration after the primary was already indexed. Cheap:
+                    // one decoded row, no scan. The same file gives the same verdict every time,
+                    // so counts/positions stay consistent between operations.
+                    using (var first = corpus.ReadDocuments(1).GetEnumerator())
+                        first.MoveNext();
+                    _sources.Add(new Source(library.Index, corpus));
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Could not open this library's content database for indexing/search right
-                    // now — leave it out of this corpus instance rather than fail every other
-                    // library (and the primary) over one unavailable additional library.
+                    corpus?.Dispose();
+                    onLibrarySkipped?.Invoke(library.Path, ex);
                 }
             }
         }

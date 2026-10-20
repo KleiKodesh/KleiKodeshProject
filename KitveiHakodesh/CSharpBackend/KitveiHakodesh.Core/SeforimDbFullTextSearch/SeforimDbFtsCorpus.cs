@@ -53,18 +53,29 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public SeforimDbFtsCorpus(string databasePath)
         {
             _connection = SqliteConnectionFactory.OpenCorpusRead(databasePath);
-            _schema = SeforimDbSchema.ForDatabase(_connection, databasePath);
-            _codec = SeforimDbLineContentCodec.Create(_connection);
+            try
+            {
+                _schema = SeforimDbSchema.ForDatabase(_connection, databasePath);
+                _codec = SeforimDbLineContentCodec.Create(_connection);
 
-            // Scan tuning on top of the standard corpus-read policy, per connection: an index
-            // build reads every line of a multi-gigabyte file in one pass, which earns a bigger
-            // page cache than the request/response reads get, and temp_store=MEMORY keeps the
-            // neighbour self-join's transient structures off disk. Matches the built-in reader.
-            using var command = _connection.CreateCommand();
-            command.CommandText =
-                "PRAGMA cache_size=-65536;" +   // up to 64 MB page cache
-                "PRAGMA temp_store=MEMORY;";
-            command.ExecuteNonQuery();
+                // Scan tuning on top of the standard corpus-read policy, per connection: an index
+                // build reads every line of a multi-gigabyte file in one pass, which earns a bigger
+                // page cache than the request/response reads get, and temp_store=MEMORY keeps the
+                // neighbour self-join's transient structures off disk. Matches the built-in reader.
+                using var command = _connection.CreateCommand();
+                command.CommandText =
+                    "PRAGMA cache_size=-65536;" +   // up to 64 MB page cache
+                    "PRAGMA temp_store=MEMORY;";
+                command.ExecuteNonQuery();
+            }
+            catch
+            {
+                // A throw after the connection opened (unreadable schema, codec setup) must not
+                // leak the handle: the caller never gets an instance to Dispose.
+                _codec?.Dispose();
+                _connection.Dispose();
+                throw;
+            }
         }
 
         public long CountDocuments()

@@ -36,8 +36,10 @@ namespace KitveiHakodesh.Core.SeforimDb
     {
         public const int OffsetUnit = 50_000_000;
 
-        /// <summary>The highest library index an id can address without overflowing int32.</summary>
-        public const int MaxLibraryIndex = int.MaxValue / OffsetUnit; // 4
+        /// <summary>The highest library index whose ENTIRE band (index * OffsetUnit .. index * OffsetUnit +
+        /// OffsetUnit - 1) still fits in int32 - 41 for OffsetUnit = 50M. int.MaxValue / OffsetUnit (42) would
+        /// allow a local id near the cap to overflow.</summary>
+        public const int MaxLibraryIndex = (int.MaxValue - (OffsetUnit - 1)) / OffsetUnit; // 41
 
         /// <summary>Maps a library's own local id to the global id every caller sees.</summary>
         public static int ToGlobal(int libraryIndex, int localId) =>

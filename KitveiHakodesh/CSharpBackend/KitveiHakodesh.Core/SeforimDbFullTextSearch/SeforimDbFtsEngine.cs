@@ -38,6 +38,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// searches, already resolved by <see cref="SeforimDbAttachedLibraries.Resolve"/> —
         /// empty for the overwhelmingly common single-library case.</summary>
         private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
+        private readonly Action<string, Exception>? _onLibrarySkipped;
 
         private SeforimIndex _index;
         private bool _disposed;
@@ -50,7 +51,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// corpus behaviour this type always had.</param>
         public SeforimDbFtsEngine(
             string indexPath, string seforimDbPath,
-            IReadOnlyList<SeforimDbAttachedLibraries.Library>? additionalLibraries = null)
+            IReadOnlyList<SeforimDbAttachedLibraries.Library>? additionalLibraries = null,
+            Action<string, Exception>? onLibrarySkipped = null)
         {
             if (string.IsNullOrWhiteSpace(indexPath))
                 throw new ArgumentException("indexPath is required", nameof(indexPath));
@@ -60,6 +62,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             _indexPath = indexPath;
             _seforimDbPath = seforimDbPath;
             _additionalLibraries = additionalLibraries ?? Array.Empty<SeforimDbAttachedLibraries.Library>();
+            _onLibrarySkipped = onLibrarySkipped;
         }
 
         public string IndexPath => _indexPath;
@@ -71,7 +74,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private IFtsCorpus OpenCorpus() =>
             _additionalLibraries.Count == 0
                 ? new SeforimDbFtsCorpus(_seforimDbPath)
-                : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries);
+                : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries, _onLibrarySkipped);
 
         /// <summary>
         /// The engine, opened on first use.

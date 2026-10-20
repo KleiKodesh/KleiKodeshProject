@@ -78,6 +78,10 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         this.additionalLibraries = additionalLibraries ?? Array.Empty<SeforimDbAttachedLibraries.Library>();
     }
 
+    /// <summary>Called (from the build thread) when an additional library had to be skipped
+    /// - or part of it - because it could not be read. The primary is never affected.</summary>
+    public Action<string, Exception>? SourceSkipped { get; set; }
+
     private const LuceneVersion Ver = LuceneVersion.LUCENE_48;
 
     // Field names. THREE indexed fields: the full TOC path (also stored — it is the
@@ -316,21 +320,42 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             // the load boundary — everything below this point (tree order, catalog paths, the
             // book-title docs, TOC streaming lookups) works in global ids exactly as it always
             // worked in the single-library case, which is why none of that code needed to change.
-            foreach (var (index, conn) in sources)
+            // Each source loads into its OWN temporary lists and is merged only once it loaded
+            // completely. An additional library that passed the attach-time probe but fails at
+            // read time (corrupt page, missing table) is dropped whole and logged; it must never
+            // prevent the primary's catalog index from being built.
+            foreach (var (index, conn) in sources.ToList())
             {
-                foreach (var c in LoadCategories(conn))
-                    categoryList.Add((Global(index, c.Id), c.ParentId is { } pid ? Global(index, pid) : null, c.Title));
-                foreach (var b in LoadBooks(conn))
-                    books.Add((Global(index, b.Id), b.Title, Global(index, b.CategoryId), b.Authors));
-                foreach (var kv in LoadFirstLines(conn))
-                    firstLines[Global(index, kv.Key)] = (Global(index, kv.Value.LineId), kv.Value.LineIndex);
-                foreach (var kv in LoadAltStructures(conn))
+                var srcCategories = new List<(int Id, int? ParentId, string Title)>();
+                var srcBooks = new List<(int Id, string Title, int CategoryId, string? Authors)>();
+                var srcFirstLines = new Dictionary<int, (int LineId, int LineIndex)>();
+                var srcAlt = new Dictionary<int, (int BookId, string Title, string HeTitle)>();
+                try
+                {
+                    foreach (var c in LoadCategories(conn))
+                        srcCategories.Add((Global(index, c.Id), c.ParentId is { } pid ? Global(index, pid) : null, c.Title));
+                    foreach (var b in LoadBooks(conn))
+                        srcBooks.Add((Global(index, b.Id), b.Title, Global(index, b.CategoryId), b.Authors));
+                    foreach (var kv in LoadFirstLines(conn))
+                        srcFirstLines[Global(index, kv.Key)] = (Global(index, kv.Value.LineId), kv.Value.LineIndex);
                     // Structure ids are internal bookkeeping (never surfaced to the frontend),
-                    // but still globalized so two libraries' alt-TOC structures cannot collide in
-                    // altStructures/the per-book level-truncation grouping below. 0 (the sentinel
-                    // for "the regular TOC") is never a real alt_toc_structure id, so it is left
-                    // untranslated on purpose — see GlobalStructure.
-                    altStructures[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
+                    // but globalized so two libraries' alt-TOC structures cannot collide. 0 (the
+                    // "regular TOC" sentinel) is never a real id and stays untranslated.
+                    foreach (var kv in LoadAltStructures(conn))
+                        srcAlt[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
+                }
+                catch (Exception ex) when (index != 0)
+                {
+                    SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+                    sources.RemoveAll(s => s.Index == index);
+                    conn.Dispose();
+                    continue;
+                }
+
+                categoryList.AddRange(srcCategories);
+                books.AddRange(srcBooks);
+                foreach (var kv in srcFirstLines) firstLines[kv.Key] = kv.Value;
+                foreach (var kv in srcAlt) altStructures[kv.Key] = kv.Value;
             }
 
             var bookRank = SeforimDbBookTreeOrder.Compute(
@@ -410,6 +435,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             // processes one book's/structure's rows from one source at a time.
             foreach (var (index, conn) in sources)
             {
+              try
+              {
                 // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
                 foreach (var group in StreamTocRowsByBook(conn))
                 {
@@ -431,6 +458,13 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
                         catalogPathByBook.GetValueOrDefault(st.BookId, ""), globalStructureId);
                 }
+              }
+              catch (Exception ex) when (index != 0)
+              {
+                // This library's TOC tables are unreadable: its book-title docs are already in,
+                // only its TOC entries are lost. Primary and other libraries are unaffected.
+                SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+              }
             }
 
             // 1+2. The normal index is complete — commit it before the slower verse pass,
@@ -446,7 +480,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             foreach (var (index, conn) in sources)
             {
                 var libraryBooks = books.Where(b => SeforimDbLibraryId.Resolve(b.Id).LibraryIndex == index).ToList();
-                docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct);
+                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct); }
+                catch (Exception ex) when (index != 0)
+                {
+                    SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+                }
             }
             writer.Commit();
 

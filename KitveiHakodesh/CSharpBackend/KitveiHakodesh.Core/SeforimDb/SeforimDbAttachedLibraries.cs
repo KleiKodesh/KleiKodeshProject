@@ -211,7 +211,12 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // table this feature actually namespaces, not just `line` (the biggest one):
                 // `book`/`category` are namespaced too and a library could plausibly have more
                 // categories than lines in a degenerate case.
-                return MaxIdFits(connection, "book")
+                // Column-level check of exactly what the catalog queries and the full-text corpus
+                // SELECT: a file with the right table NAMES but other columns would otherwise attach
+                // fine and then throw in the middle of an index build, after the primary was
+                // already indexed. Rejected here, before any enumeration begins.
+                return HasColumns(connection)
+                    && MaxIdFits(connection, "book")
                     && MaxIdFits(connection, "category")
                     && MaxIdFits(connection, "line");
             }
@@ -221,6 +226,33 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // permissions). Not compatible; not fatal to the primary database.
                 return false;
             }
+        }
+
+        /// <summary>Selecting each column the catalog/full-text readers use, with LIMIT 0, proves
+        /// the columns exist without reading a row. Line TEXT is deliberately not checked here:
+        /// it lives in line.content or line_content depending on schema version, and the full-text
+        /// corpus validates that itself (see CompositeFtsCorpus).</summary>
+        private static bool HasColumns(SqliteConnection connection)
+        {
+            string[] probes =
+            {
+                "SELECT id, parentId, title, level FROM category LIMIT 0",
+                "SELECT id, categoryId, title, orderIndex, hasTeamim, totalLines FROM book LIMIT 0",
+                "SELECT id, name FROM author LIMIT 0",
+                "SELECT bookId, authorId FROM book_author LIMIT 0",
+                "SELECT id, bookId, lineIndex FROM line LIMIT 0",
+            };
+            foreach (string sql in probes)
+            {
+                try
+                {
+                    using var command = connection.CreateCommand();
+                    command.CommandText = sql;
+                    using var reader = command.ExecuteReader();
+                }
+                catch (SqliteException) { return false; }
+            }
+            return true;
         }
 
         /// <summary>True when every id in <paramref name="table"/> is small enough to sit inside
