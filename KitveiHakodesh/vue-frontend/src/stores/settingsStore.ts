@@ -237,7 +237,7 @@ const DEFAULTS = {
  * as it lands under one of these namespaces.
  */
 const PRESERVE_PREFIXES = ['tabs:', 'workspaces.']
-const PRESERVE_KEYS = new Set<string>([KEYS.SETTINGS_SETUP_DONE])
+const PRESERVE_KEYS = new Set<string>([KEYS.SETTINGS_SETUP_DONE, KEYS.SETTINGS_TERMS_ACCEPTED])
 
 function clearPersistedSettings(): void {
   for (const key of lsKeys()) {
