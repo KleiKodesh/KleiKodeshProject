@@ -85,10 +85,12 @@ export function useZmanim() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         geoCity.value = nearestCity(coords.latitude, coords.longitude)
+        // A city picked while the lookup was pending wins; don't overwrite it.
+        if (manualCity.value) return
         status.value = 'geo'
         lsSet(KEYS.SETTINGS_ZMANIM_CITY, geoCity.value.name)
       },
-      () => { status.value = 'fallback' },
+      () => { if (!manualCity.value) status.value = 'fallback' },
       { timeout: 8000, maximumAge: 3_600_000 },
     )
   }

@@ -41,7 +41,9 @@ useDropdownClose(
     if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
     cityOpen.value = false
   },
-  { ignore: [cityBoxRef] },
+  // fitToViewport off: toggleCityDropdown positions and caps the list itself, and the fit
+  // pass would wipe that max-height and re-shift the list a frame later.
+  { ignore: [cityBoxRef], fitToViewport: false },
 )
 
 onMounted(() => {
