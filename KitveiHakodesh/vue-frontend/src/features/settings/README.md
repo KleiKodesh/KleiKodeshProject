@@ -68,7 +68,7 @@ and hold their position across the step transition. Each step's heading text the
 lives in the `STEPS` table in SetupWizard.vue, not in the step component — the header is
 part of the frame that stays put.
 
-**SetupWizardStepBookDisplay.vue**, **SetupWizardStepCommentaryDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepGeneral.vue**, **SetupWizardStepShortcuts.vue**, **SetupWizardStepTheme.vue** — the per-step body content, and nothing else: no card, no title, no nav. Multi-root templates by design.
+**SetupWizardStepBookDisplay.vue**, **SetupWizardStepCommentaryDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepDivineNames.vue**, **SetupWizardStepQuickSettings.vue**, **SetupWizardStepShortcuts.vue**, **SetupWizardStepTheme.vue** — the per-step body content, and nothing else: no card, no title, no nav. Multi-root templates by design.
 
 ## Adding a new settings section
 

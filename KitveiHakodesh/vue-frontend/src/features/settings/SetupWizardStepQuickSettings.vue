@@ -3,17 +3,30 @@ import { ref, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { pickFolder, clearHbLocalFolder } from '@/webview-host/bridge'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
 import SettingRow from './SettingRow.vue'
+import SettingsPagePathField from './SettingsPagePathField.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
 const settings = useSettingsStore()
-const { resumeLastRead } = storeToRefs(settings)
+const { resumeLastRead, hebrewBooksLocalFolder } = storeToRefs(settings)
 
-const bookViewStore = useBookViewStore()
-const { toolbarPosition } = storeToRefs(bookViewStore)
+// Same wiring as the settings page (SettingsPageAdvancedSection).
+async function pickHebrewBooksFolder() {
+  const result = await pickFolder()
+  if (result) hebrewBooksLocalFolder.value = result
+}
+
+function commitHebrewBooksFolder(newPath: string) {
+  hebrewBooksLocalFolder.value = newPath
+}
+
+async function resetHebrewBooksFolder() {
+  await clearHbLocalFolder()
+  hebrewBooksLocalFolder.value = ''
+}
 
 const { activeCity, setCity, init: initZmanim } = useZmanim()
 
@@ -79,18 +92,6 @@ function pickCity(name: string) {
       ]"
     />
   </SettingRow>
-  <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
-    <ToggleGroup
-      v-model="toolbarPosition"
-      :options="[
-        { label: 'למעלה', value: 'top' },
-        { label: 'למטה', value: 'bottom' },
-        { label: 'שמאל', value: 'left' },
-        { label: 'ימין', value: 'right' },
-      ]"
-      @update:model-value="bookViewStore.setToolbarPosition($event)"
-    />
-  </SettingRow>
   <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
     <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
       <span class="select-display">{{ activeCity.name }}</span>
@@ -118,6 +119,20 @@ function pickCity(name: string) {
         </div>
       </div>
     </Teleport>
+  </SettingRow>
+  <SettingRow
+    label="תיקייה לשמירת ספרי היברו בוקס לצמיתות במחשב (רשות)"
+    hint="כברירת מחדל, ספרים שהורדו נשמרים במטמון זמני של 10 הספרים האחרונים. בחר תיקייה כדי לשמור לצמיתות כל ספר שהורד; התיקייה תיווצר אם אינה קיימת. אפשר לבחור בתיקיית מאגר הספרים של תוכנת ארון הספרים הדיגיטלי."
+  >
+    <SettingsPagePathField
+      :value="hebrewBooksLocalFolder"
+      placeholder="לא נבחרה תיקייה"
+      :clearable="true"
+      :editable="true"
+      @pick="pickHebrewBooksFolder"
+      @clear="resetHebrewBooksFolder"
+      @commit="commitHebrewBooksFolder"
+    />
   </SettingRow>
 </template>
 

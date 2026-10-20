@@ -7,9 +7,10 @@ import { useSettings } from './useSettingsPage'
 import PageCard from '@/components/PageCard.vue'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
-import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
+import SetupWizardStepQuickSettings from './SetupWizardStepQuickSettings.vue'
 import SetupWizardStepBookDisplay from './SetupWizardStepBookDisplay.vue'
 import SetupWizardStepCommentaryDisplay from './SetupWizardStepCommentaryDisplay.vue'
+import SetupWizardStepDivineNames from './SetupWizardStepDivineNames.vue'
 import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
 import SetupWizardStepTerms from './SetupWizardStepTerms.vue'
 
@@ -33,9 +34,10 @@ type Step =
   | 'welcome'
   | 'db'
   | 'theme'
-  | 'general'
+  | 'quick-settings'
   | 'book-display'
   | 'commentary-display'
+  | 'divine-names'
   | 'shortcuts'
 
 // The db step is shown when the service reports that the resolved seforim DB does
@@ -50,7 +52,7 @@ const steps = computed<Step[]>(() => {
   if (termsOnly) return ['terms']
   const s: Step[] = ['welcome']
   if (!dbReady.value) s.push('db')
-  s.push('theme', 'general', 'book-display', 'commentary-display', 'shortcuts')
+  s.push('theme', 'quick-settings', 'book-display', 'commentary-display', 'divine-names', 'shortcuts')
   s.push('terms')
   return s
 })
@@ -84,10 +86,10 @@ const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }>
     desc: 'בחר ערכת נושא וגודל תצוגה שנוחים לך.',
     component: SetupWizardStepTheme,
   },
-  general: {
+  'quick-settings': {
     title: 'כמה הגדרות מהירות',
     desc: 'הגדרות אלו ישפיעו על חוויית הקריאה היומיומית שלך.',
-    component: SetupWizardStepGeneral,
+    component: SetupWizardStepQuickSettings,
   },
   'book-display': {
     title: 'תצוגת הספרים',
@@ -98,6 +100,11 @@ const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }>
     title: 'תצוגת הפירושים',
     desc: 'הפירושים יכולים להיראות כמו הספר, או לקבל גופנים ומרווחים משל עצמם.',
     component: SetupWizardStepCommentaryDisplay,
+  },
+  'divine-names': {
+    title: "כיסוי שם ה'",
+    desc: 'בחר כיצד ייכתבו שמות הקודש בספרים.',
+    component: SetupWizardStepDivineNames,
   },
   shortcuts: {
     title: 'קיצורי מקשים שכדאי להכיר',
