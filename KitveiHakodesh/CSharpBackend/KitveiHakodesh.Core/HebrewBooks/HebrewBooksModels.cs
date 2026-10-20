@@ -69,6 +69,10 @@ namespace KitveiHakodesh.Core.HebrewBooks
         public HebrewBookAcquireFailure Failure { get; set; }
         public string? Detail { get; set; }
 
+        /// <summary>The upstream status for <see cref="HebrewBookAcquireFailure.HttpStatus"/>;
+        /// <see cref="Detail"/> then carries the full response diagnosis.</summary>
+        public int? HttpStatusCode { get; set; }
+
         [IgnoreMember]
         public bool Succeeded => Path != null;
 

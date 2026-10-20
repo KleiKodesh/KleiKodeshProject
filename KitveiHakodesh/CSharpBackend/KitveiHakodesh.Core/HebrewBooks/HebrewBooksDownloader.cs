@@ -144,10 +144,13 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    return response.StatusCode == HttpStatusCode.NotFound
-                        ? HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'")
-                        : HebrewBookAcquireResult.Failed(
-                            HebrewBookAcquireFailure.HttpStatus, ((int)response.StatusCode).ToString());
+                    if (response.StatusCode == HttpStatusCode.NotFound)
+                        return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'");
+                    var failed = HebrewBookAcquireResult.Failed(
+                        HebrewBookAcquireFailure.HttpStatus,
+                        await DescribeFailedResponseAsync(url, response, downloadToken).ConfigureAwait(false));
+                    failed.HttpStatusCode = (int)response.StatusCode;
+                    return failed;
                 }
 
                 long total = response.Content.Headers.ContentLength ?? 0;
@@ -294,6 +297,42 @@ namespace KitveiHakodesh.Core.HebrewBooks
             length >= PdfSignatureLength
             && head[0] == (byte)'%' && head[1] == (byte)'P' && head[2] == (byte)'D'
             && head[3] == (byte)'F' && head[4] == (byte)'-';
+
+        /// <summary>
+        /// Everything needed to diagnose a refused download on a machine we cannot reach: which
+        /// URL, where redirects ended, every header (Server/Via/cf-* tell a filtering proxy or
+        /// Cloudflare from hebrewbooks.org itself) and the start of the error page's text.
+        /// </summary>
+        private static async Task<string> DescribeFailedResponseAsync(
+            string url, HttpResponseMessage response, CancellationToken ct)
+        {
+            var text = new System.Text.StringBuilder();
+            text.Append($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}\n");
+            text.Append($"Request URL: {url}\n");
+            text.Append($"Final URL: {response.RequestMessage?.RequestUri}\n");
+            text.Append("Headers:\n");
+            foreach (var header in response.Headers)
+                text.Append($"  {header.Key}: {string.Join(", ", header.Value)}\n");
+            foreach (var header in response.Content.Headers)
+                text.Append($"  {header.Key}: {string.Join(", ", header.Value)}\n");
+
+            try
+            {
+                using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                byte[] buffer = new byte[4096];
+                int length = await ReadFullyAsync(body, buffer, ct).ConfigureAwait(false);
+                string html = System.Text.Encoding.UTF8.GetString(buffer, 0, length);
+                string plain = System.Text.RegularExpressions.Regex.Replace(html, "<script[\\s\\S]*?</script>|<style[\\s\\S]*?</style>|<[^>]+>", " ");
+                plain = System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(plain), "\\s+", " ").Trim();
+                if (plain.Length > 600) plain = plain.Substring(0, 600) + "…";
+                text.Append($"Body ({length} bytes read): {plain}");
+            }
+            catch (Exception ex) when (ex is IOException || ex is HttpRequestException)
+            {
+                text.Append($"Body unreadable: {ex.GetType().Name}: {ex.Message}");
+            }
+            return text.ToString();
+        }
 
         /// <summary>Reads until the buffer is full or the stream ends, returning how much
         /// arrived. A single ReadAsync may return fewer bytes than asked for, which would make
