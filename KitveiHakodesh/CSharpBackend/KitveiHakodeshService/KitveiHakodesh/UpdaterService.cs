@@ -18,6 +18,7 @@ namespace KitveiHakodeshService.KitveiHakodesh;
 ///
 /// The service is demand-start and may not run for days, so "weekly" is a stamp on disk,
 /// not a timer: every start (and every few hours while running) compares it with now.
+/// Besides that, every app registration (registerOwner) checks at once.
 /// </summary>
 internal sealed class UpdaterService(Updater updater, ILogger<UpdaterService> logger) : BackgroundService
 {
@@ -35,10 +36,12 @@ internal sealed class UpdaterService(Updater updater, ILogger<UpdaterService> lo
         try { await Task.Delay(StartupDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
+        // A registration during the startup delay stays pending and runs the first pass.
+        bool requested = updater.CheckRequested.Wait(0);
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (IsDue()) await RunPassAsync(stoppingToken);
-            try { await Task.Delay(WakeInterval, stoppingToken); }
+            if (requested || IsDue()) await RunPassAsync(stoppingToken);
+            try { requested = await updater.CheckRequested.WaitAsync(WakeInterval, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }
