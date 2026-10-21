@@ -232,7 +232,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   width: fit-content;
   min-width: 140px;
   max-width: 100%;
-  background: var(--bg-secondary);
+  background: var(--tree-bg, var(--bg-secondary));
   direction: rtl;
 }
 
@@ -376,7 +376,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   border-top: 1px solid var(--border-color);
   padding: 5px 6px 6px;
   box-sizing: border-box;
-  background: var(--bg-secondary);
+  background: var(--tree-bg, var(--bg-secondary));
 }
 
 .search-inner {

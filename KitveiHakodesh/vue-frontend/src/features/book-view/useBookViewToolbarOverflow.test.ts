@@ -3,7 +3,6 @@ import {
   keysToCollapse,
   widthOf,
   TOOLBAR_OVERFLOW_ORDER,
-  TOOLBAR_SEPARATOR_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
 
@@ -33,16 +32,11 @@ describe('collapse order', () => {
   it('is the order the product fixed, worst-first', () => {
     expect(ALL).toEqual(['book-info', 'export-to-word', 'sync-commentaries', 'diacritics', 'zoom'])
   })
-
-  it('charges a separator less than a button', () => {
-    expect(TOOLBAR_SEPARATOR_IN_BUTTONS).toBeLessThan(1)
-    expect(TOOLBAR_SEPARATOR_IN_BUTTONS).toBeGreaterThan(0)
-  })
 })
 
 describe('widthOf', () => {
-  it('charges zoom for both buttons AND the separator that collapses with them', () => {
-    expect(widthOf('zoom')).toBe(2 + TOOLBAR_SEPARATOR_IN_BUTTONS)
+  it('charges zoom for both buttons', () => {
+    expect(widthOf('zoom')).toBe(2)
   })
 
   it('charges every other control one button', () => {
@@ -51,7 +45,7 @@ describe('widthOf', () => {
 })
 
 describe('keysToCollapse', () => {
-  const PINNED = 8 + TOOLBAR_SEPARATOR_IN_BUTTONS
+  const PINNED = 8
 
   it('collapses nothing when everything fits exactly', () => {
     expect(keysToCollapse(roomForEverything(PINNED), PINNED, ALL)).toEqual([])
@@ -96,10 +90,10 @@ describe('keysToCollapse', () => {
   })
 
   it('counts zoom as the two buttons it is', () => {
-    // Short by five buttons: book info, export, sync and diacritics free one each, and zoom's
+    // Short by six buttons: book info, export, sync and diacritics free one each, and zoom's
     // two clear the rest. Were zoom counted as one, the toolbar would still be a button over
     // with nothing left to collapse.
-    const room = roomForEverything(PINNED) - 5 * BUTTON
+    const room = roomForEverything(PINNED) - 6 * BUTTON
     expect(keysToCollapse(room, PINNED, ALL)).toEqual([
       'book-info',
       'export-to-word',

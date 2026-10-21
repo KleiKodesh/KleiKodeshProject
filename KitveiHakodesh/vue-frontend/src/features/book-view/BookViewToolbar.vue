@@ -29,7 +29,6 @@ import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
   TOOLBAR_OVERFLOW_ORDER,
-  TOOLBAR_SEPARATOR_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
 import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
@@ -269,16 +268,7 @@ const pinnedButtonCount = computed(() => {
   // Reported by the control itself rather than predicted here: it renders out of a list it
   // fetches, so nothing on this side can know in advance whether it is there.
   const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  // One separator, not two: the other one introduces the zoom pair and collapses with it,
-  // so it is the zoom control's own cost rather than a pinned one.
-  return (
-    alwaysOn +
-    dropdowns +
-    commentaryToggles +
-    search +
-    wordLinkMarkers +
-    TOOLBAR_SEPARATOR_IN_BUTTONS
-  )
+  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers
 })
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
@@ -428,9 +418,6 @@ defineExpose({ tocBtnRef })
       :book-id="bookId"
     />
 
-    <!-- The separator belongs to the zoom pair it introduces, so it goes when they go. -->
-    <div aria-hidden="true" class="separator collapsible" :class="{ collapsed: !toolbarButtonVisible('zoom') }" />
-
     <button
       class="collapsible"
       :class="{ collapsed: !toolbarButtonVisible('zoom') }"
@@ -457,8 +444,6 @@ defineExpose({ tocBtnRef })
     >
       <IconZoomIn20Regular />
     </button>
-
-    <div aria-hidden="true" class="separator" />
 
     <button
       class="collapsible"
@@ -714,11 +699,6 @@ defineExpose({ tocBtnRef })
   inset: 0 auto 0 0;
   border-left-width: 1px;
 }
-/* The docked side panel (TOC etc.) sits right beside a right-hand toolbar and reads as
-   one surface with it - no line between them. */
-.book-view-toolbar.no-edge-line::after {
-  display: none;
-}
 
 /* ── Buttons ── */
 button {
@@ -879,24 +859,6 @@ button:disabled {
   max-height: 320px;
   overflow-y: auto;
   padding: 4px 12px 8px;
-}
-
-/* ── Separators ── */
-.separator {
-  background: var(--border-color);
-  flex-shrink: 0;
-}
-.toolbar-top .separator,
-.toolbar-bottom .separator {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-}
-.toolbar-left .separator,
-.toolbar-right .separator {
-  width: 18px;
-  height: 1px;
-  margin: 2px 0;
 }
 
 /* ── Diacritics ── */

@@ -3,20 +3,10 @@ import { useElementSize } from '@vueuse/core'
 
 /**
  * Geometry the fit arithmetic mirrors from the toolbar's CSS (BookViewToolbar and the
- * `--toolbar-*` variables in main.css) - a 28px button with no gap between buttons, and a
- * 1px separator carrying 2px of margin on each side. Change any of them there, change
- * them here.
+ * `--toolbar-*` variables in main.css) - a 28px button with no gap between buttons.
+ * Change it there, change it here.
  */
 const TOOLBAR_BUTTON_SIZE = 28
-/**
- * A separator, as a share of a button-width: a 1px rule with 2px of margin on each side.
- * Charged at its real size rather than rounded up to a button.
- *
- * The toolbar has two, and they are charged to different owners: the one that introduces the
- * zoom pair collapses with it and so belongs to zoom's width (see widthOf), while the other
- * is pinned and counts among the toolbar's pinned children. Each is charged exactly once.
- */
-export const TOOLBAR_SEPARATOR_IN_BUTTONS = (1 + 2 * 2) / TOOLBAR_BUTTON_SIZE
 /**
  * How far the anchored more button sits from the edge it is pinned to. Mirrors
  * `--toolbar-edge-inset` in BookViewToolbar.
@@ -78,15 +68,13 @@ export type ToolbarOverflowKey = (typeof TOOLBAR_OVERFLOW_ORDER)[number]
 
 /**
  * How much toolbar room a key is worth, in button-widths. Only zoom differs: it is a pair of
- * buttons and their separator collapsing as one control into a single flyout row, so it
+ * buttons collapsing as one control into a single flyout row, so it
  * frees more than twice what any other key does. Counting it as one would make the toolbar
  * think collapsing it saved a fraction of what it does, and stop collapsing a button early.
  */
 export function widthOf(key: ToolbarOverflowKey): number {
-  // Zoom is a PAIR - zoom out and zoom in - plus the separator that introduces them, all of
-  // which collapse together into one flyout row. The separator is charged here rather than
-  // among the pinned children for exactly that reason: it goes when they go.
-  return key === 'zoom' ? 2 + TOOLBAR_SEPARATOR_IN_BUTTONS : 1
+  // Zoom is a PAIR - zoom out and zoom in - collapsing together into one flyout row.
+  return key === 'zoom' ? 2 : 1
 }
 
 /**
@@ -185,7 +173,7 @@ export function keysToCollapse(
  *                        TOOLBAR_OVERFLOW_ORDER. A book with no commentaries has no
  *                        sync button, and a control nothing renders must not be counted
  *                        against the fit.
- * @param pinnedCount   - how much room the non-collapsible buttons and the separators take,
+ * @param pinnedCount   - how much room the non-collapsible buttons take,
  *                        in button-widths. They always have theirs, so it comes off before
  *                        anything collapsible is measured.
  */
