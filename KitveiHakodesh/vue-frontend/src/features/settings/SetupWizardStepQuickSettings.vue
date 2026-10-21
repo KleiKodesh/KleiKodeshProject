@@ -176,7 +176,6 @@ function pickCity(name: string) {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 .city-option {
   height: 26px;

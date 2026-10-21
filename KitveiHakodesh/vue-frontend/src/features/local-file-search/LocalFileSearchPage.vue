@@ -440,7 +440,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 .sort-dropdown {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  inset-inline-start: 0;
   min-width: 160px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);

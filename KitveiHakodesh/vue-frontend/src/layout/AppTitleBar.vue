@@ -568,7 +568,7 @@ useAppTitleBarShortcuts({
        inherits RTL from the shell and its last flex child lands left.
      This box is dir="rtl", so inset-inline-start would resolve to the RIGHT
      and break the second point. */
-  left: 4px;
+  inset-inline-end: 4px;
   width: 12px;
   height: 12px;
   color: var(--text-secondary);

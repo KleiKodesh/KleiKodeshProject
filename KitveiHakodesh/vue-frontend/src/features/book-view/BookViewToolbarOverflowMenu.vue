@@ -183,7 +183,6 @@ watch(
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  direction: rtl;
   outline: none;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -209,7 +208,7 @@ watch(
   border-radius: 0;
   font-size: 13px;
   color: var(--text-primary);
-  text-align: right;
+  text-align: start;
   white-space: nowrap;
 }
 /* A whole-row hover reads as "this row does something", so only the rows that ARE one

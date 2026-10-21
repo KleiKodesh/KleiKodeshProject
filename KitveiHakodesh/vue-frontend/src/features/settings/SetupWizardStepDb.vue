@@ -130,12 +130,11 @@ function downloadOtzaria() {
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: ltr;
-  text-align: left;
+  text-align: end;
   min-width: 0;
 }
 .db-card-path.placeholder {
-  direction: rtl;
-  text-align: right;
+  text-align: start;
   font-style: italic;
 }
 
@@ -151,7 +150,7 @@ function downloadOtzaria() {
   color: var(--text-primary);
   font-size: 11px;
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 .db-dev-apply {
   flex-shrink: 0;
@@ -174,6 +173,6 @@ function downloadOtzaria() {
   font-size: 11px;
   color: var(--text-secondary);
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 </style>

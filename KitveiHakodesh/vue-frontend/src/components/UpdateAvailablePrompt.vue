@@ -75,8 +75,8 @@ onBeforeUnmount(() => {
      Word task pane gets the full width, never half of it. Bottom corner, like the toast. */
   position: fixed;
   bottom: 20px;
-  left: 16px;
-  right: 16px;
+  inset-inline-end: 16px;
+  inset-inline-start: 16px;
   margin-inline: auto;
   width: fit-content;
   max-width: 480px;
@@ -86,7 +86,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px 14px;
   padding: 14px 16px;
-  direction: rtl;
   font-family: var(--header-font);
   font-size: 13px;
   line-height: 1.45;

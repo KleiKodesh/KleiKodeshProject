@@ -186,7 +186,7 @@ function onSelect(headword: string) {
 </script>
 
 <template>
-  <div class="dict-page">
+  <div dir="rtl" class="dict-page">
     <TopSearchBar>
       <input
         ref="searchInputRef"

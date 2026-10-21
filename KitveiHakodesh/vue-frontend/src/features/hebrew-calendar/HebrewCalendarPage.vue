@@ -105,7 +105,6 @@ onMounted(() => {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
-  direction: rtl;
 }
 
 .calendar-view {

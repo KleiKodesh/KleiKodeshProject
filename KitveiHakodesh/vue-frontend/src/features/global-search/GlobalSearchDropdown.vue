@@ -211,7 +211,7 @@ function getTabIcon(route: string): FileIconInfo {
 
 <template>
   <Teleport to="body">
-    <div
+    <div dir="rtl"
       ref="dropdownRef"
       class="global-search-dropdown"
       :class="{ 'is-merged': mergeWithAnchor }"
@@ -448,8 +448,8 @@ function getTabIcon(route: string): FileIconInfo {
    the panel while the top stays perfectly clean. */
 .global-search-dropdown.is-merged {
   border-top: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-start-end-radius: 0;
+  border-start-start-radius: 0;
   box-shadow: 0 24px 20px -20px rgba(0, 0, 0, 0.35);
 }
 
@@ -527,7 +527,7 @@ function getTabIcon(route: string): FileIconInfo {
   /* Row height matches the title bar (32px). */
   height: var(--title-bar-height);
   padding: 0 12px;
-  text-align: right;
+  text-align: start;
   background: transparent;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   cursor: pointer;

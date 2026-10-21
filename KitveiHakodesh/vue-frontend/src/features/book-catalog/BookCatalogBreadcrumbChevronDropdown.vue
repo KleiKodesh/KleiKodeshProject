@@ -166,7 +166,6 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
   padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .chevron-dropdown-item {
@@ -174,7 +173,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
   width: 100%;
   height: 26px;
   padding: 0 10px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

@@ -620,6 +620,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
           v-else
           ref="scrollerEl"
           class="scroller"
+          dir="rtl"
           tabindex="0"
           data-ctrlf-enabled
           @scroll="onScroll"
@@ -739,8 +740,8 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 .positioning-mask {
   position: absolute;
   top: 32px;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   bottom: 0;
   z-index: 5;
   display: flex;

@@ -63,7 +63,7 @@ function selectItem(i: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
-  <div v-else ref="tilesEl" class="tiles-grid">
+  <div v-else ref="tilesEl" class="tiles-grid" dir="rtl">
     <!-- A <button>, like the home page tiles: it is a control, so it gets the
          semantics for free — and, unlike a div, it does not stretch to fill its
          grid cell, which is what keeps it the same 72px as home's. -->

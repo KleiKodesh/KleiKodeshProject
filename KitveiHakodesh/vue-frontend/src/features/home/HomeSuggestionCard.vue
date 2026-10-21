@@ -118,7 +118,6 @@ function onRemove() {
       type="button"
       class="card"
       data-nav-item
-      dir="rtl"
       :title="cardTooltip"
       @click="card.open(wantsNewTab($event))"
       @auxclick.middle="card.open(wantsNewTab($event))"
@@ -126,7 +125,7 @@ function onRemove() {
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
-        <span v-if="card.path" class="card-path">{{ card.path }}</span>
+        <span v-if="card.path" class="card-path" dir="auto">{{ card.path }}</span>
       </span>
     </button>
 

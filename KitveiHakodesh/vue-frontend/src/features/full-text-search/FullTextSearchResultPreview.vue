@@ -143,7 +143,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 </script>
 
 <template>
-  <div ref="boxEl" class="preview-box" @scroll.passive="onScroll">
+  <div dir="rtl" ref="boxEl" class="preview-box" @scroll.passive="onScroll">
     <WordLinkTooltip
       v-if="wordLinkTooltip"
       :key="wordLinkTooltip.id"

@@ -47,8 +47,8 @@ useDropdownClose(
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   z-index: 100;
   background: rgba(0, 0, 0, 0.28);
 }
@@ -56,7 +56,7 @@ useDropdownClose(
 .side-panel-overlay {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-start: 0;
   bottom: 0;
 }
 
@@ -83,6 +83,6 @@ useDropdownClose(
 /* Overlay mode floats over the content with no sash beside it, so it needs its
    own edge. */
 .side-panel-overlay {
-  border-left: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
 }
 </style>

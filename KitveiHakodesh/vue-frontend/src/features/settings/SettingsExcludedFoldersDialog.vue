@@ -146,7 +146,6 @@ async function saveAndClose() {
   padding: 20px 20px 14px;
   width: 460px;
   max-width: calc(100vw - 32px);
-  direction: rtl;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -198,7 +197,7 @@ async function saveAndClose() {
   overflow: hidden;
   text-overflow: ellipsis;
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 
 .excluded-item:hover {

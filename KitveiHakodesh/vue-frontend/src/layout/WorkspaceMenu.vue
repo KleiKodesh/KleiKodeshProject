@@ -421,7 +421,6 @@ function onFieldKeydown(e: KeyboardEvent) {
   flex-direction: column;
   min-width: 200px;
   min-height: 0;
-  direction: rtl;
 }
 
 .ws-list {

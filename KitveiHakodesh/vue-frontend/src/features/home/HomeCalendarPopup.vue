@@ -12,7 +12,7 @@ onMounted(() => monthly.reset())
 </script>
 
 <template>
-  <div class="calendar-popup" dir="rtl">
+  <div class="calendar-popup">
     <div class="calendar-popup-header">
       <button class="nav-btn" :title="$t('home.calendar.prevMonth')" @click="monthly.prevMonth()">‹</button>
       <button class="title-btn" :title="$t('home.calendar.backToToday')" @click="monthly.goToday()">

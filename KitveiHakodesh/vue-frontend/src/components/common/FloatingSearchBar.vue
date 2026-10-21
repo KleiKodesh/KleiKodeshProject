@@ -127,7 +127,6 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   font-size: 13px;
   color: var(--text-primary);
   cursor: text;
-  direction: rtl;
 }
 
 .search-input::placeholder { color: var(--text-secondary); }

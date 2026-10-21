@@ -50,7 +50,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="tilesEl" class="tiles-grid">
+  <div dir="rtl" ref="tilesEl" class="tiles-grid">
     <!-- A <button>, like the browse grid's and the home page's: it is a control,
          and unlike a div it does not stretch to fill its grid cell, which is what
          keeps it the same 72px as theirs. -->

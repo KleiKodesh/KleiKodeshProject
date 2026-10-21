@@ -605,7 +605,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="results-wrap">
+  <div dir="rtl" class="results-wrap">
     <div v-if="dbNotFound || indexBuildFailed || !hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
       <MessageBanner v-if="dbNotFound" class="empty-error" :message="DB_NOT_FOUND_MESSAGE" :dismissible="false" />

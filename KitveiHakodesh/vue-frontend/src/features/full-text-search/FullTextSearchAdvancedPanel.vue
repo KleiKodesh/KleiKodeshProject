@@ -306,7 +306,7 @@ function onContextWordsInput(event: Event) {
 .option-hint {
   color: var(--text-secondary);
   font-size: 11px;
-  margin-right: 4px;
+  margin-inline-start: 4px;
 }
 .distance-input {
   width: 56px;

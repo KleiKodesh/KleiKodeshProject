@@ -57,7 +57,7 @@ defineExpose({ onSearchInputKeydown })
 </script>
 
 <template>
-  <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
+  <div dir="rtl" v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
   <div v-else ref="scrollEl" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
@@ -164,7 +164,7 @@ defineExpose({ onSearchInputKeydown })
   cursor: pointer;
   font-family: inherit;
   border-radius: 0;
-  text-align: right;
+  text-align: start;
 }
 .book-title:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -199,7 +199,7 @@ defineExpose({ onSearchInputKeydown })
   text-overflow: ellipsis;
   line-height: 1.3;
   width: 100%;
-  text-align: right;
+  text-align: start;
 }
 .count {
   font-size: 10px;

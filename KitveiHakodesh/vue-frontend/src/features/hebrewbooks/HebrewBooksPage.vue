@@ -104,7 +104,6 @@ function onBookClicked(
         type="search"
         :placeholder="$t('hebrewBooks.searchPlaceholder')"
         class="search-input"
-        dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
         @keydown="onSearchInputKeydown"
       />
@@ -199,7 +198,6 @@ function onBookClicked(
    from the global `.search-inner input` rule; the type size comes from TopSearchBar. */
 .search-input {
   flex: 1;
-  direction: rtl;
 }
 
 /* Docked under the list: squared top corners so it reads as part of the page edge. */

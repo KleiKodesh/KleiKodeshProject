@@ -371,8 +371,8 @@ defineExpose({ focus: focusInput })
   position: absolute;
   z-index: 9999;
   top: 4px;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -413,7 +413,6 @@ defineExpose({ focus: focusInput })
   font-size: 13px;
   color: var(--text-primary);
   cursor: text;
-  direction: rtl;
   /* Pinned, like the reference widget's 25px input row: without it the bar's height is
      whatever the glyphs happen to be, and it drifts between fonts and zoom levels. */
   height: 24px;

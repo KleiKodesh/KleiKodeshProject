@@ -378,7 +378,7 @@ const allRelated = computed(() => [
 
 .special-entry-label {
   display: block;
-  text-align: right;
+  text-align: start;
   font-size: 0.77em;
   font-weight: 700;
   color: var(--text-secondary);

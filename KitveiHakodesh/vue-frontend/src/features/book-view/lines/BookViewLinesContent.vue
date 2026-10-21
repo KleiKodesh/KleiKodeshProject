@@ -402,7 +402,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
 </script>
 
 <template>
-  <div class="lines-content">
+  <div dir="rtl" class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
@@ -577,7 +577,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 4px;
+  inset-inline-start: 4px;
   width: 3px;
   background: var(--accent-color);
   opacity: 0;

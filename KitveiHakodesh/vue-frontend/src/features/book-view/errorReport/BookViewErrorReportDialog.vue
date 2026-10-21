@@ -333,7 +333,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
   overflow-y: auto;
-  direction: rtl;
   display: flex;
   flex-direction: column;
   gap: 12px;

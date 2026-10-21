@@ -219,7 +219,7 @@ watch(hasNavOverflow, (has) => {
      physical property is the one that says it. */
   top: 0;
   bottom: 0;
-  right: 0;
+  inset-inline-start: 0;
   width: var(--nav-panel-width);
   display: flex;
   flex-direction: column;

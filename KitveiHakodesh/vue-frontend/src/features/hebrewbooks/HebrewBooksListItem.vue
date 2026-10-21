@@ -36,7 +36,7 @@ const tooltip = computed(() => {
 </script>
 
 <template>
-  <div
+  <div dir="rtl"
     class="item"
     data-nav-item
     :class="{ 'is-focused': focused }"

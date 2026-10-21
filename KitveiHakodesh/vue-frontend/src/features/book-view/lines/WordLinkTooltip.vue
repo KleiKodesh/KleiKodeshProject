@@ -676,8 +676,8 @@ useEventListener(() => window, 'resize', () => emit('close'))
 /* Above/below: the gap is vertical, so the bridge spans the panel's full width. */
 .word-link-tooltip.is-above::before,
 .word-link-tooltip.is-below::before {
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   height: var(--bridge-gap);
 }
 
@@ -703,11 +703,11 @@ useEventListener(() => window, 'resize', () => emit('close'))
 /* `is-beside-<side>` names the panel edge the anchor sits off, so the bridge hangs
    from that edge and reaches only across the MARGIN gap — never back over the link. */
 .word-link-tooltip.is-beside-right::before {
-  left: 100%;
+  inset-inline-end: 100%;
 }
 
 .word-link-tooltip.is-beside-left::before {
-  right: 100%;
+  inset-inline-start: 100%;
 }
 
 /* Read-only preview: never takes the pointer, so it cannot swallow a click meant

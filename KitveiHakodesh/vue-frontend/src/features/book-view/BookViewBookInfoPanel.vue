@@ -164,7 +164,7 @@ const infoRows = computed<BookInfoRow[]>(() => {
   cursor: text;
 }
 .book-info-panel {
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
 }

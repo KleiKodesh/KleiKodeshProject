@@ -308,7 +308,6 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           ref="learningMenuRef"
           class="learning-menu"
           :style="learningMenuStyle"
-          dir="rtl"
           tabindex="-1"
           @keydown="onLearningMenuKeydown"
         >
