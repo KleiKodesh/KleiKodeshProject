@@ -48,7 +48,7 @@ function cancelEdit() {
     <button
       class="folder-btn"
       :disabled="props.disabled"
-      title="בחר"
+      :title="$t('settings.path.browse')"
       @click="emit('pick')"
     >
       <IconFolderOpen20Regular />
@@ -77,7 +77,7 @@ function cancelEdit() {
     <button
       v-if="!editing && props.clearable && props.value"
       class="clear-btn"
-      title="נקה נתיב"
+      :title="$t('settings.path.clear')"
       @click="emit('clear')"
     >
       <IconDismiss20Regular />

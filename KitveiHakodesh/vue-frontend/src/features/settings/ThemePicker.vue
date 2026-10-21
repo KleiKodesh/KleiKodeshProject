@@ -6,6 +6,7 @@ import themesData from '@/theme/themes.json'
 import { useThemeStore } from '@/theme/themeStore'
 import { BACKGROUND_TINT_DEFAULT } from '@/theme/themes'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 
 const themeStore = useThemeStore()
 const { themePreset, backgroundTint } = storeToRefs(themeStore)
@@ -24,10 +25,12 @@ const families = Object.entries(
   ),
 )
 
+const { t } = useI18n()
+
 const currentTheme = computed(() => themesData[themePreset.value as ThemeKey])
 const currentName = computed(() =>
   currentTheme.value
-    ? `${currentTheme.value.name} — ${currentTheme.value.isDark ? 'כהה' : 'בהיר'}`
+    ? `${t('settings.themeName.' + currentTheme.value.family)} — ${currentTheme.value.isDark ? t('settings.theme.dark') : t('settings.theme.light')}`
     : themePreset.value,
 )
 
@@ -107,18 +110,18 @@ function select(key: ThemeKey) {
     <div v-if="isOpen" ref="dropdownRef" class="theme-dropdown" :style="dropdownStyle">
       <div class="theme-grid-header">
         <span></span>
-        <span class="col-label">בהיר</span>
-        <span class="col-label">כהה</span>
+        <span class="col-label">{{ $t('settings.theme.light') }}</span>
+        <span class="col-label">{{ $t('settings.theme.dark') }}</span>
       </div>
       <div v-for="[family, variants] in families" :key="family" class="theme-row">
-        <span class="family-name">{{ variants[0]?.theme.name }}</span>
+        <span class="family-name">{{ $t('settings.themeName.' + family) }}</span>
         <template v-for="isDark in [false, true]" :key="String(isDark)">
           <button
             v-for="{ key, theme } in variants.filter((v) => v.theme.isDark === isDark)"
             :key="key"
             class="theme-btn"
             :class="{ active: themePreset === key }"
-            :title="theme.name + (theme.isDark ? ' — כהה' : ' — בהיר')"
+            :title="$t('settings.themeName.' + theme.family) + ' — ' + (theme.isDark ? $t('settings.theme.dark') : $t('settings.theme.light'))"
             @click.stop="select(key)"
             @mouseenter="themeStore.previewTheme(key)"
             @mouseleave="themeStore.previewTheme(null)"
