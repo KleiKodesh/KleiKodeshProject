@@ -4,8 +4,8 @@
          everywhere else the app is single-tab, so every key in it would be a no-op. -->
     <template v-if="hasNativeChromeTabs">
       <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.tabManagement') }}</div>
-      <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>N</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.newTab') }}</span></div>
-      <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>T</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.openTabList') }}</span></div>
+      <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>T</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.newTab') }}</span></div>
+      <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>T</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.openTabList') }}</span></div>
       <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.holdCtrlAndCycleThroughTabs') }}</span></div>
       <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.cycleInReverse') }}</span></div>
       <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>W</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.closeTab') }}</span></div>

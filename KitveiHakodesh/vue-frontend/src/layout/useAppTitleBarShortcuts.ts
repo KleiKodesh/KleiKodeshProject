@@ -46,7 +46,7 @@ export function useAppTitleBarShortcuts(options: {
   titleBarVisible: Ref<boolean>
   /** Ctrl+\ is ignored unless split view actually fits on screen. */
   isSplitViewAvailable: ComputedRef<boolean>
-  /** Ctrl+E (and Ctrl+T where no native strip exists). Owned by the component because the
+  /** Ctrl+E. Owned by the component because the
    *  address bar's visibility drives its template. */
   toggleAddressBar: () => void
   /** Ctrl+M. Owned by the component for the same reason. */
@@ -211,21 +211,20 @@ export function useAppTitleBarShortcuts(options: {
         if (isBookViewActive.value) bookViewStore.openSearch(paneId)
         else if (isTxtViewActive.value) bookViewStore.txtViewToggleSearch(paneId)
         return true
-      case 'KeyT':
-        // Ctrl+T is the tab list, and the native strip is the only thing that has one.
-        // It used to fall back to the address bar where no strip exists, from when that
-        // dropdown listed open tabs — it lists recent locations now, and Ctrl+E already
-        // opens it, so the fallback was just a second key for the same thing.
-        if (hasNativeChromeTabs) toggleChromeTabList()
+      case 'KeyN':
+        // Swallow the browser's new-window; new tab is Ctrl+T.
         return true
       case 'KeyE':
         options.toggleAddressBar()
         return true
       // Only the demo-app host has somewhere to put a new tab. The VSTO task pane
       // shows one tab with no strip, and the dev browser has no strip either — in
-      // both, Ctrl+N would open a tab the user can never navigate back to.
-      case 'KeyN':
-        if (hasNativeChromeTabs) pane.openNewTab()
+      // both, Ctrl+T would open a tab the user can never navigate back to.
+      // Ctrl+Shift+T is the tab list, and the native strip is the only thing that has one.
+      case 'KeyT':
+        if (!hasNativeChromeTabs) return true
+        if (e.shiftKey) toggleChromeTabList()
+        else pane.openNewTab()
         return true
       case 'KeyG':
         pane.goHome()
