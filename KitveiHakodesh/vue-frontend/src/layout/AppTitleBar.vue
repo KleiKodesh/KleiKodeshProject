@@ -310,6 +310,84 @@ useAppTitleBarShortcuts({
           <IconLineHorizontal320Regular />
         </button>
       </div>
+      <!-- Navigation sits beside the nav dropdown. Home stays put whether or not
+           this pane's rail is up — it is a destination, and the bar is where it belongs. -->
+      <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
+           not between tabs (Ctrl+Tab still does that). Click steps once
+           (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.
+           The 'prev-tab'/'next-tab' visibility ids are legacy — they key the
+           persisted hidden-buttons setting, so renaming them is a migration. -->
+      <AppTitleBarHistoryButton
+        v-if="isTitleBarButtonVisible('prev-tab')"
+        :pane-id="props.paneId"
+        direction="back"
+        key="history-back"
+      />
+      <AppTitleBarHistoryButton
+        v-if="isTitleBarButtonVisible('next-tab')"
+        :pane-id="props.paneId"
+        direction="forward"
+        key="history-forward"
+      />
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" :title="t('layout.home')" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+    </div>
+
+    <!-- Search mode — the title turns into an editable address-bar search. -->
+    <AddressBar
+      v-if="searchMode"
+      :pane-id="props.paneId"
+      class="bar-search"
+      @close="searchMode = false"
+    />
+
+    <span
+      v-else
+      ref="barTitleRef"
+      class="bar-title"
+      :class="{ 'is-cramped': isTitleCramped }"
+      dir="rtl"
+      :title="barTitle"
+    >
+      <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
+      <AppTitleBarTocBreadcrumb
+        v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
+        :book-title="activeTabTitle"
+        :segments="tocBreadcrumbSegments"
+        :root-toc-entries="tocBreadcrumbRootTocEntries"
+        :root-pdf-entries="tocBreadcrumbRootPdfEntries"
+        @navigate-to-toc-entry="onNavigateToBreadcrumbEntry"
+        @navigate-to-pdf-entry="onNavigateToPdfBreadcrumbEntry"
+      />
+      <!-- Plain title, plus the tab's breadcrumb caption while a TOC-bearing tab's
+           bridge has not registered yet. plainSegmentLabels is route-gated by the
+           composable, so a non-TOC route never renders one. -->
+      <template v-else>
+        <span class="bar-title-name">{{ activeTabTitle }}</span>
+        <template v-for="segment in tocBreadcrumbPlainLabels" :key="segment">
+          <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
+          <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
+        </template>
+      </template>
+      <!-- Expand affordance: the resting box is a collapsed address bar, and this
+           says so. Gone in search mode ? .bar-search replaces this whole span, so
+           the mark disappears exactly when the field is expanded. -->
+      <IconChevronDoubleDown16Regular v-if="!isTitleCramped" class="bar-title-expand"
+        :class="{ 'is-hinting': isExpandHintLive }" />
+    </span>
+
+    <div class="bar-end">
+      <button
+        v-if="isTitleBarButtonVisible('workspaces')"
+        ref="workspacesButtonEl"
+        class="bar-btn"
+        :class="{ active: workspacesOpen }"
+        tabindex="-1"
+        :title="t('layout.workspaces')"
+        :aria-expanded="workspacesOpen"
+        @click.stop="workspacesSubmenu?.toggle()"
+      >
+        <component :is="workspacesIcon.icon24" />
+      </button>
       <button
         v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.getNavSidebarVisible(props.paneId)"
         class="bar-btn"
@@ -360,83 +438,6 @@ useAppTitleBarShortcuts({
       >
         <IconConvertToText24Regular />
       </button>
-    </div>
-
-    <!-- Search mode — the title turns into an editable address-bar search. -->
-    <AddressBar
-      v-if="searchMode"
-      :pane-id="props.paneId"
-      class="bar-search"
-      @close="searchMode = false"
-    />
-
-    <span
-      v-else
-      ref="barTitleRef"
-      class="bar-title"
-      :class="{ 'is-cramped': isTitleCramped }"
-      dir="rtl"
-      :title="barTitle"
-    >
-      <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
-      <AppTitleBarTocBreadcrumb
-        v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
-        :book-title="activeTabTitle"
-        :segments="tocBreadcrumbSegments"
-        :root-toc-entries="tocBreadcrumbRootTocEntries"
-        :root-pdf-entries="tocBreadcrumbRootPdfEntries"
-        @navigate-to-toc-entry="onNavigateToBreadcrumbEntry"
-        @navigate-to-pdf-entry="onNavigateToPdfBreadcrumbEntry"
-      />
-      <!-- Plain title, plus the tab's breadcrumb caption while a TOC-bearing tab's
-           bridge has not registered yet. plainSegmentLabels is route-gated by the
-           composable, so a non-TOC route never renders one. -->
-      <template v-else>
-        <span class="bar-title-name">{{ activeTabTitle }}</span>
-        <template v-for="segment in tocBreadcrumbPlainLabels" :key="segment">
-          <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
-          <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
-        </template>
-      </template>
-      <!-- Expand affordance: the resting box is a collapsed address bar, and this
-           says so. Gone in search mode ? .bar-search replaces this whole span, so
-           the mark disappears exactly when the field is expanded. -->
-      <IconChevronDoubleDown16Regular v-if="!isTitleCramped" class="bar-title-expand"
-        :class="{ 'is-hinting': isExpandHintLive }" />
-    </span>
-
-    <div class="bar-end">
-      <!-- Stays put whether or not this pane's rail is up, unlike the hamburger and the
-           split-view toggle: those two are about the rail and the window, so the rail can
-           speak for them. Home is a destination, and the bar is where it belongs. -->
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" :title="t('layout.home')" @click.stop="pane.goHome()"><IconHome20Regular /></button>
-      <button
-        v-if="isTitleBarButtonVisible('workspaces')"
-        ref="workspacesButtonEl"
-        class="bar-btn"
-        :class="{ active: workspacesOpen }"
-        tabindex="-1"
-        :title="t('layout.workspaces')"
-        :aria-expanded="workspacesOpen"
-        @click.stop="workspacesSubmenu?.toggle()"
-      >
-        <component :is="workspacesIcon.icon24" />
-      </button>
-      <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
-           not between tabs (Ctrl+Tab still does that). Click steps once
-           (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.
-           The 'prev-tab'/'next-tab' visibility ids are legacy — they key the
-           persisted hidden-buttons setting, so renaming them is a migration. -->
-      <AppTitleBarHistoryButton
-        v-if="isTitleBarButtonVisible('prev-tab')"
-        :pane-id="props.paneId"
-        direction="back"
-      />
-      <AppTitleBarHistoryButton
-        v-if="isTitleBarButtonVisible('next-tab')"
-        :pane-id="props.paneId"
-        direction="forward"
-      />
     </div>
 
   </header>
