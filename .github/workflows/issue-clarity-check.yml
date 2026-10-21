@@ -39,6 +39,7 @@ jobs:
             - A screenshot or short screen recording from opening the program until the bug.
             - Does it also happen in another book/file, or in the latest version? Inside Word or in the full app window?
             Do NOT ask about installer type, x86/x64, Office bitness, Windows version, hardware, or other trivia, and never ask for something a form field already answers.
+            Title: if the title is vague (e.g. just "bug", "problem", "test", or only the form prefix), ask them to edit it to a short title that says what the problem is.
             Ask at most 3 things.
             Duplicates: an "Existing issues:" list is given. If one or more of them is clearly the SAME problem (be conservative, max 3),
             mention them as "#N" in the reply (e.g. "may be a duplicate of #N"), in the issue's language.
