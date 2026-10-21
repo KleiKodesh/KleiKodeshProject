@@ -88,4 +88,11 @@
          (IsAotCompatible) because this project publishes native AOT. -->
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj" />
   </ItemGroup>
+  <!-- A release must ship the HebrewBooks download fallbacks. hb-mirror.json is kept out of git
+       (it holds the R2 keys), so a machine without it would publish a service that silently
+       downloads from the official handler only. Publish-only: dev builds are not blocked. -->
+  <Target Name="RequireHebrewBooksMirrorConfig" BeforeTargets="PrepareForPublish"
+          Condition="!Exists('$(MSBuildThisFileDirectory)..\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json')">
+    <Error Text="KitveiHakodesh.Core\HebrewBooks\hb-mirror.json is missing. It holds the HebrewBooks download fallbacks (public mirror + R2 keys) and is not in git - copy it onto this machine before publishing a release, or released downloads will have no fallback when hebrewbooks.org is blocked." />
+  </Target>
 </Project>
