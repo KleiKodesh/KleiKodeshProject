@@ -120,7 +120,7 @@ defineExpose({ isOpen })
           @click="select(font)"
         >
           <span class="opt-name">{{ font }}</span>
-          <span v-if="font === defaultFont" class="opt-badge">ברירת מחדל</span>
+          <span v-if="font === defaultFont" class="opt-badge">{{ $t('settings.font.default') }}</span>
           <span class="opt-preview" :style="{ fontFamily: `'${font}'` }">אבג דהו</span>
         </div>
       </div>

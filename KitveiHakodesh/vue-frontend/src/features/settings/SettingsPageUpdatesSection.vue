@@ -4,6 +4,7 @@ import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
+import { useI18n } from 'vue-i18n'
 import {
   updatePromptBody,
   UPDATE_INSTALL_LABEL,
@@ -40,17 +41,19 @@ onMounted(async () => {
   isUpdateStatusLoaded.value = true
 })
 
+const { t } = useI18n()
+
 // ── Update status line ────────────────────────────────────────────────────────
 
 const updateStatusText = computed(() => {
-  if (!isUpdateStatusLoaded.value) return 'טוען...'
-  if (isUpdateStatusUnavailable.value) return 'לא ניתן לקבל את מצב העדכונים כרגע — שירות הנתונים אינו זמין.'
+  if (!isUpdateStatusLoaded.value) return t('settings.updates.loading')
+  if (isUpdateStatusUnavailable.value) return t('settings.updates.unavailable')
   if (readyVersion.value) return updatePromptBody(readyVersion.value)
-  if (isAutomaticUpdateTurnedOff.value) return 'בדיקת העדכונים האוטומטית כבויה.'
-  if (isCheckingForUpdate.value) return 'בודק אם יש גרסה חדשה. אם יש, היא תורד עכשיו — זה עשוי לקחת כמה דקות.'
-  if (hasCheckFailed.value) return 'לא ניתן היה לבדוק אם יש עדכון. נא לנסות שוב מאוחר יותר.'
-  if (hasCheckedForUpdate.value) return 'הגרסה המותקנת היא העדכנית ביותר.'
-  return 'אין עדכון שמוכן להתקנה. התוכנה בודקת אוטומטית מידי פעם אם יש גרסה חדשה ומורידה אותה ברקע.'
+  if (isAutomaticUpdateTurnedOff.value) return t('settings.updates.off')
+  if (isCheckingForUpdate.value) return t('settings.updates.checking')
+  if (hasCheckFailed.value) return t('settings.updates.failed')
+  if (hasCheckedForUpdate.value) return t('settings.updates.upToDate')
+  return t('settings.updates.idle')
 })
 
 // Hidden while updates are turned off, and once an update is ready (install is the next step).
@@ -61,12 +64,12 @@ const isCheckNowVisible = computed(
 
 <template>
   <!-- ── עדכונים ── -->
-  <div data-section="section-updates" data-section-label="עדכונים">
-    <div id="section-updates" class="section-label">עדכונים</div>
+  <div data-section="section-updates" :data-section-label="$t('settings.updates.section')">
+    <div id="section-updates" class="section-label">{{ $t('settings.updates.section') }}</div>
 
-    <SettingRow label="מצב עדכון">
+    <SettingRow :label="$t('settings.updates.status')">
       <div class="updates-status">
-        <span v-if="installedVersion" class="updates-status-text">גרסה מותקנת: {{ installedVersion }}</span>
+        <span v-if="installedVersion" class="updates-status-text">{{ $t('settings.updates.installed', { version: installedVersion }) }}</span>
         <span class="updates-status-text">{{ updateStatusText }}</span>
         <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         <button
@@ -77,24 +80,24 @@ const isCheckNowVisible = computed(
         >
           {{ UPDATE_INSTALL_LABEL }}
         </button>
-        <span v-if="isInstalling" class="updates-status-text">אנא המתן כמה רגעים עד לפתיחת המתקין</span>
+        <span v-if="isInstalling" class="updates-status-text">{{ $t('settings.updates.waitInstaller') }}</span>
         <button v-if="isCheckNowVisible" class="settings-btn" :disabled="isCheckingForUpdate" @click="checkForUpdateNow">
-          {{ isCheckingForUpdate ? 'בודק...' : 'בדוק עכשיו' }}
+          {{ isCheckingForUpdate ? $t('settings.updates.checkingShort') : $t('settings.updates.checkNow') }}
         </button>
       </div>
     </SettingRow>
 
     <SettingRow
       id="nav-turn-off-updates"
-      data-nav-label="כבה בדיקת עדכונים"
-      label="כבה בדיקת עדכונים אוטומטית"
-      hint="בבחירת 'כן' התוכנה לא תבדוק אם יש גרסה חדשה ולא תוריד אותה. ההגדרה משותפת עם התוסף לוורד."
+      :data-nav-label="$t('settings.updates.disableNav')"
+      :label="$t('settings.updates.disable')"
+      :hint="$t('settings.updates.disableHint')"
     >
       <ToggleGroup
         :model-value="isAutomaticUpdateTurnedOff"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
         @update:model-value="applyAutomaticUpdateTurnedOff"
       />

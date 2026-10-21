@@ -27,14 +27,14 @@ function toggleOtherName(key: OtherNameKey) {
 
 <template>
   <!-- ── כיסוי שם ה' ── -->
-  <div data-section="section-censor-divine-names" data-section-label="כיסוי שם ה'">
-    <div id="section-censor-divine-names" class="section-label">כיסוי שם ה'</div>
+  <div data-section="section-censor-divine-names" :data-section-label="$t('settings.censor.section')">
+    <div id="section-censor-divine-names" class="section-label">{{ $t('settings.censor.section') }}</div>
 
     <SettingRow
       id="nav-censor-divine-names"
-      data-nav-label="כיסוי שם ה'"
-      label="כיסוי שם ה' המפורש"
-      hint="בחר כיצד ייכתב שם ה' המפורש. 'כתיב מלא' מבטל את הכיסוי בכל שמות הקודש"
+      :data-nav-label="$t('settings.censor.section')"
+      :label="$t('settings.censor.main')"
+      :hint="$t('settings.censor.mainHint')"
       wrap
     >
       <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
@@ -43,9 +43,9 @@ function toggleOtherName(key: OtherNameKey) {
     <SettingRow
       v-if="divineNameMode !== 'none'"
       id="nav-censor-elokim"
-      data-nav-label="כיסוי א-להים"
-      label="כיסוי שם א-להים"
-      hint="חל גם על אלוהים, אלהי ואלוה. בהחלפת אות הנקודות והטעמים נשמרים במקומם"
+      :data-nav-label="$t('settings.censor.elokimNav')"
+      :label="$t('settings.censor.elokim')"
+      :hint="$t('settings.censor.elokimHint')"
       wrap
     >
       <ToggleGroup v-model="elokimMode" :options="[...ELOKIM_MODE_OPTIONS]" />
@@ -54,9 +54,9 @@ function toggleOtherName(key: OtherNameKey) {
     <SettingRow
       v-if="divineNameMode !== 'none'"
       id="nav-censor-other-names"
-      data-nav-label="כיסוי שאר שמות הקודש עם מקף"
-      label="כיסוי שאר שמות הקודש עם מקף"
-      hint="שמות שאין בהם אות להחלפה, ולכן ניתן רק להפרידם במקף. לחץ על שם כדי להחליף מצב כיסוי"
+      :data-nav-label="$t('settings.censor.other')"
+      :label="$t('settings.censor.other')"
+      :hint="$t('settings.censor.otherHint')"
       wrap
     >
       <div class="other-names-chips">

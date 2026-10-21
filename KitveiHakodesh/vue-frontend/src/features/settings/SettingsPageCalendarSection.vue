@@ -55,10 +55,10 @@ function pickCity(name: string) {
 </script>
 
 <template>
-  <div data-section="section-calendar" data-section-label="לוח שנה ושעון">
-    <div id="section-calendar" class="section-label">לוח שנה ושעון</div>
+  <div data-section="section-calendar" :data-section-label="$t('settings.calendar.section')">
+    <div id="section-calendar" class="section-label">{{ $t('settings.calendar.section') }}</div>
 
-    <SettingRow label="עיר לזמני היום" hint="זמני היום בלוח השנה יחושבו לפי מיקום העיר">
+    <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHint')">
       <div ref="cityBoxRef" class="city-select-box" tabindex="0" @click="toggleCityDropdown">
         <span class="city-select-display">{{ activeCity.name }}</span>
         <component
@@ -87,12 +87,12 @@ function pickCity(name: string) {
       </Teleport>
     </SettingRow>
 
-    <SettingRow label="הצג שעון במצב מסך מלא" hint="שעון שקוף בפינה השמאלית התחתונה, בעת שימוש במצב מסך מלא">
+    <SettingRow :label="$t('settings.calendar.clock')" :hint="$t('settings.calendar.clockHint')">
       <ToggleGroup
         v-model="showClock"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>

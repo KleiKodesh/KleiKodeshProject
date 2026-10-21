@@ -162,7 +162,7 @@ async function navigateToSection(sectionId: string) {
                 class="nav-toggle-btn"
                 :class="{ active: navPanelOpen }"
                 @click="toggleNavPanel"
-                aria-label="ניווט הגדרות"
+                :aria-label="$t('settings.page.nav')"
               >
                 <IconNavigation20Regular />
               </button>
@@ -182,7 +182,7 @@ async function navigateToSection(sectionId: string) {
               v-model="searchQuery"
               class="search-input"
               type="search"
-              placeholder="חיפוש הגדרות..."
+              :placeholder="$t('settings.page.searchPlaceholder')"
               autocomplete="off"
             />
             <IconSearch20Regular class="search-icon" />

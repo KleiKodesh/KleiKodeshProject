@@ -8,6 +8,9 @@ import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import FontDisplaySettings from './FontDisplaySettings.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const settings = useSettingsStore()
 const {
@@ -42,7 +45,7 @@ const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null
 const CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL = 950
 
 function formatMaxWidth(value: number): string {
-  return value === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? 'ללא הגבלה' : `${value}px`
+  return value === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? t('settings.book.unlimited') : `${value}px`
 }
 
 const linesContentMaxWidthSlider = computed({
@@ -62,32 +65,32 @@ const commentaryMaxWidthSlider = computed({
 
 <template>
   <!-- ── תצוגת ספר ── -->
-  <div data-section="section-book-display" data-section-label="תצוגת ספר">
-    <div id="section-book-display" class="section-label">תצוגת ספר</div>
+  <div data-section="section-book-display" :data-section-label="$t('settings.book.section')">
+    <div id="section-book-display" class="section-label">{{ $t('settings.book.section') }}</div>
 
     <SettingRow
       id="nav-resume-last-read"
-      data-nav-label="זכור מיקום אחרון"
-      label="זכור מיקום אחרון בספר"
-      hint="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+      :data-nav-label="$t('settings.book.rememberNav')"
+      :label="$t('settings.book.remember')"
+      :hint="$t('settings.book.rememberHint')"
     >
       <ToggleGroup
         v-model="resumeLastRead"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
 
-    <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים" wrap>
+    <SettingRow id="nav-toolbar-position" :data-nav-label="$t('settings.book.toolbarPosition')" :label="$t('settings.book.toolbarPosition')" wrap>
       <ToggleGroup
         v-model="toolbarPosition"
         :options="[
-          { label: 'למעלה', value: 'top' },
-          { label: 'למטה', value: 'bottom' },
-          { label: 'שמאל', value: 'left' },
-          { label: 'ימין', value: 'right' },
+          { label: $t('settings.book.top'), value: 'top' },
+          { label: $t('settings.book.bottom'), value: 'bottom' },
+          { label: $t('settings.book.left'), value: 'left' },
+          { label: $t('settings.book.right'), value: 'right' },
         ]"
         @update:model-value="bookViewStore.setToolbarPosition($event)"
       />
@@ -95,7 +98,7 @@ const commentaryMaxWidthSlider = computed({
 
     <FontDisplaySettings
       id="nav-book-font-display"
-      data-nav-label="גופן וגודל"
+      :data-nav-label="$t('settings.book.fontNav')"
       ref="bookDisplayRef"
       v-model:header-font="headerFont"
       v-model:text-font="textFont"
@@ -114,9 +117,9 @@ const commentaryMaxWidthSlider = computed({
 
     <SliderSetting
       id="nav-lines-max-width"
-      data-nav-label="רוחב מקסימלי"
-      label="רוחב מקסימלי לעמודת הטקסט"
-      hint="רוחב שורה קצר יותר נוח יותר לקריאה"
+      :data-nav-label="$t('settings.book.maxWidthNav')"
+      :label="$t('settings.book.maxWidth')"
+      :hint="$t('settings.book.maxWidthHint')"
       v-model="linesContentMaxWidthSlider"
       :min="500"
       :max="950"
@@ -127,27 +130,27 @@ const commentaryMaxWidthSlider = computed({
   </div>
 
   <!-- ── תצוגת פירושים ── -->
-  <div data-section="section-commentary-display" data-section-label="תצוגת פירושים">
-    <div id="section-commentary-display" class="section-label">תצוגת פירושים</div>
+  <div data-section="section-commentary-display" :data-section-label="$t('settings.commentary.section')">
+    <div id="section-commentary-display" class="section-label">{{ $t('settings.commentary.section') }}</div>
 
     <SettingRow
       id="nav-auto-sync-commentary"
-      data-nav-label="סנכרן מפרשים"
-      label="סנכרן מפרשים כברירת מחדל בפתיחת ספר"
-      hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
+      :data-nav-label="$t('settings.commentary.syncNav')"
+      :label="$t('settings.commentary.sync')"
+      :hint="$t('settings.commentary.syncHint')"
     >
       <ToggleGroup
         v-model="defaultAutoSyncCommentary"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
 
     <FontDisplaySettings
       id="nav-commentary-font-display"
-      data-nav-label="גופן פירושים"
+      :data-nav-label="$t('settings.commentary.fontNav')"
       ref="commentaryDisplayRef"
       v-model:header-font="commentaryHeaderFont"
       v-model:text-font="commentaryTextFont"
@@ -161,9 +164,9 @@ const commentaryMaxWidthSlider = computed({
 
     <SliderSetting
       id="nav-commentary-max-width"
-      data-nav-label="רוחב מקסימלי פירושים"
-      label="רוחב מקסימלי לעמודת הפירושים"
-      hint="רוחב שורה קצר יותר נוח יותר לקריאה"
+      :data-nav-label="$t('settings.commentary.maxWidthNav')"
+      :label="$t('settings.commentary.maxWidth')"
+      :hint="$t('settings.book.maxWidthHint')"
       v-model="commentaryMaxWidthSlider"
       :min="500"
       :max="950"

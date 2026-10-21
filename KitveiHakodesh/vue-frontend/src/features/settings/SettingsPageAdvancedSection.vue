@@ -107,26 +107,26 @@ function openExcludedFolders() {
 
 <template>
   <!-- ── מתקדם ── -->
-  <div data-section="section-advanced" data-section-label="מתקדם">
-    <div id="section-advanced" class="section-label">מתקדם</div>
+  <div data-section="section-advanced" :data-section-label="$t('settings.advanced.section')">
+    <div id="section-advanced" class="section-label">{{ $t('settings.advanced.section') }}</div>
 
     <SettingRow
       v-if="serviceInstallOffer"
-      label="שירות Windows (מומלץ)"
-      hint="מפעיל את הספרייה ברקע כשירות Windows: הפעלה מהירה יותר, אינדקס חיפוש קבצים במסמכי המחשב, והשירות נשאר מוכן בין וורד לתוכנה. ההתקנה תבקש אישור מנהל פעם אחת."
+      :label="$t('settings.advanced.service')"
+      :hint="$t('settings.advanced.serviceHint')"
     >
       <button class="settings-btn" :disabled="installing" @click="runInstallService">
-        {{ installing ? 'מתקין...' : 'התקן שירות' }}
+        {{ installing ? $t('settings.advanced.installing') : $t('settings.advanced.install') }}
       </button>
     </SettingRow>
 
     <SettingRow
-      label="תיקייה לשמירת ספרי היברו בוקס לצמיתות במחשב (רשות)"
-      hint="כברירת מחדל, ספרים שהורדו נשמרים במטמון זמני של 10 הספרים האחרונים. בחר תיקייה כדי לשמור לצמיתות כל ספר שהורד; התיקייה תיווצר אם אינה קיימת. אפשר לבחור בתיקיית מאגר הספרים של תוכנת ארון הספרים הדיגיטלי."
+      :label="$t('settings.advanced.hbFolder')"
+      :hint="$t('settings.advanced.hbFolderHint')"
     >
       <SettingsPagePathField
         :value="hebrewBooksLocalFolder"
-        placeholder="לא נבחרה תיקייה"
+        :placeholder="$t('settings.advanced.noFolder')"
         :clearable="true"
         :editable="true"
         @pick="pickHebrewBooksFolder"
@@ -136,12 +136,12 @@ function openExcludedFolders() {
     </SettingRow>
 
     <SettingRow
-      label="הגדר נתיב למסד הנתונים"
-      hint="שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך."
+      :label="$t('settings.advanced.dbPath')"
+      :hint="$t('settings.advanced.dbPathHint')"
     >
       <SettingsPagePathField
         :value="dbPath"
-        placeholder="לא נבחר נתיב"
+        :placeholder="$t('settings.advanced.noPath')"
         :clearable="true"
         :editable="true"
         @pick="pickDbPath"
@@ -151,10 +151,10 @@ function openExcludedFolders() {
     </SettingRow>
 
     <SettingRow
-      label="החרג תיקיות מחיפוש הקבצים"
-      hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
+      :label="$t('settings.advanced.excluded')"
+      :hint="$t('settings.advanced.excludedHint')"
     >
-      <button class="settings-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
+      <button class="settings-btn" @click="openExcludedFolders">{{ $t('settings.advanced.manageExcluded') }}</button>
     </SettingRow>
 
     <SettingsExcludedFoldersDialog

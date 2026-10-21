@@ -7,6 +7,10 @@ import SliderSetting from './SliderSetting.vue'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 const props = defineProps<{
   headerFont: string
   textFont: string
@@ -44,16 +48,10 @@ const props = defineProps<{
  * te'amim book only ever renders two of these steps — 300-500 all look regular and
  * 600-700 both look bold. Offering 800/900 would add steps nothing distinguishes.
  */
-const WEIGHT_LABELS: Record<number, string> = {
-  300: 'דק',
-  400: 'רגיל',
-  500: 'בינוני',
-  600: 'חצי מודגש',
-  700: 'מודגש',
-}
+const WEIGHT_STEPS = new Set([300, 400, 500, 600, 700])
 
 function formatWeight(value: number): string {
-  const name = WEIGHT_LABELS[value]
+  const name = WEIGHT_STEPS.has(value) ? t(`settings.font.weight${value}`) : ''
   return name ? `${name} (${value})` : String(value)
 }
 
@@ -100,8 +98,8 @@ function onTeamimToggle() {
   <div v-bind="$attrs">
     <FontSelectorCmp
       ref="headerFontRef"
-      label="גופן כותרות"
-      hint="הגופן שישמש לכותרות הפרקים והסעיפים"
+      :label="$t('settings.font.header')"
+      :hint="$t('settings.font.headerHint')"
       :model-value="headerFont"
       font-type="sans-serif"
       :default-font="defaultHeaderFont"
@@ -110,8 +108,8 @@ function onTeamimToggle() {
     />
     <FontSelectorCmp
       ref="textFontRef"
-      label="גופן גוף הטקסט"
-      hint="הגופן שישמש לגוף הטקסט של הספר"
+      :label="$t('settings.font.text')"
+      :hint="$t('settings.font.textHint')"
       :model-value="textFont"
       font-type="serif"
       :default-font="defaultTextFont"
@@ -121,8 +119,8 @@ function onTeamimToggle() {
     <FontSelectorCmp
       v-if="showTeamimFont"
       ref="teamimFontRef"
-      label="גופן ספרים עם טעמים"
-      hint="הגופן שישמש לגוף הטקסט בספרים שהטקסט שלהם מנוקד בטעמי המקרא"
+      :label="$t('settings.font.taamim')"
+      :hint="$t('settings.font.taamimHint')"
       :model-value="teamimTextFont ?? ''"
       font-type="serif"
       :default-font="defaultTeamimFont"
@@ -130,8 +128,8 @@ function onTeamimToggle() {
       @toggle="onTeamimToggle"
     />
     <SliderSetting
-      label="גודל גופן"
-      hint="גודל הטקסט ביחס לברירת המחדל"
+      :label="$t('settings.font.size')"
+      :hint="$t('settings.font.sizeHint')"
       :model-value="fontSize"
       :min="50"
       :max="200"
@@ -140,8 +138,8 @@ function onTeamimToggle() {
       @update:model-value="emit('update:fontSize', $event)"
     />
     <SliderSetting
-      label="עובי גופן"
-      hint="עובי הטקסט. בספרים עם טעמים יש שתי דרגות בלבד — רגיל ומודגש"
+      :label="$t('settings.font.weight')"
+      :hint="$t('settings.font.weightHint')"
       :model-value="fontWeight ?? 400"
       :min="300"
       :max="700"
@@ -150,8 +148,8 @@ function onTeamimToggle() {
       @update:model-value="emit('update:fontWeight', $event)"
     />
     <SliderSetting
-      label="ריווח בין שורות"
-      hint="המרחק האנכי בין שורות הטקסט"
+      :label="$t('settings.font.lineHeight')"
+      :hint="$t('settings.font.lineHeightHint')"
       :model-value="linePadding"
       :min="1.2"
       :max="3.0"
@@ -160,14 +158,14 @@ function onTeamimToggle() {
     />
     <SettingRow
       v-if="showFixedLineHeight"
-      label="אופן חישוב הריווח"
-      hint="'מדוייק' שומר על ריווח זהה בין כל השורות, גם כשיש מילה גדולה באמצע השורה. שים לב: מילה גדולה במיוחד עלולה לחפוף לשורה שמעליה"
+      :label="$t('settings.font.lineMode')"
+      :hint="$t('settings.font.lineModeHint')"
     >
       <ToggleGroup
         :model-value="fixedLineHeight"
         :options="[
-          { label: 'רגיל', value: false },
-          { label: 'מדוייק', value: true },
+          { label: $t('settings.font.lineModeNormal'), value: false },
+          { label: $t('settings.font.lineModeExact'), value: true },
         ]"
         @update:model-value="emit('update:fixedLineHeight', $event)"
       />
