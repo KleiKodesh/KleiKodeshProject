@@ -65,9 +65,10 @@ useDropdownClose(
   display: flex;
   flex-direction: column;
   width: fit-content;
-  background: var(--bg-secondary);
+  /* Same surface as the book-view toolbar beside it. */
+  background: var(--bg-toolbar);
   overflow: hidden;
-  --tree-bg: var(--bg-secondary);
+  --tree-bg: var(--bg-toolbar);
 }
 
 /* ── Inline mode ───────────────────────────────────────────────────────────── */
