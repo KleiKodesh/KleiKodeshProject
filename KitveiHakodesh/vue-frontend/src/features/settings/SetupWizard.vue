@@ -232,10 +232,11 @@ function skip() {
 
         <template #footer>
         <div class="wizard-card-footer">
-          <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
-          <span v-else />
-          <div class="nav-btns">
+          <div class="footer-start">
             <UiLanguageToggle compact />
+            <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
+          </div>
+          <div class="nav-btns">
             <button v-if="stepIndex > 0" class="back-btn" @click="back">{{ $t('settings.wizard.back') }}</button>
             <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
               {{ currentStep === 'welcome' ? $t('settings.wizard.start') : isLast ? $t('settings.wizard.finish') : $t('settings.wizard.next') }}
@@ -408,6 +409,12 @@ function skip() {
   color: var(--text-secondary);
   line-height: 1.7;
   max-width: 300px;
+}
+
+.footer-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .nav-btns {
