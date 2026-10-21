@@ -555,3 +555,15 @@ h1::after {
 :root[dir='ltr'] textarea {
   unicode-bidi: plaintext;
 }
+
+/* Direction-meaning icons (prev/next, back/forward, submenu and tree chevrons) are
+   drawn for the RTL layout; the LTR layout is its mirror, so they mirror too. */
+:root[dir='ltr'] .dir-icon {
+  transform: scaleX(-1);
+}
+
+/* UI labels (empty states, section headers) that sit inside a dir="rtl" content
+   container follow the UI direction, not the content's. */
+:root[dir='ltr'] .ui-chrome {
+  direction: ltr;
+}

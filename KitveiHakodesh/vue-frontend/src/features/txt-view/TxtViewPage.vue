@@ -17,6 +17,7 @@ import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { getTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import {
   IconChevronUp20Regular,
   IconChevronDown20Regular,
@@ -356,10 +357,10 @@ async function retry() {
 <template>
   <div dir="rtl" class="txt-view-page" :style="{ filter: htmlFilter }">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
-    <div v-if="loading" class="txt-state-message">
+    <div v-if="loading" class="txt-state-message ui-chrome">
       <span>{{ $t('txtView.loading') }}</span>
     </div>
-    <div v-else-if="error" class="txt-state-message txt-state-message--error">
+    <div v-else-if="error" class="txt-state-message txt-state-message--error ui-chrome">
       <MessageBanner class="txt-state-banner" :message="error" :dismissible="false" />
       <button @click="retry">{{ $t('txtView.retry') }}</button>
     </div>

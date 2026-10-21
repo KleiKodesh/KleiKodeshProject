@@ -57,8 +57,8 @@ defineExpose({ onSearchInputKeydown })
 </script>
 
 <template>
-  <div dir="rtl" v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
-  <div v-else ref="scrollEl" class="scroller">
+  <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
+  <div v-else ref="scrollEl" class="scroller" dir="rtl">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
         v-for="vRow in virtualizer.getVirtualItems()"

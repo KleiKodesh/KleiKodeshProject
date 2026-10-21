@@ -176,7 +176,7 @@ function handleKeydown(e: KeyboardEvent) {
       :disabled="!activePinnedGroup"
       @click="activePinnedGroup && emit('navigate-section', 'prev', activePinnedGroup.bookId)"
     >
-      <IconChevronRight20Regular />
+      <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
       class="btn c-pointer hover-bg"
@@ -184,7 +184,7 @@ function handleKeydown(e: KeyboardEvent) {
       :disabled="!activePinnedGroup"
       @click="activePinnedGroup && emit('navigate-section', 'next', activePinnedGroup.bookId)"
     >
-      <IconChevronLeft20Regular />
+      <IconChevronLeft20Regular class="dir-icon" />
     </button>
     <div class="sep" />
     <button

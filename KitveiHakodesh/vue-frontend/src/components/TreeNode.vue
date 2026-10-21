@@ -45,7 +45,7 @@ const fs = () => props.fontSize ?? '0.8rem'
       @click.stop="$emit('toggle')"
     >
       <IconChevronDown16Regular v-if="expanded" />
-      <IconChevronLeft16Regular v-else />
+      <IconChevronLeft16Regular class="dir-icon" v-else />
     </div>
     <span
       v-else-if="!filtered"

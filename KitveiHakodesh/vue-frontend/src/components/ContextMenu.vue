@@ -240,7 +240,7 @@ defineExpose({ show, showAtPosition, hide })
           @click="openSubmenu(index)"
         >
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
-          <span class="submenu-chevron"><IconChevronLeft16Regular /></span>
+          <span class="submenu-chevron"><IconChevronLeft16Regular class="dir-icon" /></span>
           <div
             v-if="openSubmenuIndex === index"
             :ref="setSubmenuElement"
