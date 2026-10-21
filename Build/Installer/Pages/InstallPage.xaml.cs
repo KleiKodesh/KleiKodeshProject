@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using System;
 using System.Threading.Tasks;
@@ -62,8 +63,8 @@ namespace KleiKodeshVstoInstallerWpf
                 if (!serviceRegistered)
                 {
                     var retry = MessageBox.Show(
-                        "שירות חיפוש הקבצים לא נרשם (נדרש אישור הרשאה). לנסות שוב?",
-                        "התקנת שירות אינדקס",
+                        Strings.Service_RetryPrompt,
+                        Strings.Service_InstallTitle,
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning);
 
@@ -76,8 +77,8 @@ namespace KleiKodeshVstoInstallerWpf
                 if (KitveiHakodeshServiceHelper.ServiceExeUpdateFailed)
                 {
                     MessageBox.Show(
-                        "לא ניתן היה לעדכן את שירות האינדקס כי הוא עדיין פועל. הגרסה הקודמת של השירות נשארה. הפעל מחדש את המחשב והרץ את ההתקנה שוב.",
-                        "התקנת שירות אינדקס",
+                        Strings.Service_StillRunning,
+                        Strings.Service_InstallTitle,
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                 }
@@ -88,7 +89,7 @@ namespace KleiKodeshVstoInstallerWpf
                     await Task.Delay(10);
                 }
 
-                _status.Report("ההתקנה הושלמה!");
+                _status.Report(Strings.Install_Complete);
                 await Task.Delay(300);
                 if (_showSettingsAfter)
                     (Window.GetWindow(this) as MainWindow)?.NavigateToSettings();

@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -45,16 +46,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // and its databases under KitveiHakodeshService open, and extraction overwrites them.
             await KitveiHakodeshServiceHelper.StopServiceAsync(status);
 
-            status?.Report("מחלץ קבצים...");
+            status?.Report(Strings.Install_Extracting);
             await AddinInstaller.ExtractAsync(progress);
 
-            status?.Report("רושם תוסף...");
+            status?.Report(Strings.Install_RegisteringAddin);
             await AddinInstaller.RegisterAddInAsync(progress);
 
-            status?.Report("שומר גרסה...");
+            status?.Report(Strings.Install_SavingVersion);
             AddinInstaller.SaveVersion();
 
-            status?.Report("יוצר קיצור דרך...");
+            status?.Report(Strings.Install_CreatingShortcut);
             AddinInstaller.CreateKitveiHakodeshShortcut();
 
             // Claim the kitveihakodeshapp:// scheme so deep links copied from the app
@@ -66,7 +67,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // Register (or re-register) the KitveiHakodesh Windows service.
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.
-            status?.Report("מתקין שירות אינדקס...");
+            status?.Report(Strings.Install_IndexService);
             bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(status);
 
             // Start the service now so its indexing (FTS, catalog, file index) begins right away

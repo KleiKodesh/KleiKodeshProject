@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="WindowTitle" xml:space="preserve">
+    <value>התקנת כלי קודש</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>סגור</value>
+  </data>
+  <data name="Whitelist_Title" xml:space="preserve">
+    <value>רשימת אתרים</value>
+  </data>
+  <data name="Whitelist_Header" xml:space="preserve">
+    <value>רשימת אתרים מותרים</value>
+  </data>
+  <data name="Whitelist_Subtitle" xml:space="preserve">
+    <value>אלו אתרים יהיו זמינים ב-דרך האתרים</value>
+  </data>
+  <data name="SelectAll" xml:space="preserve">
+    <value>סמן הכל</value>
+  </data>
+  <data name="DeselectAll" xml:space="preserve">
+    <value>בטל הכל</value>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>העלה</value>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>הורד</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>מחק</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>ביטול</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>אישור</value>
+  </data>
+  <data name="Clean_CheckingProcesses" xml:space="preserve">
+    <value>בודק תהליכים...</value>
+  </data>
+  <data name="Clean_DeletingFolders" xml:space="preserve">
+    <value>מוחק תיקיות התקנה...</value>
+  </data>
+  <data name="Clean_RegistryAddins" xml:space="preserve">
+    <value>מנקה רגיסטרי — Addins...</value>
+  </data>
+  <data name="Clean_RegistryUninstall" xml:space="preserve">
+    <value>מנקה רגיסטרי — Uninstall + VSTO Security...</value>
+  </data>
+  <data name="Clean_RegistryClickOnce" xml:space="preserve">
+    <value>מנקה רגיסטרי — ClickOnce SideBySide...</value>
+  </data>
+  <data name="Clean_RuntimeSettings" xml:space="preserve">
+    <value>מנקה הגדרות זמן-ריצה...</value>
+  </data>
+  <data name="Clean_WebView2Cache" xml:space="preserve">
+    <value>מוחק מטמון WebView2...</value>
+  </data>
+  <data name="Clean_WordResiliency" xml:space="preserve">
+    <value>מנקה Word Resiliency + מטא-דאטה תוסף...</value>
+  </data>
+  <data name="Clean_Shortcuts" xml:space="preserve">
+    <value>מנקה קיצורי דרך...</value>
+  </data>
+  <data name="Clean_Done" xml:space="preserve">
+    <value>הניקוי הושלם.</value>
+  </data>
+  <data name="Install_Extracting" xml:space="preserve">
+    <value>מחלץ קבצים...</value>
+  </data>
+  <data name="Install_RegisteringAddin" xml:space="preserve">
+    <value>רושם תוסף...</value>
+  </data>
+  <data name="Install_SavingVersion" xml:space="preserve">
+    <value>שומר גרסה...</value>
+  </data>
+  <data name="Install_CreatingShortcut" xml:space="preserve">
+    <value>יוצר קיצור דרך...</value>
+  </data>
+  <data name="Install_IndexService" xml:space="preserve">
+    <value>מתקין שירות אינדקס...</value>
+  </data>
+  <data name="Install_RemovingOldService" xml:space="preserve">
+    <value>מסיר שירות ישן...</value>
+  </data>
+  <data name="Install_ApprovalPrompt" xml:space="preserve">
+    <value>Windows תבקש אישור בעוד רגע - נא ללחוץ 'כן'...</value>
+  </data>
+  <data name="KH_OpenContinue" xml:space="preserve">
+    <value>כתבי הקודש פתוח כעת.
+האם לסגור אותו כדי להמשיך בהתקנה?</value>
+  </data>
+  <data name="KH_OpenTitle" xml:space="preserve">
+    <value>כתבי הקודש פתוח</value>
+  </data>
+  <data name="KH_Cancelled" xml:space="preserve">
+    <value>ההתקנה בוטלה. אנא סגור את כתבי הקודש ונסה שוב.</value>
+  </data>
+  <data name="InstallCancelledTitle" xml:space="preserve">
+    <value>התקנה בוטלה</value>
+  </data>
+  <data name="KH_OpenClean" xml:space="preserve">
+    <value>כתבי הקודש פתוח כעת. יש לסגור אותו לפני הניקוי.
+האם לסגור את כתבי הקודש כעת?</value>
+  </data>
+  <data name="Word_OpenContinue" xml:space="preserve">
+    <value>וורד פתוח כעת.
+האם לסגור את וורד כדי להמשיך בהתקנה?</value>
+  </data>
+  <data name="Word_OpenTitle" xml:space="preserve">
+    <value>וורד פתוח</value>
+  </data>
+  <data name="Word_Cancelled" xml:space="preserve">
+    <value>ההתקנה בוטלה. אנא סגור את וורד ונסה שוב.</value>
+  </data>
+  <data name="Word_OpenClean" xml:space="preserve">
+    <value>וורד פתוח כעת. יש לסגור אותו לפני הניקוי.
+האם לסגור את וורד כעת?</value>
+  </data>
+  <data name="Adv_Title" xml:space="preserve">
+    <value>הגדרות מתקדמות</value>
+  </data>
+  <data name="Adv_Subtitle" xml:space="preserve">
+    <value>הגדרות נוספות לרכיבים שבחרת</value>
+  </data>
+  <data name="Comp_KitveiHakodesh" xml:space="preserve">
+    <value>כתבי הקודש</value>
+  </data>
+  <data name="Default" xml:space="preserve">
+    <value>ברירת מחדל</value>
+  </data>
+  <data name="Comp_HebrewBooks" xml:space="preserve">
+    <value>היברו בוקס</value>
+  </data>
+  <data name="Hb_NotSet" xml:space="preserve">
+    <value>לא הוגדר — יוריד לאחסון זמני</value>
+  </data>
+  <data name="Hb_FolderHint" xml:space="preserve">
+    <value>תיקייה שבה מאוחסנים קובצי PDF — אם הספר נמצא שם לא יוריד</value>
+  </data>
+  <data name="Comp_WebSites" xml:space="preserve">
+    <value>דרך האתרים</value>
+  </data>
+  <data name="Adv_EditWhitelist" xml:space="preserve">
+    <value>ערוך רשימת אתרים מותרים</value>
+  </data>
+  <data name="Adv_WhitelistHint" xml:space="preserve">
+    <value>בחר אילו אתרים יופיעו בסרגל הכלים</value>
+  </data>
+  <data name="Adv_FileExplorer" xml:space="preserve">
+    <value>סייר הקבצים</value>
+  </data>
+  <data name="Adv_OpenWith" xml:space="preserve">
+    <value>הוסף את כתבי הקודש לתפריט 'פתיחה עם' של המערכת</value>
+  </data>
+  <data name="Adv_OpenWithHint" xml:space="preserve">
+    <value>מאפשר לפתוח קבצי PDF, Word ועוד ישירות בכתבי הקודש מסייר הקבצים</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>חזור</value>
+  </data>
+  <data name="ClickToChangePath" xml:space="preserve">
+    <value>לחץ לשינוי הנתיב</value>
+  </data>
+  <data name="DefaultWithValue" xml:space="preserve">
+    <value>ברירת מחדל: {0}</value>
+  </data>
+  <data name="Db_NotFound" xml:space="preserve">
+    <value>לא נמצאה אפליקציית זית או אוצריה — הגדר נתיב ידנית</value>
+  </data>
+  <data name="Db_PickTitle" xml:space="preserve">
+    <value>בחר קובץ מסד נתונים לכתבי הקודש</value>
+  </data>
+  <data name="Db_Error" xml:space="preserve">
+    <value>שגיאה בהגדרת מסד הנתונים: {0}</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>שגיאה</value>
+  </data>
+  <data name="ClickToChangeFolder" xml:space="preserve">
+    <value>לחץ לשינוי התיקייה</value>
+  </data>
+  <data name="Hb_PickFolder" xml:space="preserve">
+    <value>בחר תיקייה המכילה ספרי PDF מהיברו בוקס</value>
+  </data>
+  <data name="Hb_FolderError" xml:space="preserve">
+    <value>שגיאה בהגדרת תיקיית HebrewBooks: {0}</value>
+  </data>
+  <data name="InstallError" xml:space="preserve">
+    <value>שגיאה בהתקנה: {0}</value>
+  </data>
+  <data name="Install_Heading" xml:space="preserve">
+    <value>מתקין כלי קודש לוורד</value>
+  </data>
+  <data name="Install_PleaseWait" xml:space="preserve">
+    <value>אנא המתן — אל תסגור חלון זה</value>
+  </data>
+  <data name="Service_RetryPrompt" xml:space="preserve">
+    <value>שירות חיפוש הקבצים לא נרשם (נדרש אישור הרשאה). לנסות שוב?</value>
+  </data>
+  <data name="Service_InstallTitle" xml:space="preserve">
+    <value>התקנת שירות אינדקס</value>
+  </data>
+  <data name="Service_StillRunning" xml:space="preserve">
+    <value>לא ניתן היה לעדכן את שירות האינדקס כי הוא עדיין פועל. הגרסה הקודמת של השירות נשארה. הפעל מחדש את המחשב והרץ את ההתקנה שוב.</value>
+  </data>
+  <data name="Install_Complete" xml:space="preserve">
+    <value>ההתקנה הושלמה!</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>כלי קודש לוורד</value>
+  </data>
+  <data name="Landing_Tagline" xml:space="preserve">
+    <value>ארגז כלים לעורך התורני</value>
+  </data>
+  <data name="Landing_Free" xml:space="preserve">
+    <value>התוכנה חינמית לגמרי — לזיכוי הרבים</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>התוסף יותקן בתיקיית המשתמש וירשם אוטומטית ב-Word. לאחר ההתקנה פתח את Word כדי להתחיל.</value>
+  </data>
+  <data name="Repair" xml:space="preserve">
+    <value>תיקון</value>
+  </data>
+  <data name="Repair_Tooltip" xml:space="preserve">
+    <value>מחיקת כל שאריות כלי קודש מהמחשב</value>
+  </data>
+  <data name="Install" xml:space="preserve">
+    <value>התקן</value>
+  </data>
+  <data name="Repair_Title" xml:space="preserve">
+    <value>תיקון כלי קודש</value>
+  </data>
+  <data name="Repair_Subtitle" xml:space="preserve">
+    <value>ניקוי מלא של כל שאריות התוסף מהמחשב</value>
+  </data>
+  <data name="Repair_MayTakeMinutes" xml:space="preserve">
+    <value>פעולה זו עשויה לקחת מספר דקות.</value>
+  </data>
+  <data name="Repair_WillScan" xml:space="preserve">
+    <value>הכלי יסרוק קבצים, תיקיות ורגיסטרי ולאחר מכן יתקין מחדש.</value>
+  </data>
+  <data name="Repair_WhatDeleted" xml:space="preserve">
+    <value>מה יימחק</value>
+  </data>
+  <data name="Repair_ItemFolders" xml:space="preserve">
+    <value>תיקיות: AppData\Local\KleiKodesh, AppData\Roaming\KleiKodesh, Program Files</value>
+  </data>
+  <data name="Repair_ItemCaches" xml:space="preserve">
+    <value>מטמון WebView2, מטמון PDF, מטמון ספרים, ClickOnce cache</value>
+  </data>
+  <data name="Repair_ItemAddins" xml:space="preserve">
+    <value>רגיסטרי: Addins\KleiKodesh + Addins\כלי קודש — HKLM + HKCU</value>
+  </data>
+  <data name="Repair_HklmNeedsDeep" xml:space="preserve">
+    <value>רשומות HKLM דורשות ניקוי עמוק (הרשאות מנהל).</value>
+  </data>
+  <data name="Repair_ItemUninstall" xml:space="preserve">
+    <value>רגיסטרי: Uninstall, VSTO Security, VSTO SolutionMetadata, ClickOnce SideBySide</value>
+  </data>
+  <data name="Repair_ItemRuntime" xml:space="preserve">
+    <value>רגיסטרי: הגדרות זמן-ריצה (KleiKodesh, ZayitApp, KitveiHakodesh)</value>
+  </data>
+  <data name="Repair_ItemWordTimes" xml:space="preserve">
+    <value>רגיסטרי: Word AddInLoadTimes, AddinEventTimes, NotifiedAddins, CustomUICache</value>
+  </data>
+  <data name="Repair_ItemResiliency" xml:space="preserve">
+    <value>רגיסטרי: Word Resiliency — רק אם מכיל כלי קודש</value>
+  </data>
+  <data name="Repair_BasicClean" xml:space="preserve">
+    <value>ניקוי בסיסי</value>
+  </data>
+  <data name="Repair_BasicTooltip" xml:space="preserve">
+    <value>מוחק קבצים, מטמון ורשומות HKCU — ללא צורך בהרשאות מנהל.</value>
+  </data>
+  <data name="Repair_DeepClean" xml:space="preserve">
+    <value>ניקוי עמוק 🛡</value>
+  </data>
+  <data name="Repair_DeepTooltip" xml:space="preserve">
+    <value>כולל גם רשומות HKLM (גרסאות ישנות) — דורש הפעלה מחדש כמנהל.</value>
+  </data>
+  <data name="Repair_StillRunning" xml:space="preserve">
+    <value>הניקוי עדיין פועל. האם לחזור בכל זאת?</value>
+  </data>
+  <data name="Confirm" xml:space="preserve">
+    <value>אישור</value>
+  </data>
+  <data name="Repair_ConfirmText1" xml:space="preserve">
+    <value>פעולה זו תמחק את כל קבצי ורשומות הרגיסטרי של כלי קודש מהמחשב.
+
+</value>
+  </data>
+  <data name="Repair_ConfirmText2" xml:space="preserve">
+    <value>לאחר הניקוי תתחיל התקנה מחדש אוטומטית.
+
+להמשיך?</value>
+  </data>
+  <data name="Repair_ConfirmTitle" xml:space="preserve">
+    <value>אישור תיקון מלא</value>
+  </data>
+  <data name="Repair_Cleaning" xml:space="preserve">
+    <value>מנקה...</value>
+  </data>
+  <data name="Repair_ErrorLog" xml:space="preserve">
+    <value>
+❌ שגיאה: {0}</value>
+  </data>
+  <data name="Repair_NothingFound" xml:space="preserve">
+    <value>✅ לא נמצאו שאריות — המחשב היה נקי.</value>
+  </data>
+  <data name="Repair_NothingFoundLog" xml:space="preserve">
+    <value>
+✅ לא נמצאו שאריות.</value>
+  </data>
+  <data name="Repair_Summary" xml:space="preserve">
+    <value>✅ הניקוי הושלם — {0} תיקיות/קבצים, {1} רשומות רגיסטרי נמחקו.</value>
+  </data>
+  <data name="Repair_ErrorCount" xml:space="preserve">
+    <value>
+⚠ {0} שגיאות.</value>
+  </data>
+  <data name="Repair_DoneReinstalling" xml:space="preserve">
+    <value>הניקוי הושלם — מתחיל התקנה מחדש...</value>
+  </data>
+  <data name="Repair_ReinstallLog" xml:space="preserve">
+    <value>
+▶ מתחיל התקנה מחדש...</value>
+  </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>הגדרות התוסף</value>
+  </data>
+  <data name="Settings_Subtitle" xml:space="preserve">
+    <value>בחר אילו רכיבים יוצגו בסרגל הכלים ומהו הלחצן הראשי</value>
+  </data>
+  <data name="Settings_Available" xml:space="preserve">
+    <value>רכיבים זמינים</value>
+  </data>
+  <data name="Comp_KitveiHakodeshLibrary" xml:space="preserve">
+    <value>ספריית כתבי הקודש</value>
+  </data>
+  <data name="Comp_Kiwix" xml:space="preserve">
+    <value>ספריית קיוויקס</value>
+  </data>
+  <data name="Comp_DocDesign" xml:space="preserve">
+    <value>עיצוב תורני</value>
+  </data>
+  <data name="Comp_Nakdan" xml:space="preserve">
+    <value>נקדן דיקטה</value>
+  </data>
+  <data name="Comp_RegexFind" xml:space="preserve">
+    <value>חיפוש רגקס בוורד</value>
+  </data>
+  <data name="Settings_MainButton" xml:space="preserve">
+    <value>לחצן ראשי בסרגל</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>הגדרות</value>
+  </data>
+  <data name="Next" xml:space="preserve">
+    <value>הבא</value>
+  </data>
+  <data name="SwitchLanguage" xml:space="preserve">
+    <value>English</value>
+  </data>
+</root>

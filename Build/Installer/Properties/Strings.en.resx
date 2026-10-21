@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="WindowTitle" xml:space="preserve">
+    <value>Klei Kodesh Setup</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Whitelist_Title" xml:space="preserve">
+    <value>Website List</value>
+  </data>
+  <data name="Whitelist_Header" xml:space="preserve">
+    <value>Allowed Websites</value>
+  </data>
+  <data name="Whitelist_Subtitle" xml:space="preserve">
+    <value>These sites will be available in the Websites tool</value>
+  </data>
+  <data name="SelectAll" xml:space="preserve">
+    <value>Select All</value>
+  </data>
+  <data name="DeselectAll" xml:space="preserve">
+    <value>Clear All</value>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Clean_CheckingProcesses" xml:space="preserve">
+    <value>Checking processes...</value>
+  </data>
+  <data name="Clean_DeletingFolders" xml:space="preserve">
+    <value>Deleting installation folders...</value>
+  </data>
+  <data name="Clean_RegistryAddins" xml:space="preserve">
+    <value>Cleaning registry - Addins...</value>
+  </data>
+  <data name="Clean_RegistryUninstall" xml:space="preserve">
+    <value>Cleaning registry - Uninstall + VSTO Security...</value>
+  </data>
+  <data name="Clean_RegistryClickOnce" xml:space="preserve">
+    <value>Cleaning registry - ClickOnce SideBySide...</value>
+  </data>
+  <data name="Clean_RuntimeSettings" xml:space="preserve">
+    <value>Cleaning runtime settings...</value>
+  </data>
+  <data name="Clean_WebView2Cache" xml:space="preserve">
+    <value>Deleting WebView2 cache...</value>
+  </data>
+  <data name="Clean_WordResiliency" xml:space="preserve">
+    <value>Cleaning Word Resiliency + add-in metadata...</value>
+  </data>
+  <data name="Clean_Shortcuts" xml:space="preserve">
+    <value>Cleaning shortcuts...</value>
+  </data>
+  <data name="Clean_Done" xml:space="preserve">
+    <value>Cleanup complete.</value>
+  </data>
+  <data name="Install_Extracting" xml:space="preserve">
+    <value>Extracting files...</value>
+  </data>
+  <data name="Install_RegisteringAddin" xml:space="preserve">
+    <value>Registering add-in...</value>
+  </data>
+  <data name="Install_SavingVersion" xml:space="preserve">
+    <value>Saving version...</value>
+  </data>
+  <data name="Install_CreatingShortcut" xml:space="preserve">
+    <value>Creating shortcut...</value>
+  </data>
+  <data name="Install_IndexService" xml:space="preserve">
+    <value>Installing index service...</value>
+  </data>
+  <data name="Install_RemovingOldService" xml:space="preserve">
+    <value>Removing old service...</value>
+  </data>
+  <data name="Install_ApprovalPrompt" xml:space="preserve">
+    <value>Windows will ask for permission in a moment - please click 'Yes'...</value>
+  </data>
+  <data name="KH_OpenContinue" xml:space="preserve">
+    <value>Kitvei HaKodesh is currently open.
+Close it to continue the installation?</value>
+  </data>
+  <data name="KH_OpenTitle" xml:space="preserve">
+    <value>Kitvei HaKodesh is open</value>
+  </data>
+  <data name="KH_Cancelled" xml:space="preserve">
+    <value>Installation cancelled. Please close Kitvei HaKodesh and try again.</value>
+  </data>
+  <data name="InstallCancelledTitle" xml:space="preserve">
+    <value>Installation cancelled</value>
+  </data>
+  <data name="KH_OpenClean" xml:space="preserve">
+    <value>Kitvei HaKodesh is currently open and must be closed before cleanup.
+Close Kitvei HaKodesh now?</value>
+  </data>
+  <data name="Word_OpenContinue" xml:space="preserve">
+    <value>Word is currently open.
+Close Word to continue the installation?</value>
+  </data>
+  <data name="Word_OpenTitle" xml:space="preserve">
+    <value>Word is open</value>
+  </data>
+  <data name="Word_Cancelled" xml:space="preserve">
+    <value>Installation cancelled. Please close Word and try again.</value>
+  </data>
+  <data name="Word_OpenClean" xml:space="preserve">
+    <value>Word is currently open and must be closed before cleanup.
+Close Word now?</value>
+  </data>
+  <data name="Adv_Title" xml:space="preserve">
+    <value>Advanced Settings</value>
+  </data>
+  <data name="Adv_Subtitle" xml:space="preserve">
+    <value>Additional settings for the components you selected</value>
+  </data>
+  <data name="Comp_KitveiHakodesh" xml:space="preserve">
+    <value>Kitvei HaKodesh</value>
+  </data>
+  <data name="Default" xml:space="preserve">
+    <value>Default</value>
+  </data>
+  <data name="Comp_HebrewBooks" xml:space="preserve">
+    <value>HebrewBooks</value>
+  </data>
+  <data name="Hb_NotSet" xml:space="preserve">
+    <value>Not set - books will be downloaded to temporary storage</value>
+  </data>
+  <data name="Hb_FolderHint" xml:space="preserve">
+    <value>Folder where PDF files are stored - books found there will not be downloaded</value>
+  </data>
+  <data name="Comp_WebSites" xml:space="preserve">
+    <value>Websites</value>
+  </data>
+  <data name="Adv_EditWhitelist" xml:space="preserve">
+    <value>Edit allowed websites list</value>
+  </data>
+  <data name="Adv_WhitelistHint" xml:space="preserve">
+    <value>Choose which websites appear in the toolbar</value>
+  </data>
+  <data name="Adv_FileExplorer" xml:space="preserve">
+    <value>File Explorer</value>
+  </data>
+  <data name="Adv_OpenWith" xml:space="preserve">
+    <value>Add Kitvei HaKodesh to the system 'Open with' menu</value>
+  </data>
+  <data name="Adv_OpenWithHint" xml:space="preserve">
+    <value>Lets you open PDF, Word and other files directly in Kitvei HaKodesh from File Explorer</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="ClickToChangePath" xml:space="preserve">
+    <value>Click to change the path</value>
+  </data>
+  <data name="DefaultWithValue" xml:space="preserve">
+    <value>Default: {0}</value>
+  </data>
+  <data name="Db_NotFound" xml:space="preserve">
+    <value>No Zayit or Otzaria app found - set the path manually</value>
+  </data>
+  <data name="Db_PickTitle" xml:space="preserve">
+    <value>Select a database file for Kitvei HaKodesh</value>
+  </data>
+  <data name="Db_Error" xml:space="preserve">
+    <value>Error setting the database: {0}</value>
+  </data>
+  <data name="Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="ClickToChangeFolder" xml:space="preserve">
+    <value>Click to change the folder</value>
+  </data>
+  <data name="Hb_PickFolder" xml:space="preserve">
+    <value>Select a folder containing HebrewBooks PDF files</value>
+  </data>
+  <data name="Hb_FolderError" xml:space="preserve">
+    <value>Error setting the HebrewBooks folder: {0}</value>
+  </data>
+  <data name="InstallError" xml:space="preserve">
+    <value>Installation error: {0}</value>
+  </data>
+  <data name="Install_Heading" xml:space="preserve">
+    <value>Installing Klei Kodesh for Word</value>
+  </data>
+  <data name="Install_PleaseWait" xml:space="preserve">
+    <value>Please wait - do not close this window</value>
+  </data>
+  <data name="Service_RetryPrompt" xml:space="preserve">
+    <value>The file search service was not registered (permission approval is required). Try again?</value>
+  </data>
+  <data name="Service_InstallTitle" xml:space="preserve">
+    <value>Index Service Installation</value>
+  </data>
+  <data name="Service_StillRunning" xml:space="preserve">
+    <value>The index service could not be updated because it is still running. The previous version of the service was kept. Restart your computer and run the installer again.</value>
+  </data>
+  <data name="Install_Complete" xml:space="preserve">
+    <value>Installation complete!</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>Klei Kodesh for Word</value>
+  </data>
+  <data name="Landing_Tagline" xml:space="preserve">
+    <value>A toolbox for the Torah editor</value>
+  </data>
+  <data name="Landing_Free" xml:space="preserve">
+    <value>Completely free software - for the benefit of the public</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>The add-in will be installed in your user folder and registered with Word automatically. After installation, open Word to get started.</value>
+  </data>
+  <data name="Repair" xml:space="preserve">
+    <value>Repair</value>
+  </data>
+  <data name="Repair_Tooltip" xml:space="preserve">
+    <value>Remove all Klei Kodesh leftovers from this computer</value>
+  </data>
+  <data name="Install" xml:space="preserve">
+    <value>Install</value>
+  </data>
+  <data name="Repair_Title" xml:space="preserve">
+    <value>Repair Klei Kodesh</value>
+  </data>
+  <data name="Repair_Subtitle" xml:space="preserve">
+    <value>Full cleanup of all add-in leftovers from this computer</value>
+  </data>
+  <data name="Repair_MayTakeMinutes" xml:space="preserve">
+    <value>This may take several minutes.</value>
+  </data>
+  <data name="Repair_WillScan" xml:space="preserve">
+    <value>The tool will scan files, folders and the registry, and then reinstall.</value>
+  </data>
+  <data name="Repair_WhatDeleted" xml:space="preserve">
+    <value>What will be deleted</value>
+  </data>
+  <data name="Repair_ItemFolders" xml:space="preserve">
+    <value>Folders: AppData\Local\KleiKodesh, AppData\Roaming\KleiKodesh, Program Files</value>
+  </data>
+  <data name="Repair_ItemCaches" xml:space="preserve">
+    <value>WebView2 cache, PDF cache, books cache, ClickOnce cache</value>
+  </data>
+  <data name="Repair_ItemAddins" xml:space="preserve">
+    <value>Registry: Addins\KleiKodesh + Addins\Klei Kodesh - HKLM + HKCU</value>
+  </data>
+  <data name="Repair_HklmNeedsDeep" xml:space="preserve">
+    <value>HKLM entries require a deep clean (administrator rights).</value>
+  </data>
+  <data name="Repair_ItemUninstall" xml:space="preserve">
+    <value>Registry: Uninstall, VSTO Security, VSTO SolutionMetadata, ClickOnce SideBySide</value>
+  </data>
+  <data name="Repair_ItemRuntime" xml:space="preserve">
+    <value>Registry: runtime settings (KleiKodesh, ZayitApp, KitveiHakodesh)</value>
+  </data>
+  <data name="Repair_ItemWordTimes" xml:space="preserve">
+    <value>Registry: Word AddInLoadTimes, AddinEventTimes, NotifiedAddins, CustomUICache</value>
+  </data>
+  <data name="Repair_ItemResiliency" xml:space="preserve">
+    <value>Registry: Word Resiliency - only if it contains Klei Kodesh</value>
+  </data>
+  <data name="Repair_BasicClean" xml:space="preserve">
+    <value>Basic Clean</value>
+  </data>
+  <data name="Repair_BasicTooltip" xml:space="preserve">
+    <value>Deletes files, caches and HKCU entries - no administrator rights needed.</value>
+  </data>
+  <data name="Repair_DeepClean" xml:space="preserve">
+    <value>Deep Clean 🛡</value>
+  </data>
+  <data name="Repair_DeepTooltip" xml:space="preserve">
+    <value>Also includes HKLM entries (older versions) - requires restarting as administrator.</value>
+  </data>
+  <data name="Repair_StillRunning" xml:space="preserve">
+    <value>Cleanup is still running. Go back anyway?</value>
+  </data>
+  <data name="Confirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="Repair_ConfirmText1" xml:space="preserve">
+    <value>This will delete all Klei Kodesh files and registry entries from this computer.
+
+</value>
+  </data>
+  <data name="Repair_ConfirmText2" xml:space="preserve">
+    <value>A fresh installation will start automatically after the cleanup.
+
+Continue?</value>
+  </data>
+  <data name="Repair_ConfirmTitle" xml:space="preserve">
+    <value>Confirm Full Repair</value>
+  </data>
+  <data name="Repair_Cleaning" xml:space="preserve">
+    <value>Cleaning...</value>
+  </data>
+  <data name="Repair_ErrorLog" xml:space="preserve">
+    <value>
+❌ Error: {0}</value>
+  </data>
+  <data name="Repair_NothingFound" xml:space="preserve">
+    <value>✅ No leftovers found - the computer was already clean.</value>
+  </data>
+  <data name="Repair_NothingFoundLog" xml:space="preserve">
+    <value>
+✅ No leftovers found.</value>
+  </data>
+  <data name="Repair_Summary" xml:space="preserve">
+    <value>✅ Cleanup complete - {0} folders/files and {1} registry entries deleted.</value>
+  </data>
+  <data name="Repair_ErrorCount" xml:space="preserve">
+    <value>
+⚠ {0} errors.</value>
+  </data>
+  <data name="Repair_DoneReinstalling" xml:space="preserve">
+    <value>Cleanup complete - starting reinstallation...</value>
+  </data>
+  <data name="Repair_ReinstallLog" xml:space="preserve">
+    <value>
+▶ Starting reinstallation...</value>
+  </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Add-in Settings</value>
+  </data>
+  <data name="Settings_Subtitle" xml:space="preserve">
+    <value>Choose which components appear in the toolbar and which is the main button</value>
+  </data>
+  <data name="Settings_Available" xml:space="preserve">
+    <value>Available Components</value>
+  </data>
+  <data name="Comp_KitveiHakodeshLibrary" xml:space="preserve">
+    <value>Kitvei HaKodesh Library</value>
+  </data>
+  <data name="Comp_Kiwix" xml:space="preserve">
+    <value>Kiwix Library</value>
+  </data>
+  <data name="Comp_DocDesign" xml:space="preserve">
+    <value>Torah Document Design</value>
+  </data>
+  <data name="Comp_Nakdan" xml:space="preserve">
+    <value>Dicta Nakdan</value>
+  </data>
+  <data name="Comp_RegexFind" xml:space="preserve">
+    <value>Regex Search in Word</value>
+  </data>
+  <data name="Settings_MainButton" xml:space="preserve">
+    <value>Main Toolbar Button</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Next" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="SwitchLanguage" xml:space="preserve">
+    <value>עברית</value>
+  </data>
+</root>

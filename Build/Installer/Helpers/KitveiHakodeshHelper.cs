@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows;
@@ -40,22 +41,22 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (procs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "כתבי הקודש פתוח כעת.\nהאם לסגור אותו כדי להמשיך בהתקנה?",
-                "כתבי הקודש פתוח",
+                Strings.KH_OpenContinue,
+                Strings.KH_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.Yes,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                UiLanguage.MessageBoxOptions);
 
             if (r == MessageBoxResult.No)
             {
                 MessageBox.Show(
-                    "ההתקנה בוטלה. אנא סגור את כתבי הקודש ונסה שוב.",
-                    "התקנה בוטלה",
+                    Strings.KH_Cancelled,
+                    Strings.InstallCancelledTitle,
                     MessageBoxButton.OK,
                     MessageBoxImage.Information,
                     MessageBoxResult.OK,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                    UiLanguage.MessageBoxOptions);
                 return false;
             }
 
@@ -75,12 +76,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (procs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "כתבי הקודש פתוח כעת. יש לסגור אותו לפני הניקוי.\nהאם לסגור את כתבי הקודש כעת?",
-                "כתבי הקודש פתוח",
+                Strings.KH_OpenClean,
+                Strings.KH_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.Yes,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                UiLanguage.MessageBoxOptions);
 
             if (r != MessageBoxResult.Yes) return false;
 

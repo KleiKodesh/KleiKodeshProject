@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -73,7 +74,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // 80-95   Word Resiliency
             // 95-100  Done
 
-            progress.Report((0, "בודק תהליכים..."));
+            progress.Report((0, Strings.Clean_CheckingProcesses));
             await Task.Run(() => KillWord());
 
             // The services run from the install folder and hold files there open; stop them before
@@ -84,32 +85,32 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 new Progress<string>(text => progress.Report((0, text))));
             await LegacyServiceRetirement.RetireAllAsync(null);
 
-            progress.Report((10, "מוחק תיקיות התקנה..."));
+            progress.Report((10, Strings.Clean_DeletingFolders));
             await CleanFileSystem(result, detailLog);
 
-            progress.Report((25, "מנקה רגיסטרי — Addins..."));
+            progress.Report((25, Strings.Clean_RegistryAddins));
             await CleanAddinRegistry(result, detailLog, deepClean);
 
-            progress.Report((40, "מנקה רגיסטרי — Uninstall + VSTO Security..."));
+            progress.Report((40, Strings.Clean_RegistryUninstall));
             await CleanVstoAndUninstallRegistry(result, detailLog);
 
-            progress.Report((55, "מנקה רגיסטרי — ClickOnce SideBySide..."));
+            progress.Report((55, Strings.Clean_RegistryClickOnce));
             await CleanClickOnceRegistry(result, detailLog);
 
-            progress.Report((65, "מנקה הגדרות זמן-ריצה..."));
+            progress.Report((65, Strings.Clean_RuntimeSettings));
             await CleanRuntimeSettingsRegistry(result, detailLog);
 
-            progress.Report((75, "מוחק מטמון WebView2..."));
+            progress.Report((75, Strings.Clean_WebView2Cache));
             await CleanWebView2Cache(result, detailLog);
 
-            progress.Report((85, "מנקה Word Resiliency + מטא-דאטה תוסף..."));
+            progress.Report((85, Strings.Clean_WordResiliency));
             await CleanWordResiliency(result, detailLog);
             await CleanWordAddinMetadata(result, detailLog);
 
-            progress.Report((95, "מנקה קיצורי דרך..."));
+            progress.Report((95, Strings.Clean_Shortcuts));
             await CleanShortcuts(result, detailLog);
 
-            progress.Report((100, "הניקוי הושלם."));
+            progress.Report((100, Strings.Clean_Done));
             return result;
         }
 

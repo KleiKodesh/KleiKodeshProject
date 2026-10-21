@@ -1,6 +1,8 @@
 ﻿<Window x:Class="KleiKodeshVstoInstallerWpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:KleiKodeshVstoInstallerWpf.Properties"
+        xmlns:ui="clr-namespace:KleiKodeshVstoInstallerWpf"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
@@ -9,9 +11,9 @@
         WindowStartupLocation="CenterScreen"
         Width="500"
         Height="540"
-        FlowDirection="RightToLeft"
+        FlowDirection="{x:Static ui:UiLanguage.FlowDirection}"
         FontFamily="Segoe UI"
-        Title="התקנת כלי קודש"
+        Title="{x:Static p:Strings.WindowTitle}"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewMouseMove="Window_PreviewMouseMove">
 
@@ -37,7 +39,7 @@
                 VerticalAlignment="Top"
                 Margin="4"
                 Cursor="Hand"
-                ToolTip="סגור">
+                ToolTip="{x:Static p:Strings.Close}">
             <Button.Style>
                 <Style TargetType="Button">
                     <Setter Property="Background"      Value="Transparent"/>
