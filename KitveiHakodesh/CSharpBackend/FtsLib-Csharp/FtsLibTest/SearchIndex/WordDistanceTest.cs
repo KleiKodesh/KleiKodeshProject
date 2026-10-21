@@ -187,6 +187,36 @@ namespace FtsLibTest
                 maxWordDistance:  0,
                 expectPass:       false);
 
+            // ── Otzaria's word model: one-letter words and digit runs are words ──
+
+            Check(ref passed, ref failed,
+                name:             "a one-letter word between the terms counts → distance 1",
+                content:          "אמר ו משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 1);
+
+            Check(ref passed, ref failed,
+                name:             "a digit run between the terms counts → distance 2",
+                content:          "אמר 12 ב5 משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 2);
+
+            Check(ref passed, ref failed,
+                name:             "one-letter and digit words are query terms → distance 0",
+                content:          "סימן ה סעיף 12",
+                groups:           G("ה", "סעיף", "12"),
+                originalCount:    3,
+                expectedDistance: 0);
+
+            Check(ref passed, ref failed,
+                name:             "a word over 128 bytes still takes its place → distance 1",
+                content:          "אמר " + new string('א', 70) + " משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 1);
+
             // ── Summary ───────────────────────────────────────────────
 
             Console.WriteLine("║");

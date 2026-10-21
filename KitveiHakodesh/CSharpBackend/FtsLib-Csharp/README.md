@@ -56,6 +56,11 @@ if (window.IsMatch)
 
 Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. Wildcard/fuzzy tokens are expanded internally before intersection.
 
+**Words** follow Otzaria's word model (index, query and word distance alike): a word is a run of
+letters (Hebrew, ASCII) and ASCII digits, of any length, one letter included (`ו`, `12`, `ב5`).
+Digits are script-neutral; a Hebrew/Latin switch still splits a word. A word whose term is over
+128 UTF-8 bytes is not indexed and is dropped from a query, but still counts in word distances.
+
 ---
 
 ## API — `Fts5SeforimIndex`

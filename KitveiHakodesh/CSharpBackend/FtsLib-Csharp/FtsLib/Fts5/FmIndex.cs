@@ -49,7 +49,10 @@ namespace FtsLib.Fts5
         public const byte EndCode = 0, SeparatorCode = 1;
         const int HeaderBytes = 40, NodeBytes = 24;
         const int RankBlockBytes = 64, RankBlockDataBits = (RankBlockBytes - 4) * 8; // 480
-        const int CodesPerSortKey = 10; // 6 bits each → 60 bits
+        // 7 bits each → 63 bits. Sigma up to 128: Hebrew + Latin + digits + the 2 stops is 65,
+        // over the 6-bit keys' 64 (digits became word characters). The key only speeds up the
+        // build sort; the order is the same total order at any key width.
+        const int SortKeyBits = 7, CodesPerSortKey = 9;
         const uint FlagRowIdIsRankPlusOne = 1;
 
         // ── Build ─────────────────────────────────────────────────────
@@ -68,7 +71,7 @@ namespace FtsLib.Fts5
             for (int ch = 0; ch < 65536; ch++)
                 if (present[ch]) { codeOf[ch] = (byte)charOf.Count; charOf.Add((char)ch); }
             int sigma = charOf.Count;
-            if (sigma > 64) throw new NotSupportedException($"FmIndex prototype: sigma {sigma} > 64 (6-bit sort keys)");
+            if (sigma > 1 << SortKeyBits) throw new NotSupportedException($"FmIndex prototype: sigma {sigma} > {1 << SortKeyBits} ({SortKeyBits}-bit sort keys)");
 
             // Text, plus the rowid of the term each position belongs to.
             long textLong = 2;
@@ -291,7 +294,7 @@ namespace FtsLib.Fts5
             {
                 int len = Math.Min(distanceToStop[i], CodesPerSortKey);
                 ulong key = 0;
-                for (int k = 0; k < len; k++) key |= (ulong)text[i + k] << (6 * (CodesPerSortKey - 1 - k));
+                for (int k = 0; k < len; k++) key |= (ulong)text[i + k] << (SortKeyBits * (CodesPerSortKey - 1 - k));
                 keys[i] = key;
                 suffixArray[i] = i;
             }

@@ -202,7 +202,7 @@ namespace FtsLibTest
                 expected: new[] { new[] { "אב", "אב" } });
 
             // ── Index-separator parity (regression: maqaf query mismatch) ──
-            // The indexer SPLITS words on maqaf, hyphens, digits, and punctuation;
+            // The indexer SPLITS words on maqaf, hyphens, and punctuation;
             // the parser used to DELETE these mid-token, gluing the fragments into
             // one term that cannot exist in the index (pasted "יום־טוב" returned
             // zero results). The parser must split exactly where the indexer does.
@@ -218,9 +218,20 @@ namespace FtsLibTest
                 expected: new[] { new[] { "יום" }, new[] { "טוב" } });
 
             Check(ref passed, ref failed,
-                "mid-token digits split like the indexer",
-                query: "אב3גד",
-                expected: new[] { new[] { "אב" }, new[] { "גד" } });
+                "digits are word characters, as in the indexer (Otzaria's word model)",
+                query: "אב3גד ב5 12",
+                expected: new[] { new[] { "אב3גד" }, new[] { "ב5" }, new[] { "12" } });
+
+            Check(ref passed, ref failed,
+                "digits are script-neutral: a5ב splits only at the letters' boundary",
+                query: "a5ב",
+                expected: new[] { new[] { "a5" }, new[] { "ב" } });
+
+            Check(ref passed, ref failed,
+                "~ followed by two digits is not a fuzzy suffix: the digits stay in the word",
+                query: "שלום~12",
+                expected: new[] { new[] { "שלום12" } },
+                checkFuzzy: new[] { false });
 
             Check(ref passed, ref failed,
                 "surrounding punctuation stripped as separators",
@@ -245,23 +256,33 @@ namespace FtsLibTest
                 expected: new[] { new[] { "ab" }, new[] { "דה" } });
 
             Check(ref passed, ref failed,
-                "1-char script fragment dropped after the split",
+                "1-char script fragment is a word of its own after the split",
                 query: "bדה",
-                expected: new[] { new[] { "דה" } });
+                expected: new[] { new[] { "b" }, new[] { "דה" } });
 
-            // ── Unindexable-length literals dropped (regression) ──────
-            // The index stores only 2..29-letter words; a 1-char (or ≥30-char)
-            // literal can never match and used to poison the whole AND query
-            // into guaranteed-zero results.
+            // ── Word lengths (Otzaria's word model) ───────────────────
+            // Every word is indexed: one letter, digit runs, any length. Only a term
+            // over 128 UTF-8 bytes is not (Otzaria's RemoveLongFilter); such a literal
+            // can never match, so it is dropped instead of poisoning the AND query.
 
             Check(ref passed, ref failed,
-                "1-char literal dropped, rest of query survives",
+                "1-char literal is a word",
                 query: "ב שלום",
+                expected: new[] { new[] { "ב" }, new[] { "שלום" } });
+
+            Check(ref passed, ref failed,
+                "64 Hebrew letters (128 bytes) is a word",
+                query: new string('א', 64) + " שלום",
+                expected: new[] { new[] { new string('א', 64) }, new[] { "שלום" } });
+
+            Check(ref passed, ref failed,
+                "65 Hebrew letters (130 bytes) dropped, rest of query survives",
+                query: new string('א', 65) + " שלום",
                 expected: new[] { new[] { "שלום" } });
 
             Check(ref passed, ref failed,
-                "30-char literal dropped, rest of query survives",
-                query: new string('א', 30) + " שלום",
+                "an inner quote counts one byte: 64 letters + quote dropped",
+                query: new string('א', 32) + "\"" + new string('א', 32) + " שלום",
                 expected: new[] { new[] { "שלום" } });
 
             Check(ref passed, ref failed,

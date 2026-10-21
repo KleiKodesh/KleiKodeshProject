@@ -22,6 +22,20 @@ namespace FtsLib.Tokenization
             || (c >= 'A' && c <= 'Z')
             || (c >= 0x05D0 && c <= 0x05EA);
 
+        /// <summary>ASCII digit 0-9. Digits are word characters (Otzaria's tokenizer: a digit run
+        /// is a word, and digits join the letters around them, e.g. ב5), script-neutral.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsDigit(char c) => c >= '0' && c <= '9';
+
+        /// <summary>A character that builds a word: a letter (<see cref="IsLetter"/>) or a digit.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsWordChar(char c) => IsLetter(c) || IsDigit(c);
+
+        /// <summary>Otzaria's MAX_TOKEN_BYTES: a word whose term is longer (UTF-8 bytes, an
+        /// intra-word quote counting one byte) is not indexed or searched, but it is still a word
+        /// (it takes its place in word distances).</summary>
+        public const int MaxTermBytes = 128;
+
         /// <summary>ASCII lowercase (Hebrew and other chars pass through unchanged).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static char ToLowerAscii(char c) => (c >= 'A' && c <= 'Z') ? (char)(c | 32) : c;

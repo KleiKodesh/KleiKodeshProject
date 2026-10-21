@@ -54,7 +54,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // fts6 (2026-10-19): tree order puts a folder's BASE texts ahead of its subfolders and
         // negative-orderIndex ("mefarshim") folders after their siblings, so a text's lines
         // come before its commentaries' — fts5 positions are in the folders-first order.
-        public const string IndexFormatVersion = "fts6";
+        // fts7 (2026-10-21): Otzaria's word model: every word is indexed (one letter, digit runs
+        // such as 12 or ב5, any length; a term over 128 UTF-8 bytes is left out) — fts6 indexed
+        // only words of 2..29 letters and treated digits as separators.
+        public const string IndexFormatVersion = "fts7";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";
