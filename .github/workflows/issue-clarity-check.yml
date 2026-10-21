@@ -42,7 +42,8 @@ jobs:
 
           Body:
           $BODY" '{system_instruction:{parts:[{text:$sys}]},contents:[{role:"user",parts:[{text:$user}]}]}')
-          reply=$(curl -sS --fail-with-body \
+          # free tier often answers 503 (busy): retry
+          reply=$(curl -sS --fail-with-body --retry 6 --retry-all-errors --retry-delay 20 \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
             -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
             -d "$payload" | jq -r '.candidates[0].content.parts[0].text // empty')
