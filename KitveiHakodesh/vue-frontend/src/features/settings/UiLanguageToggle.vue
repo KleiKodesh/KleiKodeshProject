@@ -6,9 +6,9 @@ import ToggleGroup from './ToggleGroup.vue'
 // setup wizard footer (`compact`: a small two-segment pill). Choosing reloads the page.
 defineProps<{ compact?: boolean }>()
 
-const OPTIONS: { label: string; short: string; value: UiLanguage }[] = [
-  { label: 'עברית', short: 'עב', value: 'he' },
-  { label: 'English', short: 'EN', value: 'en' },
+const OPTIONS: { label: string; value: UiLanguage }[] = [
+  { label: 'עברית', value: 'he' },
+  { label: 'English', value: 'en' },
 ]
 </script>
 
@@ -18,10 +18,9 @@ const OPTIONS: { label: string; short: string; value: UiLanguage }[] = [
       v-for="opt in OPTIONS"
       :key="opt.value"
       :class="['lang-seg', { active: uiLanguage === opt.value }]"
-      :title="opt.label"
       @click="setUiLanguage(opt.value)"
     >
-      {{ opt.short }}
+      {{ opt.label }}
     </button>
   </div>
   <ToggleGroup
