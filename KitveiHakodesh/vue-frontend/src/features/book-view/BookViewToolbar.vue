@@ -667,18 +667,32 @@ defineExpose({ tocBtnRef })
   padding-block-end: var(--toolbar-reserved-edge);
 }
 
-/* ── Borders ── */
-.toolbar-top {
-  border-bottom: 1px solid var(--border-color);
+/* ── Borders ──
+   Drawn as an overlay line, not a CSS border: the overflow button is opaque, full button
+   size and stacked above the row (see .overflow-btn), so a real border would sit under its
+   fill. The line is painted above it instead. */
+.book-view-toolbar::after {
+  content: '';
+  position: absolute;
+  background: var(--border-color);
+  pointer-events: none;
+  z-index: 2;
 }
-.toolbar-bottom {
-  border-top: 1px solid var(--border-color);
+.toolbar-top::after {
+  inset: auto 0 0 0;
+  height: 1px;
 }
-.toolbar-left {
-  border-right: 1px solid var(--border-color);
+.toolbar-bottom::after {
+  inset: 0 0 auto 0;
+  height: 1px;
 }
-.toolbar-right {
-  border-left: 1px solid var(--border-color);
+.toolbar-left::after {
+  inset: 0 0 0 auto;
+  width: 1px;
+}
+.toolbar-right::after {
+  inset: 0 auto 0 0;
+  width: 1px;
 }
 
 /* ── Buttons ── */
