@@ -1,235 +1,435 @@
-using System;
-using System.Globalization;
+using System.Collections.Generic;
 using System.Text;
 
 namespace FtsLib.Tokenization
 {
     /// <summary>
-    /// Base class for single-pass HTML-aware text scanners.
-    /// Handles tag detection, entity decoding, nikud/cantillation stripping,
-    /// and word boundary detection.
+    /// Base class for single-pass HTML-aware text scanners: FtsLib's HTML layer with Otzaria's
+    /// word rule (otzaria_search_engine v5.0.0 hebrew_tokenizer.rs; <see cref="WordRule"/> is
+    /// the same rule on plain text). The seforim engine's scanner (hebrew-fts scanner.rs) is the
+    /// same algorithm, so both index and locate the same words.
     ///
-    /// Word model = Otzaria's (otzaria_search_engine hebrew_tokenizer.rs: a token is a run of
-    /// letters AND digits, any length, one letter included): every run of letters (Hebrew,
-    /// ASCII) and ASCII digits is a word, whatever its length. Digits are script-neutral (they
-    /// join the run they are in: ב5, 5ab). A word whose term is over
-    /// <see cref="HebrewChars.MaxTermBytes"/> is still reported here (it is a word for distances);
-    /// the index <see cref="Tokenizer"/> leaves it out of the terms (Otzaria's RemoveLongFilter). Subclasses receive each complete word via
-    /// <see cref="OnWord"/> with both its raw source span and its normalized form.
-    /// Tag/entity logic lives in <see cref="HtmlBlockTags"/>.
-    /// Not thread-safe — one instance per thread.
+    /// Rules:
+    /// - A word starts at a letter or digit of any script (Hebrew, ASCII, and every other
+    ///   alphanumeric char; no Hebrew/Latin split) and runs over letters, digits and word marks,
+    ///   any length, one letter included.
+    /// - Transparent chars (. [ ] * ~ ^ $ \ + backtick, zero-width and bidi controls) between
+    ///   word chars join them and are dropped. A run of quotes between word chars joins them when
+    ///   it is one geresh, two gereshes or one gershayim (typographic quotes count). After a word,
+    ///   a geresh belongs to it (a trailing geresh is kept); a gershayim does not.
+    /// - The term (<see cref="_buffer"/>) is quote-free (FtsLib's terms carry no quotes), marks
+    ///   dropped, presentation forms folded, lowercased in every script (Rust to_lowercase).
+    /// - The second reading of a paired reading (X) [Y] takes X's position.
+    /// - HTML: inline tags are transparent (a word continues across them); block tags and
+    ///   sup/sub end the word; every entity (or a bare &amp;) is a separator at its '&amp;'.
+    /// - A word whose term has <see cref="HebrewChars.MaxTermBytes"/> bytes or more is still
+    ///   reported (it keeps its position); the index <see cref="Tokenizer"/> leaves it out.
+    ///
+    /// Tag/entity logic lives in <see cref="HtmlBlockTags"/>. Not thread-safe: one instance per
+    /// thread.
     /// </summary>
     internal abstract class HtmlWordScanner
     {
-        // Normalized word buffer — reused across words, no per-word allocation.
+        /// <summary>The normalized term of the word being reported (valid inside <see cref="OnWord"/>).</summary>
         protected readonly StringBuilder _buffer = new StringBuilder(64);
 
-        // Tag name buffer — fixed size, no allocation per tag.
+        // Tag name buffer: fixed size, no allocation per tag.
         private readonly char[] _tagName = new char[16];
-        private int  _tagLen;
-        private bool _inTag;
-        private bool _tagNameDone;   // first space seen — attribute chars must not join the name
-        private int  _wordStart;     // raw index of first letter in current word
-        private int  _wordVisibleStart; // visible chars before the first letter of the current word
-        private int  _visibleCount;  // cumulative visible chars up to current position
-        private int  _runScript;     // 0 = no letter yet in the word (digits only), 1 = Hebrew, 2 = Latin
-        private int  _pendingQuotes; // intra-word quotes since the word's last letter/digit
-        private int  _innerQuotes;   // quotes BETWEEN the word's letters/digits (kept in its term by
-                                     // engines that keep quotes; they count one byte toward MaxTermBytes)
 
-        /// <summary>Quotes between the letters of the word being reported (valid inside
-        /// <see cref="OnWord"/>): רש"י has 1, יצחק" has 0 (a trailing quote is punctuation).</summary>
-        protected int WordInnerQuotes => _innerQuotes;
+        // Word state: 0 = outside a word, 1 = in a word, 2 = a word followed by quotes /
+        // transparent chars not yet known to belong to it (the pending run).
+        private const int Outside = 0, InWord = 1, Pending = 2;
+        private int _state;
+        private int _wordStart, _wordVisibleStart;
+        private readonly List<int> _pendingChar = new List<int>(8);
+        private readonly List<int> _pendingRaw = new List<int>(8);
+        private int _gereshCount, _gershayimCount, _firstQuote;
+        private bool _firstIsGeresh;
 
-        // ── Entry point ──────────────────────────────────────────────
+        // Otzaria's term before lowercasing: its UTF-8 bytes (quotes included) and the kind of
+        // its last two chars (0 other, 1 geresh ', 2 gershayim ") for its geresh rules.
+        private int _termBytes, _lastKind, _prevKind;
+
+        // Paired readings (Otzaria paired_reading_after).
+        private int _prev;                 // char of the last visible element (a break is ' ')
+        private bool _afterParen;          // the current word follows '('
+        private bool _secondReading;       // the current word follows ") [" after a word in '('
+        private const int GapNone = 0, GapSuffix = 1, GapSpace = 2, GapOpen = 3;
+        private int _gap;
+        private bool _held;                // a second reading waiting for its ']'
+        private string _heldText;
+        private int _heldRawStart, _heldRawEnd, _heldVisible, _heldTermBytes;
+        private int _words;                // positions given so far
+        private int _reportTermBytes;
+
+        /// <summary>UTF-8 bytes of the reported word's term before lowercasing, quotes included
+        /// (what Otzaria's RemoveLongFilter measures; valid inside <see cref="OnWord"/>).</summary>
+        protected int WordTermBytes => _reportTermBytes;
+
+        // ── Entry point ─────────────────────────────────────────────────────────────────────
 
         protected void Scan(string text)
         {
             _buffer.Clear();
-            _tagLen       = 0;
-            _inTag        = false;
-            _tagNameDone  = false;
-            _wordStart    = -1;
-            _visibleCount = 0;
-            _runScript    = 0;
-            _pendingQuotes = 0;
-            _innerQuotes  = 0;
+            _state = Outside;
+            _pendingChar.Clear();
+            _pendingRaw.Clear();
+            _termBytes = 0; _lastKind = 0; _prevKind = 0;
+            _prev = ' ';
+            _afterParen = _secondReading = _held = false;
+            _gap = GapNone;
+            _heldText = null;
+            _words = 0;
 
+            int tagLen = 0;
+            bool inTag = false, tagNameDone = false;
+            int visible = 0;
             int len = text.Length;
 
             for (int i = 0; i < len; i++)
             {
-                char c = text[i];
+                char ch = text[i];
 
-                // ── HTML TAGS ────────────────────────────────────────
-                if (_inTag)
+                // Fast path: a Hebrew letter inside a word.
+                if (!inTag && _state == InWord && ch >= 0x05D0 && ch <= 0x05EA)
                 {
-                    if (c == '>')
+                    _buffer.Append(ch);
+                    _termBytes += 2;
+                    _prevKind = _lastKind; _lastKind = 0;
+                    _prev = ch;
+                    visible++;
+                    continue;
+                }
+
+                // Fast path: a Hebrew letter starting a word, no paired-reading check open.
+                if (!inTag && ch >= 0x05D0 && ch <= 0x05EA && _state == Outside && _gap == GapNone && !_held)
+                {
+                    _state = InWord;
+                    _wordStart = i;
+                    _wordVisibleStart = visible;
+                    _afterParen = _prev == '(';
+                    _secondReading = false;
+                    _buffer.Clear();
+                    _buffer.Append(ch);
+                    _termBytes = 2; _lastKind = 0; _prevKind = 0;
+                    _prev = ch;
+                    visible++;
+                    continue;
+                }
+
+                // Fast path: a space ending a word, or between words, no paired-reading check open.
+                if (!inTag && ch == ' ' && !_held)
+                {
+                    if (_state == InWord && !_afterParen && !_secondReading)
+                        Finish(i); // leaves the gap check closed: no '(' before the word
+                    if (_state == Outside && _gap == GapNone)
                     {
-                        if (HtmlBlockTags.IsWordBreakTag(_tagName, _tagLen))
-                            Flush(i);
-                        _inTag  = false;
-                        _tagLen = 0;
+                        _prev = ' ';
+                        visible++;
+                        continue;
                     }
-                    else if (!_tagNameDone)
+                }
+
+                if (inTag)
+                {
+                    if (ch == '>')
                     {
-                        // Stop accumulating at the first space — everything after
-                        // it is attributes, which must not corrupt the tag name
-                        // the flush decision below depends on.
-                        if (c == ' ' || c == '\t') _tagNameDone = true;
-                        else if (_tagLen < 16 && c != '/') _tagName[_tagLen++] = c;
+                        if (HtmlBlockTags.IsWordBreakTag(_tagName, tagLen))
+                            Element(' ', i, visible);
+                        inTag = false;
+                        tagLen = 0;
+                    }
+                    else if (!tagNameDone)
+                    {
+                        // Stop accumulating at the first space: everything after it is attributes.
+                        if (ch == ' ' || ch == '\t') tagNameDone = true;
+                        else if (tagLen < 16 && ch != '/') _tagName[tagLen++] = ch;
                     }
                     continue;
                 }
 
-                if (c == '<')
+                if (ch == '<')
                 {
-                    // Word building continues ACROSS the tag — no flush here.
-                    // Inline formatting (<b>, <i>, <small>, <span>…) interrupts
-                    // words mid-letter (emphasised letters, e.g. ורא<b>ה</b>);
-                    // flushing on every '<' indexed those words as unfindable
-                    // fragments. The flush decision is deferred to '>' above,
-                    // once the tag name is known: block tags and sup/sub break
-                    // the word, everything else is transparent.
-                    _inTag       = true;
-                    _tagLen      = 0;
-                    _tagNameDone = false;
+                    // A tag: inline tags are transparent (the word continues across them);
+                    // the decision is taken at '>' once the name is known.
+                    inTag = true;
+                    tagLen = 0;
+                    tagNameDone = false;
                     continue;
                 }
 
-                // ── HTML ENTITIES ────────────────────────────────────
-                if (c == '&')
+                if (ch == '&')
                 {
-                    // Every entity — well-formed or a bare '&' — is a word
-                    // separator: the corpus has no letter entities (verified
-                    // 2026-07-22), only whitespace (&nbsp;, &thinsp;) and
-                    // punctuation (&amp;, &lt;, &gt;) forms, all of which end
-                    // the word. The old classifier consumed non-whitespace
-                    // entities INVISIBLY, joining the surrounding fragments
-                    // into one term that exists nowhere.
-                    //
-                    // Flush at the '&' (the entity is the separator, so it is NOT
-                    // part of the word's raw span). Flushing AFTER SkipEntity used
-                    // the ';' as rawEnd, which pulled the entity BODY (&thinsp,
-                    // minus its ';') into the token span — the snippet renderer
-                    // then copied that incomplete entity verbatim and v-html showed
-                    // it as literal text (e.g. "…ידעתיו&thinsp;למען…"). Ending the
-                    // word at '&' keeps the whole entity outside every token span.
-                    Flush(i);
+                    // Every entity (or a bare '&') is a separator at its '&'.
+                    Element(' ', i, visible);
                     HtmlBlockTags.SkipEntity(text, len, ref i);
-                    _visibleCount++; // the entity renders as one visible char
+                    visible++;
                     continue;
                 }
 
-                // ── MAQAF ─ word-joining hyphen acts as separator ────
-                if (c == '\u05BE')
+                int c = ch, units = 1;
+                if (char.IsHighSurrogate(ch) && i + 1 < len && char.IsLowSurrogate(text[i + 1]))
                 {
-                    Flush(i);
-                    _visibleCount++;
-                    continue;
+                    c = char.ConvertToUtf32(ch, text[i + 1]);
+                    units = 2;
                 }
+                Element(c, i, visible);
+                if (!HebrewChars.IsWordMark(c)) visible += units;
+                i += units - 1;
+            }
 
-                // ── NIKUD + CANTILLATION REMOVAL ─────────────────────
-                if (HebrewChars.IsStrippableMark(c))
-                    continue;
+            EndWord(len);
+            Release(false);
+        }
 
-                if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
-                    continue;
+        // ── The word rule ───────────────────────────────────────────────────────────────────
 
-                // ── WORD BUILDING ────────────────────────────────────
-                if (HebrewChars.IsWordChar(c))
-                {
-                    c = HebrewChars.ToLowerAscii(c);
-
-                    // Script-boundary split: a Hebrew↔Latin transition inside a letter run is a
-                    // word boundary. Prevents mixed-script blobs — OCR bleed (bדה), a Hebrew
-                    // prefix on a foreign word (הOU), or entity residue (בשבת&amp) — from being
-                    // indexed as one unsearchable token. Same-script runs are unaffected.
-                    // Digits belong to no script: they never split and join the run (ב5).
-                    if (!HebrewChars.IsDigit(c))
+        /// <summary>One visible element at raw index <paramref name="raw"/> (a break is ' ').</summary>
+        private void Element(int c, int raw, int visible)
+        {
+            switch (_state)
+            {
+                case Outside:
+                    OutsideElement(c, raw, visible);
+                    break;
+                case InWord:
+                    if (HebrewChars.IsWordChar(c))
+                        Push(c);
+                    else if (HebrewChars.IsQuote(c) || HebrewChars.IsTransparent(c))
                     {
-                        int script = HebrewChars.IsLatinLower(c) ? 2 : 1;
-                        if (_runScript != 0 && script != _runScript)
-                            Flush(i); // emits the completed run, resets the buffer
-                        _runScript = script;
+                        _pendingChar.Clear();
+                        _pendingRaw.Clear();
+                        _gereshCount = _gershayimCount = 0;
+                        _firstIsGeresh = false;
+                        _state = Pending;
+                        Pend(c, raw);
                     }
-
-                    if (_buffer.Length == 0)
+                    else
                     {
-                        _wordStart = i; // first letter/digit of a new word
-                        _wordVisibleStart = _visibleCount;
+                        Finish(raw);
+                        OutsideElement(c, raw, visible);
                     }
+                    break;
+                default: // Pending
+                    if (HebrewChars.IsQuote(c) || HebrewChars.IsTransparent(c))
+                        Pend(c, raw);
+                    else if (HebrewChars.IsWordChar(c))
+                    {
+                        int g = _gereshCount, d = _gershayimCount;
+                        if ((g == 0 && d == 0) || (g == 1 && d == 0) || (g == 2 && d == 0) || (g == 0 && d == 1))
+                        {
+                            for (int k = 0; k < _pendingChar.Count; k++) Push(_pendingChar[k]);
+                            Push(c);
+                            _state = InWord;
+                        }
+                        else
+                        {
+                            Finish(_pendingRaw[0]);
+                            Replay(0);
+                            OutsideElement(c, raw, visible);
+                        }
+                    }
+                    else
+                    {
+                        EndWord(raw);
+                        OutsideElement(c, raw, visible);
+                    }
+                    break;
+            }
+            _prev = c;
+        }
 
-                    _innerQuotes  += _pendingQuotes; // the quotes before this char are inside the word
-                    _pendingQuotes = 0;
-                    _buffer.Append(c);
-                    _visibleCount++;
-                }
-                else if (HebrewChars.IsIntraWordQuote(c) && _buffer.Length > 0)
+        private void Pend(int c, int raw)
+        {
+            if (HebrewChars.IsQuote(c))
+            {
+                if (_gereshCount + _gershayimCount == 0)
                 {
-                    // Hebrew geresh/gershayim and ASCII quotes appearing inside a word
-                    // (e.g. רשב"א, רש"י) are transparent connectors — skip without
-                    // flushing so the word is indexed as a single token.
-                    _pendingQuotes++;
-                    _visibleCount++;
+                    _firstQuote = _pendingChar.Count;
+                    _firstIsGeresh = HebrewChars.IsGeresh(c);
+                }
+                if (HebrewChars.IsGeresh(c)) _gereshCount++; else _gershayimCount++;
+            }
+            _pendingChar.Add(c);
+            _pendingRaw.Add(raw);
+        }
+
+        /// <summary>An element outside a word: the paired-reading checks, then maybe a new word.</summary>
+        private void OutsideElement(int c, int raw, int visible)
+        {
+            bool open = _gap == GapOpen;
+            AfterWord(c);
+            if (HebrewChars.StartsWord(c))
+            {
+                _state = InWord;
+                _wordStart = raw;
+                _wordVisibleStart = visible;
+                _afterParen = _prev == '(';
+                _secondReading = open;
+                _gap = GapNone;
+                _buffer.Clear();
+                _termBytes = 0; _lastKind = 0; _prevKind = 0;
+                Push(c);
+            }
+        }
+
+        /// <summary>A non-word element (or the end of the text) after the current word: ends it
+        /// per Otzaria (a trailing geresh is kept).</summary>
+        private void EndWord(int raw)
+        {
+            if (_state == InWord)
+                Finish(raw);
+            else if (_state == Pending)
+            {
+                int from = 0;
+                if (_firstIsGeresh)
+                {
+                    Push(_pendingChar[_firstQuote]);
+                    from = _firstQuote + 1;
+                }
+                Finish(from < _pendingRaw.Count ? _pendingRaw[from] : raw);
+                Replay(from);
+            }
+        }
+
+        /// <summary>Feeds the pending chars from <paramref name="from"/> on (left out of the word)
+        /// to the paired-reading checks.</summary>
+        private void Replay(int from)
+        {
+            for (int k = from; k < _pendingChar.Count; k++) AfterWord(_pendingChar[k]);
+        }
+
+        /// <summary>Ends the current word at raw index <paramref name="rawEnd"/>.</summary>
+        private void Finish(int rawEnd)
+        {
+            _state = Outside;
+            if (_secondReading)
+            {
+                _held = true;
+                _heldText = _buffer.ToString();
+                _heldRawStart = _wordStart;
+                _heldRawEnd = rawEnd;
+                _heldVisible = _wordVisibleStart;
+                _heldTermBytes = _termBytes;
+            }
+            else
+            {
+                _words++;
+                _reportTermBytes = _termBytes;
+                OnWord(_wordStart, rawEnd, _wordVisibleStart, _words - 1);
+            }
+            _gap = _afterParen ? GapSuffix : GapNone;
+        }
+
+        /// <summary>A visible element outside any word, fed to the paired-reading checks.</summary>
+        private void AfterWord(int c)
+        {
+            if (_held)
+            {
+                if (HebrewChars.IsReadingSuffix(c)) return;
+                Release(c == ']');
+            }
+            switch (_gap)
+            {
+                case GapSuffix:
+                    _gap = c == ')' ? GapSpace : HebrewChars.IsReadingSuffix(c) ? GapSuffix : GapNone;
+                    break;
+                case GapSpace:
+                    _gap = c == '[' ? GapOpen : HebrewChars.IsWhitespace(c) ? GapSpace : GapNone;
+                    break;
+                default:
+                    _gap = GapNone;
+                    break;
+            }
+        }
+
+        /// <summary>Reports the held second reading: at its first reading's position when its ']'
+        /// came, else at its own.</summary>
+        private void Release(bool paired)
+        {
+            if (!_held) return;
+            _held = false;
+            int position;
+            if (paired) position = _words - 1;
+            else { _words++; position = _words - 1; }
+            _buffer.Clear();
+            _buffer.Append(_heldText);
+            _reportTermBytes = _heldTermBytes;
+            OnWord(_heldRawStart, _heldRawEnd, _heldVisible, position);
+            _buffer.Clear();
+        }
+
+        // ── Term normalization (Otzaria's advance + LowerCaser) ────────────────────────────
+
+        private void Push(int c)
+        {
+            if (HebrewChars.IsWordMark(c) && c != 0xFB1E) return; // marks: not in the term
+            if (HebrewChars.IsTransparent(c)) return;
+            if (HebrewChars.IsGeresh(c))
+            {
+                if (_lastKind == 1)
+                {
+                    _termBytes--;
+                    _lastKind = _prevKind; _prevKind = 0;
+                    PushGershayimDeduped();
                 }
                 else
                 {
-                    Flush(i);
-                    // Non-letter separators (space, punctuation, etc.) count as visible.
-                    _visibleCount++;
+                    _termBytes++;
+                    _prevKind = _lastKind; _lastKind = 1;
                 }
+                return;
             }
-
-            Flush(len);
-        }
-
-        // ── Flush ────────────────────────────────────────────────────
-
-        private void Flush(int rawEnd)
-        {
-            // Every word counts (Otzaria's word model): one letter, a digit run, any length.
-            if (_buffer.Length > 0)
+            if (HebrewChars.IsGershayim(c))
             {
-                // Pass the visible count at the start of this word, recorded when its
-                // first letter arrived. Deriving it as _visibleCount - _buffer.Length was
-                // wrong for any word with quotes (רש"י, or a trailing quote as in יצחק"):
-                // the count includes the quotes, the buffer holds letters only, so the
-                // start came out late by the number of quotes. That shifted the context
-                // trim of long snippets (found by the tantivy-engine parity run).
-                OnWord(_wordStart, rawEnd, _wordVisibleStart);
+                PushGershayimDeduped();
+                return;
             }
-
-            _buffer.Clear();
-            _wordStart     = -1;
-            _runScript     = 0;
-            _pendingQuotes = 0;
-            _innerQuotes   = 0;
+            string folded = HebrewChars.FoldPresentationForm(c);
+            if (folded != null)
+            {
+                foreach (char f in folded)
+                    if (!HebrewChars.IsAttachedMark(f)) PushLower(f);
+                return;
+            }
+            PushLower(c);
         }
 
-        // ── Subclass hook ────────────────────────────────────────────
+        private void PushGershayimDeduped()
+        {
+            if (_lastKind != 2)
+            {
+                _termBytes++;
+                _prevKind = _lastKind; _lastKind = 2;
+            }
+        }
+
+        private void PushLower(int c)
+        {
+            _termBytes += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+            HebrewChars.AppendLower(_buffer, c);
+            _prevKind = _lastKind; _lastKind = 0;
+        }
+
+        // ── Subclass hook ───────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Called for each complete word found in the source text.
+        /// Called for each word found in the source text, in order.
         /// </summary>
-        /// <param name="rawStart">
-        /// Index of the first letter of the word in the original string
-        /// (points into the raw HTML, before any nikud was stripped).
-        /// </param>
+        /// <param name="rawStart">Index of the first char of the word in the original string.</param>
         /// <param name="rawEnd">
-        /// Index just past the separator that ended the word in the original string.
+        /// Index where the next visible element after the word starts (the separator, a quote or
+        /// transparent char left out of the word, an entity's '&amp;', a block tag's '&gt;', or the
+        /// end of the text): inline tags right after the word are inside its span.
         /// </param>
         /// <param name="visibleStart">
-        /// Cumulative count of visible characters up to but not including the first
-        /// letter of this word. <see cref="_buffer"/> holds the normalized form at call time.
+        /// Visible width of the text before the word (chars outside tags in UTF-16 units, an
+        /// entity 1, word marks 0). <see cref="_buffer"/> holds the normalized term at call time.
         /// </param>
-        protected abstract void OnWord(int rawStart, int rawEnd, int visibleStart);
-
-        // ── Shared letter test (used by SnippetWindowLocator for boundary snapping) ──
-
-        /// <summary>Returns true for Hebrew letters (alef–tav) and ASCII a–z / A–Z (not digits).</summary>
-        internal static bool IsLetter(char c) => HebrewChars.IsLetter(c);
-
-
+        /// <param name="position">
+        /// The word's position: one per word, except the second reading of a paired reading
+        /// (X) [Y], which takes X's position.
+        /// </param>
+        protected abstract void OnWord(int rawStart, int rawEnd, int visibleStart, int position);
     }
 }

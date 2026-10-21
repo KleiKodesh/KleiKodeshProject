@@ -1,36 +1,33 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 using FtsLib.Tokenization;
 
 namespace FtsLib.Search
 {
     /// <summary>
-    /// Parses a raw query string into a <see cref="ParsedQuery"/>.
+    /// Parses a raw query string into a <see cref="ParsedQuery"/>: FtsLib's operators over
+    /// Otzaria's word rule (<see cref="WordRule"/>, the rule the indexer uses).
     ///
     /// Rules:
+    ///   - A paired reading (X) [Y] keeps only Y (Otzaria's keep_second_of_paired_readings).
     ///   - Tokens are split on whitespace.
-    ///   - A bare '|' token (after normalisation) acts as an OR separator: the tokens
-    ///     immediately to its left and right are placed in the same OR group.
-    ///     Consecutive '|'-separated tokens all belong to the same group.
-    ///     Example: "word1 | word2 | word3 word4" → group{word1,word2,word3} AND word4.
-    ///   - A token that contains '*' or '?' is a wildcard term.
-    ///   - A token that ends with '~' or '~N' (N = 1–3) is a fuzzy term.
-    ///     If a token has both a wildcard character and a fuzzy suffix, the wildcard
-    ///     wins: the fuzzy suffix is stripped and the token is treated as a wildcard.
-    ///   - All others are literals.
-    ///   - Nikud (U+05B0–U+05C7) and cantillation (U+0591–U+05AF) are stripped from
-    ///     every token so patterns match the normalised terms stored in the index.
-    ///   - English letters are lowercased.
-    ///   - Digits are word characters, as in the indexer (Otzaria's word model): "ב5", "12".
-    ///   - Other non-letter, non-'*', non-'?' characters are dropped.
-    ///   - A literal of any length is a word (one letter included); only one whose term is over
-    ///     HebrewChars.MaxTermBytes is dropped (the index has no such term: Otzaria's
-    ///     RemoveLongFilter, applied to queries too).
-    ///   - Empty tokens (after stripping) are ignored.
-    ///   - A leading or trailing '|', or consecutive '||', is treated as if the
-    ///     missing side is absent (the pipe is simply ignored).
+    ///   - A bare '|' token acts as an OR separator: the tokens immediately to its left and right
+    ///     are placed in the same OR group. Consecutive '|'-separated tokens all belong to the
+    ///     same group. Example: "word1 | word2 | word3 word4" = group{word1,word2,word3} AND word4.
+    ///     A leading or trailing '|', or consecutive '||', is ignored.
+    ///   - A token is cut into pieces at every char that is not a word char, a quote, a
+    ///     transparent char or a query operator ('?', '%'). On each piece: '%' at the start / end
+    ///     = grammatical prefixes / suffixes; a '~' or '~N' suffix (N = 1-9, clamped) = fuzzy.
+    ///   - The rest of a piece is cut into words by the indexer's word rule, '*' and '?' counting
+    ///     as word chars: other transparent chars (. [ ] ~ ^ $ \ +, bidi controls) join and
+    ///     vanish, quotes vanish from the term (FtsLib's terms carry none), marks are stripped,
+    ///     presentation forms fold, every script is lowercased and none splits from another.
+    ///   - A word with '*' or '?' is a wildcard (it wins over '~' and '%').
+    ///   - A literal of any length is a word (one letter included). One whose term has
+    ///     HebrewChars.MaxTermBytes bytes or more has no index term (Otzaria's RemoveLongFilter):
+    ///     it is an unindexed slot, which matches nothing but keeps its one position (it counts
+    ///     in the word distance's denominator, as a skipped wildcard).
+    ///   - Every word of a piece takes the piece's operators.
     /// </summary>
     internal static class QueryParser
     {
@@ -45,21 +42,11 @@ namespace FtsLib.Search
             if (string.IsNullOrWhiteSpace(query))
                 return new ParsedQuery(groups);
 
-            // Pre-process 1: replace every character the INDEXER treats as a word
-            // separator with a space, so query tokenisation matches index
-            // tokenisation (see SplitOnIndexSeparators for the full rationale).
-            query = SplitOnIndexSeparators(query);
+            // Otzaria's sanitizer: a paired reading keeps its second reading.
+            query = WordRule.KeepSecondOfPairedReadings(query);
 
-            // Pre-process 2: pad every '|' character with spaces so that "א|ב" and
-            // "א | ב" are treated identically.  This lets users omit spaces around
-            // the pipe without affecting the tokenisation logic below.
+            // Pad every '|' with spaces so that "a|b" and "a | b" are treated identically.
             query = query.Replace("|", " | ");
-
-            // First pass: tokenise into SubPatterns and bare OR-pipe markers.
-            // A raw token of exactly "|" (after whitespace split) is an OR separator.
-            // We accumulate SubPatterns into a pending OR group; when we see a
-            // non-pipe token after a non-pipe token (i.e. no pipe between them),
-            // we flush the pending group and start a new one.
 
             // pendingGroup: the sub-patterns collected so far for the current OR group.
             var pendingGroup = new List<SubPattern>();
@@ -68,131 +55,32 @@ namespace FtsLib.Search
             foreach (var raw in query.Split(new[] { ' ', '\t', '\r', '\n' },
                                             StringSplitOptions.RemoveEmptyEntries))
             {
-                // Detect a bare pipe token (before normalisation, since '|' is dropped
-                // by Normalise).  A raw token is a pipe separator when it consists
-                // entirely of '|' characters.
-                bool isPipe = IsPipeToken(raw);
-
-                if (isPipe)
+                if (IsPipeToken(raw))
                 {
                     lastWasPipe = true;
                     continue;
                 }
 
-                // Parse the token into a SubPattern.
-                SubPattern? sp = ParseToken(raw);
-                if (sp == null) continue; // empty after normalisation
-
-                if (!lastWasPipe && pendingGroup.Count > 0)
+                foreach (var sp in ParseToken(raw))
                 {
-                    // No pipe between the previous token and this one → flush the
-                    // accumulated OR group as a completed QueryGroup.
-                    groups.Add(new QueryGroup(pendingGroup));
-                    pendingGroup = new List<SubPattern>();
-                }
+                    if (!lastWasPipe && pendingGroup.Count > 0)
+                    {
+                        // No pipe between the previous word and this one: close the group.
+                        groups.Add(new QueryGroup(pendingGroup));
+                        pendingGroup = new List<SubPattern>();
+                    }
 
-                pendingGroup.Add(sp.Value);
-                lastWasPipe = false;
+                    pendingGroup.Add(sp);
+                    lastWasPipe = false;
+                }
             }
 
-            // Flush the last pending group.
             if (pendingGroup.Count > 0)
                 groups.Add(new QueryGroup(pendingGroup));
 
             return new ParsedQuery(groups);
         }
 
-        // ── Index-separator pre-pass ──────────────────────────────────
-
-        /// <summary>
-        /// Replaces every character that the indexer's <see cref="HtmlWordScanner"/>
-        /// treats as a word SEPARATOR with a space, so query tokenisation splits
-        /// exactly where index tokenisation split.
-        ///
-        /// Normalise used to silently DELETE these characters instead, which JOINED
-        /// the surrounding fragments into one term that cannot exist in the index —
-        /// e.g. pasted "יום־טוב" (maqaf, standard Tanakh orthography) became the
-        /// unfindable single term "יוםטוב" while the index holds "יום" and "טוב",
-        /// so the query returned zero results for text that visibly contains it.
-        /// The same applied to hyphens, mid-word digits, and all punctuation.
-        ///
-        /// Kept verbatim (NOT separators):
-        ///   - whitespace (the tokeniser splits on it anyway)
-        ///   - letters (Hebrew + ASCII) and digits (word characters, as in the scanner)
-        ///   - strippable nikud/cantillation marks (Normalise removes them, matching
-        ///     the scanner) — EXCEPT maqaf U+05BE, which is inside the strippable
-        ///     range but is explicitly a separator in the scanner (checked first)
-        ///   - other Unicode non-spacing marks (transparent in the scanner too)
-        ///   - intra-word quotes (transparent connectors on both sides, e.g. רש"י)
-        ///   - query syntax characters: '*' '?' '~' '%' '|'
-        /// </summary>
-        private static string SplitOnIndexSeparators(string query)
-        {
-            StringBuilder sb = null;      // allocated only when a replacement is needed
-            char prevLetter  = '\0';      // last kept letter, '\0' after any word break
-            for (int i = 0; i < query.Length; i++)
-            {
-                char c = query[i];
-
-                bool keep;
-                if (c == '־')
-                {
-                    keep = false; // maqaf — the scanner splits on it before its strippable-range check
-                }
-                else
-                {
-                    keep = char.IsWhiteSpace(c)
-                        || HebrewChars.IsWordChar(c)
-                        || HebrewChars.IsStrippableMark(c)
-                        || HebrewChars.IsIntraWordQuote(c)
-                        || c == '*' || c == '?' || c == '~' || c == '%' || c == '|'
-                        || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark);
-                }
-
-                if (keep)
-                {
-                    if (HebrewChars.IsLetter(c))
-                    {
-                        // Script-boundary split, mirroring the indexer: a Hebrew↔Latin
-                        // transition inside a letter run starts a NEW word at index
-                        // time (HtmlWordScanner), so a mixed-script query token like
-                        // "bדה" could never match — the index holds "דה". Letters are
-                        // only Hebrew (≥ U+05D0) or ASCII, so one compare decides.
-                        if (prevLetter != '\0' && (c >= 'א') != (prevLetter >= 'א'))
-                        {
-                            if (sb == null) sb = new StringBuilder(query, 0, i, query.Length + 8);
-                            sb.Append(' ');
-                        }
-                        prevLetter = c;
-                    }
-                    else if (!(HebrewChars.IsStrippableMark(c)
-                            || HebrewChars.IsDigit(c) // script-neutral, as in the scanner
-                            || HebrewChars.IsIntraWordQuote(c)
-                            || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)))
-                    {
-                        // Whitespace / query syntax chars end the letter run;
-                        // transparent marks and quotes do not.
-                        prevLetter = '\0';
-                    }
-
-                    sb?.Append(c);
-                }
-                else
-                {
-                    if (sb == null) sb = new StringBuilder(query, 0, i, query.Length + 8);
-                    sb.Append(' ');
-                    prevLetter = '\0';
-                }
-            }
-            return sb == null ? query : sb.ToString();
-        }
-
-        // ── Token parsing ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Returns true when <paramref name="raw"/> is a pipe separator token
-        /// (consists entirely of '|' characters).
-        /// </summary>
         private static bool IsPipeToken(string raw)
         {
             foreach (char c in raw)
@@ -200,109 +88,96 @@ namespace FtsLib.Search
             return true;
         }
 
-        /// <summary>
-        /// Parses a single whitespace-delimited token into a <see cref="SubPattern"/>.
-        /// Returns null when the token is empty after normalisation.
-        /// </summary>
-        private static SubPattern? ParseToken(string raw)
+        /// <summary>A char that stays inside a piece: a word char, a quote, a transparent char, or
+        /// a query operator ('?' wildcard, '%' grammar; '*' and '~' are transparent chars).</summary>
+        private static bool IsPieceChar(int c)
+            => HebrewChars.IsWordChar(c) || HebrewChars.IsQuote(c) || HebrewChars.IsTransparent(c) || c == '?' || c == '%';
+
+        /// <summary>The words of one whitespace token, piece by piece.</summary>
+        private static List<SubPattern> ParseToken(string raw)
         {
-            // ── Strip grammar expansion markers (%) ───────────────────
-            // '%' at the start means expand prefixes; '%' at the end means expand
-            // suffixes. These are stripped before normalisation so Normalise never
-            // sees them (it would drop them anyway, but being explicit is cleaner).
-            // '*' overrides '%': if the token also contains '*', it is treated as a
-            // plain wildcard and the grammar flags are ignored.
-            bool grammarPrefix = raw.StartsWith("%");
-            bool grammarSuffix = raw.EndsWith("%");
+            var result = new List<SubPattern>();
+            int i = 0, n = raw.Length, pieceStart = 0;
+            while (i <= n)
+            {
+                int c = -1, units = 1;
+                if (i < n)
+                {
+                    c = raw[i];
+                    if (char.IsHighSurrogate(raw[i]) && i + 1 < n && char.IsLowSurrogate(raw[i + 1]))
+                    {
+                        c = char.ConvertToUtf32(raw[i], raw[i + 1]);
+                        units = 2;
+                    }
+                }
+                if (c < 0 || !IsPieceChar(c))
+                {
+                    if (i > pieceStart) ParsePiece(raw.Substring(pieceStart, i - pieceStart), result);
+                    pieceStart = i + units;
+                }
+                i += units;
+            }
+            return result;
+        }
+
+        /// <summary>One piece: its operators, then its words by the word rule.</summary>
+        private static void ParsePiece(string raw, List<SubPattern> into)
+        {
+            bool grammarPrefix = raw.StartsWith("%", StringComparison.Ordinal);
+            bool grammarSuffix = raw.EndsWith("%", StringComparison.Ordinal);
             if (grammarPrefix || grammarSuffix)
                 raw = raw.Trim('%');
 
-            // Split off a trailing fuzzy suffix (~  or ~N) before normalising,
-            // because '~' and digits would otherwise be dropped by Normalise.
-            string tokenText = raw;
-            bool   isFuzzy   = false;
-            int    fuzzyDist = 1;
-
+            // Fuzzy suffix: "word~" (distance 1) or "word~N" (N = 1-9, clamped).
+            string text = raw;
+            bool isFuzzy = false;
+            int fuzzyDist = 1;
             int tildePos = raw.LastIndexOf('~');
             if (tildePos >= 0)
             {
-                string suffix = raw.Substring(tildePos + 1); // "" or "1"/"2"/"3"
-                string prefix = raw.Substring(0, tildePos);
-
-                // suffix must be empty or a single digit 1–9
+                string suffix = raw.Substring(tildePos + 1);
                 if (suffix.Length == 0 || (suffix.Length == 1 && suffix[0] >= '1' && suffix[0] <= '9'))
                 {
-                    isFuzzy   = true;
+                    isFuzzy = true;
                     fuzzyDist = suffix.Length == 0 ? 1 : (suffix[0] - '0');
                     if (fuzzyDist > FuzzyExpander.MaxAllowedDistance)
                         fuzzyDist = FuzzyExpander.MaxAllowedDistance;
-                    tokenText = prefix;
+                    text = raw.Substring(0, tildePos);
                 }
-                // else: '~' is not a fuzzy marker here — the ~ is dropped by Normalise, digits after it stay in the word (שלום~12 = שלום12, as Otzaria strips ~)
             }
 
-            string normalised = Normalise(tokenText, out int innerQuotes);
-            if (normalised.Length == 0) return null;
+            int pos = 0;
+            while (WordRule.NextTokenBoundaries(text, pos, true, out int start, out int end))
+            {
+                pos = end;
+                string normalised = WordRule.Normalize(text.Substring(start, end - start), true, out int termBytes);
+                normalised = StripQuotes(normalised);
+                if (normalised.Length == 0) continue;
 
-            bool isWildcard = normalised.IndexOf('*') >= 0 || normalised.IndexOf('?') >= 0;
+                bool isWildcard = normalised.IndexOf('*') >= 0 || normalised.IndexOf('?') >= 0;
+                bool fuzzy = isFuzzy && !isWildcard;        // a wildcard wins over '~'
+                bool prefixes = grammarPrefix && !isWildcard, suffixes = grammarSuffix && !isWildcard;
 
-            // Fuzzy + wildcard on the same token is not supported.
-            // The wildcard wins: the fuzzy suffix is silently stripped.
-            if (isFuzzy && isWildcard) isFuzzy = false;
+                // A literal whose term is too long has no index term: an unindexed slot.
+                bool unindexed = !isWildcard && !fuzzy && !prefixes && !suffixes
+                    && !HebrewChars.IsIndexableLength(termBytes);
 
-            // '*' overrides '%': if the token is a wildcard the grammar flags are ignored.
-            if (isWildcard)
-                grammarPrefix = grammarSuffix = false;
-
-            // Every word is indexed (one letter, digits, any length) except a term over
-            // MaxTermBytes (Tokenizer.OnWord, Otzaria's RemoveLongFilter). Such a LITERAL
-            // can never match anything; keeping it would poison the whole AND query into
-            // guaranteed-zero results with no signal. Otzaria drops it from the query too.
-            // Wildcard/fuzzy/grammar tokens keep their own expansion semantics.
-            if (!isWildcard && !isFuzzy && !grammarPrefix && !grammarSuffix &&
-                Encoding.UTF8.GetByteCount(normalised) + innerQuotes > HebrewChars.MaxTermBytes)
-                return null;
-
-            return new SubPattern(normalised, isWildcard, isFuzzy, fuzzyDist,
-                                  grammarExpandPrefixes: grammarPrefix,
-                                  grammarExpandSuffixes: grammarSuffix);
+                into.Add(new SubPattern(normalised, isWildcard, fuzzy, fuzzyDist,
+                                        grammarExpandPrefixes: prefixes,
+                                        grammarExpandSuffixes: suffixes,
+                                        isUnindexed: unindexed));
+            }
         }
 
-        // ── Normalisation ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Strips nikud/cantillation, lowercases ASCII, keeps letters, digits, '*' and '?',
-        /// drops everything else. <paramref name="innerQuotes"/> = the quotes it skipped BETWEEN
-        /// word characters (the byte each takes in a quote-keeping term; see MaxTermBytes).
-        /// Preserves '*' and '?' so the caller can detect wildcard position.
-        /// Hebrew geresh/gershayim and ASCII quote characters that appear inside a
-        /// word (buffer non-empty) are treated as transparent connectors and skipped,
-        /// matching the behaviour of the indexer's HtmlWordScanner.
-        /// </summary>
-        private static string Normalise(string token, out int innerQuotes)
+        /// <summary>FtsLib's terms carry no quotes.</summary>
+        private static string StripQuotes(string s)
         {
-            var sb = new StringBuilder(token.Length);
-            innerQuotes = 0;
-            int pendingQuotes = 0;
-            foreach (char c in token)
-            {
-                if (HebrewChars.IsStrippableMark(c)) continue;          // nikud + cantillation
-                if (c == '*' || c == '?') { sb.Append(c); pendingQuotes = 0; continue; } // preserve wildcard chars
-                if (HebrewChars.IsWordChar(c))
-                {
-                    sb.Append(HebrewChars.ToLowerAscii(c));
-                    innerQuotes += pendingQuotes;
-                    pendingQuotes = 0;
-                    continue;
-                }
-                if (HebrewChars.IsIntraWordQuote(c) && sb.Length > 0) { pendingQuotes++; continue; } // transparent connector
-                // everything else (punctuation, spaces) is dropped
-            }
-            return sb.ToString();
+            if (s.IndexOf('\'') < 0 && s.IndexOf('"') < 0) return s;
+            return s.Replace("'", "").Replace("\"", "");
         }
     }
 
-    // ── Value types ───────────────────────────────────────────────────
+    // ── Result types ─────────────────────────────────────────────────────────────
 
     /// <summary>
     /// The result of parsing a query: an ordered list of groups.
@@ -343,8 +218,6 @@ namespace FtsLib.Search
             Alternatives = alternatives;
         }
 
-        // ── Convenience accessors for the single-alternative case ─────
-
         /// <summary>
         /// True when this group contains exactly one alternative.
         /// </summary>
@@ -368,6 +241,9 @@ namespace FtsLib.Search
 
         /// <summary>True when the first alternative is a grammar-expansion term.</summary>
         public bool IsGrammar => Alternatives[0].IsGrammar;
+
+        /// <summary>True when the first alternative is a literal too long to be indexed.</summary>
+        public bool IsUnindexed => Alternatives[0].IsUnindexed;
     }
 
     /// <summary>
@@ -390,23 +266,31 @@ namespace FtsLib.Search
         public readonly bool IsFuzzy;
 
         /// <summary>
-        /// Maximum edit distance for fuzzy matching (1–3).
+        /// Maximum edit distance for fuzzy matching.
         /// Meaningful only when <see cref="IsFuzzy"/> is true.
         /// </summary>
         public readonly int FuzzyDistance;
 
-        /// <summary>True when this token has a leading '%' — expand grammatical prefixes.</summary>
+        /// <summary>True when this token has a leading '%' - expand grammatical prefixes.</summary>
         public readonly bool GrammarExpandPrefixes;
 
-        /// <summary>True when this token has a trailing '%' — expand grammatical suffixes.</summary>
+        /// <summary>True when this token has a trailing '%' - expand grammatical suffixes.</summary>
         public readonly bool GrammarExpandSuffixes;
 
         /// <summary>True when this is a grammar-expansion token (at least one % marker).</summary>
         public bool IsGrammar => GrammarExpandPrefixes || GrammarExpandSuffixes;
 
+        /// <summary>
+        /// True for a literal whose term is too long to be indexed (HebrewChars.MaxTermBytes or
+        /// more): it expands to no term and is no constraint, but its slot keeps its one position
+        /// (it counts in the word distance's denominator).
+        /// </summary>
+        public readonly bool IsUnindexed;
+
         public SubPattern(string pattern, bool isWildcard,
                           bool isFuzzy = false, int fuzzyDistance = 1,
-                          bool grammarExpandPrefixes = false, bool grammarExpandSuffixes = false)
+                          bool grammarExpandPrefixes = false, bool grammarExpandSuffixes = false,
+                          bool isUnindexed = false)
         {
             Pattern                = pattern;
             IsWildcard             = isWildcard;
@@ -414,6 +298,7 @@ namespace FtsLib.Search
             FuzzyDistance          = fuzzyDistance;
             GrammarExpandPrefixes  = grammarExpandPrefixes;
             GrammarExpandSuffixes  = grammarExpandSuffixes;
+            IsUnindexed            = isUnindexed;
         }
     }
 }

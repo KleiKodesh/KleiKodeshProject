@@ -97,6 +97,30 @@ namespace FtsLibTest
 
             // ── 7. No match — IsMatch false ───────────────────────────
 
+            // Paired reading (X) [Y]: Y shares X's position (Otzaria), so the pair is one word.
+            Check(ref passed, ref failed,
+                name:             "paired reading counts one position: a (x) [y] b, a..b distance 1",
+                content:          "\u05d0\u05d1 (\u05d2\u05d3) [\u05d4\u05d5] \u05d6\u05d7",
+                groups:           G("\u05d0\u05d1", "\u05d6\u05d7"),
+                originalCount:    2,
+                expectedDistance: 1);
+
+            Check(ref passed, ref failed,
+                name:             "paired reading: the second reading is adjacent to the next word",
+                content:          "\u05d0\u05d1 (\u05d2\u05d3) [\u05d4\u05d5] \u05d6\u05d7",
+                groups:           G("\u05d4\u05d5", "\u05d6\u05d7"),
+                originalCount:    2,
+                expectedDistance: 0);
+
+            // A word too long to be indexed keeps its position; an unindexed query slot counts
+            // in originalCount, so the long word is not an extra word.
+            Check(ref passed, ref failed,
+                name:             "unindexed slot: a LONG b with originalCount 3 -> distance 0",
+                content:          "\u05d0\u05d1 " + new string('\u05d2', 64) + " \u05d6\u05d7",
+                groups:           G("\u05d0\u05d1", "\u05d6\u05d7"),
+                originalCount:    3,
+                expectedDistance: 0);
+
             CheckNoMatch(ref passed, ref failed,
                 name:    "term not in content → IsMatch false",
                 content: "שלום עולם",

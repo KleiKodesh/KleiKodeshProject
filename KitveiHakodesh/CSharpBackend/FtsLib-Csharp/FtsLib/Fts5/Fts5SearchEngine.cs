@@ -403,7 +403,7 @@ namespace FtsLib.Fts5
         {
             hardMiss = false;
 
-            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar)
+            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar && !group.IsUnindexed)
             {
                 var single = new List<string> { group.Pattern };
                 if (expandKetiv)
@@ -420,6 +420,10 @@ namespace FtsLib.Fts5
             {
                 ct.ThrowIfCancellationRequested();
                 if (!seenAlternatives.Add(AlternativeKey(alt))) continue;
+
+                // A literal too long to be indexed has no term and is no constraint: alone, its
+                // group is skipped but still counts in OriginalGroupCount (it keeps its position).
+                if (alt.IsUnindexed) continue;
 
                 List<string> expanded;
                 if (alt.IsFuzzy)
@@ -463,6 +467,7 @@ namespace FtsLib.Fts5
 
         static string AlternativeKey(SubPattern alt)
         {
+            if (alt.IsUnindexed) return "u:" + alt.Pattern;
             if (alt.IsFuzzy)    return "f" + alt.FuzzyDistance + ":" + alt.Pattern;
             if (alt.IsWildcard) return "w:" + alt.Pattern;
             if (alt.IsGrammar)
