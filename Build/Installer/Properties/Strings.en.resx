@@ -115,6 +115,13 @@ Close Word to continue the installation?</value>
   <data name="Word_OpenTitle" xml:space="preserve">
     <value>Word is open</value>
   </data>
+  <data name="Word_OpenToFinish" xml:space="preserve">
+    <value>Word must be opened once to finish the installation.
+Open Word now?</value>
+  </data>
+  <data name="Word_OpenToFinishTitle" xml:space="preserve">
+    <value>Finish installation</value>
+  </data>
   <data name="Word_Cancelled" xml:space="preserve">
     <value>Installation cancelled. Please close Word and try again.</value>
   </data>

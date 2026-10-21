@@ -13,6 +13,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// </summary>
     public static class InstallRunner
     {
+        /// <summary>True when the last RunAsync was a first install, not an update.</summary>
+        public static bool IsCleanInstall { get; private set; }
+
         /// <summary>
         /// Returns true when the KitveiHakodesh service ended up registered — or was
         /// not part of the package, which is equally fine. False means the package
@@ -51,6 +54,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             status?.Report(Strings.Install_RegisteringAddin);
             await AddinInstaller.RegisterAddInAsync(progress);
+
+            // No version stamp yet = first install on this machine (not an update). Read
+            // before SaveVersion writes it; the exit prompt to open Word keys off this.
+            IsCleanInstall = !AddinInstaller.HasSavedVersion();
 
             status?.Report(Strings.Install_SavingVersion);
             AddinInstaller.SaveVersion();

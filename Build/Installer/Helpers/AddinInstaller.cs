@@ -431,6 +431,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
         // ── Version + DB ─────────────────────────────────────────────────────────
 
+        public static bool HasSavedVersion()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                    return key?.GetValue("Version") != null;
+            }
+            catch { return false; }
+        }
+
         public static void SaveVersion()
         {
             try

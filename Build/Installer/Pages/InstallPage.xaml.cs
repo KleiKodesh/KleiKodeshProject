@@ -94,7 +94,7 @@ namespace KleiKodeshVstoInstallerWpf
                 if (_showSettingsAfter)
                     (Window.GetWindow(this) as MainWindow)?.NavigateToSettings();
                 else
-                    Environment.Exit(0);
+                    WordHelper.ExitAfterInstall();
             }
             catch (Exception ex)
             {
