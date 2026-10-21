@@ -1,4 +1,5 @@
 ﻿using KleiKodeshVstoInstallerWpf.Properties;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows;
@@ -58,6 +59,29 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 try { proc.Kill(); proc.WaitForExit(); } catch { }
 
             return true;
+        }
+
+        /// <summary>
+        /// Exits the installer after a successful install. On a clean install (not an
+        /// update) the add-in only finishes setting up the first time Word loads it, so
+        /// offer to open Word first.
+        /// </summary>
+        public static void ExitAfterInstall()
+        {
+            if (InstallRunner.IsCleanInstall && !IsWordRunning())
+            {
+                var r = MessageBox.Show(
+                    Strings.Word_OpenToFinish,
+                    Strings.Word_OpenToFinishTitle,
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes,
+                    UiLanguage.MessageBoxOptions);
+
+                if (r == MessageBoxResult.Yes)
+                    try { Process.Start(new ProcessStartInfo("winword.exe") { UseShellExecute = true }); } catch { }
+            }
+            Environment.Exit(0);
         }
 
         /// <summary>

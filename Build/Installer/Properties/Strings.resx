@@ -115,6 +115,13 @@
   <data name="Word_OpenTitle" xml:space="preserve">
     <value>וורד פתוח</value>
   </data>
+  <data name="Word_OpenToFinish" xml:space="preserve">
+    <value>כדי להשלים את ההתקנה, יש לפתוח את Word.
+לפתוח את Word עכשיו?</value>
+  </data>
+  <data name="Word_OpenToFinishTitle" xml:space="preserve">
+    <value>השלמת התקנה</value>
+  </data>
   <data name="Word_Cancelled" xml:space="preserve">
     <value>ההתקנה בוטלה. אנא סגור את וורד ונסה שוב.</value>
   </data>

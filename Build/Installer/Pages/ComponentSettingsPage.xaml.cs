@@ -208,7 +208,7 @@ namespace KleiKodeshVstoInstallerWpf
             try
             {
                 Commit();
-                Environment.Exit(0);
+                WordHelper.ExitAfterInstall();
             }
             catch (Exception ex)
             {

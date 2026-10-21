@@ -146,6 +146,12 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
         /// <summary>Installation cancelled. Please close Word and try again.</summary>
         public static string Word_Cancelled => ResourceManager.GetString("Word_Cancelled", resourceCulture);
 
+        /// <summary>Word must be opened once to finish the installation. Open Word now?</summary>
+        public static string Word_OpenToFinish => ResourceManager.GetString("Word_OpenToFinish", resourceCulture);
+
+        /// <summary>Finish installation</summary>
+        public static string Word_OpenToFinishTitle => ResourceManager.GetString("Word_OpenToFinishTitle", resourceCulture);
+
         /// <summary>Word is currently open and must be closed before cleanup. Close Word now?</summary>
         public static string Word_OpenClean => ResourceManager.GetString("Word_OpenClean", resourceCulture);
 
