@@ -163,6 +163,9 @@ useDropdownClose(
   {
     toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
     enabled: isOverlayMode,
+    // A full-height side panel, not a popup: the viewport fit would cap it 8px short
+    // of the bottom edge (same opt-out as BookViewSidePanel).
+    fitToViewport: false,
   },
 )
 
@@ -545,7 +548,7 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div v-if="isFilterOpen" class="filter-shell" @click.self="isFilterOpen = false">
+      <div v-if="isFilterOpen" class="filter-shell" :class="{ floating: showAdvancedCard }" @click.self="isFilterOpen = false">
         <FullTextSearchFilterPanel
           ref="filterPanelRef"
           :checked-book-ids="checkedBookIds"
@@ -669,6 +672,13 @@ onBeforeUnmount(() => {
     height: 100%;
     flex-shrink: 0;
     display: flex;
+  }
+  /* Over the clean-page card the panel floats instead of taking a column, so the
+     centered card is not pushed aside. */
+  .filter-shell.floating {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
   }
   /* `height: 100%` would resolve against the shell and then ADD the panel's own margin,
      overflowing the area by that much at top and bottom. Stretching instead lets the
