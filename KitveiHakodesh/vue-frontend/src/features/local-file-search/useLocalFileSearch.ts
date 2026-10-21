@@ -18,6 +18,7 @@
  * plumbing on either host.
  */
 
+import { t } from '@/i18n'
 import { ref, watch, computed, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchWarmup, localFileIndexStatus } from '@/webview-host/bridge'
@@ -168,7 +169,7 @@ export function useLocalFileSearch(
     } catch (error) {
       if (thisGeneration !== generation) return
       void reportLocalFileSearchFailure()
-      errorMessage.value = error instanceof Error ? error.message : 'שגיאה בחיפוש'
+      errorMessage.value = error instanceof Error ? error.message : t('localFileSearch.searchError')
       rawResults.value = []
       totalCount.value = 0
     } finally {

@@ -46,17 +46,17 @@ function onContextWordsInput(event: Event) {
           :class="{ active: activeTab === 'options' }"
           @click="activeTab = 'options'"
         >
-          אפשרויות חיפוש מתקדמות
+          {{ $t('fullTextSearch.adv.title') }}
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'syntax' }"
           @click="activeTab = 'syntax'"
         >
-          תחביר חיפוש
+          {{ $t('fullTextSearch.adv.syntax') }}
         </button>
       </div>
-      <button v-if="!asCard" class="close-btn" title="סגור" @click="emit('close')">
+      <button v-if="!asCard" class="close-btn" :title="$t('fullTextSearch.close')" @click="emit('close')">
         <IconDismiss20Regular />
       </button>
     </div>
@@ -64,7 +64,7 @@ function onContextWordsInput(event: Event) {
     <div v-if="activeTab === 'options'" class="panel-body">
       <!-- Word distance -->
       <div class="option-row">
-        <label class="option-label" for="word-distance-input">מרחק מקסימלי בין מילים</label>
+        <label class="option-label" for="word-distance-input">{{ $t('fullTextSearch.adv.wordDistance') }}</label>
         <input
           id="word-distance-input"
           type="number"
@@ -78,7 +78,7 @@ function onContextWordsInput(event: Event) {
 
  <!-- Context words -->
       <div class="option-row">
-        <label class="option-label" for="context-words-input">הקשר לפני ואחרי (מילים)</label>
+        <label class="option-label" for="context-words-input">{{ $t('fullTextSearch.adv.contextWords') }}</label>
         <input
           id="context-words-input"
           type="number"
@@ -94,44 +94,44 @@ function onContextWordsInput(event: Event) {
 
       <!-- Order mode -->
       <div class="option-row">
-        <span class="option-label">סדר מילים לפי שאילתא</span>
+        <span class="option-label">{{ $t('fullTextSearch.adv.wordOrder') }}</span>
         <div class="toggle-group">
           <button
             class="toggle-btn"
             :class="{ active: !props.requireOrdered }"
             @click="emit('update:requireOrdered', false)"
-          >לא</button>
+          >{{ $t('fullTextSearch.adv.no') }}</button>
           <button
             class="toggle-btn"
             :class="{ active: props.requireOrdered }"
             @click="emit('update:requireOrdered', true)"
-          >כן</button>
+          >{{ $t('fullTextSearch.adv.yes') }}</button>
         </div>
       </div>    
 
       <!-- Grammar wrap -->
       <div class="option-row">
-        <span class="option-label">תחיליות וסופיות דקדוקיות</span>
+        <span class="option-label">{{ $t('fullTextSearch.adv.grammarWrap') }}</span>
         <div class="toggle-group">
-          <button class="toggle-btn" :class="{ active: !props.grammarWrap }" @click="emit('update:grammarWrap', false)">לא</button>
-          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true)">כן</button>
+          <button class="toggle-btn" :class="{ active: !props.grammarWrap }" @click="emit('update:grammarWrap', false)">{{ $t('fullTextSearch.adv.no') }}</button>
+          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true)">{{ $t('fullTextSearch.adv.yes') }}</button>
         </div>
       </div>
 
       <!-- כתיב expansion -->
       <div class="option-row">
-        <span class="option-label">הרחב כתיב חסר/מלא</span>
+        <span class="option-label">{{ $t('fullTextSearch.adv.spellingVariants') }}</span>
         <div class="toggle-group">
           <button
             class="toggle-btn"
             :class="{ active: !props.expandKetiv }"
             @click="emit('update:expandKetiv', false)"
-          >לא</button>
+          >{{ $t('fullTextSearch.adv.no') }}</button>
           <button
             class="toggle-btn"
             :class="{ active: props.expandKetiv }"
             @click="emit('update:expandKetiv', true)"
-          >כן</button>
+          >{{ $t('fullTextSearch.adv.yes') }}</button>
         </div>
       </div>
 
@@ -140,20 +140,20 @@ function onContextWordsInput(event: Event) {
       <!-- Related-forms expansion (inflections / vetted synonyms / Targum bridge) -->
       <div class="option-row">
         <span class="option-label">
-          חיפוש מורחב
-          <span class="option-hint">(נטיות ומילים נרדפות)</span>
+          {{ $t('fullTextSearch.adv.expanded') }}
+          <span class="option-hint">{{ $t('fullTextSearch.adv.expandedHint') }}</span>
         </span>
         <div class="toggle-group">
           <button
             class="toggle-btn"
             :class="{ active: !props.expandRelated }"
             @click="emit('update:expandRelated', false)"
-          >לא</button>
+          >{{ $t('fullTextSearch.adv.no') }}</button>
           <button
             class="toggle-btn"
             :class="{ active: props.expandRelated }"
             @click="emit('update:expandRelated', true)"
-          >כן</button>
+          >{{ $t('fullTextSearch.adv.yes') }}</button>
         </div>
       </div>
     </div>
@@ -161,27 +161,27 @@ function onContextWordsInput(event: Event) {
     <div v-else-if="activeTab === 'syntax'" class="syntax-help">
       <div class="syntax-reference">
         <div class="syntax-row">
-          <div class="intent">תחיליות וסופיות</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxWildcard') }}</div>
           <div class="usage"><span class="example">ישר*</span> <span class="example">*לום</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">תו אופציונלי (כתיב חסר/מלא)</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxOptional') }}</div>
           <div class="usage"><span class="example">שלו?ם</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">דומה עם שגיאה (מרחק 1)</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxFuzzy') }}</div>
           <div class="usage"><span class="example">יצחק~</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">דומה עם שגיאה מותאמת (1–3)</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxFuzzyN') }}</div>
           <div class="usage"><span class="example">משה~2</span> <span class="example">משה~3</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">או (בחירה אחת או יותר)</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxOr') }}</div>
           <div class="usage"><span class="example">משה | אהרן</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">קידומות/סיומות דקדוקיות</div>
+          <div class="intent">{{ $t('fullTextSearch.adv.syntaxGrammar') }}</div>
           <div class="usage"><span class="example">%שלום%</span> <span class="example">%שלום</span> <span class="example">שלום%</span></div>
         </div>
       </div>

@@ -1,0 +1,20 @@
+{
+  "pleaseWait": "אנא המתן בעת בניית האינדקס",
+  "searching": "מחפש...",
+  "sort": {
+    "relevance": "ללא מיון",
+    "fileName": "שם קובץ",
+    "fileType": "סוג קובץ",
+    "fullPath": "נתיב מלא",
+    "date": "תאריך (חדש ראשון)"
+  },
+  "placeholderSearch": "חפש קבצים לפי שם או לפי תיקייה...",
+  "placeholderAddins": "הקלד תוספים: עבור תוספי אוצריא",
+  "sortTitle": "מיון: {label}",
+  "noResults": "לא נמצאו תוצאות",
+  "searchFiles": "חפש קבצים...",
+  "openingFile": "פותח קובץ…",
+  "truncated": "(מוצגים {shown} מתוך {total} תוצאות)",
+  "openInDefaultApp": "פתח בתוכנת ברירת המחדל",
+  "searchError": "שגיאה בחיפוש"
+}

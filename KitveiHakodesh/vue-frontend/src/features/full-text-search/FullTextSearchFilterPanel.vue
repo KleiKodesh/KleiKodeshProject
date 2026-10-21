@@ -233,18 +233,18 @@ function onInputKeydown(e: KeyboardEvent) {
           <span class="check-mark">✓</span>
           <span class="dash-mark">–</span>
         </span>
-        <span class="panel-title">בחר הכל</span>
+        <span class="panel-title">{{ $t('fullTextSearch.filter.selectAll') }}</span>
       </div>
       <button
         v-if="!isSearching && !booksStore.loading"
         class="expand-all-btn c-pointer hover-bg"
-        :title="allExpanded ? 'כווץ הכל' : 'הרחב הכל'"
+        :title="allExpanded ? $t('fullTextSearch.filter.collapseAll') : $t('fullTextSearch.filter.expandAll')"
         @click.stop="toggleExpandAll"
       >
         <IconChevronDoubleUp20Regular v-if="allExpanded" />
         <IconChevronDoubleDown20Regular v-else />
       </button>
-      <button class="close-btn c-pointer hover-bg" title="סגור" @click.stop="emit('close')">
+      <button class="close-btn c-pointer hover-bg" :title="$t('fullTextSearch.close')" @click.stop="emit('close')">
         <IconMinimize20Regular />
       </button>
     </div>

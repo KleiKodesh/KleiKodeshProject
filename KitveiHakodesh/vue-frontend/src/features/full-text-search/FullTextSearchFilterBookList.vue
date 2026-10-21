@@ -57,7 +57,7 @@ defineExpose({ onSearchInputKeydown })
 </script>
 
 <template>
-  <div v-if="!books.length" class="empty">לא נמצאו ספרים</div>
+  <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
   <div v-else ref="scrollEl" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
@@ -84,7 +84,7 @@ defineExpose({ onSearchInputKeydown })
             <span v-if="checkedBookIds.has(books[vRow.index]!.id)" class="check-mark">✓</span>
             <IconBookRtl20 v-else class="book-icon" />
           </button>
-          <button class="book-title" title="גלול לתוצאה הראשונה" @click.stop="onBookRowTitleClick(vRow.index)">
+          <button class="book-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="onBookRowTitleClick(vRow.index)">
             <span class="title-line">
               <span class="title-text">{{ books[vRow.index]!.title }}</span>
               <span

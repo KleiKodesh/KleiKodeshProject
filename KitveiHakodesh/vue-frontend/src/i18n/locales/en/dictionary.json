@@ -1,0 +1,9 @@
+{
+  "tabTitle": "Dictionary",
+  "tabTitleWord": "Dictionary · {word}",
+  "searchWord": "Search a word",
+  "didYouMean": "Did you mean: ",
+  "noResults": "No results found",
+  "searching": "Searching...",
+  "related": "Related"
+}

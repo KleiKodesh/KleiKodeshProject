@@ -7,10 +7,10 @@ defineProps<{ state: IndexingState }>()
   <div class="indexing-banner">
     <div class="banner-top">
       <span class="status-message">
-        <template v-if="state.isMerging">מסיים בניית האינדקס…</template>
-        <template v-else-if="state.percentage >= 100">מסיים בניית האינדקס…</template>
-        <template v-else-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
-        <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
+        <template v-if="state.isMerging">{{ $t('fullTextSearch.overlay.finishing') }}</template>
+        <template v-else-if="state.percentage >= 100">{{ $t('fullTextSearch.overlay.finishing') }}</template>
+        <template v-else-if="!state.isReady">{{ $t('fullTextSearch.overlay.pleaseWait') }}</template>
+        <template v-else>{{ $t('fullTextSearch.overlay.partial') }}</template>
       </span>
       <span class="percentage">
         <template v-if="state.isMerging">

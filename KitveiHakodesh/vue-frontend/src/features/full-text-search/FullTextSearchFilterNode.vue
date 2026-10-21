@@ -93,7 +93,7 @@ function navigateToCategory() {
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
       <span v-else class="expander-placeholder" />
-      <button class="row-title" title="גלול לתוצאה הראשונה" @click.stop="navigateToCategory">
+      <button class="row-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="navigateToCategory">
         {{ category.title }}
         <span v-if="totalResults > 0" class="count">({{ totalResults }})</span>
       </button>
@@ -124,7 +124,7 @@ function navigateToCategory() {
           <button
             class="row-title"
             :class="{ dimmed: !checkedBookIds.has(book.id) }"
-            title="גלול לתוצאה הראשונה"
+            :title="$t('fullTextSearch.filter.scrollToFirst')"
             @click.stop="emit('navigateToBook', book.id)"
           >
             {{ book.title }}

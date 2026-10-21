@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
@@ -43,7 +44,7 @@ const {
 const { status: fileIndexStatus, statusText: fileIndexStatusText } = useSearchIndexStatus('localFiles')
 const loadingLabel = computed(() => {
   if (fileIndexStatus.value.kind === 'building' && fileIndexStatusText.value) return fileIndexStatusText.value
-  return indexBuilding.value ? 'אנא המתן בעת בניית האינדקס' : 'מחפש...'
+  return indexBuilding.value ? t('localFileSearch.pleaseWait') : t('localFileSearch.searching')
 })
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
@@ -68,11 +69,11 @@ function toggleSortDropdown() {
 }
 
 const SORT_OPTIONS: { value: LocalFileSearchSortOrder; label: string }[] = [
-  { value: 'relevance', label: 'ללא מיון' },
-  { value: 'fileName',  label: 'שם קובץ' },
-  { value: 'fileType',  label: 'סוג קובץ' },
-  { value: 'fullPath',  label: 'נתיב מלא' },
-  { value: 'date',      label: 'תאריך (חדש ראשון)' },
+  { value: 'relevance', label: t('localFileSearch.sort.relevance') },
+  { value: 'fileName',  label: t('localFileSearch.sort.fileName') },
+  { value: 'fileType',  label: t('localFileSearch.sort.fileType') },
+  { value: 'fullPath',  label: t('localFileSearch.sort.fullPath') },
+  { value: 'date',      label: t('localFileSearch.sort.date') },
 ]
 
 function selectSortOrder(value: LocalFileSearchSortOrder) {
@@ -85,8 +86,8 @@ function selectSortOrder(value: LocalFileSearchSortOrder) {
 // pages advertise their query syntax the same way.
 
 const PLACEHOLDERS = [
-  'חפש קבצים לפי שם או לפי תיקייה...',
-  'הקלד תוספים: עבור תוספי אוצריא',
+  t('localFileSearch.placeholderSearch'),
+  t('localFileSearch.placeholderAddins'),
 ]
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0, charIdx = 0, pauseTicks = 0
@@ -211,7 +212,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
             ref="sortToggleButtonElement"
             class="sort-toggle-button"
             :class="{ 'is-active': sortOrder !== 'relevance' }"
-            :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
+            :title="$t('localFileSearch.sortTitle', { label: SORT_OPTIONS.find((o) => o.value === sortOrder)!.label })"
             @click="toggleSortDropdown"
           >
             <IconArrowSort20Regular />
@@ -265,7 +266,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
         <div v-else-if="!results.length" class="empty-state">
           <IconSearch20Regular class="empty-icon" />
           <MessageBanner v-if="errorMessage" class="empty-error" :message="errorMessage" :dismissible="false" />
-          <span v-else class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
+          <span v-else class="empty-msg">{{ searchQuery.trim() ? $t('localFileSearch.noResults') : $t('localFileSearch.searchFiles') }}</span>
         </div>
 
         <!-- Results list -->
@@ -281,13 +282,13 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
         <div v-if="openingFile" class="opening-overlay">
           <div class="opening-card">
             <div class="opening-spinner" />
-            <span class="opening-label">פותח קובץ…</span>
+            <span class="opening-label">{{ $t('localFileSearch.openingFile') }}</span>
           </div>
         </div>
 
         <!-- Truncation notice -->
         <div v-if="totalCount > results.length" class="truncation-notice">
-          (מוצגים {{ results.length }} מתוך {{ totalCount }} תוצאות)
+          {{ $t('localFileSearch.truncated', { shown: results.length, total: totalCount }) }}
         </div>
       </div>
     </div>
