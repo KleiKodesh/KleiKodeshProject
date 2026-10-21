@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
 import { resetting } from './appResetState'
@@ -13,6 +13,7 @@ import SetupWizardStepCommentaryDisplay from './SetupWizardStepCommentaryDisplay
 import SetupWizardStepDivineNames from './SetupWizardStepDivineNames.vue'
 import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
 import SetupWizardStepTerms from './SetupWizardStepTerms.vue'
+import UiLanguageToggle from './UiLanguageToggle.vue'
 
 const settings = useSettingsStore()
 
@@ -113,7 +114,21 @@ const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }>
   },
 }
 
-const stepIndex = ref(0)
+// Changing the UI language reloads the page; the current step is kept in
+// sessionStorage (by name, since the step list can differ) so the reload resumes there.
+const STEP_KEY = 'setupWizardStep'
+function readSavedStep(): number {
+  try {
+    const i = steps.value.indexOf(sessionStorage.getItem(STEP_KEY) as Step)
+    return i > 0 ? i : 0
+  } catch {
+    return 0
+  }
+}
+const stepIndex = ref(readSavedStep())
+watch(stepIndex, () => {
+  try { sessionStorage.setItem(STEP_KEY, steps.value[stepIndex.value] ?? '') } catch { /* ignore */ }
+})
 // `steps` is never empty (it always starts with 'welcome') and stepIndex only ever
 // moves within it, so the fallback is unreachable — it is here to keep the type
 // non-optional rather than to handle a real case.
@@ -121,6 +136,9 @@ const currentStep = computed<Step>(() => steps.value[stepIndex.value] ?? 'welcom
 const currentStepMeta = computed(() => STEPS[currentStep.value])
 const isLast = computed(() => stepIndex.value === steps.value.length - 1)
 const dismissed = ref(false)
+watch(dismissed, d => {
+  if (d) try { sessionStorage.removeItem(STEP_KEY) } catch { /* ignore */ }
+})
 
 const progressPct = computed(() =>
   steps.value.length > 1 ? Math.round((stepIndex.value / (steps.value.length - 1)) * 100) : 100,
@@ -206,6 +224,7 @@ function skip() {
           <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
           <span v-else />
           <div class="nav-btns">
+            <UiLanguageToggle compact />
             <button v-if="stepIndex > 0" class="back-btn" @click="back">{{ $t('settings.wizard.back') }}</button>
             <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
               {{ currentStep === 'welcome' ? $t('settings.wizard.start') : isLast ? $t('settings.wizard.finish') : $t('settings.wizard.next') }}

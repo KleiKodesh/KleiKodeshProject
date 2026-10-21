@@ -9,7 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
 import ThemeBackgroundTintSlider from './ThemeBackgroundTintSlider.vue'
 import { useI18n } from 'vue-i18n'
-import { uiLanguage, setUiLanguage, type UiLanguage } from '@/i18n'
+import UiLanguageToggle from './UiLanguageToggle.vue'
 
 const { t } = useI18n()
 
@@ -114,14 +114,7 @@ function toggleTitleBarButton(buttonId: string) {
     <div id="section-app" class="section-label">{{ $t('settings.app.section') }}</div>
 
     <SettingRow id="nav-ui-language" :data-nav-label="$t('settings.app.uiLanguage')" :label="$t('settings.app.uiLanguage')" :hint="$t('settings.app.uiLanguageHint')">
-      <ToggleGroup
-        :model-value="uiLanguage"
-        :options="[
-          { label: 'עברית', value: 'he' },
-          { label: 'English', value: 'en' },
-        ]"
-        @update:model-value="(lang: UiLanguage) => setUiLanguage(lang)"
-      />
+      <UiLanguageToggle />
     </SettingRow>
 
     <SettingRow id="nav-new-tab-page" :data-nav-label="$t('settings.app.newTab')" :label="$t('settings.app.newTab')" :hint="$t('settings.app.newTabHint')" wrap>
