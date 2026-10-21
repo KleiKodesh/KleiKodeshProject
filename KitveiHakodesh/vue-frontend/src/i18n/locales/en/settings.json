@@ -138,6 +138,7 @@
     "checking": "Checking for a new version. If there is one, it downloads now; this may take a few minutes.",
     "failed": "Could not check for updates. Please try again later.",
     "upToDate": "The installed version is the latest.",
+    "downloading": "Downloading version {version}... {percent}%",
     "idle": "No update is ready to install. The app checks for new versions periodically and downloads them in the background.",
     "section": "Updates and problem reports",
     "status": "Update status",

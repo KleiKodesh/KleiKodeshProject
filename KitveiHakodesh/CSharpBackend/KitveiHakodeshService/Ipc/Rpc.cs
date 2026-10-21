@@ -363,6 +363,17 @@ public sealed class UpdateStatusResult
     public string CheckError { get; set; } = "";
 }
 
+/// <summary>One frame of <c>updateProgressStream</c>: the release being downloaded now ("" when
+/// none) with its bytes so far, and the downloaded update ready to install ("" when none).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UpdateProgressFrame
+{
+    public string DownloadingVersion { get; set; } = "";
+    public long Received { get; set; }
+    public long Total { get; set; }
+    public string ReadyVersion { get; set; } = "";
+}
+
 /// <summary>Args for <c>registerOwner</c> / <c>releaseOwner</c>: a host process using this console
 /// instance (see Http/OwnerWatcher).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

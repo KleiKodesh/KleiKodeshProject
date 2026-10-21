@@ -903,6 +903,15 @@ public sealed class Dispatcher(
                 return true;
             }
 
+            // Self-update download: progress while downloading, then the ready update - pushed
+            // the moment it lands, so the app shows its prompt at once. Open for the app's session.
+            case "updateProgressStream":
+            {
+                await updater.StreamProgressAsync(
+                    f => writeFrame(RpcResponse.Ok(MsgPack.Ser(f))), ct);
+                return true;
+            }
+
             default:
                 return false;
         }

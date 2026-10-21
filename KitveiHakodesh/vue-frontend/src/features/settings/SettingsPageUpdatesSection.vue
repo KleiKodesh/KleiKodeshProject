@@ -5,6 +5,7 @@ import SettingsPageReportProblemRow from './SettingsPageReportProblemRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
+import { useUpdateDownloadProgress } from '@/composables/useUpdateDownloadProgress'
 import { useI18n } from 'vue-i18n'
 import {
   updatePromptBody,
@@ -12,9 +13,10 @@ import {
   UPDATE_INSTALL_FAILED,
 } from '@/components/updateAvailableTexts'
 
-// The KitveiHakodesh service checks for updates once a week and downloads them in the
-// background; it never installs on its own. This section shows the installed version and
-// whether a downloaded update is ready, runs a check on demand, installs through the same path
+// The KitveiHakodesh service checks for updates (every app start, and weekly) and downloads them
+// in the background; it never installs on its own. This section shows the installed version,
+// a live progress bar while the service downloads (pushed, useUpdateDownloadProgress), whether
+// a downloaded update is ready, runs a check on demand, installs through the same path
 // as UpdateAvailablePrompt (useSelfUpdate), and holds the "turn off automatic updates" toggle.
 
 const {
@@ -34,6 +36,9 @@ const {
   applyAutomaticUpdateTurnedOff,
 } = useSelfUpdate()
 
+const { progress: downloadProgress } = useUpdateDownloadProgress()
+const isDownloading = computed(() => !readyVersion.value && downloadProgress.value.downloadingVersion !== '')
+
 const isUpdateStatusLoaded = ref(false)
 
 onMounted(async () => {
@@ -49,6 +54,11 @@ const updateStatusText = computed(() => {
   if (!isUpdateStatusLoaded.value) return t('settings.updates.loading')
   if (isUpdateStatusUnavailable.value) return t('settings.updates.unavailable')
   if (readyVersion.value) return updatePromptBody(readyVersion.value)
+  if (isDownloading.value)
+    return t('settings.updates.downloading', {
+      version: downloadProgress.value.downloadingVersion,
+      percent: downloadProgress.value.percent,
+    })
   if (isAutomaticUpdateTurnedOff.value) return t('settings.updates.off')
   if (isCheckingForUpdate.value) return t('settings.updates.checking')
   if (hasCheckFailed.value) return t('settings.updates.failed')
@@ -58,7 +68,8 @@ const updateStatusText = computed(() => {
 
 // Hidden while updates are turned off, and once an update is ready (install is the next step).
 const isCheckNowVisible = computed(
-  () => isUpdateStatusLoaded.value && !isAutomaticUpdateTurnedOff.value && !readyVersion.value,
+  () =>
+    isUpdateStatusLoaded.value && !isAutomaticUpdateTurnedOff.value && !readyVersion.value && !isDownloading.value,
 )
 </script>
 
@@ -71,6 +82,16 @@ const isCheckNowVisible = computed(
       <div class="updates-status">
         <span v-if="installedVersion" class="updates-status-text">{{ $t('settings.updates.installed', { version: installedVersion }) }}</span>
         <span class="updates-status-text">{{ updateStatusText }}</span>
+        <div
+          v-if="isDownloading"
+          class="updates-progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="downloadProgress.percent"
+        >
+          <div class="updates-progress-fill" :style="{ width: downloadProgress.percent + '%' }" />
+        </div>
         <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         <button
           v-if="readyVersion"
@@ -115,6 +136,20 @@ const isCheckNowVisible = computed(
 .updates-status-text {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.updates-progress-track {
+  height: 4px;
+  margin-block: 6px;
+  border-radius: 2px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.updates-progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.25s ease;
 }
 
 .updates-install-button {
