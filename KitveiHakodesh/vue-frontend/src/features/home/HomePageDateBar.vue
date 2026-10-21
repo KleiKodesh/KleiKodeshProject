@@ -17,6 +17,7 @@ import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
 const HomeCalendarPopup = defineAsyncComponent(() => import('./HomeCalendarPopup.vue'))
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
+import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 
 const paneNavigation = usePaneNavigation()
 const { showClock } = storeToRefs(useSettingsStore())
@@ -262,7 +263,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
       </div>
       <Teleport to="body">
         <div v-if="isZmanPopupOpen" class="zman-popup-anchor" :style="zmanPopupStyle">
-          <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="zmanCity.name" />
+          <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="cityDisplayName(zmanCity)" />
         </div>
       </Teleport>
       <span class="bar-sep">·</span>

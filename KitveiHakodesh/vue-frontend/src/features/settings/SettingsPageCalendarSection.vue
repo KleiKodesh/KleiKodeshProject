@@ -6,6 +6,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
+import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 const { showClock } = storeToRefs(useSettingsStore())
@@ -60,7 +61,7 @@ function pickCity(name: string) {
 
     <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHint')">
       <div ref="cityBoxRef" class="city-select-box" tabindex="0" @click="toggleCityDropdown">
-        <span class="city-select-display">{{ activeCity.name }}</span>
+        <span class="city-select-display">{{ cityDisplayName(activeCity) }}</span>
         <component
           :is="cityOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
           class="city-select-chevron"
@@ -81,7 +82,7 @@ function pickCity(name: string) {
             :class="{ selected: activeCity.name === c.name }"
             @click="pickCity(c.name)"
           >
-            {{ c.name }}
+            {{ cityDisplayName(c) }}
           </div>
         </div>
       </Teleport>
