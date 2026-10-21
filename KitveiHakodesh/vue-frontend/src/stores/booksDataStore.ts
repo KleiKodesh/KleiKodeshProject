@@ -11,6 +11,7 @@ import {
 import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
 import type { CategoryNode } from '../features/book-catalog/bookCatalogTree'
 import type { CategoryRow, BookRow } from '@/webview-host/queries.types'
+import { t } from '@/i18n'
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)
   const loading = ref(false)
@@ -64,12 +65,12 @@ export const useBooksDataStore = defineStore('booksData', () => {
       } catch (e) {
         const msg = e instanceof Error ? e.message : ''
         if (msg.toLowerCase().includes('failed to fetch')) {
-          error.value = 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
+          error.value = t('stores.loadErrorNoServer')
         } else if (msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')) {
           error.value =
-            'שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.'
+            t('stores.loadErrorSqlite')
         } else {
-          error.value = msg || 'שגיאה בטעינת הנתונים'
+          error.value = msg || t('stores.loadError')
         }
       } finally {
         loading.value = false

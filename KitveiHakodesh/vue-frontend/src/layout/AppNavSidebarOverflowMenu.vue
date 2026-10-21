@@ -10,6 +10,9 @@ import {
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 /**
  * The buttons a too-short rail could not show, as a labelled flyout off the rail's "more"
@@ -75,15 +78,15 @@ function overflowRow(key: string): OverflowRow {
     const enabled = bookViewStore.splitViewEnabled
     return {
       key,
-      label: enabled ? 'סגור תצוגה מפוצלת' : 'פתח תצוגה מפוצלת',
+      label: enabled ? t('layout.closeSplitView') : t('layout.openSplitView'),
       shortcut: 'Ctrl+|',
       icon: enabled ? IconSplitVertical20Filled : IconSplitVertical20Regular,
     }
   }
-  if (key === 'pop-out') return { key, label: 'חלון עצמאי / חלונית', icon: IconOpen28Regular }
+  if (key === 'pop-out') return { key, label: t('layout.popOutLabel'), icon: IconOpen28Regular }
   // A destination, keyed by its label - settings included.
   const item = APP_NAV_ITEMS.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
-  return { key, label: item.label, shortcut: item.shortcut, icon: item.icon, color: item.color }
+  return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color }
 }
 
 function rowTitle(row: OverflowRow) {

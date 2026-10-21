@@ -1,0 +1,79 @@
+{
+  "nav": {
+    "library": {
+      "label": "קטלוג הספרים",
+      "description": "עיון בספרים לפי קטגוריות"
+    },
+    "search": {
+      "label": "חיפוש",
+      "description": "חיפוש טקסט מלא בכל הספרים"
+    },
+    "hbooks": {
+      "label": "היברו-בוקס",
+      "description": "ספרים סרוקים מאתר היברו-בוקס"
+    },
+    "folder": {
+      "label": "פתח קובץ",
+      "description": "פתיחת קובץ או תיקייה מהמחשב"
+    },
+    "fileSearch": {
+      "label": "חיפוש קבצים",
+      "description": "חיפוש מסמכים במחשב"
+    },
+    "dict": {
+      "label": "מילון",
+      "description": "פירושי מילים בעברית וארמית"
+    },
+    "calendar": {
+      "label": "לוח שנה",
+      "description": "תאריך עברי וזמני היום"
+    },
+    "ruler": {
+      "label": "מידות ושיעורים",
+      "description": "המרת מידות ושיעורים הלכתיים"
+    },
+    "settings": {
+      "label": "הגדרות",
+      "description": "התאמת התוכנה להעדפותיך"
+    }
+  },
+  "placeholderQuickSearch": "חיפוש מהיר בכל המאגרים...",
+  "placeholderPressEnter": "לחץ אנטר לחיפוש תוכן במאגר",
+  "placeholderTypeFree": "הקלד חופשי לחיפוש ספר או קובץ",
+  "removeFromHistory": "הסר מהיסטוריה ({key})",
+  "clearHistory": "נקה את כל ההיסטוריה ({key})",
+  "searchTabTitle": "חיפוש: {query}",
+  "searchContent": "חיפוש תוכן במאגר (Enter)",
+  "closeSplitView": "סגור תצוגה מפוצלת",
+  "openSplitView": "פתח תצוגה מפוצלת",
+  "popOutToggle": "פתח בחלון עצמאי או החזר לחלונית",
+  "popOutLabel": "חלון עצמאי / חלונית",
+  "moreItems": "פריטים נוספים",
+  "hideSidebar": "הסתר סרגל צד (Ctrl+Shift+M)",
+  "showSidebar": "הצג סרגל צד (Ctrl+Shift+M)",
+  "sidebar": "סרגל צד",
+  "openMenu": "פתח תפריט",
+  "holdHint": "לחיצה ממושכת מציגה את רשימת ההיסטוריה",
+  "back": "חזור (Alt+חץ ימני)",
+  "forward": "קדימה (Alt+חץ שמאלי)",
+  "barTitleHint": "לחץ לניווט מהיר ולמקומות אחרונים (Ctrl+E)",
+  "hideToolbar": "הסתר סרגל כלים",
+  "showToolbar": "הצג סרגל כלים",
+  "hidePdfTitleBar": "הסתר סרגל כותרת PDF",
+  "showPdfTitleBar": "הצג סרגל כותרת PDF",
+  "menu": "תפריט (Ctrl+M)",
+  "findInText": "חיפוש בטקסט (Ctrl+F)",
+  "ocrSelect": "בחירת טקסט באזור (OCR)",
+  "home": "בית (Ctrl+G)",
+  "workspaces": "סביבות עבודה (F8)",
+  "ws": {
+    "save": "שמור",
+    "cancel": "ביטול",
+    "confirmDelete": "{name} — למחוק?",
+    "delete": "מחק",
+    "active": "פעיל",
+    "rename": "שנה שם",
+    "newPlaceholder": "סביבת עבודה חדשה",
+    "create": "צור"
+  }
+}

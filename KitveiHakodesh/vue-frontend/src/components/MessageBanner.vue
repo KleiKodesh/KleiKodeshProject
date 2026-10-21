@@ -82,7 +82,7 @@ const isAssertive = computed(() => props.severity === 'error')
         v-if="dismissible"
         type="button"
         class="message-banner-dismiss"
-        aria-label="סגור"
+        :aria-label="$t('components.close')"
         @click="emit('dismiss')"
       >
         <IconDismiss20Regular aria-hidden="true" />

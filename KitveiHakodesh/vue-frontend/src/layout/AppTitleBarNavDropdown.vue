@@ -105,14 +105,14 @@ function onPopOut() {
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === index }"
       data-nav-item
-      :title="`${item.label} (${item.shortcut})
+      :title="`${item.text} (${item.shortcut})
 ${item.description}`"
       @click="onTap(item.label)"
     >
       <span class="nav-icon">
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
       </span>
-      <span class="nav-label">{{ item.label }}</span>
+      <span class="nav-label">{{ item.text }}</span>
       <span class="nav-shortcut">{{ item.shortcut }}</span>
     </button>
     <hr class="nav-divider" />
@@ -120,23 +120,23 @@ ${item.description}`"
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('settings') }"
       data-nav-item
-      :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})
+      :title="`${APP_NAV_SETTINGS_ITEM.text} (${APP_NAV_SETTINGS_ITEM.shortcut})
 ${APP_NAV_SETTINGS_ITEM.description}`"
       @click="onTap(APP_NAV_SETTINGS_ITEM.label)"
     >
       <span class="nav-icon"><component :is="APP_NAV_SETTINGS_ITEM.icon" /></span>
-      <span class="nav-label">{{ APP_NAV_SETTINGS_ITEM.label }}</span>
+      <span class="nav-label">{{ APP_NAV_SETTINGS_ITEM.text }}</span>
       <span class="nav-shortcut">{{ APP_NAV_SETTINGS_ITEM.shortcut }}</span>
     </button>
     <button
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('navSidebar') }"
       data-nav-item
-      title="הצג סרגל צד (Ctrl+Shift+M)"
+      :title="$t('layout.showSidebar')"
       @click="onShowNavSidebar"
     >
       <span class="nav-icon"><IconChevronDoubleLeft20Regular /></span>
-      <span class="nav-label">סרגל צד</span>
+      <span class="nav-label">{{ $t('layout.sidebar') }}</span>
       <span class="nav-shortcut">Ctrl+Shift+M</span>
     </button>
     <button
@@ -144,11 +144,11 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('popOut') }"
       data-nav-item
-      title="פתח בחלון עצמאי או החזר לחלונית"
+      :title="$t('layout.popOutToggle')"
       @click="onPopOut"
     >
       <span class="nav-icon"><IconOpen28Regular /></span>
-      <span class="nav-label">חלון עצמאי / חלונית</span>
+      <span class="nav-label">{{ $t('layout.popOutLabel') }}</span>
     </button>
   </div>
 </template>

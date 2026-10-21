@@ -21,7 +21,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <div class="alert-dialog" role="alertdialog" aria-modal="true">
         <p class="alert-message">{{ message }}</p>
         <div class="alert-actions">
-          <button class="alert-ok-btn" autofocus @click="emit('close')">אישור</button>
+          <button class="alert-ok-btn" autofocus @click="emit('close')">{{ $t('components.ok') }}</button>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { computed, reactive, watch, type Ref } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { catalogTocIndexStatus, localFileIndexStatus, type LocalFileIndexStatus } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
+import { t } from '@/i18n'
 
 /**
  * ONE place that knows where each search index stands — ready, being built, or
@@ -37,28 +38,28 @@ const statusByIndex = reactive<Record<SearchIndexName, SearchIndexStatus>>({
 })
 
 const INDEX_DISPLAY_NAMES: Record<SearchIndexName, string> = {
-  catalogToc: 'אינדקס הספרים',
-  localFiles: 'אינדקס הקבצים',
-  fullTextSearch: 'אינדקס החיפוש',
+  catalogToc: t('composables.index.catalogToc'),
+  localFiles: t('composables.index.localFiles'),
+  fullTextSearch: t('composables.index.fullTextSearch'),
 }
 
 /** The Settings > reset button that rebuilds each index (labels from SettingsPageResetSection). */
 export const INDEX_REBUILD_BUTTON_LABELS: Record<SearchIndexName, string> = {
-  catalogToc: 'בנייה מחדש של אינדקס החיפוש בקטלוג',
-  localFiles: 'בנייה מחדש של אינדקס חיפוש קבצים',
-  fullTextSearch: 'איפוס אינדקס החיפוש בתוכן המאגר',
+  catalogToc: t('composables.index.rebuildCatalogToc'),
+  localFiles: t('composables.index.rebuildLocalFiles'),
+  fullTextSearch: t('composables.index.rebuildFullTextSearch'),
 }
 
 function unavailableReasonText(index: SearchIndexName, reason: SearchIndexUnavailableReason): string {
   switch (reason) {
     case 'dbMissing':
-      return 'מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות'
+      return t('composables.index.dbMissing')
     case 'buildFailed':
-      return `בניית האינדקס נכשלה — לחץ בהגדרות על "${INDEX_REBUILD_BUTTON_LABELS[index]}"`
+      return t('composables.index.buildFailed', { button: INDEX_REBUILD_BUTTON_LABELS[index] })
     case 'buildFailedRetrying':
-      return 'בניית האינדקס נכשלה, מנסה שוב…'
+      return t('composables.index.buildFailedRetrying')
     case 'serviceError':
-      return 'השירות אינו זמין'
+      return t('composables.index.serviceError')
   }
 }
 
@@ -70,14 +71,14 @@ export function reportSearchIndexStatus(index: SearchIndexName, status: SearchIn
   }
 }
 
-/** Hebrew one-liner for a non-ready status; null when the index is ready. */
+/** UI-language one-liner for a non-ready status; null when the index is ready. */
 export function describeSearchIndexStatus(index: SearchIndexName, status: SearchIndexStatus): string | null {
   if (status.kind === 'ready') return null
   if (status.kind === 'building') {
     const progress = status.progressPercent === null ? '' : ` (${Math.round(status.progressPercent)}%)`
-    return `אנא המתן בעת בניית האינדקס${progress}`
+    return t('composables.index.building', { progress })
   }
-  return `${INDEX_DISPLAY_NAMES[index]} אינו זמין: ${unavailableReasonText(index, status.reason)}`
+  return t('composables.index.unavailable', { name: INDEX_DISPLAY_NAMES[index], reason: unavailableReasonText(index, status.reason) })
 }
 
 /** Reactive status of one index plus its display text (null while ready). */

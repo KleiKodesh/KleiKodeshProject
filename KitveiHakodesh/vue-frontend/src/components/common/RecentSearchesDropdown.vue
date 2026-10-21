@@ -97,13 +97,13 @@ watch(
       :style="style"
     >
       <div class="recents-header">
-        <span class="recents-title">חיפושים אחרונים</span>
+        <span class="recents-title">{{ $t('components.recentSearches') }}</span>
         <button
           class="recents-close"
           type="button"
           tabindex="-1"
-          title="סגור"
-          aria-label="סגור"
+          :title="$t('components.close')"
+          :aria-label="$t('components.close')"
           @mousedown.prevent.stop
           @click.stop="recents.onBlur()"
         >

@@ -1,10 +1,11 @@
-/** Hebrew texts of UpdateAvailablePrompt.vue. */
-export const UPDATE_PROMPT_TITLE = 'גרסה חדשה זמינה'
+import { t } from '@/i18n'
+/** UI texts of UpdateAvailablePrompt.vue. */
+export const UPDATE_PROMPT_TITLE = t('components.update.title')
 
 export function updatePromptBody(version: string): string {
-  return `גרסה ${version} של כלי קודש הורדה ומוכנה להתקנה. ההתקנה תסגור את וורד ואת התוכנה.`
+  return t('components.update.body', { version })
 }
 
-export const UPDATE_INSTALL_LABEL = 'התקן עכשיו'
-export const UPDATE_LATER_LABEL = 'אחר כך'
-export const UPDATE_INSTALL_FAILED = 'לא ניתן היה להפעיל את ההתקנה. נא לנסות שוב מאוחר יותר.'
+export const UPDATE_INSTALL_LABEL = t('components.update.installNow')
+export const UPDATE_LATER_LABEL = t('components.update.later')
+export const UPDATE_INSTALL_FAILED = t('components.update.installFailed')

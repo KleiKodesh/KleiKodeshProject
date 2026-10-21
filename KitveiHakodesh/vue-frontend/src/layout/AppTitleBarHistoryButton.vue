@@ -6,6 +6,9 @@ import { IconArrowRight20Regular, IconArrowLeft20Regular } from '@iconify-preren
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { documentIcon, iconKeyForRoute } from '@/utils/documentIcons'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 /**
  * One Back/Forward button in the title bar, browser-style: a click steps one
@@ -27,10 +30,10 @@ const isBack = props.direction === 'back'
 
 const isEnabled = computed(() => (isBack ? pane.canGoBack.value : pane.canGoForward.value))
 
-const HOLD_HINT = 'לחיצה ממושכת מציגה את רשימת ההיסטוריה'
+const HOLD_HINT = t('layout.holdHint')
 const title = isBack
-  ? 'חזור (Alt+חץ ימני)\n' + HOLD_HINT
-  : 'קדימה (Alt+חץ שמאלי)\n' + HOLD_HINT
+  ? t('layout.back') + '\n' + HOLD_HINT
+  : t('layout.forward') + '\n' + HOLD_HINT
 
 /** The frames on this button's side of the cursor, nearest step first — like
  *  the browser's own hold-to-show list. Each keeps its real entries index so a

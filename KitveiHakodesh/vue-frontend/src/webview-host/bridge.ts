@@ -11,6 +11,7 @@ import { serviceCall, serviceCallVoid } from './serviceClient'
 import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { showToast } from '@/composables/useToast'
+import { t } from '@/i18n'
 
 declare global {
   interface Window {
@@ -155,7 +156,7 @@ export async function pickLocalFile(
         if (r?.cancelled) return null // user pressed ביטול — tab already reset, stay quiet
         console.error('[bridge] openLocalFile returned no handle', { filePath, reply: r })
         if (!isDirect)
-          emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || 'פתיחת הקובץ נכשלה' })
+          emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || t('webviewHost.fileOpenFailed') })
         return null
       }
 

@@ -66,7 +66,7 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
       ref="toggleButtonRef"
       class="toc-chevron-button"
       :class="{ open: isOpen }"
-      title="פתח תפריט"
+      :title="$t('layout.openMenu')"
       @click="onToggle"
     >
       <IconChevronDown16Regular />

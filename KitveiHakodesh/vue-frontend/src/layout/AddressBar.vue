@@ -38,6 +38,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{ paneId: 1 | 2 }>()
 const emit = defineEmits<{ close: [] }>()
@@ -57,9 +60,9 @@ const dropdownEl = computed(() => dropdownRef.value?.element ?? null)
 
 // ── Animated placeholder (same phrases as the home search bar) ────────────────
 const PLACEHOLDERS = [
-  'חיפוש מהיר בכל המאגרים...',
-  'לחץ אנטר לחיפוש תוכן במאגר',
-  'הקלד חופשי לחיפוש ספר או קובץ',
+  t('layout.placeholderQuickSearch'),
+  t('layout.placeholderPressEnter'),
+  t('layout.placeholderTypeFree'),
   'היברו בוקס: שבת',
   'קובץ: ברכות',
   'תוספים: עבור תוספי אוצריא',
@@ -166,11 +169,11 @@ function onClearAllLocations() {
 //   Native strip host  — Ctrl+W closes a real tab, so the history-aware close is Alt+W / Alt+X
 //   VSTO + dev         — Ctrl+W / Ctrl+X do the history-aware close (and Alt+W/X also work)
 const removeLocationTitle = hasNativeChromeTabs
-  ? 'הסר מהיסטוריה (Alt+W)'
-  : 'הסר מהיסטוריה (Ctrl+W)'
+  ? t('layout.removeFromHistory', { key: 'Alt+W' })
+  : t('layout.removeFromHistory', { key: 'Ctrl+W' })
 const clearAllLocationsTitle = hasNativeChromeTabs
-  ? 'נקה את כל ההיסטוריה (Alt+X)'
-  : 'נקה את כל ההיסטוריה (Ctrl+X)'
+  ? t('layout.clearHistory', { key: 'Alt+X' })
+  : t('layout.clearHistory', { key: 'Ctrl+X' })
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
 // Width rule: on a narrow ("android-width") shell the dropdown fills the whole
@@ -289,7 +292,7 @@ function onKeydown(e: KeyboardEvent) {
 function launchFullTextSearch() {
   const query = searchQuery.value.trim()
   if (!query) return
-  pane.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+  pane.updateActiveTab({ route: '/search', title: t('stores.tabTitle.searchQuery', { query }), searchQuery: query })
   close()
 }
 
@@ -427,7 +430,7 @@ nextTick(() => {
       v-if="searchQuery.trim()"
       class="address-bar__button"
       tabindex="-1"
-      title="חיפוש תוכן במאגר (Enter)"
+      :title="t('layout.searchContent')"
       @click.stop="launchFullTextSearch()"
     >
       <IconSearch20Regular />

@@ -36,8 +36,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <p v-if="desc" class="confirm-desc">{{ desc }}</p>
         <div class="confirm-actions">
           <button v-if="extraLabel" class="confirm-extra-btn" @click="emit('extra')">{{ extraLabel }}</button>
-          <button class="confirm-ok-btn" @click="emit('confirm')">{{ confirmLabel ?? 'אישור' }}</button>
-          <button class="confirm-cancel-btn" @click="emit('cancel')">ביטול</button>
+          <button class="confirm-ok-btn" @click="emit('confirm')">{{ confirmLabel ?? $t('components.ok') }}</button>
+          <button class="confirm-cancel-btn" @click="emit('cancel')">{{ $t('components.cancel') }}</button>
         </div>
       </div>
     </div>
