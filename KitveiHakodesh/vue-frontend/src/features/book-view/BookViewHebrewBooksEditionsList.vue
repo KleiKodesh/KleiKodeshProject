@@ -11,6 +11,9 @@
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useHebrewBooks } from '@/features/hebrewbooks/useHebrewBooks'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   editions: HebrewBooksEdition[]
@@ -27,7 +30,7 @@ function detailsFor(edition: HebrewBooksEdition): string {
     edition.author,
     edition.printingPlace,
     edition.printingYear,
-    edition.pages ? `${edition.pages} עמ׳` : '',
+    edition.pages ? t('bookView.hebrewBooks.pages', { n: edition.pages }) : '',
   ]
     .map((part) => part.trim())
     .filter(Boolean)
@@ -51,8 +54,8 @@ function onSelect(edition: HebrewBooksEdition) {
   >
     <span class="edition-title-line">
       <span class="edition-title">{{ edition.title }}</span>
-      <span v-if="edition.isBest" class="edition-tag edition-tag-best">מומלץ</span>
-      <span v-if="!edition.isCertain" class="edition-tag edition-tag-uncertain">התאמה אפשרית</span>
+      <span v-if="edition.isBest" class="edition-tag edition-tag-best">{{ $t('bookView.hebrewBooks.recommended') }}</span>
+      <span v-if="!edition.isCertain" class="edition-tag edition-tag-uncertain">{{ $t('bookView.hebrewBooks.possibleMatch') }}</span>
     </span>
     <span v-if="detailsFor(edition)" class="edition-details">{{ detailsFor(edition) }}</span>
   </button>

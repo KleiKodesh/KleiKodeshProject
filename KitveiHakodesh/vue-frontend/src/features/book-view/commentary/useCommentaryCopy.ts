@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { nextTick, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -661,7 +662,7 @@ export function useCommentaryCopy(
     const rawText = tmp.innerHTML.replace(/<[^>]*>/g, ' ')
     const query = rawText.replace(/[^א-ת\s]/g, '').replace(/\s+/g, ' ').trim()
     if (!query) return
-    paneNavigation.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+    paneNavigation.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
   }
 
   // ── Context menu ────────────────────────────────────────────────────────────
@@ -677,19 +678,19 @@ export function useCommentaryCopy(
   }
 
   const contextMenuItems: ContextMenuItem[] = [
-    { label: 'בחר הכל', action: selectAllInContainer, shortcut: 'Ctrl+A' },
-    { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
-    { label: 'העתק לתוך וורד', action: onPasteIntoWord, shortcut: 'Ctrl+V' },
-    { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+    { label: t('bookView.selectAll'), action: selectAllInContainer, shortcut: 'Ctrl+A' },
+    { label: t('bookView.copy.copy'), action: onCopy, shortcut: 'Ctrl+C' },
+    { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+    { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
     { type: 'separator' },
     {
       type: 'submenu',
-      label: 'אפשרויות העתקה',
+      label: t('bookView.copy.options'),
       items: [
         // Independent checkboxes — all can be active simultaneously
         {
           type: 'checkbox',
-          label: 'העתק כרצף (ללא מעברי שורה)',
+          label: t('bookView.copy.joinLines'),
           get checked() { return settingsStore.copyJoinLines },
           onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
         },
@@ -698,38 +699,38 @@ export function useCommentaryCopy(
         // copyFlagExclusivity.ts; do not add ad-hoc clears here.
         {
           type: 'checkbox',
-          label: 'העתק עם מקור בהתחלה',
+          label: t('bookView.copy.sourceStart'),
           get checked() { return settingsStore.copySourcePosition === 'start' },
           onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
         },
         {
           type: 'checkbox',
-          label: 'העתק עם מקור בסוף',
+          label: t('bookView.copy.sourceEnd'),
           get checked() { return settingsStore.copySourcePosition === 'end' },
           onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
         },
         {
           type: 'checkbox',
-          label: 'העתק מקור עם ציטוט',
+          label: t('bookView.copy.quote'),
           get checked() { return settingsStore.copyAsSourceWithQuotation },
           onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
         },
         {
           type: 'checkbox',
-          label: 'העתק עם הערות',
+          label: t('bookView.copy.withNotes'),
           get checked() { return settingsStore.copyWithNotes },
           onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
         },
         {
           type: 'checkbox',
-          label: 'העתק טקסט נקי',
+          label: t('bookView.copy.plain'),
           get checked() { return settingsStore.copyCleanText },
           onChange: (value: boolean) => { settingsStore.copyCleanText = value },
         },
       ],
     },
     { type: 'separator' },
-    { label: 'דיווח על טעות בספר', action: onReportError ?? (() => {}) },
+    { label: t('bookView.report.title'), action: onReportError ?? (() => {}) },
     { type: 'separator' },
     annotationRow,
   ]

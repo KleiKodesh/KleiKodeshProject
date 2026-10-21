@@ -17,6 +17,9 @@ import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
 import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot } from './bookViewTypes'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
@@ -32,7 +35,7 @@ const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const booksDataStore = useBooksDataStore()
 // Shown when a publisher-restricted book's export is attempted anyway (see exportRestriction.ts).
-const EXPORT_RESTRICTED_MESSAGE = 'ספר זה אינו ניתן לייצוא לוורד לפי בקשת המול״ל. ניתן לעיין בו ולהדפיסו כרגיל.'
+const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 const paneId = inject<1 | 2>('paneId', 1)
 
 // Track the shell's own width instead of the viewport width so that in split

@@ -1,0 +1,166 @@
+{
+  "annotation": {
+    "addNote": "הוסף הערה",
+    "clear": "הסר סימון",
+    "highlight": "סמן",
+    "highlightColor": "סמן בצבע",
+    "selectFirst": "יש לסמן טקסט תחילה"
+  },
+  "bookInfo": {
+    "alias": "כינוי",
+    "author": "מחבר",
+    "category": "קטגוריה",
+    "collectiveTitle": "שם כולל",
+    "copyright": "זכויות יוצרים",
+    "description": "תיאור",
+    "digitalSource": "מקור דיגיטלי",
+    "editionSource": "מקור המהדורה",
+    "empty": "אין פרטים נוספים על ספר זה",
+    "loadFailed": "לא ניתן לטעון את פרטי הספר",
+    "name": "שם הספר",
+    "printPlace": "מקום הדפסה",
+    "printYear": "שנת הדפסה",
+    "title": "פרטי הספר",
+    "topics": "נושאים"
+  },
+  "cancel": "ביטול",
+  "close": "סגור",
+  "closeDialog": "סגירה",
+  "commentary": {
+    "closePanel": "סגור חלונית מפרשים",
+    "closeTree": "סגור עץ מפרשים",
+    "hintClick": "לחץ על שורה מהספר כדי להציג מפרשים",
+    "hintHeading": "לחץ על שורה שהיא כותרת כדי להציג מפרשים לכל הקטע",
+    "hintRange": "Ctrl+לחץ על שורה כדי להתחיל בחירה על טווח שורות",
+    "loadFailed": "טעינת המפרשים נכשלה — ייתכן שמסד הספרים חסר או שאינו מעודכן",
+    "nextCommentary": "מפרש הבא",
+    "nextSection": "קטע הבא",
+    "noneForLine": "אין מפרשים לשורה זו",
+    "openBookHint": "לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר",
+    "openBookHintNewTab": "לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה",
+    "openInNewTab": "פתח ספר זה בלשונית חדשה",
+    "openInNewTabNamed": "פתח ספר זה בלשונית חדשה\n{name}",
+    "pickLine": "בחר שורה לצפייה במפרשים",
+    "prevCommentary": "מפרש קודם",
+    "prevSection": "קטע קודם",
+    "searchPlaceholder": "חפש מפרש...",
+    "tree": "עץ מפרשים"
+  },
+  "copy": {
+    "copy": "העתק",
+    "intoWord": "העתק לתוך וורד",
+    "joinLines": "העתק כרצף (ללא מעברי שורה)",
+    "link": "העתק קישור לקטע זה",
+    "options": "אפשרויות העתקה",
+    "plain": "העתק טקסט נקי",
+    "quote": "העתק מקור עם ציטוט",
+    "searchTabTitle": "חיפוש: {query}",
+    "sourceEnd": "העתק עם מקור בסוף",
+    "sourceStart": "העתק עם מקור בהתחלה",
+    "toSearch": "העתק לחיפוש במאגר",
+    "withNotes": "העתק עם הערות"
+  },
+  "exportReady": "ההכנה לייצוא הסתיימה — לחץ שוב על ייצוא ל-Word",
+  "exportRestricted": "ספר זה אינו ניתן לייצוא לוורד לפי בקשת המול״ל. ניתן לעיין בו ולהדפיסו כרגיל.",
+  "hebrewBooks": {
+    "pages": "{n} עמ׳",
+    "possibleMatch": "התאמה אפשרית",
+    "recommended": "מומלץ",
+    "title": "מהדורות סרוקות בהיברו בוקס"
+  },
+  "link": {
+    "copied": "הקישור הועתק",
+    "failed": "העתקת הקישור נכשלה",
+    "noLine": "לא זוהתה שורה להעתקת קישור"
+  },
+  "loading": "טוען...",
+  "markers": {
+    "title": "ציוני מפרשים (Ctrl+U)"
+  },
+  "note": {
+    "delete": "מחק הערה",
+    "placeholder": "הזן הערה...",
+    "updated": "עודכן {time}"
+  },
+  "related": {
+    "commentariesOf": "מפרשי {title}",
+    "empty": "אין ספרים קרובים",
+    "scanning": "בסריקה...",
+    "title": "ספרים קרובים"
+  },
+  "report": {
+    "book": "ספר",
+    "correctedText": "הנוסח המתוקן",
+    "descriptionPlaceholder": "תיאור הטעות",
+    "duplicate": "הטעות כבר דווחה. תודה!",
+    "email": "כתובת דוא״ל (לא חובה)",
+    "line": "שורה",
+    "needDescription": "נא למלא את תיאור הטעות",
+    "noEndpoint": "שרת הדיווחים טרם הוגדר. הדיווח יישמר וישלח אוטומטית כשיוגדר.",
+    "noLine": "לא זוהתה שורה לדיווח",
+    "noText": "לא זוהה טקסט לדיווח",
+    "queuedOffline": "אין חיבור — הדיווח נשמר וישלח בהמשך",
+    "rejected": "שליחת הדיווח נדחתה",
+    "required": "שדה חובה",
+    "restoreOriginal": "החזרת הנוסח המקורי",
+    "saveForLater": "שמור לשליחה מאוחרת",
+    "savedForLater": "הדיווח נשמר וישלח בהמשך",
+    "selectedText": "הטקסט שנבחר",
+    "sendNow": "שלח עכשיו",
+    "sending": "שולח…",
+    "sent": "הדיווח נשלח. תודה!",
+    "source": "מקור",
+    "suggestedFix": "הצעת נוסח מתוקן",
+    "title": "דיווח על טעות בספר",
+    "unverified": "לא ניתן לאמת את השורה מול הספריה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון שניתן להחיל אוטומטית.",
+    "whatIsWrong": "מה הטעות?"
+  },
+  "search": {
+    "placeholderCommentary": "חיפוש במפרשים...",
+    "placeholderText": "חיפוש בטקסט...",
+    "recents": "חיפושים אחרונים",
+    "recentsRemove": "מחדש",
+    "scopeBottom": "מפרשים למטה",
+    "scopeLeft": "מפרשים משמאל",
+    "scopeRight": "מפרשים מימין",
+    "scopeText": "טקסט"
+  },
+  "selectAll": "בחר הכל",
+  "toc": {
+    "loadError": "שגיאה בטעינת תוכן עניינים"
+  },
+  "toolbar": {
+    "close_bottom": "סגור חלונית מפרשים תחתונה (Ctrl+J)",
+    "close_left": "סגור חלונית מפרשים משמאל (Ctrl+Alt+J)",
+    "close_right": "סגור חלונית מפרשים מימין (Ctrl+Shift+J)",
+    "dragHint": "גרור כדי להזיז את סרגל הכלים",
+    "exportToWord": "ייצא ל-Word",
+    "more": "פריטים נוספים",
+    "nextSection": "קטע הבא (Ctrl+חץ שמאלי)",
+    "open_bottom": "חלונית מפרשים תחתונה (Ctrl+J)",
+    "open_left": "חלונית מפרשים משמאל (Ctrl+Alt+J)",
+    "open_right": "חלונית מפרשים מימין (Ctrl+Shift+J)",
+    "prevSection": "קטע הקודם (Ctrl+חץ ימני)",
+    "removeAlsoNikud": "הסר גם ניקוד",
+    "removeNikud": "הסר ניקוד",
+    "removeTeamim": "הסר טעמים",
+    "restoreAll": "שחזר טעמים וניקוד",
+    "restoreNikud": "שחזר ניקוד",
+    "search": "חיפוש (Ctrl+F)",
+    "syncCommentaries": "סנכרן מפרשים",
+    "syncOffTitle": "סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה",
+    "syncOnTitle": "סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי",
+    "toc": "תוכן עניינים (Ctrl+K)",
+    "zoomInTitle": "הגדל (Ctrl+)\nטקסט: {text}% {'|'} מפרשים: {commentary}\nאיפוס: Ctrl+0",
+    "zoomOutTitle": "הקטן (Ctrl-)\nטקסט: {text}% {'|'} מפרשים: {commentary}\nאיפוס: Ctrl+0"
+  },
+  "versions": {
+    "active": "נוסח: {name}",
+    "default": "נוסח ברירת המחדל",
+    "title": "נוסחים"
+  },
+  "wordLink": {
+    "zoomIn": "הגדל טקסט",
+    "zoomOut": "הקטן טקסט"
+  }
+}

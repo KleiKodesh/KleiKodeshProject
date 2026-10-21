@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, type Ref } from 'vue'
 import { showToast } from '@/composables/useToast'
 import { htmlToText } from '@/utils/htmlText'
@@ -67,7 +68,7 @@ export function useBookViewErrorReport(options: ErrorReportOptions): {
     // pressed line with its HTML stripped.
     const selectedText = readSelectedText(options.scrollerEl.value) || originalLine
     if (!selectedText) {
-      showToast('לא זוהה טקסט לדיווח', { variant: 'error' })
+      showToast(t('bookView.report.noText'), { variant: 'error' })
       return
     }
 

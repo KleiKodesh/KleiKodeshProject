@@ -19,6 +19,9 @@ import { computed, watch, nextTick, ref } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import type { RecentSearchesController } from '@/composables/useRecentSearches'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   controller: RecentSearchesController
@@ -33,8 +36,8 @@ const props = defineProps<{
 }>()
 const recents = props.controller
 
-const RECENTS_TITLE = 'חיפושים אחרונים'
-const REMOVE_LABEL = 'מחדש'
+const RECENTS_TITLE = t('bookView.search.recents')
+const REMOVE_LABEL = t('bookView.search.recentsRemove')
 
 const listboxRef = ref<HTMLElement | null>(null)
 const inputElRef = computed(() => recents.inputEl.value)

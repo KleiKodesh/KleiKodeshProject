@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { LineItem } from './useBookViewLinesTable'
@@ -47,12 +48,12 @@ export function useBookViewLineLink(options: LineLinkOptions): {
 
   function copyLineLink(): void {
     if (pressedLineIndex == null) {
-      showToast('לא זוהתה שורה להעתקת קישור', { variant: 'error' })
+      showToast(t('bookView.link.noLine'), { variant: 'error' })
       return
     }
     copyTextToClipboard(buildLineLink(options.bookId, pressedLineIndex)).then((copied) => {
-      if (copied) showToast('הקישור הועתק')
-      else showToast('העתקת הקישור נכשלה', { variant: 'error' })
+      if (copied) showToast(t('bookView.link.copied'))
+      else showToast(t('bookView.link.failed'), { variant: 'error' })
     })
   }
 

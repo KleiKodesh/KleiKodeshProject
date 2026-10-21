@@ -17,6 +17,9 @@ import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { BookVersionRow } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   versions: BookVersionRow[]
@@ -63,7 +66,7 @@ const activeVersion = computed(() =>
 )
 
 const buttonTitle = computed(() =>
-  activeVersion.value ? `נוסח: ${labelFor(activeVersion.value)}` : 'נוסחים',
+  activeVersion.value ? t('bookView.versions.active', { name: labelFor(activeVersion.value) }) : t('bookView.versions.title'),
 )
 
 function onSelect(versionId: number | null) {
@@ -90,7 +93,7 @@ function onSelect(versionId: number | null) {
         :class="{ selected: activeVersionId == null }"
         @click="onSelect(null)"
       >
-        נוסח ברירת המחדל
+        {{ $t('bookView.versions.default') }}
       </button>
       <button
         v-for="version in versions"

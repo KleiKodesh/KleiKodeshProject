@@ -42,6 +42,9 @@ import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   searchVisible: boolean
@@ -86,9 +89,9 @@ const diacriticsState = computed(() => settingsStore.diacriticsState)
 // When the book has no teamim the cycle is 0→2→0, so the title reflects only two stages.
 const diacriticsTitle = computed(() => {
   if (!props.bookHasTeamim) {
-    return diacriticsState.value === 0 ? 'הסר ניקוד' : 'שחזר ניקוד'
+    return diacriticsState.value === 0 ? t('bookView.toolbar.removeNikud') : t('bookView.toolbar.restoreNikud')
   }
-  return ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!
+  return [t('bookView.toolbar.removeTeamim'), t('bookView.toolbar.removeAlsoNikud'), t('bookView.toolbar.restoreAll')][diacriticsState.value]!
 })
 
 function onDiacriticsClick() {
@@ -100,19 +103,19 @@ function onDiacriticsClick() {
 }
 
 /** The export control's name - its tooltip on the toolbar, its text in the flyout. */
-const EXPORT_TO_WORD_LABEL = 'ייצא ל-Word'
+const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
 
 /** The overflow button's name - the same word the nav rail's overflow button wears. */
-const MORE_LABEL = 'פריטים נוספים'
+const MORE_LABEL = t('bookView.toolbar.more')
 
 /** The book-info control's name - its tooltip on the toolbar, its row text in the flyout. */
-const BOOK_INFO_LABEL = 'פרטי הספר'
+const BOOK_INFO_LABEL = t('bookView.bookInfo.title')
 
 /** Whether the book-info row in the flyout has its panel expanded beneath it. */
 const bookInfoExpandedInOverflow = ref(false)
 
 /** The HebrewBooks editions control's name - its row text in the flyout. */
-const HEBREWBOOKS_EDITIONS_LABEL = 'מהדורות סרוקות בהיברו בוקס'
+const HEBREWBOOKS_EDITIONS_LABEL = t('bookView.hebrewBooks.title')
 
 /** Whether the editions row in the flyout has its list expanded beneath it. */
 const hebrewBooksEditionsExpandedInOverflow = ref(false)
@@ -122,7 +125,7 @@ const hebrewBooksEditionsExpandedInOverflow = ref(false)
  * tooltip - the tooltip carries the name followed by an explanation, and a row wants just
  * the name.
  */
-const SYNC_COMMENTARIES_LABEL = 'סנכרן מפרשים'
+const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
 
 // The diacritics control has no fixed name: its tooltip names the NEXT stage of the cycle,
 // which is what a row should say too, so the row reads the same text the button's tooltip
@@ -169,8 +172,8 @@ onBeforeUnmount(stopContinuousZoom)
 
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
-    ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
-    : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה',
+    ? t('bookView.toolbar.syncOnTitle')
+    : t('bookView.toolbar.syncOffTitle'),
 )
 
 // Pane-scoped zoom percentages — the store's `zoom`/`commentaryZoom` computeds
@@ -202,11 +205,11 @@ const ZOOM_LABEL = computed(
 )
 
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
+  () => t('bookView.toolbar.zoomOutTitle', { text: Math.round(linesZoomPct.value), commentary: commentaryZoomLabel.value }),
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
+  () => t('bookView.toolbar.zoomInTitle', { text: Math.round(linesZoomPct.value), commentary: commentaryZoomLabel.value }),
 )
 
 // The panels are independent, so each title names its own panel in both states —
@@ -214,20 +217,20 @@ const zoomInTitle = computed(
 // two side panels are named by their edge, not just "בצד".
 const bottomCommentaryTitle = computed(() =>
   props.bottomCommentaryVisible
-    ? 'סגור חלונית מפרשים תחתונה (Ctrl+J)'
-    : 'חלונית מפרשים תחתונה (Ctrl+J)',
+    ? t('bookView.toolbar.close_bottom')
+    : t('bookView.toolbar.open_bottom'),
 )
 
 const sideCommentaryTitle = computed(() =>
   props.sideCommentaryVisible
-    ? 'סגור חלונית מפרשים מימין (Ctrl+Shift+J)'
-    : 'חלונית מפרשים מימין (Ctrl+Shift+J)',
+    ? t('bookView.toolbar.close_right')
+    : t('bookView.toolbar.open_right'),
 )
 
 const sideLeftCommentaryTitle = computed(() =>
   props.sideLeftCommentaryVisible
-    ? 'סגור חלונית מפרשים משמאל (Ctrl+Alt+J)'
-    : 'חלונית מפרשים משמאל (Ctrl+Alt+J)',
+    ? t('bookView.toolbar.close_left')
+    : t('bookView.toolbar.open_left'),
 )
 
 // ── Overflow ───────────────────────────────────────────────────────────────────
@@ -321,7 +324,7 @@ defineExpose({ tocBtnRef })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" title="גרור כדי להזיז את סרגל הכלים">
+  <div ref="toolbarEl" class="book-view-toolbar" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
@@ -329,21 +332,21 @@ defineExpose({ tocBtnRef })
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
       :disabled="!hasToc"
-      title="תוכן עניינים (Ctrl+K)"
+      :title="$t('bookView.toolbar.toc')"
       @click="$emit('toggleToc')"
     >
       <IconTreeRtl />
     </button>
     <button
       :disabled="!hasToc"
-      title="קטע הקודם (Ctrl+חץ ימני)"
+      :title="$t('bookView.toolbar.prevSection')"
       @click="$emit('navigateToPreviousSection')"
     >
       <IconChevronRight20Regular />
     </button>
     <button
       :disabled="!hasToc"
-      title="קטע הבא (Ctrl+חץ שמאלי)"
+      :title="$t('bookView.toolbar.nextSection')"
       @click="$emit('navigateToNextSection')"
     >
       <IconChevronLeft20Regular />
@@ -429,7 +432,7 @@ defineExpose({ tocBtnRef })
     </button>
     <button
       :class="{ active: searchVisible }"
-      title="חיפוש (Ctrl+F)"
+      :title="$t('bookView.toolbar.search')"
       @click="$emit('toggleSearch')"
     >
       <IconSearch20Regular />

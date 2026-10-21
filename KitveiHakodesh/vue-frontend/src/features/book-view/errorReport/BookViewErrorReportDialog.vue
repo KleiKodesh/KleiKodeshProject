@@ -12,9 +12,12 @@ import { queueErrorReport, sendErrorReport } from './errorReportService'
 import { hasErrorReportEndpoint } from './errorReportEndpoint'
 import { UNKNOWN_LIBRARY_VERSION, type ErrorReportSource } from './errorReportSource'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const UNVERIFIED_LINE_WARNING =
-  'לא ניתן לאמת את השורה מול הספריה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון שניתן להחיל אוטומטית.'
+  t('bookView.report.unverified')
 
 /** What a report carries when the database could not be consulted at all. */
 const UNRESOLVED_SOURCE: ErrorReportSource = {
@@ -144,7 +147,7 @@ function rememberSenderEmail(): void {
  */
 function warnDescriptionRequired(): boolean {
   if (hasSomethingToReport.value) return false
-  showToast('נא למלא את תיאור הטעות', { variant: 'error' })
+  showToast(t('bookView.report.needDescription'), { variant: 'error' })
   return true
 }
 
@@ -157,10 +160,10 @@ async function onSendNow(): Promise<void> {
     await props.awaitSource()
     const result = await sendErrorReport(buildPayload())
     rememberSenderEmail()
-    if (result.outcome === 'sent') showToast('הדיווח נשלח. תודה!', { variant: 'success' })
-    else if (result.outcome === 'duplicate') showToast('הטעות כבר דווחה. תודה!', { variant: 'success' })
-    else if (result.outcome === 'queued') showToast('אין חיבור — הדיווח נשמר וישלח בהמשך')
-    else showToast('שליחת הדיווח נדחתה', { variant: 'error' })
+    if (result.outcome === 'sent') showToast(t('bookView.report.sent'), { variant: 'success' })
+    else if (result.outcome === 'duplicate') showToast(t('bookView.report.duplicate'), { variant: 'success' })
+    else if (result.outcome === 'queued') showToast(t('bookView.report.queuedOffline'))
+    else showToast(t('bookView.report.rejected'), { variant: 'error' })
     emit('close')
   } finally {
     isSending.value = false
@@ -176,7 +179,7 @@ async function onSaveForLater(): Promise<void> {
     await props.awaitSource()
     queueErrorReport(buildPayload())
     rememberSenderEmail()
-    showToast('הדיווח נשמר וישלח בהמשך')
+    showToast(t('bookView.report.savedForLater'))
     emit('close')
   } finally {
     isSending.value = false
@@ -204,11 +207,11 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     <div class="report-backdrop" @click.self="emit('close')">
       <div class="report-dialog">
         <div class="report-titlebar">
-          <p class="report-title">דיווח על טעות בספר</p>
+          <p class="report-title">{{ $t('bookView.report.title') }}</p>
           <button
             class="report-close-btn"
             type="button"
-            aria-label="סגירה"
+            :aria-label="$t('bookView.closeDialog')"
             @click="emit('close')"
           >
             &#10005;
@@ -216,31 +219,31 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         </div>
 
         <dl class="report-location">
-          <dt>ספר</dt>
+          <dt>{{ $t('bookView.report.book') }}</dt>
           <dd>{{ bookTitle }}</dd>
-          <dt>מקור</dt>
+          <dt>{{ $t('bookView.report.source') }}</dt>
           <dd>{{ currentRef }}</dd>
-          <dt>שורה</dt>
+          <dt>{{ $t('bookView.report.line') }}</dt>
           <dd>{{ lineNumber > 0 ? lineNumber : '—' }}</dd>
         </dl>
 
         <label class="report-field">
-          <span class="report-label">הטקסט שנבחר</span>
+          <span class="report-label">{{ $t('bookView.report.selectedText') }}</span>
           <p class="report-selected-text report-book-text">{{ selectedText }}</p>
         </label>
 
         <label class="report-field">
-          <span class="report-label">מה הטעות? <span class="report-required">שדה חובה</span></span>
+          <span class="report-label">{{ $t('bookView.report.whatIsWrong') }} <span class="report-required">{{ $t('bookView.report.required') }}</span></span>
           <textarea
             v-model="errorDetails"
             class="report-textarea"
             rows="3"
-            placeholder="תיאור הטעות"
+            :placeholder="$t('bookView.report.descriptionPlaceholder')"
           ></textarea>
         </label>
 
         <div class="report-field">
-          <span class="report-label">הצעת נוסח מתוקן</span>
+          <span class="report-label">{{ $t('bookView.report.suggestedFix') }}</span>
           <textarea
             v-model="proposedText"
             class="report-textarea report-book-text"
@@ -251,7 +254,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
                correction by, shown so the user can see the proposal replaces only
                the middle. -->
           <p v-if="context.before || context.after" class="report-context">
-            {{ context.before }} <strong>[הנוסח המתוקן]</strong> {{ context.after }}
+            {{ context.before }} <strong>[{{ $t('bookView.report.correctedText') }}]</strong> {{ context.after }}
           </p>
           <!-- An unverified line means the proposal travels as a description only.
                Said here, before sending, rather than silently dropped. -->
@@ -267,12 +270,12 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             type="button"
             @click="resetProposedText"
           >
-            החזרת הנוסח המקורי
+            {{ $t('bookView.report.restoreOriginal') }}
           </button>
         </div>
 
         <label class="report-field">
-          <span class="report-label">כתובת דוא״ל (לא חובה)</span>
+          <span class="report-label">{{ $t('bookView.report.email') }}</span>
           <input
             v-model="senderEmail"
             class="report-input"
@@ -283,7 +286,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         </label>
 
         <p v-if="!hasErrorReportEndpoint()" class="report-note">
-          שרת הדיווחים טרם הוגדר. הדיווח יישמר וישלח אוטומטית כשיוגדר.
+          {{ $t('bookView.report.noEndpoint') }}
         </p>
 
         <div class="report-actions">
@@ -293,7 +296,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             :disabled="!hasSomethingToReport || isSending"
             @click="onSendNow"
           >
-            {{ isSending ? 'שולח…' : 'שלח עכשיו' }}
+            {{ isSending ? $t('bookView.report.sending') : $t('bookView.report.sendNow') }}
           </button>
           <button
             class="report-later-btn"
@@ -301,9 +304,9 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             :disabled="!hasSomethingToReport || isSending"
             @click="onSaveForLater"
           >
-            שמור לשליחה מאוחרת
+            {{ $t('bookView.report.saveForLater') }}
           </button>
-          <button class="report-cancel-btn" type="button" @click="emit('close')">ביטול</button>
+          <button class="report-cancel-btn" type="button" @click="emit('close')">{{ $t('bookView.cancel') }}</button>
         </div>
       </div>
     </div>

@@ -191,7 +191,7 @@ function toggleAll() {
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen || anyHiddenGlobally }"
-      title="ציוני מפרשים (Ctrl+U)"
+      :title="$t('bookView.markers.title')"
       @click="toggleOpen"
     >
       <IconLinkDismiss20Regular v-if="anyHiddenGlobally" />
@@ -201,7 +201,7 @@ function toggleAll() {
     <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="`dropdown-${toolbarPosition}`">
       <!-- Only reachable while a retry after a failed load is in flight — the button
            itself does not exist until the list has arrived and is non-empty. -->
-      <div v-if="!loaded" class="state-message">טוען...</div>
+      <div v-if="!loaded" class="state-message">{{ $t('bookView.loading') }}</div>
       <template v-else>
         <label class="marker-row all-row">
           <input
@@ -210,7 +210,7 @@ function toggleAll() {
             :indeterminate="!allChecked && someChecked"
             @change="toggleAll"
           />
-          <span>בחר הכל</span>
+          <span>{{ $t('bookView.selectAll') }}</span>
         </label>
         <label v-for="c in commentaries" :key="c.bookId" class="marker-row">
           <input type="checkbox" :checked="!hiddenSet.has(c.bookId)" @change="toggleOne(c)" />

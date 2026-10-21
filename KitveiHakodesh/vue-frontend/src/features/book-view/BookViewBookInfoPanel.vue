@@ -11,6 +11,9 @@ import { ref, computed, watch } from 'vue'
 import { getBookMetadata } from '@/webview-host/seforimApi'
 import { openUrlInSystemBrowser } from '@/webview-host/bridge'
 import type { BookMetadataRow } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   bookId: number | undefined
@@ -97,19 +100,19 @@ const infoRows = computed<BookInfoRow[]>(() => {
   if (!book) return []
   // The third element marks a row whose values are URLs: links, decoded, one per line.
   const candidates: [string, (string | null | undefined)[], boolean?][] = [
-    ['שם הספר', [book.title]],
+    [t('bookView.bookInfo.name'), [book.title]],
     // heRef is often identical to the title; repeating it adds nothing.
-    ['כינוי', [book.heRef !== book.title ? book.heRef : null]],
-    ['שם כולל', [book.collectiveTitle]],
-    ['מחבר', book.authors],
-    ['קטגוריה', [book.categoryTitle]],
-    ['מקום הדפסה', book.publicationPlaces],
-    ['נושאים', book.topics],
-    ['תיאור', [book.description ?? book.shortDescription]],
-    ['זכויות יוצרים', book.licenses],
-    ['מקור המהדורה', book.editionSources, true],
-    ['מקור דיגיטלי', [book.sourceName]],
-    ['שנת הדפסה', book.publicationDates],
+    [t('bookView.bookInfo.alias'), [book.heRef !== book.title ? book.heRef : null]],
+    [t('bookView.bookInfo.collectiveTitle'), [book.collectiveTitle]],
+    [t('bookView.bookInfo.author'), book.authors],
+    [t('bookView.bookInfo.category'), [book.categoryTitle]],
+    [t('bookView.bookInfo.printPlace'), book.publicationPlaces],
+    [t('bookView.bookInfo.topics'), book.topics],
+    [t('bookView.bookInfo.description'), [book.description ?? book.shortDescription]],
+    [t('bookView.bookInfo.copyright'), book.licenses],
+    [t('bookView.bookInfo.editionSource'), book.editionSources, true],
+    [t('bookView.bookInfo.digitalSource'), [book.sourceName]],
+    [t('bookView.bookInfo.printYear'), book.publicationDates],
   ]
   return candidates
     .map(([label, values, isUrlList]): BookInfoRow => {
@@ -128,9 +131,9 @@ const infoRows = computed<BookInfoRow[]>(() => {
 
 <template>
   <div class="book-info-panel">
-    <div v-if="isLoading" class="book-info-message">טוען...</div>
-    <div v-else-if="loadFailed" class="book-info-message">לא ניתן לטעון את פרטי הספר</div>
-    <div v-else-if="infoRows.length === 0" class="book-info-message">אין פרטים נוספים על ספר זה</div>
+    <div v-if="isLoading" class="book-info-message">{{ $t('bookView.loading') }}</div>
+    <div v-else-if="loadFailed" class="book-info-message">{{ $t('bookView.bookInfo.loadFailed') }}</div>
+    <div v-else-if="infoRows.length === 0" class="book-info-message">{{ $t('bookView.bookInfo.empty') }}</div>
     <dl v-else class="book-info-list">
       <div v-for="row in infoRows" :key="row.label" class="book-info-row">
         <dt>{{ row.label }}</dt>

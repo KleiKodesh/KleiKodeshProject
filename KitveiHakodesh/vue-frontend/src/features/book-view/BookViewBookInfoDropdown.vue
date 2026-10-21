@@ -12,6 +12,9 @@ import { IconInfo20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   bookId: number | undefined
@@ -22,7 +25,7 @@ const props = defineProps<{
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 
-const BUTTON_LABEL = 'פרטי הספר'
+const BUTTON_LABEL = t('bookView.bookInfo.title')
 
 // ── Open / close ──────────────────────────────────────────────────────────────
 
