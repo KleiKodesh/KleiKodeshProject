@@ -562,6 +562,10 @@ h1::after {
 :root[dir='ltr'] .dir-icon:not([dir='rtl'] *) {
   transform: scaleX(-1);
 }
+/* An LTR chrome island (e.g. a commentary panel header) inside an always-RTL area mirrors again. */
+:root[dir='ltr'] [dir='rtl'] [dir='ltr'] .dir-icon {
+  transform: scaleX(-1);
+}
 
 /* UI labels (empty states, section headers) that sit inside a dir="rtl" content
    container follow the UI direction, not the content's. */
