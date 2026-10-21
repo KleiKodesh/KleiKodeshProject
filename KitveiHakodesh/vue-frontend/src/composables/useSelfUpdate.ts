@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { useUpdateDownloadProgress } from './useUpdateDownloadProgress'
 import {
   getUpdateStatus,
   checkForUpdateNow as runUpdateCheckNow,
@@ -13,7 +14,8 @@ import {
  * updates section: read the status, run a check now, install a downloaded update, and read or
  * change the turn-off-automatic-updates flag. Each caller gets its own state.
  *
- * readyVersion — the version of the downloaded installer waiting to run, or null.
+ * readyVersion — the version of the downloaded installer waiting to run, or null. Also set the
+ *   moment the service finishes a download (pushed, useUpdateDownloadProgress).
  * installedVersion — the installed copy's version ('' when unknown / not an installed copy).
  * isUpdateStatusUnavailable — the last status read failed (service unreachable).
  * hasCheckedForUpdate — a check-now has finished in this view (with or without a result).
@@ -40,6 +42,15 @@ export function useSelfUpdate() {
     readyVersion.value = status.readyVersion || null
     installedVersion.value = status.installedVersion
   }
+
+  // The service pushes a finished download at once; take it without waiting for a status read.
+  const { progress } = useUpdateDownloadProgress()
+  watch(
+    () => progress.value.readyVersion,
+    (version) => {
+      if (version) readyVersion.value = version
+    },
+  )
 
   async function loadUpdateStatus() {
     applyUpdateStatus(await getUpdateStatus())

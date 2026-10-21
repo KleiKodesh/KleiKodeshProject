@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using KitveiHakodesh.Core.Settings;
+using KitveiHakodeshService.Ipc;
 
 namespace KitveiHakodeshService.KitveiHakodesh;
 
@@ -35,6 +36,66 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
     /// <summary>A check/download pass is running; the service must not stop under it
     /// (Http/OwnerWatcher).</summary>
     public bool IsBusy => passGate.CurrentCount == 0;
+
+    // ── Download progress, pushed to the apps (updateProgressStream) ──────────────────────
+
+    /// <summary>The release being downloaded now ("" when none) and its bytes so far.</summary>
+    private string downloadingVersion = "";
+    private long downloadReceived;
+    private long downloadTotal;
+
+    /// <summary>One wake-up channel per open stream; a change drops into each (at most one
+    /// pending, so a slow client only ever skips to the latest snapshot).</summary>
+    private readonly List<System.Threading.Channels.Channel<bool>> progressSubs = [];
+
+    private UpdateProgressFrame ProgressSnapshot()
+    {
+        var ready = ReadyInstaller();
+        return new UpdateProgressFrame
+        {
+            DownloadingVersion = Volatile.Read(ref downloadingVersion),
+            Received = Interlocked.Read(ref downloadReceived),
+            Total = Interlocked.Read(ref downloadTotal),
+            ReadyVersion = ready?.Version ?? "",
+        };
+    }
+
+    private void NotifyProgress()
+    {
+        lock (progressSubs)
+            foreach (var ch in progressSubs) ch.Writer.TryWrite(true);
+    }
+
+    /// <summary>
+    /// Pushes a snapshot now and on every change - download start, progress, finish (the update
+    /// is then ready) - until the client leaves. Never ends on its own: an app keeps one open
+    /// for its whole session, so a download the service starts later reaches it at once.
+    /// </summary>
+    public async Task StreamProgressAsync(Func<UpdateProgressFrame, Task> emit, CancellationToken ct)
+    {
+        var ch = System.Threading.Channels.Channel.CreateBounded<bool>(
+            new System.Threading.Channels.BoundedChannelOptions(1)
+            {
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.DropWrite,
+            });
+        lock (progressSubs) progressSubs.Add(ch);
+        try
+        {
+            await emit(ProgressSnapshot());
+            while (true)
+            {
+                await ch.Reader.ReadAsync(ct);
+                await emit(ProgressSnapshot());
+            }
+        }
+        catch (OperationCanceledException) { /* client left */ }
+        catch (IOException) { /* client disconnected mid-stream */ }
+        catch (ObjectDisposedException) { /* connection torn down under us */ }
+        finally
+        {
+            lock (progressSubs) progressSubs.Remove(ch);
+        }
+    }
 
     private const string RegistryKeyPath = @"SOFTWARE\KleiKodesh";
     private const string LatestReleaseApiUrl =
@@ -88,7 +149,16 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
     {
         await passGate.WaitAsync(ct);
         try { return await FindOrDownloadNewerInstallerUnguardedAsync(ct); }
-        finally { passGate.Release(); }
+        finally
+        {
+            Volatile.Write(ref downloadingVersion, "");
+            Interlocked.Exchange(ref downloadReceived, 0);
+            Interlocked.Exchange(ref downloadTotal, 0);
+            passGate.Release();
+            // Download over (or reused / nothing newer / failed): the apps see the ready
+            // update, or the bar disappear, right now.
+            NotifyProgress();
+        }
     }
 
     private async Task<string?> FindOrDownloadNewerInstallerUnguardedAsync(CancellationToken ct)
@@ -137,7 +207,7 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
                 response.EnsureSuccessStatusCode();
                 await using var source = await response.Content.ReadAsStreamAsync(ct);
                 await using var destination = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None);
-                await source.CopyToAsync(destination, ct);
+                await CopyWithProgressAsync(source, destination, release.TagName, asset.Size, ct);
             }
 
             long length = new FileInfo(partial).Length;
@@ -150,6 +220,33 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
         finally
         {
             try { if (File.Exists(partial)) File.Delete(partial); } catch { /* next pass retries */ }
+        }
+    }
+
+    /// <summary>The download's copy loop, publishing bytes received. Pushes at most every
+    /// 250 ms - a frame per buffer would flood the apps.</summary>
+    private async Task CopyWithProgressAsync(Stream source, Stream destination, string version, long total, CancellationToken ct)
+    {
+        Interlocked.Exchange(ref downloadTotal, total);
+        Interlocked.Exchange(ref downloadReceived, 0);
+        Volatile.Write(ref downloadingVersion, version);
+        NotifyProgress();
+
+        byte[] buffer = new byte[81920];
+        long received = 0;
+        long lastNotify = Environment.TickCount64;
+        int read;
+        while ((read = await source.ReadAsync(buffer, ct)) > 0)
+        {
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+            received += read;
+            Interlocked.Exchange(ref downloadReceived, received);
+            long now = Environment.TickCount64;
+            if (now - lastNotify >= 250)
+            {
+                lastNotify = now;
+                NotifyProgress();
+            }
         }
     }
 

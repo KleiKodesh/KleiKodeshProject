@@ -11,9 +11,10 @@ import {
 } from './updateAvailableTexts'
 
 // Asks the user before an update is installed. The KitveiHakodesh service checks for updates
-// once a week and downloads them in the background, but never launches the installer on its
-// own: this prompt asks the service whether a downloaded update is ready and, only when the
-// user agrees, asks it to start the installer (useSelfUpdate, shared with the settings
+// (every app start, and weekly) and downloads them in the background, but never launches the
+// installer on its own: the service pushes the finished download the moment it lands
+// (useSelfUpdate -> useUpdateDownloadProgress), this prompt then shows, and only when the
+// user agrees asks it to start the installer (useSelfUpdate, shared with the settings
 // page) - which then asks to close Word and the app. "Later" hides the prompt until the app
 // is opened again. Mount ONCE at the app root.
 
