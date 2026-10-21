@@ -33,8 +33,7 @@ let loadGeneration = 0
 
 useDropdownClose(
   dropdownRef,
-  (e) => {
-    if (boxRef.value?.contains((e as MouseEvent).target as Node)) return
+  () => {
     isOpen.value = false
   },
   { ignore: [boxRef] },

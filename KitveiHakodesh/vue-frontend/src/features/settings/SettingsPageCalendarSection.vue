@@ -20,8 +20,7 @@ const cityDropdownStyle = ref<Record<string, string>>({})
 
 useDropdownClose(
   cityDropdownRef,
-  (e) => {
-    if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
+  () => {
     cityOpen.value = false
   },
   { ignore: [cityBoxRef] },
