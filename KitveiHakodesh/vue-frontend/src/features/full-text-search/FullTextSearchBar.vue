@@ -221,7 +221,6 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
      a tight bar the input refuses to shrink and pushes the buttons and the
      count badge out of the pill. Let it shrink instead. */
   min-width: 40px;
-  direction: rtl;
 }
 /* Box, hover, press, disabled and the .active state come from the global .bar-btn
    rule (main.css). Only the size differs: these sit inside the search pill, which
@@ -246,7 +245,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
   /* The sort toggle sits at the far-left corner of the (RTL) bar, so anchoring the
      dropdown's right edge would push it off the left of the screen. Anchor its left
      edge to the toggle's left edge instead, so it opens rightward into the viewport. */
-  left: 0;
+  inset-inline-end: 0;
   min-width: 140px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);

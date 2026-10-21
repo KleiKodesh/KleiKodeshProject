@@ -130,7 +130,6 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       ref="worldClockMenuRef"
       class="world-clock-menu"
       :style="worldClockMenuStyle"
-      dir="rtl"
       tabindex="-1"
       @keydown="onWorldClockMenuKeydown"
     >

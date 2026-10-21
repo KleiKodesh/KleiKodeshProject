@@ -207,7 +207,7 @@ function navigateToFirstBook() {
 .book-title {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: start;
   padding-inline-end: 8px;
   padding-inline-start: 8px;
   color: inherit;

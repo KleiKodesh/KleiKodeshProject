@@ -139,13 +139,12 @@ function cancelEdit() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+  text-align: end;
   min-width: 0;
 }
 
 .path-text.placeholder {
-  direction: rtl;
-  text-align: right;
+  text-align: start;
   opacity: 0.6;
 }
 
@@ -163,7 +162,7 @@ function cancelEdit() {
   padding: 0 8px;
   font-size: 11px;
   direction: ltr;
-  text-align: left;
+  text-align: end;
   background: transparent;
   border: none;
   outline: none;

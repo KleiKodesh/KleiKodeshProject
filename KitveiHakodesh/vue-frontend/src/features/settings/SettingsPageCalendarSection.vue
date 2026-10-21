@@ -144,7 +144,6 @@ function pickCity(name: string) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .city-option {

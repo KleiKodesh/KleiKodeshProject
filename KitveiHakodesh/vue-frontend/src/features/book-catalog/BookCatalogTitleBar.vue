@@ -149,7 +149,6 @@ function toggleView() {
   /* Inputs carry an intrinsic min-width that would otherwise hold the pill open
      and push the buttons out of it. */
   min-width: 0;
-  direction: rtl;
 }
 /* Always shown, on both faces: it is what marks the bar as a search bar, and the
    field has room for it. (It used to hide on focus to buy width back for the text,

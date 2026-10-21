@@ -746,11 +746,11 @@ defineExpose({ tocBtnRef })
 }
 .toolbar-left::after {
   inset: 0 0 0 auto;
-  border-left-width: 1px;
+  border-inline-end-width: 1px;
 }
 .toolbar-right::after {
   inset: 0 auto 0 0;
-  border-left-width: 1px;
+  border-inline-end-width: 1px;
 }
 
 /* ── Buttons ── */
@@ -848,7 +848,7 @@ button:disabled {
    where the logical end edge maps to the physical right - the wrong side. */
 .overflow-btn {
   position: absolute;
-  left: var(--toolbar-edge-inset);
+  inset-inline-end: var(--toolbar-edge-inset);
   top: 50%;
   transform: translateY(-50%);
   /* Painted on the toolbar's own surface rather than over a transparent hole: it sits ABOVE

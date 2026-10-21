@@ -64,7 +64,7 @@ defineExpose({
 
 <template>
   <!-- Host is the size container so the grid's cqi tracks the pane width. -->
-  <div class="catalog-cards-host">
+  <div dir="rtl" class="catalog-cards-host">
     <div ref="cardsEl" class="catalog-cards" @mousedown.prevent>
       <HomeSuggestionCard
         v-for="(card, i) in cards"

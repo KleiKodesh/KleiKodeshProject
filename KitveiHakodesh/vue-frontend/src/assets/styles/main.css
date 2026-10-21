@@ -460,8 +460,8 @@ input:focus { background: none !important; }
   width: 8px;
 }
 .sash-h::before {
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   top: 50%;
   transform: translateY(-50%);
   height: 8px;
@@ -477,7 +477,7 @@ input:focus { background: none !important; }
 .sash-v::after {
   top: 0;
   bottom: 0;
-  left: 0;
+  inset-inline-end: 0;
   width: 1px;
 }
 /* Pinned to an edge rather than centred. A 1px line inside a 1px track centred with
@@ -486,8 +486,8 @@ input:focus { background: none !important; }
    thicker than the 1px borders it sits next to. Anchoring it removes the fractional
    offset; the hover/drag rules grow it from that edge, which is imperceptible at 3px. */
 .sash-h::after {
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   top: 0;
   height: 1px;
 }
@@ -516,8 +516,8 @@ h1::after {
   content: '';
   position: absolute;
   bottom: 0;
-  right: 0;
-  left: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   height: 1px;
   background: var(--border-color);
 }
@@ -545,4 +545,13 @@ h1::after {
 .toc-thin-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
+}
+
+/* English UI chrome is LTR, but users type Hebrew queries: each text field takes its
+   direction from its own content (and placeholder), so Hebrew input reads RTL. */
+:root[dir='ltr'] input:not([type]),
+:root[dir='ltr'] input[type='text'],
+:root[dir='ltr'] input[type='search'],
+:root[dir='ltr'] textarea {
+  unicode-bidi: plaintext;
 }

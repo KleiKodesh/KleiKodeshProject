@@ -311,7 +311,7 @@ function onInputKeydown(e: KeyboardEvent) {
    the list inside is what grows. */
 .panel {
   position: absolute;
-  right: 0;
+  inset-inline-start: 0;
   top: 0;
   bottom: 0;
   z-index: 10;
@@ -465,7 +465,6 @@ function onInputKeydown(e: KeyboardEvent) {
   outline: none;
   font-size: 12px;
   color: var(--text-primary);
-  direction: rtl;
   padding: 0;
 }
 .search-input::placeholder {

@@ -261,7 +261,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 .search-icon {
   position: absolute;
-  left: 2px;
+  inset-inline-end: 2px;
   width: 12px;
   height: 12px;
   color: var(--text-secondary);

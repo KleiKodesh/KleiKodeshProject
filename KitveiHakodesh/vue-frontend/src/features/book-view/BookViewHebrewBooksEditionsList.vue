@@ -44,7 +44,7 @@ function onSelect(edition: HebrewBooksEdition) {
 </script>
 
 <template>
-  <button
+  <button dir="rtl"
     v-for="edition in editions"
     :key="edition.id"
     role="menuitem"
@@ -70,7 +70,7 @@ function onSelect(edition: HebrewBooksEdition) {
   width: 100%;
   min-height: 32px;
   padding: 6px 12px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   border-radius: 0;

@@ -254,7 +254,6 @@ function skip() {
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  direction: rtl;
   background: var(--bg-primary);
 }
 

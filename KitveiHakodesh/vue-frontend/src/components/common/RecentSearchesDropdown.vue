@@ -145,7 +145,6 @@ watch(
   box-shadow:
     0 10px 30px rgba(0, 0, 0, 0.34),
     0 2px 8px rgba(0, 0, 0, 0.2);
-  direction: rtl;
 }
 .recents-list {
   margin: 0;
@@ -248,18 +247,18 @@ watch(
   z-index: 1; /* paint above the list */
   width: 12px;
   height: 12px;
-  right: 20px;
+  inset-inline-start: 20px;
   background: var(--bg-secondary);
   transform: rotate(45deg);
 }
 .recents-bubble.up .recents-notch {
   bottom: -6px;
-  border-right: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
 .recents-bubble.down .recents-notch {
   top: -6px;
-  border-left: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   border-top: 1px solid var(--border-color);
 }
 </style>

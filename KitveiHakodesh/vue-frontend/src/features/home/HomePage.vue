@@ -304,7 +304,6 @@ onMounted(focusSearchInput)
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
-  direction: rtl;
 }
 
 .home-search-bar__field::placeholder {

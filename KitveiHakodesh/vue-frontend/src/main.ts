@@ -33,8 +33,10 @@ await checkAndExecPendingDbSwitchCleanup()
 installBrowserPersistenceFlush()
 
 const pinia = createPinia()
-// Layout stays RTL in every UI language; only lang follows the choice.
+// Hebrew UI is RTL; English UI chrome is LTR. Content (book text, results, TOC,
+// dictionary) carries its own dir="rtl" so it stays RTL in both.
 document.documentElement.lang = uiLanguage
+document.documentElement.dir = uiLanguage === 'en' ? 'ltr' : 'rtl'
 const app = createApp(App).use(pinia).use(i18n)
 
 // All synchronous — reads from localStorage

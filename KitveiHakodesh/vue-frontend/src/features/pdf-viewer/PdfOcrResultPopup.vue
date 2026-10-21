@@ -240,7 +240,7 @@ function onKeydown(event: KeyboardEvent) {
   font-family: inherit;
   resize: none;
   direction: rtl;
-  text-align: right;
+  text-align: start;
   box-sizing: border-box;
   outline: none;
   transition: border-color 100ms ease;
@@ -379,7 +379,7 @@ function onKeydown(event: KeyboardEvent) {
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 28px;
-  text-align: right;
+  text-align: start;
 }
 
 .close-btn:disabled,

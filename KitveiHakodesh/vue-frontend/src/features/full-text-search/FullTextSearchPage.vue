@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
         <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
              column, runs the full height beside it, and the advanced dropdown covers it. -->
         <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
-        <div class="search-stage-row" dir="rtl" aria-live="polite">
+        <div class="search-stage-row" aria-live="polite">
           <template v-if="isSearching">
             {{ stageLabel }}
             <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>

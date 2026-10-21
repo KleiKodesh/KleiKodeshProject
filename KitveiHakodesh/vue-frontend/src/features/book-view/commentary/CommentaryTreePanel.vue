@@ -149,7 +149,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
 </script>
 
 <template>
-  <div class="filter-panel">
+  <div dir="rtl" class="filter-panel">
     <div class="tree-scroll">
       <div
         class="all-row"
@@ -327,7 +327,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   padding-block: 6px;
   padding-inline: 8px;
   gap: 2px;
-  text-align: right;
+  text-align: start;
   background: none;
   border: none;
   cursor: pointer;

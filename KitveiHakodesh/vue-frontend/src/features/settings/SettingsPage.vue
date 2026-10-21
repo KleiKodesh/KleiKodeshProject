@@ -209,10 +209,11 @@ async function navigateToSection(sectionId: string) {
   display: flex;
   flex-direction: row;
   height: 100%;
-  direction: rtl;
   background: var(--bg-primary);
   position: relative;
-  container-type: inline-size;
+  container: settings-page / inline-size;
+  /* One side gutter shared by the search bar and the sections in narrow mode. */
+  --settings-narrow-gutter: 12px;
 }
 
 .settings-body {
@@ -274,7 +275,6 @@ async function navigateToSection(sectionId: string) {
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
-  direction: rtl;
 }
 
 .nav-toggle-btn {
@@ -302,7 +302,7 @@ async function navigateToSection(sectionId: string) {
 .nav-panel {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  inset-inline-start: 0;
   min-width: 160px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -317,7 +317,7 @@ async function navigateToSection(sectionId: string) {
 .nav-panel-item {
   height: 32px;
   padding: 0 14px;
-  text-align: right;
+  text-align: start;
   font-size: 13px;
   color: var(--text-primary);
   background: transparent;
@@ -334,6 +334,25 @@ async function navigateToSection(sectionId: string) {
 @container (min-width: 900px) {
   .narrow-only {
     display: none;
+  }
+}
+
+/* Narrow: full width, no outer gutter (cards flatten below). Must stay last
+   so it overrides the base rules above. */
+@container settings-page (max-width: 600px) {
+  .settings-body,
+  .settings-toolbar {
+    background: var(--bg-secondary);
+  }
+  .settings-body-inner {
+    padding: 0 0 16px;
+  }
+  .settings-toolbar {
+    padding: 8px var(--settings-narrow-gutter);
+    margin: 0;
+  }
+  .search-container {
+    background: var(--bg-primary);
   }
 }
 </style>
@@ -361,6 +380,25 @@ async function navigateToSection(sectionId: string) {
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border-color);
   scroll-margin-top: 56px;
+}
+
+/* Narrow: cards flatten into full-width sections, like the FTS page card. */
+@container settings-page (max-width: 600px) {
+  [data-section] {
+    border: none;
+    border-radius: 0;
+    background: none;
+    padding: 0 var(--settings-narrow-gutter);
+    margin: 0 0 4px;
+  }
+  .section-label {
+    padding-top: 10px;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+  }
+  [data-section] .setting-row-item {
+    margin-bottom: 16px;
+  }
 }
 
 [data-section-hidden] {

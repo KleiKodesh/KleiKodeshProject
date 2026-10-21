@@ -237,12 +237,13 @@ In RTL layout, the leftmost button is always the "next/advance" button. For prev
 
 ## UI Translations (i18n)
 
-The UI is bilingual (Hebrew default, English option) via vue-i18n; the layout stays RTL in both. Every user-visible UI string goes through `t()` / `$t()` — never hard-code Hebrew UI text.
+The UI is bilingual (Hebrew default, English option) via vue-i18n. Hebrew mode: whole UI RTL. English mode: UI chrome is LTR (`main.ts` sets `<html dir>` from `uiLanguage`), CONTENT stays RTL. Every user-visible UI string goes through `t()` / `$t()` — never hard-code Hebrew UI text.
 
 - Any change that adds or edits UI text MUST update BOTH `src/i18n/locales/he/<ns>.json` and `src/i18n/locales/en/<ns>.json`, same key set. A Hebrew-only change is incomplete.
 - One namespace file per area (`bookView`, `settings`, `layout`, ...); keys are `'<ns>.<key>'`. `.vue` uses `$t` / `useI18n()`; plain `.ts` imports `t` from `@/i18n`.
 - Strings that double as data (nav labels = route keys, commentary section labels, city names, theme names) keep their Hebrew value for matching/persistence and are translated at DISPLAY time only via a helper (`appNavItems` `.text`, `displayCommentaryLabel`, `cityDisplayName`).
 - Never translate book content, DB data, search-syntax examples, regex/normalization tables, Hebrew month/weekday names, divine-name tables.
+- Content containers (book lines, commentary, TOC, search results/snippets, catalog/book lists, dictionary, txt/html views, book-data tooltips) carry an explicit `dir="rtl"` on their root; query inputs use `dir="auto"`. Chrome CSS uses logical properties (`margin-inline-start`, `inset-inline-end`, `text-align: start`), never physical left/right, so it mirrors correctly in both directions.
 - Switching language reloads the page (`setUiLanguage`), so module-level `t()` constants are fine.
 
 ## Git

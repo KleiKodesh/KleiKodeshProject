@@ -310,7 +310,6 @@ onBeforeUnmount(() => observer?.disconnect())
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   overflow: hidden;
-  direction: rtl;
 }
 
 /* The clamp lands on this element, so the menu inside it has to be the thing that shrinks

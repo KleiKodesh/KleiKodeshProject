@@ -132,7 +132,7 @@ async function onDelete() {
 
 <template>
   <Teleport to="body">
-    <div ref="bubbleRef" class="note-bubble" :style="style" @click.stop>
+    <div dir="rtl" ref="bubbleRef" class="note-bubble" :style="style" @click.stop>
       <div class="note-bubble-header">
         <span class="note-bubble-quote" :title="note.quote">{{ note.quote }}</span>
         <button class="delete-button" :aria-label="$t('bookView.note.delete')" @click="onDelete">

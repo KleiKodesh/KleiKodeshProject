@@ -515,8 +515,8 @@ nextTick(() => {
 .address-bar.is-merged {
   background: var(--bg-secondary);
   border-bottom: none;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+  border-end-end-radius: 0;
+  border-end-start-radius: 0;
   box-shadow: none;
 }
 .address-bar__field {
@@ -528,7 +528,6 @@ nextTick(() => {
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
-  direction: rtl;
   /* Explorer draws no rounded search affordance inside the box */
   padding: 0;
 }

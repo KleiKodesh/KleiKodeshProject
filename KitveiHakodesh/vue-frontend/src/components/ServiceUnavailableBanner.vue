@@ -131,8 +131,8 @@ watch(texts, () => { dismissed.value = false })
      broke the text after every word. */
   position: fixed;
   top: 12px;
-  left: 16px;
-  right: 16px;
+  inset-inline-end: 16px;
+  inset-inline-start: 16px;
   margin-inline: auto;
   width: fit-content;
   max-width: 640px;
@@ -142,7 +142,6 @@ watch(texts, () => { dismissed.value = false })
   align-items: center;
   gap: 8px 12px;
   padding: 12px 16px;
-  direction: rtl;
   font-family: var(--header-font);
   font-size: 13px;
   line-height: 1.45;

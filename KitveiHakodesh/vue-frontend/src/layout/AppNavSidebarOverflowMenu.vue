@@ -214,7 +214,6 @@ watch(
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   overflow-y: auto;
-  direction: rtl;
   outline: none;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;

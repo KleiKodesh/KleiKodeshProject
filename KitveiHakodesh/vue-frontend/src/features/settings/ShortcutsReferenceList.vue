@@ -128,7 +128,7 @@ const hasRoomForSideCommentary = computed(() => windowWidth.value >= SIDE_COMMEN
 .shortcut-description {
   font-size: 13px;
   color: var(--text-primary);
-  text-align: right;
+  text-align: start;
   flex: 1;
 }
 

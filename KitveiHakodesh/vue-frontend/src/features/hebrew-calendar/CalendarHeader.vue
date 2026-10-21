@@ -304,10 +304,10 @@ function selectGregYear(y: number) {
   overflow: hidden;
 }
 .side--he .drop {
-  right: 0;
+  inset-inline-start: 0;
 }
 .side--greg .drop {
-  left: 0;
+  inset-inline-end: 0;
 }
 
 .month-drop {

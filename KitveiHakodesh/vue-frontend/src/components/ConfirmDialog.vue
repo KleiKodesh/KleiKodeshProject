@@ -61,7 +61,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   border-radius: 8px;
   padding: 20px 20px 14px;
   width: 320px;
-  direction: rtl;
   display: flex;
   flex-direction: column;
   gap: 10px;

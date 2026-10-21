@@ -157,14 +157,13 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
 .nav-dropdown {
   position: absolute;
   top: calc(100% + 3px);
-  right: 0;
+  inset-inline-start: 0;
   z-index: 200;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   min-width: 160px;
-  direction: rtl;
   max-height: calc(100vh - 60px);
   overflow-y: auto;
   scrollbar-width: thin;
@@ -183,7 +182,7 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
   border: none;
   border-radius: 0;
   cursor: pointer;
-  text-align: right;
+  text-align: start;
 }
 .nav-row:hover,
 .nav-row--focused {

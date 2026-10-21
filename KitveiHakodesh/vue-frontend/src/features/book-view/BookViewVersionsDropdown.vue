@@ -151,22 +151,22 @@ button.active {
 /* ── Positioning based on toolbar position ── */
 .dropdown-top {
   top: calc(100% + 4px);
-  right: 0;
+  inset-inline-start: 0;
 }
 
 .dropdown-bottom {
   bottom: calc(100% + 4px);
-  right: 0;
+  inset-inline-start: 0;
 }
 
 .dropdown-left {
   top: 0;
-  left: calc(100% + 4px);
+  inset-inline-end: calc(100% + 4px);
 }
 
 .dropdown-right {
   top: 0;
-  right: calc(100% + 4px);
+  inset-inline-start: calc(100% + 4px);
 }
 
 /* ── Version rows ── */
@@ -175,7 +175,7 @@ button.active {
   width: 100%;
   min-height: 32px;
   padding: 6px 12px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

@@ -197,7 +197,6 @@ function onKeydown(e: KeyboardEvent) {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  direction: rtl;
   font-size: 12px;
   color: var(--text-primary);
 }

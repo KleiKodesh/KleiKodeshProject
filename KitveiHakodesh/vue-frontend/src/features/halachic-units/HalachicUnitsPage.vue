@@ -340,7 +340,6 @@ const toMetricDisplay = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  direction: rtl;
   background: var(--bg-primary);
 }
 
@@ -459,7 +458,7 @@ const toMetricDisplay = computed(() => {
   font-size: clamp(14px, 4.5vh, 30px);
   font-family: inherit;
   direction: ltr;
-  text-align: right;
+  text-align: start;
 }
 .value-input {
   background: none;
@@ -485,7 +484,7 @@ const toMetricDisplay = computed(() => {
   font-size: var(--hint-size);
   color: var(--text-secondary);
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 .unit-disputed {
   padding: 0 4px;

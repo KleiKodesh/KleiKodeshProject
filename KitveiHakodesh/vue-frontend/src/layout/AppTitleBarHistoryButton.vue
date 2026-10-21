@@ -157,7 +157,6 @@ function onSelectItem(index: number) {
   padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .history-button-dropdown-item {
@@ -180,7 +179,7 @@ function onSelectItem(index: number) {
 .history-button-dropdown-item-label {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: start;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -105,7 +105,7 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="scrollElement" class="scroller">
+  <div dir="rtl" ref="scrollElement" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
         v-for="virtualRow in virtualizer.getVirtualItems()"
@@ -227,7 +227,7 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   direction: ltr;
-  text-align: right;
+  text-align: start;
 }
 /* Date pill pushed to the far inline-end of the title row (physical left in RTL) so its
    left edge lines up vertically with the path row's left edge below it — the two-line item

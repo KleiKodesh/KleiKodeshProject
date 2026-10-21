@@ -83,7 +83,7 @@ defineExpose({
 <template>
   <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <!-- Host is the size container so the grid's cqi tracks the pane width. -->
-  <div v-else class="catalog-cards-host">
+  <div v-else class="catalog-cards-host" dir="rtl">
     <div ref="cardsEl" class="catalog-cards" @mousedown.prevent>
       <HomeSuggestionCard
         v-for="(card, i) in cards"

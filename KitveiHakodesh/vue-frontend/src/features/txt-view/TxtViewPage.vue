@@ -354,7 +354,7 @@ async function retry() {
 </script>
 
 <template>
-  <div class="txt-view-page" :style="{ filter: htmlFilter }">
+  <div dir="rtl" class="txt-view-page" :style="{ filter: htmlFilter }">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="loading" class="txt-state-message">
       <span>{{ $t('txtView.loading') }}</span>
@@ -470,8 +470,8 @@ async function retry() {
   position: absolute;
   z-index: 9999;
   top: 4px;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   margin: 0 auto;
   display: flex;
   align-items: center;
