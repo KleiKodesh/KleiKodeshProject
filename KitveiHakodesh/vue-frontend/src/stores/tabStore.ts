@@ -546,6 +546,13 @@ export const useTabStore = defineStore('tabs', () => {
   function showLocationWithoutRecording(tab: Tab, location: NavLocation) {
     const patch = tabPatchForLocation(location)
     applyLocationPosition(patch, location)
+    // Same rule as applyTabPatch: the outgoing document's pending jump must not
+    // survive into the location we step to. Without this, Back from a book opened
+    // at a line (commentary header, word link) applied THAT book's line index to
+    // the previous book whenever the frame had no captured scroll index.
+    if (changesIdentity(tab, patch)) {
+      for (const field of POSITION_FIELDS) delete tab[field]
+    }
     Object.assign(tab, patch)
   }
 
