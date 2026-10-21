@@ -691,25 +691,33 @@ defineExpose({ tocBtnRef })
 .book-view-toolbar::after {
   content: '';
   position: absolute;
-  background: var(--border-color);
+  /* A border, not a 1px background: at fractional DPI (150%) Chromium snaps a 1px box to 1
+     or 2 device pixels depending on its offset, so the bottom/right line came out double.
+     Border widths are snapped consistently. */
+  border: 0 solid var(--border-color);
   pointer-events: none;
   z-index: 2;
 }
 .toolbar-top::after {
   inset: auto 0 0 0;
-  height: 1px;
+  border-top-width: 1px;
 }
 .toolbar-bottom::after {
   inset: 0 0 auto 0;
-  height: 1px;
+  border-top-width: 1px;
 }
 .toolbar-left::after {
   inset: 0 0 0 auto;
-  width: 1px;
+  border-left-width: 1px;
 }
 .toolbar-right::after {
   inset: 0 auto 0 0;
-  width: 1px;
+  border-left-width: 1px;
+}
+/* The docked side panel (TOC etc.) sits right beside a right-hand toolbar and reads as
+   one surface with it - no line between them. */
+.book-view-toolbar.no-edge-line::after {
+  display: none;
 }
 
 /* ── Buttons ── */

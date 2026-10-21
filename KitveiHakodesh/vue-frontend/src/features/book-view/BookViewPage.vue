@@ -401,7 +401,10 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         v-if="toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
         v-bind="toolbarProps"
-        :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
+        :class="{
+          'toolbar-order-end': toolbarPosition === 'left',
+          'no-edge-line': toolbarPosition === 'right' && sidePanelVisible && !sidePanelIsOverlay,
+        }"
         @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
         @toggle-side-commentary="toggleCommentaryPanel('side')"
         @toggle-side-left-commentary="toggleCommentaryPanel('side-left')"
