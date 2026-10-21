@@ -521,10 +521,10 @@ onBeforeUnmount(() => {
             {{ stageLabel }}
             <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
           </template>
-          <template v-else-if="results.length">
+          <span v-else-if="results.length" dir="auto">
             <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
             {{ $t('fullTextSearch.results') }}
-          </template>
+          </span>
         </div>
         <FullTextSearchResultsList
           ref="resultsListRef"
