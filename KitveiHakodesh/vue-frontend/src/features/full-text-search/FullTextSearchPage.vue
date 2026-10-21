@@ -74,6 +74,8 @@ const {
   expandKetiv,
   expandRelated,
   grammarWrap,
+  fuzzy,
+  wildcardWrap,
   sortOrder,
   executeSearch,
   cancelSearch,
@@ -146,6 +148,8 @@ const isAdvancedActive = computed(
      || !expandKetiv.value
      || expandRelated.value
      || grammarWrap.value
+     || fuzzy.value
+     || wildcardWrap.value
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -195,6 +199,8 @@ watch(
     expandKetiv,
     expandRelated,
     grammarWrap,
+    fuzzy,
+    wildcardWrap,
     () => settings.searchContextMarginWords,
   ],
   () => {
@@ -485,12 +491,16 @@ onBeforeUnmount(() => {
         :expand-ketiv="expandKetiv"
         :expand-related="expandRelated"
         :grammar-wrap="grammarWrap"
+        :fuzzy="fuzzy"
+        :wildcard-wrap="wildcardWrap"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
         @update:expand-ketiv="expandKetiv = $event"
         @update:expand-related="expandRelated = $event"
         @update:grammar-wrap="grammarWrap = $event"
+        @update:fuzzy="fuzzy = $event"
+        @update:wildcard-wrap="wildcardWrap = $event"
         @close="isAdvancedOpen = false"
       />
     </div>
@@ -507,12 +517,16 @@ onBeforeUnmount(() => {
           :expand-ketiv="expandKetiv"
           :expand-related="expandRelated"
           :grammar-wrap="grammarWrap"
+          :fuzzy="fuzzy"
+          :wildcard-wrap="wildcardWrap"
           @update:max-word-distance="maxWordDistance = $event"
           @update:require-ordered="requireOrdered = $event"
           @update:context-words="settings.searchContextMarginWords = $event"
           @update:expand-ketiv="expandKetiv = $event"
           @update:expand-related="expandRelated = $event"
           @update:grammar-wrap="grammarWrap = $event"
+          @update:fuzzy="fuzzy = $event"
+          @update:wildcard-wrap="wildcardWrap = $event"
         />
       </PageCard>
       <div v-if="!showAdvancedCard" class="results-list-wrap">

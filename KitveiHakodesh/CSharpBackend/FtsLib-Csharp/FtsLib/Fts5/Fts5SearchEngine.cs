@@ -433,21 +433,21 @@ namespace FtsLib.Fts5
                 }
                 else if (alt.IsWildcard)
                 {
-                    if (IsFmWildcard(alt.Pattern, out string core, out bool suffixOnly))
-                    {
-                        anyRealConstraint = true;
-                        expanded = ExpandWildcardWithFm(core, suffixOnly);
-                    }
-                    else
-                    {
-                        expanded = HebrewWildcardExpander.Expand(alt.Pattern, _termSegments, out bool rejected);
-                        if (!rejected) anyRealConstraint = true;
-                    }
+                    expanded = ExpandWildcard(alt.Pattern, ref anyRealConstraint);
+                    // Spelling variants apply to the literal core too, or *word* would match
+                    // FEWER lines than plain word (which gets its ketiv variants).
+                    if (expandKetiv && TrySplitStarCore(alt.Pattern, out string lead, out string core, out string trail))
+                        foreach (var variant in KetivExpander.Expand(core))
+                            expanded.AddRange(ExpandWildcard(lead + variant + trail, ref anyRealConstraint));
                 }
                 else if (alt.IsGrammar)
                 {
                     anyRealConstraint = true;
                     expanded = GrammarExpander.Expand(alt.Pattern, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments);
+                    // Same as wildcards: %word% must not lose the variants plain word gets.
+                    if (expandKetiv)
+                        foreach (var variant in KetivExpander.Expand(alt.Pattern))
+                            expanded.AddRange(GrammarExpander.Expand(variant, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments));
                 }
                 else
                 {
@@ -463,6 +463,36 @@ namespace FtsLib.Fts5
 
             if (list.Count == 0 && anyRealConstraint) hardMiss = true;
             return list;
+        }
+
+        List<string> ExpandWildcard(string pattern, ref bool anyRealConstraint)
+        {
+            if (IsFmWildcard(pattern, out string core, out bool suffixOnly))
+            {
+                anyRealConstraint = true;
+                return ExpandWildcardWithFm(core, suffixOnly);
+            }
+            var expanded = HebrewWildcardExpander.Expand(pattern, _termSegments, out bool rejected);
+            if (!rejected) anyRealConstraint = true;
+            return expanded;
+        }
+
+        /// <summary>
+        /// Splits a wildcard whose only wildcards are leading/trailing '*' runs (no '?', no
+        /// inner '*') into those runs and its literal core — the shape ketiv can vary.
+        /// </summary>
+        static bool TrySplitStarCore(string pattern, out string lead, out string core, out string trail)
+        {
+            lead = core = trail = null;
+            if (pattern.IndexOf('?') >= 0) return false;
+            int start = 0, end = pattern.Length;
+            while (start < end && pattern[start] == '*') start++;
+            while (end > start && pattern[end - 1] == '*') end--;
+            core = pattern.Substring(start, end - start);
+            if (core.Length == 0 || core.IndexOf('*') >= 0) return false;
+            lead = pattern.Substring(0, start);
+            trail = pattern.Substring(end);
+            return true;
         }
 
         static string AlternativeKey(SubPattern alt)
