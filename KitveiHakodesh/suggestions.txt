@@ -1,0 +1,16 @@
+catlog search:
+why is חידושי רבי קיבא אייגר על תלמוד בבלי first in teh results for בבלי in teh catlog search
+also need to limit reulst they aren't instant
+
+home page:
+הלכה יומית? לפי מעגל השנה?
+
+fts:
+ai search with api?
+symantic search
+aramaic to Hebrew?
+
+bookview suggestions:
+adjust text files to open in teh bookview and parse them as html content
+also maybe msword files
+
