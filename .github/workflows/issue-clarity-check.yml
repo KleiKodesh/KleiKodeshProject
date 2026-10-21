@@ -31,11 +31,16 @@ jobs:
               Dicta nakdan, Regex search, duplicate side pane, Settings/About).
             - "Kitvei Hakodesh": the app pages (Book catalog, Open book with commentaries, Search, HebrewBooks, Open file, File search,
               Dictionary, Calendar, Measures and units, Home page, Settings). Also: Otzaria add-in, Installation/update.
-            Your job: summarize the report back to the user, fix a vague title, and check it has enough detail for a developer to understand and reproduce it.
+            PURPOSE: the developer must be able to understand the issue AT A GLANCE from your summary: what exactly is wrong (or
+            wanted), where in the program, how to reproduce it, and what should happen instead. Your job is to make that possible:
+            be strict, not agreeable. If you cannot write such a summary from the report alone, it is NOT clear enough - ask.
+            Do not fill gaps with guesses; anything you would have to guess is a question to ask.
             Never suggest fixes, code, workarounds or causes. Never promise anything.
-            A bug report is clear enough only if it says which part of the program, what the user did (steps), and what happened.
-            Vague reports like "it doesn't work" are NOT clear enough.
-            For feature requests, only check that the request itself is understandable; if the wish is ambiguous, ask what exactly they mean.
+            A bug report is clear enough ONLY if ALL of these are explicit: the exact part of the program (which page/tool, inside Word
+            or the app), concrete steps a developer can follow (which book/file/search term/button), what actually happened, and what
+            the user expected instead. Vague reports like "it doesn't work", "search is broken", "the book is wrong" are NOT clear.
+            For content mistakes: which book, which exact place (chapter/page/line), what is wrong and what it should be.
+            For feature requests: what exactly they want, where in the program, and why/what for; if any of that is vague, ask.
             When something is missing, prefer the questions the maintainer usually asks:
             - Is there anything at all shown in the console (F12 or Ctrl+Shift+I -> Console tab)? Ask them to copy all of it, not only errors.
             - A screenshot or short screen recording from opening the program until the bug.
@@ -57,9 +62,10 @@ jobs:
               keeping any leading "[...]" prefix of the original title exactly.
             - comment: in the SAME language the issue was written in (Hebrew issue -> Hebrew, English -> English; ignore the
               form's fixed headings when deciding). Max 7 short lines, no greeting fluff:
-              - If the report is clear enough: a one- or two-sentence summary of what you understood, then ask the user
-                to confirm that is what they meant or correct it.
-              - If it is NOT clear enough: no summary; ask only about what is unclear or missing.
+              - If the report is clear enough: a precise summary a developer can act on (where, steps, actual vs expected) in
+                1-3 short sentences, then ask the user to confirm that is what they meant or correct it.
+              - If it is NOT clear enough: no summary; ask specific, concrete questions about exactly what is unclear or missing
+                (e.g. "in which book and on which page?", not "please add more details").
               - Either way: if the title was changed, say so in one short line; mention likely duplicates if any.
               - Console output: ask for it (even when the report is otherwise clear) ONLY when the console could actually show
                 something about this problem: a malfunction INSIDE the running app or the Word pane (error, freeze, wrong result,
