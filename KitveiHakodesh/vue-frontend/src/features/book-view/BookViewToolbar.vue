@@ -16,10 +16,13 @@ import {
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
   IconInfo20Regular,
+  IconDocumentPdf20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
+import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDropdown.vue'
+import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
@@ -38,7 +41,7 @@ import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
-import type { BookVersionRow } from '@/webview-host/queries.types'
+import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 
 const props = defineProps<{
   searchVisible: boolean
@@ -60,6 +63,8 @@ const props = defineProps<{
   // The book's alternate versions. Empty for most books, which hides the control.
   versions: BookVersionRow[]
   activeVersionId: number | null
+  // The book's scanned editions on HebrewBooks. Empty for most books, which hides the control.
+  hebrewBooksEditions: HebrewBooksEdition[]
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
@@ -105,6 +110,12 @@ const BOOK_INFO_LABEL = 'פרטי הספר'
 
 /** Whether the book-info row in the flyout has its panel expanded beneath it. */
 const bookInfoExpandedInOverflow = ref(false)
+
+/** The HebrewBooks editions control's name - its row text in the flyout. */
+const HEBREWBOOKS_EDITIONS_LABEL = 'מהדורות סרוקות בהיברו בוקס'
+
+/** Whether the editions row in the flyout has its list expanded beneath it. */
+const hebrewBooksEditionsExpandedInOverflow = ref(false)
 
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
@@ -233,6 +244,7 @@ const isVerticalToolbar = computed(
 )
 
 const hasVersions = computed(() => props.versions.length > 0)
+const hasHebrewBooksEditions = computed(() => props.hebrewBooksEditions.length > 0)
 
 /** Whether the word-link markers control is on the toolbar - it tells us; see its own note. */
 const wordLinkMarkersPresent = ref(false)
@@ -244,6 +256,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
   TOOLBAR_OVERFLOW_ORDER.filter((key) => {
     if (key === 'sync-commentaries') return props.hasCommentaries
     if (key === 'export-to-word') return !props.exportRestricted
+    if (key === 'hebrewbooks-editions') return hasHebrewBooksEditions.value
     return true
   }),
 )
@@ -260,7 +273,9 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
  */
 const pinnedButtonCount = computed(() => {
   const alwaysOn = 3 // TOC, previous section, next section
-  const dropdowns = (props.hasRelatedBooks ? 1 : 0) + (hasVersions.value ? 1 : 0)
+  const dropdowns =
+    (props.hasRelatedBooks ? 1 : 0) +
+    (hasVersions.value ? 1 : 0)
   const commentaryToggles = props.hasCommentaries
     ? 1 + (props.canUseSidePanel ? 2 : 0) // bottom panel, plus both side panels when they fit
     : 0
@@ -295,9 +310,11 @@ watch(hasToolbarOverflow, (has) => {
   if (!has) overflowOpen.value = false
 })
 
-// Each opening of the flyout starts with the info panel folded, like a fresh dropdown.
+// Each opening of the flyout starts with the info panel and editions list folded, like a fresh dropdown.
 watch(overflowOpen, (open) => {
-  if (!open) bookInfoExpandedInOverflow.value = false
+  if (open) return
+  bookInfoExpandedInOverflow.value = false
+  hebrewBooksEditionsExpandedInOverflow.value = false
 })
 
 defineExpose({ tocBtnRef })
@@ -349,6 +366,15 @@ defineExpose({ tocBtnRef })
       :versions="versions"
       :active-version-id="activeVersionId"
       @select="$emit('selectVersion', $event)"
+    />
+    <!-- Only for books with scanned editions on HebrewBooks; absent otherwise, like versions.
+         The second control to collapse; in the flyout its row expands the list inline. -->
+    <BookViewHebrewBooksEditionsDropdown
+      v-if="hasHebrewBooksEditions"
+      class="collapsible hebrewbooks-editions-toolbar-item"
+      :class="{ collapsed: !toolbarButtonVisible('hebrewbooks-editions') }"
+      :inert="!toolbarButtonVisible('hebrewbooks-editions')"
+      :editions="hebrewBooksEditions"
     />
     <!--
       RTL: first child sits physically right. The three buttons run right → bottom
@@ -535,6 +561,30 @@ defineExpose({ tocBtnRef })
           class="overflow-book-info-panel"
           :book-id="bookId"
         />
+      </template>
+      <!-- Same inline-expand as book-info: the editions list opens beneath its row. -->
+      <template v-if="isOverflowed('hebrewbooks-editions')">
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :class="{ active: hebrewBooksEditionsExpandedInOverflow }"
+          aria-haspopup="menu"
+          :aria-expanded="hebrewBooksEditionsExpandedInOverflow"
+          @click="hebrewBooksEditionsExpandedInOverflow = !hebrewBooksEditionsExpandedInOverflow"
+        >
+          <IconDocumentPdf20Regular />
+          <span>{{ HEBREWBOOKS_EDITIONS_LABEL }}</span>
+        </button>
+        <div
+          v-if="hebrewBooksEditionsExpandedInOverflow"
+          role="menu"
+          class="overflow-editions-list"
+        >
+          <BookViewHebrewBooksEditionsList
+            :editions="hebrewBooksEditions"
+            @picked="overflowOpen = false"
+          />
+        </div>
       </template>
       <button
         v-if="isOverflowed('export-to-word')"
@@ -849,10 +899,23 @@ button:disabled {
 }
 
 
-/* The info dropdown hangs out of its box, so its clipping is lifted while it is on the bar;
-   collapsing it still clips, as .collapsible intends. */
-.collapsible.book-info-toolbar-item:not(.collapsed) {
+/* The info and editions dropdowns hang out of their boxes, so their clipping is lifted while
+   they are on the bar; collapsing them still clips, as .collapsible intends. */
+.collapsible.book-info-toolbar-item:not(.collapsed),
+.collapsible.hebrewbooks-editions-toolbar-item:not(.collapsed) {
   overflow: visible;
+}
+/* Indented under its row so it reads as that row's sub-list; scrolls within the flyout,
+   which itself clamps to the viewport. */
+.overflow-editions-list {
+  display: flex;
+  flex-direction: column;
+  max-width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-inline-start: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .overflow-book-info-panel {
   max-width: 320px;

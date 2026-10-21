@@ -47,6 +47,10 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  * first to go. Fixed by product decision, not by position in the toolbar: these are the
  * controls a reader can do without while the pane is cramped, worst-first.
  *
+ * The HebrewBooks editions dropdown is the one list-opening control that IS here (second,
+ * by product decision): in the flyout its row expands the editions inline beneath it, the
+ * same way the book-info row expands its panel, so no second floating layer is involved.
+ *
  * The versions and related-books dropdowns are deliberately NOT here: they open lists of
  * their own, and a list opening out of a row in the flyout is a second floating layer that
  * has to be measured and clamped against the window - in exactly the narrow window that
@@ -58,6 +62,7 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  */
 export const TOOLBAR_OVERFLOW_ORDER = [
   'book-info',
+  'hebrewbooks-editions',
   'export-to-word',
   'sync-commentaries',
   'diacritics',

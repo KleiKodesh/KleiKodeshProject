@@ -46,6 +46,7 @@ global using WordLinkAnchorsResult = KitveiHakodesh.Core.SeforimDb.WordLinkAncho
 global using WordLinkTargetRow = KitveiHakodesh.Core.SeforimDb.WordLinkTargetRow;
 global using WordLinkTargetsResult = KitveiHakodesh.Core.SeforimDb.WordLinkTargetsResult;
 global using HebrewBook = KitveiHakodesh.Core.HebrewBooks.HebrewBook;
+global using HebrewBooksEdition = KitveiHakodesh.Core.HebrewBooks.HebrewBooksEdition;
 global using FtsHit = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit;
 global using FtsIndexStatus = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsIndexStatus;
 global using FtsSearchResult = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsSearchResult;

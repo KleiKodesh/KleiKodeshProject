@@ -508,6 +508,12 @@ public sealed class Dispatcher(
                         : new HbDownloadResult { Redownload = true }));
                 }
 
+                case "getHebrewBooksEditions":
+                {
+                    var a = MsgPack.De<HebrewBooksEditionsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new HebrewBooksEditionsResult { Editions = hebrewBooks.EditionsOf(a.BookId) }));
+                }
+
                 case "checkHbLocalFiles":
                 {
                     var a = MsgPack.De<HbCheckLocalArgs>(req.Args);

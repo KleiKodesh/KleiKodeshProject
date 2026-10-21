@@ -84,6 +84,11 @@ export interface Tab {
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   localFileDownloadProgress?: string // in-memory only — live HB download progress text (e.g. "6.2 / 13.2 MB · 47%")
   pdfViewerTitleBarVisible?: boolean // persisted — whether to show PDF.js viewer title bar (default true)
+  // Outline entry a /pdf-view tab opens at, as a book-view breadcrumb path - set when a
+  // HebrewBooks edition is opened from a text book. One-shot: PdfViewPage hands it to the
+  // viewer on the tab's first load and clears it. Deliberately NOT a position field: the
+  // download flow that follows changes the tab's identity, which would wipe it. Not persisted.
+  pdfInitialOutlineTarget?: string
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state
   bookId?: number
@@ -213,6 +218,7 @@ const TRANSIENT_FIELDS = [
   'localFileConverting',
   'localFileLoadingType',
   'localFileDownloadProgress',
+  'pdfInitialOutlineTarget',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**

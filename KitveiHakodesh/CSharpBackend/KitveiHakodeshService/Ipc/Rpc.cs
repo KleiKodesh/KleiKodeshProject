@@ -271,6 +271,21 @@ public sealed class HbDownloadResult
     public string? Detail { get; set; }
 }
 
+/// <summary>Args for <c>getHebrewBooksEditions</c>: a seforim.db book id.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HebrewBooksEditionsArgs
+{
+    public int BookId { get; set; }
+}
+
+/// <summary>Result of <c>getHebrewBooksEditions</c>: the book's HebrewBooks scans, best first;
+/// empty when it has none or the library in use has no Otzaria map.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HebrewBooksEditionsResult
+{
+    public List<HebrewBooksEdition> Editions { get; set; } = new();
+}
+
 /// <summary>Args for <c>checkHbLocalFiles</c>.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class HbCheckLocalArgs

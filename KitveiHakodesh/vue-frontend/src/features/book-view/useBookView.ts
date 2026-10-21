@@ -150,6 +150,7 @@ export function useBookView(
     lines, prioritise, prefetch, holdBackfill, releaseBackfill,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim,
     versions, activeVersionId, setVersion,
+    hebrewBooksEditions,
   } = useLines(() => bookId)
 
   // Warm up the connection type ID table immediately — single tiny query that must
@@ -743,6 +744,8 @@ export function useBookView(
     bookHasTeamim,
     // alternate versions (empty for most books — the toolbar control hides)
     versions, activeVersionId, selectVersion, versionPersistState,
+    // scanned editions on HebrewBooks (empty for most books — the toolbar control hides)
+    hebrewBooksEditions,
     // UI state
     selectedLineId,
     searchMode: searchPanel.searchMode,

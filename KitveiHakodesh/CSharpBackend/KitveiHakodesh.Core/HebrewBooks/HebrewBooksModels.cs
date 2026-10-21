@@ -22,6 +22,25 @@ namespace KitveiHakodesh.Core.HebrewBooks
         public bool HasLocalFile { get; set; }
     }
 
+    /// <summary>
+    /// A HebrewBooks scan that Otzaria's map links to one of its books — a printed edition of
+    /// the same work. <see cref="Id"/> is the HebrewBooks file id, so it opens like any other
+    /// HebrewBooks book. <see cref="IsBest"/> marks the one edition Otzaria prefers;
+    /// <see cref="IsCertain"/> is false for a match Otzaria rated only "likely".
+    /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class HebrewBooksEdition
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string PrintingPlace { get; set; } = "";
+        public string PrintingYear { get; set; } = "";
+        public int? Pages { get; set; }
+        public bool IsBest { get; set; }
+        public bool IsCertain { get; set; }
+    }
+
     /// <summary>Why an acquire did not produce a file. The caller turns this into a message —
     /// Core never phrases one (project rule 3).</summary>
     public enum HebrewBookAcquireFailure

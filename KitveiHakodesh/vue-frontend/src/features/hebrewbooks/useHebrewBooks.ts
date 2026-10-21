@@ -5,7 +5,14 @@ import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCata
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useSettingsStore } from '@/stores/settingsStore'
+import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles, revealHbLocalFile } from '@/webview-host/bridge'
+
+/**
+ * Where an edition opened from a text book lands. Only 'newTab' is wired; 'splitView' is
+ * reserved for opening it beside the text - only `resolveEditionTabId` would change.
+ */
+export type HebrewBooksEditionTarget = 'newTab' | 'splitView'
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
@@ -80,7 +87,6 @@ export function useHebrewBooks() {
   }
 
   function openBook(book: HebrewBook, openInNewTab = false) {
-    trackAccess(book)
     // The whole download→convert→navigate lifecycle is driven by tab id
     // (startHbDownload / finishHbDownload / cancelHbDownload all target the tab
     // via updateTab). For a Ctrl/⌘-click we open a fresh placeholder tab and
@@ -88,6 +94,40 @@ export function useHebrewBooks() {
     const tabId = openInNewTab
       ? paneNavigation.openTab({ route: '/pdf-view', title: book.title }).id
       : paneNavigation.activeTabId
+    startBookDownload(book, tabId)
+  }
+
+  /**
+   * Opens a scanned edition of the text book the reader is in, through the same
+   * local-folder / cache / download flow as any HebrewBooks book. `outlineTarget` is the
+   * book view breadcrumb; the PDF viewer jumps to the matching outline entry once loaded.
+   */
+  function openEdition(
+    edition: HebrewBooksEdition,
+    target: HebrewBooksEditionTarget,
+    outlineTarget?: string,
+  ) {
+    const tabId = resolveEditionTabId(edition, target, outlineTarget)
+    const { id, title, author, printingYear } = edition
+    startBookDownload({ id, title, author, printingPlace: edition.printingPlace, printingYear, pages: edition.pages, categories: '' }, tabId)
+  }
+
+  /** The placeholder tab an edition downloads into - the one place a target differs. */
+  function resolveEditionTabId(
+    edition: HebrewBooksEdition,
+    _target: HebrewBooksEditionTarget,
+    outlineTarget?: string,
+  ): string {
+    return paneNavigation.openTab({
+      route: '/pdf-view',
+      title: edition.title,
+      pdfInitialOutlineTarget: outlineTarget || undefined,
+    }).id
+  }
+
+  /** Records the access and starts the download into `tabId`, which then shows the PDF. */
+  function startBookDownload(book: HebrewBook, tabId: string) {
+    trackAccess(book)
     localFileStore.startHbDownload(book.title, tabId, String(book.id))
     triggerHbDownload(
       String(book.id),
@@ -157,6 +197,7 @@ export function useHebrewBooks() {
     search,
     trackAccess,
     openBook,
+    openEdition,
     downloadBook,
     deleteLocalFile,
     revealInFolder,

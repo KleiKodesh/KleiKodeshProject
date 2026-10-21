@@ -137,6 +137,23 @@ export interface BookVersionRow {
   heVersionNotes: string | null
 }
 
+/**
+ * A scanned edition of an Otzaria book on HebrewBooks. Ordered by the service: the best
+ * edition first, then certain matches before uncertain ones.
+ */
+export interface HebrewBooksEdition {
+  /** The HebrewBooks file id - what the download and the local-folder lookup key on. */
+  id: number
+  title: string
+  author: string
+  printingPlace: string
+  printingYear: string
+  pages: number | null
+  isBest: boolean
+  /** False when the book-to-edition match is only probable. */
+  isCertain: boolean
+}
+
 /** Reverse source/targum lookup — which lines point AT the given ones. */
 export interface ReverseLineRow {
   sourceBookId: number
