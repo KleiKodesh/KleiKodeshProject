@@ -116,9 +116,15 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// rebuild for any drive whose cursor is missing or stale.
         /// <paramref name="progress"/> receives a status string at each milestone;
         /// <paramref name="fullCrawlReason"/> says, per drive, why it was crawled in full.
+        /// <paramref name="progressPercent"/> receives an estimated 0-99 while building and 100
+        /// at the end. No pre-count pass: the estimate's total is the entry count the index
+        /// already held from its previous run, against the entries crawled so far; drives done
+        /// / total is the floor (and the only measure when there is no previous index). The
+        /// larger of the two is reported, never decreasing, capped at 99 until done.
         /// </summary>
         public void Build(Action<string> progress = null, CancellationToken ct = default,
-                          Action<string> fullCrawlReason = null)
+                          Action<string> fullCrawlReason = null,
+                          Action<int> progressPercent = null)
         {
             var drives = LocalFileIndexMftCrawler.GetNtfsDrives();
             if (drives.Count == 0)
@@ -130,6 +136,25 @@ namespace KitveiHakodesh.Core.LocalFiles
                     throw new InvalidOperationException("No indexable drives found.");
             }
 
+            int previousEntryCount;
+            try { previousEntryCount = Count(); } catch { previousEntryCount = 0; }
+            int drivesDone = 0;
+            long entriesInFinishedDrives = 0;
+            int lastReportedPercent = -1;
+            void ReportProgress(long entriesInCurrentDrive)
+            {
+                if (progressPercent == null) return;
+                int byDrives = (int)(drivesDone * 100L / drives.Count);
+                int byEntries = previousEntryCount > 0
+                    ? (int)Math.Min(100L, (entriesInFinishedDrives + entriesInCurrentDrive) * 100L / previousEntryCount)
+                    : 0;
+                int percent = Math.Min(99, Math.Max(byDrives, byEntries));
+                if (percent <= lastReportedPercent) return;
+                lastReportedPercent = percent;
+                progressPercent(percent);
+            }
+
+            ReportProgress(0);
             foreach (var drive in drives)
             {
                 ct.ThrowIfCancellationRequested();
@@ -160,6 +185,8 @@ namespace KitveiHakodesh.Core.LocalFiles
                     {
                         LocalFileIndexUsnJournal.SaveCursor(_indexPath, letter, advancedCursor);
                         progress?.Invoke($"✓ {letter}: updated incrementally");
+                        drivesDone++;
+                        ReportProgress(0);
                         continue;
                     }
 
@@ -175,7 +202,11 @@ namespace KitveiHakodesh.Core.LocalFiles
                 var paths = LocalFileIndexDirectoryCrawler.EnumeratePathsWithFallback(
                     letter,
                     msg => progress?.Invoke(msg),
-                    count => progress?.Invoke($"Crawling {letter}:… {count:N0} entries"),
+                    count =>
+                    {
+                        progress?.Invoke($"Crawling {letter}:… {count:N0} entries");
+                        ReportProgress(count);
+                    },
                     ct);
 
                 ct.ThrowIfCancellationRequested();
@@ -193,8 +224,12 @@ namespace KitveiHakodesh.Core.LocalFiles
                     // startup simply does another full build via the fallback path.
                 }
                 progress?.Invoke($"✓ {letter}: full rebuild done ({paths.Count:N0} paths)");
+                entriesInFinishedDrives += paths.Count;
+                drivesDone++;
+                ReportProgress(0);
             }
 
+            progressPercent?.Invoke(100);
             _writer.Commit();
             _searcherManager.MaybeRefreshBlocking();
             progress?.Invoke($"Index ready — {Count():N0} total paths");

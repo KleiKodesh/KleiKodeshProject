@@ -535,6 +535,7 @@ onBeforeUnmount(() => {
           :has-searched="hasSearched"
           :search-error="searchError"
           :db-not-found="indexingState.dbNotFound"
+          :index-build-failed="indexingState.buildFailed"
           :initial-scroll-index="initialScrollIndex"
           :initial-scroll-offset="initialScrollOffset"
           :zoom="zoom"

@@ -34,6 +34,7 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  hasIndexFailureToShow,
   isLoadingAny,
   clearResults,
   pause: pauseSearch,
@@ -47,7 +48,7 @@ const {
 const searchBar = useHomeSearchBar({
   query: homeSearchQuery,
   searchBarRef,
-  hasAnyResults,
+  hasAnyResults: () => hasAnyResults() || hasIndexFailureToShow(),
   isLoadingAny,
   clearResults,
   onSubmit: (query) => navigation.openFullTextSearch(query),

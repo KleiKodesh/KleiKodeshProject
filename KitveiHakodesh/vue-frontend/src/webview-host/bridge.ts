@@ -520,6 +520,31 @@ export type CatalogTocSearchResult = {
   /** True when a newer search superseded this one — discard and retry. */
   superseded?: boolean
   error?: string | null
+  /** With ready = false: the seforim DB is missing — the index can never become ready. */
+  dbMissing?: boolean
+  /** Build progress while not ready. */
+  builtBooks?: number
+  totalBooks?: number
+  /** With ready = false: the last build failed and none is running — stop retrying. */
+  buildFailure?: string | null
+  /** The last build failed and an automatic retry is running now. */
+  retryingAfterBuildFailure?: boolean
+}
+
+/** Where the catalog TOC index stands (catalogTocStatus wire shape, camelCased). */
+export type CatalogTocIndexStatus = {
+  ready: boolean
+  indexing: boolean
+  builtBooks: number
+  totalBooks: number
+  dbMissing: boolean
+  buildFailure?: string | null
+  retryingAfterBuildFailure?: boolean
+}
+
+/** Catalog TOC index status. Polled only while a build is known to run. */
+export function catalogTocIndexStatus(): Promise<CatalogTocIndexStatus | null> {
+  return serviceCall<CatalogTocIndexStatus>('catalogTocStatus').catch(() => null)
 }
 
 /**
@@ -678,9 +703,20 @@ export function fileSystemSearch(
  * waiting. Any failure is reported as not-building, because the search call itself is
  * what surfaces real errors.
  */
-export function localFileIndexStatus(): Promise<{ isBuilding: boolean; message?: string }> {
-  return serviceCall<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(
-    () => ({ isBuilding: false }),
+export type LocalFileIndexStatus = {
+  isBuilding: boolean
+  message?: string
+  /** Why the last build failed, when none is running. */
+  buildFailure?: string | null
+  /** Estimated build progress 0-100 (Core estimates it); -1 when unknown. */
+  progressPercent?: number
+  /** Set only by this wrapper: the call itself failed, so nothing is known. */
+  unreachable?: boolean
+}
+
+export function localFileIndexStatus(): Promise<LocalFileIndexStatus> {
+  return serviceCall<LocalFileIndexStatus>('localFileIndexStatus').catch(
+    () => ({ isBuilding: false, unreachable: true }),
   )
 }
 

@@ -37,6 +37,14 @@ public sealed class LocalFileIndexStatusResult
     /// own wording; this is detail, not display text.</summary>
     public string? Message { get; set; }
 
+    /// <summary>Why the last build attempt failed, when no build is running; null otherwise.
+    /// English, diagnostic — the UI shows its own wording.</summary>
+    public string? BuildFailure { get; set; }
+
+    /// <summary>Estimated build progress 0-100 while building; -1 when unknown or idle.
+    /// Estimate, not a count: see LocalFileIndex.Build.</summary>
+    public int ProgressPercent { get; set; } = -1;
+
     /// <summary>Why the index last built from scratch, and when; null if every start so far
     /// only caught up from the journal.</summary>
     public KitveiHakodesh.Core.Common.IndexBuildReason? BuildReason { get; set; }

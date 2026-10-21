@@ -161,6 +161,12 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             return true;
         }
         public bool IsIndexing => _isIndexing;
+
+        /// <summary>Why the last build failed (exception message); null once a build succeeds.
+        /// Kept while an automatic retry runs, so the caller can say "failed, retrying" instead
+        /// of flipping back to a plain "building".</summary>
+        public string? LastBuildFailure => _lastBuildFailure;
+        private volatile string? _lastBuildFailure;
         public int BuiltBooks => _builtBooks;
         public int TotalBooks => _totalBooks;
 
@@ -296,6 +302,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                     onProgress: (done, total) => { _builtBooks = done; _totalBooks = total; },
                     ct: ct);
                 _isReady = true;
+                _lastBuildFailure = null;
                 _log(CatalogIndexLogLevel.Information,
                     $"catalog TOC index build complete — {docs} docs in {sw.Elapsed.TotalSeconds:F1}s (switched atomically)",
                     null);
@@ -307,6 +314,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             catch (Exception ex)
             {
                 _log(CatalogIndexLogLevel.Error, "catalog TOC index build failed", ex);
+                _lastBuildFailure = ex.Message;
 
                 // Interlocked: two builds can be in flight across a re-arm, and a lost increment
                 // would turn a bounded retry into an unbounded one.
@@ -532,6 +540,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 BuiltBooks = BuiltBooks,
                 TotalBooks = TotalBooks,
                 DbMissing = DatabasePath == null,
+                // An older index still serving means search works: a failed rebuild is not
+                // the user's problem until nothing can serve.
+                BuildFailure = IsIndexing || IsReadyToServe() ? null : LastBuildFailure,
+                RetryingAfterBuildFailure = IsIndexing && !IsReadyToServe() && LastBuildFailure != null,
                 BuildReason = _lastBuildReason,
             };
         }
@@ -565,6 +577,12 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             if (!TryGetSearchableIndex(out var index))
             {
                 result.Ready = false;
+                result.DbMissing = DatabasePath == null;
+                result.BuiltBooks = BuiltBooks;
+                result.TotalBooks = TotalBooks;
+                // A failed build with no retry running will never make the index ready.
+                result.BuildFailure = IsIndexing ? null : LastBuildFailure;
+                result.RetryingAfterBuildFailure = IsIndexing && LastBuildFailure != null;
                 return result;
             }
             result.Ready = true;

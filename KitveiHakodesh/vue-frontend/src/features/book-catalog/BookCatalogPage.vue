@@ -17,9 +17,14 @@ import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import type { ComponentPublicInstance } from 'vue'
 
 const paneNavigation = usePaneNavigation()
+// While the catalog index builds, the search spinner says so (with progress); when the
+// index is unavailable, the search area says why instead of spinning.
+const { statusText: catalogIndexStatusText, isUnavailable: isCatalogIndexUnavailable } =
+  useSearchIndexStatus('catalogToc')
 const tabStore = useTabStore()
 const {
   loading,
@@ -375,7 +380,16 @@ function onSearchEnter() {
         <!-- select-book/select-toc emit (item, openInNewTab) — the boolean is
              forwarded straight through to the pane-navigation helper. -->
         <template v-if="isSearching">
-          <LoadingAnimation v-if="tocSearching && !searchItems.length" />
+          <MessageBanner
+            v-if="isCatalogIndexUnavailable && catalogIndexStatusText && !searchItems.length"
+            class="error-msg"
+            :message="catalogIndexStatusText"
+            :dismissible="false"
+          />
+          <LoadingAnimation
+            v-else-if="tocSearching && !searchItems.length"
+            :text="catalogIndexStatusText ?? undefined"
+          />
           <BookCatalogSearch
             ref="searchResultsRef"
             v-else

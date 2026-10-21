@@ -45,6 +45,13 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
+import {
+  reportCatalogTocSearchResponse,
+  reportLocalFileSearchFailure,
+  reportSearchIndexStatus,
+  useLocalFileIndexBuildPolling,
+  useSearchIndexStatus,
+} from '@/composables/useSearchIndexStatus'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -323,9 +330,10 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       for (;;) {
         const res = await catalogTocSearch(effectiveQuery)
         if (generation !== catalogGeneration) return
-        // A hard failure (index missing or unreadable) is terminal — retrying it
-        // would poll forever and hold the spinner on for the life of the query.
-        if (res.error) {
+        reportCatalogTocSearchResponse(res)
+        // A hard failure (index missing or unreadable, or no seforim DB) is terminal —
+        // retrying it would poll forever and hold the spinner on for the life of the query.
+        if (res.error || res.dbMissing || res.buildFailure) {
           setCatalog([])
           setCatalogToc([])
           appliedCatalogQuery = effectiveQuery
@@ -345,6 +353,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       }
     } catch {
       if (generation === catalogGeneration) {
+        reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'serviceError' })
         setCatalog([])
         setCatalogToc([])
         appliedCatalogQuery = effectiveQuery
@@ -411,9 +420,11 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
         .then((response) => {
           if (generation !== asyncGeneration) return
           if (response.error || !response.results) {
+            void reportLocalFileSearchFailure()
             setFiles([])
             return
           }
+          reportSearchIndexStatus('localFiles', { kind: 'ready' })
           setFiles(response.results.map((item) => ({
             source: 'files' as const,
             fileName: item.fileName,
@@ -433,6 +444,9 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     },
     { immediate: true },
   )
+
+  // The file search blocks while the file index builds — say so instead of a bare spinner.
+  useLocalFileIndexBuildPolling(isLoadingFiles)
 
   function clearResults() {
     asyncGeneration++
@@ -458,6 +472,13 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     hebrewBooksResults.value.length > 0 ||
     fileResults.value.length > 0
 
+  // An unavailable index has no results and no spinner, but its section still has
+  // something to say — the dropdown must open to show it.
+  const catalogIndexStatus = useSearchIndexStatus('catalogToc')
+  const fileIndexStatus = useSearchIndexStatus('localFiles')
+  const hasIndexFailureToShow = () =>
+    catalogIndexStatus.isUnavailable.value || fileIndexStatus.isUnavailable.value
+
   const isLoadingAny = () =>
     isLoadingCatalogToc.value || isLoadingHebrewBooks.value || isLoadingFiles.value
 
@@ -471,6 +492,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     isLoadingHebrewBooks,
     isLoadingFiles,
     hasAnyResults,
+    hasIndexFailureToShow,
     isLoadingAny,
     clearResults,
     pause,
