@@ -14,6 +14,8 @@ import type { CommentaryGroup } from './useCommentary'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
 import { useI18n } from 'vue-i18n'
 
+// Chrome, not content: follows the UI direction (set once at boot in main.ts) even inside the always-RTL book body row.
+const uiDir = document.documentElement.dir || 'rtl'
 const { t } = useI18n()
 
 const props = defineProps<{
@@ -126,7 +128,7 @@ function handleKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="nav">
+  <div class="nav" :dir="uiDir">
     <button
       ref="filterBtnRef"
       class="btn c-pointer hover-bg"
