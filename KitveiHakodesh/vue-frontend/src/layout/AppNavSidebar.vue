@@ -82,8 +82,8 @@ watch(hasNavOverflow, (has) => {
 </script>
 
 <template>
-  <!-- The strip holds the width in the layout; the panel inside it is the docked sheet,
-       full width and inset only at the top and bottom. -->
+  <!-- The strip holds the width in the layout; the panel inside it is the docked rail,
+       filling it edge to edge. -->
   <div class="nav-sidebar">
     <nav ref="navPanelEl" class="nav-panel">
       <button
@@ -192,23 +192,15 @@ watch(hasNavOverflow, (has) => {
   --nav-glyph-size-sm: 20px;
   position: relative;
   flex-shrink: 0;
-  /* The panel fills the strip's width - the inset is vertical only, so there is no side gap
-     to leave room for and no surface showing through beside it. */
+  /* The panel fills the strip edge to edge, so there is no gap beside it to paint. */
   width: var(--nav-panel-width);
   /* Above the content panel it sits over. */
   z-index: 20;
 }
 
-/* The app menu as a sheet docked to this pane's edge: the same surface, frame and radius as
-   the hamburger dropdown that offers these same items (AppTitleBarNavDropdown), so it reads
-   as that menu rather than as the app's frame thickened down one side.
-
-   Full width of its strip, inset at the top and bottom only, and square on the side against
-   the pane's edge - the two rounded corners face the page, which is the only side there is
-   anything to round against. The side insets went and took a fair amount with them: with a
-   gap beside the panel, something had to paint that gap (the shell behind it is the panel's
-   own colour, so it showed as nothing). None of that is needed once the panel fills its
-   column.
+/* The app menu as a rail docked to this pane's edge, the full height of the pane: the
+   chrome surface itself, with no frame, radius or margin, so it reads as the window's frame
+   running down one side and continuing the title bar.
 
    Icons only, and it stays that way: the labels live in the tooltips, and the panel does
    not widen on hover. A width that changed under the pointer moved every icon the moment
@@ -230,20 +222,9 @@ watch(hasNavOverflow, (has) => {
   flex-direction: column;
   padding: var(--nav-panel-inset) var(--nav-panel-inline-inset);
   gap: var(--nav-panel-inset);
-  /* Inset at the top and bottom only, which is all the rounded corners need to read as
-     corners. No side margin: the sheet runs the full width of its strip, flush to the
-     pane's edge on one side and to the content on the other. */
-  margin-block: var(--nav-panel-inset);
+  /* The chrome surface, same as the title bar, so the two read as one continuous surface.
+     A tinted strip (the address bar's tint) looked darker beside the white page. */
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  /* Nothing drawn on the side against the pane's edge - no border there, and square corners
-     - so the sheet runs straight off that edge instead of closing itself off a pixel short
-     of it. The frame and the two rounded corners face the page, which is the only side
-     there is anything to frame against. PHYSICAL right, deliberately, not the logical
-     properties: the document is dir=rtl, where the logical end edge maps to the physical
-     LEFT - the side the page is on. */
-  border-right: none;
-  border-radius: 6px 0 0 6px;
   overflow-y: auto;
   scrollbar-width: none;
 }
