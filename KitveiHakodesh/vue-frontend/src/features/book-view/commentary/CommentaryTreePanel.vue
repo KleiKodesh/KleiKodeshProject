@@ -160,7 +160,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           <span class="check-mark">&#10003;</span>
           <span class="dash-mark">&#8211;</span>
         </span>
-        <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
+        <span class="row-label">{{ $t('bookView.commentary.showAll') }}</span>
         <!-- click.stop: the whole row is a toggle-all target. -->
         <button
           class="close-btn c-pointer hover-bg"

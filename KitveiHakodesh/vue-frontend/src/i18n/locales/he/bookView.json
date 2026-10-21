@@ -44,7 +44,8 @@
     "prevCommentary": "מפרש קודם",
     "prevSection": "קטע קודם",
     "searchPlaceholder": "חפש מפרש...",
-    "tree": "עץ מפרשים"
+    "tree": "עץ מפרשים",
+    "showAll": "הצג הכל"
   },
   "copy": {
     "copy": "העתק",
@@ -162,5 +163,25 @@
   "wordLink": {
     "zoomIn": "הגדל טקסט",
     "zoomOut": "הקטן טקסט"
+  },
+  "connectionType": {
+    "SOURCE": "מקושרים",
+    "TARGUM": "תרגומים",
+    "COMMENTARY": "מפרשים",
+    "EIN_MISHPAT": "עין משפט",
+    "MESORAH_HASHAS": "מסורת הש״ס",
+    "OTHER": "קשרים",
+    "REFERENCE": "ציונים"
+  },
+  "category": {
+    "tanakh": "תנ\"ך",
+    "mishnah": "משנה",
+    "tosefta": "תוספתא",
+    "talmud": "תלמוד",
+    "midrash": "מדרש",
+    "geonim": "גאונים",
+    "rishonim": "ראשונים",
+    "acharonim": "אחרונים",
+    "other": "אחר"
   }
 }

@@ -40,6 +40,7 @@ import {
 import type { LineItem } from './lines/useBookViewLinesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { loadSectionTocEntries } from './lines/wordLinkSection'
+import { displayCommentaryLabel } from './commentary/commentaryLabelDisplay'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -524,7 +525,7 @@ async function onBookClick(book: RelatedBook) {
       <div v-if="!relatedBooksLoaded" class="loading-message">{{ $t('bookView.related.scanning') }}</div>
       <div v-else-if="sections.length === 0" class="empty-message">{{ $t('bookView.related.empty') }}</div>
       <template v-else v-for="section in sections" :key="section.label">
-        <div class="section-caption">{{ section.label }}</div>
+        <div class="section-caption">{{ displayCommentaryLabel(section.label) }}</div>
         <button
           v-for="book in section.books"
           :key="book.bookId"

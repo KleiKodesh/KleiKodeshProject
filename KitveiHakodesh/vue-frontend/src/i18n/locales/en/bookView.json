@@ -44,7 +44,8 @@
     "prevCommentary": "Previous commentary",
     "prevSection": "Previous section",
     "searchPlaceholder": "Find commentary...",
-    "tree": "Commentary tree"
+    "tree": "Commentary tree",
+    "showAll": "Show all"
   },
   "copy": {
     "copy": "Copy",
@@ -119,7 +120,7 @@
     "placeholderCommentary": "Search commentaries...",
     "placeholderText": "Search text...",
     "recents": "Recent searches",
-    "recentsRemove": "Remove",
+    "recentsRemove": "Remove from recent searches",
     "scopeBottom": "Commentaries below",
     "scopeLeft": "Commentaries left",
     "scopeRight": "Commentaries right",
@@ -162,5 +163,25 @@
   "wordLink": {
     "zoomIn": "Larger text",
     "zoomOut": "Smaller text"
+  },
+  "connectionType": {
+    "SOURCE": "Linked",
+    "TARGUM": "Translations",
+    "COMMENTARY": "Commentaries",
+    "EIN_MISHPAT": "Ein Mishpat",
+    "MESORAH_HASHAS": "Mesorat HaShas",
+    "OTHER": "Links",
+    "REFERENCE": "References"
+  },
+  "category": {
+    "tanakh": "Tanakh",
+    "mishnah": "Mishnah",
+    "tosefta": "Tosefta",
+    "talmud": "Talmud",
+    "midrash": "Midrash",
+    "geonim": "Geonim",
+    "rishonim": "Rishonim",
+    "acharonim": "Acharonim",
+    "other": "Other"
   }
 }
