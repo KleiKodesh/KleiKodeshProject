@@ -101,15 +101,15 @@ namespace Nakdan.Core
             find.MatchWildcards = true;
             find.Wrap = Word.WdFindWrap.wdFindStop;
 
-            find.Text = " ׀ ";
-            find.Replacement.Text = " ";
-            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+            // Maqaf and paseq are word separators: they become a space so removing them
+            // never merges two words. A paseq with its surrounding spaces collapses to one.
+            ReplaceSeparatorsWithSpace(find);
 
             // Build a range string with the actual first and last cantillation characters
             // U+0591 (Etnahta) through U+05AF (Masora Circle), plus meteg U+05BD
             string first = "\u0591";
             string last = "\u05AF";
-            find.Text = "[" + first + "-" + last + "\u05BD׀]";
+            find.Text = "[" + first + "-" + last + "\u05BD]";
             find.Replacement.Text = "";
             find.Execute(Replace: Word.WdReplace.wdReplaceAll);         
         }
@@ -131,15 +131,29 @@ namespace Nakdan.Core
             find.MatchWildcards = true;
             find.Wrap = Word.WdFindWrap.wdFindStop;
 
-            // Paseq between thin spaces collapses to one space (same as RemoveCantillations)
-            find.Text = " ׀ ";
-            find.Replacement.Text = " ";
-            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+            // Maqaf and paseq are word separators: they become a space so removing them
+            // never merges two words. A paseq with its surrounding spaces collapses to one.
+            ReplaceSeparatorsWithSpace(find);
 
             // U+0591..U+05BD is contiguous: cantillation (0591-05AF) + nikkud (05B0-05BC) + meteg (05BD).
-            // Plus paseq U+05C0 and shin/sin dots U+05C1, U+05C2 (same as RemoveNikkud's ^0209^0210).
-            find.Text = "[\u0591-\u05BD\u05C0\u05C1\u05C2]";
+            // Plus shin/sin dots U+05C1, U+05C2 (same as RemoveNikkud's ^0209^0210).
+            find.Text = "[\u0591-\u05BD\u05C1\u05C2]";
             find.Replacement.Text = "";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+        }
+
+        /// <summary>
+        /// Maqaf (U+05BE) and paseq (U+05C0) -> one space, so stripping ta'amim never
+        /// joins two words. Spaces (normal or thin) around a paseq fold into that space.
+        /// </summary>
+        private static void ReplaceSeparatorsWithSpace(Word.Find find)
+        {
+            find.Replacement.Text = " ";
+            find.Text = "\u05BE";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+            find.Text = "[ \u2009]@\u05C0[ \u2009]@";
+            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
+            find.Text = "\u05C0";
             find.Execute(Replace: Word.WdReplace.wdReplaceAll);
         }
 
