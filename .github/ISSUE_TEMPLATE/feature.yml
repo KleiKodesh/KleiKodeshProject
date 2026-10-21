@@ -32,7 +32,7 @@ body:
       label: איך היית רוצה שזה יעבוד?
       description: "תאר בצורה מעשית: איפה לוחצים ומה מופיע."
     validations:
-      required: true
+      required: false
   - type: textarea
     id: extra
     attributes:

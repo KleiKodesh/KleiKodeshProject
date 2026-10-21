@@ -30,7 +30,7 @@ body:
       description: "מופיעה בהגדרות → אודות, או בקובץ ההתקנה."
       placeholder: "לדוגמה: 2.4.1"
     validations:
-      required: true
+      required: false
   - type: textarea
     id: steps
     attributes:
@@ -47,7 +47,7 @@ body:
     attributes:
       label: מה ציפית שיקרה?
     validations:
-      required: true
+      required: false
   - type: textarea
     id: actual
     attributes:
@@ -60,7 +60,7 @@ body:
       label: מתי זה כן עובד תקין?
       description: "למשל: בספר אחר, בחיפוש אחר, אחרי הפעלה מחדש, בגרסה קודמת. אם לא בדקת - כתוב 'לא בדקתי'."
     validations:
-      required: true
+      required: false
   - type: dropdown
     id: frequency
     attributes:
@@ -70,7 +70,7 @@ body:
         - לפעמים
         - קרה פעם אחת
     validations:
-      required: true
+      required: false
   - type: textarea
     id: logs
     attributes:
@@ -80,11 +80,11 @@ body:
         אם הופיעה הודעת שגיאה על המסך - העתק אותה. אם אין - כתוב 'אין'.
       render: shell
     validations:
-      required: true
+      required: false
   - type: textarea
     id: screenshots
     attributes:
       label: צילומי מסך
       description: "גרור לכאן תמונה או סרטון קצר שמראים את הבעיה."
     validations:
-      required: true
+      required: false
