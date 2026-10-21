@@ -75,5 +75,9 @@
     "rename": "Rename",
     "newPlaceholder": "New workspace",
     "create": "Create"
-  }
+  },
+  "dbDownload": "Download book database",
+  "dbDownloadDescription": "Download the book library to this computer",
+  "dbChoose": "Choose book database",
+  "dbChooseDescription": "Choose an existing book library"
 }
