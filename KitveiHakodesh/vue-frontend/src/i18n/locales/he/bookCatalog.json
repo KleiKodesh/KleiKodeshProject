@@ -1,0 +1,20 @@
+{
+  "breadcrumb": {
+    "close": "סגור",
+    "showFolders": "הצג תיקיות"
+  },
+  "retry": "נסה שוב",
+  "diag": {
+    "loading": "אוסף נתוני אבחון...",
+    "copy": "העתק לדוח"
+  },
+  "noResults": "לא נמצאו תוצאות",
+  "titleBar": {
+    "listView": "תצוגת רשימה",
+    "tilesView": "תצוגת אריחים",
+    "switchTo": "החלף ל{view}",
+    "reset": "איפוס"
+  },
+  "bookCount": "{n} ספרים",
+  "noItems": "אין פריטים"
+}

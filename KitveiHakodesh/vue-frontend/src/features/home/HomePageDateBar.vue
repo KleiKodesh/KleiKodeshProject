@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useNow, useWindowSize } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -60,12 +61,12 @@ watch(() => dateReference.value.toDateString(), () => loadDateInfo(dateReference
 // "בעוד ..." phrasing: minutes only under an hour, otherwise hours (+ minutes).
 const nextZmanCountdown = computed(() => {
   const total = nextZman.value?.minutesUntil ?? 0
-  if (total < 60) return `בעוד ${total} דקות`
+  if (total < 60) return t('home.dateBar.inMinutes', { n: total })
   const hours = Math.floor(total / 60)
   const minutes = total % 60
-  const hoursText = hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`
-  if (minutes === 0) return `בעוד ${hoursText}`
-  return `בעוד ${hoursText} ו-${minutes} דקות`
+  const hoursText = hours === 1 ? t('home.dateBar.oneHour') : hours === 2 ? t('home.dateBar.twoHours') : t('home.dateBar.nHours', { n: hours })
+  if (minutes === 0) return t('home.dateBar.inHours', { hours: hoursText })
+  return t('home.dateBar.inHoursMinutes', { hours: hoursText, n: minutes })
 })
 
 const dailyLearningEntries = useHomeDailyLearningEntries()
@@ -253,7 +254,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
             `zman--${nextZman.urgency}`,
             { on: isZmanPopupOpen, 'zman--flash': nextZman.flash },
           ]"
-          :title="`${nextZmanCountdown} · לחץ לכל הזמנים`"
+          :title="$t('home.dateBar.nextZmanTitle', { countdown: nextZmanCountdown })"
           @click="toggleZmanPopup"
         >
           <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
@@ -271,7 +272,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
         ref="calendarButtonRef"
         class="bar-item bar-item--btn calendar-btn"
         :class="{ on: isCalendarOpen }"
-        title="לחץ להצגת לוח שנה"
+        :title="$t('home.dateBar.calendarTitle')"
         @click="toggleCalendarPopup"
       >
         {{ dateInfo.hebrewDate }}
@@ -294,10 +295,10 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           ref="learningButtonRef"
           class="bar-item bar-item--btn learning-btn"
           :class="{ on: isLearningOpen }"
-          title="לחץ להצגת הלימוד היומי (דף יומי ועוד)"
+          :title="$t('home.dateBar.dailyLearningTitle')"
           @click="toggleLearningMenu"
         >
-          לימוד יומי
+          {{ $t('home.dateBar.dailyLearning') }}
         </button>
       </div>
       <Teleport to="body">
@@ -320,7 +321,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
             }"
             :disabled="!entry.open"
             :data-nav-item="entry.open ? '' : undefined"
-            :title="entry.open ? undefined : 'הספר אינו בספרייה'"
+            :title="entry.open ? undefined : $t('home.dateBar.bookNotInLibrary')"
             tabindex="-1"
             @click="openLearningItem(entry, wantsNewTab($event))"
             @mouseenter="entry.open && (learningFocusedIndex = navigableLearningEntries.indexOf(entry))"

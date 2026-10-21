@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, watch, markRaw } from 'vue'
 import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
@@ -32,7 +33,7 @@ function activateIndex(index: number, openInNewTab = false) {
 function getSecondaryLine(item: FsItem): string {
   if (item.kind === 'book') return ''
   const count = item.node.subtreeBookIds?.length ?? 0
-  return count ? `${count} ספרים` : ''
+  return count ? t('bookCatalog.bookCount', { n: count }) : ''
 }
 
 const cards = computed((): CardData[] =>
@@ -80,7 +81,7 @@ defineExpose({
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <!-- Host is the size container so the grid's cqi tracks the pane width. -->
   <div v-else class="catalog-cards-host">
     <div ref="cardsEl" class="catalog-cards" @mousedown.prevent>

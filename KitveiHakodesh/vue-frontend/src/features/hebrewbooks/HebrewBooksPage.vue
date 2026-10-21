@@ -102,7 +102,7 @@ function onBookClicked(
         ref="searchInputRef"
         :value="searchTerm"
         type="search"
-        placeholder="חפש ספרים, מחברים או נושאים..."
+        :placeholder="$t('hebrewBooks.searchPlaceholder')"
         class="search-input"
         dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
@@ -146,8 +146,8 @@ function onBookClicked(
 
       <div v-else class="state">
         <span class="state-icon">📚</span>
-        <span v-if="searchTerm">לא נמצאו ספרים</span>
-        <span v-else>אין היסטוריה — חפש ספר להתחיל</span>
+        <span v-if="searchTerm">{{ $t('hebrewBooks.noBooksFound') }}</span>
+        <span v-else>{{ $t('hebrewBooks.noHistory') }}</span>
       </div>
     </div>
 

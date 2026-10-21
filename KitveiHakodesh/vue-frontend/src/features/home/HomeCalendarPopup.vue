@@ -14,14 +14,14 @@ onMounted(() => monthly.reset())
 <template>
   <div class="calendar-popup" dir="rtl">
     <div class="calendar-popup-header">
-      <button class="nav-btn" title="חודש קודם" @click="monthly.prevMonth()">‹</button>
-      <button class="title-btn" title="חזרה להיום" @click="monthly.goToday()">
+      <button class="nav-btn" :title="$t('home.calendar.prevMonth')" @click="monthly.prevMonth()">‹</button>
+      <button class="title-btn" :title="$t('home.calendar.backToToday')" @click="monthly.goToday()">
         <span class="heb">{{ monthly.hebrewLabel.value }}</span>
         <span class="greg">{{ monthly.gregLabel.value }}</span>
       </button>
-      <button class="nav-btn" title="חודש הבא" @click="monthly.nextMonth()">›</button>
-      <button class="full-btn" title="פתח את לוח השנה המלא" @click="emit('open-full')">
-        לוח מלא
+      <button class="nav-btn" :title="$t('home.calendar.nextMonth')" @click="monthly.nextMonth()">›</button>
+      <button class="full-btn" :title="$t('home.calendar.openFull')" @click="emit('open-full')">
+        {{ $t('home.calendar.full') }}
       </button>
     </div>
     <MonthlyView :monthly="monthly" class="calendar-popup-grid" />

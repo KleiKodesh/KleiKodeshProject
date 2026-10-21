@@ -134,7 +134,7 @@ onMounted(focusSearchInput)
             <button
               class="bar-btn home-search-bar__search-button"
               tabindex="-1"
-              title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ"
+              :title="$t('home.searchButtonTitle')"
               @click="searchBar.submit"
             >
               <IconSearch20Regular />

@@ -1,0 +1,20 @@
+{
+  "breadcrumb": {
+    "close": "Close",
+    "showFolders": "Show folders"
+  },
+  "retry": "Try again",
+  "diag": {
+    "loading": "Collecting diagnostics...",
+    "copy": "Copy for report"
+  },
+  "noResults": "No results found",
+  "titleBar": {
+    "listView": "list view",
+    "tilesView": "tiles view",
+    "switchTo": "Switch to {view}",
+    "reset": "Reset"
+  },
+  "bookCount": "{n} books",
+  "noItems": "No items"
+}

@@ -90,7 +90,7 @@ function selectListItem(i: number, event?: MouseEvent) {
 </script>
 
 <template>
-  <p v-if="!items.length && !searching" class="empty">לא נמצאו תוצאות</p>
+  <p v-if="!items.length && !searching" class="empty">{{ $t('bookCatalog.noResults') }}</p>
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
     <div
       v-for="(item, index) in items"

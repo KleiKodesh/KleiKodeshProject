@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed } from 'vue'
 import {
   IconHome16Regular,
@@ -29,13 +30,13 @@ const emit = defineEmits<{
 // switches to the other one on click. The title names the view being switched TO,
 // since the icon already says where you are.
 const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }> = {
-  list: { label: 'תצוגת רשימה', icon: IconTextBulletList20Regular },
-  tiles: { label: 'תצוגת אריחים', icon: IconGrid20Regular },
+  list: { label: t('bookCatalog.titleBar.listView'), icon: IconTextBulletList20Regular },
+  tiles: { label: t('bookCatalog.titleBar.tilesView'), icon: IconGrid20Regular },
 }
 
 const otherView = computed(() => (props.view === 'list' ? 'tiles' : 'list') as BooksView)
 const viewToggleTitle = computed(
-  () => `החלף ל${VIEWS[otherView.value].label}`,
+  () => t('bookCatalog.titleBar.switchTo', { view: VIEWS[otherView.value].label }),
 )
 
 function toggleView() {
@@ -59,7 +60,7 @@ function toggleView() {
          clicking one while typing would collapse the field first and move the
          button out from under the pointer. -->
     <template #left>
-      <button class="bar-btn pill-btn" title="איפוס" @mousedown.prevent @click="$emit('goHome')">
+      <button class="bar-btn pill-btn" :title="$t('bookCatalog.titleBar.reset')" @mousedown.prevent @click="$emit('goHome')">
         <IconHome16Regular />
       </button>
     </template>

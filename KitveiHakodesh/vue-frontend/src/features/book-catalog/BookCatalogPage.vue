@@ -337,9 +337,9 @@ function onSearchEnter() {
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
         <MessageBanner class="error-msg" :message="error" :dismissible="false" />
-        <button class="retry-btn" @click="load()">נסה שוב</button>
+        <button class="retry-btn" @click="load()">{{ $t('bookCatalog.retry') }}</button>
         <template v-if="isBitnessMismatch(error)">
-          <div v-if="diagLoading" class="diag-loading">אוסף נתוני אבחון...</div>
+          <div v-if="diagLoading" class="diag-loading">{{ $t('bookCatalog.diag.loading') }}</div>
           <div v-else-if="diagData" class="diag-panel">
             <div class="diag-table">
               <div v-for="(val, key) in diagData" :key="key" class="diag-row">
@@ -364,7 +364,7 @@ function onSearchEnter() {
                 >
               </div>
             </div>
-            <button class="diag-copy-btn" @click="copyDiagnostics">העתק לדוח</button>
+            <button class="diag-copy-btn" @click="copyDiagnostics">{{ $t('bookCatalog.diag.copy') }}</button>
           </div>
         </template>
       </div>

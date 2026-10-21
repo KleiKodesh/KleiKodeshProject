@@ -136,8 +136,8 @@ function onRemove() {
         class="card-action card-action--pin"
         :class="{ 'is-active': card.pinning.pinned, 'is-popping': isPinPopping }"
         tabindex="-1"
-        :title="card.pinning.pinned ? 'בטל הצמדה' : 'הצמד'"
-        :aria-label="card.pinning.pinned ? 'בטל הצמדה' : 'הצמד'"
+        :title="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
+        :aria-label="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
         @click.stop="onPin"
         @animationend="isPinPopping = false"
       >
@@ -147,8 +147,8 @@ function onRemove() {
         type="button"
         class="card-action card-action--remove"
         tabindex="-1"
-        title="הסר מהרשימה"
-        aria-label="הסר מהרשימה"
+        :title="$t('home.card.remove')"
+        :aria-label="$t('home.card.remove')"
         @click.stop="onRemove"
       >
         <IconDelete16Filled />
