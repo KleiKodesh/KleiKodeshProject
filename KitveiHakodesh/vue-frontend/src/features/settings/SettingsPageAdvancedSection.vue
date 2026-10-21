@@ -115,7 +115,7 @@ function openExcludedFolders() {
       label="שירות Windows (מומלץ)"
       hint="מפעיל את הספרייה ברקע כשירות Windows: הפעלה מהירה יותר, אינדקס חיפוש קבצים במסמכי המחשב, והשירות נשאר מוכן בין וורד לתוכנה. ההתקנה תבקש אישור מנהל פעם אחת."
     >
-      <button class="manage-btn" :disabled="installing" @click="runInstallService">
+      <button class="settings-btn" :disabled="installing" @click="runInstallService">
         {{ installing ? 'מתקין...' : 'התקן שירות' }}
       </button>
     </SettingRow>
@@ -154,7 +154,7 @@ function openExcludedFolders() {
       label="החרג תיקיות מחיפוש הקבצים"
       hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
     >
-      <button class="manage-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
+      <button class="settings-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
     </SettingRow>
 
     <SettingsExcludedFoldersDialog
@@ -165,26 +165,4 @@ function openExcludedFolders() {
 </template>
 
 <style scoped>
-.manage-btn {
-  width: 100%;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-radius: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.manage-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.manage-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 </style>

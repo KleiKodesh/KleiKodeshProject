@@ -92,35 +92,37 @@ function confirmResetAll() {
   <div data-section="section-reset" data-section-label="איפוס">
     <div id="section-reset" class="section-label">איפוס</div>
 
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
-      <p class="reset-description" data-search-ignore>
-        מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים נשמרים.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש בתוכן המאגר</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetCatalogTocIndex">בנייה מחדש של אינדקס החיפוש בקטלוג</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ובונה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">בנייה מחדש של אינדקס חיפוש קבצים</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetAll">{{ RESET_ALL_LABEL }}</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואת אינדקסי החיפוש בתוכן המאגר, בקטלוג, ובקבצים. לא ניתן לבטל פעולה זו.
-      </p>
+    <div class="reset-list">
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
+        <p class="reset-description" data-search-ignore>
+          מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים נשמרים.
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש בתוכן המאגר</button>
+        <p class="reset-description" data-search-ignore>
+          מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetCatalogTocIndex">בנייה מחדש של אינדקס החיפוש בקטלוג</button>
+        <p class="reset-description" data-search-ignore>
+          מוחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ובונה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetDocumentLocatorIndex">בנייה מחדש של אינדקס חיפוש קבצים</button>
+        <p class="reset-description" data-search-ignore>
+          מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetAll">{{ RESET_ALL_LABEL }}</button>
+        <p class="reset-description" data-search-ignore>
+          מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואת אינדקסי החיפוש בתוכן המאגר, בקטלוג, ובקבצים. לא ניתן לבטל פעולה זו.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -155,7 +157,19 @@ function confirmResetAll() {
   margin: 4px 0 0;
 }
 
-.reset-group {
+/* All reset buttons share one column, as wide as the longest label: each group is
+   a subgrid of this list, so their buttons line up at the same width. Overrides
+   the page-wide button grid in SettingsPage.vue for this section only. */
+.reset-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+}
+
+.reset-list > .reset-group {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  gap: 0;
   padding: 6px 0;
 }
 
@@ -164,20 +178,12 @@ function confirmResetAll() {
 }
 
 .reset-btn {
-  width: 100%;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
   color: var(--status-danger);
-  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, transparent);
+  border-color: color-mix(in srgb, var(--status-danger) 40%, transparent);
   background: color-mix(in srgb, var(--status-danger) 8%, transparent);
-  border-radius: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-.reset-btn:hover {
+.reset-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--status-danger) 16%, transparent);
 }
 </style>
