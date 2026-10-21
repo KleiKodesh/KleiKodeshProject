@@ -99,5 +99,5 @@ jobs:
             gh issue edit "$ISSUE" --repo "$GITHUB_REPOSITORY" --add-label "$labels"
           fi
           if [ -z "$(printf '%s' "$comment" | tr -d '[:space:]')" ]; then echo "no comment"; exit 0; fi
-          printf '%s\n\n<sub>הודעה אוטומטית</sub>\n' "$comment" > reply.md
+          printf '### 🤖 תגובת הבוט האוטומטי | Automated bot reply\n\n%s\n\n---\n<sub>תגובה זו נכתבה אוטומטית על ידי בוט, לא על ידי המפתח. | This reply was written automatically by a bot, not by the developer.</sub>\n' "$comment" > reply.md
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file reply.md
