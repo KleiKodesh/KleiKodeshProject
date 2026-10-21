@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { i18n, uiLanguage } from './i18n'
 import './assets/styles/main.css'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import { useTabStore } from './stores/tabStore'
@@ -32,7 +33,9 @@ await checkAndExecPendingDbSwitchCleanup()
 installBrowserPersistenceFlush()
 
 const pinia = createPinia()
-const app = createApp(App).use(pinia)
+// Layout stays RTL in every UI language; only lang follows the choice.
+document.documentElement.lang = uiLanguage
+const app = createApp(App).use(pinia).use(i18n)
 
 // All synchronous — reads from localStorage
 useWorkspaceStore().init()
