@@ -37,8 +37,7 @@ const cityDropdownStyle = ref<Record<string, string>>({})
 
 useDropdownClose(
   cityDropdownRef,
-  (e) => {
-    if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
+  () => {
     cityOpen.value = false
   },
   // fitToViewport off: toggleCityDropdown positions and caps the list itself, and the fit
