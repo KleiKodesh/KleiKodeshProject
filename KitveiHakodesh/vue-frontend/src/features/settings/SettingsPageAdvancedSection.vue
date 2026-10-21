@@ -40,8 +40,8 @@ async function runInstallService() {
 const dbPath = ref('')
 
 onMounted(async () => {
-  serviceInstallOffer.value = await getServiceInstallOffer()
-  const info = await getDbPathInfo()
+  const [offer, info] = await Promise.all([getServiceInstallOffer(), getDbPathInfo()])
+  serviceInstallOffer.value = offer
   if (info) dbPath.value = info.path
 })
 
