@@ -148,7 +148,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
                         return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'");
                     var failed = HebrewBookAcquireResult.Failed(
                         HebrewBookAcquireFailure.HttpStatus,
-                        await DescribeFailedResponseAsync(url, response, downloadToken).ConfigureAwait(false));
+                        await DescribeFailedResponseAsync(_http, url, response, downloadToken).ConfigureAwait(false));
                     failed.HttpStatusCode = (int)response.StatusCode;
                     return failed;
                 }
@@ -304,7 +304,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// Cloudflare from hebrewbooks.org itself) and the start of the error page's text.
         /// </summary>
         private static async Task<string> DescribeFailedResponseAsync(
-            string url, HttpResponseMessage response, CancellationToken ct)
+            HttpClient http, string url, HttpResponseMessage response, CancellationToken ct)
         {
             var text = new System.Text.StringBuilder();
             text.Append($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}\n");
@@ -331,7 +331,37 @@ namespace KitveiHakodesh.Core.HebrewBooks
             {
                 text.Append($"Body unreadable: {ex.GetType().Name}: {ex.Message}");
             }
+
+            // Cloudflare never says why it challenged; the site owner sees that by CF-RAY. Its
+            // public trace endpoint does show what it saw of us: public IP (filter / VPN /
+            // carrier), colo, WARP/Gateway, TLS and HTTP versions, the User-Agent received.
+            if (response.Headers.Contains("Cf-Mitigated") && response.RequestMessage?.RequestUri is Uri requested)
+                text.Append("\nCloudflare trace:\n").Append(await CloudflareTraceAsync(http, requested, ct).ConfigureAwait(false));
+
             return text.ToString();
+        }
+
+        private static async Task<string> CloudflareTraceAsync(HttpClient http, Uri site, CancellationToken ct)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            string traceUrl = site.GetLeftPart(UriPartial.Authority) + "/cdn-cgi/trace";
+            try
+            {
+                using var trace = await http.GetAsync(traceUrl, timeout.Token).ConfigureAwait(false);
+                string body = await trace.Content.ReadAsStringAsync().ConfigureAwait(false);
+                return trace.IsSuccessStatusCode
+                    ? body.Trim()
+                    : $"HTTP {(int)trace.StatusCode} from '{traceUrl}'";
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return $"timed out: '{traceUrl}'";
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is IOException)
+            {
+                return $"failed: '{traceUrl}': {ex.Message}";
+            }
         }
 
         /// <summary>Reads until the buffer is full or the stream ends, returning how much
