@@ -1,0 +1,21 @@
+name: General (English)
+description: A general inquiry that is not a bug report or a feature request
+title: "[General] "
+body:
+  - type: markdown
+    attributes:
+      value: "Please note: inquiries submitted through the general form receive lower priority than those submitted through the \"Bug report\" or \"Feature request\" forms. If possible, please use one of them. Thank you!"
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "Please describe your inquiry as clearly as possible."
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots / attachments
+      description: "You can drag images or files here."
+    validations:
+      required: false
