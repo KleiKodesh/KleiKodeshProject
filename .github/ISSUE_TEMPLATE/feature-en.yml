@@ -1,0 +1,54 @@
+name: Feature request (English)
+description: An idea or improvement
+title: "[Request] "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part of the program?
+      options:
+        - "Klei Kodesh (Word) - Kitvei Hakodesh (כתבי הקודש)"
+        - "Klei Kodesh (Word) - Kiwix library (ספריית קיוויקס)"
+        - "Klei Kodesh (Word) - HebrewBooks (היברו-בוקס)"
+        - "Klei Kodesh (Word) - Websites (Derech Ha'atarim) (דרך האתרים)"
+        - "Klei Kodesh (Word) - Torah formatting (עיצוב תורני)"
+        - "Klei Kodesh (Word) - Dicta nakdan (vocalizer) (נקדן דיקטה)"
+        - "Klei Kodesh (Word) - Regex search (חיפוש רגקס)"
+        - "Klei Kodesh (Word) - Duplicate side pane / open document in sub-pane (שכפל חלונית צד / פתח מסמך בחלונית משנה)"
+        - "Klei Kodesh (Word) - Settings / About (הגדרות / אודות)"
+        - "Kitvei Hakodesh - Book catalog (קטלוג הספרים)"
+        - "Kitvei Hakodesh - Open book (text and commentaries) (ספר פתוח (טקסט ומפרשים))"
+        - "Kitvei Hakodesh - Search (חיפוש)"
+        - "Kitvei Hakodesh - HebrewBooks (היברו-בוקס)"
+        - "Kitvei Hakodesh - Open file (פתח קובץ)"
+        - "Kitvei Hakodesh - File search (חיפוש קבצים)"
+        - "Kitvei Hakodesh - Dictionary (מילון)"
+        - "Kitvei Hakodesh - Calendar (לוח שנה)"
+        - "Kitvei Hakodesh - Measures and units (מידות ושיעורים)"
+        - "Kitvei Hakodesh - Home page (דף הבית)"
+        - "Kitvei Hakodesh - Settings (הגדרות)"
+        - "Otzaria add-in (תוסף לאוצריא)"
+        - "Installation / update (התקנה / עדכון)"
+        - "Other (specify below) (אחר (פרט למטה))"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the need?
+      description: "What are you trying to do today, and why is it hard?"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: How would you like it to work?
+      description: "Describe it practically: where you click and what appears."
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Examples / screenshots
+      description: "Optional. For example: how it looks in another program."

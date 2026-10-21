@@ -1,0 +1,103 @@
+name: Bug report (English)
+description: Something is not working as it should
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please report only one bug per report. Several problems = several reports."
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part of the program?
+      options:
+        - "Klei Kodesh (Word) - Kitvei Hakodesh (כתבי הקודש)"
+        - "Klei Kodesh (Word) - Kiwix library (ספריית קיוויקס)"
+        - "Klei Kodesh (Word) - HebrewBooks (היברו-בוקס)"
+        - "Klei Kodesh (Word) - Websites (Derech Ha'atarim) (דרך האתרים)"
+        - "Klei Kodesh (Word) - Torah formatting (עיצוב תורני)"
+        - "Klei Kodesh (Word) - Dicta nakdan (vocalizer) (נקדן דיקטה)"
+        - "Klei Kodesh (Word) - Regex search (חיפוש רגקס)"
+        - "Klei Kodesh (Word) - Duplicate side pane / open document in sub-pane (שכפל חלונית צד / פתח מסמך בחלונית משנה)"
+        - "Klei Kodesh (Word) - Settings / About (הגדרות / אודות)"
+        - "Kitvei Hakodesh - Book catalog (קטלוג הספרים)"
+        - "Kitvei Hakodesh - Open book (text and commentaries) (ספר פתוח (טקסט ומפרשים))"
+        - "Kitvei Hakodesh - Search (חיפוש)"
+        - "Kitvei Hakodesh - HebrewBooks (היברו-בוקס)"
+        - "Kitvei Hakodesh - Open file (פתח קובץ)"
+        - "Kitvei Hakodesh - File search (חיפוש קבצים)"
+        - "Kitvei Hakodesh - Dictionary (מילון)"
+        - "Kitvei Hakodesh - Calendar (לוח שנה)"
+        - "Kitvei Hakodesh - Measures and units (מידות ושיעורים)"
+        - "Kitvei Hakodesh - Home page (דף הבית)"
+        - "Kitvei Hakodesh - Settings (הגדרות)"
+        - "Otzaria add-in (תוסף לאוצריא)"
+        - "Installation / update (התקנה / עדכון)"
+        - "Other (specify below) (אחר (פרט למטה))"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Shown in Settings → About, or in the installer file."
+      placeholder: "For example: 2.4.1"
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: "Exactly what you clicked, in order. Include the book name / search term."
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: works
+    attributes:
+      label: When does it work correctly?
+      description: "For example: in another book, with another search, after a restart, in a previous version. If you did not check - write 'did not check'."
+    validations:
+      required: false
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often?
+      options:
+        - Always
+        - Sometimes
+        - Happened once
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages from the console
+      description: |
+        Inside the program window: press F12 (or Ctrl+Shift+I) → Console tab → reproduce the bug → copy the red lines here.
+        If an error message appeared on screen - copy it. If none - write 'none'.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: "Drag an image or a short video showing the problem here."
+    validations:
+      required: false
