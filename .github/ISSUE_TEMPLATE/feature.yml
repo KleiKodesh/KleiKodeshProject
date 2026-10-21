@@ -1,0 +1,40 @@
+name: בקשה לתכונה חדשה
+description: רעיון או שיפור
+title: "[בקשה] "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: באיזה חלק של התוכנה?
+      options:
+        - תוסף לוורד
+        - התוכנה העצמאית (כתבי הקודש)
+        - תוסף לאוצריא
+        - חיפוש בטקסט מלא
+        - תצוגת ספר / מפרשים
+        - קטלוג ספרים / עץ ספרים
+        - היברובוקס / PDF
+        - חיפוש קבצים מקומיים
+        - אחר
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: מה הצורך?
+      description: "מה אתה מנסה לעשות היום ולמה זה קשה?"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: איך היית רוצה שזה יעבוד?
+      description: "תאר בצורה מעשית: איפה לוחצים ומה מופיע."
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: דוגמאות / צילומי מסך
+      description: "לא חובה. למשל: איך זה נראה בתוכנה אחרת."
