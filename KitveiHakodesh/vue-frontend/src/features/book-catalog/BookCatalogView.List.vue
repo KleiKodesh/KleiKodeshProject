@@ -65,7 +65,7 @@ function selectItem(index: number, event?: MouseEvent) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <div v-else ref="scrollEl" class="scroller">
     <div class="list-items">
       <div

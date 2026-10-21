@@ -1,4 +1,5 @@
 import { parseDafYomiString } from './dafYomiNavigation'
+import { t } from '@/i18n'
 import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
 
 /**
@@ -64,7 +65,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const firstParshaName = parshaNames[0]!
     return {
       key: 'weekly-parsha',
-      label: 'פרשת השבוע',
+      label: t('home.daily.parsha'),
       location: parshaNames.join('-'),
       target: {
         bookQueries: [torahBookTitleForParshaNumber(parshaNumber)],
@@ -84,7 +85,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const chapterLetters = toLetters(reading.v)
     return {
       key: 'nach-yomi',
-      label: 'נ"ך יומי',
+      label: t('home.daily.nach'),
       location: `${bookName} ${chapterLetters}`,
       target: {
         bookQueries: [bookName],
@@ -100,7 +101,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const firstLetters = toLetters(firstChapter)
     return {
       key: 'daily-psalms',
-      label: 'תהילים יומי',
+      label: t('home.daily.tehillim'),
       location: `תהילים ${firstLetters}-${toLetters(lastChapter)}`,
       target: {
         bookQueries: ['תהילים', 'תהלים'],
@@ -119,7 +120,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     if (!chapter) return null
     return {
       key: 'mishnah-yomit',
-      label: 'משנה יומית',
+      label: t('home.daily.mishnaYomit'),
       location: `${tractate} ${toLetters(chapter)}${mishnah ? `:${toLetters(mishnah)}` : ''}`,
       target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', toLetters(chapter)) },
     }
@@ -132,7 +133,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const chapterLetters = toLetters(reading.v)
     return {
       key: 'perek-yomi',
-      label: 'פרק יומי',
+      label: t('home.daily.perekYomi'),
       location: `${tractate} ${chapterLetters}`,
       target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', chapterLetters) },
     }
@@ -145,7 +146,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const firstLetters = toLetters(chapters[0]!)
     return {
       key: 'pirkei-avot',
-      label: 'פרקי אבות',
+      label: t('home.daily.avot'),
       location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
       target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
     }
@@ -157,7 +158,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     if (!parsed) return null
     return {
       key: 'daf-yomi',
-      label: 'דף יומי',
+      label: t('home.daily.dafYomi'),
       location: dafText,
       target: {
         bookQueries: [`בבלי ${parsed.tractate}`],
@@ -172,7 +173,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     if (!parsed) return null
     return {
       key: 'daf-weekly',
-      label: 'דף שבועי',
+      label: t('home.daily.dafWeekly'),
       location: dafText,
       target: {
         bookQueries: [`בבלי ${parsed.tractate}`],
@@ -190,7 +191,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const [, tractate, dafLetters, amudLetter] = match
     return {
       key: 'amud-yomi',
-      label: 'עמוד יומי',
+      label: t('home.daily.amudYomi'),
       location: hebrewPart,
       target: { bookQueries: [`בבלי ${tractate}`], tocPatterns: dafTocPatterns(dafLetters!, amudLetter) },
     }
@@ -203,7 +204,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const dafLetters = toLetters(reading.blatt)
     return {
       key: 'yerushalmi-yomi',
-      label: 'ירושלמי יומי',
+      label: t('home.daily.yerushalmi'),
       location: `${tractate} דף ${dafLetters}`,
       target: { bookQueries: [`ירושלמי ${tractate}`], tocPatterns: dafTocPatterns(dafLetters) },
     }
@@ -243,8 +244,8 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     }
   }
 
-  tryAdd(() => rambamItem('rambam-1', 'רמב"ם פרק אחד', [learning.dailyRambam1(hebrewDate)]))
-  tryAdd(() => rambamItem('rambam-3', 'רמב"ם שלושה פרקים', learning.dailyRambam3(hebrewDate)))
+  tryAdd(() => rambamItem('rambam-1', t('home.daily.rambam1'), [learning.dailyRambam1(hebrewDate)]))
+  tryAdd(() => rambamItem('rambam-3', t('home.daily.rambam3'), learning.dailyRambam3(hebrewDate)))
 
   tryAdd(() => {
     // chofetzChaim → { k: section, b: klal.seif, e: klal.seif } (numbers like 2.5).
@@ -254,7 +255,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const klalLetters = klal > 0 ? toLetters(klal) : null
     return {
       key: 'chofetz-chaim',
-      label: 'חפץ חיים',
+      label: t('home.daily.chofetzChaim'),
       location: section && klalLetters ? `${section} כלל ${klalLetters}` : `חפץ חיים ${reading.b}-${reading.e}`,
       target: {
         bookQueries: ['חפץ חיים'],
@@ -274,7 +275,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const chapterLetters = chapter > 0 ? toLetters(chapter) : null
     return {
       key: 'shemirat-halashon',
-      label: 'שמירת הלשון',
+      label: t('home.daily.shmirasHalashon'),
       location: `חלק ${partLetters}${chapterLetters ? ` פרק ${chapterLetters}` : ''}`,
       target: {
         bookQueries: ['שמירת הלשון'],
@@ -293,7 +294,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     const simanLetters = siman > 0 ? toLetters(siman) : null
     return {
       key: 'kitzur-shulchan-aruch',
-      label: 'קיצור שולחן ערוך',
+      label: t('home.daily.kitzur'),
       location: cleanHebrew(new learning.KitzurShulchanAruchEvent(hebrewDate, reading).renderBrief('he')),
       target: {
         bookQueries: ['קיצור שולחן ערוך'],

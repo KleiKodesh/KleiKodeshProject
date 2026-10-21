@@ -1,0 +1,18 @@
+{
+  "item": {
+    "openInExplorer": "Open in File Explorer: {title}",
+    "deleteFromFolder": "Delete from folder: {title}",
+    "download": "Download {title}"
+  },
+  "searchPlaceholder": "Search books, authors or topics...",
+  "noBooksFound": "No books found",
+  "noHistory": "No history yet. Search for a book to start",
+  "error": {
+    "loadFailed": "Failed to load books",
+    "noInternet": "No internet connection",
+    "notOnServer": "The book was not found on the server",
+    "downloadFailed": "Download failed",
+    "generic": "Error",
+    "fileNotInFolder": "The file was not found in the folder"
+  }
+}

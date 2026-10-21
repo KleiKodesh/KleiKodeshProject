@@ -1,4 +1,5 @@
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { t } from '@/i18n'
 import { useTabStore } from '@/stores/tabStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -147,7 +148,7 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
   function openFullTextSearch(query: string) {
     paneNavigation.updateActiveTab({
       route: '/search',
-      title: `חיפוש: ${query}`,
+      title: t('home.searchTabTitle', { query }),
       searchQuery: query,
     })
   }

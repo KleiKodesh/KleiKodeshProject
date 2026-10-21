@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { t } from '@/i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
@@ -61,7 +62,7 @@ export function useHebrewBooks() {
       books.value = await history.getHistory()
       await refreshLocalFileIdsFromHistory(books.value)
     } catch {
-      error.value = 'שגיאה בטעינת הספרים'
+      error.value = t('hebrewBooks.error.loadFailed')
     } finally {
       isLoading.value = false
     }
@@ -141,7 +142,7 @@ export function useHebrewBooks() {
 
   async function downloadBook(book: HebrewBook) {
     if (!navigator.onLine) {
-      localFileStore.downloadErrorMessage = 'אין חיבור לאינטרנט'
+      localFileStore.downloadErrorMessage = t('hebrewBooks.error.noInternet')
       return
     }
     const id = String(book.id)
@@ -149,10 +150,10 @@ export function useHebrewBooks() {
     downloadingBookIds.value = new Set(downloadingBookIds.value).add(id)
     try {
       const result = await triggerHbSaveAs(id, book.title, getHbPdfUrl(book.id))
-      if (result.notFound) localFileStore.downloadErrorMessage = 'הספר לא נמצא בשרת'
-      else if (result.error) localFileStore.downloadErrorMessage = 'ההורדה נכשלה'
+      if (result.notFound) localFileStore.downloadErrorMessage = t('hebrewBooks.error.notOnServer')
+      else if (result.error) localFileStore.downloadErrorMessage = t('hebrewBooks.error.downloadFailed')
     } catch {
-      localFileStore.downloadErrorMessage = 'ההורדה נכשלה'
+      localFileStore.downloadErrorMessage = t('hebrewBooks.error.downloadFailed')
     } finally {
       const updated = new Set(downloadingBookIds.value)
       updated.delete(id)
@@ -164,12 +165,12 @@ export function useHebrewBooks() {
     const folder = settings.hebrewBooksLocalFolder
     if (!folder) return
     const result = await deleteHbLocalFile(String(book.id), folder).catch(
-      () => ({ error: 'שגיאה' }) as { error: string },
+      () => ({ error: t('hebrewBooks.error.generic') }) as { error: string },
     )
     if ('error' in result && result.error) {
       localFileStore.downloadErrorMessage = result.error
     } else if ('notFound' in result && result.notFound) {
-      localFileStore.downloadErrorMessage = 'הקובץ לא נמצא בתיקייה'
+      localFileStore.downloadErrorMessage = t('hebrewBooks.error.fileNotInFolder')
     } else if ('ok' in result && result.ok) {
       // Remove immediately so the button disappears without a round-trip.
       const updated = new Set(localFileBookIds.value)

@@ -1,19 +1,20 @@
 import { ref, watch, type Ref } from 'vue'
+import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 
 const SEARCH_PLACEHOLDERS = [
-  'חיפוש מהיר בכל המאגרים...',
-  'לחץ אנטר לחיפוש תוכן במאגר',
-  'הקלד חופשי לחיפוש ספר או קובץ',
-  'כדי להקדים תוצאות מהיברו בוקס כתוב',
+  t('home.searchHint.quick'),
+  t('home.searchHint.enter'),
+  t('home.searchHint.free'),
+  t('home.searchHint.hbPrefix'),
   'היברו בוקס: שבת',
   'או היברו: שבת',
   'או: \\ שבת',
-  'כדי להקדים תוצאות מהמחשב כתוב',
+  t('home.searchHint.pcPrefix'),
   'קובץ: ברכות',
   'או מחשב: ברכות',
   'או: \\\\ ברכות',
-  'הקלד תוספים: עבור תוספי אוצריא',
+  t('home.searchHint.addins'),
 ]
 
 const MINIMUM_QUERY_LENGTH = 2

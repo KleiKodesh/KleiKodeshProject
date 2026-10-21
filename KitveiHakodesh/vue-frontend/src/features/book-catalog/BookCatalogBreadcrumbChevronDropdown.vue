@@ -61,7 +61,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
       ref="toggleButtonRef"
       class="chevron-button"
       :class="{ open: isOpen }"
-      :title="isOpen ? 'סגור' : 'הצג תיקיות'"
+      :title="isOpen ? $t('bookCatalog.breadcrumb.close') : $t('bookCatalog.breadcrumb.showFolders')"
       @mousedown.prevent
       @click.stop="onToggle"
     >

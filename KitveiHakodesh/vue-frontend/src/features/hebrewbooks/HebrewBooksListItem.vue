@@ -53,7 +53,7 @@ const tooltip = computed(() => {
         <button
           v-if="hasLocalFile"
           class="dl-btn reveal-btn"
-          :title="'פתח בסייר הקבצים: ' + book.title"
+          :title="$t('hebrewBooks.item.openInExplorer', { title: book.title })"
           tabindex="-1"
           @click.stop="emit('reveal-clicked', book)"
         >
@@ -62,7 +62,7 @@ const tooltip = computed(() => {
         <button
           v-if="hasLocalFile"
           class="dl-btn delete-btn"
-          :title="'מחק מהתיקייה: ' + book.title"
+          :title="$t('hebrewBooks.item.deleteFromFolder', { title: book.title })"
           tabindex="-1"
           @click.stop="emit('delete-clicked', book)"
         >
@@ -70,7 +70,7 @@ const tooltip = computed(() => {
         </button>
         <button
           class="dl-btn"
-          :title="'הורד ' + book.title"
+          :title="$t('hebrewBooks.item.download', { title: book.title })"
           tabindex="-1"
           :disabled="downloading"
           :aria-busy="downloading"

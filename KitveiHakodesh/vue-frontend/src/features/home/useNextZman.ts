@@ -1,4 +1,5 @@
 import { ref, computed, onMounted } from 'vue'
+import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 import { CITIES } from '@/features/hebrew-calendar/calendarTypes'
 import type { CalendarZmanim, City } from '@/features/hebrew-calendar/calendarTypes'
@@ -17,23 +18,23 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   // always before alot(D) and after tzeit(D-1), so it opens the civil day and
   // the ordered scan below keeps its ascending-times invariant. (In winter that
   // midpoint can fall before civil midnight, on date D-1.)
-  { key: 'chatzotNight', label: 'חצות הלילה' },
-  { key: 'alot', label: 'עלות השחר' },
-  { key: 'misheyakir', label: 'משיכיר' },
-  { key: 'sunrise', label: 'הנץ החמה' },
+  { key: 'chatzotNight', label: t('home.zman.chatzotNight') },
+  { key: 'alot', label: t('home.zman.alot') },
+  { key: 'misheyakir', label: t('home.zman.misheyakir') },
+  { key: 'sunrise', label: t('home.zman.sunrise') },
   // MGA's day starts at alot, so each MGA deadline lands BEFORE its GRA
   // counterpart — and tfilla-MGA still lands after shma-GRA (gap = one GRA
   // hour minus 24 min, positive at any habitable latitude).
-  { key: 'sofShmaMga', label: 'סו״ז ק״ש (מג״א)' },
-  { key: 'sofShmaGra', label: 'סו״ז ק״ש (גר״א)' },
-  { key: 'sofTfillaMga', label: 'סו״ז תפילה (מג״א)' },
-  { key: 'sofTfillaGra', label: 'סו״ז תפילה (גר״א)' },
-  { key: 'chatzot', label: 'חצות היום' },
-  { key: 'minchaGedola', label: 'מנחה גדולה' },
-  { key: 'minchaKetana', label: 'מנחה קטנה' },
-  { key: 'plag', label: 'פלג המנחה' },
-  { key: 'sunset', label: 'שקיעה' },
-  { key: 'tzeit', label: 'צאת הכוכבים' },
+  { key: 'sofShmaMga', label: t('home.zman.sofShmaMga') },
+  { key: 'sofShmaGra', label: t('home.zman.sofShmaGra') },
+  { key: 'sofTfillaMga', label: t('home.zman.sofTfillaMga') },
+  { key: 'sofTfillaGra', label: t('home.zman.sofTfillaGra') },
+  { key: 'chatzot', label: t('home.zman.chatzot') },
+  { key: 'minchaGedola', label: t('home.zman.minchaGedola') },
+  { key: 'minchaKetana', label: t('home.zman.minchaKetana') },
+  { key: 'plag', label: t('home.zman.plag') },
+  { key: 'sunset', label: t('home.zman.sunset') },
+  { key: 'tzeit', label: t('home.zman.tzeit') },
 ]
 
 /**
