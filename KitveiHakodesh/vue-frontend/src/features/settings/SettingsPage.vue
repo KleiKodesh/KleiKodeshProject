@@ -342,7 +342,8 @@ async function navigateToSection(sectionId: string) {
 @container settings-page (max-width: 600px) {
   .settings-body,
   .settings-toolbar {
-    background: var(--bg-secondary);
+    /* Same as PageCard's full-width mode. */
+    background: var(--bg-primary);
   }
   .settings-body-inner {
     padding: 0 0 16px;
@@ -350,9 +351,6 @@ async function navigateToSection(sectionId: string) {
   .settings-toolbar {
     padding: 8px var(--settings-narrow-gutter);
     margin: 0;
-  }
-  .search-container {
-    background: var(--bg-primary);
   }
 }
 </style>

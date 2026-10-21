@@ -631,6 +631,14 @@ onBeforeUnmount(() => {
   border-radius: 0;
   box-shadow: none;
 }
+/* Full-width card (PageCard <=600px) takes the app background; the panel must
+   not paint its own bg-secondary over it. Breakpoint mirrors PageCard.vue. */
+@media (max-width: 600px) {
+  .results-area :deep(.advanced-panel.as-card),
+  .results-area :deep(.advanced-panel.as-card .panel-header) {
+    background: none;
+  }
+}
 .results-list-wrap {
   flex: 1;
   min-height: 0;

@@ -61,9 +61,11 @@
     max-width: 100%;
     padding: 0;
   }
+  /* Full width: the card blends into the app background. */
   .page-card {
     border: none;
     border-radius: 0;
+    background: var(--bg-primary);
   }
 }
 </style>
