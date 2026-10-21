@@ -235,6 +235,16 @@ Never use `position: absolute`, `grid`, or add `flex-grow` to `.bar-title`. Neve
 
 In RTL layout, the leftmost button is always the "next/advance" button. For prev/next navigation pairs, always use `IconChevronLeft` for next (advance) and `IconChevronRight` for prev (back). The correct button order reading left→right on screen is: `<` (next) · `>` (prev) · home · toggle. Never reverse this — the chevron icon direction matches the reading direction, not the semantic direction.
 
+## UI Translations (i18n)
+
+The UI is bilingual (Hebrew default, English option) via vue-i18n; the layout stays RTL in both. Every user-visible UI string goes through `t()` / `$t()` — never hard-code Hebrew UI text.
+
+- Any change that adds or edits UI text MUST update BOTH `src/i18n/locales/he/<ns>.json` and `src/i18n/locales/en/<ns>.json`, same key set. A Hebrew-only change is incomplete.
+- One namespace file per area (`bookView`, `settings`, `layout`, ...); keys are `'<ns>.<key>'`. `.vue` uses `$t` / `useI18n()`; plain `.ts` imports `t` from `@/i18n`.
+- Strings that double as data (nav labels = route keys, commentary section labels, city names, theme names) keep their Hebrew value for matching/persistence and are translated at DISPLAY time only via a helper (`appNavItems` `.text`, `displayCommentaryLabel`, `cityDisplayName`).
+- Never translate book content, DB data, search-syntax examples, regex/normalization tables, Hebrew month/weekday names, divine-name tables.
+- Switching language reloads the page (`setUiLanguage`), so module-level `t()` constants are fine.
+
 ## Git
 
 - Never use git commands unless explicitly asked by the user
