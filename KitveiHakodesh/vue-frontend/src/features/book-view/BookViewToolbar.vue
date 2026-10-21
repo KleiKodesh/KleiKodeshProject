@@ -32,6 +32,7 @@ import {
   TOOLBAR_SEPARATOR_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
+import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
@@ -227,6 +228,7 @@ const sideLeftCommentaryTitle = computed(() =>
 // which of those controls this book actually has, how much room the pinned ones take, and
 // the flyout's state.
 const toolbarEl = ref<HTMLElement | null>(null)
+const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
 )
@@ -312,7 +314,10 @@ defineExpose({ tocBtnRef })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" :class="`toolbar-${toolbarPosition}`">
+  <div ref="toolbarEl" class="book-view-toolbar" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" title="גרור כדי להזיז את סרגל הכלים">
+    <Teleport to="body">
+      <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
+    </Teleport>
     <button
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
@@ -643,6 +648,18 @@ defineExpose({ tocBtnRef })
   background: var(--bg-toolbar);
   flex-shrink: 0;
   transition: background 120ms;
+  cursor: grab;
+  touch-action: none;
+}
+.book-view-toolbar.dragging {
+  cursor: grabbing;
+}
+.toolbar-drop-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: #d0d0d0;
+  opacity: 0.5;
 }
 
 /* ── Orientation ── */
