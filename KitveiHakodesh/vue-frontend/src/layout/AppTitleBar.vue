@@ -34,6 +34,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { documentIcon } from '@/utils/documentIcons'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -109,7 +112,7 @@ const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
 // A click always enters search mode; the address-bar dropdown lists recent
 // locations (shown while the field is empty / has no results) — not open tabs.
-const barTitleHint = 'לחץ לניווט מהיר ולמקומות אחרונים (Ctrl+E)'
+const barTitleHint = t('layout.barTitleHint')
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
@@ -120,8 +123,8 @@ const barTitle = computed(() => {
 
 const toolbarTitle = computed(() => {
   const baseTitle = isBookViewActive.value
-    ? bookViewStore.getToolbarVisible(props.paneId) ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'
-    : activeTab.value?.pdfViewerTitleBarVisible !== false ? 'הסתר סרגל כותרת PDF' : 'הצג סרגל כותרת PDF'
+    ? bookViewStore.getToolbarVisible(props.paneId) ? t('layout.hideToolbar') : t('layout.showToolbar')
+    : activeTab.value?.pdfViewerTitleBarVisible !== false ? t('layout.hidePdfTitleBar') : t('layout.showPdfTitleBar')
   return `${baseTitle} (Ctrl+B)`
 })
 
@@ -301,7 +304,7 @@ useAppTitleBarShortcuts({
           ref="navBtnRef"
           class="bar-btn"
           tabindex="-1"
-          title="תפריט (Ctrl+M)"
+          :title="t('layout.menu')"
           @click.stop="toggleNavDropdown"
         >
           <IconLineHorizontal320Regular />
@@ -311,7 +314,7 @@ useAppTitleBarShortcuts({
         v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.getNavSidebarVisible(props.paneId)"
         class="bar-btn"
         tabindex="-1"
-        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
+        :title="`${bookViewStore.splitViewEnabled ? t('layout.closeSplitView') : t('layout.openSplitView')} (Ctrl+|)`"
         @click.stop="bookViewStore.toggleSplitView()"
       >
         <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
@@ -322,7 +325,7 @@ useAppTitleBarShortcuts({
         v-if="isTxtViewActive"
         class="bar-btn"
         tabindex="-1"
-        title="חיפוש בטקסט (Ctrl+F)"
+        :title="t('layout.findInText')"
         @click.stop="bookViewStore.txtViewToggleSearch(props.paneId)"
       >
         <IconSearch24Regular />
@@ -352,7 +355,7 @@ useAppTitleBarShortcuts({
         class="bar-btn"
         tabindex="-1"
         :class="{ active: pdfOcrStore.isActive }"
-        title="בחירת טקסט באזור (OCR)"
+        :title="t('layout.ocrSelect')"
         @click.stop="pdfOcrStore.toggle()"
       >
         <IconConvertToText24Regular />
@@ -406,14 +409,14 @@ useAppTitleBarShortcuts({
       <!-- Stays put whether or not this pane's rail is up, unlike the hamburger and the
            split-view toggle: those two are about the rail and the window, so the rail can
            speak for them. Home is a destination, and the bar is where it belongs. -->
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" :title="t('layout.home')" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <button
         v-if="isTitleBarButtonVisible('workspaces')"
         ref="workspacesButtonEl"
         class="bar-btn"
         :class="{ active: workspacesOpen }"
         tabindex="-1"
-        title="סביבות עבודה (F8)"
+        :title="t('layout.workspaces')"
         :aria-expanded="workspacesOpen"
         @click.stop="workspacesSubmenu?.toggle()"
       >

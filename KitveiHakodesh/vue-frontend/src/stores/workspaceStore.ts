@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, toRaw } from 'vue'
 import { lsGet, lsSet, lsDelete, idbTabsDeleteByPrefix } from '@/utils/persistence'
+import { t } from '@/i18n'
 
 /**
  * Disk names owned here. `tabsList` is exported because `tabStore` writes the list
@@ -39,7 +40,7 @@ function deleteWorkspaceData(wsId: string): Promise<void> {
 }
 
 const DEFAULT_WS_ID = 'default'
-const DEFAULT_WS_NAME = 'ברירת מחדל'
+const DEFAULT_WS_NAME = t('stores.defaultWorkspace')
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -75,7 +76,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   async function createWorkspace(name: string): Promise<Workspace> {
     const ws: Workspace = {
       id: makeId(),
-      name: name.trim() || 'סביבת עבודה',
+      name: name.trim() || t('stores.workspace'),
       createdAt: Date.now(),
     }
     workspaces.value.push(ws)

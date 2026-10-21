@@ -114,7 +114,7 @@ watch(texts, () => { dismissed.value = false })
         >
           {{ SEFORIM_DB_PICK_LABEL }}
         </button>
-        <button class="service-banner-close" aria-label="סגור" @click="dismissed = true">
+        <button class="service-banner-close" :aria-label="$t('components.close')" @click="dismissed = true">
           <svg viewBox="0 0 12 12" width="12" height="12" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M2 2l8 8M10 2l-8 8"/>
           </svg>

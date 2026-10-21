@@ -1,0 +1,24 @@
+{
+  "tabTitle": {
+    "home": "בית",
+    "search": "חיפוש",
+    "searchQuery": "חיפוש: {query}",
+    "catalog": "קטלוג הספרים",
+    "hebrewbooks": "היברו-בוקס",
+    "settings": "הגדרות",
+    "calendar": "לוח שנה",
+    "dictionary": "מילון",
+    "midot": "מידות ושיעורים",
+    "fileSearch": "חיפוש קבצים",
+    "kitveiHakodesh": "כתבי הקודש"
+  },
+  "loadError": "שגיאה בטעינת הנתונים",
+  "loadErrorNoServer": "שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת",
+  "loadErrorSqlite": "שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.",
+  "noInternet": "אין חיבור לאינטרנט",
+  "bookNotDownloadable": "הספר המבוקש אינו זמין להורדה",
+  "downloadFailedWith": "ההורדה נכשלה: {error}",
+  "downloadFailed": "ההורדה נכשלה",
+  "defaultWorkspace": "ברירת מחדל",
+  "workspace": "סביבת עבודה"
+}

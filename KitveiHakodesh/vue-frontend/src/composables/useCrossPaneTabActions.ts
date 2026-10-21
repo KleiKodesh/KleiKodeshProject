@@ -2,6 +2,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { TabRoute } from '@/stores/tabStore'
+import { t } from '@/i18n'
 
 /**
  * Tab operations used by the native chrome-tabs mirror.
@@ -44,10 +45,10 @@ export function closeTabAnyPane(tabId: string) {
 
 // Mirrors ROUTE_MAP in useAppShellPane.ts — the user's configured new-tab page.
 const NEW_TAB_ROUTES: Record<string, { title: string; route: TabRoute }> = {
-  homepage: { title: 'בית', route: '/' },
-  openfile: { title: 'קטלוג הספרים', route: '/books' },
-  hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
-  search: { title: 'חיפוש', route: '/search' },
+  homepage: { title: t('stores.tabTitle.home'), route: '/' },
+  openfile: { title: t('stores.tabTitle.catalog'), route: '/books' },
+  hebrewbooks: { title: t('stores.tabTitle.hebrewbooks'), route: '/hebrewbooks' },
+  search: { title: t('stores.tabTitle.search'), route: '/search' },
 }
 
 /** Open a new tab in the given pane, honoring the user's configured new-tab page setting. */
@@ -55,7 +56,7 @@ export function openNewTabInPane(pane: 1 | 2 = 1) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
   const target =
-    NEW_TAB_ROUTES[useSettingsStore().newTabPage] ?? { title: 'בית', route: '/' as TabRoute }
+    NEW_TAB_ROUTES[useSettingsStore().newTabPage] ?? { title: t('stores.tabTitle.home'), route: '/' as TabRoute }
 
   if (pane === 2 && bookViewStore.splitViewEnabled) {
     bookViewStore.setFocusedPane(2)

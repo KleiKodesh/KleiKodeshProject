@@ -7,6 +7,7 @@ import {
 } from '@/stores/navHistory'
 import { navigatesDestinationsInPlace } from '@/webview-host/bridge'
 import type { Tab, TabRoute } from '@/stores/tabStore'
+import { t } from '@/i18n'
 
 /**
  * Provides pane-aware tab operations for AppTitleBar and AppPageView.
@@ -156,7 +157,7 @@ export function useAppShellPane(paneId: 1 | 2) {
   // for why home is deliberately not unique.
   function openNewHomeTab() {
     if (paneId === 1) tabStore.openNewHomeTab()
-    else tabStore.openPane2Tab({ title: 'בית', route: '/' })
+    else tabStore.openPane2Tab({ title: t('stores.tabTitle.home'), route: '/' })
   }
 
   function navigateToDestination(route: TabRoute, openInNewTab = false) {
@@ -164,14 +165,14 @@ export function useAppShellPane(paneId: 1 | 2) {
   }
 
   const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
-    homepage: { title: 'בית', route: '/' },
-    openfile: { title: 'קטלוג הספרים', route: '/books' },
-    hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
-    search: { title: 'חיפוש', route: '/search' as TabRoute },
+    homepage: { title: t('stores.tabTitle.home'), route: '/' },
+    openfile: { title: t('stores.tabTitle.catalog'), route: '/books' },
+    hebrewbooks: { title: t('stores.tabTitle.hebrewbooks'), route: '/hebrewbooks' },
+    search: { title: t('stores.tabTitle.search'), route: '/search' as TabRoute },
   }
 
   function openNewTab() {
-    const target = ROUTE_MAP[settingsStore.newTabPage] ?? { title: 'בית', route: '/' as TabRoute }
+    const target = ROUTE_MAP[settingsStore.newTabPage] ?? { title: t('stores.tabTitle.home'), route: '/' as TabRoute }
     if (target.route === '/') openNewHomeTab()
     else openTab({ title: target.title, route: target.route })
   }
@@ -185,7 +186,7 @@ export function useAppShellPane(paneId: 1 | 2) {
         closeTab(currentId)
       }
     } else {
-      updateActiveTab({ route: '/', title: 'בית' })
+      updateActiveTab({ route: '/', title: t('stores.tabTitle.home') })
     }
   }
 

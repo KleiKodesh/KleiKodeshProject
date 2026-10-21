@@ -1,0 +1,18 @@
+{
+  "openHereHint": "לחיצה / Enter — פתיחה בכרטיסייה הנוכחית",
+  "openNewTabHint": "Ctrl+לחיצה / Ctrl+Enter — פתיחה בכרטיסייה חדשה",
+  "index": {
+    "catalogToc": "אינדקס הספרים",
+    "localFiles": "אינדקס הקבצים",
+    "fullTextSearch": "אינדקס החיפוש",
+    "rebuildCatalogToc": "בנייה מחדש של אינדקס החיפוש בקטלוג",
+    "rebuildLocalFiles": "בנייה מחדש של אינדקס חיפוש קבצים",
+    "rebuildFullTextSearch": "איפוס אינדקס החיפוש בתוכן המאגר",
+    "dbMissing": "מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות",
+    "buildFailed": "בניית האינדקס נכשלה — לחץ בהגדרות על \"{button}\"",
+    "buildFailedRetrying": "בניית האינדקס נכשלה, מנסה שוב…",
+    "serviceError": "השירות אינו זמין",
+    "building": "אנא המתן בעת בניית האינדקס{progress}",
+    "unavailable": "{name} אינו זמין: {reason}"
+  }
+}

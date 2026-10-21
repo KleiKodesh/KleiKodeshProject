@@ -20,6 +20,9 @@ import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 import { detectAvailableFonts } from '@/webview-host/fontsApi'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // Prewarm the per-session font list at launch so the settings font dropdowns open instantly.
 void detectAvailableFonts()
@@ -107,7 +110,7 @@ const pdfClosePending = computed(() => bookViewStore.pdfClosePending)
 const pdfCloseDesc = computed(() => {
   const titles = (pdfClosePending.value?.tabTitles ?? []).filter(Boolean)
   const names = titles.length ? ` (${titles.join(', ')})` : ''
-  return `השינויים שבוצעו בתוכן העניינים${names} לא נשמרו ויאבדו אם הכרטיסייה תיסגר.`
+  return t('app.unsavedDesc', { names })
 })
 
 // "שמירה בשם..." from the close dialog: save the tab's PDF through the
@@ -197,10 +200,10 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <UpdateAvailablePrompt />
     <ConfirmDialog
       v-if="pdfClosePending"
-      title="שינויים שלא נשמרו"
+      :title="t('app.unsavedTitle')"
       :desc="pdfCloseDesc"
-      confirm-label="סגירה ללא שמירה"
-      :extra-label="pdfClosePending.tabId ? 'שמירה בשם...' : undefined"
+      :confirm-label="t('app.closeWithoutSaving')"
+      :extra-label="pdfClosePending.tabId ? t('app.saveAs') : undefined"
       @confirm="bookViewStore.resolvePdfCloseConfirm(true)"
       @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
       @extra="pdfCloseSaveAs"

@@ -1,0 +1,18 @@
+{
+  "openHereHint": "Click / Enter - open in the current tab",
+  "openNewTabHint": "Ctrl+click / Ctrl+Enter - open in a new tab",
+  "index": {
+    "catalogToc": "The book index",
+    "localFiles": "The file index",
+    "fullTextSearch": "The search index",
+    "rebuildCatalogToc": "Rebuild catalog search index",
+    "rebuildLocalFiles": "Rebuild file search index",
+    "rebuildFullTextSearch": "Reset full-text search index",
+    "dbMissing": "Database not found - choose a database file in Settings",
+    "buildFailed": "Building the index failed - in Settings, click \"{button}\"",
+    "buildFailedRetrying": "Building the index failed, retrying...",
+    "serviceError": "The service is unavailable",
+    "building": "Please wait while the index is built{progress}",
+    "unavailable": "{name} is unavailable: {reason}"
+  }
+}

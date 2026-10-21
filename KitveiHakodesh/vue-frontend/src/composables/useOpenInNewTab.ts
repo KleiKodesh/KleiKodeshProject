@@ -1,4 +1,5 @@
 import { hasNativeChromeTabs } from '@/webview-host/bridge'
+import { t } from '@/i18n'
 
 /**
  * Should activating an item open it in a NEW tab instead of the current one?
@@ -34,9 +35,8 @@ export function wantsNewTab(event?: MouseEvent | KeyboardEvent | null): boolean 
  * nothing, so only the first is shown.
  */
 export const OPEN_IN_NEW_TAB_HINT = hasNativeChromeTabs
-  ? 'לחיצה / Enter — פתיחה בכרטיסייה הנוכחית\n' +
-    'Ctrl+לחיצה / Ctrl+Enter — פתיחה בכרטיסייה חדשה'
-  : 'לחיצה / Enter — פתיחה בכרטיסייה הנוכחית'
+  ? t('composables.openHereHint') + '\n' + t('composables.openNewTabHint')
+  : t('composables.openHereHint')
 
 /** Append the new-tab hint as a trailing line to an existing content tooltip. */
 export function withNewTabHint(tooltip: string): string {

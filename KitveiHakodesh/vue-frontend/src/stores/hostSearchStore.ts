@@ -3,6 +3,7 @@ import { useTabStore } from './tabStore'
 import { useBooksDataStore } from './booksDataStore'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
+import { t } from '@/i18n'
 
 /**
  * Receives "navigate from the VSTO host" pushes and routes them to a page.
@@ -56,7 +57,7 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
         tabStore.updateTab(existing.id, { catalogQuery: text })
         tabStore.switchTab(existing.id)
       } else {
-        tabStore.openTab({ route: '/books', title: 'קטלוג הספרים', catalogQuery: text })
+        tabStore.openTab({ route: '/books', title: t('stores.tabTitle.catalog'), catalogQuery: text })
       }
       return
     }
@@ -65,7 +66,7 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     // syntax, so drop it from a raw selection to avoid splitting the term.
     const ftsText = text.replace(/@/g, ' ').replace(/\s+/g, ' ').trim()
     if (!ftsText) return
-    tabStore.openTab({ route: '/search', title: 'חיפוש: ' + ftsText, searchQuery: ftsText })
+    tabStore.openTab({ route: '/search', title: t('stores.tabTitle.searchQuery', { query: ftsText }), searchQuery: ftsText })
   }
 
   async function handleHostOpenBook(msg: Record<string, unknown>) {
@@ -93,7 +94,7 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     // Resolve a human title for the tab (falls back to a generic label).
     const booksData = useBooksDataStore()
     try { await booksData.ensureLoaded() } catch { /* title falls back */ }
-    const title = booksData.allBooksMap.get(resolvedBookId)?.title ?? 'כתבי הקודש'
+    const title = booksData.allBooksMap.get(resolvedBookId)?.title ?? t('stores.tabTitle.kitveiHakodesh')
 
     // Otzaria links may carry highlight params (&m=<text> / &mark). We parse them
     // C#-side so any link type is accepted, but intentionally IGNORE the highlight

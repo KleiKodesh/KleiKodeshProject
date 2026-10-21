@@ -52,6 +52,7 @@ import {
   dropUncheckedCommentaryForTab,
   pruneUncheckedCommentary,
 } from '@/features/book-view/commentary/uncheckedCommentaryBooks'
+import { t } from '@/i18n'
 
 export type TabRoute =
   | '/'
@@ -176,7 +177,7 @@ const IDENTITY_FIELDS = [
  */
 const HOME_PATCH = {
   route: '/' as TabRoute,
-  title: 'בית',
+  title: t('stores.tabTitle.home'),
   bookId: undefined,
   localFilePath: undefined,
   localFileName: undefined,
@@ -268,7 +269,7 @@ interface PersistedTabList {
   accessOrder?: Record<string, number>
 }
 
-const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
+const DEFAULT_TAB: Tab = { id: '1', title: t('stores.tabTitle.home'), route: '/' }
 
 /**
  * Dev guard for the one list that must be maintained by hand: anything that survives
@@ -393,13 +394,13 @@ export const useTabStore = defineStore('tabs', () => {
     '/file-search',
   ]
   const DESTINATION_TITLES: Record<string, string> = {
-    '/settings': 'הגדרות',
-    '/books': 'קטלוג הספרים',
-    '/hebrewbooks': 'היברו-בוקס',
-    '/hebrew-calendar': 'לוח שנה',
-    '/dictionary': 'מילון',
-    '/midot': 'מידות ושיעורים',
-    '/file-search': 'חיפוש קבצים',
+    '/settings': t('stores.tabTitle.settings'),
+    '/books': t('stores.tabTitle.catalog'),
+    '/hebrewbooks': t('stores.tabTitle.hebrewbooks'),
+    '/hebrew-calendar': t('stores.tabTitle.calendar'),
+    '/dictionary': t('stores.tabTitle.dictionary'),
+    '/midot': t('stores.tabTitle.midot'),
+    '/file-search': t('stores.tabTitle.fileSearch'),
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
@@ -831,7 +832,7 @@ export const useTabStore = defineStore('tabs', () => {
     return (
       tabs.value.find((t) => t.id === id && t.pane === 2) ??
       pane2Tabs.value[0] ??
-      { id: '', title: 'בית', route: '/', pane: 2 as const }
+      { id: '', title: t('stores.tabTitle.home'), route: '/', pane: 2 as const }
     )
   }
 
@@ -888,7 +889,7 @@ export const useTabStore = defineStore('tabs', () => {
         // Pane 2 must never be left with no tab — mirror the pane-1 closeTab guarantee.
         // Without this, pane2ActiveTabId stays '' and any subsequent navigateToDestination
         // call hits the `if (!id) return` guard in updatePane2ActiveTab and silently does nothing.
-        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         pane2ActiveTabId.value = home.id
       }
@@ -908,7 +909,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (own.length > 0) {
       activeTabId.value = own[0]!.id
     } else {
-      const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
     }
@@ -935,7 +936,7 @@ export const useTabStore = defineStore('tabs', () => {
         if (own.length > 0) {
           activeTabId.value = own[0]!.id
         } else {
-          const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+          const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
           tabs.value.push(home)
           activeTabId.value = home.id
         }
@@ -947,7 +948,7 @@ export const useTabStore = defineStore('tabs', () => {
       // Pane 2 must never be left empty while split view is open.
       const remaining = tabs.value.filter((t) => t.pane === 2)
       if (remaining.length === 0) {
-        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         pane2ActiveTabId.value = home.id
       } else if (pane2ActiveTabId.value === id) {
@@ -965,7 +966,7 @@ export const useTabStore = defineStore('tabs', () => {
       }
       return pane2ActiveTabId.value
     }
-    const tab = openPane2Tab({ title: 'בית', route: '/' })
+    const tab = openPane2Tab({ title: t('stores.tabTitle.home'), route: '/' })
     return tab.id
   }
 
@@ -1115,7 +1116,7 @@ export const useTabStore = defineStore('tabs', () => {
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       disposeClosedTab(tab.id)
     }
-    const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+    const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
     // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
@@ -1199,12 +1200,12 @@ export const useTabStore = defineStore('tabs', () => {
       if (visible.length > 0) {
         activeTabId.value = visible[Math.min(Math.max(visIdx, 0), visible.length - 1)]!.id
       } else {
-        const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         activeTabId.value = home.id
       }
     } else if (tabs.value.length === 0) {
-      const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
     }
@@ -1315,7 +1316,7 @@ export const useTabStore = defineStore('tabs', () => {
   // browser opens a fresh new-tab page each time rather than switching to the one
   // already open. Home holds no app-wide state, so copies cannot go stale.
   function openNewHomeTab() {
-    openTab({ title: 'בית', route: '/' })
+    openTab({ title: t('stores.tabTitle.home'), route: '/' })
   }
 
   // Destination pages (the tool routes listed in DESTINATION_ROUTES). Never

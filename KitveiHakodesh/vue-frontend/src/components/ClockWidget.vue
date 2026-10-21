@@ -32,7 +32,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="isFullscreen" class="clock-widget" aria-live="off" aria-label="שעון">
+  <div v-if="isFullscreen" class="clock-widget" aria-live="off" :aria-label="$t('components.clock')">
     {{ currentTime }}
   </div>
 </template>

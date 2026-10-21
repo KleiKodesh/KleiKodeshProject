@@ -17,6 +17,7 @@ import {
 } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 import { useSettingsStore } from './settingsStore'
+import { t } from '@/i18n'
 
 function stripFileExtension(fileName: string): string {
   const lastDot = fileName.lastIndexOf('.')
@@ -298,7 +299,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       tabStore.updateTab(tabId, {
         route: '/',
-        title: 'בית',
+        title: t('stores.tabTitle.home'),
         localFileVirtualUrl: undefined,
         localFileName: undefined,
         localFilePath: undefined,
@@ -341,7 +342,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     }
     tabStore.updateTab(tabId, {
       route: '/',
-      title: 'בית',
+      title: t('stores.tabTitle.home'),
       localFileVirtualUrl: undefined,
       localFileName: undefined,
       localFilePath: undefined,
@@ -433,14 +434,14 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (cancelled) return
     tabStore.updateTab(tabId, {
       route: '/hebrewbooks',
-      title: 'היברו-בוקס',
+      title: t('stores.tabTitle.hebrewbooks'),
       localFileConverting: false,
       localFileVirtualUrl: undefined,
       localFileName: undefined,
     })
-    if (noInternet) downloadErrorMessage.value = 'אין חיבור לאינטרנט'
-    else if (notFound) downloadErrorMessage.value = 'הספר המבוקש אינו זמין להורדה'
-    else downloadErrorMessage.value = error ? `ההורדה נכשלה: ${error}` : 'ההורדה נכשלה'
+    if (noInternet) downloadErrorMessage.value = t('stores.noInternet')
+    else if (notFound) downloadErrorMessage.value = t('stores.bookNotDownloadable')
+    else downloadErrorMessage.value = error ? t('stores.downloadFailedWith', { error }) : t('stores.downloadFailed')
   }
 
   /** Open a HebrewBooks PDF directly (used by session restore). */
@@ -494,7 +495,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)
         if (keepTabOpenOnFailure) {
-          tabStore.updateTab(tabId, { route: '/', title: 'בית', localFileConverting: false, localFileLoadingType: undefined })
+          tabStore.updateTab(tabId, { route: '/', title: t('stores.tabTitle.home'), localFileConverting: false, localFileLoadingType: undefined })
         } else {
           tabStore.closeTab(tabId)
         }
@@ -581,7 +582,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       if (!res) {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)
-        tabStore.updateTab(tabId, { route: '/', title: 'בית', localFileConverting: false })
+        tabStore.updateTab(tabId, { route: '/', title: t('stores.tabTitle.home'), localFileConverting: false })
       } else if ('url' in res) {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)

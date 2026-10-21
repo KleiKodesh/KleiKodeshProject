@@ -6,6 +6,9 @@ import {
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useFloatingPanel, type FloatingPanelPosition } from '@/composables/useFloatingPanel'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -38,7 +41,7 @@ watch(
 )
 
 const matchLabel = computed(() => {
-  if (props.notFound) return 'לא נמצא'
+  if (props.notFound) return t('components.notFound')
   if (props.matchCount !== null && props.matchCount > 0) return `${props.matchIndex} / ${props.matchCount}`
   return ''
 })
@@ -60,7 +63,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
           :value="query"
           type="search"
           class="search-input"
-          :placeholder="placeholder ?? 'חיפוש...'"
+          :placeholder="placeholder ?? $t('components.searchPlaceholder')"
           spellcheck="true"
           autocomplete="off"
           @input="emit('update:query', ($event.target as HTMLInputElement).value)"

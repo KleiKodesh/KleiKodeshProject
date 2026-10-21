@@ -15,6 +15,9 @@ import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { togglePopOut } from '@/webview-host/bridge'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // The nav dropdown's items, always on. Same list, same order, same actions - the only
 // difference is that a row here is its icon alone with the label as its tooltip, because
@@ -36,7 +39,7 @@ const isSplitViewButtonVisible = computed(
   () => isSplitViewAvailable.value && !settingsStore.titleBarHiddenButtons.includes('split-view'),
 )
 const splitViewTitle = computed(() =>
-  bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)',
+  `${bookViewStore.splitViewEnabled ? t('layout.closeSplitView') : t('layout.openSplitView')} (Ctrl+|)`,
 )
 
 // Which pane this rail belongs to - it closes its own rail, not both panes'.
@@ -91,7 +94,7 @@ watch(hasNavOverflow, (has) => {
         :key="item.label"
         class="nav-btn"
         tabindex="-1"
-        :title="`${item.label} (${item.shortcut})`"
+        :title="`${item.text} (${item.shortcut})`"
         @click="navigateInNewTab(item.label)"
       >
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
@@ -116,7 +119,7 @@ watch(hasNavOverflow, (has) => {
         v-if="railButtonVisible('pop-out')"
         class="nav-btn"
         tabindex="-1"
-        title="פתח בחלון עצמאי או החזר לחלונית"
+        :title="t('layout.popOutToggle')"
         @click="togglePopOut()"
       >
         <IconOpen28Regular />
@@ -125,7 +128,7 @@ watch(hasNavOverflow, (has) => {
         v-if="railButtonVisible(APP_NAV_SETTINGS_ITEM.label)"
         class="nav-btn"
         tabindex="-1"
-        :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
+        :title="`${APP_NAV_SETTINGS_ITEM.text} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
         @click="navigateInNewTab(APP_NAV_SETTINGS_ITEM.label)"
       >
         <component :is="APP_NAV_SETTINGS_ITEM.icon" />
@@ -138,7 +141,7 @@ watch(hasNavOverflow, (has) => {
         class="nav-btn"
         :class="{ 'nav-btn--on': overflowOpen }"
         tabindex="-1"
-        title="פריטים נוספים"
+        :title="t('layout.moreItems')"
         :aria-expanded="overflowOpen"
         @click="overflowOpen = !overflowOpen"
       >
@@ -153,7 +156,7 @@ watch(hasNavOverflow, (has) => {
       <button
         class="nav-btn nav-btn-sm"
         tabindex="-1"
-        title="הסתר סרגל צד (Ctrl+Shift+M)"
+        :title="t('layout.hideSidebar')"
         @click="settingsStore.setNavSidebarVisible(paneId, false)"
       >
         <IconChevronDoubleRight20Regular />
