@@ -1,6 +1,7 @@
 # Reads each new issue: fixes a vague title, and posts ONE comment with a short summary
 # ("is this what you meant?"), any missing details and likely duplicates.
-# No checkout, no code access: it can only comment and edit the issue title.
+# Also applies type + program-area labels. No checkout, no code access: it can only comment,
+# edit the title and add labels.
 name: Issue clarity check
 
 on:
@@ -43,7 +44,14 @@ jobs:
             Ask at most 3 things.
             Duplicates: an "Existing issues:" list is given. If one or more of them is clearly the SAME problem (be conservative, max 3),
             mention them as "#N" (e.g. "may be a duplicate of #N").
-            Answer ONLY with JSON: {"new_title": string, "comment": string}
+            Answer ONLY with JSON: {"new_title": string, "type": string, "areas": [string], "comment": string}
+            - type: exactly one of "bug", "enhancement", "question", "documentation".
+            - areas: 1-2 labels for the program part(s) it is about, ONLY from this list (empty list if unsure):
+              "word: kitvei-hakodesh pane", "word: kiwix", "word: hebrewbooks", "word: websites", "word: torah design",
+              "word: nakdan", "word: regex search", "word: side pane", "word: settings",
+              "app: catalog", "app: book view", "app: search", "app: hebrewbooks", "app: open file", "app: file search",
+              "app: dictionary", "app: calendar", "app: measures", "app: home", "app: settings",
+              "otzaria add-in", "install / update".
             - new_title: "" if the title is already clear. If it is vague (e.g. "bug", "problem", "test", only the form prefix),
               a short clear title (max ~60 chars) saying what the problem/request is, in the issue's language,
               keeping any leading "[...]" prefix of the original title exactly.
@@ -73,11 +81,21 @@ jobs:
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
             -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
             -d "$payload" | jq -r '.candidates[0].content.parts[0].text // empty')
-          new_title=$(printf '%s' "$reply" | jq -r '.new_title // empty')
-          comment=$(printf '%s' "$reply" | jq -r '.comment // empty')
-          if [ -n "$new_title" ] && [ "$new_title" != "$TITLE" ]; then
+          # Safety: anything malformed -> post nothing, change nothing.
+          if ! printf '%s' "$reply" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "model output is not a JSON object - nothing posted"; exit 1
+          fi
+          new_title=$(printf '%s' "$reply" | jq -r '.new_title // "" | tostring | gsub("[\r\n]"; " ")')
+          comment=$(printf '%s' "$reply" | jq -r '.comment // "" | tostring')
+          ALLOWED='["bug","enhancement","question","documentation","word: kitvei-hakodesh pane","word: kiwix","word: hebrewbooks","word: websites","word: torah design","word: nakdan","word: regex search","word: side pane","word: settings","app: catalog","app: book view","app: search","app: hebrewbooks","app: open file","app: file search","app: dictionary","app: calendar","app: measures","app: home","app: settings","otzaria add-in","install / update"]'
+          labels=$(printf '%s' "$reply" | jq -r --argjson ok "$ALLOWED" '[(.type // empty), ((.areas // [])[:2][])] | map(tostring) | map(select(IN($ok[]))) | unique | join(",")')
+          if [ ${#comment} -gt 2000 ]; then echo "comment too long - nothing posted"; exit 1; fi
+          if [ -n "$new_title" ] && [ "$new_title" != "$TITLE" ] && [ ${#new_title} -le 100 ]; then
             gh issue edit "$ISSUE" --repo "$GITHUB_REPOSITORY" --title "$new_title"
           fi
-          if [ -z "$comment" ]; then echo "no comment"; exit 0; fi
+          if [ -n "$labels" ]; then
+            gh issue edit "$ISSUE" --repo "$GITHUB_REPOSITORY" --add-label "$labels"
+          fi
+          if [ -z "$(printf '%s' "$comment" | tr -d '[:space:]')" ]; then echo "no comment"; exit 0; fi
           printf '%s\n\n<sub>הודעה אוטומטית</sub>\n' "$comment" > reply.md
           gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file reply.md
