@@ -162,6 +162,10 @@ namespace KitveiHakodesh.Core.Settings
         public static string GetBorderColor() => Get(AppKitveiHakodesh, "Appearance", "BorderColor", "");
         public static void SetBorderColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "BorderColor", hex);
 
+        // Vue's UI language ("he" | "en"), so the native chrome starts in the right direction/texts.
+        public static string GetUiLanguage() => Get(AppKitveiHakodesh, "Appearance", "UiLanguage", "he");
+        public static void SetUiLanguage(string lang) => Set(AppKitveiHakodesh, "Appearance", "UiLanguage", lang);
+
         // ── Service ───────────────────────────────────────────────────────────────────
         // The one unasked "install the service?" prompt a host may raise, on the first launch
         // that finds the product installed but its service not registered. Afterwards the

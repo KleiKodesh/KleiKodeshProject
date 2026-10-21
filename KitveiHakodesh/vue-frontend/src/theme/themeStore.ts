@@ -7,6 +7,7 @@ const KEYS = { SETTINGS_THEME: 'app.theme' } as const
 import { applyTheme, getTheme, tintTheme, BACKGROUND_TINT_DEFAULT, toggleThemeMode, type ThemePreset } from './themes'
 import { darken, lighten } from './themeColorUtils'
 import { setTheme } from '@/webview-host/bridge'
+import { uiLanguage } from '@/i18n'
 export type { ThemePreset } from './themes'
 
 interface ThemeState {
@@ -88,7 +89,9 @@ export const useThemeStore = defineStore('theme', () => {
         ? lighten(ui.bgSecondary, 6)
         : darken(ui.bgSecondary, 8)
       : undefined
-    setTheme(themePreset.value.includes('-dark'), chromeStrip, ui?.accentColor, ui?.borderColor)
+    // uiLanguage rides along: a language switch reloads the page, so this startup send
+    // carries it to the native chrome (direction + texts).
+    setTheme(themePreset.value.includes('-dark'), chromeStrip, ui?.accentColor, ui?.borderColor, uiLanguage)
   }
 
   /** Momentary hover preview — paints `key` without saving; null restores the chosen theme. */
