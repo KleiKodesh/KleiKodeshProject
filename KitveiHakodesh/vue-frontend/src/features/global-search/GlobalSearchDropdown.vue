@@ -318,12 +318,12 @@ function getTabIcon(route: string): FileIconInfo {
             class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
-            :title="withNewTabHint(`${item.book.title} ${item.tocPath}`)"
+            :title="withNewTabHint(`${item.book.title} / ${item.tocPath}`)"
             @click="emit('selectCatalogToc', item, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogToc', item, wantsNewTab($event))"
           >
             <IconLibrary20Filled class="global-search-dropdown__item-icon global-search-dropdown__item-icon--catalog" />
-            <span class="global-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
+            <span class="global-search-dropdown__item-title">{{ item.book.title }} / {{ item.tocPath }}</span>
             <span v-if="item.book.parentPath" class="global-search-dropdown__item-path">
               {{ item.book.parentPath }}
             </span>
