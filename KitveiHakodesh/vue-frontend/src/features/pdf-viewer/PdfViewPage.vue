@@ -2,7 +2,7 @@
 import { uiLanguage } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -19,12 +19,17 @@ import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
 import { attachPdfLoadErrorReporting } from './usePdfLoadErrorReporting'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const paneNavigation = usePaneNavigation()
 const pdfOcrStore = usePdfOcrStore()
 const pageTracking = usePdfViewPageTracking()
+// The PDF canvas is grey like the chrome, so beside the nav rail it needs a line to separate them.
+const settingsStore = useSettingsStore()
+const paneId = inject<1 | 2>('paneId', 1)
+const isNavSidebarVisible = computed(() => settingsStore.getNavSidebarVisible(paneId))
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
@@ -254,7 +259,7 @@ function cancelConversion() {
 </script>
 
 <template>
-  <div class="pdf-page">
+  <div class="pdf-page" :class="{ 'pdf-page--beside-nav-sidebar': isNavSidebarVisible }">
     <div v-if="converting" class="converting">
       <div class="converting-card">
         <LoadingAnimation />
@@ -354,6 +359,23 @@ function cancelConversion() {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+/* The rail is the shell's first flex child, so it touches the page's inline-start edge.
+   The line runs alongside the document area only, starting below PDF.js's toolbar: 32px
+   mirrors --toolbar-height in public/pdfjs/web/viewer.css (default density). */
+.pdf-page--beside-nav-sidebar {
+  position: relative;
+}
+.pdf-page--beside-nav-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--border-color);
+  z-index: 1;
+  pointer-events: none;
 }
 .iframe-wrap {
   flex: 1;
