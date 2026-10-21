@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { HDate, HebrewCalendar, flags } from '@hebcal/core'
+import { isShownEvent } from './isShownModernHoliday'
 import type { useMonthlyView } from './useMonthlyView'
 
 const props = defineProps<{
@@ -76,6 +77,7 @@ const grid = computed<GridCell[]>(() => {
     let parasha: string | null = null
 
     for (const e of dayEvents) {
+      if (!isShownEvent(e)) continue
       const f = e.getFlags()
       if (f & flags.PARSHA_HASHAVUA) {
         parasha = strip(e.render('he')).replace(/^פרשת\s+/, '')

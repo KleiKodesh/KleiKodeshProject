@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue'
 import { HDate } from '@hebcal/hdate'
 import { HebrewCalendar } from '@hebcal/core/dist/esm/hebcal'
 import { flags } from '@hebcal/core/dist/esm/event'
+import { isShownEvent } from './isShownModernHoliday'
 import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
 import { calcDayZmanim } from './useZmanim'
@@ -104,6 +105,7 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
     let fastEnd: string | null = null
 
     for (const e of dayEvents) {
+      if (!isShownEvent(e)) continue
       const f = e.getFlags()
       if (f & flags.PARSHA_HASHAVUA) {
         parasha = strip(e.render('he')).replace(/^פרשת\s+/, '')
