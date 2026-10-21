@@ -42,6 +42,9 @@ import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
@@ -392,7 +395,7 @@ async function pasteAllIntoWord(): Promise<void> {
   const copied = triggerCopy(() => { pasting = pasteIntoWord().catch(() => {}) })
   window.getSelection()?.removeAllRanges()
   await pasting
-  if (!copied) showToast('ההכנה לייצוא הסתיימה — לחץ שוב על ייצוא ל-Word')
+  if (!copied) showToast(t('bookView.exportReady'))
 }
 
 defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })

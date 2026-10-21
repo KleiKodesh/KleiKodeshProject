@@ -1,0 +1,166 @@
+{
+  "annotation": {
+    "addNote": "Add note",
+    "clear": "Remove highlight",
+    "highlight": "Highlight",
+    "highlightColor": "Highlight in color",
+    "selectFirst": "Select some text first"
+  },
+  "bookInfo": {
+    "alias": "Alias",
+    "author": "Author",
+    "category": "Category",
+    "collectiveTitle": "Collective title",
+    "copyright": "Copyright",
+    "description": "Description",
+    "digitalSource": "Digital source",
+    "editionSource": "Edition source",
+    "empty": "No further details for this book",
+    "loadFailed": "Could not load book details",
+    "name": "Title",
+    "printPlace": "Place of printing",
+    "printYear": "Year of printing",
+    "title": "Book details",
+    "topics": "Topics"
+  },
+  "cancel": "Cancel",
+  "close": "Close",
+  "closeDialog": "Close",
+  "commentary": {
+    "closePanel": "Close commentary panel",
+    "closeTree": "Close commentary tree",
+    "hintClick": "Click a line in the book to show commentaries",
+    "hintHeading": "Click a heading line to show commentaries for the whole section",
+    "hintRange": "Ctrl+click a line to start selecting a range of lines",
+    "loadFailed": "Failed to load commentaries - the book database may be missing or outdated",
+    "nextCommentary": "Next commentary",
+    "nextSection": "Next section",
+    "noneForLine": "No commentaries for this line",
+    "openBookHint": "Double-click or Ctrl+click (or long-press on touch) to open the book",
+    "openBookHintNewTab": "Double-click or Ctrl+click (or long-press on touch) to open the book in a new tab",
+    "openInNewTab": "Open this book in a new tab",
+    "openInNewTabNamed": "Open this book in a new tab\n{name}",
+    "pickLine": "Select a line to view commentaries",
+    "prevCommentary": "Previous commentary",
+    "prevSection": "Previous section",
+    "searchPlaceholder": "Find commentary...",
+    "tree": "Commentary tree"
+  },
+  "copy": {
+    "copy": "Copy",
+    "intoWord": "Copy into Word",
+    "joinLines": "Copy as one block (no line breaks)",
+    "link": "Copy link to this section",
+    "options": "Copy options",
+    "plain": "Copy plain text",
+    "quote": "Copy source with quotation",
+    "searchTabTitle": "Search: {query}",
+    "sourceEnd": "Copy with source at end",
+    "sourceStart": "Copy with source at start",
+    "toSearch": "Copy to library search",
+    "withNotes": "Copy with notes"
+  },
+  "exportReady": "Export is ready - click Export to Word again",
+  "exportRestricted": "This book cannot be exported to Word at the publisher's request. You can still read and print it as usual.",
+  "hebrewBooks": {
+    "pages": "{n} pp.",
+    "possibleMatch": "Possible match",
+    "recommended": "Recommended",
+    "title": "Scanned editions on HebrewBooks"
+  },
+  "link": {
+    "copied": "Link copied",
+    "failed": "Copying the link failed",
+    "noLine": "No line found to copy a link to"
+  },
+  "loading": "Loading...",
+  "markers": {
+    "title": "Commentary markers (Ctrl+U)"
+  },
+  "note": {
+    "delete": "Delete note",
+    "placeholder": "Enter a note...",
+    "updated": "Updated {time}"
+  },
+  "related": {
+    "commentariesOf": "Commentaries on {title}",
+    "empty": "No related books",
+    "scanning": "Scanning...",
+    "title": "Related books"
+  },
+  "report": {
+    "book": "Book",
+    "correctedText": "corrected text",
+    "descriptionPlaceholder": "Description of the mistake",
+    "duplicate": "This mistake was already reported. Thank you!",
+    "email": "Email address (optional)",
+    "line": "Line",
+    "needDescription": "Please describe the mistake",
+    "noEndpoint": "The report server is not configured yet. The report will be saved and sent automatically once it is.",
+    "noLine": "No line found to report",
+    "noText": "No text found to report",
+    "queuedOffline": "No connection - the report was saved and will be sent later",
+    "rejected": "The report was rejected",
+    "required": "Required",
+    "restoreOriginal": "Restore original text",
+    "saveForLater": "Save to send later",
+    "savedForLater": "The report was saved and will be sent later",
+    "selectedText": "Selected text",
+    "sendNow": "Send now",
+    "sending": "Sending…",
+    "sent": "Report sent. Thank you!",
+    "source": "Source",
+    "suggestedFix": "Suggested correction",
+    "title": "Report a mistake in the book",
+    "unverified": "The line could not be verified against the library, so the suggestion will be sent as a description only, not as a fix that can be applied automatically.",
+    "whatIsWrong": "What's wrong?"
+  },
+  "search": {
+    "placeholderCommentary": "Search commentaries...",
+    "placeholderText": "Search text...",
+    "recents": "Recent searches",
+    "recentsRemove": "Remove",
+    "scopeBottom": "Commentaries below",
+    "scopeLeft": "Commentaries left",
+    "scopeRight": "Commentaries right",
+    "scopeText": "Text"
+  },
+  "selectAll": "Select all",
+  "toc": {
+    "loadError": "Error loading table of contents"
+  },
+  "toolbar": {
+    "close_bottom": "Close bottom commentary panel (Ctrl+J)",
+    "close_left": "Close left commentary panel (Ctrl+Alt+J)",
+    "close_right": "Close right commentary panel (Ctrl+Shift+J)",
+    "dragHint": "Drag to move the toolbar",
+    "exportToWord": "Export to Word",
+    "more": "More items",
+    "nextSection": "Next section (Ctrl+Left)",
+    "open_bottom": "Bottom commentary panel (Ctrl+J)",
+    "open_left": "Left commentary panel (Ctrl+Alt+J)",
+    "open_right": "Right commentary panel (Ctrl+Shift+J)",
+    "prevSection": "Previous section (Ctrl+Right)",
+    "removeAlsoNikud": "Remove vowels too",
+    "removeNikud": "Remove vowels",
+    "removeTeamim": "Remove cantillation",
+    "restoreAll": "Restore cantillation and vowels",
+    "restoreNikud": "Restore vowels",
+    "search": "Search (Ctrl+F)",
+    "syncCommentaries": "Sync commentaries",
+    "syncOffTitle": "Sync commentaries\nCommentaries will follow the top line automatically",
+    "syncOnTitle": "Sync commentaries\nClick to turn off auto-sync",
+    "toc": "Table of contents (Ctrl+K)",
+    "zoomInTitle": "Zoom in (Ctrl+)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0",
+    "zoomOutTitle": "Zoom out (Ctrl-)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0"
+  },
+  "versions": {
+    "active": "Version: {name}",
+    "default": "Default version",
+    "title": "Versions"
+  },
+  "wordLink": {
+    "zoomIn": "Larger text",
+    "zoomOut": "Smaller text"
+  }
+}

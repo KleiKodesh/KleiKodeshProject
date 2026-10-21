@@ -60,15 +60,15 @@ const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`
       ref="toggleButtonRef"
       class="editions-toggle"
       :class="{ active: isOpen }"
-      title="מהדורות סרוקות בהיברו בוקס"
-      aria-label="מהדורות סרוקות בהיברו בוקס"
+      :title="$t('bookView.hebrewBooks.title')"
+      :aria-label="$t('bookView.hebrewBooks.title')"
       @click="toggleOpen"
     >
       <IconDocumentPdf20Regular />
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="dropdownPositionClass">
-      <div class="editions-header">מהדורות סרוקות בהיברו בוקס</div>
+      <div class="editions-header">{{ $t('bookView.hebrewBooks.title') }}</div>
       <BookViewHebrewBooksEditionsList :editions="editions" @picked="setOpen(false)" />
     </div>
   </div>

@@ -14,6 +14,9 @@ import {
   setCommentaryAllChecked,
   isCommentaryBookUnchecked,
 } from './uncheckedCommentaryBooks'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   groups: CommentaryGroup[]
@@ -26,7 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 /** "Close the commentator tree" */
-const closeTitle = 'סגור עץ מפרשים'
+const closeTitle = t('bookView.commentary.closeTree')
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 onMounted(() => nextTick(() => searchInputRef.value?.focus({ preventScroll: true })))

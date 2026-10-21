@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, shallowRef, markRaw, computed, watch, onScopeDispose } from 'vue'
 import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
@@ -138,7 +139,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       // TOC load failed — show the book with no TOC rather than a blank page
       tocEntries.value = markRaw([])
       tocSearchTree.value = new SearchableTree([])
-      error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
+      error.value = e instanceof Error ? e.message : t('bookView.toc.loadError')
     } finally {
       if (generation === loadGeneration) {
         openTabToc.pending = null

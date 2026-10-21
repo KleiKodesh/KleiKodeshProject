@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { showToast } from '@/composables/useToast'
@@ -83,14 +84,14 @@ export function useCommentaryErrorReport(options: CommentaryErrorReportOptions):
     const isRealLine = pressedLineId != null && pressedLineId >= 0
     const found = isRealLine ? options.findLine(pressedLineId!) : null
     if (!found || found.line.lineIndex < 0) {
-      showToast('לא זוהתה שורה לדיווח', { variant: 'error' })
+      showToast(t('bookView.report.noLine'), { variant: 'error' })
       return
     }
 
     const originalLine = htmlToText(found.line.content).trim()
     const selectedText = readSelectedText(options.scrollerEl.value) || originalLine
     if (!selectedText) {
-      showToast('לא זוהה טקסט לדיווח', { variant: 'error' })
+      showToast(t('bookView.report.noText'), { variant: 'error' })
       return
     }
 

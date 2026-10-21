@@ -40,6 +40,9 @@ import {
 import type { LineItem } from './lines/useBookViewLinesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { loadSectionTocEntries } from './lines/wordLinkSection'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   bookId: number | undefined
@@ -133,7 +136,7 @@ const sections = computed<RelatedBooksSection[]>(() => {
     sectionMap.get(label)!.some((book) => book.isBaseText) ? index : last, -1)
   let insertAt = lastSourceSection + 1
   for (const source of sourceCommentaries.value) {
-    const label = `מפרשי ${source.sourceTitle}`
+    const label = t('bookView.related.commentariesOf', { title: source.sourceTitle })
     const books: RelatedBook[] = []
     for (const { group, baseBookId } of source.groups) {
       if (group.bookId === props.bookId || seen.has(group.bookId)) continue
@@ -511,15 +514,15 @@ async function onBookClick(book: RelatedBook) {
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen }"
-      title="ספרים קרובים"
+      :title="$t('bookView.related.title')"
       @click="toggleOpen"
     >
       <IconLibrary16Regular />
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="dropdownPositionClass">
-      <div v-if="!relatedBooksLoaded" class="loading-message">בסריקה...</div>
-      <div v-else-if="sections.length === 0" class="empty-message">אין ספרים קרובים</div>
+      <div v-if="!relatedBooksLoaded" class="loading-message">{{ $t('bookView.related.scanning') }}</div>
+      <div v-else-if="sections.length === 0" class="empty-message">{{ $t('bookView.related.empty') }}</div>
       <template v-else v-for="section in sections" :key="section.label">
         <div class="section-caption">{{ section.label }}</div>
         <button

@@ -475,8 +475,8 @@ useEventListener(() => window, 'resize', () => emit('close'))
               v-if="interactive"
               class="word-link-tooltip-button"
               type="button"
-              title="הקטן טקסט"
-              aria-label="הקטן טקסט"
+              :title="$t('bookView.wordLink.zoomOut')"
+              :aria-label="$t('bookView.wordLink.zoomOut')"
               @click="decreaseFontSize"
               @mousedown.left.stop
             >
@@ -486,8 +486,8 @@ useEventListener(() => window, 'resize', () => emit('close'))
               v-if="interactive"
               class="word-link-tooltip-button"
               type="button"
-              title="הגדל טקסט"
-              aria-label="הגדל טקסט"
+              :title="$t('bookView.wordLink.zoomIn')"
+              :aria-label="$t('bookView.wordLink.zoomIn')"
               @click="increaseFontSize"
               @mousedown.left.stop
             >
@@ -497,8 +497,8 @@ useEventListener(() => window, 'resize', () => emit('close'))
               v-if="interactive"
               class="word-link-tooltip-close"
               type="button"
-              title="סגור"
-              aria-label="סגור"
+              :title="$t('bookView.close')"
+              :aria-label="$t('bookView.close')"
               @click="emit('close')"
               @mousedown.left.stop
             >

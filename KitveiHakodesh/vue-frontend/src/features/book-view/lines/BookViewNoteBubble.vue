@@ -135,7 +135,7 @@ async function onDelete() {
     <div ref="bubbleRef" class="note-bubble" :style="style" @click.stop>
       <div class="note-bubble-header">
         <span class="note-bubble-quote" :title="note.quote">{{ note.quote }}</span>
-        <button class="delete-button" :aria-label="'מחק הערה'" @click="onDelete">
+        <button class="delete-button" :aria-label="$t('bookView.note.delete')" @click="onDelete">
           <IconDelete24Regular />
         </button>
       </div>
@@ -144,12 +144,12 @@ async function onDelete() {
         v-model="noteText"
         class="note-textarea"
         dir="auto"
-        placeholder="הזן הערה..."
+        :placeholder="$t('bookView.note.placeholder')"
         rows="7"
       />
       <div class="note-bubble-timestamps">
         <span>{{ formatTimestamp(note.createdAt) }}</span>
-        <span v-if="note.updatedAt !== note.createdAt">עודכן {{ formatTimestamp(note.updatedAt) }}</span>
+        <span v-if="note.updatedAt !== note.createdAt">{{ $t('bookView.note.updated', { time: formatTimestamp(note.updatedAt) }) }}</span>
       </div>
     </div>
   </Teleport>
