@@ -9,6 +9,17 @@ const props = defineProps<{ card: HomeSuggestionCardData }>()
 
 const actions = computed(() => !!props.card.pinning)
 
+// Title+path text block direction, resolved once per title from its first strong
+// char (Hebrew/Arabic -> rtl, Latin -> ltr), so the path aligns with its title.
+// The card itself keeps the app direction, so the icon stays on the app's start side.
+const FIRST_STRONG = /[A-Za-zÀ-ɏ֐-ࣿיִ-﷿ﹰ-﻿]/
+const textDir = computed(() => {
+  const m = FIRST_STRONG.exec(props.card.title)
+  if (!m) return 'auto'
+  const c = m[0].charCodeAt(0)
+  return c >= 0x0590 ? 'rtl' : 'ltr'
+})
+
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
 
@@ -123,9 +134,9 @@ function onRemove() {
       @auxclick.middle="card.open(wantsNewTab($event))"
     >
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
-      <span class="card-text">
+      <span class="card-text" :dir="textDir">
         <span class="card-title">{{ card.title }}</span>
-        <span v-if="card.path" class="card-path" dir="auto">{{ card.path }}</span>
+        <span v-if="card.path" class="card-path">{{ card.path }}</span>
       </span>
     </button>
 
