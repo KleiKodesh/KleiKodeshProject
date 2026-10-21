@@ -47,7 +47,15 @@ type Step =
 // skipped) the wizard before the terms existed sees ONLY the terms step. Captured
 // once at mount so accepting the terms does not reshape the flow mid-way.
 const termsOnly = settings.setupDone && !settings.termsAccepted
-const termsAgreed = ref(settings.termsAccepted)
+// An unsubmitted terms tick survives the language reload (cleared with the step key).
+const TERMS_KEY = 'setupWizardTermsTick'
+function readTermsTick(): boolean {
+  try { return sessionStorage.getItem(TERMS_KEY) === '1' } catch { return false }
+}
+const termsAgreed = ref(settings.termsAccepted || readTermsTick())
+watch(termsAgreed, v => {
+  try { sessionStorage.setItem(TERMS_KEY, v ? '1' : '0') } catch { /* ignore */ }
+})
 
 const steps = computed<Step[]>(() => {
   if (termsOnly) return ['terms']
@@ -137,7 +145,10 @@ const currentStepMeta = computed(() => STEPS[currentStep.value])
 const isLast = computed(() => stepIndex.value === steps.value.length - 1)
 const dismissed = ref(false)
 watch(dismissed, d => {
-  if (d) try { sessionStorage.removeItem(STEP_KEY) } catch { /* ignore */ }
+  if (d) try {
+    sessionStorage.removeItem(STEP_KEY)
+    sessionStorage.removeItem(TERMS_KEY)
+  } catch { /* ignore */ }
 })
 
 const progressPct = computed(() =>
