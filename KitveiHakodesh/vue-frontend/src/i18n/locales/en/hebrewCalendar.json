@@ -1,0 +1,58 @@
+{
+  "nav": {
+    "next": "Next",
+    "prev": "Previous",
+    "today": "Today",
+    "monthly": "Monthly",
+    "weekly": "Weekly"
+  },
+  "zmanim": {
+    "chatzotNight": "Midnight",
+    "alot": "Dawn (Alot HaShachar)",
+    "misheyakir": "Misheyakir",
+    "sunrise": "Sunrise",
+    "sofShmaMga": "Latest Shema (MGA)",
+    "sofShmaGra": "Latest Shema (GRA)",
+    "sofTfillaMga": "Latest Shacharit (MGA)",
+    "sofTfillaGra": "Latest Shacharit (GRA)",
+    "chatzot": "Midday (Chatzot)",
+    "minchaGedola": "Mincha Gedola",
+    "minchaKetana": "Mincha Ketana",
+    "plag": "Plag HaMincha",
+    "sunset": "Sunset",
+    "tzeit": "Nightfall (Tzeit)"
+  },
+  "learning": {
+    "dafYomi": "Daf Yomi",
+    "dirshuAmudYomi": "Amud Yomi (Dirshu)",
+    "yerushalmiVilna": "Yerushalmi Yomi",
+    "mishnaYomi": "Mishna Yomit",
+    "nachYomi": "Nach Yomi",
+    "perekYomi": "Perek Yomi",
+    "rambam1": "Rambam Yomi (1 chapter)",
+    "rambam3": "Rambam Yomi (3 chapters)",
+    "kitzurShulchanAruch": "Kitzur Shulchan Aruch",
+    "chofetzChaim": "Chofetz Chaim",
+    "psalms": "Daily Tehillim"
+  },
+  "day": {
+    "zmanim": "Zmanim",
+    "learning": "Daily learning",
+    "havdalah": "Shabbat ends: {time}",
+    "candleLighting": "Candle lighting: {time}"
+  },
+  "gregMonths": {
+    "jan": "January",
+    "feb": "February",
+    "mar": "March",
+    "apr": "April",
+    "may": "May",
+    "jun": "June",
+    "jul": "July",
+    "aug": "August",
+    "sep": "September",
+    "oct": "October",
+    "nov": "November",
+    "dec": "December"
+  }
+}

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, computed } from 'vue'
 import { convert, toMetric, formatResult, explainConversion } from './halachicUnits'
 import type { ConversionExplanation } from './halachicUnits'
@@ -24,12 +26,12 @@ function normalizeSources(source: Unit['source']): UnitSource | null {
 }
 
 const TABS = [
-  { key: 'length', label: 'אורך' },
-  { key: 'area', label: 'שטח' },
-  { key: 'volume', label: 'נפח' },
-  { key: 'weight', label: 'משקל' },
-  { key: 'coins', label: 'מטבעות' },
-  { key: 'time', label: 'זמן' },
+  { key: 'length', label: t('halachicUnits.tabs.length') },
+  { key: 'area', label: t('halachicUnits.tabs.area') },
+  { key: 'volume', label: t('halachicUnits.tabs.volume') },
+  { key: 'weight', label: t('halachicUnits.tabs.weight') },
+  { key: 'coins', label: t('halachicUnits.tabs.coins') },
+  { key: 'time', label: t('halachicUnits.tabs.time') },
 ]
 
 const OPINION_LABELS: Record<string, string> = {
@@ -250,15 +252,12 @@ const toMetricDisplay = computed(() => {
       <!-- First-use disclaimer — shown instead of converter -->
       <div v-if="!settings.midotDisclaimerAccepted" class="disclaimer-wrap">
         <div class="disclaimer-box">
-          <p class="disclaimer-title">שימו לב</p>
-          <p class="disclaimer-body">
-            המידות והשיעורים המוצגים כאן מבוססים על מקורות שונים ועל שיטות פוסקים שונות. ייתכנו
-            אי-דיוקים, מחלוקות, ופרשנויות שונות בין הפוסקים.
-          </p>
-          <p class="disclaimer-body">השימוש בכלי זה הוא באחריות המשתמש בלבד.</p>
-          <p class="disclaimer-body">לכל שאלה הלכתית יש לפנות לרב מוסמך.</p>
+          <p class="disclaimer-title">{{ $t('halachicUnits.disclaimer.title') }}</p>
+          <p class="disclaimer-body">{{ $t('halachicUnits.disclaimer.body1') }}</p>
+          <p class="disclaimer-body">{{ $t('halachicUnits.disclaimer.body2') }}</p>
+          <p class="disclaimer-body">{{ $t('halachicUnits.disclaimer.body3') }}</p>
           <button class="disclaimer-btn" @click="settings.acceptMidotDisclaimer()">
-            הבנתי, המשך
+            {{ $t('halachicUnits.disclaimer.accept') }}
           </button>
         </div>
       </div>
@@ -321,10 +320,10 @@ const toMetricDisplay = computed(() => {
           <button
             class="rounded-toggle"
             :class="{ active: useRounded }"
-            :title="useRounded ? 'ערכים מעוגלים (כספרים)' : 'ערכים מדויקים'"
+            :title="useRounded ? $t('halachicUnits.options.roundedTitle') : $t('halachicUnits.options.exactTitle')"
             @click="useRounded = !useRounded"
           >
-            {{ useRounded ? 'מעוגל' : 'מדויק' }}
+            {{ useRounded ? $t('halachicUnits.options.rounded') : $t('halachicUnits.options.exact') }}
           </button>
         </div>
       </template>

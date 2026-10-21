@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, computed, watch } from 'vue'
 import { IconDismiss20Regular, IconCopy20Regular, IconCheckmark20Regular, IconHourglassOneQuarter20Regular } from '@iconify-prerendered/vue-fluent'
 import type { OcrSelectionResult, OcrScript } from './pdfViewerTypes'
@@ -21,7 +23,7 @@ watch(() => props.result.text, (val) => {
 })
 
 const resultLabel = computed(() => {
-  return props.result.isOcr ? 'טקסט מזוהה (OCR)' : 'טקסט נבחר'
+  return props.result.isOcr ? t('pdfViewer.ocr.recognizedText') : t('pdfViewer.ocr.selectedText')
 })
 
 // The chrome stays RTL, but the recognised text itself follows the script that
@@ -30,7 +32,7 @@ const resultLabel = computed(() => {
 const textDirection = computed(() => (props.script === 'english' ? 'ltr' : 'rtl'))
 
 const copyButtonLabel = computed(() => {
-  return copied.value ? 'הועתק' : 'העתק'
+  return copied.value ? t('pdfViewer.ocr.copied') : t('pdfViewer.ocr.copy')
 })
 
 async function copyText() {
@@ -77,10 +79,10 @@ function onKeydown(event: KeyboardEvent) {
           </span>
           <div v-if="props.isProcessing" class="processing-indicator">
             <IconHourglassOneQuarter20Regular class="spinner" />
-            <span class="processing-text">מעבד...</span>
+            <span class="processing-text">{{ $t('pdfViewer.ocr.processing') }}</span>
           </div>
         </div>
-        <button class="close-btn" @click="emit('dismiss')" title="סגור (Esc)" :disabled="props.isProcessing">
+        <button class="close-btn" @click="emit('dismiss')" :title="$t('pdfViewer.closeEsc')" :disabled="props.isProcessing">
           <IconDismiss20Regular />
         </button>
       </div>
@@ -90,7 +92,7 @@ function onKeydown(event: KeyboardEvent) {
           ref="textRef"
           class="popup-textarea"
           v-model="editableText"
-          :placeholder="editableText ? '' : 'לא נמצא טקסט באזור הנבחר'"
+          :placeholder="editableText ? '' : $t('pdfViewer.ocr.noText')"
           spellcheck="true"
           :dir="textDirection"
           :disabled="props.isProcessing"
@@ -104,13 +106,13 @@ function onKeydown(event: KeyboardEvent) {
       </div>
 
       <div class="popup-footer">
-        <button class="action-btn cancel-btn" @click="emit('dismiss')" :disabled="props.isProcessing">ביטול</button>
+        <button class="action-btn cancel-btn" @click="emit('dismiss')" :disabled="props.isProcessing">{{ $t('pdfViewer.cancel') }}</button>
         <button 
           class="action-btn copy-btn" 
           :disabled="!editableText || props.isProcessing" 
           :class="{ copied: copied }"
           @click="copyText"
-          title="העתק לחיתוך (Ctrl+C)"
+          :title="$t('pdfViewer.ocr.copyForCut')"
         >
           <IconCheckmark20Regular v-if="copied" class="icon" />
           <IconCopy20Regular v-else class="icon" />

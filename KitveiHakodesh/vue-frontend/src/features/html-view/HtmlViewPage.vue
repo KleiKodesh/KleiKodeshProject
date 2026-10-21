@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -69,7 +71,7 @@ watch(src, (url) => {
   loadTimeoutId = window.setTimeout(() => {
     if (!loaded.value) {
       loading.value = false
-      error.value = 'לא נטען — נסה רענון'
+      error.value = t('htmlView.notLoaded')
     }
   }, 8000)
 })
@@ -213,7 +215,7 @@ onMounted(() => {
     loadTimeoutId = window.setTimeout(() => {
       if (!loaded.value) {
         loading.value = false
-        error.value = 'לא נטען — נסה רענון'
+        error.value = t('htmlView.notLoaded')
       }
     }, 8000)
   }
@@ -280,7 +282,7 @@ const htmlFilter = computed(() => {
 <template>
   <div class="html-view-page" :style="{ filter: htmlFilter }">
     <div v-if="!src" class="html-state-message">
-      <span>אין קובץ פתוח</span>
+      <span>{{ $t('htmlView.noFileOpen') }}</span>
     </div>
     <div v-else style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column;">
       <iframe
@@ -290,11 +292,11 @@ const htmlFilter = computed(() => {
         @load="onIframeLoad"
       />
       <div v-if="loading" class="html-overlay">
-        <span>טוען...</span>
+        <span>{{ $t('htmlView.loading') }}</span>
       </div>
       <div v-if="error" class="html-overlay html-overlay--error">
         <MessageBanner class="html-overlay-message" :message="error" :dismissible="false" />
-        <button @click="retry">נסה שוב</button>
+        <button @click="retry">{{ $t('htmlView.retry') }}</button>
       </div>
     </div>
   </div>

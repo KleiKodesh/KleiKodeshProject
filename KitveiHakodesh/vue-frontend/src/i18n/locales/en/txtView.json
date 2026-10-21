@@ -1,0 +1,15 @@
+{
+  "notFound": "No matches",
+  "fileNotFound": "File not found",
+  "loadError": "Error loading file",
+  "noFileOpen": "No file open",
+  "loading": "Loading...",
+  "retry": "Try again",
+  "searchPlaceholder": "Search text...",
+  "menu": {
+    "copy": "Copy",
+    "selectAll": "Select all",
+    "copyJoinLines": "Copy as one line (no line breaks)",
+    "copyCleanText": "Copy clean text"
+  }
+}
