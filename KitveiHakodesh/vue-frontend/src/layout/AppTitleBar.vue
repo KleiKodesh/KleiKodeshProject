@@ -33,6 +33,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
+import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { documentIcon } from '@/utils/documentIcons'
 import { useI18n } from 'vue-i18n'
 
@@ -45,6 +46,7 @@ const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
+const hebrewBooksSideEditionStore = useHebrewBooksSideEditionStore()
 
 // ---- The workspace picker -----------------------------------------------------
 //
@@ -109,6 +111,11 @@ const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 /** Catalog title for a catalog book, the stored title otherwise (see catalogBookTitle). */
 const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(activeTab.value) : ''))
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
+// OCR works on any PDF.js viewer on screen: a PDF tab, or a HebrewBooks edition shown side
+// by side in the book view's left panel.
+const isOcrAvailable = computed(() =>
+  activeTab.value?.route === '/pdf-view' || hebrewBooksSideEditionStore.isEditionShown(props.paneId),
+)
 
 // A click always enters search mode; the address-bar dropdown lists recent
 // locations (shown while the field is empty / has no results) — not open tabs.
@@ -429,7 +436,7 @@ useAppTitleBarShortcuts({
         <IconOptions24Regular v-else />
       </button>
       <button
-        v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
+        v-if="isTitleBarButtonVisible('ocr') && isOcrAvailable"
         class="bar-btn"
         tabindex="-1"
         :class="{ active: pdfOcrStore.isActive }"

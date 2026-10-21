@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { uiLanguage } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
@@ -12,6 +11,9 @@ import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
+import { usePdfOcrStoreSync } from './usePdfOcrStoreSync'
+import PdfOcrToolbar from './PdfOcrToolbar.vue'
+import { buildPdfViewerSrc, outlineJumpHash } from './buildPdfViewerSrc'
 import { usePdfContextMenu } from './usePdfContextMenu'
 import { usePdfPrintShortcut } from './usePdfPrintShortcut'
 import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
@@ -120,23 +122,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// Sync composable active state with store
-watch(pdfOcrStore, () => {
-  if (pdfOcrStore.isActive !== ocr.isActive.value) {
-    pdfOcrStore.isActive ? ocr.activate() : ocr.deactivate()
-  }
-  if (pdfOcrStore.script !== ocr.script.value) {
-    ocr.setScript(pdfOcrStore.script)
-  }
-  if (pdfOcrStore.skipExistingText !== ocr.forceOcr.value) {
-    ocr.setForceOcr(pdfOcrStore.skipExistingText)
-  }
-})
-
-// Deactivate store when composable deactivates (e.g. after selection)
-watch(ocr.isActive, (active) => {
-  if (!active && pdfOcrStore.isActive) pdfOcrStore.deactivate()
-})
+usePdfOcrStoreSync(ocr)
 
 // Update PDF.js toolbar visibility when the setting changes
 watch(
@@ -196,13 +182,10 @@ let outlineHash: { url: string; hash: string } | null = null
 const iframeSrc = computed(() => {
   const url = paneNavigation.activeTab.localFileVirtualUrl
   if (!url) return null
-  const p = new URLSearchParams({ file: url, locale: uiLanguage === 'en' ? 'en-US' : 'he', cMapPacked: 'true' })
-  const fileName = paneNavigation.activeTab.localFileName
-  if (fileName) p.set('filename', encodeURIComponent(fileName))
   const outlineTarget = paneNavigation.activeTab.pdfInitialOutlineTarget
-  if (outlineTarget) outlineHash = { url, hash: `#khOutline=${encodeURIComponent(outlineTarget)}` }
+  if (outlineTarget) outlineHash = { url, hash: outlineJumpHash(outlineTarget) }
   else if (outlineHash?.url !== url) outlineHash = null
-  return `/pdfjs/web/viewer.html?${p}${outlineHash?.hash ?? ''}`
+  return buildPdfViewerSrc(url, paneNavigation.activeTab.localFileName, outlineHash?.hash)
 })
 
 // A reactive :src change (switching between two PDF tabs, or another file
@@ -281,56 +264,7 @@ function cancelConversion() {
           allowfullscreen
           @load="onIframeLoad"
         />
-        <div v-if="ocr.isActive.value" class="ocr-overlay" />
-        <div v-if="ocr.isActive.value" class="ocr-toolbar">
-          <div class="toolbar-content">
-            <div class="script-buttons">
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'hebrew' }"
-                @click="pdfOcrStore.setScript('hebrew')"
-                :title="$t('pdfViewer.ocr.scriptHebrewTitle')"
-              >
-                {{ $t('pdfViewer.ocr.scriptHebrew') }}
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'rashi' }"
-                @click="pdfOcrStore.setScript('rashi')"
-                :title="$t('pdfViewer.ocr.scriptRashiTitle')"
-              >
-                {{ $t('pdfViewer.ocr.scriptRashi') }}
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'mixed' }"
-                @click="pdfOcrStore.setScript('mixed')"
-                :title="$t('pdfViewer.ocr.scriptMixedTitle')"
-              >
-                {{ $t('pdfViewer.ocr.scriptMixed') }}
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'english' }"
-                @click="pdfOcrStore.setScript('english')"
-                title="English"
-              >
-                English
-              </button>
-            </div>
-            <button
-              class="toggle-btn"
-              :class="{ active: pdfOcrStore.skipExistingText }"
-              @click="pdfOcrStore.toggleSkipExistingText()"
-              :title="$t('pdfViewer.ocr.forceTitle')"
-            >
-              {{ $t('pdfViewer.ocr.force') }}
-            </button>
-            <button class="close-btn" @click="ocr.deactivate()" :title="$t('pdfViewer.closeEsc')">
-              <IconDismiss20Regular />
-            </button>
-          </div>
-        </div>
+        <PdfOcrToolbar :ocr="ocr" />
       </div>
     </template>
 
@@ -387,123 +321,6 @@ function cancelConversion() {
   height: 100%;
   border: none;
 }
-.ocr-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-  z-index: 8000;
-}
-
-.ocr-toolbar {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10000;
-  animation: slideDown 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-.toolbar-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.script-buttons {
-  display: flex;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--bg-primary);
-}
-
-.script-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.script-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-.script-btn.active {
-  background: var(--accent-color);
-  color: #fff;
-}
-
-.toggle-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 100ms ease;
-  white-space: nowrap;
-}
-
-.toggle-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-.toggle-btn.active {
-  background: var(--status-warning);
-  color: #fff;
-  border-color: var(--status-warning);
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 4px;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.close-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  color: var(--text-primary);
-}
-
-.close-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
 .pdf-empty {
   flex: 1;
   display: flex;

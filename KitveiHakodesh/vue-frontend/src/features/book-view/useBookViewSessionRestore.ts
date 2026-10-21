@@ -27,6 +27,7 @@ import type {
   CommentaryTreeStatePersist,
   TocPersistState,
   PinnedCommentaryGroup,
+  SideEditionPersistState,
 } from './bookViewTypes'
 import {
   hasCommentaryCheckState,
@@ -73,6 +74,8 @@ export function useBookViewSessionRestore(
   const idbResolved = ref(false)
   /** The saved version's title, or null for the merged text. Applied by useBookView. */
   const restoredVersionTitle = ref<string | null>(null)
+  /** The saved side-by-side HebrewBooks edition, or null for none. Applied by BookViewPage. */
+  const restoredSideEdition = ref<SideEditionPersistState | null>(null)
 
   /** Resolved per-panel saved state, filled by _applyRestoreData. */
   let _restoredPanels: CommentaryPanelPersistStates = {}
@@ -111,6 +114,15 @@ export function useBookViewSessionRestore(
     // to be matched against loads asynchronously and may arrive either side of this,
     // so useBookView applies it once both are in hand.
     restoredVersionTitle.value = bookSaved?.versionTitle ?? (useLastRead ? lastRead?.versionTitle ?? null : null)
+    // The side-by-side edition. The PICK falls back to last-read even with resumeLastRead
+    // off - which edition a reader chose for a book is a preference about the book, so
+    // a new tab or a restart shows it again. The column width is layout, and follows the
+    // same rule as everything else here.
+    const savedSideEdition = bookSaved?.sideEdition ?? (useLastRead ? lastRead?.sideEdition : undefined)
+    const pickedEditionId = savedSideEdition?.editionId ?? lastRead?.sideEdition?.editionId ?? null
+    restoredSideEdition.value = savedSideEdition || pickedEditionId != null
+      ? { editionId: pickedEditionId, fraction: savedSideEdition?.fraction ?? null }
+      : null
     // autoSelectTopLine is deliberately NOT restored here. It is a single app-wide
     // preference (one ref, persisted in localStorage, toggled from the toolbar) — there is
     // no per-tab storage for it, so writing a per-(tab, book) snapshot into it does not
@@ -228,5 +240,5 @@ export function useBookViewSessionRestore(
     }
   }
 
-  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restoredVersionTitle, restore }
+  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restoredVersionTitle, restoredSideEdition, restore }
 }

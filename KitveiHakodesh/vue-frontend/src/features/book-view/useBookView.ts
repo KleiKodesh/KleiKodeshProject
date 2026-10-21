@@ -598,7 +598,7 @@ export function useBookView(
 
   const {
     initialLineIndex, initialScrollTop, initialScrollOffset,
-    scrollStateReady, idbResolved, restoredVersionTitle, restore: restoreSession,
+    scrollStateReady, idbResolved, restoredVersionTitle, restoredSideEdition, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     panels,
@@ -777,7 +777,7 @@ export function useBookView(
     buildExportHtml, bookTitle,
     // scroll / search state
     currentScrollLineIndex,
-    scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+    scrollStateReady, idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
     flashOpenLine,
     activeMatchCount: searchPanel.activeMatchCount,
     activeMatchIdx: searchPanel.activeMatchIdx,

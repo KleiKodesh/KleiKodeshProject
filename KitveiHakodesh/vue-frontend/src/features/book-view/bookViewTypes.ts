@@ -186,6 +186,18 @@ export interface TocPersistState {
 }
 
 /**
+ * The HebrewBooks scanned edition shown side by side in the left column - which one the
+ * reader picked and how wide they made its column. Whether it is on screen needs no field:
+ * that is the left panel's own `commentaryPanels['side-left'].visible`.
+ */
+export interface SideEditionPersistState {
+  /** The picked edition (HebrewBooks book id); null = none picked, the best is used. */
+  editionId: number | null
+  /** The edition column's width as a fraction of the row; null = the default split. */
+  fraction: number | null
+}
+
+/**
  * Each panel's currently-shown commentary group, captured at the instant of a user
  * action (line click, auto-select scroll) while `activePinnedGroup` is still valid.
  * A snapshot rather than a single value because the panels sit on different books.

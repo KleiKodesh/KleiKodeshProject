@@ -33,6 +33,14 @@ The trees used to share `BookViewSidePanel` with the TOC, which is why only one 
 
 Adding a fourth panel means adding a slot to `COMMENTARY_SLOTS` plus its layout and toggle: the composables, the store, persistence and session restore all loop over the constant and need no edit.
 
+## HebrewBooks edition side by side
+
+With the toggle row on top of the editions dropdown on (per pane, persisted, default on), the **side-left** column shows a scanned HebrewBooks edition instead of commentary - the one picked in the dropdown, else the book's best - opened at the current TOC path. Picking an edition opens the column. Available only where split view is (`useSplitViewAvailable`: never VSTO, wide window); elsewhere the toggle is hidden and picks open a new tab.
+
+- `useHebrewBooksSideEditionMode.ts` - toggle + availability.
+- `stores/hebrewBooksSideEditionStore.ts` - per pane+book picked edition (localStorage `app.hbSideEditionPicks`), per pane edition on screen (the title bar shows OCR while one is).
+- `BookViewHebrewBooksSideEdition.vue` - fetches the PDF (`fetchHbPdfUrl`, shared with the tab download flow) and hosts the PDF.js iframe (`buildPdfViewerSrc`, shared with `PdfViewPage`), with OCR (`usePdfOcrStoreSync` + `PdfOcrToolbar`, also shared).
+
 ## Top-Level Components
 
 **BookViewPage.vue** - top-level orchestrator. The right place to add new panels or cross-cutting book-view behavior.
