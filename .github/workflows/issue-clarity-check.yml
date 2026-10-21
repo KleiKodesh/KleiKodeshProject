@@ -35,11 +35,10 @@ jobs:
             Vague reports like "it doesn't work" are NOT clear enough.
             For feature requests, only check that the request itself is understandable; if the wish is ambiguous, ask what exactly they mean.
             When something is missing, prefer the questions the maintainer usually asks:
-            - Any red errors in the console (F12 or Ctrl+Shift+I -> Console tab)?
-            - Which version, and which installer/Office bitness (regular, x86 or x64)?
+            - Is there anything at all shown in the console (F12 or Ctrl+Shift+I -> Console tab)? Ask them to copy all of it, not only errors.
             - A screenshot or short screen recording from opening the program until the bug.
             - Does it also happen in another book/file, or in the latest version? Inside Word or in the full app window?
-            Do NOT ask about Windows version, hardware, or other trivia, and never ask for something a form field already answers.
+            Do NOT ask about installer type, x86/x64, Office bitness, Windows version, hardware, or other trivia, and never ask for something a form field already answers.
             Ask at most 3 things.
             Duplicates: an "Existing issues:" list is given. If one or more of them is clearly the SAME problem (be conservative, max 3),
             mention them as "#N" in the reply (e.g. "may be a duplicate of #N"), in the issue's language.
