@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import { detectAvailableFonts, BUNDLED_FONTS } from '@/webview-host/fontsApi'
@@ -39,34 +39,36 @@ useDropdownClose(
   { ignore: [boxRef] },
 )
 
-async function toggle() {
+function toggle() {
   if (isOpen.value) {
     isOpen.value = false
     return
   }
+  // Position BEFORE opening so the dropdown mounts already fixed under the box. Opening
+  // first mounted it unpositioned at the bottom of <body> for a tick; the viewport fitter
+  // could measure it there and pin a translate that pushed it off-screen, so it opened
+  // for some clicks and not others. Max height goes through a CSS variable because the
+  // fitter owns (and clears) the inline max-height.
+  if (boxRef.value) {
+    const rect = boxRef.value.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
+    const goUp = spaceAbove > spaceBelow
+    const maxH = Math.min(200, goUp ? spaceAbove : spaceBelow)
+    dropdownStyle.value = {
+      position: 'fixed',
+      left: rect.left + 'px',
+      width: rect.width + 'px',
+      zIndex: '10000',
+      '--font-dropdown-max-height': maxH + 'px',
+      ...(goUp
+        ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
+        : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
+    }
+  }
   isOpen.value = true
   emit('toggle')
-  // Enumeration starts BEFORE positioning. The early return below only means "cannot
-  // measure yet"; when it also skipped the load, the dropdown stayed open showing an empty
-  // list with no loading row, and only a close-and-reopen ever populated it.
   void loadFonts()
-  await nextTick()
-  if (!boxRef.value || !dropdownRef.value) return
-  const rect = boxRef.value.getBoundingClientRect()
-  const spaceBelow = window.innerHeight - rect.bottom - 8
-  const spaceAbove = rect.top - 8
-  const goUp = spaceAbove > spaceBelow
-  const maxH = Math.min(200, goUp ? spaceAbove : spaceBelow)
-  dropdownRef.value.style.maxHeight = maxH + 'px'
-  dropdownStyle.value = {
-    position: 'fixed',
-    left: rect.left + 'px',
-    width: rect.width + 'px',
-    zIndex: '10000',
-    ...(goUp
-      ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
-      : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
-  }
 }
 
 async function loadFonts() {
@@ -187,6 +189,7 @@ defineExpose({ isOpen })
 
 <style>
 .select-dropdown {
+  max-height: var(--font-dropdown-max-height, 200px);
   overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
