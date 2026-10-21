@@ -68,47 +68,47 @@ const steps = computed<Step[]>(() => {
  */
 const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }> = {
   terms: {
-    title: 'תנאי שימוש וזכויות יוצרים',
-    desc: 'לפני השימוש בתוכנה, נא לקרוא את התנאים ולאשר אותם.',
+    title: 'settings.wizard.terms.title',
+    desc: 'settings.wizard.terms.desc',
     component: SetupWizardStepTerms,
   },
   welcome: {
-    title: 'ברוכים הבאים לכתבי הקודש',
-    desc: 'אשף זה ילווה אותך בהגדרת האפליקציה בכמה צעדים קצרים. ניתן לשנות הכל בהמשך.',
+    title: 'settings.wizard.welcome.title',
+    desc: 'settings.wizard.welcome.desc',
   },
   db: {
-    title: 'בחירת מסד נתונים',
-    desc: 'כתבי הקודש צריכה את מסד הנתונים של אוצריא או של זית. אם אחת מהתוכנות כבר מותקנת, הפעל אותה פעם אחת לסיום ההתקנה ואז בחר את הנתיב למסד הנתונים. ניתן לשנות את הנתיב בכל עת דרך הגדרות האפליקציה.',
+    title: 'settings.wizard.db.title',
+    desc: 'settings.wizard.db.desc',
     component: SetupWizardStepDb,
   },
   theme: {
-    title: 'איך תרצה שהאפליקציה תיראה?',
-    desc: 'בחר ערכת נושא וגודל תצוגה שנוחים לך.',
+    title: 'settings.wizard.theme.title',
+    desc: 'settings.wizard.theme.desc',
     component: SetupWizardStepTheme,
   },
   'quick-settings': {
-    title: 'כמה הגדרות מהירות',
-    desc: 'הגדרות אלו ישפיעו על חוויית הקריאה היומיומית שלך.',
+    title: 'settings.wizard.quickSettings.title',
+    desc: 'settings.wizard.quickSettings.desc',
     component: SetupWizardStepQuickSettings,
   },
   'book-display': {
-    title: 'תצוגת הספרים',
-    desc: 'בחר גופנים ומרווחים לתצוגת הספרים.',
+    title: 'settings.wizard.bookDisplay.title',
+    desc: 'settings.wizard.bookDisplay.desc',
     component: SetupWizardStepBookDisplay,
   },
   'commentary-display': {
-    title: 'תצוגת הפירושים',
-    desc: 'הפירושים יכולים להיראות כמו הספר, או לקבל גופנים ומרווחים משל עצמם.',
+    title: 'settings.wizard.commentaryDisplay.title',
+    desc: 'settings.wizard.commentaryDisplay.desc',
     component: SetupWizardStepCommentaryDisplay,
   },
   'divine-names': {
-    title: "כיסוי שם ה'",
-    desc: 'בחר כיצד ייכתבו שמות הקודש בספרים.',
+    title: 'settings.wizard.divineNames.title',
+    desc: 'settings.wizard.divineNames.desc',
     component: SetupWizardStepDivineNames,
   },
   shortcuts: {
-    title: 'קיצורי מקשים שכדאי להכיר',
-    desc: 'ניתן לעיין בהם שוב בכל עת דרך הגדרות האפליקציה.',
+    title: 'settings.wizard.shortcuts.title',
+    desc: 'settings.wizard.shortcuts.desc',
     component: SetupWizardStepShortcuts,
   },
 }
@@ -179,8 +179,8 @@ function skip() {
                  hero: its title runs in the flow of its own content below, so it
                  renders no strip and the card is one uninterrupted section. -->
             <div v-if="currentStep !== 'welcome'" class="wizard-card-header">
-              <h2 class="step-title">{{ currentStepMeta.title }}</h2>
-              <p v-if="currentStepMeta.desc" class="step-desc">{{ currentStepMeta.desc }}</p>
+              <h2 class="step-title">{{ $t(currentStepMeta.title) }}</h2>
+              <p v-if="currentStepMeta.desc" class="step-desc">{{ $t(currentStepMeta.desc) }}</p>
             </div>
 
             <div class="wizard-card-body toc-thin-scroll">
@@ -191,8 +191,8 @@ function skip() {
                      content. -->
                 <div v-if="currentStep === 'welcome'" class="step-welcome">
                   <img src="/images/KitveiHakodesh.png" class="welcome-logo" alt="" />
-                  <h1 class="welcome-title">{{ currentStepMeta.title }}</h1>
-                  <p class="welcome-body">{{ currentStepMeta.desc }}</p>
+                  <h1 class="welcome-title">{{ $t(currentStepMeta.title) }}</h1>
+                  <p class="welcome-body">{{ currentStepMeta.desc && $t(currentStepMeta.desc) }}</p>
                 </div>
                 <SetupWizardStepTerms v-else-if="currentStep === 'terms'" v-model="termsAgreed" />
                 <component v-else :is="currentStepMeta.component" />
@@ -203,12 +203,12 @@ function skip() {
 
         <template #footer>
         <div class="wizard-card-footer">
-          <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
+          <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
           <span v-else />
           <div class="nav-btns">
-            <button v-if="stepIndex > 0" class="back-btn" @click="back">הקודם</button>
+            <button v-if="stepIndex > 0" class="back-btn" @click="back">{{ $t('settings.wizard.back') }}</button>
             <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
-              {{ currentStep === 'welcome' ? 'התחל' : isLast ? 'סיום' : 'הבא' }}
+              {{ currentStep === 'welcome' ? $t('settings.wizard.start') : isLast ? $t('settings.wizard.finish') : $t('settings.wizard.next') }}
             </button>
           </div>
         </div>

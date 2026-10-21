@@ -82,18 +82,18 @@ function pickCity(name: string) {
 
 <template>
   <SettingRow
-    label="זכור מיקום אחרון בספר"
-    title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+    :label="$t('settings.book.remember')"
+    :title="$t('settings.book.rememberHint')"
   >
     <ToggleGroup
       v-model="resumeLastRead"
       :options="[
-        { label: 'כן', value: true },
-        { label: 'לא', value: false },
+        { label: $t('settings.yes'), value: true },
+        { label: $t('settings.no'), value: false },
       ]"
     />
   </SettingRow>
-  <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
+  <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHintWizard')">
     <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
       <span class="select-display">{{ activeCity.name }}</span>
       <component
@@ -122,12 +122,12 @@ function pickCity(name: string) {
     </Teleport>
   </SettingRow>
   <SettingRow
-    label="תיקייה לשמירת ספרי היברו בוקס לצמיתות במחשב (רשות)"
-    hint="כברירת מחדל, ספרים שהורדו נשמרים במטמון זמני של 10 הספרים האחרונים. בחר תיקייה כדי לשמור לצמיתות כל ספר שהורד; התיקייה תיווצר אם אינה קיימת. אפשר לבחור בתיקיית מאגר הספרים של תוכנת ארון הספרים הדיגיטלי."
+    :label="$t('settings.advanced.hbFolder')"
+    :hint="$t('settings.advanced.hbFolderHint')"
   >
     <SettingsPagePathField
       :value="hebrewBooksLocalFolder"
-      placeholder="לא נבחרה תיקייה"
+      :placeholder="$t('settings.advanced.noFolder')"
       :clearable="true"
       :editable="true"
       @pick="pickHebrewBooksFolder"

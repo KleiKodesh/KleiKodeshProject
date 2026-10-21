@@ -17,23 +17,23 @@ function applyPdfPageFilters(value: boolean) {
 </script>
 
 <template>
-  <SettingRow label="ערכת נושא">
+  <SettingRow :label="$t('settings.theme.section')">
     <ThemePicker />
   </SettingRow>
   <ThemeBackgroundTintSlider />
   <SliderSetting
-    label="גודל תצוגה"
+    :label="$t('settings.theme.zoom')"
     v-model="appZoom"
     :min="0.5"
     :max="1.5"
     :step="0.05"
   />
-  <SettingRow label="החל ערכת נושא על דפי PDF" hint="מחיל את צבעי ערכת הנושא על תוכן דפי PDF">
+  <SettingRow :label="$t('settings.theme.pdf')" :hint="$t('settings.theme.pdfHint')">
     <ToggleGroup
       :model-value="pdfPageFilters"
       :options="[
-        { label: 'כן', value: true },
-        { label: 'לא', value: false },
+        { label: $t('settings.yes'), value: true },
+        { label: $t('settings.no'), value: false },
       ]"
       @update:model-value="applyPdfPageFilters"
     />
