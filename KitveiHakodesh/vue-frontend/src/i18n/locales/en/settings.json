@@ -114,7 +114,8 @@
     "city": "City for prayer times",
     "cityHint": "Calendar prayer times are calculated for this city",
     "clock": "Show clock in full screen",
-    "clockHint": "A transparent clock in the bottom-left corner while in full screen"
+    "clockHint": "A transparent clock in the bottom-left corner while in full screen",
+    "cityHintWizard": "The city used to calculate calendar prayer times"
   },
   "censor": {
     "section": "Divine name covering",
@@ -247,5 +248,126 @@
     "sepia": "Sepia",
     "gruvbox": "Gruvbox",
     "parchment": "Parchment"
+  },
+  "wizard": {
+    "terms": {
+      "title": "Terms of use and copyright",
+      "desc": "Before using the app, please read and accept the terms."
+    },
+    "welcome": {
+      "title": "Welcome to Kitvei Hakodesh",
+      "desc": "This wizard walks you through setting up the app in a few short steps. You can change everything later."
+    },
+    "db": {
+      "title": "Choose a database",
+      "desc": "Kitvei Hakodesh needs the Otzaria or Zayit database. If one of them is already installed, run it once to finish its setup, then choose the database path. You can change the path any time in the app settings."
+    },
+    "theme": {
+      "title": "How should the app look?",
+      "desc": "Choose a theme and display size that suit you."
+    },
+    "quickSettings": {
+      "title": "A few quick settings",
+      "desc": "These settings affect your everyday reading."
+    },
+    "bookDisplay": {
+      "title": "Book display",
+      "desc": "Choose fonts and spacing for books."
+    },
+    "commentaryDisplay": {
+      "title": "Commentary display",
+      "desc": "Commentaries can look like the book, or have their own fonts and spacing."
+    },
+    "divineNames": {
+      "title": "Divine name covering",
+      "desc": "Choose how divine names are written in books."
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts worth knowing",
+      "desc": "You can review them any time in the app settings."
+    },
+    "skip": "Skip",
+    "back": "Back",
+    "start": "Start",
+    "finish": "Finish",
+    "next": "Next"
+  },
+  "db": {
+    "notFound": "The file was not found at that path",
+    "saveFailed": "Saving the path failed",
+    "downloadOtzaria": "Download Otzaria",
+    "downloadZayit": "Download Zayit",
+    "pick": "Choose a database file",
+    "devPlaceholder": "Full path to seforim.db"
+  },
+  "terms": {
+    "p0": "General",
+    "p1": "Kitvei Hakodesh is software for studying holy books, part of the \"Klei Kodesh\" project: a non-profit volunteer initiative that makes Word and the computer accessible to learners and eases their work. The software is free to use.",
+    "p2": "Text sources and copyright",
+    "p3": "The books shown are not part of the software. They are read from the book library of Otzaria (or Zayit) installed on the computer, and come from public collections such as Otzaria, Sefaria and others.",
+    "p4": "All rights in each text belong to their lawful owners. Some books are in the public domain, and some were uploaded with the rights holders' permission or under specific license terms. The texts may not be used commercially, and copyrighted material may not be copied, distributed or published except under the terms set by the rights holders.",
+    "p5": "If you hold rights in a book and believe it appears unlawfully, please contact the collection it came from, or us, and it will be handled promptly.",
+    "p6": "Liability",
+    "p7": "The software is provided AS IS, without warranty of any kind, express or implied. The developers are not liable for any damage, direct or indirect, resulting from using the software or being unable to use it.",
+    "p8": "Content accuracy",
+    "p9": "The texts were typed and processed by people and by computer, and may contain errors and omissions. Checking accuracy is the user's responsibility. Do not rely on the software for practical halachic rulings; ask a qualified rabbi.",
+    "p10": "Reporting errors",
+    "p11": "We welcome reports of errors in the text or the software. You can report through the error reporting option in the app, helping fix the library for all learners.",
+    "p12": "The Klei Kodesh project",
+    "p13": "The Klei Kodesh project develops a free toolkit for Torah editors and all learners: a library of holy books with search, Torah libraries and websites, Torah document design, vowelization and advanced search. More information and updates on the project site: kleikodesh.github.io",
+    "p14": "May we merit to make Torah great and glorious.",
+    "agree": "I have read and agree to the terms"
+  },
+  "shortcutsList": {
+    "tabManagement": "Tab management",
+    "newTab": "New tab",
+    "openTabList": "Open tab list",
+    "holdCtrlAndCycleThroughTabs": "Hold Ctrl and cycle through tabs",
+    "cycleInReverse": "Cycle in reverse",
+    "closeTab": "Close tab",
+    "closeAllTabs": "Close all tabs",
+    "navigation": "Navigation",
+    "focusTheSearchBar": "Focus the search bar",
+    "rightArrow": "Right arrow",
+    "goBackInHistory": "Go back in history",
+    "leftArrow": "Left arrow",
+    "goForwardInHistory": "Go forward in history",
+    "goToHomePage": "Go to home page",
+    "openMainMenu": "Open main menu",
+    "showHideSidebar": "Show / hide sidebar",
+    "openWorkspaces": "Open workspaces",
+    "renameWorkspaceInList": "Rename workspace (in list)",
+    "deleteWorkspaceInList": "Delete workspace (in list)",
+    "toggleTheme": "Toggle theme",
+    "quickNavigation": "Quick navigation",
+    "bookCatalog": "Book catalog",
+    "search": "Search",
+    "hebrewbooks": "HebrewBooks",
+    "openFile": "Open file",
+    "fileSearch": "File search",
+    "dictionary": "Dictionary",
+    "calendar": "Calendar",
+    "measuresAndQuantities": "Measures and quantities",
+    "settings": "Settings",
+    "bookView": "Book view",
+    "showHideCommentariesBelow": "Show / hide commentaries below",
+    "showHideCommentariesOnTheRight": "Show / hide commentaries on the right",
+    "showHideCommentariesOnTheLeft": "Show / hide commentaries on the left",
+    "showHideTableOfContents": "Show / hide table of contents",
+    "nextSection": "Next section",
+    "previousSection": "Previous section",
+    "showHideCommentaryMarkers": "Show / hide commentary markers",
+    "removeRestoreVowelsAndCantillation": "Remove / restore vowels and cantillation",
+    "view": "View",
+    "splitView": "Split view",
+    "showHideToolbar": "Show / hide toolbar",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom",
+    "showHideAppBar": "Show / hide app bar",
+    "showHideScrollbars": "Show / hide scrollbars",
+    "readingModeHideShowAllBarsAndScrollbars": "Reading mode: hide / show all bars and scrollbars",
+    "fullScreen": "Full screen",
+    "caretBrowsingForNavigationAndSelection": "Caret browsing for navigation and selection"
   }
 }

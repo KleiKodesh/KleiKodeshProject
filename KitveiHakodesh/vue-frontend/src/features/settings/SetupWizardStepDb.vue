@@ -2,6 +2,9 @@
 import { ref, onMounted } from 'vue'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog } from '@/webview-host/bridge'
 import {
   IconFolderOpen20Regular,
@@ -42,8 +45,8 @@ async function applyDevPath() {
     await onDbPathChanged(previous, p)
   } catch (err) {
     devError.value = err instanceof Error && /not found/i.test(err.message)
-      ? 'הקובץ לא נמצא בנתיב שצוין'
-      : 'שמירת הנתיב נכשלה'
+      ? t('settings.db.notFound')
+      : t('settings.db.saveFailed')
   }
 }
 
@@ -62,16 +65,16 @@ function downloadOtzaria() {
 <template>
   <button class="db-pick-card" @click="downloadOtzaria">
     <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">הורד את אוצריא</span>
+    <span class="db-card-path placeholder">{{ $t('settings.db.downloadOtzaria') }}</span>
   </button>
   <button class="db-pick-card" @click="downloadZayit">
     <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">הורד את זית</span>
+    <span class="db-card-path placeholder">{{ $t('settings.db.downloadZayit') }}</span>
   </button>
   <button class="db-pick-card" @click="pickDbPath">
     <IconFolderOpen20Regular class="db-card-icon" />
     <span class="db-card-path" :class="{ placeholder: !dbPath }">
-      {{ dbPath || 'בחר קובץ מסד נתונים' }}
+      {{ dbPath || $t('settings.db.pick') }}
     </span>
   </button>
     <div class="db-pick-card db-dev-row">
@@ -79,11 +82,11 @@ function downloadOtzaria() {
       <input
         v-model="devInput"
         class="db-dev-input"
-        placeholder="נתיב מלא לקובץ seforim.db"
+        :placeholder="$t('settings.db.devPlaceholder')"
         spellcheck="false"
         @keydown.enter="applyDevPath"
       />
-      <button class="db-dev-apply" @click="applyDevPath">אישור</button>
+      <button class="db-dev-apply" @click="applyDevPath">{{ $t('settings.ok') }}</button>
     </div>
     <MessageBanner v-if="devError" class="db-dev-error" :message="devError" @dismiss="devError = ''" />
     <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
