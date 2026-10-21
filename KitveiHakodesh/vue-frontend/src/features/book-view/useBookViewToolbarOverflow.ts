@@ -153,7 +153,7 @@ export function keysToCollapse(
   // that went before it. Give those back - latest first - while they fit, so nothing sits in
   // the flyout with its own room still free on the toolbar.
   for (let i = collapsed.length - 2; i >= 0; i--) {
-    const key = collapsed[i]
+    const key = collapsed[i]!
     const budget = currentlyCollapsed.includes(key)
       ? availableLengthPx - TOOLBAR_HYSTERESIS_PX
       : availableLengthPx

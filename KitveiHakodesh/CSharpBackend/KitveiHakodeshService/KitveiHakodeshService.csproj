@@ -40,6 +40,8 @@
          Note: elevation is NOT optional for the product — without USN access PathIndex has
          no watcher at all and the index freezes at build time. See Properties\app.manifest. -->
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+    <!-- Same icon as the app: the service exe shows in Task Manager and the UAC prompt. -->
+    <ApplicationIcon>..\KitveiHakodeshDemoApp\KitveiHakodeshLarge.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- GCConserveMemory has no MSBuild property, and PublishAot ignores

@@ -19,23 +19,22 @@ namespace KitveiHakodeshDemoApp
 
         private static MainForm _mainForm;
 
+        // Main touches ONLY the BCL until it knows it is the first instance. A file opened
+        // from Explorer while the app runs launches a second copy of this exe whose only
+        // job is to forward the path -- loading KitveiHakodeshLib / WinForms / WebView2 for
+        // that (or JIT-compiling a Main that references them) is what made the new tab lag.
+        // Everything else lives in methods marked NoInlining so their types load only there.
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
-            string request = GetOpenRequestArgument();
+            string[] args = Environment.GetCommandLineArgs();
 
             // Debug harness: `--plain` hosts the viewer in a bare Form with no chrome-tabs
             // strip / mirror, to isolate whether the strip steals web-content focus. Runs
             // standalone (skips the single-instance mutex + its own webcache folder).
-            if (Array.Exists(Environment.GetCommandLineArgs(),
-                    a => string.Equals(a, "--plain", StringComparison.OrdinalIgnoreCase)))
+            if (Array.Exists(args, a => string.Equals(a, "--plain", StringComparison.OrdinalIgnoreCase)))
             {
-                // The plain harness hosts a file, so a deep link has nowhere to go here.
-                Application.Run(new PlainDebugForm(HostLink.TryParse(request) == null ? request : null));
+                RunPlainHarness();
                 return;
             }
 
@@ -44,10 +43,7 @@ namespace KitveiHakodeshDemoApp
             {
                 if (createdNew)
                 {
-                    // First instance — start the pipe listener and run the app.
-                    StartPipeListener();
-                    _mainForm = new MainForm(request);
-                    Application.Run(_mainForm);
+                    RunFirstInstance();
                     try { mutex.ReleaseMutex(); } catch { }
                 }
                 else
@@ -55,6 +51,13 @@ namespace KitveiHakodeshDemoApp
                     // An instance is already running. Forward the request to it and exit —
                     // a second window is never opened, for a deep link exactly as for a file:
                     // the running instance turns it into a new tab.
+                    // Forwarded RAW: MainForm.OpenRequest validates whatever arrives over the
+                    // pipe, so parsing it here would only cost the lib load this path avoids.
+                    string request = args.Length > 1 ? args[1] : null;
+                    // A relative path must resolve against OUR working directory, not the
+                    // running instance's. Links pass through untouched.
+                    if (!string.IsNullOrEmpty(request) && request.IndexOf("://", StringComparison.Ordinal) < 0)
+                        try { request = Path.GetFullPath(request); } catch { }
                     if (!string.IsNullOrEmpty(request))
                     {
                         // Hand our foreground rights to the already-running instance BEFORE
@@ -87,6 +90,27 @@ namespace KitveiHakodeshDemoApp
                     }
                 }
             }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void RunFirstInstance()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            StartPipeListener();
+            // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
+            _mainForm = new MainForm(GetOpenRequestArgument());
+            Application.Run(_mainForm);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void RunPlainHarness()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            string request = GetOpenRequestArgument();
+            // The plain harness hosts a file, so a deep link has nowhere to go here.
+            Application.Run(new PlainDebugForm(HostLink.TryParse(request) == null ? request : null));
         }
 
         // ── Command-line argument parsing ─────────────────────────────────────────
