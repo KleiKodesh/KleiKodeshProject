@@ -135,6 +135,9 @@ public sealed class CatalogTocSearchResult
     public string? BuildFailure { get; set; }
     /// <summary>The last build failed and an automatic retry is running now.</summary>
     public bool RetryingAfterBuildFailure { get; set; }
+    /// <summary>Not built yet; a timed retry is pending (DB mid-update, index lock held by
+    /// another writer). Transient: keep polling, show "building", not a failure.</summary>
+    public bool Waiting { get; set; }
 }
 
 /// <summary>Where the catalog index stands (catalogTocStatus wire shape).</summary>
@@ -150,6 +153,9 @@ public sealed class CatalogTocStatus
     public string? BuildFailure { get; set; }
     /// <summary>The last build failed and an automatic retry is running now.</summary>
     public bool RetryingAfterBuildFailure { get; set; }
+    /// <summary>Not built yet; a timed retry is pending (DB mid-update, index lock held by
+    /// another writer). Transient: keep polling, show "building", not a failure.</summary>
+    public bool Waiting { get; set; }
 
     /// <summary>Why the index last started building, and when; null if it never has in this
     /// process.</summary>

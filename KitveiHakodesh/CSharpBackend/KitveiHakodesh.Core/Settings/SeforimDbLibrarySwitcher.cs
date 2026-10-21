@@ -54,7 +54,26 @@ public static class SeforimDbLibrarySwitcher
     /// <summary>True when another app's update of <paramref name="path"/> was interrupted (a
     /// rollback journal or Otzaria's .applying marker is present). Detected only, never
     /// repaired: deleting the journal would corrupt the database; Otzaria rolls it back or
-    /// completes it on its next run.</summary>
+    /// completes it on its next run.
+    ///
+    /// A marker younger than <see cref="InterruptedAfter"/> is an update (or a plain write
+    /// transaction) IN PROGRESS, not an interrupted one — SQLite creates and deletes a
+    /// -journal around every write — so it does not count.</summary>
     public static bool IsUpdateInterrupted(string? path) =>
-        path is not null && (File.Exists(path + "-journal") || File.Exists(path + ".applying"));
+        path is not null && (IsStaleMarker(path + "-journal") || IsStaleMarker(path + ".applying"));
+
+    /// <summary>How long a -journal / .applying marker must sit untouched before it means an
+    /// update died rather than one running right now.</summary>
+    private static readonly TimeSpan InterruptedAfter = TimeSpan.FromSeconds(60);
+
+    private static bool IsStaleMarker(string markerPath)
+    {
+        try
+        {
+            var info = new FileInfo(markerPath);
+            return info.Exists && DateTime.UtcNow - info.LastWriteTimeUtc > InterruptedAfter;
+        }
+        catch (IOException) { return false; }          // vanished / locked mid-check: not stale
+        catch (UnauthorizedAccessException) { return false; }
+    }
 }

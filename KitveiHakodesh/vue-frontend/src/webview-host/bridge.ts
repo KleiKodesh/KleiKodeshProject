@@ -530,6 +530,8 @@ export type CatalogTocSearchResult = {
   buildFailure?: string | null
   /** The last build failed and an automatic retry is running now. */
   retryingAfterBuildFailure?: boolean
+  /** Not built yet; a timed retry is pending (DB mid-update, index locked). Transient. */
+  waiting?: boolean
 }
 
 /** Where the catalog TOC index stands (catalogTocStatus wire shape, camelCased). */
@@ -541,6 +543,7 @@ export type CatalogTocIndexStatus = {
   dbMissing: boolean
   buildFailure?: string | null
   retryingAfterBuildFailure?: boolean
+  waiting?: boolean
 }
 
 /** Catalog TOC index status. Polled only while a build is known to run. */
@@ -1168,6 +1171,8 @@ export interface DbPathInfo {
   updateInterrupted?: boolean
   /** The database answers a query; false with `exists` true = the file cannot be read. */
   readable?: boolean
+  /** With readable = false: the failure is transient (DB busy/locked by a writer). */
+  readBusy?: boolean
   /** Which service instance answered. Changes when the service restarts after a path change. */
   instanceId?: string
 }
@@ -1246,23 +1251,47 @@ export async function installService(): Promise<boolean> {
  * Hosted: the WebView2 host owns the dialog (an installed service may run in a session with
  * no desktop to show one on), then the path goes to the service like a typed one. Dev: the
  * service shows the dialog on its own desktop and persists in one step.
+ *
+ * `throwSaveErrors`: a path was chosen but could not be saved (file not found, service down
+ * past the brief retry) → throw instead of returning null, so the caller can tell the user.
  */
-export async function pickDbPath(): Promise<string | null> {
+export async function pickDbPath(options: { throwSaveErrors?: boolean } = {}): Promise<string | null> {
   try {
     if (typeof window.__webviewAction === 'function') {
       const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
       if (picked?.cancelled || picked?.error || !picked?.path) return null
-      await setDbPath(picked.path)
+      await setDbPathRetryingWhileUnavailable(picked.path)
       return picked.path
     }
     const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string; instanceId?: string }>(
       'pickSeforimDbPath',
     )
-    if (result?.cancelled || result?.error || !result?.path) return null
+    if (result?.cancelled || !result?.path) {
+      if (result?.error) throw new Error(result.error)
+      return null
+    }
+    if (result.error) throw new Error(result.error)
     switchedFromInstanceId = result.instanceId ?? null
     return result.path
-  } catch {
+  } catch (err) {
+    console.error('[bridge] pickDbPath failed:', err)
+    if (options.throwSaveErrors) throw err
     return null
+  }
+}
+
+/** setDbPath, retried for a few seconds while the service is unreachable (e.g. restarting).
+ *  A real error (file not found, ...) is thrown at once. */
+async function setDbPathRetryingWhileUnavailable(path: string): Promise<void> {
+  const deadline = Date.now() + 8000
+  for (;;) {
+    try {
+      await setDbPath(path)
+      return
+    } catch (err) {
+      if (!(err instanceof ServiceUnavailableError) || Date.now() >= deadline) throw err
+      await new Promise((r) => setTimeout(r, 500))
+    }
   }
 }
 

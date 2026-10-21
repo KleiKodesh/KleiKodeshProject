@@ -86,6 +86,18 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
 
         private int _failedBuilds;
         private bool _resetInFlight;
+
+        /// <summary>A build that cannot start or finish YET (DB mid-update, Lucene lock held by a
+        /// previous service instance still shutting down, a transient build failure) is retried on
+        /// a timer, not on the next status poll or search keystroke. While one is pending the
+        /// status says "waiting", never "failed" — only <see cref="_gaveUp"/> is terminal.</summary>
+        private Timer? _retryTimer;
+        private static readonly TimeSpan NotReadyRetryDelay = TimeSpan.FromMinutes(1);
+        private static readonly TimeSpan FailedBuildRetryDelay = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan LockedRetryDelay = TimeSpan.FromSeconds(15);
+        private volatile bool _waiting;  // a timed retry is pending (DB not ready / index locked)
+        private volatile bool _gaveUp;   // MaxBuildAttempts real failures: terminal until reset
+        private volatile bool _shutDown; // Shutdown called: never arm another timed retry
         private volatile int _builtBooks;
         private volatile int _totalBooks;
 
@@ -250,9 +262,11 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                             "catalog TOC index: waiting for the seforim DB — " + notReady, null);
                     _lastNotReadyReason = notReady;
                     if (GetIndex(databasePath).TryOpenActive()) _isReady = true;
+                    ScheduleRetry(NotReadyRetryDelay);
                     return;
                 }
                 _lastNotReadyReason = null;
+                _waiting = false;
 
                 // Hashing stays INSIDE the lock, after the latch: in the common already-built
                 // case this is never reached, so an EnsureIndex from a keystroke costs nothing.
@@ -261,6 +275,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 catch (Exception ex)
                 {
                     _log(CatalogIndexLogLevel.Error, "catalog TOC index: could not hash seforim DB", ex);
+                    ScheduleRetry(FailedBuildRetryDelay); // usually a transient lock — try again
                     return;
                 }
 
@@ -303,6 +318,8 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                     ct: ct);
                 _isReady = true;
                 _lastBuildFailure = null;
+                Interlocked.Exchange(ref _failedBuilds, 0);
+                _gaveUp = false;
                 _log(CatalogIndexLogLevel.Information,
                     $"catalog TOC index build complete — {docs} docs in {sw.Elapsed.TotalSeconds:F1}s (switched atomically)",
                     null);
@@ -310,6 +327,23 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             catch (OperationCanceledException)
             {
                 _log(CatalogIndexLogLevel.Information, "catalog TOC index build cancelled", null);
+            }
+            catch (Exception ex) when (IsIndexLockContention(ex))
+            {
+                // Another writer holds the index lock — typically the previous service instance
+                // still exiting after a restart. Not a failure: burn no attempt, retry shortly.
+                _log(CatalogIndexLogLevel.Information,
+                    "catalog TOC index: index is locked by another writer — retrying in "
+                        + LockedRetryDelay.TotalSeconds + "s", ex);
+                lock (_lock)
+                {
+                    if (!_resetInFlight)
+                    {
+                        _buildStarted = false;
+                        _pendingBuildReason = "retrying after the index lock was busy";
+                        ScheduleRetry(LockedRetryDelay);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -333,10 +367,12 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                     {
                         _buildStarted = false;
                         _pendingBuildReason = $"retrying after a failed build ({failures} of {MaxBuildAttempts})";
+                        ScheduleRetry(FailedBuildRetryDelay);
                     }
                 }
                 else
                 {
+                    _gaveUp = true;
                     _log(CatalogIndexLogLevel.Warning,
                         $"catalog TOC index: giving up after {failures} failed build attempts", null);
                 }
@@ -345,6 +381,41 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             {
                 _isIndexing = false;
             }
+        }
+
+        /// <summary>Arms ONE timed retry of <see cref="EnsureIndex"/> (no-op if one is pending).
+        /// Call under <see cref="_lock"/>.</summary>
+        private void ScheduleRetry(TimeSpan delay)
+        {
+            if (_shutDown) return;
+            _waiting = true;
+            _retryTimer ??= new Timer(_ =>
+            {
+                lock (_lock) { _retryTimer?.Dispose(); _retryTimer = null; }
+                if (_shutDown) return;
+                try { EnsureIndex(); }
+                catch (Exception ex) { _log(CatalogIndexLogLevel.Error, "catalog TOC index: timed retry failed", ex); }
+            }, null, delay, Timeout.InfiniteTimeSpan);
+        }
+
+        /// <summary>Lucene could not take its write lock (or Windows reported a sharing/lock
+        /// violation on an index file): someone else is writing, so this is "retry later".
+        /// Matched by type NAME so this file needs no Lucene type.</summary>
+        private static bool IsIndexLockContention(Exception ex)
+        {
+            for (Exception? e = ex; e != null; e = e.InnerException)
+            {
+                if (string.Equals(e.GetType().Name, "LockObtainFailedException", StringComparison.Ordinal))
+                    return true;
+                if (e is IOException)
+                {
+                    int code = e.HResult & 0xFFFF;
+                    if (code == 32 || code == 33) return true; // ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION
+                    if (e.Message.IndexOf("Lock obtain timed out", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -447,6 +518,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                     _buildStarted = false;
                     _buildTask = null;
                     _buildCts = null;
+                    _failedBuilds = 0;
+                    _gaveUp = false;
+                    _lastBuildFailure = null;
                 }
             }
             finally
@@ -479,6 +553,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 if (_index != null) { _index.Dispose(); _index = null; }
                 _isReady = false;
                 _buildStarted = false;
+                _failedBuilds = 0;
+                _gaveUp = false;
+                _lastBuildFailure = null;
             }
             EnsureIndex();
         }
@@ -498,6 +575,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             Task? build;
             lock (_lock)
             {
+                _shutDown = true;
+                _retryTimer?.Dispose();
+                _retryTimer = null;
                 _buildCts?.Cancel();
                 build = _buildTask;
             }
@@ -542,8 +622,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 DbMissing = DatabasePath == null,
                 // An older index still serving means search works: a failed rebuild is not
                 // the user's problem until nothing can serve.
-                BuildFailure = IsIndexing || IsReadyToServe() ? null : LastBuildFailure,
-                RetryingAfterBuildFailure = IsIndexing && !IsReadyToServe() && LastBuildFailure != null,
+                // Terminal only once the retry budget is spent; until then "retrying"/"waiting".
+                BuildFailure = IsIndexing || IsReadyToServe() || !_gaveUp ? null : LastBuildFailure,
+                RetryingAfterBuildFailure = !IsReadyToServe() && !_gaveUp && LastBuildFailure != null,
+                Waiting = !IsReadyToServe() && !IsIndexing && _waiting,
                 BuildReason = _lastBuildReason,
             };
         }
@@ -581,8 +663,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 result.BuiltBooks = BuiltBooks;
                 result.TotalBooks = TotalBooks;
                 // A failed build with no retry running will never make the index ready.
-                result.BuildFailure = IsIndexing ? null : LastBuildFailure;
-                result.RetryingAfterBuildFailure = IsIndexing && LastBuildFailure != null;
+                result.BuildFailure = IsIndexing || !_gaveUp ? null : LastBuildFailure;
+                result.RetryingAfterBuildFailure = !_gaveUp && LastBuildFailure != null;
+                result.Waiting = !IsIndexing && _waiting;
                 return result;
             }
             result.Ready = true;

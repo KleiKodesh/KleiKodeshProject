@@ -116,6 +116,7 @@ interface CatalogTocIndexState {
   totalBooks?: number
   buildFailure?: string | null
   retryingAfterBuildFailure?: boolean
+  waiting?: boolean
 }
 
 /**
@@ -127,10 +128,10 @@ export function reportCatalogTocSearchResponse(response: CatalogTocIndexState): 
     reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'buildFailed' })
   } else if (response.dbMissing) {
     reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'dbMissing' })
-  } else if (response.retryingAfterBuildFailure && !response.ready) {
-    // Keep saying "failed, retrying" — flipping back to plain "building" would hide the failure.
-    reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'buildFailedRetrying' })
   } else if (!response.ready) {
+    // Includes a pending retry (retryingAfterBuildFailure / waiting): the service retries on
+    // its own timer and reports buildFailure only once its retry budget is spent, so a
+    // transient failure shows as "building" and keeps the background poll alive.
     const total = response.totalBooks ?? 0
     reportSearchIndexStatus('catalogToc', {
       kind: 'building',

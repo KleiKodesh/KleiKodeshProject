@@ -22,14 +22,49 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
 
-    /// <summary>The database exists AND answers a query: false for a file that is not a
-    /// seforim database, is corrupt, or is locked. One cheap read; the page polls it for
-    /// its "library cannot be read" banner.</summary>
-    public bool CanRead()
+    public enum ReadState { Readable, Busy, Unreadable }
+
+    private string? _lastReadFailure; // polled every few seconds: log a failure once, not per poll
+
+    /// <summary>Whether the database exists AND answers a query. <see cref="ReadState.Busy"/>
+    /// = a TRANSIENT failure (SQLITE_BUSY / SQLITE_LOCKED, a file I/O error — another process
+    /// is writing or updating it) that clears by itself; <see cref="ReadState.Unreadable"/> =
+    /// not a seforim database, corrupt, or missing. One cheap read; the page polls it for its
+    /// "library cannot be read" banner, which it shows only for Unreadable.</summary>
+    public ReadState CheckRead()
     {
-        if (!HasDb) return false;
-        try { _queries.GetBookById(1); return true; }
-        catch { return false; } // polled: not logged, the real queries already log why
+        if (!HasDb) return ReadState.Unreadable;
+        try
+        {
+            _queries.GetBookById(1);
+            _lastReadFailure = null;
+            return ReadState.Readable;
+        }
+        catch (Exception ex)
+        {
+            bool transient = IsTransientReadError(ex);
+            string key = (transient ? "busy: " : "unreadable: ") + ex.GetType().Name + ": " + ex.Message;
+            if (key != _lastReadFailure)
+            {
+                _lastReadFailure = key;
+                if (transient) logger.LogInformation(ex, "seforim DB read check: busy (transient)");
+                else logger.LogWarning(ex, "seforim DB read check: unreadable");
+            }
+            return transient ? ReadState.Busy : ReadState.Unreadable;
+        }
+    }
+
+    private static bool IsTransientReadError(Exception ex)
+    {
+        for (Exception? e = ex; e != null; e = e.InnerException)
+        {
+            // SQLITE_BUSY = 5, SQLITE_LOCKED = 6 (primary code; extended codes keep it in the low byte).
+            if (e is Microsoft.Data.Sqlite.SqliteException sql
+                && ((sql.SqliteErrorCode & 0xFF) == 5 || (sql.SqliteErrorCode & 0xFF) == 6))
+                return true;
+            if (e is IOException) return true;
+        }
+        return false;
     }
 
     /// <summary>Idle memory trim: drop the cached book/category catalog (see Core).</summary>
