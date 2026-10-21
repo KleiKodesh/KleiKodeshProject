@@ -57,7 +57,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // fts7 (2026-10-21): Otzaria's word model: every word is indexed (one letter, digit runs
         // such as 12 or ב5, any length; a term over 128 UTF-8 bytes is left out) — fts6 indexed
         // only words of 2..29 letters and treated digits as separators.
-        public const string IndexFormatVersion = "fts7";
+        // fts8 (2026-10-21): Otzaria's remaining tokenizer rules: . [ ] and bidi/zero-width chars
+        // join a word, letters of every script are word chars (no Hebrew/Latin split, Unicode
+        // lowercase), a trailing geresh belongs to its word, typographic quotes and presentation
+        // forms fold, and a term of 128 UTF-8 bytes or more (quotes included) is left out.
+        public const string IndexFormatVersion = "fts8";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

@@ -18,6 +18,7 @@ namespace FtsLibTest
                 case "parsertest":        QueryParserTest.Run(args); return;
                 case "worddist":          WordDistanceTest.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
+                case "tokentest":         TokenRuleTest.Run(args); return;
                 case "tokdiag":           TokenDiag.Run(args); return;
                 case "tokbench":          TokBench.Run(args); return;
                 case "charbench":         CharBench.Run(args); return;
@@ -77,7 +78,7 @@ namespace FtsLibTest
                 }
 
                 default:
-                    Console.WriteLine("Tests: parsertest worddist ketivtest");
+                    Console.WriteLine("Tests: parsertest worddist ketivtest tokentest");
                     Console.WriteLine("Benchmarks: tokdiag tokbench charbench decodebench trgmbench trgmidx trgmlive trgmfull fmbench fuzzybench");
                     Console.WriteLine("SQLite FTS5: fts5engine fts5buildat fts5queryat fts5trigramat");
                     return;

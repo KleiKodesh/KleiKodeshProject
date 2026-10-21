@@ -46,13 +46,19 @@ namespace FtsLib.Fts5
     internal static class FmIndex
     {
         public const uint Magic = 0x33494D46; // 'FMI3'
-        public const byte EndCode = 0, SeparatorCode = 1;
+        public const ushort EndCode = 0, SeparatorCode = 1;
         const int HeaderBytes = 40, NodeBytes = 24;
         const int RankBlockBytes = 64, RankBlockDataBits = (RankBlockBytes - 4) * 8; // 480
-        // 7 bits each → 63 bits. Sigma up to 128: Hebrew + Latin + digits + the 2 stops is 65,
-        // over the 6-bit keys' 64 (digits became word characters). The key only speeds up the
-        // build sort; the order is the same total order at any key width.
-        const int SortKeyBits = 7, CodesPerSortKey = 9;
+        // Symbol codes are 16-bit: once every script is a word char the alphabet passes 255.
+        // Sort keys pack as many codes as fit in 64 bits at the width the alphabet needs
+        // (7 bits x 9 codes up to 128 symbols, 9 bits x 7 up to 512). The key only speeds up
+        // the build sort; the order is the same total order at any key width.
+        static int SortKeyBits(int sigma)
+        {
+            int bits = 1;
+            while ((1 << bits) < sigma) bits++;
+            return bits;
+        }
         const uint FlagRowIdIsRankPlusOne = 1;
 
         // ── Build ─────────────────────────────────────────────────────
@@ -66,19 +72,18 @@ namespace FtsLib.Fts5
                 if (t.Length == 0) throw new InvalidDataException("FmIndex: empty term");
                 foreach (char ch in t) present[ch] = true;
             }
-            var codeOf = new byte[65536];
+            var codeOf = new ushort[65536];
             var charOf = new List<char> { '\0', '\0' };
             for (int ch = 0; ch < 65536; ch++)
-                if (present[ch]) { codeOf[ch] = (byte)charOf.Count; charOf.Add((char)ch); }
+                if (present[ch]) { codeOf[ch] = (ushort)charOf.Count; charOf.Add((char)ch); }
             int sigma = charOf.Count;
-            if (sigma > 1 << SortKeyBits) throw new NotSupportedException($"FmIndex prototype: sigma {sigma} > {1 << SortKeyBits} ({SortKeyBits}-bit sort keys)");
 
             // Text, plus the rowid of the term each position belongs to.
             long textLong = 2;
             foreach (string t in terms) textLong += t.Length + 1;
             if (textLong > int.MaxValue) throw new NotSupportedException("FmIndex prototype: text too long");
             int n = (int)textLong;
-            var text = new byte[n];
+            var text = new ushort[n];
             var rowIdAtPosition = new int[n]; // 0 on SEP/END
             int maxRowId = 0, w = 0;
             for (int i = 0; i < terms.Count; i++)
@@ -91,9 +96,9 @@ namespace FtsLib.Fts5
             text[w++] = SeparatorCode;
             text[w] = EndCode;
 
-            int[] suffixArray = BuildSuffixArray(text);
+            int[] suffixArray = BuildSuffixArray(text, SortKeyBits(sigma));
 
-            var bwt = new byte[n];
+            var bwt = new ushort[n];
             for (int row = 0; row < n; row++)
             {
                 int p = suffixArray[row];
@@ -101,7 +106,7 @@ namespace FtsLib.Fts5
             }
 
             var symbolCount = new long[sigma];
-            foreach (byte b in text) symbolCount[b]++;
+            foreach (ushort b in text) symbolCount[b]++;
             var c = new int[sigma + 1];
             for (int s = 0; s < sigma; s++) c[s + 1] = c[s] + (int)symbolCount[s];
 
@@ -119,7 +124,7 @@ namespace FtsLib.Fts5
             var tree = HuffmanTree.Build(symbolCount);
             var nodeBits = new BitWriter[tree.Left.Count];
             for (int i = 0; i < nodeBits.Length; i++) nodeBits[i] = new BitWriter();
-            foreach (byte sym in bwt)
+            foreach (ushort sym in bwt)
             {
                 var pathNodes = tree.PathNodes[sym]; var pathBits = tree.PathBits[sym];
                 for (int d = 0; d < pathNodes.Length; d++) nodeBits[pathNodes[d]].Append(pathBits[d]);
@@ -281,8 +286,9 @@ namespace FtsLib.Fts5
         /// Terms are short (max ~30 chars), so a packed 10-code key settles almost every
         /// comparison; equal-key runs are finished with a direct comparison.
         /// </summary>
-        static int[] BuildSuffixArray(byte[] text)
+        static int[] BuildSuffixArray(ushort[] text, int keyBits)
         {
+            int codesPerKey = 64 / keyBits;
             int n = text.Length;
             var distanceToStop = new int[n]; // codes from i up to and including the first SEP/END
             for (int i = n - 1; i >= 0; i--)
@@ -292,9 +298,9 @@ namespace FtsLib.Fts5
             var suffixArray = new int[n];
             for (int i = 0; i < n; i++)
             {
-                int len = Math.Min(distanceToStop[i], CodesPerSortKey);
+                int len = Math.Min(distanceToStop[i], codesPerKey);
                 ulong key = 0;
-                for (int k = 0; k < len; k++) key |= (ulong)text[i + k] << (SortKeyBits * (CodesPerSortKey - 1 - k));
+                for (int k = 0; k < len; k++) key |= (ulong)text[i + k] << (keyBits * (codesPerKey - 1 - k));
                 keys[i] = key;
                 suffixArray[i] = i;
             }
@@ -304,7 +310,7 @@ namespace FtsLib.Fts5
             {
                 int la = distanceToStop[a], lb = distanceToStop[b];
                 int common = Math.Min(la, lb);
-                for (int k = CodesPerSortKey; k < common; k++)
+                for (int k = codesPerKey; k < common; k++)
                 {
                     int d = text[a + k] - text[b + k];
                     if (d != 0) return d;
@@ -318,7 +324,7 @@ namespace FtsLib.Fts5
                 while (runEnd < n && keys[runEnd] == keys[runStart]) runEnd++;
                 if (runEnd - runStart > 1)
                 {
-                    bool stopInsideKey = distanceToStop[suffixArray[runStart]] <= CodesPerSortKey;
+                    bool stopInsideKey = distanceToStop[suffixArray[runStart]] <= codesPerKey;
                     Array.Sort(suffixArray, runStart, runEnd - runStart, stopInsideKey ? byPosition : tail);
                 }
                 runStart = runEnd;
@@ -336,7 +342,7 @@ namespace FtsLib.Fts5
             bool _pointerAcquired, _disposed;
             readonly int _textLength, _rowIdBits;
             readonly int[] _c;
-            readonly byte[] _codeOf = new byte[65536]; // 0 = char not in alphabet
+            readonly ushort[] _codeOf = new ushort[65536]; // 0 = char not in alphabet
             readonly int[] _left, _right;
             readonly int _rootNode;
             readonly long[] _nodeOffset;               // file offset of each node's rank blocks
@@ -373,7 +379,7 @@ namespace FtsLib.Fts5
 
                     long pos = HeaderBytes;
                     for (int code = 0; code < sigma; code++, pos += 2)
-                        if (code > SeparatorCode) _codeOf[ReadU16(pos)] = (byte)code;
+                        if (code > SeparatorCode) _codeOf[ReadU16(pos)] = (ushort)code;
                     _c = new int[sigma + 1];
                     for (int i = 0; i <= sigma; i++, pos += 4) _c[i] = ReadI32(pos);
 
@@ -416,7 +422,7 @@ namespace FtsLib.Fts5
             }
 
             /// <summary>Occurrences of <paramref name="code"/> in BWT[0, row): one rank per code bit.</summary>
-            int Occ(byte code, int row)
+            int Occ(ushort code, int row)
             {
                 var nodes = _pathNodes[code]; var bits = _pathBits[code];
                 for (int d = 0; d < nodes.Length; d++)
@@ -435,7 +441,7 @@ namespace FtsLib.Fts5
                 first = 0; end = _textLength;
                 for (int k = pattern.Length - (mustEndTerm ? 0 : 1); k >= 0; k--)
                 {
-                    byte code;
+                    ushort code;
                     if (k == pattern.Length) code = SeparatorCode;      // only when mustEndTerm
                     else { code = _codeOf[pattern[k]]; if (code == 0) return false; }
                     first = _c[code] + Occ(code, first);
@@ -485,11 +491,11 @@ namespace FtsLib.Fts5
             public List<(int RowId, int Distance)> FindFuzzy(string query, int maxDistance)
             {
                 int m = query.Length;
-                var reversedQuery = new byte[m];
+                var reversedQuery = new ushort[m];
                 for (int j = 0; j < m; j++)
                 {
-                    byte code = _codeOf[query[m - 1 - j]];
-                    reversedQuery[j] = code == 0 ? (byte)255 : code; // 255 never equals a BWT symbol
+                    ushort code = _codeOf[query[m - 1 - j]];
+                    reversedQuery[j] = code == 0 ? ushort.MaxValue : code; // never equals a BWT symbol
                 }
                 var search = new FuzzySearch(this, reversedQuery, maxDistance);
                 var firstRow = new int[m + 1];
@@ -501,24 +507,24 @@ namespace FtsLib.Fts5
 
             sealed class FuzzySearch
             {
-                readonly Reader _reader; readonly byte[] _query; readonly int _maxDistance, _m;
+                readonly Reader _reader; readonly ushort[] _query; readonly int _maxDistance, _m;
                 public readonly List<(int RowId, int Distance)> Results = new List<(int, int)>();
                 // Per-depth scratch, reused across siblings: child symbols with their Occ ranges,
                 // and the DP rows handed down to each child.
                 // Depth never exceeds m + maxDistance: row[0] == depth, so deeper rows are pruned.
-                readonly List<(byte Code, int OccLo, int OccHi)>[] _children;
+                readonly List<(ushort Code, int OccLo, int OccHi)>[] _children;
                 readonly int[][] _rows;
 
-                public FuzzySearch(Reader reader, byte[] query, int maxDistance)
+                public FuzzySearch(Reader reader, ushort[] query, int maxDistance)
                 {
                     _reader = reader; _query = query; _maxDistance = maxDistance; _m = query.Length;
-                    _children = new List<(byte, int, int)>[_m + maxDistance + 2];
+                    _children = new List<(ushort, int, int)>[_m + maxDistance + 2];
                     _rows = new int[_m + maxDistance + 3][];
                 }
 
                 public void Visit(int lo, int hi, int[] row, int depth)
                 {
-                    var children = _children[depth] ??= new List<(byte, int, int)>(64);
+                    var children = _children[depth] ??= new List<(ushort, int, int)>(64);
                     children.Clear();
                     EnumerateSymbols(_reader._rootNode, lo, hi, children);
                     var next = _rows[depth + 1] ??= new int[_m + 1];
@@ -554,7 +560,7 @@ namespace FtsLib.Fts5
                 }
 
                 /// <summary>Distinct symbols in BWT[lo, hi) with their Occ at lo and hi.</summary>
-                void EnumerateSymbols(int node, int lo, int hi, List<(byte, int, int)> into)
+                void EnumerateSymbols(int node, int lo, int hi, List<(ushort, int, int)> into)
                 {
                     int onesLo = _reader.Rank1(node, lo), onesHi = _reader.Rank1(node, hi);
                     int zerosLo = lo - onesLo, zerosHi = hi - onesHi;
@@ -562,9 +568,9 @@ namespace FtsLib.Fts5
                     if (onesHi > onesLo) Descend(_reader._right[node], onesLo, onesHi, into);
                 }
 
-                void Descend(int child, int lo, int hi, List<(byte, int, int)> into)
+                void Descend(int child, int lo, int hi, List<(ushort, int, int)> into)
                 {
-                    if (child < 0) into.Add(((byte)(-child - 1), lo, hi));
+                    if (child < 0) into.Add(((ushort)(-child - 1), lo, hi));
                     else EnumerateSymbols(child, lo, hi, into);
                 }
             }

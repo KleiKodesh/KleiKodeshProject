@@ -56,10 +56,17 @@ if (window.IsMatch)
 
 Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. Wildcard/fuzzy tokens are expanded internally before intersection.
 
-**Words** follow Otzaria's word model (index, query and word distance alike): a word is a run of
-letters (Hebrew, ASCII) and ASCII digits, of any length, one letter included (`ו`, `12`, `ב5`).
-Digits are script-neutral; a Hebrew/Latin switch still splits a word. A word whose term is over
-128 UTF-8 bytes is not indexed and is dropped from a query, but still counts in word distances.
+**Words** follow Otzaria's tokenizer (index, query and word distance alike; index format `fts8`):
+a word starts at a letter or digit of any script (no Hebrew/Latin split; terms lowercased in every
+script) and runs over letters, digits and marks, any length, one letter included. `.` `[` `]` `*` `~`
+`^` `$` `\` `+` backtick and zero-width / bidi controls join a word and vanish; between letters one
+geresh, two gereshes or one gershayim join (typographic quotes count), and a trailing geresh belongs
+to the word (terms carry no quotes). Hebrew presentation forms fold. In a paired reading `(X) [Y]`,
+Y shares X's position (word distance), and a query keeps only Y. A word whose term (quotes included)
+has 128 UTF-8 bytes or more is not indexed; it keeps its position, and in a query it is an unindexed
+slot that counts in the word distance. The word rule is `Tokenization/WordRule.cs` (plain text) and
+`HtmlWordScanner` (HTML, single pass); `UnicodeTables.cs` is generated from Rust's
+`is_alphanumeric` / `to_lowercase`, so the seforim engine tokenizes identically.
 
 ---
 

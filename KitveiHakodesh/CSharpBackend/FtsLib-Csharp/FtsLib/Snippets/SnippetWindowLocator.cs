@@ -77,7 +77,9 @@ namespace FtsLib.Snippets
             // WordDistance = extra words between matched slots (0 = all consecutive).
             // originalGroupCount overrides so skipped wildcards still count as a slot.
             int denominator = originalGroupCount > 0 ? originalGroupCount : prepared.GroupCount;
-            int wordDist = iRight - iLeft - (denominator - 1);
+            // Words between the ends, by position (a paired reading's second reading shares
+            // its first reading's position).
+            int wordDist = tokens[iRight].Position - tokens[iLeft].Position - (denominator - 1);
             if (wordDist < 0) wordDist = 0;
 
             bool isMatch = !(requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared));
