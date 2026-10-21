@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ThemePicker from './ThemePicker.vue'
+import ThemeBackgroundTintSlider from './ThemeBackgroundTintSlider.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
 const settings = useSettingsStore()
@@ -19,6 +20,7 @@ function applyPdfPageFilters(value: boolean) {
   <SettingRow label="ערכת נושא">
     <ThemePicker />
   </SettingRow>
+  <ThemeBackgroundTintSlider />
   <SliderSetting
     label="גודל תצוגה"
     v-model="appZoom"

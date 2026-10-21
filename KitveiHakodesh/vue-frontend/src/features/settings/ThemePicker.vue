@@ -4,10 +4,11 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import themesData from '@/theme/themes.json'
 import { useThemeStore } from '@/theme/themeStore'
+import { BACKGROUND_TINT_DEFAULT } from '@/theme/themes'
 import { storeToRefs } from 'pinia'
 
 const themeStore = useThemeStore()
-const { themePreset } = storeToRefs(themeStore)
+const { themePreset, backgroundTint } = storeToRefs(themeStore)
 
 type ThemeKey = keyof typeof themesData
 
@@ -75,8 +76,10 @@ async function toggle() {
   }
 }
 
+// Picking a theme starts it at its own designed tint; the tint slider adjusts from there.
 function select(key: ThemeKey) {
   themePreset.value = key
+  backgroundTint.value = BACKGROUND_TINT_DEFAULT
   isOpen.value = false
 }
 </script>

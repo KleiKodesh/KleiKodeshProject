@@ -1,5 +1,5 @@
 import themesData from './themes.json'
-import type { ThemePreset, Theme } from './themeTypes'
+import type { ThemePreset, Theme, ThemeColors } from './themeTypes'
 import { lighten, darken, hexToRgb, hexToRgbObj, mixHex } from './themeColorUtils'
 
 export type { ThemePreset, Theme, ThemeColors } from './themeTypes'
@@ -35,13 +35,58 @@ export function getThemeFamilies() {
   return Array.from(families.entries()).map(([family, data]) => ({ family, ...data }))
 }
 
+/** Background tint strength, in percent of the theme's own tint: 0 = neutral gray/white,
+ *  100 = the theme as designed, 200 = twice as colored. */
+export const BACKGROUND_TINT_MIN = 0
+export const BACKGROUND_TINT_MAX = 200
+export const BACKGROUND_TINT_DEFAULT = 100
+
+/** Scales how colored (beige, green, rose...) a color is, keeping its brightness:
+ *  the color is pulled toward / pushed away from the gray of the same brightness. */
+function scaleTint(hex: string, strength: number): string {
+  const { r, g, b } = hexToRgbObj(hex)
+  const gray = 0.299 * r + 0.587 * g + 0.114 * b
+  const ch = (x: number) => Math.min(255, Math.max(0, Math.round(gray + (x - gray) * strength)))
+  return '#' + [ch(r), ch(g), ch(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
+}
+
+/** False for themes whose backgrounds are plain white/gray (default, Fluent...):
+ *  there is no tint for the tint slider to scale, so it is not offered. */
+export function hasBackgroundTint(theme: Theme): boolean {
+  return [theme.ui, theme.reading].some((c) =>
+    [c.bgPrimary, c.bgSecondary].some((hex) => {
+      const { r, g, b } = hexToRgbObj(hex)
+      return Math.max(r, g, b) - Math.min(r, g, b) > 4
+    }),
+  )
+}
+
+/**
+ * The theme with its background surfaces (and the borders on them) more or less
+ * tinted — how emphasized the theme's background color is. Text and accent keep
+ * their colors; brightness stays the same, so contrast is unchanged.
+ */
+export function tintTheme(theme: Theme, tint: number): Theme {
+  if (tint === BACKGROUND_TINT_DEFAULT) return theme
+  const strength = tint / 100
+  const tintColors = (c: ThemeColors): ThemeColors => ({
+    ...c,
+    bgPrimary: scaleTint(c.bgPrimary, strength),
+    bgSecondary: scaleTint(c.bgSecondary, strength),
+    ...(c.bgTertiary ? { bgTertiary: scaleTint(c.bgTertiary, strength) } : {}),
+    borderColor: scaleTint(c.borderColor, strength),
+  })
+  return { ...theme, ui: tintColors(theme.ui), reading: tintColors(theme.reading) }
+}
+
 export const isDarkTheme = (): boolean => document.documentElement.classList.contains('dark')
 
 // ── Apply theme to DOM ───────────────────────────────────────────────────────
 
-export function applyTheme(preset: ThemePreset) {
-  const theme = getTheme(preset)
-  if (!theme) return
+export function applyTheme(preset: ThemePreset, backgroundTint = BACKGROUND_TINT_DEFAULT) {
+  const base = getTheme(preset)
+  if (!base) return
+  const theme = tintTheme(base, backgroundTint)
 
   const { ui, reading, isDark } = theme
   const s = document.documentElement.style
