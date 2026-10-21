@@ -193,9 +193,9 @@ async function navigateToSection(sectionId: string) {
         <SettingsPageBookAndCommentaryDisplaySection />
         <SettingsPageCensorDivineNamesSection />
         <SettingsPageCalendarSection />
-        <SettingsPageUpdatesSection />
         <SettingsPageAdvancedSection />
         <SettingsPageResetSection />
+        <SettingsPageUpdatesSection />
         <SettingsPageKeyboardShortcutsSection />
 
       </div>

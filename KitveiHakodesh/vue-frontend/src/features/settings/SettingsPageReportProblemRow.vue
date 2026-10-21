@@ -23,10 +23,7 @@ const { isGithubReachable } = useIsGithubReachable()
         :href="GITHUB_NEW_ISSUE_URL"
         @click.prevent="openUrlInSystemBrowser(GITHUB_NEW_ISSUE_URL)"
       >{{ GITHUB_NEW_ISSUE_URL }}</a>
-      <template v-else-if="isGithubReachable === false">
-        <span class="report-problem-text">{{ $t('settings.reportProblem.emailNote') }}</span>
-        <span class="report-problem-link" dir="ltr">{{ SUPPORT_EMAIL }}</span>
-      </template>
+      <span v-else-if="isGithubReachable === false" class="report-problem-link" dir="ltr">{{ SUPPORT_EMAIL }}</span>
     </div>
   </SettingRow>
 </template>
@@ -43,11 +40,6 @@ const { isGithubReachable } = useIsGithubReachable()
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.report-problem-text {
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .report-problem-link {
