@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -174,7 +175,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
                     if (!AdminHelper.IsElevated) continue; // inert; a later elevated run gets it
 
-                    status?.Report("מסיר שירות ישן...");
+                    status?.Report(Strings.Install_RemovingOldService);
 
                     // Resolve the exe location before deregistering — afterwards the
                     // ImagePath is gone and we would lose track of what to clean up.

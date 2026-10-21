@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows;
@@ -38,16 +39,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (wordProcs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "וורד פתוח כעת.\nהאם לסגור את וורד כדי להמשיך בהתקנה?",
-                "וורד פתוח",
+                Strings.Word_OpenContinue,
+                Strings.Word_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (r == MessageBoxResult.No)
             {
                 MessageBox.Show(
-                    "ההתקנה בוטלה. אנא סגור את וורד ונסה שוב.",
-                    "התקנה בוטלה",
+                    Strings.Word_Cancelled,
+                    Strings.InstallCancelledTitle,
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return false;
@@ -69,12 +70,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (wordProcs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "וורד פתוח כעת. יש לסגור אותו לפני הניקוי.\nהאם לסגור את וורד כעת?",
-                "וורד פתוח",
+                Strings.Word_OpenClean,
+                Strings.Word_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.Yes,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                UiLanguage.MessageBoxOptions);
 
             if (r != MessageBoxResult.Yes) return false;
 

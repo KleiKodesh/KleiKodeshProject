@@ -286,6 +286,12 @@ Section "Main"
   File "${WPF_EXE_PATH}"
   File /nonfatal "${WPF_EXE_PATH}\..\*.config"
 
+  ; English UI texts (satellite of Properties/Strings.en.resx). Hebrew is built
+  ; into the exe itself; without this the English option falls back to Hebrew.
+  SetOutPath "$TEMP\KleiKodeshInstaller\en"
+  File "${WPF_EXE_PATH}\..\en\KleiKodeshVstoInstallerWpf.resources.dll"
+  SetOutPath "$TEMP\KleiKodeshInstaller"
+
   ; KleiKodesh.pkg — the solid-LZMA payload, written next to the exe.
   ; AddinInstaller.OpenPayloadStream() looks for it here first.
   ;

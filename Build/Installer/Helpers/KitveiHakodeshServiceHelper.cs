@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -209,7 +210,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>Status line shown while Windows prepares the admin prompt.</summary>
-        private const string ApprovalPromptStatus = "Windows תבקש אישור בעוד רגע - נא ללחוץ 'כן'...";
+        private static string ApprovalPromptStatus => Strings.Install_ApprovalPrompt;
 
         /// <summary>The installer's main window, as the owner of the admin prompt; zero when
         /// there is none (the prompt then still appears, only possibly in the background).</summary>

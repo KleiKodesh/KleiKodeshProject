@@ -36,6 +36,9 @@ namespace KleiKodeshVstoInstallerWpf
         {
             base.OnStartup(e);
 
+            // UI language (Hebrew default / English) must be set before any window exists.
+            UiLanguage.ApplySaved();
+
             // When built with -p:ForceCleanInstall=true, the installer always launches
             // in repair mode — wipes existing files/registry then installs fresh.
             // The "התקן" button on LandingPage therefore behaves exactly like "תיקון".

@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using System;
 using System.Windows;
@@ -36,12 +37,12 @@ namespace KleiKodeshVstoInstallerWpf
             if (_isRunning)
             {
                 var confirm = MessageBox.Show(
-                    "הניקוי עדיין פועל. האם לחזור בכל זאת?",
-                    "אישור",
+                    Strings.Repair_StillRunning,
+                    Strings.Confirm,
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question,
                     MessageBoxResult.No,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                    UiLanguage.MessageBoxOptions);
                 if (confirm != MessageBoxResult.Yes) return;
             }
             _host.NavigateToLanding();
@@ -85,13 +86,13 @@ namespace KleiKodeshVstoInstallerWpf
             if (!skipConfirm)
             {
                 var confirm = MessageBox.Show(
-                    "פעולה זו תמחק את כל קבצי ורשומות הרגיסטרי של כלי קודש מהמחשב.\n\n" +
-                    "לאחר הניקוי תתחיל התקנה מחדש אוטומטית.\n\nלהמשיך?",
-                    "אישור תיקון מלא",
+                    Strings.Repair_ConfirmText1 +
+                    Strings.Repair_ConfirmText2,
+                    Strings.Repair_ConfirmTitle,
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning,
                     MessageBoxResult.No,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                    UiLanguage.MessageBoxOptions);
 
                 if (confirm != MessageBoxResult.Yes) return;
             }
@@ -102,7 +103,7 @@ namespace KleiKodeshVstoInstallerWpf
             _isRunning                 = true;
             BasicCleanButton.IsEnabled = false;
             DeepCleanButton.IsEnabled  = false;
-            BasicCleanButton.Content   = "מנקה...";
+            BasicCleanButton.Content   = Strings.Repair_Cleaning;
             CancelButton.IsEnabled     = false;
             ProgressPanel.Visibility = Visibility.Visible;
             LogPanel.Visibility      = Visibility.Visible;
@@ -125,9 +126,9 @@ namespace KleiKodeshVstoInstallerWpf
             catch (Exception ex)
             {
                 _isRunning = false;
-                AppendLog($"\n❌ שגיאה: {ex.Message}");
+                AppendLog(string.Format(Strings.Repair_ErrorLog, ex.Message));
                 BasicCleanButton.IsEnabled = true;
-                BasicCleanButton.Content   = "ניקוי בסיסי";
+                BasicCleanButton.Content   = Strings.Repair_BasicClean;
                 DeepCleanButton.IsEnabled  = true;
                 CancelButton.IsEnabled     = true;
                 return;
@@ -139,19 +140,19 @@ namespace KleiKodeshVstoInstallerWpf
 
             if (result.TotalDeleted == 0 && result.Errors.Count == 0)
             {
-                SummaryText.Text = "✅ לא נמצאו שאריות — המחשב היה נקי.";
-                AppendLog("\n✅ לא נמצאו שאריות.");
+                SummaryText.Text = Strings.Repair_NothingFound;
+                AppendLog(Strings.Repair_NothingFoundLog);
             }
             else
             {
-                SummaryText.Text = $"✅ הניקוי הושלם — {result.DeletedPaths.Count} תיקיות/קבצים, {result.DeletedRegistryKeys.Count} רשומות רגיסטרי נמחקו.";
+                SummaryText.Text = string.Format(Strings.Repair_Summary, result.DeletedPaths.Count, result.DeletedRegistryKeys.Count);
                 if (result.Errors.Count > 0)
-                    AppendLog($"\n⚠ {result.Errors.Count} שגיאות.");
+                    AppendLog(string.Format(Strings.Repair_ErrorCount, result.Errors.Count));
             }
 
-            StepText.Text = "הניקוי הושלם — מתחיל התקנה מחדש...";
+            StepText.Text = Strings.Repair_DoneReinstalling;
             ProgressBar.Value = 100;
-            AppendLog("\n▶ מתחיל התקנה מחדש...");
+            AppendLog(Strings.Repair_ReinstallLog);
 
             // A repair re-registers the service even when its registration looks current: a
             // broken one (disabled, wrong permissions) is part of what a repair is for.

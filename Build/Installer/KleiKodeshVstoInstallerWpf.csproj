@@ -51,6 +51,19 @@
     <Reference Include="System.ServiceProcess" />
   </ItemGroup>
 
+  <!-- UI texts: Strings.resx = Hebrew (default), Strings.en.resx = English (satellite en\). -->
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Strings.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Strings.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <Compile Update="Properties\Strings.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
   <ItemGroup>
     <Resource Include="KleiKodesh_Main.ico" />
   </ItemGroup>
