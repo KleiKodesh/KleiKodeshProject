@@ -817,6 +817,7 @@ export function copyImageToClipboard(dataUrl: string): Promise<{ ok?: boolean; e
  * chromeColor is the theme's title-bar background (hex) — the native chrome tab
  * strip derives its full palette from it so it matches the Vue theme exactly.
  * accentColor drives the active-tab indicator in the native tab-list dropdown.
+ * uiLanguage ('he' | 'en') switches the native chrome's direction (RTL/LTR) and texts.
  * Fire-and-forget — no meaningful return value.
  */
 export function setTheme(
@@ -824,10 +825,12 @@ export function setTheme(
   chromeColor?: string,
   accentColor?: string,
   borderColor?: string,
+  uiLanguage?: string,
 ): void {
   if (typeof window.__webviewAction !== 'function') return
   action('setTheme', {
     isDark,
+    ...(uiLanguage ? { uiLanguage } : {}),
     ...(chromeColor ? { chromeColor } : {}),
     ...(accentColor ? { accentColor } : {}),
     ...(borderColor ? { borderColor } : {}),

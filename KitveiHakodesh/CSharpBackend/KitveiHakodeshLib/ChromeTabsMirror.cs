@@ -7,6 +7,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Windows.Forms;
 
 namespace KitveiHakodeshLib
 {
@@ -57,19 +58,7 @@ namespace KitveiHakodeshLib
             // the window (Vue guarantees at least one tab, but snapshots arrive async).
             _form.AllowTabDetach = false;
             _form.ExitOnLastTabClose = false;
-            _form.TabListOpenTabsHeader = "לשוניות פתוחות";
-
-            // Hebrew caption-button tooltips (replace Windows' OS-language ones)
-            _form.MinimizeToolTip = "מזער";
-            _form.MaximizeToolTip = "הגדל";
-            _form.RestoreToolTip = "שחזר";
-            _form.CloseToolTip = "סגור";
-
-            // Hebrew tab context-menu captions (the base class defaults are English)
-            _form.CloseTabMenuText = "סגור לשונית זו";
-            _form.CloseOtherTabsMenuText = "סגור את כל הלשוניות האחרות";
-            _form.CloseTabsToTheLeftMenuText = "סגור את כל הלשוניות שמשמאל";
-            _form.CloseTabsToTheRightMenuText = "סגור את כל הלשוניות שמימין";
+            ApplyLanguage(AppSettingsRegistry.GetUiLanguage());
 
             ApplyPersistedTheme();
 
@@ -394,6 +383,55 @@ namespace KitveiHakodeshLib
                 -1, 0));
         }
 
+        // -- UI language ---------------------------------------------------------------
+        //
+        // English = LTR chrome + English texts; anything else = RTL + Hebrew. Setting
+        // RightToLeftLayout recreates the form handle, so only touch it on a real change.
+
+        private const string HebrewTitle = "כתבי הקודש";
+
+        private void ApplyLanguage(string uiLanguage)
+        {
+            bool english = uiLanguage == "en";
+
+            if (_form.RightToLeftLayout == english)
+                _form.RightToLeftLayout = !english;
+            RightToLeft direction = english ? RightToLeft.No : RightToLeft.Yes;
+            if (_form.RightToLeft != direction)
+                _form.RightToLeft = direction;
+
+            if (english)
+            {
+                _form.Text = "Kitvei Hakodesh";
+                _form.TabListOpenTabsHeader = "Open tabs";
+                _form.MinimizeToolTip = "Minimize";
+                _form.MaximizeToolTip = "Maximize";
+                _form.RestoreToolTip = "Restore";
+                _form.CloseToolTip = "Close";
+                _form.CloseTabMenuText = "Close tab";
+                _form.CloseOtherTabsMenuText = "Close other tabs";
+                _form.CloseTabsToTheLeftMenuText = "Close tabs to the left";
+                _form.CloseTabsToTheRightMenuText = "Close tabs to the right";
+            }
+            else
+            {
+                _form.Text = HebrewTitle;
+                _form.TabListOpenTabsHeader = "לשוניות פתוחות";
+
+                // Hebrew caption-button tooltips (replace Windows' OS-language ones)
+                _form.MinimizeToolTip = "מזער";
+                _form.MaximizeToolTip = "הגדל";
+                _form.RestoreToolTip = "שחזר";
+                _form.CloseToolTip = "סגור";
+
+                // Hebrew tab context-menu captions (the base class defaults are English)
+                _form.CloseTabMenuText = "סגור לשונית זו";
+                _form.CloseOtherTabsMenuText = "סגור את כל הלשוניות האחרות";
+                _form.CloseTabsToTheLeftMenuText = "סגור את כל הלשוניות שמשמאל";
+                _form.CloseTabsToTheRightMenuText = "סגור את כל הלשוניות שמימין";
+            }
+        }
+
         // ── Theme ───────────────────────────────────────────────────────────────────
 
         private void OnChromeThemeChanged(object sender, ChromeThemeChangedEventArgs e)
@@ -401,10 +439,15 @@ namespace KitveiHakodeshLib
             if (_form.IsDisposed) return;
             if (_form.InvokeRequired)
             {
-                _form.BeginInvoke(new Action(() => ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor, e.BorderColor)));
+                _form.BeginInvoke(new Action(() =>
+                {
+                    ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor, e.BorderColor);
+                    if (e.UiLanguage != null) ApplyLanguage(e.UiLanguage);
+                }));
                 return;
             }
             ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor, e.BorderColor);
+            if (e.UiLanguage != null) ApplyLanguage(e.UiLanguage);
         }
 
         private void ApplyPersistedTheme()
