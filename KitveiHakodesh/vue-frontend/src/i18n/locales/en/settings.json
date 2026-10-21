@@ -130,7 +130,7 @@
   "reportProblem": {
     "section": "Report a problem",
     "label": "Found a problem or have a suggestion?",
-    "emailNote": "If GitHub is blocked for you, send the report by email to:"
+    "emailNote": "GitHub is blocked on your network. Please send the report by email to:"
   },
   "updates": {
     "loading": "Loading...",
