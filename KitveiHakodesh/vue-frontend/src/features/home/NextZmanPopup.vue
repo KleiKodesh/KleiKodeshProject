@@ -72,7 +72,7 @@ defineProps<{
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  text-align: start;
+  text-align: left;
 }
 .zp-label.passed,
 .zp-value.passed {
