@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 
 namespace FtsLib.Tokenization
 {
@@ -29,7 +30,11 @@ namespace FtsLib.Tokenization
         {
             // rawStart / rawEnd / visibleStart are available but not needed here —
             // the Tokenizer only cares about the normalized form.
-            _terms.Add(_buffer.ToString());
+            string term = _buffer.ToString();
+            // Otzaria's RemoveLongFilter: a term over MaxTermBytes (UTF-8, its inner quotes
+            // counting one byte each, as engines that keep them store it) is not indexed.
+            if (Encoding.UTF8.GetByteCount(term) + WordInnerQuotes > HebrewChars.MaxTermBytes) return;
+            _terms.Add(term);
         }
     }
 }

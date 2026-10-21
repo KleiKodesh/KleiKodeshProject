@@ -23,7 +23,11 @@ namespace FtsLib.Search
     ///   - Nikud (U+05B0–U+05C7) and cantillation (U+0591–U+05AF) are stripped from
     ///     every token so patterns match the normalised terms stored in the index.
     ///   - English letters are lowercased.
-    ///   - Non-letter, non-'*', non-'~', non-digit characters are dropped.
+    ///   - Digits are word characters, as in the indexer (Otzaria's word model): "ב5", "12".
+    ///   - Other non-letter, non-'*', non-'?' characters are dropped.
+    ///   - A literal of any length is a word (one letter included); only one whose term is over
+    ///     HebrewChars.MaxTermBytes is dropped (the index has no such term: Otzaria's
+    ///     RemoveLongFilter, applied to queries too).
     ///   - Empty tokens (after stripping) are ignored.
     ///   - A leading or trailing '|', or consecutive '||', is treated as if the
     ///     missing side is absent (the pipe is simply ignored).
@@ -114,14 +118,13 @@ namespace FtsLib.Search
         ///
         /// Kept verbatim (NOT separators):
         ///   - whitespace (the tokeniser splits on it anyway)
-        ///   - letters (Hebrew + ASCII)
+        ///   - letters (Hebrew + ASCII) and digits (word characters, as in the scanner)
         ///   - strippable nikud/cantillation marks (Normalise removes them, matching
         ///     the scanner) — EXCEPT maqaf U+05BE, which is inside the strippable
         ///     range but is explicitly a separator in the scanner (checked first)
         ///   - other Unicode non-spacing marks (transparent in the scanner too)
         ///   - intra-word quotes (transparent connectors on both sides, e.g. רש"י)
         ///   - query syntax characters: '*' '?' '~' '%' '|'
-        ///   - a digit directly after '~' (the fuzzy-distance suffix, e.g. "שלום~2")
         /// </summary>
         private static string SplitOnIndexSeparators(string query)
         {
@@ -139,11 +142,10 @@ namespace FtsLib.Search
                 else
                 {
                     keep = char.IsWhiteSpace(c)
-                        || HebrewChars.IsLetter(c)
+                        || HebrewChars.IsWordChar(c)
                         || HebrewChars.IsStrippableMark(c)
                         || HebrewChars.IsIntraWordQuote(c)
                         || c == '*' || c == '?' || c == '~' || c == '%' || c == '|'
-                        || (c >= '0' && c <= '9' && i > 0 && query[i - 1] == '~')
                         || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark);
                 }
 
@@ -164,6 +166,7 @@ namespace FtsLib.Search
                         prevLetter = c;
                     }
                     else if (!(HebrewChars.IsStrippableMark(c)
+                            || HebrewChars.IsDigit(c) // script-neutral, as in the scanner
                             || HebrewChars.IsIntraWordQuote(c)
                             || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)))
                     {
@@ -235,10 +238,10 @@ namespace FtsLib.Search
                         fuzzyDist = FuzzyExpander.MaxAllowedDistance;
                     tokenText = prefix;
                 }
-                // else: '~' is not a fuzzy marker here — treat as noise (dropped by Normalise)
+                // else: '~' is not a fuzzy marker here — the ~ is dropped by Normalise, digits after it stay in the word (שלום~12 = שלום12, as Otzaria strips ~)
             }
 
-            string normalised = Normalise(tokenText);
+            string normalised = Normalise(tokenText, out int innerQuotes);
             if (normalised.Length == 0) return null;
 
             bool isWildcard = normalised.IndexOf('*') >= 0 || normalised.IndexOf('?') >= 0;
@@ -251,14 +254,13 @@ namespace FtsLib.Search
             if (isWildcard)
                 grammarPrefix = grammarSuffix = false;
 
-            // The index only stores words of 2..29 letters (HtmlWordScanner.Flush).
-            // A shorter or longer LITERAL can never match anything; keeping it would
-            // poison the whole AND query into guaranteed-zero results with no signal.
-            // Treat it like the index does — as a non-word — and drop the token.
-            // Wildcard/fuzzy/grammar tokens keep their own expansion semantics
-            // (e.g. "א~1" can legitimately match the 2-letter index term "אב").
+            // Every word is indexed (one letter, digits, any length) except a term over
+            // MaxTermBytes (Tokenizer.OnWord, Otzaria's RemoveLongFilter). Such a LITERAL
+            // can never match anything; keeping it would poison the whole AND query into
+            // guaranteed-zero results with no signal. Otzaria drops it from the query too.
+            // Wildcard/fuzzy/grammar tokens keep their own expansion semantics.
             if (!isWildcard && !isFuzzy && !grammarPrefix && !grammarSuffix &&
-                (normalised.Length < 2 || normalised.Length >= 30))
+                Encoding.UTF8.GetByteCount(normalised) + innerQuotes > HebrewChars.MaxTermBytes)
                 return null;
 
             return new SubPattern(normalised, isWildcard, isFuzzy, fuzzyDist,
@@ -269,22 +271,32 @@ namespace FtsLib.Search
         // ── Normalisation ─────────────────────────────────────────────
 
         /// <summary>
-        /// Strips nikud/cantillation, lowercases ASCII, drops non-letter non-'*' chars.
+        /// Strips nikud/cantillation, lowercases ASCII, keeps letters, digits, '*' and '?',
+        /// drops everything else. <paramref name="innerQuotes"/> = the quotes it skipped BETWEEN
+        /// word characters (the byte each takes in a quote-keeping term; see MaxTermBytes).
         /// Preserves '*' and '?' so the caller can detect wildcard position.
         /// Hebrew geresh/gershayim and ASCII quote characters that appear inside a
         /// word (buffer non-empty) are treated as transparent connectors and skipped,
         /// matching the behaviour of the indexer's HtmlWordScanner.
         /// </summary>
-        private static string Normalise(string token)
+        private static string Normalise(string token, out int innerQuotes)
         {
             var sb = new StringBuilder(token.Length);
+            innerQuotes = 0;
+            int pendingQuotes = 0;
             foreach (char c in token)
             {
                 if (HebrewChars.IsStrippableMark(c)) continue;          // nikud + cantillation
-                if (c == '*' || c == '?') { sb.Append(c); continue; }   // preserve wildcard chars
-                if (HebrewChars.IsLetter(c)) { sb.Append(HebrewChars.ToLowerAscii(c)); continue; }
-                if (HebrewChars.IsIntraWordQuote(c) && sb.Length > 0) continue; // transparent connector
-                // everything else (digits, punctuation, spaces) is dropped
+                if (c == '*' || c == '?') { sb.Append(c); pendingQuotes = 0; continue; } // preserve wildcard chars
+                if (HebrewChars.IsWordChar(c))
+                {
+                    sb.Append(HebrewChars.ToLowerAscii(c));
+                    innerQuotes += pendingQuotes;
+                    pendingQuotes = 0;
+                    continue;
+                }
+                if (HebrewChars.IsIntraWordQuote(c) && sb.Length > 0) { pendingQuotes++; continue; } // transparent connector
+                // everything else (punctuation, spaces) is dropped
             }
             return sb.ToString();
         }

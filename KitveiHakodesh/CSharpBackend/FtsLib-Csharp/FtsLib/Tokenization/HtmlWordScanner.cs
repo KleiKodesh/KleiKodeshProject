@@ -7,7 +7,14 @@ namespace FtsLib.Tokenization
     /// <summary>
     /// Base class for single-pass HTML-aware text scanners.
     /// Handles tag detection, entity decoding, nikud/cantillation stripping,
-    /// and word boundary detection. Subclasses receive each complete word via
+    /// and word boundary detection.
+    ///
+    /// Word model = Otzaria's (otzaria_search_engine hebrew_tokenizer.rs: a token is a run of
+    /// letters AND digits, any length, one letter included): every run of letters (Hebrew,
+    /// ASCII) and ASCII digits is a word, whatever its length. Digits are script-neutral (they
+    /// join the run they are in: ב5, 5ab). A word whose term is over
+    /// <see cref="HebrewChars.MaxTermBytes"/> is still reported here (it is a word for distances);
+    /// the index <see cref="Tokenizer"/> leaves it out of the terms (Otzaria's RemoveLongFilter). Subclasses receive each complete word via
     /// <see cref="OnWord"/> with both its raw source span and its normalized form.
     /// Tag/entity logic lives in <see cref="HtmlBlockTags"/>.
     /// Not thread-safe — one instance per thread.
@@ -25,6 +32,14 @@ namespace FtsLib.Tokenization
         private int  _wordStart;     // raw index of first letter in current word
         private int  _wordVisibleStart; // visible chars before the first letter of the current word
         private int  _visibleCount;  // cumulative visible chars up to current position
+        private int  _runScript;     // 0 = no letter yet in the word (digits only), 1 = Hebrew, 2 = Latin
+        private int  _pendingQuotes; // intra-word quotes since the word's last letter/digit
+        private int  _innerQuotes;   // quotes BETWEEN the word's letters/digits (kept in its term by
+                                     // engines that keep quotes; they count one byte toward MaxTermBytes)
+
+        /// <summary>Quotes between the letters of the word being reported (valid inside
+        /// <see cref="OnWord"/>): רש"י has 1, יצחק" has 0 (a trailing quote is punctuation).</summary>
+        protected int WordInnerQuotes => _innerQuotes;
 
         // ── Entry point ──────────────────────────────────────────────
 
@@ -36,6 +51,9 @@ namespace FtsLib.Tokenization
             _tagNameDone  = false;
             _wordStart    = -1;
             _visibleCount = 0;
+            _runScript    = 0;
+            _pendingQuotes = 0;
+            _innerQuotes  = 0;
 
             int len = text.Length;
 
@@ -119,7 +137,7 @@ namespace FtsLib.Tokenization
                     continue;
 
                 // ── WORD BUILDING ────────────────────────────────────
-                if (HebrewChars.IsLetter(c))
+                if (HebrewChars.IsWordChar(c))
                 {
                     c = HebrewChars.ToLowerAscii(c);
 
@@ -127,16 +145,23 @@ namespace FtsLib.Tokenization
                     // word boundary. Prevents mixed-script blobs — OCR bleed (bדה), a Hebrew
                     // prefix on a foreign word (הOU), or entity residue (בשבת&amp) — from being
                     // indexed as one unsearchable token. Same-script runs are unaffected.
-                    if (_buffer.Length > 0
-                        && HebrewChars.IsLatinLower(c) != HebrewChars.IsLatinLower(_buffer[0]))
-                        Flush(i); // emits the completed run (if len 2..29), resets the buffer
+                    // Digits belong to no script: they never split and join the run (ב5).
+                    if (!HebrewChars.IsDigit(c))
+                    {
+                        int script = HebrewChars.IsLatinLower(c) ? 2 : 1;
+                        if (_runScript != 0 && script != _runScript)
+                            Flush(i); // emits the completed run, resets the buffer
+                        _runScript = script;
+                    }
 
                     if (_buffer.Length == 0)
                     {
-                        _wordStart = i; // first letter of a new word
+                        _wordStart = i; // first letter/digit of a new word
                         _wordVisibleStart = _visibleCount;
                     }
 
+                    _innerQuotes  += _pendingQuotes; // the quotes before this char are inside the word
+                    _pendingQuotes = 0;
                     _buffer.Append(c);
                     _visibleCount++;
                 }
@@ -145,6 +170,7 @@ namespace FtsLib.Tokenization
                     // Hebrew geresh/gershayim and ASCII quotes appearing inside a word
                     // (e.g. רשב"א, רש"י) are transparent connectors — skip without
                     // flushing so the word is indexed as a single token.
+                    _pendingQuotes++;
                     _visibleCount++;
                 }
                 else
@@ -162,7 +188,8 @@ namespace FtsLib.Tokenization
 
         private void Flush(int rawEnd)
         {
-            if (_buffer.Length > 1 && _buffer.Length < 30)
+            // Every word counts (Otzaria's word model): one letter, a digit run, any length.
+            if (_buffer.Length > 0)
             {
                 // Pass the visible count at the start of this word, recorded when its
                 // first letter arrived. Deriving it as _visibleCount - _buffer.Length was
@@ -174,7 +201,10 @@ namespace FtsLib.Tokenization
             }
 
             _buffer.Clear();
-            _wordStart = -1;
+            _wordStart     = -1;
+            _runScript     = 0;
+            _pendingQuotes = 0;
+            _innerQuotes   = 0;
         }
 
         // ── Subclass hook ────────────────────────────────────────────
@@ -197,7 +227,7 @@ namespace FtsLib.Tokenization
 
         // ── Shared letter test (used by SnippetWindowLocator for boundary snapping) ──
 
-        /// <summary>Returns true for Hebrew letters (alef–tav) and ASCII a–z / A–Z.</summary>
+        /// <summary>Returns true for Hebrew letters (alef–tav) and ASCII a–z / A–Z (not digits).</summary>
         internal static bool IsLetter(char c) => HebrewChars.IsLetter(c);
 
 
