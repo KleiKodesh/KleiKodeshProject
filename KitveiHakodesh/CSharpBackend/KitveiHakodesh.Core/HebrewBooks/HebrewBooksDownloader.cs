@@ -24,9 +24,6 @@ namespace KitveiHakodesh.Core.HebrewBooks
     /// </summary>
     public sealed class HebrewBooksDownloader
     {
-        private const string DownloadUrlFormat =
-            "https://download.hebrewbooks.org/downloadhandler.ashx?req={0}";
-
         /// <summary>How many downloaded PDFs the app cache keeps. The user's own folder is
         /// not subject to this — we never delete from a folder the user chose.</summary>
         private const int MaxCachedPdfs = 10;
@@ -40,6 +37,9 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
         private readonly HttpClient _http;
         private readonly string _cacheDirectory;
+
+        /// <summary>The official handler, then the hb-mirror.json fallbacks.</summary>
+        private readonly HebrewBooksDownloadSources _sources = HebrewBooksDownloadSources.Load();
 
         /// <summary>Byte progress per in-flight download, keyed by book id. Entries exist only
         /// while a download is running, so "no entry" means "not downloading" — already
@@ -137,64 +137,62 @@ namespace KitveiHakodesh.Core.HebrewBooks
             string? destination = null;
             try
             {
-                string url = string.Format(DownloadUrlFormat, bookId);
-                using var response = await _http
-                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, downloadToken)
-                    .ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    if (response.StatusCode == HttpStatusCode.NotFound)
-                        return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'");
-                    var failed = HebrewBookAcquireResult.Failed(
-                        HebrewBookAcquireFailure.HttpStatus,
-                        await DescribeFailedResponseAsync(_http, url, response, downloadToken).ConfigureAwait(false));
-                    failed.HttpStatusCode = (int)response.StatusCode;
-                    return failed;
-                }
-
-                long total = response.Content.Headers.ContentLength ?? 0;
-                _progress[bookId] = new HebrewBookDownloadProgress { Received = 0, Total = total };
-
-                using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-
-                byte[] signature = new byte[PdfSignatureLength];
-                int signatureLength = await ReadFullyAsync(body, signature, downloadToken).ConfigureAwait(false);
-                if (!IsPdfSignature(signature, signatureLength))
-                    return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream,
-                        $"Not a PDF. Status {(int)response.StatusCode}, Content-Type '{response.Content.Headers.ContentType}', " +
-                        $"final URL '{response.RequestMessage?.RequestUri}', first bytes '{System.Text.Encoding.UTF8.GetString(signature, 0, signatureLength)}'");
-
                 destination = ChooseDestination(localFolder, bookId, cachedPath);
-
                 // Written to a .part first and moved into place only once complete, so a
                 // cancelled or failed download can never leave a truncated PDF that the
                 // cache-hit check above would later trust.
                 partPath = destination + ".part";
-                long received = signatureLength;
 
-                using (var file = new FileStream(
-                    partPath, FileMode.Create, FileAccess.Write, FileShare.None,
-                    CopyBufferBytes, useAsync: true))
+                // The official handler first, then the mirrors. The handler is authoritative:
+                // its 404 means no such book and ends the search, and when every source fails
+                // its failure is the one reported. Each mirror's failure is appended to that
+                // detail so the console shows why the fallbacks did not save it either.
+                HebrewBookAcquireResult? officialFailure = null;
+                foreach (HttpRequestMessage request in _sources.RequestsFor(bookId))
                 {
-                    await file.WriteAsync(signature, 0, signatureLength, downloadToken).ConfigureAwait(false);
-                    _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
-
-                    byte[] buffer = new byte[CopyBufferBytes];
-                    int read;
-                    while ((read = await body.ReadAsync(buffer, 0, buffer.Length, downloadToken).ConfigureAwait(false)) > 0)
+                    HebrewBookAcquireResult attempt;
+                    using (request)
                     {
-                        await file.WriteAsync(buffer, 0, read, downloadToken).ConfigureAwait(false);
-                        received += read;
-                        _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+                        // A source that cannot be reached at all (refused, DNS, TLS, timeout) is
+                        // that source failing, not the download: the next one must still be tried —
+                        // a network that blocks hebrewbooks.org outright is the case mirrors exist for.
+                        try
+                        {
+                            attempt = await TryDownloadFromAsync(request, bookId, partPath, downloadToken).ConfigureAwait(false);
+                        }
+                        catch (HttpRequestException ex)
+                        {
+                            attempt = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.ToString());
+                        }
+                        catch (OperationCanceledException ex) when (!cancellation.IsCancellationRequested)
+                        {
+                            // Neither the user nor the host cancelled — HttpClient's own timeout.
+                            attempt = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, "Timeout: " + ex);
+                        }
+                    }
+
+                    if (attempt.Succeeded)
+                    {
+                        MoveIntoPlace(partPath, destination);
+                        partPath = null;
+                        if (destination == cachedPath) EvictCache();
+                        return HebrewBookAcquireResult.Success(destination);
+                    }
+
+                    if (officialFailure == null)
+                    {
+                        if (attempt.Failure == HebrewBookAcquireFailure.NotFoundUpstream
+                            && attempt.HttpStatusCode == (int)HttpStatusCode.NotFound)
+                            return attempt;
+                        officialFailure = attempt;
+                    }
+                    else
+                    {
+                        officialFailure.Detail += $"\n\nFallback {request.RequestUri?.Host} failed: {attempt.Failure}: {attempt.Detail}";
                     }
                 }
 
-                MoveIntoPlace(partPath, destination);
-                partPath = null;
-
-                if (destination == cachedPath) EvictCache();
-                return HebrewBookAcquireResult.Success(destination);
+                return officialFailure!;
             }
             catch (OperationCanceledException)
                 when (cancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -232,6 +230,75 @@ namespace KitveiHakodesh.Core.HebrewBooks
                 _downloads.TryRemove(bookId, out _);
                 if (partPath != null) await DeleteWithRetryAsync(partPath).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// One source's attempt: streams its PDF into <paramref name="partPath"/> and returns
+        /// Success, or returns why this source did not yield a PDF. The .part is overwritten by
+        /// each attempt, so a failed source leaves nothing the next one could mistake for its own.
+        /// </summary>
+        private async Task<HebrewBookAcquireResult> TryDownloadFromAsync(
+            HttpRequestMessage request, string bookId, string partPath, CancellationToken downloadToken)
+        {
+            string url = request.RequestUri?.ToString() ?? "";
+            using var response = await _http
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, downloadToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    var notFound = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'");
+                    notFound.HttpStatusCode = 404;
+                    return notFound;
+                }
+                var failed = HebrewBookAcquireResult.Failed(
+                    HebrewBookAcquireFailure.HttpStatus,
+                    await DescribeFailedResponseAsync(_http, url, response, downloadToken).ConfigureAwait(false));
+                failed.HttpStatusCode = (int)response.StatusCode;
+                return failed;
+            }
+
+            long total = response.Content.Headers.ContentLength ?? 0;
+            _progress[bookId] = new HebrewBookDownloadProgress { Received = 0, Total = total };
+
+            using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+
+            byte[] signature = new byte[PdfSignatureLength];
+            int signatureLength = await ReadFullyAsync(body, signature, downloadToken).ConfigureAwait(false);
+            if (!IsPdfSignature(signature, signatureLength))
+            {
+                var notPdf = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream,
+                    $"Not a PDF. Status {(int)response.StatusCode}, Content-Type '{response.Content.Headers.ContentType}', " +
+                    $"final URL '{response.RequestMessage?.RequestUri}', first bytes '{System.Text.Encoding.UTF8.GetString(signature, 0, signatureLength)}'");
+                // hebrewbooks.org answers a missing book by redirecting to its own message page
+                // (message.aspx) with a 200 — that is its 404, so it is recorded as one. Any
+                // other non-PDF (a filter's block page) is left for the mirrors to try.
+                if (response.RequestMessage?.RequestUri?.AbsolutePath.EndsWith("/message.aspx", StringComparison.OrdinalIgnoreCase) == true)
+                    notPdf.HttpStatusCode = (int)HttpStatusCode.NotFound;
+                return notPdf;
+            }
+
+            long received = signatureLength;
+            using (var file = new FileStream(
+                partPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                CopyBufferBytes, useAsync: true))
+            {
+                await file.WriteAsync(signature, 0, signatureLength, downloadToken).ConfigureAwait(false);
+                _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+
+                byte[] buffer = new byte[CopyBufferBytes];
+                int read;
+                while ((read = await body.ReadAsync(buffer, 0, buffer.Length, downloadToken).ConfigureAwait(false)) > 0)
+                {
+                    await file.WriteAsync(buffer, 0, read, downloadToken).ConfigureAwait(false);
+                    received += read;
+                    _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+                }
+            }
+
+            return HebrewBookAcquireResult.Success(partPath);
         }
 
         /// <summary>Which of <paramref name="bookIds"/> already have a PDF in the user's folder.
