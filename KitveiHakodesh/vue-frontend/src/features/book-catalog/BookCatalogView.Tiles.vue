@@ -6,7 +6,7 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -27,7 +27,7 @@ function getTitle(item: FsItem) {
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
+  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 
@@ -63,7 +63,7 @@ function selectItem(i: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
-  <div v-else ref="tilesEl" class="tiles-grid" dir="rtl">
+  <div v-else ref="tilesEl" class="tiles-grid">
     <!-- A <button>, like the home page tiles: it is a control, so it gets the
          semantics for free — and, unlike a div, it does not stretch to fill its
          grid cell, which is what keeps it the same 72px as home's. -->

@@ -18,13 +18,14 @@ import { getDiagnostics } from '@/webview-host/bridge'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import MessageBanner from '@/components/MessageBanner.vue'
 import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
+import { tHe } from '@/i18n'
 import type { ComponentPublicInstance } from 'vue'
 
 const paneNavigation = usePaneNavigation()
 // While the catalog index builds, the search spinner says so (with progress); when the
 // index is unavailable, the search area says why instead of spinning.
 const { statusText: catalogIndexStatusText, isUnavailable: isCatalogIndexUnavailable } =
-  useSearchIndexStatus('catalogToc')
+  useSearchIndexStatus('catalogToc', tHe)
 const tabStore = useTabStore()
 const {
   loading,
@@ -308,7 +309,8 @@ function onSearchEnter() {
 </script>
 
 <template>
-  <div class="books-page">
+  <!-- Never translated, always RTL in every UI language (user decision). -->
+  <div class="books-page" dir="rtl">
     <BookCatalogTitleBar
       :view="view"
       :path="path"

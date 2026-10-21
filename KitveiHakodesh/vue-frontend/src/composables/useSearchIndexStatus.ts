@@ -4,6 +4,8 @@ import { catalogTocIndexStatus, localFileIndexStatus, type LocalFileIndexStatus 
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 
+type Translate = typeof t
+
 /**
  * ONE place that knows where each search index stands — ready, being built, or
  * unavailable — so the home/address-bar dropdown and each index's own page say the
@@ -37,29 +39,34 @@ const statusByIndex = reactive<Record<SearchIndexName, SearchIndexStatus>>({
   fullTextSearch: READY,
 })
 
-const INDEX_DISPLAY_NAMES: Record<SearchIndexName, string> = {
-  catalogToc: t('composables.index.catalogToc'),
-  localFiles: t('composables.index.localFiles'),
-  fullTextSearch: t('composables.index.fullTextSearch'),
+const INDEX_DISPLAY_NAME_KEYS: Record<SearchIndexName, string> = {
+  catalogToc: 'composables.index.catalogToc',
+  localFiles: 'composables.index.localFiles',
+  fullTextSearch: 'composables.index.fullTextSearch',
 }
 
 /** The Settings > reset button that rebuilds each index (labels from SettingsPageResetSection). */
+const INDEX_REBUILD_BUTTON_LABEL_KEYS: Record<SearchIndexName, string> = {
+  catalogToc: 'composables.index.rebuildCatalogToc',
+  localFiles: 'composables.index.rebuildLocalFiles',
+  fullTextSearch: 'composables.index.rebuildFullTextSearch',
+}
 export const INDEX_REBUILD_BUTTON_LABELS: Record<SearchIndexName, string> = {
-  catalogToc: t('composables.index.rebuildCatalogToc'),
-  localFiles: t('composables.index.rebuildLocalFiles'),
-  fullTextSearch: t('composables.index.rebuildFullTextSearch'),
+  catalogToc: t(INDEX_REBUILD_BUTTON_LABEL_KEYS.catalogToc),
+  localFiles: t(INDEX_REBUILD_BUTTON_LABEL_KEYS.localFiles),
+  fullTextSearch: t(INDEX_REBUILD_BUTTON_LABEL_KEYS.fullTextSearch),
 }
 
-function unavailableReasonText(index: SearchIndexName, reason: SearchIndexUnavailableReason): string {
+function unavailableReasonText(index: SearchIndexName, reason: SearchIndexUnavailableReason, tr: Translate): string {
   switch (reason) {
     case 'dbMissing':
-      return t('composables.index.dbMissing')
+      return tr('composables.index.dbMissing')
     case 'buildFailed':
-      return t('composables.index.buildFailed', { button: INDEX_REBUILD_BUTTON_LABELS[index] })
+      return tr('composables.index.buildFailed', { button: tr(INDEX_REBUILD_BUTTON_LABEL_KEYS[index]) })
     case 'buildFailedRetrying':
-      return t('composables.index.buildFailedRetrying')
+      return tr('composables.index.buildFailedRetrying')
     case 'serviceError':
-      return t('composables.index.serviceError')
+      return tr('composables.index.serviceError')
   }
 }
 
@@ -72,19 +79,27 @@ export function reportSearchIndexStatus(index: SearchIndexName, status: SearchIn
 }
 
 /** UI-language one-liner for a non-ready status; null when the index is ready. */
-export function describeSearchIndexStatus(index: SearchIndexName, status: SearchIndexStatus): string | null {
+export function describeSearchIndexStatus(
+  index: SearchIndexName,
+  status: SearchIndexStatus,
+  tr: Translate = t,
+): string | null {
   if (status.kind === 'ready') return null
   if (status.kind === 'building') {
     const progress = status.progressPercent === null ? '' : ` (${Math.round(status.progressPercent)}%)`
-    return t('composables.index.building', { progress })
+    return tr('composables.index.building', { progress })
   }
-  return t('composables.index.unavailable', { name: INDEX_DISPLAY_NAMES[index], reason: unavailableReasonText(index, status.reason) })
+  return tr('composables.index.unavailable', {
+    name: tr(INDEX_DISPLAY_NAME_KEYS[index]),
+    reason: unavailableReasonText(index, status.reason, tr),
+  })
 }
 
-/** Reactive status of one index plus its display text (null while ready). */
-export function useSearchIndexStatus(index: SearchIndexName) {
+/** Reactive status of one index plus its display text (null while ready). `tr` picks the
+ *  text language (the catalog page passes `tHe`: it is never translated). */
+export function useSearchIndexStatus(index: SearchIndexName, tr: Translate = t) {
   const status = computed(() => statusByIndex[index])
-  const statusText = computed(() => describeSearchIndexStatus(index, status.value))
+  const statusText = computed(() => describeSearchIndexStatus(index, status.value, tr))
   const isUnavailable = computed(() => status.value.kind === 'unavailable')
   return { status, statusText, isUnavailable }
 }

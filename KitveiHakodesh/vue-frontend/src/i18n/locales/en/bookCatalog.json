@@ -1,20 +1,20 @@
 {
   "breadcrumb": {
-    "close": "Close",
-    "showFolders": "Show folders"
+    "close": "סגור",
+    "showFolders": "הצג תיקיות"
   },
-  "retry": "Try again",
+  "retry": "נסה שוב",
   "diag": {
-    "loading": "Collecting diagnostics...",
-    "copy": "Copy for report"
+    "loading": "אוסף נתוני אבחון...",
+    "copy": "העתק לדוח"
   },
-  "noResults": "No results found",
+  "noResults": "לא נמצאו תוצאות",
   "titleBar": {
-    "listView": "list view",
-    "tilesView": "tiles view",
-    "switchTo": "Switch to {view}",
-    "reset": "Reset"
+    "listView": "תצוגת רשימה",
+    "tilesView": "תצוגת אריחים",
+    "switchTo": "החלף ל{view}",
+    "reset": "איפוס"
   },
-  "bookCount": "{n} books",
-  "noItems": "No items"
+  "bookCount": "{n} ספרים",
+  "noItems": "אין פריטים"
 }

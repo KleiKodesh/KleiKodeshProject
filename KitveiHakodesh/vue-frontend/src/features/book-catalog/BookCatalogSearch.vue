@@ -5,7 +5,7 @@ import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
 import { titleWithAuthor } from './titleWithAuthor'
 
@@ -69,7 +69,7 @@ function itemTooltip(item: SearchFsItem): string {
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
   if (item.book.parentPath) parts.push(item.book.parentPath)
-  return withNewTabHint(parts.join('\n'))
+  return withNewTabHint(parts.join('\n'), OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 function onSelect(item: SearchFsItem, openInNewTab = false) {

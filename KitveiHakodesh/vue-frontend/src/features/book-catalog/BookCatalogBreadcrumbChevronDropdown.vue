@@ -73,6 +73,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
         v-if="isOpen"
         ref="dropdownRef"
         class="chevron-dropdown"
+        dir="rtl"
         :style="{ top: dropdownTop + 'px', left: dropdownLeft + 'px' }"
       >
         <button
