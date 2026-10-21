@@ -287,11 +287,12 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { });
             _appReady = true;
-            if (_pendingFilePath != null)
+            if (_pendingFilePaths.Count > 0)
             {
-                string path = _pendingFilePath;
-                _pendingFilePath = null;
-                _ = _localFile.OpenFileFromPathAsync(path);
+                string[] paths = _pendingFilePaths.ToArray();
+                _pendingFilePaths.Clear();
+                foreach (string path in paths)
+                    _ = _localFile.OpenFileFromPathAsync(path);
             }
             if (_pendingSearch != null)
             {

@@ -68,7 +68,10 @@ namespace KitveiHakodeshDemoApp
                         // for. ASFW_ANY because the running instance's pid is not known here
                         // and any of our own instances raising itself is the wanted outcome.
                         AllowSetForegroundWindow(ASFW_ANY);
-                        SendOpenRequestToPipe(request);
+                        // Pipe only as the fallback for a running instance older than the
+                        // WM_COPYDATA receiver (mid-upgrade).
+                        if (!SendOpenRequestByCopyData(request))
+                            SendOpenRequestToPipe(request);
                     }
 
                     // Only restore if minimized — do NOT call SetForegroundWindow on the
@@ -97,10 +100,15 @@ namespace KitveiHakodeshDemoApp
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            // Before the form: the receiver must exist the moment the mutex is ours, so
+            // launches that race our startup (a multi-file Explorer open) find it.
+            _receiver = new OpenRequestReceiver();
             StartPipeListener();
             // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
-            _mainForm = new MainForm(GetOpenRequestArgument());
-            Application.Run(_mainForm);
+            var form = new MainForm(GetOpenRequestArgument());
+            form.HandleCreated += (s, e) => form.BeginInvoke(new Action(DrainEarlyRequests));
+            lock (EarlyRequestsLock) _mainForm = form;
+            Application.Run(form);
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -158,31 +166,8 @@ namespace KitveiHakodeshDemoApp
                                 // IsHandleCreated because the listener starts before the form.
                                 try
                                 {
-                                    if (!string.IsNullOrEmpty(request) &&
-                                        _mainForm != null && _mainForm.IsHandleCreated)
-                                    {
-                                        _mainForm.BeginInvoke(new Action(() =>
-                                        {
-                                            if (IsIconic(_mainForm.Handle))
-                                                ShowWindow(_mainForm.Handle, SW_RESTORE);
-                                            // In-process, on our own UI thread, so this is not the
-                                            // cross-process SetForegroundWindow the caller avoids.
-                                            // Without it a link clicked in Word or a browser opens a
-                                            // tab in a window the user never sees.
-                                            //
-                                            // Activate() alone is not enough: the launching instance
-                                            // (or Word, or the browser) is the process Windows gives
-                                            // foreground rights to, so our request is refused and only
-                                            // flashes the taskbar button. The launcher calls
-                                            // AllowSetForegroundWindow before sending, which makes the
-                                            // SetForegroundWindow below succeed; Activate() stays as
-                                            // the fallback for callers that cannot do that (a launch
-                                            // arriving over the pipe from anywhere else).
-                                            _mainForm.Activate();
-                                            SetForegroundWindow(_mainForm.Handle);
-                                            _mainForm.OpenRequest(request);
-                                        }));
-                                    }
+                                    if (!string.IsNullOrEmpty(request))
+                                        EnqueueOrDispatch(request);
                                 }
                                 catch { /* window went away mid-dispatch; keep listening */ }
                             }
@@ -198,13 +183,146 @@ namespace KitveiHakodeshDemoApp
             thread.Start();
         }
 
+        private static readonly object EarlyRequestsLock = new object();
+        private static readonly System.Collections.Generic.List<string> EarlyRequests = new System.Collections.Generic.List<string>();
+
+        // Any thread. Receivers start before the form exists. Explorer launches one copy
+        // per selected file, so with several files the others forward theirs while the
+        // first is still starting -- park them instead of dropping them.
+        private static void EnqueueOrDispatch(string request)
+        {
+            bool ready;
+            lock (EarlyRequestsLock)
+            {
+                ready = _mainForm != null && _mainForm.IsHandleCreated;
+                if (!ready) EarlyRequests.Add(request);
+            }
+            // BeginInvoke even on the UI thread: the sender is blocked in SendMessage
+            // until we return, so opening the tab must not happen inside it.
+            if (ready)
+                _mainForm.BeginInvoke(new Action(() => DispatchRequest(request)));
+        }
+
+        private static void DrainEarlyRequests()
+        {
+            string[] requests;
+            lock (EarlyRequestsLock)
+            {
+                requests = EarlyRequests.ToArray();
+                EarlyRequests.Clear();
+            }
+            foreach (string request in requests) DispatchRequest(request);
+        }
+
+        // UI thread only.
+        private static void DispatchRequest(string request)
+        {
+            if (IsIconic(_mainForm.Handle))
+                ShowWindow(_mainForm.Handle, SW_RESTORE);
+            // In-process, on our own UI thread, so this is not the
+            // cross-process SetForegroundWindow the caller avoids.
+            // Without it a link clicked in Word or a browser opens a
+            // tab in a window the user never sees.
+            //
+            // Activate() alone is not enough: the launching instance
+            // (or Word, or the browser) is the process Windows gives
+            // foreground rights to, so our request is refused and only
+            // flashes the taskbar button. The launcher calls
+            // AllowSetForegroundWindow before sending, which makes the
+            // SetForegroundWindow below succeed; Activate() stays as
+            // the fallback for callers that cannot do that (a launch
+            // arriving over the pipe from anywhere else).
+            _mainForm.Activate();
+            SetForegroundWindow(_mainForm.Handle);
+            _mainForm.OpenRequest(request);
+        }
+
+        // ── WM_COPYDATA IPC (the Notepad++ model) ─────────────────────────────────
+        // The first instance owns a hidden message-only window with a fixed caption;
+        // a later launch finds it and SendMessage's the request. Synchronous, lands on
+        // the UI thread in launch order, no listener thread or pipe-instance queue.
+
+        private const string ReceiverCaption = "KitveiHakodesh-OpenRequest-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
+        private const int WM_COPYDATA = 0x004A;
+        private static readonly IntPtr HWND_MESSAGE = new IntPtr(-3);
+        private static OpenRequestReceiver _receiver; // rooted: the window lives as long as the app
+
+        private sealed class OpenRequestReceiver : NativeWindow
+        {
+            public OpenRequestReceiver()
+            {
+                CreateHandle(new CreateParams { Caption = ReceiverCaption, Parent = HWND_MESSAGE });
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                if (m.Msg == WM_COPYDATA)
+                {
+                    var data = (COPYDATASTRUCT)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(COPYDATASTRUCT));
+                    string request = data.cbData > 0
+                        ? System.Runtime.InteropServices.Marshal.PtrToStringUni(data.lpData, data.cbData / 2)
+                        : null;
+                    if (!string.IsNullOrEmpty(request)) EnqueueOrDispatch(request);
+                    m.Result = new IntPtr(1);
+                    return;
+                }
+                base.WndProc(ref m);
+            }
+        }
+
+        /// <summary>False when no receiver was found -- the caller falls back to the pipe.</summary>
+        private static bool SendOpenRequestByCopyData(string request)
+        {
+            // Same wait as Notepad++: the mutex owner may not have made its window yet.
+            IntPtr target = IntPtr.Zero;
+            for (int i = 0; i < 20 && target == IntPtr.Zero; i++)
+            {
+                if (i > 0) Thread.Sleep(100);
+                target = FindWindowEx(HWND_MESSAGE, IntPtr.Zero, null, ReceiverCaption);
+            }
+            if (target == IntPtr.Zero) return false;
+
+            IntPtr buffer = System.Runtime.InteropServices.Marshal.StringToHGlobalUni(request);
+            try
+            {
+                var data = new COPYDATASTRUCT { dwData = IntPtr.Zero, cbData = request.Length * 2, lpData = buffer };
+                IntPtr result;
+                // Timeout so a hung instance cannot hang every later launch with it.
+                // True even on timeout: the message may still be delivered, and a pipe
+                // retry would then open the file twice.
+                SendMessageTimeout(target, WM_COPYDATA, IntPtr.Zero, ref data,
+                    SMTO_ABORTIFHUNG, 10000, out result);
+                return true;
+            }
+            finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct COPYDATASTRUCT
+        {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, int msg, IntPtr wParam, ref COPYDATASTRUCT lParam,
+            int flags, int timeout, out IntPtr result);
+
+        private const int SMTO_ABORTIFHUNG = 0x0002;
+
         private static void SendOpenRequestToPipe(string request)
         {
             try
             {
                 using (var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out))
                 {
-                    client.Connect(timeout: 3000);
+                    // Generous: a multi-file Explorer open queues one launch per file on
+                    // this single-instance pipe, behind a first instance still starting.
+                    client.Connect(timeout: 10000);
                     using (var writer = new StreamWriter(client) { AutoFlush = true })
                         writer.Write(request);
                 }

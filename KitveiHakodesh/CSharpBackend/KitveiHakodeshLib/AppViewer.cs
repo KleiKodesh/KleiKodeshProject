@@ -114,12 +114,14 @@ namespace KitveiHakodeshLib
         private HebrewBooksHandler _hb;
         private string _dbInjectionScriptId;
 
-        // A file path queued before the Vue app has finished mounting.
+        // File paths queued before the Vue app has finished mounting.
         // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
         // event listeners (localFileStore) are live before the push event fires.
-        private string _pendingFilePath;
+        // A list, not one slot: Explorer opens a multi-file selection as one launch
+        // per file, so several can arrive before the app is ready.
+        private readonly System.Collections.Generic.List<string> _pendingFilePaths = new System.Collections.Generic.List<string>();
         // A search request queued before the Vue app has finished mounting, dispatched
-        // on 'appReady' just like _pendingFilePath. Only the last request is kept.
+        // on 'appReady' just like _pendingFilePaths. Only the last request is kept.
         private (string text, string target)? _pendingSearch;
         // An open-book (deep link) request queued before the Vue app is ready. Same
         // dispatch-on-'appReady' pattern; only the last request is kept.
@@ -172,7 +174,7 @@ namespace KitveiHakodeshLib
             if (!_appReady)
             {
                 // Vue event listeners not live yet — queue until appReady fires.
-                _pendingFilePath = filePath;
+                _pendingFilePaths.Add(filePath);
             }
             else
             {
