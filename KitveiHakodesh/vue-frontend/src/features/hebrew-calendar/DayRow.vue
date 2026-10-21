@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import type { CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 
@@ -18,36 +20,36 @@ const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = [
   // chatzotNight of date D is the midpoint of the night ending at D's sunrise;
   // in winter it can fall before civil midnight, on date D-1.
-  { key: 'chatzotNight', label: 'חצות הלילה' },
-  { key: 'alot', label: 'עלות השחר' },
-  { key: 'misheyakir', label: 'משיכיר' },
-  { key: 'sunrise', label: 'הנץ החמה' },
+  { key: 'chatzotNight', label: t('hebrewCalendar.zmanim.chatzotNight') },
+  { key: 'alot', label: t('hebrewCalendar.zmanim.alot') },
+  { key: 'misheyakir', label: t('hebrewCalendar.zmanim.misheyakir') },
+  { key: 'sunrise', label: t('hebrewCalendar.zmanim.sunrise') },
   // MGA's day starts at alot, so each MGA deadline lands before its GRA
   // counterpart (shma-MGA → shma-GRA → tfilla-MGA → tfilla-GRA).
-  { key: 'sofShmaMga', label: 'סו״ז ק״ש מג״א' },
-  { key: 'sofShmaGra', label: 'סו״ז ק״ש גר״א' },
-  { key: 'sofTfillaMga', label: 'סו״ז תפילה מג״א' },
-  { key: 'sofTfillaGra', label: 'סו״ז תפילה גר״א' },
-  { key: 'chatzot', label: 'חצות היום' },
-  { key: 'minchaGedola', label: 'מנחה גדולה' },
-  { key: 'minchaKetana', label: 'מנחה קטנה' },
-  { key: 'plag', label: 'פלג המנחה' },
-  { key: 'sunset', label: 'שקיעה' },
-  { key: 'tzeit', label: 'צאת הכוכבים' },
+  { key: 'sofShmaMga', label: t('hebrewCalendar.zmanim.sofShmaMga') },
+  { key: 'sofShmaGra', label: t('hebrewCalendar.zmanim.sofShmaGra') },
+  { key: 'sofTfillaMga', label: t('hebrewCalendar.zmanim.sofTfillaMga') },
+  { key: 'sofTfillaGra', label: t('hebrewCalendar.zmanim.sofTfillaGra') },
+  { key: 'chatzot', label: t('hebrewCalendar.zmanim.chatzot') },
+  { key: 'minchaGedola', label: t('hebrewCalendar.zmanim.minchaGedola') },
+  { key: 'minchaKetana', label: t('hebrewCalendar.zmanim.minchaKetana') },
+  { key: 'plag', label: t('hebrewCalendar.zmanim.plag') },
+  { key: 'sunset', label: t('hebrewCalendar.zmanim.sunset') },
+  { key: 'tzeit', label: t('hebrewCalendar.zmanim.tzeit') },
 ]
 
 const LEARNING_ROWS: Array<{ key: keyof DailyLearning; label: string }> = [
-  { key: 'dafYomi', label: 'דף יומי' },
-  { key: 'dirshuAmudYomi', label: 'עמוד יומי (דירשו)' },
-  { key: 'yerushalmiVilna', label: 'ירושלמי יומי' },
-  { key: 'mishnaYomi', label: 'משנה יומית' },
-  { key: 'nachYomi', label: 'נ״ך יומי' },
-  { key: 'perekYomi', label: 'פרק יומי' },
-  { key: 'rambam1', label: 'רמב״ם יומי (פרק)' },
-  { key: 'rambam3', label: 'רמב״ם יומי (ג׳ פרקים)' },
-  { key: 'kitzurShulchanAruch', label: 'קיצור שולחן ערוך' },
-  { key: 'chofetzChaim', label: 'חפץ חיים' },
-  { key: 'psalms', label: 'תהילים יומי' },
+  { key: 'dafYomi', label: t('hebrewCalendar.learning.dafYomi') },
+  { key: 'dirshuAmudYomi', label: t('hebrewCalendar.learning.dirshuAmudYomi') },
+  { key: 'yerushalmiVilna', label: t('hebrewCalendar.learning.yerushalmiVilna') },
+  { key: 'mishnaYomi', label: t('hebrewCalendar.learning.mishnaYomi') },
+  { key: 'nachYomi', label: t('hebrewCalendar.learning.nachYomi') },
+  { key: 'perekYomi', label: t('hebrewCalendar.learning.perekYomi') },
+  { key: 'rambam1', label: t('hebrewCalendar.learning.rambam1') },
+  { key: 'rambam3', label: t('hebrewCalendar.learning.rambam3') },
+  { key: 'kitzurShulchanAruch', label: t('hebrewCalendar.learning.kitzurShulchanAruch') },
+  { key: 'chofetzChaim', label: t('hebrewCalendar.learning.chofetzChaim') },
+  { key: 'psalms', label: t('hebrewCalendar.learning.psalms') },
 ]
 
 const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
@@ -81,7 +83,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         </template>
         <span v-if="day.chanukahCandles" class="chip chanukah">{{ day.chanukahCandles }}</span>
         <button class="chip pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
-          זמני היום
+          {{ $t('hebrewCalendar.day.zmanim') }}
         </button>
         <button
           v-if="hasLearning"
@@ -89,7 +91,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
           :class="{ on: learningOpen }"
           @click="$emit('toggle-learning')"
         >
-          לימוד יומי
+          {{ $t('hebrewCalendar.day.learning') }}
         </button>
       </div>
 
@@ -117,9 +119,9 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         "
         class="extras"
       >
-        <span v-if="day.havdalah" class="ev havdalah">צאת שבת: {{ day.havdalah }}</span>
+        <span v-if="day.havdalah" class="ev havdalah">{{ $t('hebrewCalendar.day.havdalah', { time: day.havdalah }) }}</span>
         <span v-if="day.candleLighting" class="ev candle"
-          >הדלקת נרות: {{ day.candleLighting }}</span
+          >{{ $t('hebrewCalendar.day.candleLighting', { time: day.candleLighting }) }}</span
         >
         <span v-if="day.omer" class="ev muted">{{ day.omer }}</span>
         <span v-if="day.yomKippurKatan" class="ev holiday">{{ day.yomKippurKatan }}</span>

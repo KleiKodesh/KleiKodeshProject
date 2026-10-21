@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, type Ref } from 'vue'
 import type ContextMenu from '@/components/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -228,14 +229,14 @@ export function usePdfContextMenu(
     const copied = copyCapturedSelection(() => {
       pasteIntoWord().catch(() => {})
     })
-    if (!copied) options.notify?.('לא ניתן היה להעתיק את הטקסט שנבחר.')
+    if (!copied) options.notify?.(t('pdfViewer.menu.copyFailed'))
   }
 
   async function copyPageAsImage(): Promise<void> {
     const win = getIframe()?.contentWindow ?? null
     const app = getApp(win)
     if (!app || !app.pdfDocument) {
-      options.notify?.('לא נטען קובץ PDF.')
+      options.notify?.(t('pdfViewer.menu.noPdf'))
       return
     }
     const pageNumber = app.page || 1
@@ -262,7 +263,7 @@ export function usePdfContextMenu(
       await page.render({ canvasContext: ctx, viewport }).promise
     } catch (err) {
       console.error('[PdfContextMenu] render failed', err)
-      options.notify?.('לא ניתן היה לצייר את הדף.')
+      options.notify?.(t('pdfViewer.menu.renderFailed'))
       return
     }
 
@@ -276,7 +277,7 @@ export function usePdfContextMenu(
       try {
         const res = await copyImageToClipboard(canvas.toDataURL('image/png'))
         if (res?.ok) {
-          options.notify?.(`דף ${pageNumber} הועתק כתמונה.`)
+          options.notify?.(t('pdfViewer.menu.pageCopiedAsImage', { page: pageNumber }))
           return
         }
       } catch {
@@ -286,14 +287,14 @@ export function usePdfContextMenu(
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (!blob) {
-      options.notify?.('לא ניתן היה ליצור את התמונה.')
+      options.notify?.(t('pdfViewer.menu.imageFailed'))
       return
     }
 
     if (window.ClipboardItem && navigator.clipboard?.write) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-        options.notify?.(`דף ${pageNumber} הועתק כתמונה.`)
+        options.notify?.(t('pdfViewer.menu.pageCopiedAsImage', { page: pageNumber }))
         return
       } catch (err) {
         console.warn('[PdfContextMenu] clipboard image write failed, downloading', err)
@@ -308,16 +309,16 @@ export function usePdfContextMenu(
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
-    options.notify?.(`הלוח אינו זמין — דף ${pageNumber} נשמר כתמונה.`)
+    options.notify?.(t('pdfViewer.menu.clipboardUnavailableSaved', { page: pageNumber }))
   }
 
   function buildItems(hasSelection: boolean): ContextMenuItem[] {
     const list: ContextMenuItem[] = []
     if (hasSelection) {
-      list.push({ label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' })
-      list.push({ label: 'העתק לתוך וורד', action: onCopyIntoWord })
+      list.push({ label: t('pdfViewer.menu.copy'), action: onCopy, shortcut: 'Ctrl+C' })
+      list.push({ label: t('pdfViewer.menu.copyIntoWord'), action: onCopyIntoWord })
     }
-    list.push({ label: 'העתק דף כתמונה', action: () => void copyPageAsImage() })
+    list.push({ label: t('pdfViewer.menu.copyPageAsImage'), action: () => void copyPageAsImage() })
     return list
   }
 

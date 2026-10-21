@@ -1,0 +1,15 @@
+{
+  "notFound": "לא נמצא",
+  "fileNotFound": "הקובץ לא נמצא",
+  "loadError": "שגיאה בטעינת הקובץ",
+  "noFileOpen": "אין קובץ פתוח",
+  "loading": "בטעינה...",
+  "retry": "נסה שוב",
+  "searchPlaceholder": "חיפוש בטקסט...",
+  "menu": {
+    "copy": "העתק",
+    "selectAll": "בחר הכל",
+    "copyJoinLines": "העתק כרצף (ללא מעברי שורה)",
+    "copyCleanText": "העתק טקסט נקי"
+  }
+}

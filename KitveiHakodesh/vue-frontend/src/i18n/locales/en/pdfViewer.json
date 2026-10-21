@@ -1,0 +1,38 @@
+{
+  "ocr": {
+    "recognizedText": "Recognized text (OCR)",
+    "selectedText": "Selected text",
+    "copied": "Copied",
+    "copy": "Copy",
+    "processing": "Processing...",
+    "noText": "No text found in the selected area",
+    "copyForCut": "Copy for cutting (Ctrl+C)",
+    "scriptHebrewTitle": "Regular Hebrew",
+    "scriptHebrew": "Hebrew",
+    "scriptRashiTitle": "Rashi script",
+    "scriptRashi": "Rashi",
+    "scriptMixedTitle": "Hebrew + Rashi",
+    "scriptMixed": "Mixed",
+    "forceTitle": "Force: skip the text layer and recognize directly from the image",
+    "force": "Force"
+  },
+  "closeEsc": "Close (Esc)",
+  "cancel": "Cancel",
+  "loading": {
+    "converting": "Converting to PDF. This may take a while",
+    "downloadingProgress": "Downloading the book: {progress}",
+    "downloadingWait": "Downloading the book. Please wait"
+  },
+  "noFile": "No file selected",
+  "menu": {
+    "copyFailed": "Could not copy the selected text.",
+    "noPdf": "No PDF loaded.",
+    "renderFailed": "Could not render the page.",
+    "pageCopiedAsImage": "Page {page} copied as an image.",
+    "imageFailed": "Could not create the image.",
+    "clipboardUnavailableSaved": "Clipboard unavailable. Page {page} was saved as an image.",
+    "copy": "Copy",
+    "copyIntoWord": "Copy into Word",
+    "copyPageAsImage": "Copy page as image"
+  }
+}

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -113,11 +114,11 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
   }
 
   const items: ContextMenuItem[] = [
-    { label: 'העתק', action: onCopy },
-    { label: 'בחר הכל', action: onSelectAll },
+    { label: t('txtView.menu.copy'), action: onCopy },
+    { label: t('txtView.menu.selectAll'), action: onSelectAll },
     {
       type: 'checkbox',
-      label: 'העתק כרצף (ללא מעברי שורה)',
+      label: t('txtView.menu.copyJoinLines'),
       get checked() {
         return settingsStore.copyJoinLines
       },
@@ -127,7 +128,7 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
     },
     {
       type: 'checkbox',
-      label: 'העתק טקסט נקי',
+      label: t('txtView.menu.copyCleanText'),
       get checked() {
         return settingsStore.copyCleanText
       },

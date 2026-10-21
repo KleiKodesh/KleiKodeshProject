@@ -1,0 +1,58 @@
+{
+  "nav": {
+    "next": "הבא",
+    "prev": "הקודם",
+    "today": "היום",
+    "monthly": "חודשי",
+    "weekly": "שבועי"
+  },
+  "zmanim": {
+    "chatzotNight": "חצות הלילה",
+    "alot": "עלות השחר",
+    "misheyakir": "משיכיר",
+    "sunrise": "הנץ החמה",
+    "sofShmaMga": "סו״ז ק״ש מג״א",
+    "sofShmaGra": "סו״ז ק״ש גר״א",
+    "sofTfillaMga": "סו״ז תפילה מג״א",
+    "sofTfillaGra": "סו״ז תפילה גר״א",
+    "chatzot": "חצות היום",
+    "minchaGedola": "מנחה גדולה",
+    "minchaKetana": "מנחה קטנה",
+    "plag": "פלג המנחה",
+    "sunset": "שקיעה",
+    "tzeit": "צאת הכוכבים"
+  },
+  "learning": {
+    "dafYomi": "דף יומי",
+    "dirshuAmudYomi": "עמוד יומי (דירשו)",
+    "yerushalmiVilna": "ירושלמי יומי",
+    "mishnaYomi": "משנה יומית",
+    "nachYomi": "נ״ך יומי",
+    "perekYomi": "פרק יומי",
+    "rambam1": "רמב״ם יומי (פרק)",
+    "rambam3": "רמב״ם יומי (ג׳ פרקים)",
+    "kitzurShulchanAruch": "קיצור שולחן ערוך",
+    "chofetzChaim": "חפץ חיים",
+    "psalms": "תהילים יומי"
+  },
+  "day": {
+    "zmanim": "זמני היום",
+    "learning": "לימוד יומי",
+    "havdalah": "צאת שבת: {time}",
+    "candleLighting": "הדלקת נרות: {time}"
+  },
+  "gregMonths": {
+    "jan": "ינואר",
+    "feb": "פברואר",
+    "mar": "מרץ",
+    "apr": "אפריל",
+    "may": "מאי",
+    "jun": "יוני",
+    "jul": "יולי",
+    "aug": "אוגוסט",
+    "sep": "ספטמבר",
+    "oct": "אוקטובר",
+    "nov": "נובמבר",
+    "dec": "דצמבר"
+  }
+}

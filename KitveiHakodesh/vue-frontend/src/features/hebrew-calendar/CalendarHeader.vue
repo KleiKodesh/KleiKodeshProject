@@ -151,19 +151,19 @@ function selectGregYear(y: number) {
 
     <!-- Center: navigation + view toggle -->
     <div class="nav">
-      <button class="nav-btn" title="הבא" @click="emit('next')">
+      <button class="nav-btn" :title="$t('hebrewCalendar.nav.next')" @click="emit('next')">
         <IconChevronLeft20Regular />
       </button>
-      <button class="nav-btn" title="הקודם" @click="emit('prev')">
+      <button class="nav-btn" :title="$t('hebrewCalendar.nav.prev')" @click="emit('prev')">
         <IconChevronRight20Regular />
       </button>
       <div class="sep" />
-      <button class="nav-btn" title="היום" @click="emit('today')"><IconHome20Regular /></button>
+      <button class="nav-btn" :title="$t('hebrewCalendar.nav.today')" @click="emit('today')"><IconHome20Regular /></button>
       <div class="sep" />
       <button
         class="nav-btn"
         :class="{ active: viewMode === 'monthly' }"
-        title="חודשי"
+        :title="$t('hebrewCalendar.nav.monthly')"
         @click="emit('set-view', 'monthly')"
       >
         <IconCalendarMonth20Regular />
@@ -171,7 +171,7 @@ function selectGregYear(y: number) {
       <button
         class="nav-btn"
         :class="{ active: viewMode === 'weekly' }"
-        title="שבועי"
+        :title="$t('hebrewCalendar.nav.weekly')"
         @click="emit('set-view', 'weekly')"
       >
         <IconCalendarAgenda20Regular />

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, inject } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
@@ -258,7 +260,7 @@ function highlightedHtml(line: ParsedLine, lineIndex: number): string {
 
 const matchLabel = computed(() => {
   if (!searchQuery.value) return ''
-  if (matchCount.value === 0) return 'לא נמצא'
+  if (matchCount.value === 0) return t('txtView.notFound')
   return `${currentMatchIndex.value + 1} / ${matchCount.value}`
 })
 
@@ -276,24 +278,24 @@ async function loadContent() {
     if (filePath.value) {
       const content = await readTxtFileContent(filePath.value)
       if (content === null) {
-        error.value = 'הקובץ לא נמצא'
+        error.value = t('txtView.fileNotFound')
       } else {
         rawContent.value = content
       }
     } else if (virtualUrl.value) {
       const response = await fetch(virtualUrl.value)
       if (!response.ok) {
-        error.value = 'שגיאה בטעינת הקובץ'
+        error.value = t('txtView.loadError')
       } else {
         // Detect encoding rather than assuming UTF-8 — many Hebrew .txt files are
         // legacy Windows-1255, which decodes as U+FFFD replacement chars under UTF-8.
         rawContent.value = decodeTextDetectEncoding(await response.arrayBuffer())
       }
     } else {
-      error.value = 'אין קובץ פתוח'
+      error.value = t('txtView.noFileOpen')
     }
   } catch {
-    error.value = 'שגיאה בטעינת הקובץ'
+    error.value = t('txtView.loadError')
   } finally {
     loading.value = false
   }
@@ -355,11 +357,11 @@ async function retry() {
   <div class="txt-view-page" :style="{ filter: htmlFilter }">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="loading" class="txt-state-message">
-      <span>בטעינה...</span>
+      <span>{{ $t('txtView.loading') }}</span>
     </div>
     <div v-else-if="error" class="txt-state-message txt-state-message--error">
       <MessageBanner class="txt-state-banner" :message="error" :dismissible="false" />
-      <button @click="retry">נסה שוב</button>
+      <button @click="retry">{{ $t('txtView.retry') }}</button>
     </div>
     <div
       v-else
@@ -384,7 +386,7 @@ async function retry() {
             v-model="searchQuery"
             type="search"
             class="search-input"
-            placeholder="חיפוש בטקסט..."
+            :placeholder="$t('txtView.searchPlaceholder')"
             spellcheck="true"
             autocomplete="off"
             @keydown="onSearchKeydown"

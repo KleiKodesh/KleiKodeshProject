@@ -1,0 +1,38 @@
+{
+  "ocr": {
+    "recognizedText": "טקסט מזוהה (OCR)",
+    "selectedText": "טקסט נבחר",
+    "copied": "הועתק",
+    "copy": "העתק",
+    "processing": "מעבד...",
+    "noText": "לא נמצא טקסט באזור הנבחר",
+    "copyForCut": "העתק לחיתוך (Ctrl+C)",
+    "scriptHebrewTitle": "עברי רגיל",
+    "scriptHebrew": "עברי",
+    "scriptRashiTitle": "כתב רש״י",
+    "scriptRashi": "רש\"י",
+    "scriptMixedTitle": "עברי + רש״י",
+    "scriptMixed": "מעורב",
+    "forceTitle": "כפה — דלג על שכבת הטקסט וזהה ישירות מהתמונה",
+    "force": "כפה"
+  },
+  "closeEsc": "סגור (Esc)",
+  "cancel": "ביטול",
+  "loading": {
+    "converting": "ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה",
+    "downloadingProgress": "מוריד את הספר — {progress}",
+    "downloadingWait": "מוריד את הספר — אנא המתן"
+  },
+  "noFile": "לא נבחר קובץ",
+  "menu": {
+    "copyFailed": "לא ניתן היה להעתיק את הטקסט שנבחר.",
+    "noPdf": "לא נטען קובץ PDF.",
+    "renderFailed": "לא ניתן היה לצייר את הדף.",
+    "pageCopiedAsImage": "דף {page} הועתק כתמונה.",
+    "imageFailed": "לא ניתן היה ליצור את התמונה.",
+    "clipboardUnavailableSaved": "הלוח אינו זמין — דף {page} נשמר כתמונה.",
+    "copy": "העתק",
+    "copyIntoWord": "העתק לתוך וורד",
+    "copyPageAsImage": "העתק דף כתמונה"
+  }
+}

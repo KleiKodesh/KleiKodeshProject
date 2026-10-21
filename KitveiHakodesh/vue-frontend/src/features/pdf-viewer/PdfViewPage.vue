@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -238,10 +240,10 @@ const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
 // Live HebrewBooks download progress text (e.g. "6.2 / 13.2 MB · 47%"), when available.
 const downloadProgress = computed(() => paneNavigation.activeTab.localFileDownloadProgress ?? null)
 const loadingSubText = computed(() => {
-  if (loadingType.value !== 'downloading') return 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
+  if (loadingType.value !== 'downloading') return t('pdfViewer.loading.converting')
   return downloadProgress.value
-    ? `מוריד את הספר — ${downloadProgress.value}`
-    : 'מוריד את הספר — אנא המתן'
+    ? t('pdfViewer.loading.downloadingProgress', { progress: downloadProgress.value })
+    : t('pdfViewer.loading.downloadingWait')
 })
 
 function cancelConversion() {
@@ -259,7 +261,7 @@ function cancelConversion() {
         <div class="converting-sub">{{ loadingSubText }}</div>
         <button class="cancel-btn" @click="cancelConversion">
           <IconDismiss20Regular />
-          <span>ביטול</span>
+          <span>{{ $t('pdfViewer.cancel') }}</span>
         </button>
       </div>
     </div>
@@ -281,25 +283,25 @@ function cancelConversion() {
                 class="script-btn"
                 :class="{ active: pdfOcrStore.script === 'hebrew' }"
                 @click="pdfOcrStore.setScript('hebrew')"
-                title="עברי רגיל"
+                :title="$t('pdfViewer.ocr.scriptHebrewTitle')"
               >
-                עברי
+                {{ $t('pdfViewer.ocr.scriptHebrew') }}
               </button>
               <button
                 class="script-btn"
                 :class="{ active: pdfOcrStore.script === 'rashi' }"
                 @click="pdfOcrStore.setScript('rashi')"
-                title="כתב רש״י"
+                :title="$t('pdfViewer.ocr.scriptRashiTitle')"
               >
-                רש"י
+                {{ $t('pdfViewer.ocr.scriptRashi') }}
               </button>
               <button
                 class="script-btn"
                 :class="{ active: pdfOcrStore.script === 'mixed' }"
                 @click="pdfOcrStore.setScript('mixed')"
-                title="עברי + רש״י"
+                :title="$t('pdfViewer.ocr.scriptMixedTitle')"
               >
-                מעורב
+                {{ $t('pdfViewer.ocr.scriptMixed') }}
               </button>
               <button
                 class="script-btn"
@@ -314,11 +316,11 @@ function cancelConversion() {
               class="toggle-btn"
               :class="{ active: pdfOcrStore.skipExistingText }"
               @click="pdfOcrStore.toggleSkipExistingText()"
-              title="כפה — דלג על שכבת הטקסט וזהה ישירות מהתמונה"
+              :title="$t('pdfViewer.ocr.forceTitle')"
             >
-              כפה
+              {{ $t('pdfViewer.ocr.force') }}
             </button>
-            <button class="close-btn" @click="ocr.deactivate()" title="סגור (Esc)">
+            <button class="close-btn" @click="ocr.deactivate()" :title="$t('pdfViewer.closeEsc')">
               <IconDismiss20Regular />
             </button>
           </div>
@@ -326,7 +328,7 @@ function cancelConversion() {
       </div>
     </template>
 
-    <div v-else class="pdf-empty">לא נבחר קובץ</div>
+    <div v-else class="pdf-empty">{{ $t('pdfViewer.noFile') }}</div>
 
     <PdfOcrResultPopup
       v-if="ocr.result.value"
