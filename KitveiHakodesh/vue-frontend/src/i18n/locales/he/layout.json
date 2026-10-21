@@ -75,5 +75,9 @@
     "rename": "שנה שם",
     "newPlaceholder": "סביבת עבודה חדשה",
     "create": "צור"
-  }
+  },
+  "dbDownload": "הורד מסד ספרים",
+  "dbDownloadDescription": "הורדת מאגר הספרים למחשב",
+  "dbChoose": "בחר מסד ספרים",
+  "dbChooseDescription": "בחירת מאגר ספרים קיים"
 }
