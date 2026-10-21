@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import type { Plugin } from 'vite'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -788,7 +789,13 @@ function devSqlitePlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [devSqlitePlugin(), vue(), viteSingleFile()],
+  plugins: [
+    devSqlitePlugin(),
+    vue(),
+    // Precompiles src/i18n/locales/**/*.json so the runtime-only vue-i18n build ships (no message compiler).
+    VueI18nPlugin({ include: [fileURLToPath(new URL('./src/i18n/locales/**', import.meta.url))], runtimeOnly: true, compositionOnly: true, fullInstall: false }),
+    viteSingleFile(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
