@@ -64,3 +64,19 @@ describe('addinDisplayTitle', () => {
     expect(addinDisplayTitle('')).toBe('')
   })
 })
+
+describe('English addin aliases', () => {
+  it('accepts addins / addin / add-ins case-insensitively, with or without a colon', () => {
+    for (const query of ['addins', 'addins:', 'Addins: x', 'ADD-INS x', 'addin', 'find addins here']) {
+      expect(queryTargetsAddins(query)).toBe(true)
+      expect(normalizeAddinQuery(query)).toContain(INDEX_PREFIX)
+    }
+  })
+
+  it('needs a whole word', () => {
+    for (const query of ['addinsx', 'myaddins', 'addition']) {
+      expect(queryTargetsAddins(query)).toBe(false)
+      expect(normalizeAddinQuery(query)).toBe(query)
+    }
+  })
+})
