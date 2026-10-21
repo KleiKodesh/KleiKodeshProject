@@ -13,6 +13,7 @@ const { isGithubReachable } = useIsGithubReachable()
 </script>
 
 <template>
+  <hr class="report-problem-separator" />
   <SettingRow :label="$t('settings.reportProblem.label')">
     <div class="report-problem">
       <a
@@ -31,6 +32,12 @@ const { isGithubReachable } = useIsGithubReachable()
 </template>
 
 <style scoped>
+.report-problem-separator {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 8px 0;
+}
+
 .report-problem {
   width: 100%;
   display: flex;
