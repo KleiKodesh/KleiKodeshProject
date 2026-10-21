@@ -128,7 +128,6 @@
     "otherHint": "Names with no letter to replace, so they can only be split with a hyphen. Click a name to toggle covering"
   },
   "reportProblem": {
-    "section": "Report a problem",
     "label": "Found a problem or have a suggestion?",
     "emailNote": "GitHub is blocked on your network. Please send the report by email to:"
   },
@@ -140,7 +139,7 @@
     "failed": "Could not check for updates. Please try again later.",
     "upToDate": "The installed version is the latest.",
     "idle": "No update is ready to install. The app checks for new versions periodically and downloads them in the background.",
-    "section": "Updates",
+    "section": "Updates and problem reports",
     "status": "Update status",
     "installed": "Installed version: {version}",
     "waitInstaller": "Please wait a moment for the installer to open",

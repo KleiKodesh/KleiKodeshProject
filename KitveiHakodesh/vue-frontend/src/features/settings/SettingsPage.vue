@@ -16,7 +16,6 @@ import SettingsPageBookAndCommentaryDisplaySection from './SettingsPageBookAndCo
 import SettingsPageCensorDivineNamesSection from './SettingsPageCensorDivineNamesSection.vue'
 import SettingsPageCalendarSection from './SettingsPageCalendarSection.vue'
 import SettingsPageUpdatesSection from './SettingsPageUpdatesSection.vue'
-import SettingsPageReportProblemSection from './SettingsPageReportProblemSection.vue'
 import SettingsPageAdvancedSection from './SettingsPageAdvancedSection.vue'
 import SettingsPageResetSection from './SettingsPageResetSection.vue'
 import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcutsSection.vue'
@@ -195,7 +194,6 @@ async function navigateToSection(sectionId: string) {
         <SettingsPageCensorDivineNamesSection />
         <SettingsPageCalendarSection />
         <SettingsPageUpdatesSection />
-        <SettingsPageReportProblemSection />
         <SettingsPageAdvancedSection />
         <SettingsPageResetSection />
         <SettingsPageKeyboardShortcutsSection />
