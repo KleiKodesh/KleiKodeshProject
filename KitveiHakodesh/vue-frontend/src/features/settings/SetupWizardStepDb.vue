@@ -27,7 +27,16 @@ onMounted(() => {
 
 async function pickDbPath() {
   const previous = (await getDbPathInfo())?.path ?? ''
-  const picked = await pickDbPathWithDialog()
+  devError.value = ''
+  let picked: string | null
+  try {
+    picked = await pickDbPathWithDialog({ throwSaveErrors: true })
+  } catch (err) {
+    devError.value = err instanceof Error && /not found/i.test(err.message)
+      ? t('settings.db.notFound')
+      : t('settings.db.saveFailed')
+    return
+  }
   if (!picked) return
   dbPath.value = picked
   await onDbPathChanged(previous, picked)

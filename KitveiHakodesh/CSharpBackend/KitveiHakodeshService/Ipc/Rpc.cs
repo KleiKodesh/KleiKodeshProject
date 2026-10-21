@@ -203,6 +203,10 @@ public sealed class DbPathResult
     /// <see cref="Exists"/> true means the file is there but cannot be read (not a seforim
     /// database, corrupt, locked).</summary>
     public bool Readable { get; set; }
+    /// <summary><c>getSeforimDbPath</c> only: with <see cref="Readable"/> false, the read
+    /// failed TRANSIENTLY (SQLITE_BUSY/LOCKED, I/O error) — it will clear by itself, so the
+    /// page shows no "unreadable" banner.</summary>
+    public bool ReadBusy { get; set; }
     public bool Restarting { get; set; }
     /// <summary>Identifies the service instance that answered. A path change restarts the
     /// service, but the old instance keeps answering (with the OLD database) for a few seconds

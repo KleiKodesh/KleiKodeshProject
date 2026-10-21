@@ -47,7 +47,8 @@ async function checkDbProblem() {
     ? 'interrupted'
     : !info.exists
       ? (settingsStore.setupDone ? 'missing' : null)
-      : info.readable === false ? 'unreadable' : null
+      // readBusy = a transient lock / I/O error that clears by itself: not worth a banner.
+      : info.readable === false && !info.readBusy ? 'unreadable' : null
   if (dbProblem.value && !problem) location.reload()
   dbProblem.value = problem
 }

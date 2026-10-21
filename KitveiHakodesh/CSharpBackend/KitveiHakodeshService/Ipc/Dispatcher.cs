@@ -337,6 +337,7 @@ public sealed class Dispatcher(
                     // known not to exist, so the settings page is told plainly that there is no
                     // database rather than being shown a path it would report as missing.
                     string? p = SeforimDbLocator.Resolve();
+                    var readState = p is null ? SeforimDbService.ReadState.Unreadable : seforim.CheckRead();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
                         InstanceId = InstanceId,
@@ -346,7 +347,8 @@ public sealed class Dispatcher(
                         // Detected only, never repaired: deleting the journal would corrupt the
                         // database; Otzaria rolls it back or completes it on its next run.
                         UpdateInterrupted = SeforimDbLibrarySwitcher.IsUpdateInterrupted(p),
-                        Readable = p is not null && seforim.CanRead(),
+                        Readable = readState == SeforimDbService.ReadState.Readable,
+                        ReadBusy = readState == SeforimDbService.ReadState.Busy,
                     }));
                 }
 
