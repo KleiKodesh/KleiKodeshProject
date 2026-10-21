@@ -224,7 +224,8 @@ async function navigateToSection(sectionId: string) {
 }
 
 .settings-body-inner {
-  max-width: 720px;
+  /* Cards match PageCard's 560px (FTS page): 560 + 2×24 padding */
+  max-width: 608px;
   margin: 0 auto;
   padding: 0 24px 40px;
   box-sizing: border-box;
