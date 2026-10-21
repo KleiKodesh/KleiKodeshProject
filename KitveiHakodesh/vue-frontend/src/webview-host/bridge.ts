@@ -907,6 +907,53 @@ export function notifyTabIcons(icons: { key: string; png: string }[]): void {
   action('tabIcons', { icons }).catch(() => {})
 }
 
+/** How fetching a HebrewBooks PDF ended - `url` when it can be shown, else the reason. */
+export type HbPdfFetchResult =
+  | { url: string; cancelled?: undefined; notFound?: undefined; noInternet?: undefined; error?: undefined }
+  | { url?: undefined; cancelled: true; notFound?: undefined; noInternet?: undefined; error?: undefined }
+  | { url?: undefined; cancelled?: undefined; notFound: boolean; noInternet: boolean; error?: string }
+
+/**
+ * Fetches a HebrewBooks PDF (local folder, then cache, then download) and resolves to a URL
+ * the PDF.js viewer can load - ONE implementation shared by the tab download flow
+ * (`triggerHbDownload`, which turns the result into hbPdfReady / hbPdfCancelled events) and
+ * callers that show the PDF without a tab, like the book view's side-by-side edition.
+ */
+export async function fetchHbPdfUrl(
+  bookId: string,
+  localFolder?: string,
+  isOnline?: boolean,
+): Promise<HbPdfFetchResult> {
+  try {
+    const r = await serviceCall<{
+      handle?: string
+      path?: string
+      notFound?: boolean
+      noInternet?: boolean
+      cancelled?: boolean
+      error?: string
+      detail?: string
+    }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
+    const url = await servedPdfUrl(r)
+    if (url) return { url }
+    // The user aborted the download; nothing to show.
+    if (r?.cancelled) return { cancelled: true }
+    console.error(`[hb-download] book ${bookId} failed:
+${r?.detail || r?.error || JSON.stringify(r)}`)
+    // Anything else carries the service's reason (HTTP status, disk error with the folder,
+    // invalid id) so the caller can show it instead of failing silently.
+    return { notFound: !!r?.notFound, noInternet: !!r?.noInternet, error: r?.error || undefined }
+  } catch (e) {
+    console.error(`[hb-download] book ${bookId} threw:`, e)
+    const noInternet = !navigator.onLine
+    return {
+      notFound: false,
+      noInternet,
+      error: noInternet ? undefined : e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
 /**
  * Trigger a HebrewBooks PDF download, then open it. The service checks {localFolder}\{bookId}.pdf
  * and its cache first, otherwise downloads the PDF ENTIRELY in C# (HttpClient) and answers
@@ -924,42 +971,19 @@ export function triggerHbDownload(
   isOnline?: boolean,
 ): Promise<{ ok?: boolean }> {
   ;(async () => {
-    try {
-      const r = await serviceCall<{
-        handle?: string
-        path?: string
-        notFound?: boolean
-        noInternet?: boolean
-        cancelled?: boolean
-        error?: string
-        detail?: string
-      }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
-      const url = await servedPdfUrl(r)
-      if (url) {
-        emitWebviewEvent({ event: 'hbPdfReady', url, bookId, bookTitle, tabId })
-      } else if (r?.cancelled) {
-        // The user aborted the download; the tab was already reset, nothing to show.
-        emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
-      } else {
-        console.error(`[hb-download] book ${bookId} failed:\n${r?.detail || r?.error || JSON.stringify(r)}`)
-        // Anything else carries the service's reason (HTTP status, disk error with the folder,
-        // invalid id) so the store can show it instead of closing the tab silently.
-        emitWebviewEvent({
-          event: 'hbPdfCancelled',
-          tabId,
-          notFound: !!r?.notFound,
-          noInternet: !!r?.noInternet,
-          error: r?.error || undefined,
-        })
-      }
-    } catch (e) {
-      console.error(`[hb-download] book ${bookId} threw:`, e)
-      const noInternet = !navigator.onLine
+    const result = await fetchHbPdfUrl(bookId, localFolder, isOnline)
+    if (result.url) {
+      emitWebviewEvent({ event: 'hbPdfReady', url: result.url, bookId, bookTitle, tabId })
+    } else if (result.cancelled) {
+      // The tab was already reset, nothing to show.
+      emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
+    } else {
       emitWebviewEvent({
         event: 'hbPdfCancelled',
         tabId,
-        noInternet,
-        error: noInternet ? undefined : e instanceof Error ? e.message : String(e),
+        notFound: result.notFound,
+        noInternet: result.noInternet,
+        error: result.error,
       })
     }
   })()

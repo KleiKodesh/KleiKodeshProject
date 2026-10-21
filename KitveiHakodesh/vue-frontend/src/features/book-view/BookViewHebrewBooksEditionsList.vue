@@ -4,12 +4,17 @@
  * implementation shared by the toolbar dropdown (BookViewHebrewBooksEditionsDropdown) and
  * its collapsed row in the toolbar's "more" flyout, so the two never drift apart.
  *
- * Picking opens the edition in a new tab at the outline entry for the section the reader is
- * in now - read at click time, so it is wherever they scrolled to. The host only closes
- * itself, on `picked`.
+ * Picking opens the edition at the outline entry for the section the reader is in now - read
+ * at click time, so it is wherever they scrolled to. Where side by side is available (see
+ * useHebrewBooksSideEditionMode) a toggle row on top chooses between showing it in the
+ * book view's left side panel and opening a new tab; the edition on screen in the side
+ * panel is marked. The host only closes itself, on `picked`.
  */
+import { inject } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useHebrewBooks } from '@/features/hebrewbooks/useHebrewBooks'
+import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
+import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -21,8 +26,15 @@ defineProps<{
 
 const emit = defineEmits<{ picked: [] }>()
 
+const paneId = inject<1 | 2>('paneId', 1)
 const paneNavigation = usePaneNavigation()
 const { openEdition } = useHebrewBooks()
+const sideEditionStore = useHebrewBooksSideEditionStore()
+const { isSideBySideAvailable, isToggleOn, opensSideBySide } = useHebrewBooksSideEditionMode(paneId)
+
+function isShownSideBySide(edition: HebrewBooksEdition): boolean {
+  return sideEditionStore.getShownEditionId(paneId) === edition.id
+}
 
 /** Author, place, year and page count - whichever of them the catalogue has. */
 function detailsFor(edition: HebrewBooksEdition): string {
@@ -39,16 +51,23 @@ function detailsFor(edition: HebrewBooksEdition): string {
 
 function onSelect(edition: HebrewBooksEdition) {
   emit('picked')
-  openEdition(edition, 'newTab', paneNavigation.activeTab.tocPath)
+  if (opensSideBySide.value) sideEditionStore.pickEdition(paneId, paneNavigation.activeTab.id, paneNavigation.activeTab.bookId, edition.id)
+  else openEdition(edition, 'newTab', paneNavigation.activeTab.tocPath)
 }
 </script>
 
 <template>
+  <label v-if="isSideBySideAvailable" class="side-panel-toggle-row" @click.stop>
+    <input v-model="isToggleOn" type="checkbox" />
+    <span>{{ $t('bookView.hebrewBooks.showInSidePanel') }}</span>
+  </label>
   <button dir="rtl"
     v-for="edition in editions"
     :key="edition.id"
     role="menuitem"
     class="edition-row"
+    :class="{ 'edition-row-shown': isShownSideBySide(edition) }"
+    :aria-current="isShownSideBySide(edition) || undefined"
     :title="edition.title"
     @click="onSelect(edition)"
   >
@@ -62,6 +81,21 @@ function onSelect(edition: HebrewBooksEdition) {
 </template>
 
 <style scoped>
+.side-panel-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+}
+.side-panel-toggle-row input {
+  margin: 0;
+  accent-color: var(--accent-color);
+}
 .edition-row {
   display: flex;
   flex-direction: column;
@@ -77,6 +111,10 @@ function onSelect(edition: HebrewBooksEdition) {
 }
 .edition-row:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.edition-row-shown {
+  box-shadow: inset -3px 0 0 var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 .edition-row:active {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);

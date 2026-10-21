@@ -38,6 +38,12 @@ export interface LastReadState {
    */
   versionTitle?: string | null
   /**
+   * The HebrewBooks edition last shown beside the text, and its column width. Unlike the
+   * rest of this record the edition pick is restored even with resumeLastRead off - the
+   * edition a reader chose for a book is a preference about the book, not a position.
+   */
+  sideEdition?: import('@/features/book-view/bookViewTypes').SideEditionPersistState
+  /**
    * When this position was last written. The on-disk cap evicts by it — without a
    * timestamp the only order available is the key cursor's (lexicographic by book id),
    * which would drop whichever books happen to sort lowest, not the stale ones.

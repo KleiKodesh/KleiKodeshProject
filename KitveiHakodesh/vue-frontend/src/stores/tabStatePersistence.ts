@@ -44,6 +44,8 @@ export interface BookState {
    * the reason given on `LastReadState.versionTitle`.
    */
   versionTitle?: string | null
+  /** The HebrewBooks edition shown beside the text, and its column width. */
+  sideEdition?: import('@/features/book-view/bookViewTypes').SideEditionPersistState
 }
 
 /**

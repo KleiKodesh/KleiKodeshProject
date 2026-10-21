@@ -69,6 +69,8 @@ const KEYS = {
   // existing preference carries over.
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
   SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
+  SETTINGS_HB_EDITION_IN_SIDE_PANEL: 'app.hbEditionInSidePanel',
+  SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2: 'app.hbEditionInSidePanel.pane2',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
@@ -336,6 +338,18 @@ export const useSettingsStore = defineStore('settings', () => {
   function setNavSidebarVisible(paneId: 1 | 2, value: boolean): void {
     navSidebarVisibleByPane.value[paneId] = value
   }
+  // Per-pane: does picking a HebrewBooks edition in the book view show it in the left side
+  // panel (true) or open it in a new tab (false). Only honoured where the side panel can
+  // host it - see useHebrewBooksEditionSidePanelAvailable.
+  const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: true, 2: true })
+
+  function getHbEditionInSidePanel(paneId: 1 | 2 = 1): boolean {
+    return hbEditionInSidePanelByPane.value[paneId]
+  }
+
+  function setHbEditionInSidePanel(paneId: 1 | 2, value: boolean): void {
+    hbEditionInSidePanelByPane.value[paneId] = value
+  }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
@@ -492,6 +506,10 @@ export const useSettingsStore = defineStore('settings', () => {
     if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
     const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
     if (navSidebar2 != null) navSidebarVisibleByPane.value[2] = navSidebar2
+    const hbEditionInSidePanel1 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL)
+    if (hbEditionInSidePanel1 != null) hbEditionInSidePanelByPane.value[1] = hbEditionInSidePanel1
+    const hbEditionInSidePanel2 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2)
+    if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
@@ -563,6 +581,14 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(
     () => navSidebarVisibleByPane.value[2],
     (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR_PANE2, value),
+  )
+  watch(
+    () => hbEditionInSidePanelByPane.value[1],
+    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL, value),
+  )
+  watch(
+    () => hbEditionInSidePanelByPane.value[2],
+    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2, value),
   )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
@@ -734,6 +760,7 @@ export const useSettingsStore = defineStore('settings', () => {
       1: DEFAULTS.navSidebarVisible,
       2: DEFAULTS.navSidebarVisible,
     }
+    hbEditionInSidePanelByPane.value = { 1: true, 2: true }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
     // Both of these have a persist watcher and a stored key, so leaving them out left the
@@ -771,6 +798,8 @@ export const useSettingsStore = defineStore('settings', () => {
     navSidebarVisibleByPane,
     getNavSidebarVisible,
     setNavSidebarVisible,
+    getHbEditionInSidePanel,
+    setHbEditionInSidePanel,
     showRecentlyOpened,
     showFrequentFolders,
     fileSearchSortOrder,

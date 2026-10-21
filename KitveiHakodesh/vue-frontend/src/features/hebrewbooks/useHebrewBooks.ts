@@ -10,10 +10,17 @@ import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles, revealHbLocalFile } from '@/webview-host/bridge'
 
 /**
- * Where an edition opened from a text book lands. Only 'newTab' is wired; 'splitView' is
- * reserved for opening it beside the text - only `resolveEditionTabId` would change.
+ * Where an edition opened from a text book lands in a tab. Only 'newTab' is wired; 'splitView'
+ * is reserved - only `resolveEditionTabId` would change. Side by side in the book view's left
+ * panel is not a tab at all: BookViewHebrewBooksSideEdition fetches the PDF itself.
  */
 export type HebrewBooksEditionTarget = 'newTab' | 'splitView'
+
+/** An edition as the HebrewBooks book record the history and download flow key on. */
+export function editionAsHebrewBook(edition: HebrewBooksEdition): HebrewBook {
+  const { id, title, author, printingPlace, printingYear, pages } = edition
+  return { id, title, author, printingPlace, printingYear, pages, categories: '' }
+}
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
@@ -109,8 +116,7 @@ export function useHebrewBooks() {
     outlineTarget?: string,
   ) {
     const tabId = resolveEditionTabId(edition, target, outlineTarget)
-    const { id, title, author, printingYear } = edition
-    startBookDownload({ id, title, author, printingPlace: edition.printingPlace, printingYear, pages: edition.pages, categories: '' }, tabId)
+    startBookDownload(editionAsHebrewBook(edition), tabId)
   }
 
   /** The placeholder tab an edition downloads into - the one place a target differs. */

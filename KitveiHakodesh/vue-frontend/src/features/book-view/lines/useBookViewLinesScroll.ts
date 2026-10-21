@@ -34,6 +34,7 @@ import type {
   CommentarySlot,
   CommentaryTreeState,
   CommentaryTreeStatePersist,
+  SideEditionPersistState,
   TocPersistState,
 } from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
@@ -65,6 +66,8 @@ export interface BookViewLinesScrollProps {
    * time like the panels above. null = the book's merged text.
    */
   versionPersistState?: () => string | null
+  /** The side-by-side HebrewBooks edition and its column width, read at save time. */
+  sideEditionPersistState?: () => SideEditionPersistState
   /**
    * The alternate version being rendered, or null for the merged text. Part of the
    * line renderer's cache key — a swap changes a line's text while its index and id
@@ -419,6 +422,7 @@ export function useBookViewLinesScroll(
     const commentaryPanels = commentaryPanelsForSave()
     const toc = props.tocPersistState?.()
     const versionTitle = props.versionPersistState?.() ?? null
+    const sideEdition = props.sideEditionPersistState?.()
 
     tabStore.setBookViewState(tabId, bookId, {
       ...position,
@@ -428,6 +432,7 @@ export function useBookViewLinesScroll(
       commentaryPanels,
       toc,
       versionTitle,
+      sideEdition,
     })
     return tabStore.setLastReadPos(bookId, {
       ...position,
@@ -438,6 +443,7 @@ export function useBookViewLinesScroll(
       commentaryPanels,
       toc,
       versionTitle,
+      sideEdition,
     })
   }
 
