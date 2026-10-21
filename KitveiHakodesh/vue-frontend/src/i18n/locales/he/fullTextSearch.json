@@ -61,6 +61,8 @@
     "contextWords": "הקשר לפני ואחרי (מילים)",
     "wordOrder": "סדר מילים לפי שאילתא",
     "grammarWrap": "תחיליות וסופיות דקדוקיות",
+    "wildcardWrap": "תחיליות וסופיות",
+    "fuzzy": "חיפוש מטושטש",
     "spellingVariants": "הרחב כתיב חסר/מלא",
     "expanded": "חיפוש מורחב",
     "expandedHint": "(נטיות ומילים נרדפות)",

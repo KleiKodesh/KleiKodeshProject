@@ -55,6 +55,7 @@ const KEYS = {
   SETTINGS_SEARCH_EXPAND_RELATED: 'search.expandRelated',
   SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
   SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
+  SETTINGS_SEARCH_FUZZY: 'search.fuzzy',
 
   // App shell / chrome
   SETTINGS_APP_ZOOM: 'app.zoom',
@@ -185,6 +186,7 @@ const DEFAULTS = {
   searchExpandRelated: false,
   searchWildcardWrap: false,
   searchGrammarWrap: false,
+  searchFuzzy: false,
   copyCleanText: false,
   // Join the selected lines into one continuous run of text with NO line break
   // between them (default off = keep one line break per source line on paste).
@@ -302,6 +304,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchExpandRelated = ref(DEFAULTS.searchExpandRelated)
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
+  const searchFuzzy = ref(DEFAULTS.searchFuzzy)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
@@ -441,6 +444,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_RELATED, searchExpandRelated)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
+    loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
@@ -531,6 +535,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchExpandRelated, KEYS.SETTINGS_SEARCH_EXPAND_RELATED)
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
+  persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
@@ -706,6 +711,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchExpandRelated.value = DEFAULTS.searchExpandRelated
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
+    searchFuzzy.value = DEFAULTS.searchFuzzy
     copyCleanText.value = DEFAULTS.copyCleanText
     copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
@@ -751,7 +757,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showClock,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap, searchFuzzy,
     copyCleanText,
     copyJoinLines,
     copySourcePosition,

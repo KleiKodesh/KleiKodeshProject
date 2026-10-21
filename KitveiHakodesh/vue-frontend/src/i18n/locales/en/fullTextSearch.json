@@ -61,6 +61,8 @@
     "contextWords": "Context before and after (words)",
     "wordOrder": "Keep query word order",
     "grammarWrap": "Grammatical prefixes and suffixes",
+    "wildcardWrap": "Prefixes and suffixes",
+    "fuzzy": "Fuzzy search",
     "spellingVariants": "Expand defective/full spelling",
     "expanded": "Expanded search",
     "expandedHint": "(inflections and synonyms)",

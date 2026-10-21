@@ -9,6 +9,8 @@ const props = defineProps<{
   expandKetiv: boolean
   expandRelated: boolean
   grammarWrap: boolean
+  fuzzy: boolean
+  wildcardWrap: boolean
   /** Rendered inline as a centered card on the empty search page, not as a popup. */
   asCard?: boolean
 }>()
@@ -20,6 +22,8 @@ const emit = defineEmits<{
   'update:expandKetiv': [boolean]
   'update:expandRelated': [boolean]
   'update:grammarWrap': [boolean]
+  'update:fuzzy': [boolean]
+  'update:wildcardWrap': [boolean]
   close: []
 }>()
 
@@ -109,12 +113,30 @@ function onContextWordsInput(event: Event) {
         </div>
       </div>    
 
+      <!-- Wildcard wrap (*word*: any prefix/suffix, not only grammatical) -->
+      <div class="option-row">
+        <span class="option-label">{{ $t('fullTextSearch.adv.wildcardWrap') }}</span>
+        <div class="toggle-group">
+          <button class="toggle-btn" :class="{ active: !props.wildcardWrap }" @click="emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.no') }}</button>
+          <button class="toggle-btn" :class="{ active: props.wildcardWrap }" @click="emit('update:wildcardWrap', true); emit('update:grammarWrap', false); emit('update:fuzzy', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
+        </div>
+      </div>
+
       <!-- Grammar wrap -->
       <div class="option-row">
         <span class="option-label">{{ $t('fullTextSearch.adv.grammarWrap') }}</span>
         <div class="toggle-group">
           <button class="toggle-btn" :class="{ active: !props.grammarWrap }" @click="emit('update:grammarWrap', false)">{{ $t('fullTextSearch.adv.no') }}</button>
-          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true)">{{ $t('fullTextSearch.adv.yes') }}</button>
+          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true); emit('update:fuzzy', false); emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
+        </div>
+      </div>
+
+      <!-- Fuzzy (edit distance 1 on every plain word) -->
+      <div class="option-row">
+        <span class="option-label">{{ $t('fullTextSearch.adv.fuzzy') }}</span>
+        <div class="toggle-group">
+          <button class="toggle-btn" :class="{ active: !props.fuzzy }" @click="emit('update:fuzzy', false)">{{ $t('fullTextSearch.adv.no') }}</button>
+          <button class="toggle-btn" :class="{ active: props.fuzzy }" @click="emit('update:fuzzy', true); emit('update:grammarWrap', false); emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
         </div>
       </div>
 

@@ -71,7 +71,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap, searchWildcardWrap, searchFuzzy } = storeToRefs(settings)
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
@@ -80,12 +80,15 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
   function _buildQueryToSend(normalizedQuery: string): string {
-    if (!settings.searchGrammarWrap) return normalizedQuery
+    if (!settings.searchGrammarWrap && !settings.searchWildcardWrap && !settings.searchFuzzy) return normalizedQuery
     return normalizedQuery
       .split(/\s+/)
       .map((word) => {
         if (!word) return word
         if (/[*~|%]/.test(word)) return word  // already has special syntax
+        // The panel keeps fuzzy / wildcard wrap / grammar wrap mutually exclusive.
+        if (settings.searchFuzzy) return `${word}~1`
+        if (settings.searchWildcardWrap) return `*${word}*`
         return `%${word}%`
       })
       .join(' ')
@@ -442,6 +445,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     expandKetiv: searchExpandKetiv,
     expandRelated: searchExpandRelated,
     grammarWrap: searchGrammarWrap,
+    fuzzy: searchFuzzy,
+    wildcardWrap: searchWildcardWrap,
     sortOrder,
     executeSearch,
     cancelSearch,
