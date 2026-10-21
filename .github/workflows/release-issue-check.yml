@@ -75,6 +75,6 @@ jobs:
           echo "$(wc -l < notes.jsonl) issue(s) to notify"
           while IFS= read -r note; do
             n=$(printf '%s' "$note" | jq -r .issue)
-            printf '%s\n\n<sub>הודעה אוטומטית</sub>\n' "$(printf '%s' "$note" | jq -r .comment)" > reply.md
+            printf '### 🤖 תגובת הבוט האוטומטי | Automated bot reply\n\n%s\n\n---\n<sub>תגובה זו נכתבה אוטומטית על ידי בוט, לא על ידי המפתח. | This reply was written automatically by a bot, not by the developer.</sub>\n' "$(printf '%s' "$note" | jq -r .comment)" > reply.md
             gh issue comment "$n" --repo "$REPO" --body-file reply.md
           done < notes.jsonl
