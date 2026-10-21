@@ -127,6 +127,15 @@
     "other": "Cover other divine names with a hyphen",
     "otherHint": "Names with no letter to replace, so they can only be split with a hyphen. Click a name to toggle covering"
   },
+  "reportProblem": {
+    "section": "Report a problem",
+    "label": "Found a problem or have a suggestion?",
+    "checking": "Checking connection...",
+    "open": "Report a problem",
+    "emailNote": "GitHub is blocked on your network. Please send the report by email to:",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
   "updates": {
     "loading": "Loading...",
     "unavailable": "Update status is unavailable right now: the data service is not available.",
