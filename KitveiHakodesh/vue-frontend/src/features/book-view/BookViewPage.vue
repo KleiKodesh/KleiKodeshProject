@@ -401,7 +401,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       @select-version="selectVersion"
     />
     <!-- Middle row: side toolbar + main area (RTL: first child = physical right) -->
-    <div class="body-row">
+    <!-- dir=rtl in both UI languages: left/right settings and the side/side-left commentary slots name PHYSICAL sides, laid out as in Hebrew. -->
+    <div class="body-row" dir="rtl">
       <BookViewToolbar
         v-if="toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
