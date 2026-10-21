@@ -411,7 +411,11 @@ export const useTabStore = defineStore('tabs', () => {
   function persistTabs(wsId: string) {
     // A workspace deleted while its write was pending must not come back as an orphan key.
     if (!useWorkspaceStore().workspaces.some((w) => w.id === wsId)) return
-    const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
+    // Settings is the one destination that survives a restart: reopening on the
+    // settings page (and its scroll, see settingsViewMemory) is where the user left off.
+    const persistable = tabs.value.filter(
+      (t) => t.route === '/settings' || !DESTINATION_ROUTES.includes(t.route),
+    )
     lsSet<PersistedTabList>(tabsListKey(wsId), {
       tabs: persistable.map(withoutTransientFields).map((t) => {
         if (import.meta.env.DEV) assertWatched(t)
@@ -716,7 +720,7 @@ export const useTabStore = defineStore('tabs', () => {
   // be added here too - the dev assertion in persistTabs shouts if one is forgotten.
   const _persistedSnapshot = computed(() =>
     tabs.value
-      .filter((t) => !DESTINATION_ROUTES.includes(t.route))
+      .filter((t) => t.route === '/settings' || !DESTINATION_ROUTES.includes(t.route))
       .map((t) => WATCHED_FIELDS.map((f) => t[f])),
   )
   // accessOrder is included so a pane-2 switch (which changes neither the snapshot
