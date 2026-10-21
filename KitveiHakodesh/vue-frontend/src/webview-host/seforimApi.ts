@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -74,6 +74,24 @@ export async function getBookVersions(bookId: number): Promise<BookVersionRow[]>
   } catch {
     // DB not ready, or swapped under us. [] means "no versions to offer", which is also what
     // a library without the version tables answers — the toolbar shows no version control.
+    return []
+  }
+}
+
+// ── HebrewBooks editions ─────────────────────────────────────────────────────
+
+/**
+ * The book's scanned editions on HebrewBooks, best first.
+ *
+ * [] means "none to offer" - the book has none, or the library carries no editions map
+ * (Zayit, or a map file that is missing). The toolbar then shows no editions control.
+ */
+export async function getHebrewBooksEditions(bookId: number): Promise<HebrewBooksEdition[]> {
+  if (bookId <= 0) return []
+  try {
+    return (await seforimOp<{ editions: HebrewBooksEdition[] }>('getHebrewBooksEditions', { bookId })).editions ?? []
+  } catch {
+    // Service not ready, or the DB swapped under us - same answer as "no editions".
     return []
   }
 }

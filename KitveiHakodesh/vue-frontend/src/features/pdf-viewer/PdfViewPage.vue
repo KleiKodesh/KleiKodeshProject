@@ -157,6 +157,10 @@ function setPdfToolbarVisible(visible: boolean) {
 }
 
 function onIframeLoad() {
+  // The viewer has read the outline target off its hash — consumed.
+  if (paneNavigation.activeTab.pdfInitialOutlineTarget) {
+    paneNavigation.updateActiveTab({ pdfInitialOutlineTarget: undefined })
+  }
   const contentWindow = iframeRef.value?.contentWindow ?? null
   iframeContentWindow.value = contentWindow
   attachIframeWheelRelay()
@@ -173,13 +177,24 @@ function onIframeLoad() {
   }, 100)
 }
 
+// The one-shot outline jump (tab.pdfInitialOutlineTarget) rides the src as #khOutline=
+// for the first load of that file only; viewer.mjs strips it and jumps once the outline is
+// in. onIframeLoad clears the tab field, and the hash is remembered against the file url so
+// that clearing it does not change the src (which would reload the viewer). Any other url
+// - another tab, another file - drops it, so a later visit restores the reading position
+// instead of jumping again.
+let outlineHash: { url: string; hash: string } | null = null
+
 const iframeSrc = computed(() => {
   const url = paneNavigation.activeTab.localFileVirtualUrl
   if (!url) return null
   const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
   const fileName = paneNavigation.activeTab.localFileName
   if (fileName) p.set('filename', encodeURIComponent(fileName))
-  return `/pdfjs/web/viewer.html?${p}`
+  const outlineTarget = paneNavigation.activeTab.pdfInitialOutlineTarget
+  if (outlineTarget) outlineHash = { url, hash: `#khOutline=${encodeURIComponent(outlineTarget)}` }
+  else if (outlineHash?.url !== url) outlineHash = null
+  return `/pdfjs/web/viewer.html?${p}${outlineHash?.hash ?? ''}`
 })
 
 // A reactive :src change (switching between two PDF tabs, or another file

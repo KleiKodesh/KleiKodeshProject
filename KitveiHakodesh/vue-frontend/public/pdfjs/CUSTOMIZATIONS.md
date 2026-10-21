@@ -1848,6 +1848,31 @@ and that `.treeItemToggler` is prepended as the row's first child.
 
 ---
 
+## Open at an outline entry (`#khOutline=`)
+
+The Vue app opens a HebrewBooks edition of a text book and wants it to land on the section
+the reader was in. It appends `#khOutline=<encodeURIComponent(section path)>` to the iframe
+src, once, on the tab's first load (the path is the book view breadcrumb, segments joined by
+a middle dot).
+
+Two patches in `web/viewer.mjs`, both marked `[KleiKodesh]`:
+
+1. **Top of the module, before `/******/ // The require scope`** — `khInitialOutlineTarget`
+   reads `khOutline` out of `location.hash` and strips it with `history.replaceState`, keeping
+   any other hash parameters. This must run before `PDFViewerApplication` is defined, because
+   its `initialBookmark: document.location.hash.substring(1)` initialiser captures the hash at
+   module load. Stripped, PDF.js never tries to resolve it as a destination, and a hash with
+   nothing else leaves the normal ViewHistory restore untouched. The same block defines
+   `khFindOutlineItem(outline, path)`: niqqud/punctuation-stripped, whitespace-collapsed
+   titles; deepest path segment first, then shallower; exact equality before containment;
+   ties go to the item with the most matching ancestors.
+2. **`onePageRendered.then` → `pdfDocument.getOutline().then`**, right after
+   `this.pdfOutlineViewer.render({ outline, pdfDocument })` — on the first document only
+   (`this._khOutlineTargetDone`), find the item and call
+   `this.pdfLinkService.goToDestination(item.dest)`. No match = nothing happens.
+
+---
+
 ## Vue App Integration (no changes needed on upgrade)
 
 These live in the Vue app and do not need to be re-applied to PDF.js:

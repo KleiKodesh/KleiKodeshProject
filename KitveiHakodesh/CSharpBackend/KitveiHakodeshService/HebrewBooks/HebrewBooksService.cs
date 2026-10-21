@@ -40,6 +40,38 @@ public sealed class HebrewBooksService
             _catalog = new CoreHebrewBooks.HebrewBooksCatalogDbQueries(path);
     }
 
+    /// <summary>The map last located and the seforim.db it belongs to. Re-located only when
+    /// the library switches, so a book open costs one indexed lookup, not a shape probe.</summary>
+    private sealed record EditionsMap(string? SeforimDbPath, CoreHebrewBooks.OtzariaHebrewBooksCatalogDbQueries? Map);
+
+    // A reference swapped whole, so concurrent RPCs never see one library's path with another's map.
+    private volatile EditionsMap _editionsMap = new(null, null);
+
+    /// <summary>
+    /// The HebrewBooks scans Otzaria's map links to this seforim.db book, best first. Empty
+    /// when there is no map beside the library in use, or that library is Zayit's — its book
+    /// ids are not the ones the map describes.
+    /// </summary>
+    public List<HebrewBooksEdition> EditionsOf(int bookId)
+    {
+        try
+        {
+            string? seforimDbPath = global::KitveiHakodesh.Core.Settings.SeforimDbPathResolver.Resolve().Path;
+            var cached = _editionsMap;
+            if (!string.Equals(cached.SeforimDbPath, seforimDbPath, StringComparison.OrdinalIgnoreCase))
+            {
+                cached = new EditionsMap(seforimDbPath, CoreHebrewBooks.OtzariaHebrewBooksCatalogDbQueries.LocateBeside(seforimDbPath));
+                _editionsMap = cached;
+            }
+            return cached.Map?.EditionsOf(bookId) ?? new List<HebrewBooksEdition>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "getHebrewBooksEditions failed");
+            return new List<HebrewBooksEdition>();
+        }
+    }
+
     /// <summary>Outcome of an acquire: the resolved on-disk PDF path, or a reason it failed.
     /// Exactly one of Path / NotFound / Error is meaningful.</summary>
     /// <param name="Detail">Full failure detail (exception ToString, response facts) for the console only.</param>
