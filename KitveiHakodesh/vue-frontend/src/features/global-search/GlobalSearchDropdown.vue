@@ -225,7 +225,7 @@ function getTabIcon(route: string): FileIconInfo {
       <template v-if="tabs && tabs.length > 0">
         <!-- Clear-all row — only shown when a tooltip is supplied, so callers
              that don't support bulk-clear simply omit the prop. -->
-        <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header">
+        <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header ui-chrome">
           <span class="global-search-dropdown__recents-label">{{ $t('globalSearch.history') }}</span>
           <button
             class="global-search-dropdown__clear-all"
@@ -273,7 +273,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- ── Book catalog section ── -->
         <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc || isCatalogIndexUnavailable)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('catalog')"
             @mousedown.prevent
@@ -288,7 +288,7 @@ function getTabIcon(route: string): FileIconInfo {
           </div>
           <div
             v-if="catalogIndexStatusText && (isLoadingCatalogToc || isCatalogIndexUnavailable)"
-            class="global-search-dropdown__index-status"
+            class="global-search-dropdown__index-status ui-chrome"
             :class="{ 'is-error': isCatalogIndexUnavailable }"
           >
             {{ catalogIndexStatusText }}
@@ -333,7 +333,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- ── HebrewBooks section ── -->
         <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('hebrewbooks')"
             @mousedown.prevent
@@ -371,7 +371,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- ── File search section ── -->
         <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles || isFileIndexUnavailable)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('files')"
             @mousedown.prevent
@@ -386,7 +386,7 @@ function getTabIcon(route: string): FileIconInfo {
           </div>
           <div
             v-if="fileIndexStatusText && (isLoadingFiles || isFileIndexUnavailable)"
-            class="global-search-dropdown__index-status"
+            class="global-search-dropdown__index-status ui-chrome"
             :class="{ 'is-error': isFileIndexUnavailable }"
           >
             {{ fileIndexStatusText }}

@@ -151,11 +151,11 @@ function selectGregYear(y: number) {
 
     <!-- Center: navigation + view toggle -->
     <div class="nav">
-      <button class="nav-btn" :title="$t('hebrewCalendar.nav.next')" @click="emit('next')">
-        <IconChevronLeft20Regular />
+      <button class="nav-btn nav-next" :title="$t('hebrewCalendar.nav.next')" @click="emit('next')">
+        <IconChevronLeft20Regular class="dir-icon" />
       </button>
-      <button class="nav-btn" :title="$t('hebrewCalendar.nav.prev')" @click="emit('prev')">
-        <IconChevronRight20Regular />
+      <button class="nav-btn nav-prev" :title="$t('hebrewCalendar.nav.prev')" @click="emit('prev')">
+        <IconChevronRight20Regular class="dir-icon" />
       </button>
       <div class="sep" />
       <button class="nav-btn" :title="$t('hebrewCalendar.nav.today')" @click="emit('today')"><IconHome20Regular /></button>
@@ -307,6 +307,33 @@ function selectGregYear(y: number) {
   inset-inline-start: 0;
 }
 .side--greg .drop {
+  inset-inline-end: 0;
+}
+/* English (LTR) reads Gregorian first: it takes the inline-start side. */
+:root[dir='ltr'] .side--greg {
+  order: -1;
+  justify-content: flex-start;
+}
+:root[dir='ltr'] .side--he {
+  order: 1;
+  justify-content: flex-end;
+}
+:root[dir='ltr'] .side--greg .drop {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+}
+/* .nav is physically LTR (next, prev). English reads prev then next. */
+:root[dir='ltr'] .nav > * {
+  order: 2;
+}
+:root[dir='ltr'] .nav > .nav-prev {
+  order: 0;
+}
+:root[dir='ltr'] .nav > .nav-next {
+  order: 1;
+}
+:root[dir='ltr'] .side--he .drop {
+  inset-inline-start: auto;
   inset-inline-end: 0;
 }
 

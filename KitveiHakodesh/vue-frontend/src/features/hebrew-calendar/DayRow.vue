@@ -196,6 +196,15 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 .date.greg {
   align-items: flex-end;
 }
+/* English (LTR) reads Gregorian first: it takes the inline-start side. */
+:root[dir='ltr'] .date.greg {
+  order: -1;
+  align-items: flex-start;
+}
+:root[dir='ltr'] .date.heb {
+  order: 1;
+  align-items: flex-end;
+}
 
 .day-name {
   font-size: 9px;

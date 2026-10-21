@@ -111,8 +111,8 @@ function onSelectItem(index: number) {
     @pointerdown="suppressClick = false"
     @click.stop="onClick"
   >
-    <IconArrowRight20Regular v-if="isBack" />
-    <IconArrowLeft20Regular v-else />
+    <IconArrowRight20Regular class="dir-icon" v-if="isBack" />
+    <IconArrowLeft20Regular class="dir-icon" v-else />
   </button>
 
   <Teleport to="body">

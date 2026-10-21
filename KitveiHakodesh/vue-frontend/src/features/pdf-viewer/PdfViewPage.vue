@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { uiLanguage } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
@@ -190,7 +191,7 @@ let outlineHash: { url: string; hash: string } | null = null
 const iframeSrc = computed(() => {
   const url = paneNavigation.activeTab.localFileVirtualUrl
   if (!url) return null
-  const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
+  const p = new URLSearchParams({ file: url, locale: uiLanguage === 'en' ? 'en-US' : 'he', cMapPacked: 'true' })
   const fileName = paneNavigation.activeTab.localFileName
   if (fileName) p.set('filename', encodeURIComponent(fileName))
   const outlineTarget = paneNavigation.activeTab.pdfInitialOutlineTarget

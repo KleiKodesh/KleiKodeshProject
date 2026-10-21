@@ -76,10 +76,6 @@ function argbToCss(signedArgb: number): string {
 </template>
 
 <style scoped>
-.annotation-menu-row {
-  direction: rtl;
-}
-
 /* These rows sit inside ContextMenu.vue, which cannot style them (they belong to this
    child component) — so they take the menu's published row metrics from its CSS
    variables rather than restating the numbers. Do not inline literals here: the height
@@ -128,7 +124,6 @@ function argbToCss(signedArgb: number): string {
 
 .highlight-row {
   gap: 5px;
-  direction: rtl;
 }
 
 .highlight-label {

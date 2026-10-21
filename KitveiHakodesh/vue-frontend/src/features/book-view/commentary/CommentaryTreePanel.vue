@@ -160,7 +160,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           <span class="check-mark">&#10003;</span>
           <span class="dash-mark">&#8211;</span>
         </span>
-        <span class="row-label">{{ $t('bookView.commentary.showAll') }}</span>
+        <span class="row-label ui-chrome">{{ $t('bookView.commentary.showAll') }}</span>
         <!-- click.stop: the whole row is a toggle-all target. -->
         <button
           class="close-btn c-pointer hover-bg"
@@ -200,7 +200,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
             <span class="check-mark">&#10003;</span>
           </button>
         </div>
-        <div v-if="searchResults.length === 0" class="no-results">
+        <div v-if="searchResults.length === 0" class="no-results ui-chrome">
           {{ $t('components.notFound') }}
         </div>
       </template>

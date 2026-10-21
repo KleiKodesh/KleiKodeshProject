@@ -161,8 +161,8 @@ defineExpose({ snapshotState, restoreState })
 
 <template>
   <div dir="rtl" class="toc-tree">
-    <div v-if="loading" class="toc-state">{{ $t('bookView.loading') }}</div>
-    <div v-else-if="error" class="toc-state">
+    <div v-if="loading" class="toc-state ui-chrome">{{ $t('bookView.loading') }}</div>
+    <div v-else-if="error" class="toc-state ui-chrome">
       <MessageBanner :message="error" :dismissible="false" />
     </div>
     <template v-else>

@@ -621,7 +621,7 @@ defineExpose({
         :message="SEARCH_ERROR_MESSAGES[searchError]"
         :dismissible="false"
       />
-      <span v-else-if="hasSearched && !results.length" class="empty-msg">{{ $t('fullTextSearch.noResults') }}</span>
+      <span v-else-if="hasSearched && !results.length" class="empty-msg ui-chrome">{{ $t('fullTextSearch.noResults') }}</span>
     </div>
     <template v-else>
       <BookViewAbbrevTooltip

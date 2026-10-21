@@ -75,14 +75,14 @@ function onHeaderDblClick() {
         :title="$t('bookView.commentary.prevSection')"
         @click.stop="emit('navigate-section', 'prev', props.bookId)"
       >
-        <IconChevronRight20Regular />
+        <IconChevronRight20Regular class="dir-icon" />
       </button>
       <button
         class="action-btn c-pointer hover-bg"
         :title="$t('bookView.commentary.nextSection')"
         @click.stop="emit('navigate-section', 'next', props.bookId)"
       >
-        <IconChevronLeft20Regular />
+        <IconChevronLeft20Regular class="dir-icon" />
       </button>
     </div>
   </div>

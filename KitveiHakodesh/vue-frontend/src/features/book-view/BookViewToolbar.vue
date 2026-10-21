@@ -342,14 +342,14 @@ defineExpose({ tocBtnRef })
       :title="$t('bookView.toolbar.prevSection')"
       @click="$emit('navigateToPreviousSection')"
     >
-      <IconChevronRight20Regular />
+      <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
       :disabled="!hasToc"
       :title="$t('bookView.toolbar.nextSection')"
       @click="$emit('navigateToNextSection')"
     >
-      <IconChevronLeft20Regular />
+      <IconChevronLeft20Regular class="dir-icon" />
     </button>
     <BookViewRelatedBooksDropdown
       v-if="hasRelatedBooks"
