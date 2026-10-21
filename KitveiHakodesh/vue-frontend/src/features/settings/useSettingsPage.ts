@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
+import { watchFullTextSearchIndexStatus } from '@/features/full-text-search/useFullTextSearchIndexingStatus'
 import { resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, resetCatalogTocIndex as bridgeResetCatalogTocIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
@@ -28,6 +29,9 @@ export function useSettings() {
   async function resetSearchIndexAction() {
     await searchCache.clear()
     await bridgeResetSearchIndex()
+    // The app-wide status stream ended when the old index was ready — reopen it so a
+    // failed rebuild still toasts with the full-text-search page closed.
+    watchFullTextSearchIndexStatus()
   }
 
   async function resetDocumentLocatorIndexAction() {

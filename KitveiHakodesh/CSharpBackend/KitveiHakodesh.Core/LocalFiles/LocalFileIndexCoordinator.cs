@@ -86,6 +86,14 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// </summary>
     private volatile string? _buildStatusMessage;
 
+    /// <summary>Why the last build attempt failed (exception message); null when it succeeded
+    /// or a new attempt is running. Reported by <see cref="GetIndexStatus"/>.</summary>
+    private volatile string? _lastBuildFailure;
+
+    /// <summary>Estimated build progress 0-100 (see LocalFileIndex.Build); -1 when unknown
+    /// or no build runs.</summary>
+    private volatile int _buildProgressPercent = -1;
+
     /// <summary>Why the index last (re)built from scratch — a full crawl of a drive, or a
     /// reindex — and when; null while every start only caught up from the journal.</summary>
     public IndexBuildReason? LastBuildReason => _lastBuildReason;
@@ -128,6 +136,8 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         {
             IsBuilding = build is not null && !build.IsCompleted,
             Message = _buildStatusMessage,
+            BuildFailure = build is not null && !build.IsCompleted ? null : _lastBuildFailure,
+            ProgressPercent = build is not null && !build.IsCompleted ? _buildProgressPercent : -1,
             BuildReason = _lastBuildReason,
         };
     }
@@ -208,13 +218,24 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// exactly once per index instance, memoized in <c>_buildTask</c>.</summary>
     private LocalFileIndex BuildIndex()
     {
-        var index = new LocalFileIndex(IndexPath);
+        _lastBuildFailure = null;
+        LocalFileIndex index;
+        try
+        {
+            index = new LocalFileIndex(IndexPath);
+        }
+        catch (Exception ex)
+        {
+            _lastBuildFailure = ex.Message;
+            throw;
+        }
         try
         {
             return BuildAndStartWatchers(index);
         }
-        catch
+        catch (Exception ex)
         {
+            _lastBuildFailure = ex.Message;
             // Anything past the ctor throwing (starting the USN watchers, the rescan timer)
             // leaves an index nobody will ever be handed: dispose it here or its Lucene write
             // lock is held for the process lifetime. The faulted task is dropped by
@@ -241,7 +262,8 @@ public sealed class LocalFileIndexCoordinator : IDisposable
                     _log(LocalFileIndexLogLevel.Debug, "[LocalFileIndex] " + msg, null);
                 },
                 CancellationToken.None,
-                crawlReasons.Add);
+                crawlReasons.Add,
+                percent => _buildProgressPercent = percent);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -252,6 +274,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         finally
         {
             _buildStatusMessage = null;
+            _buildProgressPercent = -1;
             if (pending != null || crawlReasons.Count > 0)
             {
                 string reason = pending ?? "full crawl — " + string.Join("; ", crawlReasons);

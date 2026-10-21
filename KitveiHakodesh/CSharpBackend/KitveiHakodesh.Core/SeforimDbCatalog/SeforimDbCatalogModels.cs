@@ -123,6 +123,18 @@ public sealed class CatalogTocSearchResult
     /// <summary>True when a newer search cancelled this one — discard this response.</summary>
     public bool Superseded { get; set; }
     public string? Error { get; set; }
+
+    /// <summary>Set with <see cref="Ready"/> = false: the seforim DB is missing, so the index
+    /// can never become ready — the caller stops retrying and tells the user.</summary>
+    public bool DbMissing { get; set; }
+    /// <summary>Build progress while not ready, so the caller can show it instead of a bare spinner.</summary>
+    public int BuiltBooks { get; set; }
+    public int TotalBooks { get; set; }
+    /// <summary>Set with <see cref="Ready"/> = false when the last build failed and none is
+    /// running: the index will not become ready on its own. Exception message (diagnostic).</summary>
+    public string? BuildFailure { get; set; }
+    /// <summary>The last build failed and an automatic retry is running now.</summary>
+    public bool RetryingAfterBuildFailure { get; set; }
 }
 
 /// <summary>Where the catalog index stands (catalogTocStatus wire shape).</summary>
@@ -134,6 +146,10 @@ public sealed class CatalogTocStatus
     public int BuiltBooks { get; set; }
     public int TotalBooks { get; set; }
     public bool DbMissing { get; set; }
+    /// <summary>Why the last build failed, when none is running now; null otherwise.</summary>
+    public string? BuildFailure { get; set; }
+    /// <summary>The last build failed and an automatic retry is running now.</summary>
+    public bool RetryingAfterBuildFailure { get; set; }
 
     /// <summary>Why the index last started building, and when; null if it never has in this
     /// process.</summary>

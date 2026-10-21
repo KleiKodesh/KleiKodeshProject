@@ -89,6 +89,7 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  hasIndexFailureToShow,
   isLoadingAny,
   clearResults,
   pause: pauseSearch,
@@ -113,9 +114,10 @@ const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleLocations.val
 // An empty panel is just a floating blank rectangle, so render nothing at all
 // until there is something in it. The loading flags count as content: a search in
 // flight shows spinners, and hiding the panel until the first row lands would
-// make it flicker in and out mid-type.
+// make it flicker in and out mid-type. A failed index counts too: its section says why
+// there are no results from it (same rule as the home page's search bar).
 const hasDropdownContent = computed(
-  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
+  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny() || hasIndexFailureToShow(),
 )
 
 // The one condition the panel renders on. The field's merged styling reads this

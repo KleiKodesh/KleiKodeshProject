@@ -10,6 +10,7 @@ import { storeToRefs } from 'pinia'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
 import { addinDisplayTitle } from './otzariaAddins'
@@ -38,9 +39,12 @@ const {
 // A cold index build takes minutes, and a plain "searching" spinner for that long
 // reads as a hang. While the index is being built we say so instead, reusing the
 // full-text-search overlay's wording so the two search pages read consistently.
-const loadingLabel = computed(() =>
-  indexBuilding.value ? 'אנא המתן בעת בניית האינדקס' : 'מחפש...'
-)
+// The shared index status carries the build progress (drives done / total) when known.
+const { status: fileIndexStatus, statusText: fileIndexStatusText } = useSearchIndexStatus('localFiles')
+const loadingLabel = computed(() => {
+  if (fileIndexStatus.value.kind === 'building' && fileIndexStatusText.value) return fileIndexStatusText.value
+  return indexBuilding.value ? 'אנא המתן בעת בניית האינדקס' : 'מחפש...'
+})
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
 const resultsListElement = ref<InstanceType<typeof LocalFileSearchResultsList> | null>(null)

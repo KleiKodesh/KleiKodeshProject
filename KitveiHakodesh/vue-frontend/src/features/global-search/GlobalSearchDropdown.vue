@@ -16,6 +16,7 @@ import {
   type DocumentIconKey,
 } from '@/utils/documentIcons'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type {
   CatalogSearchResult,
@@ -118,6 +119,10 @@ function toggleSection(section: SearchSourcePriority) {
   else next.add(section)
   collapsedSections.value = next
 }
+
+// Shown in place of an endless spinner: "building the index (n%)" or why it is unavailable.
+const { statusText: catalogIndexStatusText, isUnavailable: isCatalogIndexUnavailable } = useSearchIndexStatus('catalogToc')
+const { statusText: fileIndexStatusText, isUnavailable: isFileIndexUnavailable } = useSearchIndexStatus('localFiles')
 
 const visibleCatalogResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogResults))
 const visibleCatalogTocResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogTocResults))
@@ -266,7 +271,7 @@ function getTabIcon(route: string): FileIconInfo {
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
-        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
+        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc || isCatalogIndexUnavailable)">
           <div
             class="global-search-dropdown__section-header"
             role="button"
@@ -280,6 +285,13 @@ function getTabIcon(route: string): FileIconInfo {
             />
             קטלוג הספרים
             <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="global-search-dropdown__spinner" />
+          </div>
+          <div
+            v-if="catalogIndexStatusText && (isLoadingCatalogToc || isCatalogIndexUnavailable)"
+            class="global-search-dropdown__index-status"
+            :class="{ 'is-error': isCatalogIndexUnavailable }"
+          >
+            {{ catalogIndexStatusText }}
           </div>
           <div
             v-for="item in visibleCatalogResults"
@@ -357,7 +369,7 @@ function getTabIcon(route: string): FileIconInfo {
         </template>
 
         <!-- ── File search section ── -->
-        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles)">
+        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles || isFileIndexUnavailable)">
           <div
             class="global-search-dropdown__section-header"
             role="button"
@@ -371,6 +383,13 @@ function getTabIcon(route: string): FileIconInfo {
             />
             קבצים
             <IconArrowSync20Regular v-if="isLoadingFiles" class="global-search-dropdown__spinner" />
+          </div>
+          <div
+            v-if="fileIndexStatusText && (isLoadingFiles || isFileIndexUnavailable)"
+            class="global-search-dropdown__index-status"
+            :class="{ 'is-error': isFileIndexUnavailable }"
+          >
+            {{ fileIndexStatusText }}
           </div>
           <div
             v-for="item in visibleFileResults"
@@ -471,6 +490,16 @@ function getTabIcon(route: string): FileIconInfo {
 
 .global-search-dropdown__section-chevron.is-expanded {
   transform: rotate(180deg);
+}
+
+.global-search-dropdown__index-status {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.global-search-dropdown__index-status.is-error {
+  color: var(--status-danger);
 }
 
 .global-search-dropdown__spinner {

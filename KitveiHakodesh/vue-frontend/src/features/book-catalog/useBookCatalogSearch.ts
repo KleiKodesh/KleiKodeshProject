@@ -21,6 +21,7 @@ import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { catalogTocSearch } from '@/webview-host/bridge'
+import { reportCatalogTocSearchResponse, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import type { BookRow } from '@/webview-host/queries.types'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -55,6 +56,10 @@ type CatalogTocServiceResult = {
   /** True when a newer search cancelled this one server-side — discard and retry. */
   superseded?: boolean
   error?: string | null
+  dbMissing?: boolean
+  builtBooks?: number
+  totalBooks?: number
+  buildFailure?: string | null
 }
 
 /** Poll interval while the service is still building the index (first start after a
@@ -126,6 +131,13 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
         for (;;) {
           const res = await catalogTocSearch(query)
           if (generation !== searchGeneration) return
+          reportCatalogTocSearchResponse(res)
+          // Terminal failure (index unreadable, or no seforim DB) — stop polling; the
+          // shared index status tells the user why.
+          if (res.error || res.dbMissing || res.buildFailure) {
+            results.value = []
+            break
+          }
           if (res.ready && !res.superseded) {
             results.value = toItems(res.results ?? [])
             break
@@ -136,7 +148,10 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
           if (generation !== searchGeneration) return
         }
       } catch {
-        if (generation === searchGeneration) results.value = []
+        if (generation === searchGeneration) {
+          reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'serviceError' })
+          results.value = []
+        }
       } finally {
         if (generation === searchGeneration) searching.value = false
       }

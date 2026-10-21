@@ -21,6 +21,7 @@
 import { ref, watch, computed, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchWarmup, localFileIndexStatus } from '@/webview-host/bridge'
+import { reportLocalFileIndexState, reportLocalFileSearchFailure, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { normalizeAddinQuery } from './otzariaAddins'
 
@@ -91,6 +92,7 @@ export function useLocalFileSearch(
       // one and label a warm search as "building the index".
       if (pollGeneration !== generation || !searching.value) return
       indexBuilding.value = status.isBuilding
+      reportLocalFileIndexState(status)
     }
 
     void poll()
@@ -147,12 +149,14 @@ export function useLocalFileSearch(
       if (thisGeneration !== generation) return
 
       if (response.error) {
+        void reportLocalFileSearchFailure()
         errorMessage.value = response.error
         rawResults.value = []
         totalCount.value = 0
         return
       }
 
+      reportSearchIndexStatus('localFiles', { kind: 'ready' })
       totalCount.value = response.total ?? 0
       rawResults.value = (response.results ?? []).map((item) => ({
         fileName: item.fileName,
@@ -163,6 +167,7 @@ export function useLocalFileSearch(
       }))
     } catch (error) {
       if (thisGeneration !== generation) return
+      void reportLocalFileSearchFailure()
       errorMessage.value = error instanceof Error ? error.message : 'שגיאה בחיפוש'
       rawResults.value = []
       totalCount.value = 0

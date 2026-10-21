@@ -11,6 +11,7 @@ import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { INDEX_REBUILD_BUTTON_LABELS } from '@/composables/useSearchIndexStatus'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
@@ -36,6 +37,8 @@ const props = defineProps<{
   hasSearched: boolean
   searchError?: SearchFailReason | null
   dbNotFound?: boolean
+  /** The index build failed — searches cannot succeed until it is rebuilt. */
+  indexBuildFailed?: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -47,6 +50,8 @@ const emit = defineEmits<{
 }>()
 
 const DB_NOT_FOUND_MESSAGE = 'מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות'
+const INDEX_BUILD_FAILED_MESSAGE =
+  `בניית אינדקס החיפוש נכשלה — לחץ בהגדרות על "${INDEX_REBUILD_BUTTON_LABELS.fullTextSearch}"`
 const SEARCH_ERROR_MESSAGES: Record<SearchFailReason, string> = {
   indexNotReady: 'האינדקס לא מוכן לחיפוש — נסה שוב בעוד כמה רגעים',
   indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
@@ -600,9 +605,15 @@ defineExpose({
 
 <template>
   <div class="results-wrap">
-    <div v-if="dbNotFound || !hasSearched || (!results.length && !isSearching)" class="empty-state">
+    <div v-if="dbNotFound || indexBuildFailed || !hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
       <MessageBanner v-if="dbNotFound" class="empty-error" :message="DB_NOT_FOUND_MESSAGE" :dismissible="false" />
+      <MessageBanner
+        v-else-if="indexBuildFailed"
+        class="empty-error"
+        :message="INDEX_BUILD_FAILED_MESSAGE"
+        :dismissible="false"
+      />
       <MessageBanner
         v-else-if="searchError"
         class="empty-error"

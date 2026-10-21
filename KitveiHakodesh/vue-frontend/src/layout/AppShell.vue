@@ -8,6 +8,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { PANE_NAVIGATION_KEY } from '@/composables/usePaneNavigation'
+import { watchFullTextSearchIndexStatus } from '@/features/full-text-search/useFullTextSearchIndexingStatus'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -19,6 +20,9 @@ if (props.paneId === 2) {
 }
 
 const pane = useAppShellPane(props.paneId)
+// App-wide: a failed full-text-search index build must toast even with its page closed.
+// Idempotent, so the second pane's shell does not open a second stream.
+watchFullTextSearchIndexStatus()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 
