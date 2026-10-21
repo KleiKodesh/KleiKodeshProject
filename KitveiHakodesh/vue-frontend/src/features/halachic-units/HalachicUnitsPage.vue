@@ -230,7 +230,7 @@ const toMetricDisplay = computed(() => {
 </script>
 
 <template>
-  <div class="midot-page">
+  <div class="midot-page" dir="rtl">
     <PageCard>
       <template #header>
         <div class="systems">
