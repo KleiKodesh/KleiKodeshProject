@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import SettingRow from './SettingRow.vue'
+import SettingsPageReportProblemRow from './SettingsPageReportProblemRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
@@ -36,8 +37,7 @@ const {
 const isUpdateStatusLoaded = ref(false)
 
 onMounted(async () => {
-  await loadAutomaticUpdateTurnedOff()
-  await loadUpdateStatus()
+  await Promise.all([loadAutomaticUpdateTurnedOff(), loadUpdateStatus()])
   isUpdateStatusLoaded.value = true
 })
 
@@ -102,6 +102,8 @@ const isCheckNowVisible = computed(
         @update:model-value="applyAutomaticUpdateTurnedOff"
       />
     </SettingRow>
+
+    <SettingsPageReportProblemRow />
   </div>
 </template>
 
