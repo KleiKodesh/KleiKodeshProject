@@ -71,6 +71,11 @@
     <Content Include="HebrewBooks\HebrewBooksCatalog.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Download fallbacks for HebrewBooksDownloadSources. Kept out of git; the Condition lets a
+         clone without it build and download from the official handler alone. -->
+    <Content Include="HebrewBooks\hb-mirror.json" Condition="Exists('HebrewBooks\hb-mirror.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

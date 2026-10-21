@@ -402,3 +402,6 @@ KitveiHakodesh/scripts/**/*.json
 #   https://github.com/KleiKodesh/kleikodesh.github.io
 hebrew-typing-tutor
 kleikodesh-website
+
+# HebrewBooks download fallbacks (R2 keys): shipped in builds, never committed
+KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json
