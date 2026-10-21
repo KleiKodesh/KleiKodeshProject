@@ -383,4 +383,49 @@ async function navigateToSection(sectionId: string) {
   font-size: 13.5px;
   color: var(--text-primary);
 }
+
+/* Settings-page buttons are sized by the SAME grid as ToggleGroup (keep the two
+   in sync): whatever box holds a .settings-btn becomes that grid, so every button
+   is exactly one כן/לא cell wide — no per-button wrapper or width, ever.
+   Anything else in that box (status text, banners, descriptions) takes a full row.
+   :is(div) lifts specificity over the holders' own scoped display rules. */
+[data-section] :is(div):has(> .settings-btn) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px 4px;
+  align-items: center;
+}
+
+[data-section] :is(div):has(> .settings-btn) > :not(.settings-btn) {
+  grid-column: 1 / -1;
+}
+
+/* The ONE settings-page button: one grid cell wide (wider only when its text
+   needs it), 28px high like a toggle.
+   Sections add only color variants (e.g. .reset-btn) — never their own size. */
+.settings-btn {
+  justify-self: start;
+  margin-top: 4px;
+  width: max-content;
+  min-width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.settings-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 </style>

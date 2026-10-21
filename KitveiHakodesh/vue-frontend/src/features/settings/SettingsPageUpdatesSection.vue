@@ -50,7 +50,7 @@ const updateStatusText = computed(() => {
   if (isCheckingForUpdate.value) return 'בודק אם יש גרסה חדשה. אם יש, היא תורד עכשיו — זה עשוי לקחת כמה דקות.'
   if (hasCheckFailed.value) return 'לא ניתן היה לבדוק אם יש עדכון. נא לנסות שוב מאוחר יותר.'
   if (hasCheckedForUpdate.value) return 'הגרסה המותקנת היא העדכנית ביותר.'
-  return 'אין עדכון שמוכן להתקנה. התוכנה בודקת אוטומטית פעם בשבוע אם יש גרסה חדשה ומורידה אותה ברקע.'
+  return 'אין עדכון שמוכן להתקנה. התוכנה בודקת אוטומטית מידי פעם אם יש גרסה חדשה ומורידה אותה ברקע.'
 })
 
 // Hidden while updates are turned off, and once an update is ready (install is the next step).
@@ -64,28 +64,21 @@ const isCheckNowVisible = computed(
   <div data-section="section-updates" data-section-label="עדכונים">
     <div id="section-updates" class="section-label">עדכונים</div>
 
-    <SettingRow v-if="installedVersion" label="גרסה מותקנת">
-      <span class="updates-status-text">{{ installedVersion }}</span>
-    </SettingRow>
-
     <SettingRow label="מצב עדכון">
       <div class="updates-status">
+        <span v-if="installedVersion" class="updates-status-text">גרסה מותקנת: {{ installedVersion }}</span>
         <span class="updates-status-text">{{ updateStatusText }}</span>
         <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         <button
           v-if="readyVersion"
-          class="updates-install-button"
+          class="settings-btn updates-install-button"
           :disabled="isInstalling"
           @click="installUpdate"
         >
           {{ UPDATE_INSTALL_LABEL }}
         </button>
-        <button
-          v-if="isCheckNowVisible"
-          class="updates-check-button"
-          :disabled="isCheckingForUpdate"
-          @click="checkForUpdateNow"
-        >
+        <span v-if="isInstalling" class="updates-status-text">אנא המתן כמה רגעים עד לפתיחת המתקין</span>
+        <button v-if="isCheckNowVisible" class="settings-btn" :disabled="isCheckingForUpdate" @click="checkForUpdateNow">
           {{ isCheckingForUpdate ? 'בודק...' : 'בדוק עכשיו' }}
         </button>
       </div>
@@ -111,10 +104,6 @@ const isCheckNowVisible = computed(
 
 <style scoped>
 .updates-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
   width: 100%;
 }
 
@@ -124,32 +113,12 @@ const isCheckNowVisible = computed(
 }
 
 .updates-install-button {
-  height: 28px;
-  padding: 0 14px;
-  font-size: 12px;
   color: var(--text-on-accent, #fff);
   background: var(--accent-color);
-  border: none;
-  border-radius: 4px;
+  border-color: var(--accent-color);
 }
 
-.updates-check-button {
-  height: 28px;
-  padding: 0 14px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-
-.updates-check-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.updates-install-button:disabled,
-.updates-check-button:disabled {
-  opacity: 0.6;
-  cursor: default;
+.updates-install-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-color) 85%, #000);
 }
 </style>
