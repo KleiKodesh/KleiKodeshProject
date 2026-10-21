@@ -148,6 +148,19 @@ export function keysToCollapse(
     collapsed.push(key)
     needed -= costOf(key)
   }
+
+  // Zoom frees more than two buttons, so collapsing it can leave room for a cheaper control
+  // that went before it. Give those back - latest first - while they fit, so nothing sits in
+  // the flyout with its own room still free on the toolbar.
+  for (let i = collapsed.length - 2; i >= 0; i--) {
+    const key = collapsed[i]
+    const budget = currentlyCollapsed.includes(key)
+      ? availableLengthPx - TOOLBAR_HYSTERESIS_PX
+      : availableLengthPx
+    if (needed + costOf(key) > budget) continue
+    needed += costOf(key)
+    collapsed.splice(i, 1)
+  }
   return collapsed
 }
 
