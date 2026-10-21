@@ -557,8 +557,9 @@ h1::after {
 }
 
 /* Direction-meaning icons (prev/next, back/forward, submenu and tree chevrons) are
-   drawn for the RTL layout; the LTR layout is its mirror, so they mirror too. */
-:root[dir='ltr'] .dir-icon {
+   drawn for the RTL layout; the LTR layout is its mirror, so they mirror too - except
+   inside an explicit dir="rtl" subtree (the catalog page, RTL content), which stays RTL. */
+:root[dir='ltr'] .dir-icon:not([dir='rtl'] *) {
   transform: scaleX(-1);
 }
 

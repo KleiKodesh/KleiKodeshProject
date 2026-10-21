@@ -9,6 +9,10 @@ import { createI18n } from 'vue-i18n'
 //
 // Switching language reloads the page (setUiLanguage), so strings built once at module
 // load (menus, constant tables) are always in the active language.
+//
+// The CATALOG page is never translated and always RTL (user decision): locales/en/bookCatalog.json
+// is deliberately an exact copy of the Hebrew file, and shared strings rendered inside the
+// catalog (new-tab hint, index status) use `tHe`.
 
 export type UiLanguage = 'he' | 'en'
 
@@ -43,6 +47,14 @@ export const i18n = createI18n({
 /** For plain .ts modules; components use `useI18n()` or `$t` in templates. */
 export const t: (key: string, named?: Record<string, unknown>) => string = (key, named) =>
   (i18n.global as unknown as { t: (k: string, n?: Record<string, unknown>) => string }).t(key, named ?? {})
+
+/** Hebrew regardless of UI language - for strings shown on the never-translated catalog page. */
+export const tHe: (key: string, named?: Record<string, unknown>) => string = (key, named) =>
+  (i18n.global as unknown as { t: (k: string, n: Record<string, unknown>, o: { locale: string }) => string }).t(
+    key,
+    named ?? {},
+    { locale: 'he' },
+  )
 
 export function setUiLanguage(lang: UiLanguage): void {
   if (lang === uiLanguage) return

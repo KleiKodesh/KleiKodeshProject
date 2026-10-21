@@ -6,7 +6,7 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import { titleWithAuthor } from './titleWithAuthor'
 
 const props = defineProps<{ items: FsItem[] }>()
@@ -28,7 +28,7 @@ function getTitle(item: FsItem) {
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
+  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 // Combobox model (see useInputListNavigation): DOM focus stays in the page's
@@ -66,7 +66,7 @@ function selectItem(index: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
-  <div v-else ref="scrollEl" class="scroller" dir="rtl">
+  <div v-else ref="scrollEl" class="scroller">
     <div class="list-items">
       <div
         v-for="(item, index) in items"

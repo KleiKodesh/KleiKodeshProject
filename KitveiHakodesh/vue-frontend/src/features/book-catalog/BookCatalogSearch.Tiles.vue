@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem } from './useBookCatalogSearch'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
 // LEGACY: superseded by BookCatalogSearch.Cards.vue (same props, emits and
 // exposed hooks). Kept, like BookCatalogView.Tiles.vue, to swap back to.
@@ -34,7 +34,7 @@ function itemTooltip(item: SearchFsItem): string {
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
   if (item.book.parentPath) parts.push(item.book.parentPath)
-  return withNewTabHint(parts.join('\n'))
+  return withNewTabHint(parts.join('\n'), OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 function selectItem(i: number, event?: MouseEvent) {
@@ -50,7 +50,7 @@ defineExpose({
 </script>
 
 <template>
-  <div dir="rtl" ref="tilesEl" class="tiles-grid">
+  <div ref="tilesEl" class="tiles-grid">
     <!-- A <button>, like the browse grid's and the home page's: it is a control,
          and unlike a div it does not stretch to fill its grid cell, which is what
          keeps it the same 72px as theirs. -->

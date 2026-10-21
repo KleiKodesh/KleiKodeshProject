@@ -245,6 +245,7 @@ The UI is bilingual (Hebrew default, English option) via vue-i18n. Hebrew mode: 
 - Never translate book content, DB data, search-syntax examples, regex/normalization tables, Hebrew month/weekday names, divine-name tables.
 - Content containers (book lines, commentary, TOC, search results/snippets, catalog/book lists, dictionary, txt/html views, book-data tooltips) carry an explicit `dir="rtl"` on their root; query inputs use `dir="auto"`. Chrome CSS uses logical properties (`margin-inline-start`, `inset-inline-end`, `text-align: start`), never physical left/right, so it mirrors correctly in both directions.
 - Switching language reloads the page (`setUiLanguage`), so module-level `t()` constants are fine.
+- EXCEPTION - the CATALOG page (`src/features/book-catalog`) is never translated and is always RTL, in both UI languages: its root carries `dir="rtl"`, `locales/en/bookCatalog.json` is an exact copy of the Hebrew file, and shared strings rendered inside it use `tHe` (`@/i18n`) or Hebrew variants (`OPEN_IN_NEW_TAB_HINT_HE`, `useSearchIndexStatus(index, tHe)`). `.dir-icon` does not mirror inside any `[dir=rtl]` subtree. The catalog's nav label / tab title in the title bar is chrome and stays translated.
 
 ## Git
 
