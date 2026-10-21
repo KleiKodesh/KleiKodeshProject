@@ -402,7 +402,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       return
     }
     _converting.delete(tabId)
-    tabStore.updateTab(tabId, {
+    // Completes the navigation startHbDownload already recorded (same route + book id) —
+    // a second history frame would make Back land on the download placeholder.
+    tabStore.updateTabWithoutHistory(tabId, {
       route: '/pdf-view',
       title: bookTitle,
       localFileVirtualUrl: url,
