@@ -6,6 +6,7 @@ import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
 import { calcDayZmanim } from './useZmanim'
 import type { City, CalendarDay, CalendarWeek } from './calendarTypes'
+import { GREG_MONTHS } from './useMonthlyView'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -169,8 +170,8 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
     MONTH_NAMES[hdSat.getMonth()] ?? '', satYear,
   )
   const gregLabel = rangeLabel(
-    sunday.toLocaleDateString('he-IL', { month: 'long' }), String(sunday.getFullYear()),
-    saturday.toLocaleDateString('he-IL', { month: 'long' }), String(saturday.getFullYear()),
+    GREG_MONTHS[sunday.getMonth()] ?? '', String(sunday.getFullYear()),
+    GREG_MONTHS[saturday.getMonth()] ?? '', String(saturday.getFullYear()),
   )
 
   return { hebrewLabel, gregLabel, days }

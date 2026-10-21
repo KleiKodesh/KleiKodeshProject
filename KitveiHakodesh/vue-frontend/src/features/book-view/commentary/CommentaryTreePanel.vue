@@ -201,7 +201,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           </button>
         </div>
         <div v-if="searchResults.length === 0" class="no-results">
-          &#x5DC;&#x5D0; &#x5E0;&#x5DE;&#x5E6;&#x5D0;
+          {{ $t('components.notFound') }}
         </div>
       </template>
     </div>

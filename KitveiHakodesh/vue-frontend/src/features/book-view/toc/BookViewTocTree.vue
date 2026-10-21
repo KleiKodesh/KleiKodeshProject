@@ -161,7 +161,7 @@ defineExpose({ snapshotState, restoreState })
 
 <template>
   <div class="toc-tree">
-    <div v-if="loading" class="toc-state">&#x5D8;&#x5D5;&#x5E2;&#x5DF;...</div>
+    <div v-if="loading" class="toc-state">{{ $t('bookView.loading') }}</div>
     <div v-else-if="error" class="toc-state">
       <MessageBanner :message="error" :dismissible="false" />
     </div>
@@ -200,7 +200,7 @@ defineExpose({ snapshotState, restoreState })
             v-model="searchQuery"
             type="search"
             class="search-input"
-            placeholder="&#x5D7;&#x5D9;&#x5E4;&#x5D5;&#x5E9;..."
+            :placeholder="$t('components.searchPlaceholder')"
             @keydown.up.prevent="focusTocList"
             @keydown.down.prevent="focusTocList"
             @keydown.tab.prevent="focusTocList"
