@@ -7,6 +7,7 @@ import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
+import ThemeBackgroundTintSlider from './ThemeBackgroundTintSlider.vue'
 
 const settings = useSettingsStore()
 const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
@@ -57,6 +58,8 @@ function toggleTitleBarButton(buttonId: string) {
     <SettingRow id="nav-theme-picker" data-nav-label="ערכת נושא" label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
       <ThemePicker />
     </SettingRow>
+
+    <ThemeBackgroundTintSlider id="nav-background-tint" data-nav-label="עוצמת גוון הרקע" />
 
     <SettingRow id="nav-dark-mode" data-nav-label="מצב כהה" label="מצב כהה" hint="החלף בין מצב בהיר לכהה (Ctrl+L)">
       <ToggleGroup
