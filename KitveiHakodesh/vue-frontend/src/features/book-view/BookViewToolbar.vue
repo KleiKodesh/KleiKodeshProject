@@ -324,7 +324,7 @@ defineExpose({ tocBtnRef })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar" :dir="isVerticalToolbar ? 'rtl' : undefined" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
