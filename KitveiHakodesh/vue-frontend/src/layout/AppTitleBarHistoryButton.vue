@@ -26,14 +26,14 @@ const props = defineProps<{
 }>()
 
 const pane = useAppShellPane(props.paneId)
-const isBack = props.direction === 'back'
+const isBack = computed(() => props.direction === 'back')
 
-const isEnabled = computed(() => (isBack ? pane.canGoBack.value : pane.canGoForward.value))
+const isEnabled = computed(() => (isBack.value ? pane.canGoBack.value : pane.canGoForward.value))
 
 const HOLD_HINT = t('layout.holdHint')
-const title = isBack
+const title = computed(() => isBack.value
   ? t('layout.back') + '\n' + HOLD_HINT
-  : t('layout.forward') + '\n' + HOLD_HINT
+  : t('layout.forward') + '\n' + HOLD_HINT)
 
 /** The frames on this button's side of the cursor, nearest step first — like
  *  the browser's own hold-to-show list. Each keeps its real entries index so a
@@ -50,7 +50,7 @@ const listItems = computed(() => {
     }
   })
   const cursor = pane.historyCursor.value
-  return isBack ? items.slice(0, cursor).reverse() : items.slice(cursor + 1)
+  return isBack.value ? items.slice(0, cursor).reverse() : items.slice(cursor + 1)
 })
 
 const buttonRef = ref<HTMLElement | null>(null)
@@ -91,7 +91,7 @@ function onClick() {
     isOpen.value = false
     return
   }
-  if (isBack) pane.goBack()
+  if (isBack.value) pane.goBack()
   else pane.goForward()
 }
 
