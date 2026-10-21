@@ -63,7 +63,13 @@
     "free": "הקלד חופשי לחיפוש ספר או קובץ",
     "hbPrefix": "כדי להקדים תוצאות מהיברו בוקס כתוב",
     "pcPrefix": "כדי להקדים תוצאות מהמחשב כתוב",
-    "addins": "הקלד תוספים: עבור תוספי אוצריא"
+    "addins": "הקלד תוספים: עבור תוספי אוצריא",
+    "hbExample1": "היברו בוקס: {book}",
+    "hbExample2": "או היברו: {book}",
+    "hbExample3": "או: {shorthand} {book}",
+    "pcExample1": "קובץ: {book}",
+    "pcExample2": "או מחשב: {book}",
+    "pcExample3": "או: {shorthand} {book}"
   },
   "searchTabTitle": "חיפוש: {query}",
   "daily": {

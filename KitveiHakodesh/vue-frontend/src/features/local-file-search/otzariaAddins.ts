@@ -23,8 +23,12 @@
  * these inputs are where people type book titles. "בעלי התוספים" must stay a
  * book query — matching it would both mis-rank the sections and rewrite the
  * term into the nonsense "בעלי התוסף אוצריא: ".
+ *
+ * English aliases (addins, addin, add-ins, add-in) are accepted in both UI
+ * languages, case-insensitively, and must end at a word boundary so "addinsX"
+ * stays an ordinary term.
  */
-const SHORTHAND = /(^|\s)תוספים:?\s*/
+const SHORTHAND = /(^|\s)(?:תוספים|add-?ins?\b):?\s*/i
 
 /**
  * Rewrites the "תוספים" shorthand to the prefix the index actually stores.
@@ -32,7 +36,7 @@ const SHORTHAND = /(^|\s)תוספים:?\s*/
  * rule below; $1 preserves the boundary the pattern consumed.
  */
 export function normalizeAddinQuery(query: string): string {
-  return query.replace(new RegExp(SHORTHAND.source, 'g'), '$1תוסף אוצריא: ')
+  return query.replace(new RegExp(SHORTHAND.source, 'gi'), '$1תוסף אוצריא: ')
 }
 
 /**

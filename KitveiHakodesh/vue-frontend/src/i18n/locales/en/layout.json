@@ -79,5 +79,8 @@
   "dbDownload": "Download book database",
   "dbDownloadDescription": "Download the book library to this computer",
   "dbChoose": "Choose book database",
-  "dbChooseDescription": "Choose an existing book library"
+  "dbChooseDescription": "Choose an existing book library",
+  "placeholderHbExample": "hebrewbooks: {book}",
+  "placeholderFileExample": "file: {book}",
+  "placeholderAddinsExample": "addins: to show Otzaria add-ins"
 }

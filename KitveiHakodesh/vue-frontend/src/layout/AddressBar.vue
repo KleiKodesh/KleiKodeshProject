@@ -63,9 +63,9 @@ const PLACEHOLDERS = [
   t('layout.placeholderQuickSearch'),
   t('layout.placeholderPressEnter'),
   t('layout.placeholderTypeFree'),
-  'היברו בוקס: שבת',
-  'קובץ: ברכות',
-  'תוספים: עבור תוספי אוצריא',
+  t('layout.placeholderHbExample', { book: '\u05E9\u05D1\u05EA' }),
+  t('layout.placeholderFileExample', { book: '\u05D1\u05E8\u05DB\u05D5\u05EA' }),
+  t('layout.placeholderAddinsExample'),
 ]
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0, charIdx = 0, pauseTicks = 0

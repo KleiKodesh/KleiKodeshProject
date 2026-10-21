@@ -9,7 +9,7 @@
     "date": "Date (newest first)"
   },
   "placeholderSearch": "Search files by name or folder...",
-  "placeholderAddins": "Type תוספים: for Otzaria add-ins",
+  "placeholderAddins": "Type addins: to show Otzaria add-ins",
   "sortTitle": "Sort: {label}",
   "noResults": "No results found",
   "searchFiles": "Search files...",

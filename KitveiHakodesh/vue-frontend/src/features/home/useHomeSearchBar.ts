@@ -2,18 +2,22 @@ import { ref, watch, type Ref } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 
+// Book names stay Hebrew in both UI languages; only the prefix wording is translated.
+const EXAMPLE_BOOK_HB = '\u05E9\u05D1\u05EA'
+const EXAMPLE_BOOK_PC = '\u05D1\u05E8\u05DB\u05D5\u05EA'
+
 const SEARCH_PLACEHOLDERS = [
   t('home.searchHint.quick'),
   t('home.searchHint.enter'),
   t('home.searchHint.free'),
   t('home.searchHint.hbPrefix'),
-  'היברו בוקס: שבת',
-  'או היברו: שבת',
-  'או: \\ שבת',
+  t('home.searchHint.hbExample1', { book: EXAMPLE_BOOK_HB }),
+  t('home.searchHint.hbExample2', { book: EXAMPLE_BOOK_HB }),
+  t('home.searchHint.hbExample3', { book: EXAMPLE_BOOK_HB, shorthand: '\\' }),
   t('home.searchHint.pcPrefix'),
-  'קובץ: ברכות',
-  'או מחשב: ברכות',
-  'או: \\\\ ברכות',
+  t('home.searchHint.pcExample1', { book: EXAMPLE_BOOK_PC }),
+  t('home.searchHint.pcExample2', { book: EXAMPLE_BOOK_PC }),
+  t('home.searchHint.pcExample3', { book: EXAMPLE_BOOK_PC, shorthand: '\\\\' }),
   t('home.searchHint.addins'),
 ]
 

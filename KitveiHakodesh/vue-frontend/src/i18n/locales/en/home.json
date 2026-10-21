@@ -61,9 +61,15 @@
     "quick": "Quick search across all libraries...",
     "enter": "Press Enter to search content",
     "free": "Type freely to find a book or file",
-    "hbPrefix": "To put HebrewBooks results first, type",
-    "pcPrefix": "To put computer files first, type",
-    "addins": "Type תוספים: for Otzaria add-ins"
+    "hbPrefix": "To show HebrewBooks results first, type",
+    "pcPrefix": "To show computer files first, type",
+    "addins": "Type addins: to show Otzaria add-ins",
+    "hbExample1": "hebrewbooks: {book}",
+    "hbExample2": "or hb: {book}",
+    "hbExample3": "or: {shorthand} {book}",
+    "pcExample1": "file: {book}",
+    "pcExample2": "or pc: {book}",
+    "pcExample3": "or: {shorthand} {book}"
   },
   "searchTabTitle": "Search: {query}",
   "daily": {

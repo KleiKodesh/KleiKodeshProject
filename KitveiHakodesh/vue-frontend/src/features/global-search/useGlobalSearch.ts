@@ -28,6 +28,10 @@
  * Source-priority prefixes (stripped before searching):
  *   HebrewBooks first: היברו, היברובוקס, היברו בוקס, \ (single backslash)
  *   Files first:       מחשב, קובץ, \\ (double backslash)
+ *   English aliases, accepted in both UI languages, case-insensitive, and only
+ *   as a whole word (followed by a colon, space or end):
+ *     HebrewBooks first: hebrewbooks, hebrew books, hb
+ *     Files first:       file, files, pc, computer
  *   The backslash shorthands also work as a suffix: "query\" and "query\\".
  *   Default (no prefix): catalog first
  *
@@ -112,6 +116,10 @@ const SUPERSEDED_RETRY_MS = 150
 // longer one (\\) is matched first.
 const HEBREWBOOKS_PREFIXES = ['היברו בוקס', 'היברובוקס', 'היברו']
 const FILES_PREFIXES = ['מחשב', 'קובץ']
+// English aliases: whole-word only, so an English file name such as "filename"
+// or "hbx" is never mistaken for a prefix. One anchored regex test each.
+const HEBREWBOOKS_PREFIX_EN = /^(?:hebrew\s*books|hb)(?=[\s:]|$)/i
+const FILES_PREFIX_EN = /^(?:files?|pc|computer)(?=[\s:]|$)/i
 const HEBREWBOOKS_SHORTHAND = '\\'
 const FILES_SHORTHAND = '\\\\'
 
@@ -135,7 +143,7 @@ function stripShorthandFromQuery(trimmed: string): string {
   return trimmed.replace(/^\\+|\\+$/g, '').replace(/^\s*:\s*/, '').trim()
 }
 
-function parseQueryPrefix(rawQuery: string): ParsedQuery {
+export function parseQueryPrefix(rawQuery: string): ParsedQuery {
   const trimmed = rawQuery.trim()
 
   // Check the backslash shorthands first, as prefix or suffix — \\ (files)
@@ -157,6 +165,14 @@ function parseQueryPrefix(rawQuery: string): ParsedQuery {
     if (trimmed.startsWith(prefix)) {
       return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, prefix) }
     }
+  }
+  const hebrewBooksEn = HEBREWBOOKS_PREFIX_EN.exec(trimmed)
+  if (hebrewBooksEn) {
+    return { priority: 'hebrewbooks', effectiveQuery: stripPrefixFromQuery(trimmed, hebrewBooksEn[0]) }
+  }
+  const filesEn = FILES_PREFIX_EN.exec(trimmed)
+  if (filesEn) {
+    return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, filesEn[0]) }
   }
   // "תוספים" also puts files first, but it is a search TERM rather than a prefix —
   // the file search rewrites it to the index's addin prefix, so it must survive here.
