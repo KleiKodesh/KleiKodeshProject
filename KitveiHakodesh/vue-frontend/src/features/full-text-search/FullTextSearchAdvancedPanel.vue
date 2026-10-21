@@ -216,6 +216,9 @@ function onContextWordsInput(event: Event) {
    popup rule above. */
 .advanced-panel.as-card {
   position: static;
+  /* Drop the popup's z-index: as a flex item of the page card it still applies while
+     static, and stacked the card above the narrow filter overlay (z-index 10). */
+  z-index: auto;
   width: 380px;
   max-width: calc(100% - 32px);
   /* No cap of its own: the page card around it bounds the height (up to the full
