@@ -3,6 +3,9 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import type { CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
+import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
+import { useDailyLearningOpener } from '@/features/home/useHomeDailyLearning'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
   day: CalendarDay
@@ -38,19 +41,22 @@ const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = 
   { key: 'tzeit', label: t('hebrewCalendar.zmanim.tzeit') },
 ]
 
-const LEARNING_ROWS: Array<{ key: keyof DailyLearning; label: string }> = [
-  { key: 'dafYomi', label: t('hebrewCalendar.learning.dafYomi') },
-  { key: 'dirshuAmudYomi', label: t('hebrewCalendar.learning.dirshuAmudYomi') },
-  { key: 'yerushalmiVilna', label: t('hebrewCalendar.learning.yerushalmiVilna') },
-  { key: 'mishnaYomi', label: t('hebrewCalendar.learning.mishnaYomi') },
-  { key: 'nachYomi', label: t('hebrewCalendar.learning.nachYomi') },
-  { key: 'perekYomi', label: t('hebrewCalendar.learning.perekYomi') },
-  { key: 'rambam1', label: t('hebrewCalendar.learning.rambam1') },
-  { key: 'rambam3', label: t('hebrewCalendar.learning.rambam3') },
-  { key: 'kitzurShulchanAruch', label: t('hebrewCalendar.learning.kitzurShulchanAruch') },
-  { key: 'chofetzChaim', label: t('hebrewCalendar.learning.chofetzChaim') },
-  { key: 'psalms', label: t('hebrewCalendar.learning.psalms') },
+// `homeKey` is the same cycle in the home date-bar dropdown, which knows how to open it.
+const LEARNING_ROWS: Array<{ key: keyof DailyLearning; homeKey: HomeDailyLearningItem['key']; label: string }> = [
+  { key: 'dafYomi', homeKey: 'daf-yomi', label: t('hebrewCalendar.learning.dafYomi') },
+  { key: 'dirshuAmudYomi', homeKey: 'amud-yomi', label: t('hebrewCalendar.learning.dirshuAmudYomi') },
+  { key: 'yerushalmiVilna', homeKey: 'yerushalmi-yomi', label: t('hebrewCalendar.learning.yerushalmiVilna') },
+  { key: 'mishnaYomi', homeKey: 'mishnah-yomit', label: t('hebrewCalendar.learning.mishnaYomi') },
+  { key: 'nachYomi', homeKey: 'nach-yomi', label: t('hebrewCalendar.learning.nachYomi') },
+  { key: 'perekYomi', homeKey: 'perek-yomi', label: t('hebrewCalendar.learning.perekYomi') },
+  { key: 'rambam1', homeKey: 'rambam-1', label: t('hebrewCalendar.learning.rambam1') },
+  { key: 'rambam3', homeKey: 'rambam-3', label: t('hebrewCalendar.learning.rambam3') },
+  { key: 'kitzurShulchanAruch', homeKey: 'kitzur-shulchan-aruch', label: t('hebrewCalendar.learning.kitzurShulchanAruch') },
+  { key: 'chofetzChaim', homeKey: 'chofetz-chaim', label: t('hebrewCalendar.learning.chofetzChaim') },
+  { key: 'psalms', homeKey: 'daily-psalms', label: t('hebrewCalendar.learning.psalms') },
 ]
+
+const openLearning = useDailyLearningOpener()
 
 const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 </script>
@@ -142,10 +148,15 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
     <div v-if="learningOpen" class="panel">
       <div class="data-grid">
         <template v-for="r in LEARNING_ROWS" :key="r.key">
-          <div v-if="day.learning[r.key]" class="data-row">
+          <button
+            v-if="day.learning[r.key]"
+            class="data-row"
+            @click="openLearning(day.date, r.homeKey, wantsNewTab($event))"
+            @auxclick.middle.prevent="openLearning(day.date, r.homeKey, true)"
+          >
             <span class="gl">{{ r.label }}</span
             ><span class="gv">{{ day.learning[r.key] }}</span>
-          </div>
+          </button>
         </template>
       </div>
     </div>
@@ -350,7 +361,16 @@ button.chip {
   gap: 2px;
 }
 .data-row {
+  all: unset;
   line-height: 1.5;
+  cursor: pointer;
+  border-radius: 4px;
+  padding-inline: 4px;
+  text-align: start;
+}
+.data-row:hover,
+.data-row:focus-visible {
+  background: color-mix(in srgb, #3a9e6e 10%, transparent);
 }
 .gl {
   font-size: 12px;

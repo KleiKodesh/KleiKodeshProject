@@ -45,6 +45,28 @@ export function useHomeDailyLearningEntries() {
   return useDailyLearningState().entries
 }
 
+/** Opens one cycle's reading for any date (calendar page); no-op when its book is not in the library. */
+export function useDailyLearningOpener() {
+  const paneNavigation = usePaneNavigation()
+  return async (date: Date, key: HomeDailyLearningItem['key'], openInNewTab: boolean) => {
+    if (!dbReady.value) return
+    const item = (await computeHomeDailyLearningItems(date)).find((i) => i.key === key)
+    if (!item) return
+    const resolved = await resolveHomeDailyLearningTarget(item.target).catch(() => null)
+    if (!resolved) return
+    paneNavigation.openOrUpdateActiveTab(
+      {
+        route: '/book-view',
+        title: resolved.bookTitle,
+        bookId: resolved.bookId,
+        openTocEntryId: resolved.tocEntryId,
+        openTocLineIndex: resolved.tocLineIndex,
+      },
+      openInNewTab,
+    )
+  }
+}
+
 function useDailyLearningState() {
   const paneNavigation = usePaneNavigation()
   const booksDataStore = useBooksDataStore()
