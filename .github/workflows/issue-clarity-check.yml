@@ -13,7 +13,6 @@ on:
 
 permissions:
   issues: write
-  models: read
 
 jobs:
   check:
@@ -22,6 +21,7 @@ jobs:
       - name: Ask the model and comment if details are missing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ISSUE: ${{ github.event.issue.number || inputs.issue }}
           SYSTEM_PROMPT: |
             You review new issues for a Hebrew Torah-library program (Word add-in "Klei Kodesh" and the "Kitvei HaKodesh" app).
@@ -40,10 +40,11 @@ jobs:
           payload=$(jq -n --arg sys "$SYSTEM_PROMPT" --arg user "Title: $TITLE
 
           Body:
-          $BODY" '{model:"openai/gpt-4.1-mini",messages:[{role:"system",content:$sys},{role:"user",content:$user}]}')
-          reply=$(curl -sS --fail-with-body https://models.github.ai/inference/chat/completions \
-            -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" \
-            -d "$payload" | jq -r '.choices[0].message.content // empty')
+          $BODY" '{system_instruction:{parts:[{text:$sys}]},contents:[{role:"user",parts:[{text:$user}]}]}')
+          reply=$(curl -sS --fail-with-body \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
+            -d "$payload" | jq -r '.candidates[0].content.parts[0].text // empty')
           trimmed="$(printf '%s' "$reply" | tr -d '[:space:]')"
           if [ -z "$trimmed" ] || [ "$trimmed" = "OK" ]; then echo "clear enough"; exit 0; fi
           printf '%s\n\n<sub>הודעה אוטומטית</sub>\n' "$reply" > reply.md
