@@ -61,11 +61,11 @@ watch(
 
 const itemTitle = (item: SearchFsItem) =>
   item.kind === 'toc'
-    ? `${item.book.title} ${item.tocPath}`
+    ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(item.book.title, item.book.authors)
 
 function itemTooltip(item: SearchFsItem): string {
-  const title = item.kind === 'toc' ? `${item.book.title} — ${item.tocPath}` : item.book.title
+  const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
   if (item.book.parentPath) parts.push(item.book.parentPath)

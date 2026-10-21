@@ -19,7 +19,7 @@ const BOOK_ICON = markRaw(IconBookRtl20)
 
 const itemTitle = (item: SearchFsItem) =>
   item.kind === 'toc'
-    ? `${item.book.title} ${item.tocPath}`
+    ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(item.book.title, item.book.authors)
 
 // Same shape as the search list row: author in the title, folder path below.
