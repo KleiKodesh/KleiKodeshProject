@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { watch, ref, computed, onMounted, nextTick } from 'vue'
 import { useDebounce } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -87,7 +88,7 @@ watch(debouncedQuery, async (q) => {
   if (!trimmed) {
     pageData.value = null
     noResults.value = false
-    paneNavigation.updateActiveTab({ title: 'מילון' })
+    paneNavigation.updateActiveTab({ title: t('dictionary.tabTitle') })
     return
   }
   searching.value = true
@@ -98,7 +99,7 @@ watch(debouncedQuery, async (q) => {
     if (mine !== lookupGeneration) return
     if (cached) {
       pageData.value = cached
-      paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
+      paneNavigation.updateActiveTab({ title: t('dictionary.tabTitleWord', { word: trimmed }) })
       return
     }
 
@@ -154,7 +155,7 @@ watch(debouncedQuery, async (q) => {
     if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !micropediaRows.length && !aruchRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
-      paneNavigation.updateActiveTab({ title: 'מילון' })
+      paneNavigation.updateActiveTab({ title: t('dictionary.tabTitle') })
     } else {
       const result: WordPageData = {
         headword:    trimmed,
@@ -171,7 +172,7 @@ watch(debouncedQuery, async (q) => {
       }
       pageData.value = result
       dictionaryCacheSet(trimmed, result)
-      paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
+      paneNavigation.updateActiveTab({ title: t('dictionary.tabTitleWord', { word: trimmed }) })
     }
   } finally {
     // Only the latest lookup owns the spinner.
@@ -192,7 +193,7 @@ function onSelect(headword: string) {
         :value="searchQuery"
         class="dict-search-input"
         type="text"
-        placeholder="חפש מילה"
+        :placeholder="$t('dictionary.searchWord')"
         spellcheck="true"
         autocomplete="off"
         @input="searchQuery = ($event.target as HTMLInputElement).value"
@@ -204,16 +205,16 @@ function onSelect(headword: string) {
 
     <div v-if="noResults" class="dict-no-results">
       <template v-if="suggestions.length">
-        <span class="dict-suggestions-label">אולי התכוונת ל: </span>
+        <span class="dict-suggestions-label">{{ $t('dictionary.didYouMean') }}</span>
         <span v-for="(w, i) in suggestions" :key="w">
           <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
         </span>
       </template>
-      <span v-else>לא נמצאו תוצאות</span>
+      <span v-else>{{ $t('dictionary.noResults') }}</span>
     </div>
 
     <div class="dict-body">
-      <div v-if="searching" class="dict-state">מחפש...</div>
+      <div v-if="searching" class="dict-state">{{ $t('dictionary.searching') }}</div>
 
       <DictionaryWordPage
         v-else-if="pageData"

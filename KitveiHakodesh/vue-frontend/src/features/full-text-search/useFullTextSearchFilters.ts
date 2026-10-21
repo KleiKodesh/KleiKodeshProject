@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, shallowRef, watch } from 'vue'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
 import { normalize } from '@/utils/normalizeText'
@@ -234,7 +235,7 @@ export function useFullTextSearchFilters(
   }
 
   async function handleSearch(q: string) {
-    paneNavigation.updateActiveTab({ title: `חיפוש: ${q}` })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q }) })
     await executeSearch(q)
   }
 
@@ -242,7 +243,7 @@ export function useFullTextSearchFilters(
     clearSearch()
     searchQuery.value = ''
     atFilters.value = []
-    paneNavigation.updateActiveTab({ title: 'חיפוש' })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitle') })
   }
 
   async function handleResultClick(result: FullTextSearchResult, openInNewTab = false) {

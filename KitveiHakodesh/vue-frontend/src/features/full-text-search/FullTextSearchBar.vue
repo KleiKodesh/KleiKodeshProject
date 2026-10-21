@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
@@ -49,11 +50,11 @@ localQuery.value = props.searchQuery
 
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
 const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
-  { value: 'catalogOrder', label: 'סדר מקורי' },
-  { value: 'relevance', label: 'רלוונטיות' },
-  { value: 'bookName', label: 'שם הספר' },
-  { value: 'authorName', label: 'שם המחבר' },
-  { value: 'chronological', label: 'סדר כרונולוגי' },
+  { value: 'catalogOrder', label: t('fullTextSearch.bar.sortCatalogOrder') },
+  { value: 'relevance', label: t('fullTextSearch.bar.sortRelevance') },
+  { value: 'bookName', label: t('fullTextSearch.bar.sortBookName') },
+  { value: 'authorName', label: t('fullTextSearch.bar.sortAuthorName') },
+  { value: 'chronological', label: t('fullTextSearch.bar.sortChronological') },
 ]
 const isSortDropdownOpen = ref(false)
 const sortToggleButtonRef = ref<HTMLElement | null>(null)
@@ -83,8 +84,8 @@ watch(localQuery, (v) => emit('update:searchQuery', v))
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
 const PLACEHOLDERS = [
-  'הזן טקסט לחיפוש...',
-  'הוסף @ לסינון לפי ספר או קטגוריה',
+  t('fullTextSearch.bar.placeholderEnter'),
+  t('fullTextSearch.bar.placeholderFilterHint'),
   'שויתי לנגדי תמיד',
   'כי ביצחק @רשי @רמבן',
   'קיש קיש קריא @בבלי בבא מציעא',
@@ -139,7 +140,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         ref="filterBtnRef"
         class="bar-btn"
         :class="{ 'filter-active': filterCount > 0 || atFilterCount > 0 }"
-        :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"
+        :title="filterCount > 0 ? $t('fullTextSearch.bar.filterCount', { n: filterCount }) : $t('fullTextSearch.bar.filterResults')"
         @click.stop="$emit('toggleFilter')"
       >
         <IconFilter20Regular />
@@ -148,7 +149,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         ref="advancedBtnRef"
         class="bar-btn"
         :class="{ 'filter-active': isAdvancedOpen || isAdvancedActive }"
-        title="אפשרויות מתקדמות"
+        :title="$t('fullTextSearch.bar.advancedOptions')"
         @click.stop="$emit('toggleAdvanced')"
       >
         <IconOptions20Regular />
@@ -177,7 +178,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
           ref="sortToggleButtonRef"
           class="bar-btn"
           :class="{ 'filter-active': sortOrder !== 'catalogOrder' }"
-          :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
+          :title="$t('fullTextSearch.sortTitle', { label: SORT_OPTIONS.find((o) => o.value === sortOrder)!.label })"
           @click.stop="toggleSortDropdown"
         >
           <IconArrowSort20Regular />
@@ -203,7 +204,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         class="bar-btn"
         type="button"
         :disabled="disabled || (!isSearching && !localQuery.trim())"
-        :title="isSearching ? 'ביטול חיפוש' : 'חיפוש'"
+        :title="isSearching ? $t('fullTextSearch.bar.cancelSearch') : $t('fullTextSearch.bar.search')"
         @click="isSearching ? $emit('cancel') : handleSearch()"
       >
         <IconDismiss20Regular v-if="isSearching" />

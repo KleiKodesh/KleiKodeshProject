@@ -146,7 +146,7 @@ defineExpose({
           <button
             class="open-in-app-button"
             type="button"
-            title="פתח בתוכנת ברירת המחדל"
+            :title="$t('localFileSearch.openInDefaultApp')"
             @click="openInDefaultApp(items[virtualRow.index]!, $event)"
             @auxclick.stop
             @mousedown.stop

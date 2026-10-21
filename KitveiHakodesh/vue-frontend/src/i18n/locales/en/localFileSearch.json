@@ -1,0 +1,20 @@
+{
+  "pleaseWait": "Please wait while the index is being built",
+  "searching": "Searching...",
+  "sort": {
+    "relevance": "No sorting",
+    "fileName": "File name",
+    "fileType": "File type",
+    "fullPath": "Full path",
+    "date": "Date (newest first)"
+  },
+  "placeholderSearch": "Search files by name or folder...",
+  "placeholderAddins": "Type תוספים: for Otzaria add-ins",
+  "sortTitle": "Sort: {label}",
+  "noResults": "No results found",
+  "searchFiles": "Search files...",
+  "openingFile": "Opening file…",
+  "truncated": "(showing {shown} of {total} results)",
+  "openInDefaultApp": "Open in default app",
+  "searchError": "Search error"
+}

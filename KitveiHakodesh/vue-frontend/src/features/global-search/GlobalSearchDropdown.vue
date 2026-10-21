@@ -226,7 +226,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- Clear-all row — only shown when a tooltip is supplied, so callers
              that don't support bulk-clear simply omit the prop. -->
         <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header">
-          <span class="global-search-dropdown__recents-label">היסטוריה</span>
+          <span class="global-search-dropdown__recents-label">{{ $t('globalSearch.history') }}</span>
           <button
             class="global-search-dropdown__clear-all"
             :title="clearAllLocationsTitle"
@@ -260,7 +260,7 @@ function getTabIcon(route: string): FileIconInfo {
                independent, so this is "remove from history". -->
           <button
             class="global-search-dropdown__tab-close"
-            :title="removeLocationTitle ?? 'הסר מהרשימה'"
+            :title="removeLocationTitle ?? $t('globalSearch.removeFromList')"
             @click.stop="emit('forgetTab', tab.id)"
           >
             <IconDismiss20Regular />
@@ -283,7 +283,7 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('catalog') }"
             />
-            קטלוג הספרים
+            {{ $t('globalSearch.bookCatalog') }}
             <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="global-search-dropdown__spinner" />
           </div>
           <div
@@ -343,7 +343,7 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('hebrewbooks') }"
             />
-            היברו-בוקס
+            {{ $t('globalSearch.hebrewBooks') }}
             <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="global-search-dropdown__spinner" />
           </div>
           <div
@@ -381,7 +381,7 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('files') }"
             />
-            קבצים
+            {{ $t('globalSearch.files') }}
             <IconArrowSync20Regular v-if="isLoadingFiles" class="global-search-dropdown__spinner" />
           </div>
           <div

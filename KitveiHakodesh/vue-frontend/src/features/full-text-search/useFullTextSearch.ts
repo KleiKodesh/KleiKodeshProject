@@ -11,6 +11,7 @@
  * (matchedTermsOf, from the term id of each snippet mark). Titles, TOC paths and snippet
  * HTML are built per rendered row.
  */
+import { t } from '@/i18n'
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { serviceStream } from '@/webview-host/serviceClient'
@@ -57,13 +58,13 @@ interface SearchStreamChunk {
 
 /** Short labels for the service's search stage keys. Unknown keys show nothing. */
 export const SEARCH_STAGE_LABELS: Record<string, string> = {
-  rewrite: 'מעבד',
-  parse: 'מעבד',
-  expand: 'מרחיב תצורות של המילים',
-  lookup: 'מחפש באינדקס',
-  fetch: 'התוצאות בטעינה',
-  snippets: 'התוצאות בטעינה',
-  enrich: 'התוצאות בטעינה',
+  rewrite: t('fullTextSearch.stage.rewrite'),
+  parse: t('fullTextSearch.stage.parse'),
+  expand: t('fullTextSearch.stage.expand'),
+  lookup: t('fullTextSearch.stage.lookup'),
+  fetch: t('fullTextSearch.stage.fetch'),
+  snippets: t('fullTextSearch.stage.snippets'),
+  enrich: t('fullTextSearch.stage.enrich'),
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
@@ -164,7 +165,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   }
   onScopeDispose(clearStageLabel)
   /** Text for the stage indicator: generic "searching" until a stage settles. */
-  const stageLabel = computed(() => isSearching.value ? (settledStageLabel.value || 'מחפש') : '')
+  const stageLabel = computed(() => isSearching.value ? (settledStageLabel.value || t('fullTextSearch.stage.searching')) : '')
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)

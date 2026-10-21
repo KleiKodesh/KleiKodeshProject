@@ -1,0 +1,76 @@
+{
+  "bar": {
+    "sortCatalogOrder": "Original order",
+    "sortRelevance": "Relevance",
+    "sortBookName": "Book name",
+    "sortAuthorName": "Author name",
+    "sortChronological": "Chronological",
+    "placeholderEnter": "Enter text to search...",
+    "placeholderFilterHint": "Add {'@'} to filter by book or category",
+    "filterCount": "Filter: {n} books",
+    "filterResults": "Filter results",
+    "advancedOptions": "Advanced options",
+    "cancelSearch": "Cancel search",
+    "search": "Search"
+  },
+  "sortTitle": "Sort: {label}",
+  "stage": {
+    "rewrite": "Processing",
+    "parse": "Processing",
+    "expand": "Expanding word forms",
+    "lookup": "Searching the index",
+    "fetch": "Loading results",
+    "snippets": "Loading results",
+    "enrich": "Loading results",
+    "searching": "Searching"
+  },
+  "tabTitle": "Search",
+  "tabTitleQuery": "Search: {q}",
+  "results": "results",
+  "overlay": {
+    "finishing": "Finishing index build…",
+    "pleaseWait": "Please wait while the index is being built",
+    "partial": "Partial search results — the index is still being built"
+  },
+  "loading": "Loading…",
+  "filter": {
+    "noBooks": "No books found",
+    "scrollToFirst": "Scroll to first result",
+    "selectAll": "Select all",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all"
+  },
+  "close": "Close",
+  "error": {
+    "dbNotFound": "Database not found — choose a database file in Settings",
+    "indexBuildFailed": "Building the search index failed — in Settings, click \"{button}\"",
+    "indexNotReady": "The index is not ready for search — try again in a few moments",
+    "indexMerging": "The index is merging — try again in a few moments",
+    "searchFailed": "An error occurred while searching"
+  },
+  "noResults": "No results found",
+  "list": {
+    "backToResultLine": "Back to the result line",
+    "closePreview": "Close preview",
+    "showMore": "Show more"
+  },
+  "adv": {
+    "title": "Advanced search options",
+    "syntax": "Search syntax",
+    "wordDistance": "Maximum distance between words",
+    "contextWords": "Context before and after (words)",
+    "wordOrder": "Keep query word order",
+    "grammarWrap": "Grammatical prefixes and suffixes",
+    "spellingVariants": "Expand defective/full spelling",
+    "expanded": "Expanded search",
+    "expandedHint": "(inflections and synonyms)",
+    "syntaxWildcard": "Prefixes and suffixes",
+    "syntaxOptional": "Optional character (defective/full spelling)",
+    "syntaxFuzzy": "Similar with a typo (distance 1)",
+    "syntaxFuzzyN": "Similar with custom typo distance (1–3)",
+    "syntaxOr": "Or (one or more alternatives)",
+    "syntaxGrammar": "Grammatical prefixes/suffixes",
+    "no": "No",
+    "yes": "Yes"
+  }
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import PageCard from '@/components/PageCard.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
@@ -243,14 +244,14 @@ function resetScrollForNewSearch() {
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
-  paneNavigation.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
+  paneNavigation.updateActiveTab({ searchQuery: q, title: t('fullTextSearch.tabTitleQuery', { q: term || q }) })
   if (term) {
     resetScrollForNewSearch()
     handleSearch(term)
   }
 }
 function onClearSearch() {
-  paneNavigation.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
+  paneNavigation.updateActiveTab({ searchQuery: undefined, title: t('fullTextSearch.tabTitle') })
   handleClearSearch()
 }
 
@@ -267,7 +268,7 @@ watch(
     searchQuery.value = q
     const { term, atFilters: tokens } = parseSearchQuery(q)
     setAtFilters(tokens)
-    paneNavigation.updateActiveTab({ title: `חיפוש: ${term || q}` })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q: term || q }) })
     if (term) {
       resetScrollForNewSearch()
       handleSearch(term)
@@ -355,7 +356,7 @@ async function restoreFromTab() {
   searchQuery.value = savedQuery
   const { term, atFilters: tokens } = parseSearchQuery(savedQuery)
   setAtFilters(tokens)
-  paneNavigation.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
+  paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q: term || savedQuery }) })
   const fromCache = await loadCachedResults(term || savedQuery)
   if (!fromCache) handleSearch(term || savedQuery)
 }
@@ -522,7 +523,7 @@ onBeforeUnmount(() => {
           </template>
           <template v-else-if="results.length">
             <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
-            תוצאות
+            {{ $t('fullTextSearch.results') }}
           </template>
         </div>
         <FullTextSearchResultsList

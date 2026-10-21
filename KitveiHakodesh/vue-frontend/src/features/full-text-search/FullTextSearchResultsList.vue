@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, watch, onBeforeUnmount, onUpdated, onScopeDispose, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
@@ -49,13 +50,13 @@ const emit = defineEmits<{
   saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
-const DB_NOT_FOUND_MESSAGE = 'מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות'
+const DB_NOT_FOUND_MESSAGE = t('fullTextSearch.error.dbNotFound')
 const INDEX_BUILD_FAILED_MESSAGE =
-  `בניית אינדקס החיפוש נכשלה — לחץ בהגדרות על "${INDEX_REBUILD_BUTTON_LABELS.fullTextSearch}"`
+  t('fullTextSearch.error.indexBuildFailed', { button: INDEX_REBUILD_BUTTON_LABELS.fullTextSearch })
 const SEARCH_ERROR_MESSAGES: Record<SearchFailReason, string> = {
-  indexNotReady: 'האינדקס לא מוכן לחיפוש — נסה שוב בעוד כמה רגעים',
-  indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
-  searchFailed:  'אירעה שגיאה בחיפוש',
+  indexNotReady: t('fullTextSearch.error.indexNotReady'),
+  indexMerging:  t('fullTextSearch.error.indexMerging'),
+  searchFailed:  t('fullTextSearch.error.searchFailed'),
 }
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
@@ -620,7 +621,7 @@ defineExpose({
         :message="SEARCH_ERROR_MESSAGES[searchError]"
         :dismissible="false"
       />
-      <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
+      <span v-else-if="hasSearched && !results.length" class="empty-msg">{{ $t('fullTextSearch.noResults') }}</span>
     </div>
     <template v-else>
       <BookViewAbbrevTooltip
@@ -665,14 +666,14 @@ defineExpose({
                 <button
                   v-if="previewOf(results[vRow.index]!)"
                   class="preview-recenter-btn"
-                  title="חזרה לשורת התוצאה"
+                  :title="$t('fullTextSearch.list.backToResultLine')"
                   @click.stop="recenterPreview(results[vRow.index]!)"
                 >
                   <IconArrowReset24Regular />
                 </button>
                 <button
                   class="preview-toggle-btn"
-                  :title="previewOf(results[vRow.index]!) ? 'סגור תצוגה מקדימה' : 'הצג עוד'"
+                  :title="previewOf(results[vRow.index]!) ? $t('fullTextSearch.list.closePreview') : $t('fullTextSearch.list.showMore')"
                   @click.stop="togglePreview(results[vRow.index]!)"
                 >
                   <IconDismiss24Regular v-if="previewOf(results[vRow.index]!)" />

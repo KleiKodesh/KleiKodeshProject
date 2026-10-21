@@ -1,0 +1,76 @@
+{
+  "bar": {
+    "sortCatalogOrder": "סדר מקורי",
+    "sortRelevance": "רלוונטיות",
+    "sortBookName": "שם הספר",
+    "sortAuthorName": "שם המחבר",
+    "sortChronological": "סדר כרונולוגי",
+    "placeholderEnter": "הזן טקסט לחיפוש...",
+    "placeholderFilterHint": "הוסף {'@'} לסינון לפי ספר או קטגוריה",
+    "filterCount": "סינון: {n} ספרים",
+    "filterResults": "סינון תוצאות",
+    "advancedOptions": "אפשרויות מתקדמות",
+    "cancelSearch": "ביטול חיפוש",
+    "search": "חיפוש"
+  },
+  "sortTitle": "מיון: {label}",
+  "stage": {
+    "rewrite": "מעבד",
+    "parse": "מעבד",
+    "expand": "מרחיב תצורות של המילים",
+    "lookup": "מחפש באינדקס",
+    "fetch": "התוצאות בטעינה",
+    "snippets": "התוצאות בטעינה",
+    "enrich": "התוצאות בטעינה",
+    "searching": "מחפש"
+  },
+  "tabTitle": "חיפוש",
+  "tabTitleQuery": "חיפוש: {q}",
+  "results": "תוצאות",
+  "overlay": {
+    "finishing": "מסיים בניית האינדקס…",
+    "pleaseWait": "אנא המתן בעת בניית האינדקס",
+    "partial": "תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה"
+  },
+  "loading": "טוען…",
+  "filter": {
+    "noBooks": "לא נמצאו ספרים",
+    "scrollToFirst": "גלול לתוצאה הראשונה",
+    "selectAll": "בחר הכל",
+    "collapseAll": "כווץ הכל",
+    "expandAll": "הרחב הכל"
+  },
+  "close": "סגור",
+  "error": {
+    "dbNotFound": "מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות",
+    "indexBuildFailed": "בניית אינדקס החיפוש נכשלה — לחץ בהגדרות על \"{button}\"",
+    "indexNotReady": "האינדקס לא מוכן לחיפוש — נסה שוב בעוד כמה רגעים",
+    "indexMerging": "האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים",
+    "searchFailed": "אירעה שגיאה בחיפוש"
+  },
+  "noResults": "לא נמצאו תוצאות",
+  "list": {
+    "backToResultLine": "חזרה לשורת התוצאה",
+    "closePreview": "סגור תצוגה מקדימה",
+    "showMore": "הצג עוד"
+  },
+  "adv": {
+    "title": "אפשרויות חיפוש מתקדמות",
+    "syntax": "תחביר חיפוש",
+    "wordDistance": "מרחק מקסימלי בין מילים",
+    "contextWords": "הקשר לפני ואחרי (מילים)",
+    "wordOrder": "סדר מילים לפי שאילתא",
+    "grammarWrap": "תחיליות וסופיות דקדוקיות",
+    "spellingVariants": "הרחב כתיב חסר/מלא",
+    "expanded": "חיפוש מורחב",
+    "expandedHint": "(נטיות ומילים נרדפות)",
+    "syntaxWildcard": "תחיליות וסופיות",
+    "syntaxOptional": "תו אופציונלי (כתיב חסר/מלא)",
+    "syntaxFuzzy": "דומה עם שגיאה (מרחק 1)",
+    "syntaxFuzzyN": "דומה עם שגיאה מותאמת (1–3)",
+    "syntaxOr": "או (בחירה אחת או יותר)",
+    "syntaxGrammar": "קידומות/סיומות דקדוקיות",
+    "no": "לא",
+    "yes": "כן"
+  }
+}
