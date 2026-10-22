@@ -43,22 +43,22 @@ namespace FtsLib.Fts5
 
         /// <param name="batchSizeAt">The caller's batch plan — see
         /// <see cref="Fts5SearchEngine.Search"/>.</param>
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
+        public IEnumerable<SearchResult> Search(string query, int cap = 0,
                                                 IEnumerable<int> filterIds = null, CancellationToken ct = default,
                                                 Action<string> onStage = null, Func<int, int> batchSizeAt = null)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (var result in engine.Search(query, cap, expandKetiv, filterIds, ct, onStage, batchSizeAt))
+            foreach (var result in engine.Search(query, cap, filterIds, ct, onStage, batchSizeAt))
                 yield return result;
         }
 
-        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
+        public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (int id in engine.SearchIds(query, expandKetiv, filterIds, ct))
+            foreach (int id in engine.SearchIds(query, filterIds, ct))
                 yield return id;
         }
 

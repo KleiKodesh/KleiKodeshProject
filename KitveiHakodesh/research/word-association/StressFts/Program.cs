@@ -130,7 +130,7 @@ var index = new FtsLib.Fts5.Fts5SeforimIndex(IndexPath, () => new StressCorpus(S
     using var cts = new CancellationTokenSource(timeBudgetMs);
     try
     {
-        foreach (var _ in index.Search(q, cap: 0, expandKetiv: false, ct: cts.Token))
+        foreach (var _ in index.Search(q, cap: 0, ct: cts.Token))
         {
             n++;
             if (sw.ElapsedMilliseconds > timeBudgetMs) { n = -n; break; } // timed out mid-stream

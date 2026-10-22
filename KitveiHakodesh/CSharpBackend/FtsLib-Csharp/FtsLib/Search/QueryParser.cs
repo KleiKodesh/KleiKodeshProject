@@ -29,8 +29,8 @@ namespace FtsLib.Search
     ///     in the word distance's denominator, as a skipped wildcard).
     ///   - Every word of a piece takes the piece's operators.
     ///   - Per-word markers, leading, before any other operator: '^' = spelling variants for
-    ///     this word (as the global expandKetiv flag does for all); '+' = related forms, which
-    ///     the host rewrites before parsing, so here it is only dropped.
+    ///     this word; '+' = related forms, which the host rewrites before parsing, so here it
+    ///     is only dropped.
     /// </summary>
     internal static class QueryParser
     {

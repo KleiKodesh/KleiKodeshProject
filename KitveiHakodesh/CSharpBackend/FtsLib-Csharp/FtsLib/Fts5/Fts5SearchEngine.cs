@@ -111,10 +111,10 @@ namespace FtsLib.Fts5
         const int DefaultContentBatchSize = 256;
 
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
-        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
+        public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
-            var plan = Plan(query, expandKetiv, filterIds, ct);
+            var plan = Plan(query, filterIds, ct);
             if (plan == null) yield break;
             foreach (int id in StreamIds(plan, ct)) yield return id;
         }
@@ -130,11 +130,11 @@ namespace FtsLib.Fts5
         /// batch number n (0-based) — so a caller that processes results in batches of its
         /// own gets them cut at the same places. Null: <see cref="DefaultContentBatchSize"/>
         /// throughout.</param>
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
+        public IEnumerable<SearchResult> Search(string query, int cap = 0,
                                                 IEnumerable<int> filterIds = null, CancellationToken ct = default,
                                                 Action<string> onStage = null, Func<int, int> batchSizeAt = null)
         {
-            var plan = Plan(query, expandKetiv, filterIds, ct, onStage);
+            var plan = Plan(query, filterIds, ct, onStage);
             if (plan == null) yield break;
             onStage?.Invoke("lookup");
             var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
@@ -188,7 +188,7 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>Parse + expand. Null when the query can match nothing.</summary>
-        QueryPlan Plan(string query, bool expandKetiv, IEnumerable<int> filterIds, CancellationToken ct,
+        QueryPlan Plan(string query, IEnumerable<int> filterIds, CancellationToken ct,
                        Action<string> onStage = null)
         {
             onStage?.Invoke("parse");
@@ -208,7 +208,7 @@ namespace FtsLib.Fts5
             foreach (var group in parsed.Groups)
             {
                 ct.ThrowIfCancellationRequested();
-                var groupTerms = ExpandGroup(group, expandKetiv, ct, out bool hardMiss);
+                var groupTerms = ExpandGroup(group, ct, out bool hardMiss);
                 if (hardMiss) return null;
                 if (groupTerms.Count == 0) continue;
                 groups.Add(groupTerms);
@@ -399,14 +399,14 @@ namespace FtsLib.Fts5
         /// Expands one query group to literal terms with the production expanders over the
         /// term dictionaries (ported from the former segment engine's ExpandGroup).
         /// </summary>
-        List<string> ExpandGroup(QueryGroup group, bool expandKetiv, CancellationToken ct, out bool hardMiss)
+        List<string> ExpandGroup(QueryGroup group, CancellationToken ct, out bool hardMiss)
         {
             hardMiss = false;
 
             if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar && !group.IsUnindexed)
             {
                 var single = new List<string> { group.Pattern };
-                if (expandKetiv || group.Alternatives[0].ExpandKetiv)
+                if (group.Alternatives[0].ExpandKetiv)
                     foreach (var variant in KetivExpander.Expand(group.Pattern)) single.Add(variant);
                 return single;
             }
@@ -425,8 +425,8 @@ namespace FtsLib.Fts5
                 // group is skipped but still counts in OriginalGroupCount (it keeps its position).
                 if (alt.IsUnindexed) continue;
 
-                // The global flag, or this word's own '^' marker.
-                bool ketiv = expandKetiv || alt.ExpandKetiv;
+                // Spelling variants come from the word's own '^' marker.
+                bool ketiv = alt.ExpandKetiv;
 
                 List<string> expanded;
                 if (alt.IsFuzzy)

@@ -230,10 +230,7 @@ public sealed class FtsSearchArgs
     public int MaxWordDistance { get; set; } = 10;
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
-    public bool ExpandKetiv { get; set; }
-    /// <summary>Expand each query word with its related forms (inflections,
-    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
-    public bool ExpandRelated { get; set; }
+    // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 
 
@@ -247,9 +244,6 @@ public sealed class FtsSearchStreamArgs
     public int MaxWordDistance { get; set; } = 10;
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
-    public bool ExpandKetiv { get; set; }
-    /// <summary>Expand each query word with its related forms (inflections,
-    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
-    public bool ExpandRelated { get; set; }
+    // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 

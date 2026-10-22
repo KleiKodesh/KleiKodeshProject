@@ -73,11 +73,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// streaming search path an escaping exception closes the socket with no response and
         /// reads as a service outage.
         /// </summary>
-        /// <param name="onlyMarked">Expand only the words the user marked with a leading '+'
-        /// (per-word related forms); the rest pass through.</param>
-        public string RewriteQuery(string query, int perTerm = PerTermLimit, bool onlyMarked = false)
+        public string RewriteQuery(string query, int perTerm = PerTermLimit)
         {
-            try { return RewriteCore(query, perTerm, onlyMarked); }
+            try { return RewriteCore(query, perTerm); }
             catch (Exception) { return query; }
         }
 
@@ -94,10 +92,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private static string LeadingWordMarkers(string token) =>
             token.Substring(0, token.Length - token.TrimStart('+', '^').Length);
 
-        private string RewriteCore(string query, int perTerm, bool onlyMarked)
+        private string RewriteCore(string query, int perTerm)
         {
             if (string.IsNullOrWhiteSpace(query) || !IsAvailable) return query;
-            if (query.IndexOf('|') >= 0) return query;   // manual OR groups — leave them alone
+            // Pad every '|' as the parser does, so "a|b" is the tokens a, |, b. A word's forms
+            // join its own OR group as more alternatives, which keeps a hand-made group's meaning.
+            query = query.Replace("|", " | ");
 
             string[] tokens = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             var rewritten = new StringBuilder(query.Length * 2);
@@ -122,7 +122,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 // Per-word markers: '+' is consumed here; '^' rides on every alternative so
                 // they all get the spelling variants the user asked this word for.
                 string marks = LeadingWordMarkers(token);
-                if (onlyMarked && marks.IndexOf('+') < 0)
+                if (marks.IndexOf('+') < 0)
                 {
                     rewritten.Append(token);
                     continue;

@@ -806,7 +806,7 @@ public sealed class Dispatcher(
                 case "ftsSearch":
                 {
                     var a = MsgPack.De<FtsSearchArgs>(req.Args);
-                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv, a.ExpandRelated);
+                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords);
                     return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
@@ -891,8 +891,8 @@ public sealed class Dispatcher(
                 IdleMemoryTrimmer.Touch();
                 var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
                 await fts.StreamSearch(
-                    a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv,
-                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct, a.ExpandRelated);
+                    a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords,
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
                 return true;
             }
 
