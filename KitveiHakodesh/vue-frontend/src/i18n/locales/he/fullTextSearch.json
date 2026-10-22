@@ -70,7 +70,8 @@
     "grammarSuffix": "סופיות דקדוקיות",
     "fuzzy": "חיפוש מטושטש",
     "spellingVariants": "הרחב כתיב חסר/מלא",
-    "expanded": "נטיות ומילים נרדפות",
+    "inflections": "נטיות",
+    "synonyms": "מילים נרדפות",
     "syntaxWildcard": "תחיליות וסופיות",
     "syntaxOptional": "תו אופציונלי (כתיב חסר/מלא)",
     "syntaxFuzzy": "דומה עם שגיאה (מרחק 1)",
@@ -78,7 +79,8 @@
     "syntaxOr": "או (בחירה אחת או יותר)",
     "syntaxGrammar": "קידומות/סיומות דקדוקיות",
     "syntaxKetiv": "כתיב חסר/מלא למילה",
-    "syntaxRelated": "נטיות ומילים נרדפות למילה",
+    "syntaxInflections": "נטיות למילה",
+    "syntaxSynonyms": "מילים נרדפות למילה",
     "no": "לא",
     "yes": "כן"
   }

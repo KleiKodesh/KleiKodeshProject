@@ -52,7 +52,8 @@ const KEYS = {
   SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
   SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
   SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
-  SETTINGS_SEARCH_EXPAND_RELATED: 'search.expandRelated',
+  SETTINGS_SEARCH_EXPAND_INFLECTIONS: 'search.expandInflections',
+  SETTINGS_SEARCH_EXPAND_SYNONYMS: 'search.expandSynonyms',
   SETTINGS_SEARCH_WILDCARD_PREFIX: 'search.wildcardPrefix',
   SETTINGS_SEARCH_WILDCARD_SUFFIX: 'search.wildcardSuffix',
   SETTINGS_SEARCH_GRAMMAR_PREFIX: 'search.grammarPrefix',
@@ -187,7 +188,8 @@ const DEFAULTS = {
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
-  searchExpandRelated: false,
+  searchExpandInflections: true,
+  searchExpandSynonyms: false,
   searchWildcardPrefix: false,
   searchWildcardSuffix: false,
   searchGrammarPrefix: false,
@@ -307,7 +309,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
-  const searchExpandRelated = ref(DEFAULTS.searchExpandRelated)
+  const searchExpandInflections = ref(DEFAULTS.searchExpandInflections)
+  const searchExpandSynonyms = ref(DEFAULTS.searchExpandSynonyms)
   const searchWildcardPrefix = ref(DEFAULTS.searchWildcardPrefix)
   const searchWildcardSuffix = ref(DEFAULTS.searchWildcardSuffix)
   const searchGrammarPrefix = ref(DEFAULTS.searchGrammarPrefix)
@@ -461,7 +464,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
-    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_RELATED, searchExpandRelated)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_INFLECTIONS, searchExpandInflections)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_SYNONYMS, searchExpandSynonyms)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX, searchWildcardPrefix)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX, searchWildcardSuffix)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX, searchGrammarPrefix)
@@ -558,7 +562,8 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
   persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
-  persistSetting(searchExpandRelated, KEYS.SETTINGS_SEARCH_EXPAND_RELATED)
+  persistSetting(searchExpandInflections, KEYS.SETTINGS_SEARCH_EXPAND_INFLECTIONS)
+  persistSetting(searchExpandSynonyms, KEYS.SETTINGS_SEARCH_EXPAND_SYNONYMS)
   persistSetting(searchWildcardPrefix, KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX)
   persistSetting(searchWildcardSuffix, KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX)
   persistSetting(searchGrammarPrefix, KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX)
@@ -744,7 +749,8 @@ export const useSettingsStore = defineStore('settings', () => {
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
     searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
-    searchExpandRelated.value = DEFAULTS.searchExpandRelated
+    searchExpandInflections.value = DEFAULTS.searchExpandInflections
+    searchExpandSynonyms.value = DEFAULTS.searchExpandSynonyms
     searchWildcardPrefix.value = DEFAULTS.searchWildcardPrefix
     searchWildcardSuffix.value = DEFAULTS.searchWildcardSuffix
     searchGrammarPrefix.value = DEFAULTS.searchGrammarPrefix
@@ -796,7 +802,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showClock,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyCleanText,
     copyJoinLines,
     copySourcePosition,
