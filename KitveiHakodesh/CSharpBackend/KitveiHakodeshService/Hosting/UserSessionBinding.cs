@@ -18,15 +18,14 @@ namespace KitveiHakodeshService.Hosting;
 /// and started. That first request is held and answered by the data host once it is up, so
 /// the first caller sees an ordinary (slightly slower) reply.
 ///
-/// When the data host stops itself (it restarts after a database-path change), the service
-/// stops with it; the SCM shows it stopped and the next host to need it starts it again.
+/// When the data host asks to be reloaded (a database-path or additional-library change) it is
+/// rebuilt IN THIS PROCESS (<see cref="DataHostSupervisor"/>): the service keeps running, so
+/// nothing has to start it again. Only a stop that is not a reload ends the service.
 /// </summary>
 public sealed class UserSessionBinding(
     IHostApplicationLifetime serviceLifetime,
     ILogger<UserSessionBinding> logger) : BackgroundService
 {
-    private IHost? _dataHost;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         string pipeName = PipeServer.ResolvePipeName();
@@ -64,69 +63,20 @@ public sealed class UserSessionBinding(
             return;
         }
 
-        // Keep the pipe LISTENING while the data host is built: with only the single held
-        // connection nothing was armed, and every further client got PIPE_BUSY for as long as
-        // the build took. Their requests are read and held, then answered once it is up.
-        var holder = new StartupConnectionHolder(
-            () => WindowsServiceMode.CreatePipe(pipeName), 3, stoppingToken,
-            (message, ex) => logger.LogWarning(ex, "{Message}", message));
-        holder.Start();
-
-        try
-        {
-            _dataHost = Program.BuildDataHost(Array.Empty<string>());
-            await _dataHost.StartAsync(stoppingToken);
-        }
-        catch (OperationCanceledException)
-        {
-            holder.Abandon();
-            await holder.StopAcceptingAsync();
-            firstConnection.Dispose();
-            return;
-        }
-        catch (Exception ex)
-        {
-            // A data host that cannot be built (database unreadable, a store failing at
-            // construction) used to leave the held first request unanswered forever. Answer it
-            // with the error, close everything else, and stop so the next client starts a
-            // fresh attempt.
-            logger.LogError(ex, "Could not build or start the data host; stopping");
-            holder.Abandon();
-            await holder.StopAcceptingAsync();
-            try
-            {
-                await FrameProtocol.WriteFrameAsync(
-                    firstConnection, RpcResponse.Err("service failed to start: " + ex.Message), CancellationToken.None);
-            }
-            catch { /* the client may already be gone */ }
-            firstConnection.Dispose();
-            try { _dataHost?.Dispose(); } catch { }
-            _dataHost = null;
-            serviceLifetime.StopApplication();
-            return;
-        }
-
-        var dispatcher = _dataHost.Services.GetRequiredService<Dispatcher>();
-        holder.Ready((pipe, request, ct) => AnswerAsync(dispatcher, pipe, request, ct));
-        // The data host's own PipeServer is armed now (StartAsync ran its accept loops up to
-        // their first await), so the holder can stop listening.
-        await holder.StopAcceptingAsync();
-        // The request that told us who we serve is answered like any other, once the data host
-        // is up - the first caller sees nothing special.
-        _ = AnswerAsync(dispatcher, firstConnection, firstRequest, stoppingToken);
-        try
-        {
-            // Ends when the data host stops itself or the SCM stops us.
-            await _dataHost.WaitForShutdownAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) { }
+        // The data host runs - and is rebuilt in this process on a reload request (an added or
+        // removed library, a switched database) - until the SCM stops us or something stops it
+        // without asking for a reload (the installer's "shutdown", a host that cannot be built).
+        var supervisor = new DataHostSupervisor(
+            () => WindowsServiceMode.CreatePipe(pipeName),
+            () => Program.BuildDataHost(Array.Empty<string>()),
+            (host, pipe, request, ct) => AnswerAsync(host.Services.GetRequiredService<Dispatcher>(), pipe, request, ct),
+            DataHostReload.Consume,
+            logger);
+        try { await supervisor.RunAsync(firstConnection, firstRequest!, stoppingToken); }
         finally
         {
-            try { await _dataHost.StopAsync(CancellationToken.None); } catch { }
-            _dataHost.Dispose();
-            _dataHost = null;
-            // The data host restarted itself: let the SCM see us stopped so the next host
-            // start brings a fresh instance up against the new database.
+            // The data host stopped for good (or never started): the service stops with it, and
+            // the next client starts a fresh one. Not when the SCM itself is stopping us.
             if (!stoppingToken.IsCancellationRequested) serviceLifetime.StopApplication();
         }
     }

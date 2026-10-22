@@ -6,13 +6,15 @@ import {
   getAdditionalSeforimLibraries,
   pickAdditionalSeforimLibrary,
   removeAdditionalSeforimLibrary,
+  pingServiceInstance,
+  startServiceNow,
   type AdditionalLibraryInfo,
 } from '@/webview-host/bridge'
 import {
   additionalLibraryErrorText,
   additionalLibraryReasonText,
   describeFailure,
-  waitForServiceRestart,
+  restoreServiceAfterChange,
 } from './additionalLibrariesFlow'
 
 // Visual twin of SettingsExcludedFoldersDialog (same list-box + footer layout, same RTL
@@ -33,6 +35,12 @@ const isLoading = ref(true)
 const isBusy = ref(false)
 const isRestarting = ref(false)
 const errorMessage = ref('')
+/** What the restart wait is really doing right now (shown instead of a bare "restarting"). */
+const restartStatusText = ref('')
+/** True once the wait gave up: the dialog offers "try starting the service again". */
+const restartFailed = ref(false)
+/** The data host that answered before the last change (see pingServiceInstance). */
+let instanceBeforeChange: string | undefined
 
 /** Set when the LIST could not be loaded (as opposed to "no libraries configured"). */
 const loadError = ref('')
@@ -50,7 +58,14 @@ async function loadLibraries() {
   }
 }
 
-onMounted(loadLibraries)
+async function rememberInstance() {
+  try { instanceBeforeChange = await pingServiceInstance() } catch { instanceBeforeChange = undefined }
+}
+
+onMounted(() => {
+  void loadLibraries()
+  void rememberInstance()
+})
 
 useEventListener('keydown', (event: KeyboardEvent) => {
   if (event.code === 'Escape' && !isRestarting.value) {
@@ -59,19 +74,44 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   }
 })
 
-/** The service resolves additional libraries once, at construction — so a change needs a
- *  restart, then a page reload. The reload used to fire after a FIXED 800ms, usually before the
- *  service was back; now it waits until the service answers again (and says so if it never
- *  does, instead of reloading into a dead pipe). */
+/** The service resolves additional libraries when its data host is built, so a change makes it
+ *  rebuild that host (inside the running service - it normally never goes down), then the page
+ *  reloads. We wait until a REBUILT host answers. If nothing answers for a few seconds the
+ *  service is started from here (no prompt), again and again, and only when that also fails
+ *  does the dialog say so - and offer to try once more. */
 async function reloadAfterRestart() {
   isRestarting.value = true
-  const back = await waitForServiceRestart(() => getAdditionalSeforimLibraries())
-  if (back) {
+  restartFailed.value = false
+  errorMessage.value = ''
+  restartStatusText.value = 'טוען מחדש את הספריות…'
+  const result = await restoreServiceAfterChange({
+    ping: pingServiceInstance,
+    startService: startServiceNow,
+    previousInstance: instanceBeforeChange,
+    onStatus: (status, attempt) => {
+      restartStatusText.value =
+        status === 'starting'
+          ? `שירות הנתונים אינו עונה — מפעיל אותו (ניסיון ${attempt})…`
+          : 'טוען מחדש את הספריות…'
+    },
+  })
+  if (result.ok) {
     window.location.reload()
     return
   }
   isRestarting.value = false
-  errorMessage.value = 'השירות לא חזר לפעול בזמן. נסה לסגור ולפתוח מחדש את התוכנה.'
+  restartFailed.value = true
+  restartStatusText.value = ''
+  errorMessage.value =
+    'שירות הנתונים אינו פועל ולא הצלחנו להפעיל אותו אוטומטית' +
+    (result.startAttempts > 0 ? ` (${result.startAttempts} ניסיונות)` : '') +
+    '. אפשר ללחוץ "הפעל את השירות שוב", או לסגור ולפתוח מחדש את התוכנה.'
+}
+
+async function retryStartService() {
+  if (isRestarting.value) return
+  instanceBeforeChange = undefined // whatever answers now is the rebuilt service
+  await reloadAfterRestart()
 }
 
 async function addLibrary() {
@@ -130,7 +170,7 @@ function statusText(library: AdditionalLibraryInfo): string | null {
         <p class="additional-title">ספריות נוספות</p>
         <p class="additional-description">
           ספריות seforim.db נוספות (לדוגמה: אוסף אישי) שייטענו לצד מסד הנתונים הראשי, לעיון
-          וקריאה בלבד. כל שינוי כאן מפעיל מחדש את שירות הנתונים.
+          וקריאה בלבד. כל שינוי כאן טוען מחדש את הספריות בשירות הנתונים.
         </p>
 
         <div class="additional-list">
@@ -159,7 +199,10 @@ function statusText(library: AdditionalLibraryInfo): string | null {
         </div>
 
         <p v-if="errorMessage" class="additional-error">{{ errorMessage }}</p>
-        <p v-if="isRestarting" class="additional-restarting">מפעיל מחדש את השירות…</p>
+        <p v-if="isRestarting" class="additional-restarting">{{ restartStatusText }}</p>
+        <button v-if="restartFailed && !isRestarting" class="additional-add-button" @click="retryStartService">
+          הפעל את השירות שוב
+        </button>
 
         <div class="additional-actions">
           <button class="additional-close-button" :disabled="isRestarting" @click="emit('close')">

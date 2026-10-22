@@ -42,7 +42,7 @@ public sealed class RpcEnvelope
 }
 
 // ── Tiny status-flag result DTOs (preserve the current response shapes) ──────────
-[MessagePackObject(keyAsPropertyName: true)] public sealed class PongResult { public bool Pong { get; set; } = true; }
+[MessagePackObject(keyAsPropertyName: true)] public sealed class PongResult { public bool Pong { get; set; } = true; public string? Instance { get; set; } }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class ShuttingDownResult { public bool ShuttingDown { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class StartedResult { public bool Started { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class ResetResult { public bool Reset { get; set; } = true; }
