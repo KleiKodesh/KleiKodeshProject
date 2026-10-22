@@ -54,6 +54,7 @@ namespace KitveiHakodeshLib
                         // The page's "try again" after the service was unavailable: allow one more
                         // install / repair prompt and bring the service up.
                         case "retryService": await HandleRetryService(id); break;
+                        case "startService": await HandleStartService(id); break;
                         // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
                         // cannot meaningfully await a navigation that destroys the page making the
                         // call, so the reply exists only to settle the promise. Both frontend
@@ -174,6 +175,24 @@ namespace KitveiHakodeshLib
 
                 hostForm.FormBorderStyle = FormBorderStyle.None;
                 hostForm.WindowState = FormWindowState.Maximized;
+            }
+        }
+
+        /// <summary>
+        /// Starts the service WITHOUT any prompt (the settings dialog calls it when the service
+        /// did not come back after a library change). Unlike retryService it never elevates.
+        /// </summary>
+        private async Task HandleStartService(string id)
+        {
+            KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher.ForgetRecentStartFailure();
+            try
+            {
+                await Task.Run(() => _serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false));
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)
+            {
+                _bridge.Reply(id, new { ok = false, reason = ex.Reason.ToString(), detail = ex.Message });
             }
         }
 

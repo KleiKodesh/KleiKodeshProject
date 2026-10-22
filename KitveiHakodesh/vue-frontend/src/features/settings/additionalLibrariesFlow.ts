@@ -67,6 +67,81 @@ export async function waitForServiceRestart(
   return false
 }
 
+export type RestoreStatus = 'waiting' | 'starting'
+
+export interface RestoreServiceDeps {
+  /** Resolves with the answering data host's instance id (undefined = old service build). */
+  ping: () => Promise<string | undefined>
+  /** Asks the host app to start the service (no prompt). Resolves true when it is listening. */
+  startService: () => Promise<boolean>
+  /** The instance that was answering BEFORE the change, when known. */
+  previousInstance?: string
+  /** Reports what is really happening, for the dialog's text. */
+  onStatus?: (status: RestoreStatus, startAttempt: number) => void
+  /** Give up (resolve ok:false) after this long in total. */
+  timeoutMs?: number
+  intervalMs?: number
+  /** How long the old instance may keep answering before it is taken as "already reloaded". */
+  sameInstanceGraceMs?: number
+  /** How long the service may stay silent before we start it ourselves. */
+  startAfterMs?: number
+  /** Minimum gap between two start attempts. */
+  startRetryMs?: number
+  sleep?: (ms: number) => Promise<void>
+  now?: () => number
+}
+
+export interface RestoreResult {
+  ok: boolean
+  /** How many times the service was started by us (0 = it came back / never went down). */
+  startAttempts: number
+}
+
+/**
+ * After a library change the service rebuilds its data host (normally without ever going
+ * down). Resolves ok once a REBUILT instance answers. Never just waits for a service that is
+ * gone: when nothing answers for `startAfterMs` it asks the host app to start the service
+ * (again every `startRetryMs`) while it keeps probing, and only then - after `timeoutMs` -
+ * reports failure.
+ */
+export async function restoreServiceAfterChange(deps: RestoreServiceDeps): Promise<RestoreResult> {
+  const {
+    ping, startService, previousInstance, onStatus,
+    timeoutMs = 60_000, intervalMs = 400, sameInstanceGraceMs = 8_000,
+    startAfterMs = 4_000, startRetryMs = 5_000,
+    sleep = realSleep, now = Date.now,
+  } = deps
+  const start = now()
+  let silentSince: number | null = null
+  let lastStartAt = -Infinity
+  let startAttempts = 0
+  onStatus?.('waiting', 0)
+
+  while (now() - start < timeoutMs) {
+    try {
+      const instance = await ping()
+      const elapsed = now() - start
+      const rebuilt = previousInstance === undefined || instance === undefined || instance !== previousInstance
+      // The same instance may keep answering for a moment before it goes down; a service that
+      // never reports an instance id, or a reload too fast to observe, is accepted after the grace.
+      if (rebuilt || elapsed >= sameInstanceGraceMs) return { ok: true, startAttempts }
+      silentSince = null
+      onStatus?.('waiting', startAttempts)
+    } catch {
+      const t = now()
+      silentSince ??= t
+      if (t - silentSince >= startAfterMs && t - lastStartAt >= startRetryMs) {
+        lastStartAt = t
+        startAttempts++
+        onStatus?.('starting', startAttempts)
+        try { await startService() } catch { /* the probes below tell whether it worked */ }
+      }
+    }
+    await sleep(intervalMs)
+  }
+  return { ok: false, startAttempts }
+}
+
 /** Short Hebrew wording for a service-side `reason` string of a library that is not attached. */
 export function additionalLibraryReasonText(reason: string | undefined): string | null {
   if (!reason) return null
@@ -83,7 +158,7 @@ export function additionalLibraryReasonText(reason: string | undefined): string 
     return 'לא ניתן לקרוא את טקסט השורות של הספרייה'
   if (reason.startsWith('full-text search skipped'))
     return 'הספרייה פגומה (קובץ משובש או קטוע) — החיפוש בתוכן מדלג עליה, וחיפוש שאר הספריות לא נפגע'
-  if (reason.startsWith('not loaded yet')) return 'ממתינה להפעלה מחדש של השירות'
+  if (reason.startsWith('not loaded yet')) return 'ממתינה לטעינה מחדש (מתבצעת עכשיו)'
   return 'לא נטענה: ' + reason
 }
 

@@ -1175,6 +1175,25 @@ export interface AdditionalLibrariesResult {
   cancelled?: boolean
 }
 
+/** Which data host answers: changes whenever the service rebuilds its data host (a library
+ *  change) or restarts. Undefined from a service build that predates the field. */
+export async function pingServiceInstance(): Promise<string | undefined> {
+  const result = await serviceCall<{ pong?: boolean; instance?: string }>(
+    'ping', {}, undefined, ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS)
+  return result?.instance
+}
+
+/**
+ * Ask the host app to START the service now (no admin prompt, no install/repair). True when it
+ * is listening. In the dev browser there is no host to ask - the dev server respawns the
+ * service - so it reports success and the caller just keeps probing.
+ */
+export async function startServiceNow(): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') return true
+  const reply = await action<{ ok?: boolean }>('startService')
+  return !!reply?.ok
+}
+
 /**
  * Every configured additional library and its current status.
  *

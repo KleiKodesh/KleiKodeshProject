@@ -77,6 +77,7 @@ if (multiLibMode)
     KitveiHakodesh.Core.Settings.AppSettingsRegistry.InMemoryStore = new();
     return MultiLibraryVerify.Run() == 0 ? 0 : 1;
 }
+if (args.Contains("--reload")) return ReloadVerify.Run() == 0 ? 0 : 1;
 if (args.Contains("--hardening")) return HardeningVerify.Run() == 0 ? 0 : 1;
 if (multiLibIndexMode)
     return MultiLibraryIndexVerify.Run() == 0 ? 0 : 1;

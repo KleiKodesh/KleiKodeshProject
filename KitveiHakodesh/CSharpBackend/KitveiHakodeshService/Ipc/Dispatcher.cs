@@ -60,7 +60,9 @@ public sealed class Dispatcher(
             switch (req.Op)
             {
                 case "ping":
-                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+                    // Instance: which data host answered. A reload (library change) builds a new
+                    // one, so a caller can tell "the old one" from "the rebuilt one".
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult { Instance = InstanceId }));
 
                 // The loopback HTTP host's port AND bearer token, handed to the spawner over
                 // this PRIVATE pipe (never a file). Awaits the bind so an early call doesn't
@@ -955,6 +957,9 @@ public sealed class Dispatcher(
     /// cancels the FTS build cleanly (resumable) and releases the index lock; the dev
     /// courier (or the SCM, when installed) starts a fresh instance that re-resolves
     /// the seforim DB path.</summary>
+    /// <summary>Identifies this data host (one per Dispatcher): changes on every in-process reload.</summary>
+    private readonly string InstanceId = Guid.NewGuid().ToString("N");
+
     private void RestartSoon() =>
         _ = Task.Run(async () =>
         {
@@ -962,7 +967,9 @@ public sealed class Dispatcher(
             // If the stop request itself fails, the service keeps running against the OLD db path
             // while the frontend has already been told Restarting=true - so it must be logged, not
             // swallowed into an unobserved task fault.
-            try { lifetime.StopApplication(); }
+            // Installed service: only the data host stops and is rebuilt in-process (the service
+            // itself keeps running - see DataHostReload). Console instance: the process exits.
+            try { KitveiHakodeshService.Hosting.DataHostReload.RequestAndStop(lifetime); }
             catch (Exception ex) { logger.LogError(ex, "restart after DB path change failed"); }
         });
 
