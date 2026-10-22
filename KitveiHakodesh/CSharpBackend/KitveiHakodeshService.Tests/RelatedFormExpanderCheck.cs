@@ -35,6 +35,7 @@ public static class RelatedFormExpanderCheck
             else Console.WriteLine("  ok:   " + what);
         }
         string Rewrite(string path, string word) => new SeforimDbFtsRelatedFormExpander(path).RewriteQuery("+" + H(word));
+        string RewriteMarked(string path, string token) => new SeforimDbFtsRelatedFormExpander(path).RewriteQuery(token);
         // The typed token is kept verbatim, marker included; alternatives follow it.
         string Or(params string[] words) => "+" + string.Join(" | ", words.Select(H));
 
@@ -46,10 +47,27 @@ public static class RelatedFormExpanderCheck
             string oldDb = Path.Combine(dir, "old.db");
             Build(oldDb, weighted: false,
                 fold: [("ab", "ag", 0)],
-                exp: [("ag", "ab", "inf"), ("ag", "ac", "inf"), ("ag", "ad", "syn-bavli"), ("ag", "ae", "inf"),
-                      ("ag", "af", "syn"), ("ag", "ah", "inf"), ("ag", "ai", "inf"), ("ag", "ak", "inf")]);
-            Expect(Rewrite(oldDb, "ab"), Or("ab", "ac", "ae", "af", "ah", "ai"), "old schema: single lemma, policy + budget 5");
+                exp: [("ag", "ab", "infl"), ("ag", "ac", "infl"), ("ag", "ad", "syn-bavli"), ("ag", "ae", "infl"),
+                      ("ag", "af", "syn"), ("ag", "ah", "infl"), ("ag", "ai", "infl"), ("ag", "ak", "infl")]);
+            Expect(RewriteMarked(oldDb, H("ab") + "+="), H("ab") + "+= | " + string.Join(" | ", new[] { "ac", "ae", "af", "ah", "ai" }.Select(H)), "old schema: single lemma, policy + budget 5");
             Expect(Rewrite(oldDb, "ba"), "+" + H("ba"), "old schema: no fold row, no forms -> unchanged");
+
+            // CHANNEL SELECTION: '+' = infl only; '=' = trusted syn + bridge; both = union in rank
+            // order under one budget; no marker = untouched.
+            string channelDb = Path.Combine(dir, "channels.db");
+            Build(channelDb, weighted: true,
+                fold: [("ab", "ga", 1.0)],
+                exp: [("ga", "ka", "infl"), ("ga", "sa", "syn"), ("ga", "kb", "infl"), ("ga", "ta", "bridge"),
+                      ("ga", "sb", "syn-bavli"), ("ga", "kc", "infl"), ("ga", "sc", "syn"), ("ga", "kd", "infl"),
+                      ("ga", "ke", "infl"), ("ga", "kf", "infl")]);
+            string ab = H("ab");
+            Expect(RewriteMarked(channelDb, ab + "+"), ab + "+ | " + string.Join(" | ", new[] { "ka", "kb", "kc", "kd", "ke" }.Select(H)), "channels: '+' = inflections only");
+            Expect(RewriteMarked(channelDb, ab + "="), ab + "= | " + string.Join(" | ", new[] { "sa", "ta", "sc" }.Select(H)), "channels: '=' = trusted synonyms + bridge");
+            Expect(RewriteMarked(channelDb, ab + "+="), ab + "+= | " + string.Join(" | ", new[] { "ka", "sa", "kb", "ta", "kc" }.Select(H)), "channels: '+=' = union, rank order, one budget");
+            Expect(RewriteMarked(channelDb, "=" + ab), "=" + ab + " | " + string.Join(" | ", new[] { "sa", "ta", "sc" }.Select(H)), "channels: leading '=' read too");
+            Expect(RewriteMarked(channelDb, "^" + ab + "="), "^" + ab + "= | " + string.Join(" | ", new[] { "sa", "ta", "sc" }.Select(H).Select(w => "^" + w)), "channels: '^' rides on synonym alternatives");
+            Expect(RewriteMarked(channelDb, ab), ab, "channels: no marker -> unchanged");
+            Expect(SeforimDbFtsRelatedFormExpander.HasRelatedMarker(ab + "=") ? "y" : "n", "y", "channels: HasRelatedMarker sees '='");
 
             // NEW schema.
             string newDb = Path.Combine(dir, "new.db");
@@ -58,11 +76,11 @@ public static class RelatedFormExpanderCheck
                        ("bb", "ga", 0.6), ("bb", "gz", 0.4),                        // gz has no forms
                        ("cb", "gc", 0.1),                                           // only reading, kept
                        ("db", "ga", 0.5), ("db", "gd", 0.5)],                       // shared form
-                exp: [("ga", "ka", "inf"), ("ga", "kb", "inf"), ("ga", "kc", "inf"), ("ga", "kd", "inf"),
-                      ("ga", "ke", "inf"), ("ga", "kf", "inf"),
-                      ("gb", "la", "inf"), ("gb", "lb", "inf"),
-                      ("gc", "ma", "inf"),
-                      ("gd", "ka", "inf"), ("gd", "na", "inf"), ("gd", "nb", "inf"), ("gd", "nc", "inf")]);
+                exp: [("ga", "ka", "infl"), ("ga", "kb", "infl"), ("ga", "kc", "infl"), ("ga", "kd", "infl"),
+                      ("ga", "ke", "infl"), ("ga", "kf", "infl"),
+                      ("gb", "la", "infl"), ("gb", "lb", "infl"),
+                      ("gc", "ma", "infl"),
+                      ("gd", "ka", "infl"), ("gd", "na", "infl"), ("gd", "nb", "infl"), ("gd", "nc", "infl")]);
             Expect(Rewrite(newDb, "ab"), Or("ab", "ka", "la", "kb", "kc", "kd"), "new schema: 0.7/0.3 -> 4+1 round-robin, 0.05 dropped");
             Expect(Rewrite(newDb, "bb"), Or("bb", "ka", "kb", "kc", "kd", "ke"), "new schema: short reading's budget goes to the other");
             Expect(Rewrite(newDb, "cb"), Or("cb", "ma"), "new schema: lone low-weight reading kept");

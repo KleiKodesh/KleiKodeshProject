@@ -6,8 +6,8 @@
  *   - prefixes / suffixes: `*word`, `word*` (both: `*word*`)
  *   - grammatical prefixes / suffixes: `%word`, `word%` (both: `%word%`)
  *   - fuzzy: `word~1` (or `~N` as typed)
- *   - markers: `^` spelling variants among the leading signs (`^%word`), `+` related forms
- *     among the trailing signs (`word%+`)
+ *   - markers: `^` spelling variants among the leading signs (`^%word`); `+` inflections and
+ *     `=` synonyms among the trailing signs (`word%+`, `word=`, `word+=`)
  * Per word, `*` and `%` exclude each other on the same side (`*word%` is fine), and `~`
  * excludes both.
  * Only the "all words" choice of each option is a persisted setting.
@@ -15,11 +15,11 @@
  */
 
 export type WrapOption = 'wildcardPrefix' | 'wildcardSuffix' | 'grammarPrefix' | 'grammarSuffix' | 'fuzzy'
-export type MarkOption = 'ketiv' | 'related'
+export type MarkOption = 'ketiv' | 'inflections' | 'synonyms'
 export type WordOption = WrapOption | MarkOption
 
 export const WRAP_OPTIONS: WrapOption[] = ['wildcardPrefix', 'wildcardSuffix', 'grammarPrefix', 'grammarSuffix', 'fuzzy']
-export const WORD_OPTIONS: WordOption[] = [...WRAP_OPTIONS, 'ketiv', 'related']
+export const WORD_OPTIONS: WordOption[] = [...WRAP_OPTIONS, 'ketiv', 'inflections', 'synonyms']
 
 /** Each option's "all words" setting. */
 export type AllWords = Record<WordOption, boolean>
@@ -47,22 +47,26 @@ export interface QueryWord {
   lead: string
   trail: string
   ketiv: boolean
-  related: boolean
+  inflections: boolean
+  synonyms: boolean
 }
 
-const LEADING_SIGNS = /^[*%+^]*/
-const TRAILING_SIGNS = /(?:[*%+]|~[1-9]?)*$/
+const LEADING_SIGNS = /^[*%+=^]*/
+const TRAILING_SIGNS = /(?:[*%+=]|~[1-9]?)*$/
 
-/** The token's markers: `^` among its leading signs (`*^word` = `^*word`), `+` among its
- *  trailing signs (`word%+`; a leading `+` is read too). `rest` is the token without them. */
+/** The token's markers: `^` among its leading signs (`*^word` = `^*word`), `+` (inflections)
+ *  and `=` (synonyms) among its trailing signs (`word%+=`; leading ones are read too). `rest` is
+ *  the token without them. */
 export function splitMarks(token: string): { marks: string; rest: string } {
   const leading = token.match(LEADING_SIGNS)?.[0] ?? ''
   const body = token.slice(leading.length)
   const trailing = body.match(TRAILING_SIGNS)?.[0] ?? ''
-  const marks = (leading.includes('+') || trailing.includes('+') ? '+' : '') + (leading.includes('^') ? '^' : '')
+  const marks = (leading.includes('+') || trailing.includes('+') ? '+' : '')
+    + (leading.includes('=') || trailing.includes('=') ? '=' : '')
+    + (leading.includes('^') ? '^' : '')
   return {
     marks,
-    rest: leading.replace(/[+^]/g, '') + body.slice(0, body.length - trailing.length) + trailing.replace(/\+/g, ''),
+    rest: leading.replace(/[+=^]/g, '') + body.slice(0, body.length - trailing.length) + trailing.replace(/[+=]/g, ''),
   }
 }
 
@@ -70,18 +74,19 @@ export function splitMarks(token: string): { marks: string; rest: string } {
  *  (`|`, `?`, `*word~`, a sign inside the word...): such a word gets no toggles. */
 export function parseQueryWord(token: string): QueryWord | null {
   const { marks, rest } = splitMarks(token)
-  const m = rest.match(/^([*%]?)([^*?~%|+^@]+)([*%]?|~[1-9]?)$/)
+  const m = rest.match(/^([*%]?)([^*?~%|+=^@]+)([*%]?|~[1-9]?)$/)
   if (!m) return null
   const word: QueryWord = {
     core: m[2] ?? '', lead: m[1] ?? '', trail: m[3] ?? '',
-    ketiv: marks.includes('^'), related: marks.includes('+'),
+    ketiv: marks.includes('^'), inflections: marks.includes('+'), synonyms: marks.includes('='),
   }
   // Fuzzy takes the whole word: a lead with '~' (e.g. *word~) is no toggle.
   return word.lead && word.trail.startsWith('~') ? null : word
 }
 
 export function renderQueryWord(word: QueryWord): string {
-  return (word.ketiv ? '^' : '') + word.lead + word.core + word.trail + (word.related ? '+' : '')
+  return (word.ketiv ? '^' : '') + word.lead + word.core + word.trail
+    + (word.inflections ? '+' : '') + (word.synonyms ? '=' : '')
 }
 
 export function hasOption(word: QueryWord, option: WordOption): boolean {
@@ -150,7 +155,7 @@ export function applyAllWords(query: string, allWords: AllWords): string {
 }
 
 /** The query cut into runs of syntax signs and plain text, for the search input's coloring:
- *  a word's leading `* % + ^`, trailing `* % +` or `~N`, and every `|`. The `@` filter is plain. */
+ *  a word's leading `* % + = ^`, trailing `* % + =` or `~N`, and every `|`. The `@` filter is plain. */
 export function syntaxSegments(query: string): { text: string; sign: boolean }[] {
   const out: { text: string; sign: boolean }[] = []
   const push = (text: string, sign: boolean) => {
@@ -162,7 +167,7 @@ export function syntaxSegments(query: string): { text: string; sign: boolean }[]
   const at = query.indexOf('@')
   const term = at < 0 ? query : query.slice(0, at)
   for (const part of term.split(/(\s+)/)) {
-    const m = part.match(/^([*%+^]*)(.*?)((?:[*%+]|~[1-9]?)*)$/)
+    const m = part.match(/^([*%+=^]*)(.*?)((?:[*%+=]|~[1-9]?)*)$/)
     if (!part.trim() || !m) { push(part, false); continue }
     push(m[1] ?? '', true)
     for (const piece of (m[2] ?? '').split(/(\|)/)) push(piece, piece === '|')

@@ -31,9 +31,9 @@ namespace FtsLib.Search
     ///     in the word distance's denominator, as a skipped wildcard).
     ///   - Every word of a piece takes the piece's operators.
     ///   - Per-word markers: '^' anywhere among a piece's leading signs ("*^word" = "^*word")
-    ///     = spelling variants for this word; '+' among its trailing signs ("word%+", or
-    ///     leading) = related forms, which the host rewrites before parsing, so here it is only
-    ///     dropped.
+    ///     = spelling variants for this word; '+' / '=' among its trailing signs ("word%+",
+    ///     "word=", or leading) = inflections / synonyms, which the host rewrites before
+    ///     parsing, so here they are only dropped.
     /// </summary>
     internal static class QueryParser
     {
@@ -129,7 +129,7 @@ namespace FtsLib.Search
         /// <summary>One piece: its operators, then its words by the word rule.</summary>
         private static void ParsePiece(string raw, List<SubPattern> into)
         {
-            WordMarkers.Split(raw, out bool expandKetiv, out _, out raw);
+            WordMarkers.Split(raw, out bool expandKetiv, out _, out _, out raw);
 
             bool grammarPrefix = raw.StartsWith("%", StringComparison.Ordinal);
             bool grammarSuffix = raw.EndsWith("%", StringComparison.Ordinal);

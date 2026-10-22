@@ -30,6 +30,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// weight column — one reading per surface at weight 1, detected once per expander. Policy, stored in the artifact's meta and enforced here: synonym rows
     /// are trusted only from the validated 'tanach' side and the human-reviewed 'word-thesaurus'
     /// links; inflection and bridge rows from every source.
+    ///
+    /// Two independent per-word channels, picked by the word's markers (FtsLib WordMarkers):
+    /// '+' = INFLECTIONS (channel 'infl'); '=' = SYNONYMS (channel 'syn' under the trust policy,
+    /// plus 'bridge' — Targum equivalents are cross-language synonyms). Either, both, or
+    /// neither; the per-word budget applies to the union actually asked for.
     /// </summary>
     public sealed class SeforimDbFtsRelatedFormExpander
     {
@@ -94,17 +99,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             catch (Exception) { return query; }
         }
 
-        /// <summary>True when some word carries the per-word related-forms marker ('+', leading,
-        /// in any order with the '^' spelling-variants marker).</summary>
+        /// <summary>True when some word carries a per-word expansion marker — '+' (inflections)
+        /// or '=' (synonyms), in any order with the other signs.</summary>
         public static bool HasRelatedMarker(string query)
         {
             foreach (string token in query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             {
-                WordMarkers.Split(token, out _, out bool related, out _);
-                if (related) return true;
+                WordMarkers.Split(token, out _, out bool inflections, out bool synonyms, out _);
+                if (inflections || synonyms) return true;
             }
             return false;
         }
+
+        /// <summary>Is an exp row's channel one the word asked for? Bridge rows (Targum
+        /// equivalents) ride with synonyms; unknown channels are never taken.</summary>
+        private static bool ChannelRequested(string channel, bool inflections, bool synonyms) =>
+            channel == "infl" ? inflections
+            : channel == "syn" || channel == "bridge" ? synonyms
+            : false;
 
 
         private string RewriteCore(string query, int perTerm)
@@ -135,10 +147,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 // bare word — and keep them, so every alternative is re-wrapped in the SAME
                 // markers. Markers COMPOSE with expansion rather than being overridden by it: a
                 // grammar- or fuzzy-marked word expands to alternatives carrying those markers.
-                // Per-word markers: '+' is consumed here; '^' rides on every alternative so
-                // they all get the spelling variants the user asked this word for.
-                WordMarkers.Split(token, out bool ketiv, out bool related, out string unmarked);
-                if (!related)
+                // Per-word markers: '+' (inflections) and '=' (synonyms) are consumed here; '^'
+                // rides on every alternative so they all get the spelling variants the user
+                // asked this word for.
+                WordMarkers.Split(token, out bool ketiv, out bool inflections, out bool synonyms, out string unmarked);
+                if (!inflections && !synonyms)
                 {
                     rewritten.Append(token);
                     continue;
@@ -174,6 +187,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                             string channel = reader.GetString(1);
                             string source = reader.GetString(2);
 
+                            if (!ChannelRequested(channel, inflections, synonyms)) continue;
                             // The artifact's trust policy: synonyms only from the validated side
                             // or the human-reviewed Word-thesaurus links.
                             if (channel == "syn" && source != "tanach" && source != "word-thesaurus") continue;

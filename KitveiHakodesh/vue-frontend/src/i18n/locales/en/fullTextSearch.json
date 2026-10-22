@@ -70,7 +70,8 @@
     "grammarSuffix": "Grammatical suffixes",
     "fuzzy": "Fuzzy search",
     "spellingVariants": "Expand defective/full spelling",
-    "expanded": "Inflections and synonyms",
+    "inflections": "Inflections",
+    "synonyms": "Synonyms",
     "syntaxWildcard": "Prefixes and suffixes",
     "syntaxOptional": "Optional character (defective/full spelling)",
     "syntaxFuzzy": "Similar with a typo (distance 1)",
@@ -78,7 +79,8 @@
     "syntaxOr": "Or (one or more alternatives)",
     "syntaxGrammar": "Grammatical prefixes/suffixes",
     "syntaxKetiv": "Defective/full spelling for a word",
-    "syntaxRelated": "Inflections and synonyms for a word",
+    "syntaxInflections": "Inflections of a word",
+    "syntaxSynonyms": "Synonyms for a word",
     "no": "No",
     "yes": "Yes"
   }

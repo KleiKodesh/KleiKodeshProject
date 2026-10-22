@@ -40,7 +40,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     private readonly string? _dbPath;
     private readonly string _indexPath;
     private readonly Action<FtsIndexLogLevel, string, Exception?> _log;
-    /// <summary>The related-form query rewrite ('+'-marked words). Null = queries pass through.</summary>
+    /// <summary>The related-form query rewrite ('+' inflections, '=' synonyms). Null = queries pass through.</summary>
     private readonly SeforimDbFtsRelatedFormExpander? _expander;
 
     /// <param name="databasePath">The seforim DB to index and search; null when none was found.</param>
@@ -49,7 +49,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// (the service's FTS_INDEX_PATH) — never built into, never wiped.</param>
     /// <param name="log">The host's log sink.</param>
     /// <param name="relatedFormExpander">Rewrites a query with related forms when a search asks
-    /// for '+'-marked words; null leaves queries unexpanded.</param>
+    /// for '+' or '='-marked words; null leaves queries unexpanded.</param>
     public SeforimDbFtsIndexCoordinator(
         string? databasePath, string indexPath, bool indexIsExternal,
         Action<FtsIndexLogLevel, string, Exception?> log,
@@ -704,7 +704,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>The one-shot search (ftsSearch). Ready = false while still building (or no
     /// DB). Full-text search results are NEVER capped: <paramref name="cap"/> &lt;= 0 means
     /// unlimited; a positive cap is only honoured if a caller ever explicitly asks for one.
-    /// Words marked '+' get their related forms first; '^' (spelling variants) is the engine's.</summary>
+    /// Words marked '+' (inflections) or '=' (synonyms) are expanded first; '^' (spelling variants) is the engine's.</summary>
     public FtsSearchResult Search(
         string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords)
     {

@@ -79,7 +79,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const ALL_WORDS_SETTINGS = {
     wildcardPrefix: 'searchWildcardPrefix', wildcardSuffix: 'searchWildcardSuffix',
     grammarPrefix: 'searchGrammarPrefix', grammarSuffix: 'searchGrammarSuffix',
-    fuzzy: 'searchFuzzy', ketiv: 'searchExpandKetiv', related: 'searchExpandRelated',
+    fuzzy: 'searchFuzzy', ketiv: 'searchExpandKetiv',
+    inflections: 'searchExpandInflections', synonyms: 'searchExpandSynonyms',
   } as const satisfies Record<WordOption, keyof typeof settings>
   const allWords = computed<AllWords>(() => {
     const out = {} as AllWords

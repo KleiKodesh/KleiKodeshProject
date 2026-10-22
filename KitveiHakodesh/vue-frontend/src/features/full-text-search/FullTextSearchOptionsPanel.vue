@@ -41,7 +41,7 @@ const activeTab = ref<ActiveTab>('options')
 const LABEL_KEYS: Record<WordOption, string> = {
   wildcardPrefix: 'wildcardPrefix', wildcardSuffix: 'wildcardSuffix',
   grammarPrefix: 'grammarPrefix', grammarSuffix: 'grammarSuffix',
-  fuzzy: 'fuzzy', ketiv: 'spellingVariants', related: 'expanded',
+  fuzzy: 'fuzzy', ketiv: 'spellingVariants', inflections: 'inflections', synonyms: 'synonyms',
 }
 
 const isAllWords = (option: WordOption) => props.allWords[option]
@@ -302,8 +302,12 @@ function onContextWordsInput(event: Event) {
           <div class="usage"><span class="example">^שלום</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.options.syntaxRelated') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxInflections') }}</div>
           <div class="usage"><span class="example">שלום+</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxSynonyms') }}</div>
+          <div class="usage"><span class="example">שלום=</span> <span class="example">שלום+=</span></div>
         </div>
       </div>
     </div>
