@@ -69,6 +69,20 @@ namespace FtsLibTest
             // FM index over an alphabet of more than 255 chars (every script is a word char)
             FmLargeAlphabet();
 
+            // an unterminated '<' is a plain separator, the rest of the line is indexed (Otzaria)
+            Words("unterminated < keeps the rest", A + " <" + B + " " + G, A, B, G);
+            Words("< closed later is still a tag", A + "<b " + B + ">" + G, A + G);
+            Words("< after the last > is plain", A + "<i>" + B + "</i> <" + G, A + B, G);
+
+            // fuzzy: a swap of two adjacent letters is ONE edit (Otzaria's transposition)
+            Check("swap is one edit", FtsLib.Search.Levenshtein.Distance(A + B + G + D, B + A + G + D, 2) == 1, "");
+            Check("swap at the end is one edit", FtsLib.Search.Levenshtein.Distance(A + B + G + D, A + B + D + G, 2) == 1, "");
+            Check("two swaps are two edits", FtsLib.Search.Levenshtein.Distance(A + B + G + D, B + A + D + G, 2) == 2, "");
+            Check("plain edits unchanged", FtsLib.Search.Levenshtein.Distance(A + B + G, A + G, 2) == 1
+                  && FtsLib.Search.Levenshtein.Distance(A + B + G, A + D + G, 2) == 1
+                  && FtsLib.Search.Levenshtein.Distance(A + B + G + D + H, D + G + H, 1) == 2, "");
+            FmFuzzySwap(A + B + G + D, B + A + G + D, A + B + D + G, B + A + D + G);
+
             Console.WriteLine(_failed == 0 ? $"  All {_passed} tests passed" : $"  {_failed} FAILED / {_passed + _failed} total");
             Console.WriteLine("== TOKEN RULE TESTS DONE ==");
             if (_failed > 0) Environment.Exit(1);
@@ -123,6 +137,35 @@ namespace FtsLibTest
                 pos = e;
             }
             return list;
+        }
+
+        /// <summary>FM fuzzy finds a one-swap term at distance 1, a two-swap term only at 2,
+        /// and agrees with Levenshtein.Distance on every term.</summary>
+        static void FmFuzzySwap(string query, string swapFirst, string swapLast, string twoSwaps)
+        {
+            var sorted = new List<string> { query, swapFirst, swapLast, twoSwaps, query + "x", "zz" + query }
+                .Distinct().OrderBy(s => s, StringComparer.Ordinal).ToList();
+            var rowIds = Enumerable.Range(1, sorted.Count).ToList();
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fm_swap_" + Guid.NewGuid().ToString("N") + ".fmi");
+            try
+            {
+                FtsLib.Fts5.FmIndex.Build(path, sorted, rowIds);
+                using var fm = new FtsLib.Fts5.FmIndex.Reader(path);
+                bool ok = true;
+                for (int d = 1; d <= 2; d++)
+                {
+                    var got = fm.FindFuzzy(query, d).Select(h => (sorted[h.RowId - 1], h.Distance)).OrderBy(x => x.Item1, StringComparer.Ordinal).ToList();
+                    var want = sorted.Select(s => (s, FtsLib.Search.Levenshtein.Distance(query, s, d))).Where(x => x.Item2 <= d).ToList();
+                    ok &= got.SequenceEqual(want);
+                }
+                var d1 = fm.FindFuzzy(query, 1).Select(h => sorted[h.RowId - 1]).ToList();
+                ok &= d1.Contains(swapFirst) && d1.Contains(swapLast) && !d1.Contains(twoSwaps);
+                Check("FM fuzzy: a swap is one edit", ok, "");
+            }
+            finally
+            {
+                try { System.IO.File.Delete(path); } catch { }
+            }
         }
 
         static void FmLargeAlphabet()

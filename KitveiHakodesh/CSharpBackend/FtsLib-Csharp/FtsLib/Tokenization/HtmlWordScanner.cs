@@ -83,6 +83,7 @@ namespace FtsLib.Tokenization
 
             int tagLen = 0;
             bool inTag = false, tagNameDone = false;
+            int lastGt = -2;   // last '>' in the text (-1: none), read at the first '<'
             int visible = 0;
             int len = text.Length;
 
@@ -148,7 +149,10 @@ namespace FtsLib.Tokenization
                     continue;
                 }
 
-                if (ch == '<')
+                // An unterminated '<' (no '>' after it in the text) is not a tag: it is
+                // kept as a plain separator and the rest of the line is scanned
+                // (Otzaria's strip_html_for_indexing keeps it verbatim).
+                if (ch == '<' && i < (lastGt == -2 ? (lastGt = text.LastIndexOf('>')) : lastGt))
                 {
                     // A tag: inline tags are transparent (the word continues across them);
                     // the decision is taken at '>' once the name is known.
