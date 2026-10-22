@@ -89,6 +89,9 @@ namespace KleiKodeshVstoInstallerWpf
                     await Task.Delay(10);
                 }
 
+                // We closed כתבי הקודש silently before installing — bring it back.
+                KitveiHakodeshHelper.RelaunchIfClosed();
+
                 _status.Report(Strings.Install_Complete);
                 await Task.Delay(300);
                 if (_showSettingsAfter)
@@ -98,6 +101,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
             catch (Exception ex)
             {
+                KitveiHakodeshHelper.RelaunchIfClosed();
                 MessageBox.Show(ex.Message);
                 Environment.Exit(1);
             }

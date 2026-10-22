@@ -1,7 +1,7 @@
 ﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
-using System.Windows;
 
 namespace KleiKodeshVstoInstallerWpf.Helpers
 {
@@ -30,65 +30,31 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             }
         }
 
+        /// <summary>Exe path of the instance we closed, so it can be relaunched after install.</summary>
+        private static string _closedExePath;
+
         /// <summary>
-        /// If כתבי הקודש is running, asks the user whether to close it.
-        /// Returns true if it is safe to proceed (not running, or user approved and it was killed).
-        /// Returns false if the user declined or it could not be closed.
+        /// Closes כתבי הקודש without asking — the app saves everything as it goes, so nothing
+        /// is lost. Remembers its exe path so <see cref="RelaunchIfClosed"/> can reopen it.
+        /// Always returns true.
         /// </summary>
         public static bool EnsureKitveiHakodeshClosed()
         {
-            var procs = Process.GetProcessesByName(ProcessName);
-            if (procs.Length == 0) return true;
-
-            var r = MessageBox.Show(
-                Strings.KH_OpenContinue,
-                Strings.KH_OpenTitle,
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.Yes,
-                UiLanguage.MessageBoxOptions);
-
-            if (r == MessageBoxResult.No)
+            foreach (var proc in Process.GetProcessesByName(ProcessName))
             {
-                MessageBox.Show(
-                    Strings.KH_Cancelled,
-                    Strings.InstallCancelledTitle,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.OK,
-                    UiLanguage.MessageBoxOptions);
-                return false;
+                try { _closedExePath = _closedExePath ?? proc.MainModule.FileName; } catch { }
+                try { proc.Kill(); proc.WaitForExit(3000); } catch { }
             }
-
-            foreach (var proc in procs)
-                try { proc.Kill(); proc.WaitForExit(); } catch { }
-
             return true;
         }
 
-        /// <summary>
-        /// Variant used by RepairPage — asks to close כתבי הקודש before cleanup (not install).
-        /// Returns true if safe to proceed.
-        /// </summary>
-        public static bool EnsureKitveiHakodeshClosedForRepair()
+        /// <summary>Reopens כתבי הקודש if <see cref="EnsureKitveiHakodeshClosed"/> closed it.</summary>
+        public static void RelaunchIfClosed()
         {
-            var procs = Process.GetProcessesByName(ProcessName);
-            if (procs.Length == 0) return true;
-
-            var r = MessageBox.Show(
-                Strings.KH_OpenClean,
-                Strings.KH_OpenTitle,
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.Yes,
-                UiLanguage.MessageBoxOptions);
-
-            if (r != MessageBoxResult.Yes) return false;
-
-            foreach (var proc in procs)
-                try { proc.Kill(); proc.WaitForExit(3000); } catch { }
-
-            return true;
+            var path = _closedExePath;
+            _closedExePath = null;
+            if (path == null || !File.Exists(path) || IsKitveiHakodeshRunning()) return;
+            try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); } catch { }
         }
     }
 }

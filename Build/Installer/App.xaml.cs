@@ -104,7 +104,7 @@ namespace KleiKodeshVstoInstallerWpf
                     catch { /* process already gone */ }
 
                     // Now show the window on the UI thread
-                    Dispatcher.Invoke(() => MainWindow?.Show());
+                    Dispatcher.Invoke(() => { MainWindow?.Show(); BringToFront(MainWindow); });
                 });
             }
 
@@ -116,8 +116,8 @@ namespace KleiKodeshVstoInstallerWpf
             //   1. The install overwrites files that Word (VSTO) and כתבי הקודש hold open,
             //      so BOTH must be closed first. The only place to enforce that usefully is
             //      the התקן click: LandingPage waits for them, and
-            //      EnsureWordClosed()/EnsureKitveiHakodeshClosed() can tell the user what to
-            //      close and let them retry. A headless installer can only wait blindly and
+            //      EnsureWordClosed() can tell the user what to close and let them retry
+            //      (כתבי הקודש is closed automatically and relaunched after install). A headless installer can only wait blindly and
             //      give up, which is how a partial extraction over locked files happens.
             //   2. Registering the elevated index service raises a UAC prompt. Raised from a
             //      hidden process it had no visible parent and appeared minutes after the
@@ -139,7 +139,22 @@ namespace KleiKodeshVstoInstallerWpf
             if (waitForPid > 0)
                 mainWindow.Visibility = System.Windows.Visibility.Hidden;
             else
+            {
                 mainWindow.Show();
+                BringToFront(mainWindow);
+            }
+        }
+
+        // Launched from another process (updater, service, NSIS) the window can open behind
+        // others. A brief Topmost toggle plus Activate puts it in front without pinning it.
+        private static void BringToFront(Window window)
+        {
+            if (window == null) return;
+            if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+            window.Topmost = true;
+            window.Activate();
+            window.Topmost = false;
+            window.Focus();
         }
     }
 }

@@ -32,7 +32,7 @@ namespace KleiKodeshVstoInstallerWpf
         private void InstallButton_Click(object sender, RoutedEventArgs e)
         {
             if (!WordHelper.EnsureWordClosed()) return;
-            if (!KitveiHakodeshHelper.EnsureKitveiHakodeshClosed()) return;
+            KitveiHakodeshHelper.EnsureKitveiHakodeshClosed();
             // showSettingsAfter: true — after install completes, navigate to SettingsPage
             // so the user can configure ribbon visibility and the default button.
             _host.NavigateToInstall(showSettingsAfter: true);

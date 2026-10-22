@@ -27,8 +27,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         {
             // NOTE: this assumes Word and כתבי הקודש are already closed. Enforcing that is
             // LandingPage's job — its constructor waits for them and the התקן click calls
-            // EnsureWordClosed()/EnsureKitveiHakodeshClosed(), which can actually tell the
-            // user what to close. Do not re-add a wait here; there is no useful way to
+            // EnsureWordClosed() (which can tell the user what to close) and
+            // EnsureKitveiHakodeshClosed() (which closes it silently). Do not re-add a wait here; there is no useful way to
             // stall from this far down, and duplicating the check just hides where the real
             // gate is.
             if (!Directory.Exists(AddinInstaller.InstallPath))

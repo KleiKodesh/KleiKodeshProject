@@ -98,7 +98,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
 
             if (!WordHelper.EnsureWordClosedForRepair()) return;
-            if (!KitveiHakodeshHelper.EnsureKitveiHakodeshClosedForRepair()) return;
+            KitveiHakodeshHelper.EnsureKitveiHakodeshClosed();
 
             _isRunning                 = true;
             BasicCleanButton.IsEnabled = false;
