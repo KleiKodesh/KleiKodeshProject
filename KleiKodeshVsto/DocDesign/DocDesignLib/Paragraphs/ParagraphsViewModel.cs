@@ -22,15 +22,15 @@ namespace DocDesign.Paragraphs
             }
         }
 
-        int _firstWordMinLineCount = 1;
-        int _hangingMinLineCount = 2;
-        int _centerLastLineMinLineCount = 2;
+        int _firstWordMinLineCount = Math.Max(1, DocDesignSettings.GetInt(nameof(FirstWordMinLineCount), 1));
+        int _hangingMinLineCount = Math.Max(2, DocDesignSettings.GetInt(nameof(HangingMinLineCount), 2));
+        int _centerLastLineMinLineCount = Math.Max(2, DocDesignSettings.GetInt(nameof(CenterLastLineMinLineCount), 2));
         ObservableCollection<ActiveStyle> _activeStyles = new ObservableCollection<ActiveStyle>();
         bool? _checkAllStyles;
 
-        public int FirstWordMinLineCount { get => _firstWordMinLineCount; set => SetProperty(ref _firstWordMinLineCount, Math.Max(1, value)); }
-        public int HangingMinLineCount { get => _hangingMinLineCount; set => SetProperty(ref _hangingMinLineCount, Math.Max(2, value)); }
-        public int CenterLastLineMinLineCount { get => _centerLastLineMinLineCount; set => SetProperty(ref _centerLastLineMinLineCount, Math.Max(2, value)); }
+        public int FirstWordMinLineCount { get => _firstWordMinLineCount; set { if (SetProperty(ref _firstWordMinLineCount, Math.Max(1, value))) DocDesignSettings.Save(nameof(FirstWordMinLineCount), _firstWordMinLineCount); } }
+        public int HangingMinLineCount { get => _hangingMinLineCount; set { if (SetProperty(ref _hangingMinLineCount, Math.Max(2, value))) DocDesignSettings.Save(nameof(HangingMinLineCount), _hangingMinLineCount); } }
+        public int CenterLastLineMinLineCount { get => _centerLastLineMinLineCount; set { if (SetProperty(ref _centerLastLineMinLineCount, Math.Max(2, value))) DocDesignSettings.Save(nameof(CenterLastLineMinLineCount), _centerLastLineMinLineCount); } }
         public bool? CheckAllStyles { get => _checkAllStyles; set { if (SetProperty(ref _checkAllStyles, value)) CheckAllChanged(value); } }
         public ObservableCollection<ActiveStyle> ActiveStyles { get => _activeStyles; set => SetProperty(ref _activeStyles, value); }
         public bool RefreshStyles { set => RefreshActiveStylesAction(); }
