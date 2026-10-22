@@ -118,6 +118,10 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
         /// <summary>The file is there and could not be removed — in use, read-only, no permission.</summary>
         DeleteFailed,
+
+        /// <summary>A Recycle Bin move was asked for but the file's drive has no bin, so it
+        /// would have been deleted permanently. The file was left in place.</summary>
+        NoRecycleBin,
     }
 
     /// <summary>Bytes received so far and the total when upstream sent a Content-Length

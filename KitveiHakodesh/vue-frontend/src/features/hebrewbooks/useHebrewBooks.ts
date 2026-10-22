@@ -167,14 +167,16 @@ export function useHebrewBooks() {
     }
   }
 
-  async function deleteLocalFile(book: HebrewBook) {
+  async function deleteLocalFile(book: HebrewBook, toRecycleBin = false) {
     const folder = settings.hebrewBooksLocalFolder
     if (!folder) return
-    const result = await deleteHbLocalFile(String(book.id), folder).catch(
+    const result = await deleteHbLocalFile(String(book.id), folder, toRecycleBin).catch(
       () => ({ error: t('hebrewBooks.error.generic') }) as { error: string },
     )
     if ('error' in result && result.error) {
       localFileStore.downloadErrorMessage = result.error
+    } else if ('noRecycleBin' in result && result.noRecycleBin) {
+      localFileStore.downloadErrorMessage = t('hebrewBooks.error.noRecycleBin')
     } else if ('notFound' in result && result.notFound) {
       localFileStore.downloadErrorMessage = t('hebrewBooks.error.fileNotInFolder')
     } else if ('ok' in result && result.ok) {

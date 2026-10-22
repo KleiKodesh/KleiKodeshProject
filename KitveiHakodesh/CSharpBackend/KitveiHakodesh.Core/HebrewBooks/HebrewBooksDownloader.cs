@@ -322,8 +322,11 @@ namespace KitveiHakodesh.Core.HebrewBooks
             return present;
         }
 
-        /// <summary>Removes a downloaded PDF from the user's folder.</summary>
-        public HebrewBookDeleteOutcome DeleteDownloaded(string bookId, string? localFolder)
+        /// <summary>Removes a downloaded PDF from the user's folder - permanently, or into the
+        /// Recycle Bin when <paramref name="toRecycleBin"/> is set. The bin is the calling
+        /// process's account's, so the installed (LocalSystem) service never recycles: the
+        /// user-side host calls <see cref="RecycleBin"/> itself; this path serves dev only.</summary>
+        public HebrewBookDeleteOutcome DeleteDownloaded(string bookId, string? localFolder, bool toRecycleBin = false)
         {
             if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) return HebrewBookDeleteOutcome.InvalidBookId;
             if (string.IsNullOrWhiteSpace(localFolder)) return HebrewBookDeleteOutcome.NoLocalFolderConfigured;
@@ -332,6 +335,15 @@ namespace KitveiHakodesh.Core.HebrewBooks
             {
                 string path = Path.Combine(localFolder, bookId + ".pdf");
                 if (!File.Exists(path)) return HebrewBookDeleteOutcome.NotThere;
+                if (toRecycleBin)
+                {
+                    switch (RecycleBin.Send(path))
+                    {
+                        case RecycleBinOutcome.Recycled: return HebrewBookDeleteOutcome.Deleted;
+                        case RecycleBinOutcome.NoRecycleBin: return HebrewBookDeleteOutcome.NoRecycleBin;
+                        default: return HebrewBookDeleteOutcome.DeleteFailed;
+                    }
+                }
                 File.Delete(path);
                 return HebrewBookDeleteOutcome.Deleted;
             }

@@ -1048,18 +1048,30 @@ export function checkHbLocalFiles(
   }).catch(() => ({ existingIds: [] }))
 }
 
+type HbDeleteLocalResult = { ok?: boolean; notFound?: boolean; noRecycleBin?: boolean; error?: string }
+
 /**
- * Delete a HebrewBooks PDF from the user's configured local folder.
+ * Delete a HebrewBooks PDF from the user's configured local folder - permanently, or into
+ * the Recycle Bin when `toRecycleBin` is set.
  * Returns { ok: true } on success, { notFound: true } if the file is not there,
+ * { noRecycleBin: true } if the drive has no Recycle Bin (file left in place),
  * or { error: "..." } on failure.
+ *
+ * The Recycle Bin move goes through the user-side host when there is one: the installed
+ * service runs as LocalSystem and would fill SYSTEM's bin. Dev has no host bridge, but its
+ * service runs as the user, so the service path is right there.
  */
 export function deleteHbLocalFile(
   bookId: string,
   localFolder: string,
-): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
-  return serviceCall<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+  toRecycleBin = false,
+): Promise<HbDeleteLocalResult> {
+  if (toRecycleBin && typeof window.__webviewAction === 'function')
+    return action<HbDeleteLocalResult>('recycleHbLocalFile', { bookId, localFolder })
+  return serviceCall<HbDeleteLocalResult>('deleteHbLocalFile', {
     bookId,
     localFolder,
+    toRecycleBin,
   })
 }
 

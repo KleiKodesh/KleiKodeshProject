@@ -4,6 +4,12 @@
     "deleteFromFolder": "Delete from folder: {title}",
     "download": "Download {title}"
   },
+  "deleteConfirm": {
+    "title": "Delete file: {title}",
+    "warning": "Warning: the file will be removed from the local folder on this computer. Permanent deletion cannot be undone.",
+    "deletePermanently": "Delete permanently",
+    "moveToRecycleBin": "Move to Recycle Bin"
+  },
   "searchPlaceholder": "Search books, authors or topics...",
   "noBooksFound": "No books found",
   "noHistory": "No history yet. Search for a book to start",
@@ -13,6 +19,7 @@
     "notOnServer": "The book was not found on the server",
     "downloadFailed": "Download failed",
     "generic": "Error",
-    "fileNotInFolder": "The file was not found in the folder"
+    "fileNotInFolder": "The file was not found in the folder",
+    "noRecycleBin": "This drive has no Recycle Bin, so the file was not deleted. To remove it, choose \"Delete permanently\"."
   }
 }

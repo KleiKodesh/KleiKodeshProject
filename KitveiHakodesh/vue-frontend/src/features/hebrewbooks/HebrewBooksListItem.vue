@@ -69,6 +69,7 @@ const tooltip = computed(() => {
           <IconDelete20Regular />
         </button>
         <button
+          v-if="!hasLocalFile"
           class="dl-btn"
           :title="$t('hebrewBooks.item.download', { title: book.title })"
           tabindex="-1"

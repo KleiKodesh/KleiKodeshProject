@@ -84,6 +84,7 @@ namespace KitveiHakodeshLib
                         case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
+                        case "recycleHbLocalFile": _hb.HandleRecycleHbLocalFile(root, id); break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;

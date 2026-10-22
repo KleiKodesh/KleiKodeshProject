@@ -151,23 +151,24 @@ public sealed class HebrewBooksService
     public List<string> CheckLocalFiles(IEnumerable<string> bookIds, string? localFolder) =>
         _downloader.WhichAreDownloaded(bookIds, localFolder);
 
-    public (bool ok, bool notFound, string? error) DeleteLocalFile(string bookId, string? localFolder)
+    public (bool ok, bool notFound, bool noRecycleBin, string? error) DeleteLocalFile(string bookId, string? localFolder, bool toRecycleBin = false)
     {
-        var outcome = _downloader.DeleteDownloaded(bookId, localFolder);
+        var outcome = _downloader.DeleteDownloaded(bookId, localFolder, toRecycleBin);
         return outcome switch
         {
-            CoreHebrewBooks.HebrewBookDeleteOutcome.Deleted => (true, false, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.Deleted => (true, false, false, null),
 
             // The only true "nothing to delete": the folder is configured and holds no such file.
-            CoreHebrewBooks.HebrewBookDeleteOutcome.NotThere => (false, true, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.NotThere => (false, true, false, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.NoRecycleBin => (false, false, true, null),
 
             // These two are errors the user can act on, NOT a missing file. Reporting them as
             // notFound would silently swallow "you have not chosen a save folder yet".
             CoreHebrewBooks.HebrewBookDeleteOutcome.NoLocalFolderConfigured =>
-                (false, false, "לא הוגדרה תיקיית שמירה"),
-            CoreHebrewBooks.HebrewBookDeleteOutcome.InvalidBookId => (false, false, "invalid book id"),
+                (false, false, false, "לא הוגדרה תיקיית שמירה"),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.InvalidBookId => (false, false, false, "invalid book id"),
 
-            _ => (false, false, "delete failed"),
+            _ => (false, false, false, "delete failed"),
         };
     }
 }
