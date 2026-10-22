@@ -84,6 +84,8 @@ namespace KitveiHakodesh.Core.Common
         /// </summary>
         private static unsafe NativeStamp ReadNativeStamp(string path)
         {
+            // kernel32 only: elsewhere (macOS / Linux, portable build) size + mtime it is.
+            if (!OperatingSystem.IsWindows()) return default;
             try
             {
                 using var stream = new FileStream(
