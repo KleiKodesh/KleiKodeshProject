@@ -188,7 +188,7 @@ const DEFAULTS = {
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
-  searchExpandInflections: true,
+  searchExpandInflections: false,
   searchExpandSynonyms: false,
   searchWildcardPrefix: false,
   searchWildcardSuffix: false,
