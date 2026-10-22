@@ -38,7 +38,7 @@ namespace KitveiHakodeshService.Tests
 {
     public static class HardeningVerify
     {
-        private enum Shape { Plain, SplitCompressed, SplitPlain }
+        internal enum Shape { Plain, SplitCompressed, SplitPlain }
 
         public static int Run()
         {
@@ -581,7 +581,7 @@ namespace KitveiHakodeshService.Tests
 
         // ── Fixtures ────────────────────────────────────────────────────────────────
 
-        private static void BuildLibrary(string path, string category, string book, string line, string toc,
+        internal static void BuildLibrary(string path, string category, string book, string line, string toc,
             Shape shape, bool altToc, bool regularToc, int dictSeed = 0)
         {
             using var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString);

@@ -200,8 +200,15 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// no structure field, so the doc-values read falls back to 0 for every doc and the
     /// truncation collapses to the old per-book behavior meanwhile. Old results, never
     /// wrong paths — and OpenMode.CREATE means a reader is all-v19 or all-v20, never a
-    /// mix.</summary>
-    public const string IndexFormatVersion = "v20";
+    /// mix.
+    /// v21: no index-format change; forces ONE rebuild of every index built before the
+    /// additional-library hardening. Those builds dropped a library they could not read
+    /// whole (a schema-6+ library without alt_toc_structure was one) yet stamped the index
+    /// with the fingerprint of the FULL library set, and that stamp is the same string a
+    /// current build computes for the same files - so the current build trusted the old
+    /// index and never rebuilt it, leaving the library's book titles out of book-name
+    /// search for as long as its file did not change.</summary>
+    public const string IndexFormatVersion = "v21";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -275,11 +282,22 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
         try
         {
-            int docCount = BuildInPlace(onProgress, ct);
+            var uncovered = new HashSet<int>();
+            int docCount = BuildInPlace(onProgress, ct, uncovered);
 
             // Build finished: publish the hash, then refresh once more so the final
             // documents (the Tanach verse pass) are visible on the NRT reader.
-            File.WriteAllText(VerFile, dbHash);
+            //
+            // The stamp must not certify a library this build did not cover. A library that
+            // could not be read right now (file busy, a table that fails mid-read) is skipped
+            // so it cannot take the primary down - but stamping the full set anyway would make
+            // that skip permanent: the next start sees a matching stamp and never retries. So
+            // the stamp names only the libraries actually indexed; the next start's comparison
+            // against the full set then fails and the build is retried.
+            string stamp = uncovered.Count == 0
+                ? dbHash
+                : ComputeDbHash(dbPath, additionalLibraries.Where(l => !uncovered.Contains(l.Index)).ToList());
+            File.WriteAllText(VerFile, stamp);
             lock (_lock) RefreshNrtLocked();
             return docCount;
         }
@@ -295,7 +313,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         }
     }
 
-    private int BuildInPlace(Action<int, int>? onProgress, CancellationToken ct)
+    /// <param name="uncovered">Receives the index of every additional library that was skipped
+    /// or only partly indexed by this build.</param>
+    private int BuildInPlace(Action<int, int>? onProgress, CancellationToken ct, HashSet<int> uncovered)
     {
         // Every source to index: the primary seforim.db at library 0, plus every additional
         // library configured and attachable right now (see SeforimDbAttachedLibraries.Resolve).
@@ -306,7 +326,13 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         foreach (var library in additionalLibraries)
         {
             try { sources.Add((library.Index, SqliteConnectionFactory.OpenCorpusRead(library.Path))); }
-            catch { /* unavailable right now — this build simply does not cover it */ }
+            catch (Exception ex)
+            {
+                // Unavailable right now — this build does not cover it. Said out loud and
+                // recorded, so the index is neither silently missing it nor stamped as complete.
+                uncovered.Add(library.Index);
+                SourceSkipped?.Invoke(library.Path, ex);
+            }
         }
 
         try
@@ -349,6 +375,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 }
                 catch (Exception ex) when (index != 0)
                 {
+                    uncovered.Add(index);
                     SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
                     sources.RemoveAll(s => s.Index == index);
                     conn.Dispose();
@@ -468,6 +495,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
               {
                 // This library's TOC tables are unreadable: its book-title docs are already in,
                 // only its TOC entries are lost. Primary and other libraries are unaffected.
+                uncovered.Add(index);
                 SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
               }
             }
@@ -488,6 +516,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct); }
                 catch (Exception ex) when (index != 0)
                 {
+                    uncovered.Add(index);
                     SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
                 }
             }
