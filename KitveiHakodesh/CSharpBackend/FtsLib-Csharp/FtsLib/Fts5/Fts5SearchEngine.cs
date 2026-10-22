@@ -434,6 +434,16 @@ namespace FtsLib.Fts5
                     anyRealConstraint = true;
                     expanded = ExpandFuzzy(alt.Pattern, alt.FuzzyDistance);
                 }
+                else if (alt.IsWildcard && alt.IsGrammar
+                         && TrySplitStarCore(alt.Pattern, out string mixedLead, out string mixedCore, out _))
+                {
+                    // "*word%" / "%word*": '*' on one side, grammar on the other.
+                    bool grammarIsPrefix = mixedLead.Length == 0;
+                    expanded = ExpandStarGrammar(mixedCore, grammarIsPrefix, ref anyRealConstraint);
+                    if (ketiv)
+                        foreach (var variant in KetivExpander.Expand(mixedCore))
+                            expanded.AddRange(ExpandStarGrammar(variant, grammarIsPrefix, ref anyRealConstraint));
+                }
                 else if (alt.IsWildcard)
                 {
                     expanded = ExpandWildcard(alt.Pattern, ref anyRealConstraint);
@@ -481,6 +491,21 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>
+        /// "%word*" (<paramref name="grammarIsPrefix"/>) or "*word%": one '*' scan per grammatical
+        /// form of the '%' side ("form*" per prefix form, "*form" per suffix form), so every term
+        /// is exact and no unfiltered expansion can run into the cap.
+        /// </summary>
+        List<string> ExpandStarGrammar(string word, bool grammarIsPrefix, ref bool anyRealConstraint)
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            var forms = grammarIsPrefix ? GrammarExpander.PrefixForms(word) : GrammarExpander.SuffixForms(word);
+            foreach (var form in forms)
+                foreach (var t in ExpandWildcard(grammarIsPrefix ? form + "*" : "*" + form, ref anyRealConstraint))
+                    found.Add(t);
+            return new List<string>(found);
+        }
+
+        /// <summary>
         /// Splits a wildcard whose only wildcards are leading/trailing '*' runs (no '?', no
         /// inner '*') into those runs and its literal core — the shape ketiv can vary.
         /// </summary>
@@ -502,7 +527,8 @@ namespace FtsLib.Fts5
         {
             if (alt.IsUnindexed) return "u:" + alt.Pattern;
             if (alt.IsFuzzy)    return "f" + alt.FuzzyDistance + ":" + alt.Pattern;
-            if (alt.IsWildcard) return "w:" + alt.Pattern;
+            if (alt.IsWildcard)
+                return "w" + (alt.GrammarExpandPrefixes ? "p" : "") + (alt.GrammarExpandSuffixes ? "s" : "") + ":" + alt.Pattern;
             if (alt.IsGrammar)
                 return "g" + (alt.GrammarExpandPrefixes ? "p" : "") + (alt.GrammarExpandSuffixes ? "s" : "") + ":" + alt.Pattern;
             return "l:" + alt.Pattern;

@@ -1,3 +1,4 @@
+using FtsLib.Search;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -84,13 +85,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public static bool HasRelatedMarker(string query)
         {
             foreach (string token in query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-                if (LeadingWordMarkers(token).IndexOf('+') >= 0) return true;
+            {
+                WordMarkers.Split(token, out _, out bool related, out _);
+                if (related) return true;
+            }
             return false;
         }
 
-        /// <summary>The token's leading per-word markers ('+' related forms, '^' spelling variants).</summary>
-        private static string LeadingWordMarkers(string token) =>
-            token.Substring(0, token.Length - token.TrimStart('+', '^').Length);
 
         private string RewriteCore(string query, int perTerm)
         {
@@ -121,14 +122,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 // grammar- or fuzzy-marked word expands to alternatives carrying those markers.
                 // Per-word markers: '+' is consumed here; '^' rides on every alternative so
                 // they all get the spelling variants the user asked this word for.
-                string marks = LeadingWordMarkers(token);
-                if (marks.IndexOf('+') < 0)
+                WordMarkers.Split(token, out bool ketiv, out bool related, out string unmarked);
+                if (!related)
                 {
                     rewritten.Append(token);
                     continue;
                 }
-                string core = PeelMarkers(token.Substring(marks.Length), out string lead, out string trail);
-                if (marks.IndexOf('^') >= 0) lead = "^" + lead;
+                string core = PeelMarkers(unmarked, out string lead, out string trail);
+                if (ketiv) lead = "^" + lead;
 
                 string bare = BareHebrew(core);
                 if (bare.Length < MinBareLength)

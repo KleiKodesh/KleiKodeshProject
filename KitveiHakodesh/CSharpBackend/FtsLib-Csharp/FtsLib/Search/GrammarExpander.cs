@@ -19,8 +19,9 @@ namespace FtsLib.Search
     ///   '?' — compatible: optional-char variants are generated first (by
     ///         <see cref="HebrewWildcardExpander"/>), then grammar expansion is
     ///         applied to each variant independently.
-    ///   '*' — overrides '%': a token that contains '*' is treated as a plain
-    ///         wildcard; any '%' markers are ignored.
+    ///   '*' — on the same side, overrides '%'. On opposite sides they combine
+    ///         ("*word%", "%word*"): the engine runs one '*' scan per grammatical
+    ///         form of the '%' side (<see cref="PrefixForms"/>, <see cref="SuffixForms"/>).
     ///
     /// Lookup strategy (same as <see cref="KetivExpander"/>):
     ///   All candidate forms are generated in C#, then each is verified with an
@@ -162,6 +163,23 @@ namespace FtsLib.Search
 
             var candidates = BuildCandidates(word, expandPrefixes, expandSuffixes);
             return Verify(candidates, segments);
+        }
+
+        /// <summary>The word bare and behind every grammatical prefix ("%word*").</summary>
+        internal static List<string> PrefixForms(string word)
+        {
+            var forms = new List<string>(Prefixes.Length + 1) { word };
+            foreach (var prefix in Prefixes) forms.Add(prefix + word);
+            return forms;
+        }
+
+        /// <summary>The word bare and its stem followed by every grammatical suffix ("*word%").</summary>
+        internal static List<string> SuffixForms(string word)
+        {
+            string stem = NormaliseFinalLetter(word);
+            var forms = new List<string>(Suffixes.Length + 1) { word };
+            foreach (var suffix in Suffixes) forms.Add(stem + suffix);
+            return forms;
         }
 
         // ── Candidate generation ──────────────────────────────────────
