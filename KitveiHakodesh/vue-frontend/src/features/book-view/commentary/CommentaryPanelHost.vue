@@ -198,7 +198,7 @@ defineExpose({ view })
 /* Hangs below the sticky nav (32px), on the RTL start edge under the filter
    button that opens it.
 
-   Chrome follows the app's floating-panel convention (FullTextSearchAdvancedPanel,
+   Chrome follows the app's floating-panel convention (FullTextSearchOptionsPanel,
    BookViewNoteBubble): 1px border, 8px radius on all four corners, soft shadow.
    Inset from the column's edge and foot so every corner is free to round. */
 .filter-popup {

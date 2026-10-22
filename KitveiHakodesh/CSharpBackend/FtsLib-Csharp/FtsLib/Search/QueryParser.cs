@@ -28,6 +28,9 @@ namespace FtsLib.Search
     ///     it is an unindexed slot, which matches nothing but keeps its one position (it counts
     ///     in the word distance's denominator, as a skipped wildcard).
     ///   - Every word of a piece takes the piece's operators.
+    ///   - Per-word markers, leading, before any other operator: '^' = spelling variants for
+    ///     this word (as the global expandKetiv flag does for all); '+' = related forms, which
+    ///     the host rewrites before parsing, so here it is only dropped.
     /// </summary>
     internal static class QueryParser
     {
@@ -123,6 +126,10 @@ namespace FtsLib.Search
         /// <summary>One piece: its operators, then its words by the word rule.</summary>
         private static void ParsePiece(string raw, List<SubPattern> into)
         {
+            string unmarked = raw.TrimStart('^', '+');
+            bool expandKetiv = raw.Substring(0, raw.Length - unmarked.Length).IndexOf('^') >= 0;
+            raw = unmarked;
+
             bool grammarPrefix = raw.StartsWith("%", StringComparison.Ordinal);
             bool grammarSuffix = raw.EndsWith("%", StringComparison.Ordinal);
             if (grammarPrefix || grammarSuffix)
@@ -165,7 +172,8 @@ namespace FtsLib.Search
                 into.Add(new SubPattern(normalised, isWildcard, fuzzy, fuzzyDist,
                                         grammarExpandPrefixes: prefixes,
                                         grammarExpandSuffixes: suffixes,
-                                        isUnindexed: unindexed));
+                                        isUnindexed: unindexed,
+                                        expandKetiv: expandKetiv));
             }
         }
 
@@ -287,10 +295,13 @@ namespace FtsLib.Search
         /// </summary>
         public readonly bool IsUnindexed;
 
+        /// <summary>True when this word asked for spelling variants itself (a leading '^').</summary>
+        public readonly bool ExpandKetiv;
+
         public SubPattern(string pattern, bool isWildcard,
                           bool isFuzzy = false, int fuzzyDistance = 1,
                           bool grammarExpandPrefixes = false, bool grammarExpandSuffixes = false,
-                          bool isUnindexed = false)
+                          bool isUnindexed = false, bool expandKetiv = false)
         {
             Pattern                = pattern;
             IsWildcard             = isWildcard;
@@ -299,6 +310,7 @@ namespace FtsLib.Search
             GrammarExpandPrefixes  = grammarExpandPrefixes;
             GrammarExpandSuffixes  = grammarExpandSuffixes;
             IsUnindexed            = isUnindexed;
+            ExpandKetiv            = expandKetiv;
         }
     }
 }

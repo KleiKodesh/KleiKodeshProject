@@ -18,7 +18,7 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 **FullTextSearchIndexingOverlay.vue** — full-screen overlay shown while the Bloom index is being built.
 
-**FullTextSearchAdvancedPanel.vue** — advanced search options panel. Provides conjunction mode toggle (AND/OR), category proximity filtering, and search scope controls.
+**FullTextSearchOptionsPanel.vue** — search options panel. Provides conjunction mode toggle (AND/OR), category proximity filtering, and search scope controls.
 
 ## Composables
 

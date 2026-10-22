@@ -17,7 +17,7 @@ import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
-import FullTextSearchAdvancedPanel from './FullTextSearchAdvancedPanel.vue'
+import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const paneNavigation = usePaneNavigation()
@@ -122,8 +122,8 @@ const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null
 const _scrollMirror = lsGet<{ i: number; o: number }>(scrollMirrorKey)
 const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
-const isAdvancedOpen = ref(false)
-const advancedPanelRef = ref<HTMLElement | null>(null)
+const isOptionsOpen = ref(false)
+const optionsPanelRef = ref<HTMLElement | null>(null)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 // Set for one tick while the searchRestore watcher is applying a history position, so the
 // new-search reset can recognize that navigation no matter which watcher runs first.
@@ -131,10 +131,10 @@ let restoringNonce: number | null = null
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
 
-// Clean page (nothing searched yet, no popup open): offer the advanced options up front
+// Clean page (nothing searched yet, no popup open): offer the search options up front
 // as a centered card so the user can set them before launching the first search.
-const showAdvancedCard = computed(
-  () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isAdvancedOpen.value
+const showOptionsCard = computed(
+  () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isOptionsOpen.value
      && !indexingState.value.dbNotFound && !searchError.value
      // A tab returning to a saved search restores it asynchronously (onMounted); the saved
      // query is known synchronously, so gate on it or the card flashes before the restore.
@@ -143,7 +143,7 @@ const showAdvancedCard = computed(
 
 const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
 
-const isAdvancedActive = computed(
+const isOptionsActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || !expandKetiv.value
      || expandRelated.value
@@ -173,7 +173,7 @@ useDropdownClose(
   },
 )
 
-// The advanced panel is a popup over the results in every size, so unlike the filter
+// The options panel is a popup over the results in every size, so unlike the filter
 // panel it closes on outside-click unconditionally — no overlay-mode gate.
 //
 // The toggle button has to be named, or clicking it while the panel is open would close
@@ -183,14 +183,14 @@ useDropdownClose(
 // without closing, leaving the single close to the button's toggle. Nothing reads the
 // returned `justClosed` — that guard is for toggles that set the flag themselves.
 useDropdownClose(
-  advancedPanelRef,
+  optionsPanelRef,
   () => {
-    if (isAdvancedOpen.value) isAdvancedOpen.value = false
+    if (isOptionsOpen.value) isOptionsOpen.value = false
   },
-  { toggleButton: computed(() => searchBarRef.value?.advancedBtnRef ?? null) },
+  { toggleButton: computed(() => searchBarRef.value?.optionsBtnRef ?? null) },
 )
 
-// Re-run the search whenever any advanced setting changes — the current results
+// Re-run the search whenever any search option changes — the current results
 // were generated with the old setting values and are now stale.
 watch(
   [
@@ -209,6 +209,12 @@ watch(
     }
   },
 )
+
+// The per-word toggles rewrite the query's syntax; a search already on screen re-runs with it.
+function onPerWordQuery(query: string) {
+  searchQuery.value = query
+  if (hasSearched.value && executedQuery.value) handleSearch(query)
+}
 
 // The index builds in the background; a search issued before the first segments
 // flush returns 'indexNotReady' and the results area shows that error until the
@@ -460,10 +466,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="search-page">
     <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
-    <div v-show="!showAdvancedCard" class="search-bar-dock">
+    <div v-show="!showOptionsCard" class="search-bar-dock">
       <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
            instance (no remount), so typing, focus and refs survive the hop back to the top. -->
-      <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showAdvancedCard">
+      <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showOptionsCard">
       <FullTextSearchBar
         ref="searchBarRef"
         v-model:search-query="searchQuery"
@@ -472,19 +478,20 @@ onBeforeUnmount(() => {
         :total-result-count="results.length"
         :filter-count="checkedBookIds.size"
         :at-filter-count="atFilters.length"
-        :is-advanced-open="isAdvancedOpen"
-        :is-advanced-active="isAdvancedActive"
+        :is-options-open="isOptionsOpen"
+        :is-options-active="isOptionsActive"
+        :show-options-toggle="!showOptionsCard"
         v-model:sort-order="sortOrder"
         @search="onSearch"
         @cancel="cancelSearch"
         @toggle-filter="isFilterOpen = !isFilterOpen"
-        @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
+        @toggle-options="isOptionsOpen = !isOptionsOpen"
         @clear="onClearSearch"
       />
       </Teleport>
-      <FullTextSearchAdvancedPanel
-        v-if="isAdvancedOpen"
-        ref="advancedPanelRef"
+      <FullTextSearchOptionsPanel
+        v-if="isOptionsOpen"
+        ref="optionsPanelRef"
         :max-word-distance="maxWordDistance"
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
@@ -493,6 +500,7 @@ onBeforeUnmount(() => {
         :grammar-wrap="grammarWrap"
         :fuzzy="fuzzy"
         :wildcard-wrap="wildcardWrap"
+        :query="searchQuery"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
@@ -501,15 +509,16 @@ onBeforeUnmount(() => {
         @update:grammar-wrap="grammarWrap = $event"
         @update:fuzzy="fuzzy = $event"
         @update:wildcard-wrap="wildcardWrap = $event"
-        @close="isAdvancedOpen = false"
+        @update:query="onPerWordQuery"
+        @close="isOptionsOpen = false"
       />
     </div>
 
     <div class="results-area">
       <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
-      <PageCard v-show="showAdvancedCard">
+      <PageCard v-show="showOptionsCard">
         <div :id="cardBarSlotId" class="card-bar-slot" />
-        <FullTextSearchAdvancedPanel
+        <FullTextSearchOptionsPanel
           as-card
           :max-word-distance="maxWordDistance"
           :require-ordered="requireOrdered"
@@ -519,7 +528,8 @@ onBeforeUnmount(() => {
           :grammar-wrap="grammarWrap"
           :fuzzy="fuzzy"
           :wildcard-wrap="wildcardWrap"
-          @update:max-word-distance="maxWordDistance = $event"
+          :query="searchQuery"
+            @update:max-word-distance="maxWordDistance = $event"
           @update:require-ordered="requireOrdered = $event"
           @update:context-words="settings.searchContextMarginWords = $event"
           @update:expand-ketiv="expandKetiv = $event"
@@ -527,11 +537,12 @@ onBeforeUnmount(() => {
           @update:grammar-wrap="grammarWrap = $event"
           @update:fuzzy="fuzzy = $event"
           @update:wildcard-wrap="wildcardWrap = $event"
+          @update:query="onPerWordQuery"
         />
       </PageCard>
-      <div v-if="!showAdvancedCard" class="results-list-wrap">
+      <div v-if="!showOptionsCard" class="results-list-wrap">
         <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
-             column, runs the full height beside it, and the advanced dropdown covers it. -->
+             column, runs the full height beside it, and the options dropdown covers it. -->
         <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
         <div class="search-stage-row" aria-live="polite">
           <template v-if="isSearching">
@@ -562,7 +573,7 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div v-if="isFilterOpen" class="filter-shell" :class="{ floating: showAdvancedCard }" @click.self="isFilterOpen = false">
+      <div v-if="isFilterOpen" class="filter-shell" :class="{ floating: showOptionsCard }" @click.self="isFilterOpen = false">
         <FullTextSearchFilterPanel
           ref="filterPanelRef"
           :checked-book-ids="checkedBookIds"
@@ -619,7 +630,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
 }
-/* Anchor for the advanced panel: on wide screens it floats as a popup below
+/* Anchor for the options panel: on wide screens it floats as a popup below
    the search bar, so it needs the bar's bottom edge as its containing block. */
 .search-bar-dock {
   position: relative;
@@ -628,7 +639,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 0;
   /* The results area has no stacking context, so its filter shell (z-index 10) competes
-     with this dock directly: stay above it so the dock's popups (advanced panel, sort
+     with this dock directly: stay above it so the dock's popups (options panel, sort
      dropdown) paint over both the results list and the filter side panel. */
   z-index: 11;
 }
@@ -639,7 +650,7 @@ onBeforeUnmount(() => {
   padding: 4px 0;
 }
 /* The card owns the frame; the panel inside is just its lower section. */
-.results-area :deep(.advanced-panel.as-card) {
+.results-area :deep(.options-panel.as-card) {
   width: 100%;
   max-width: 100%;
   min-height: 0;
@@ -651,8 +662,8 @@ onBeforeUnmount(() => {
 /* Full-width card (PageCard <=600px) takes the app background; the panel must
    not paint its own bg-secondary over it. Breakpoint mirrors PageCard.vue. */
 @media (max-width: 600px) {
-  .results-area :deep(.advanced-panel.as-card),
-  .results-area :deep(.advanced-panel.as-card .panel-header) {
+  .results-area :deep(.options-panel.as-card),
+  .results-area :deep(.options-panel.as-card .panel-header) {
     background: none;
   }
 }

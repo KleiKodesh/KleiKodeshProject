@@ -2,7 +2,7 @@
  * Search result cache — persisted in app-search-cache IDB under `search:` prefix.
  * LRU-capped at 100 queries.
  *
- * Cache keys encode the plain query plus all advanced search options that affect which
+ * Cache keys encode the plain query plus all search options that affect which
  * results C# returns (e.g. "זימון|d10|ord|ktv|ww"). The display-LRU stores only the
  * plain normalized query strings so the datalist shows clean text, not encoded keys.
  *

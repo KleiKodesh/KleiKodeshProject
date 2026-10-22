@@ -73,13 +73,28 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// streaming search path an escaping exception closes the socket with no response and
         /// reads as a service outage.
         /// </summary>
-        public string RewriteQuery(string query, int perTerm = PerTermLimit)
+        /// <param name="onlyMarked">Expand only the words the user marked with a leading '+'
+        /// (per-word related forms); the rest pass through.</param>
+        public string RewriteQuery(string query, int perTerm = PerTermLimit, bool onlyMarked = false)
         {
-            try { return RewriteCore(query, perTerm); }
+            try { return RewriteCore(query, perTerm, onlyMarked); }
             catch (Exception) { return query; }
         }
 
-        private string RewriteCore(string query, int perTerm)
+        /// <summary>True when some word carries the per-word related-forms marker ('+', leading,
+        /// in any order with the '^' spelling-variants marker).</summary>
+        public static bool HasRelatedMarker(string query)
+        {
+            foreach (string token in query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                if (LeadingWordMarkers(token).IndexOf('+') >= 0) return true;
+            return false;
+        }
+
+        /// <summary>The token's leading per-word markers ('+' related forms, '^' spelling variants).</summary>
+        private static string LeadingWordMarkers(string token) =>
+            token.Substring(0, token.Length - token.TrimStart('+', '^').Length);
+
+        private string RewriteCore(string query, int perTerm, bool onlyMarked)
         {
             if (string.IsNullOrWhiteSpace(query) || !IsAvailable) return query;
             if (query.IndexOf('|') >= 0) return query;   // manual OR groups — leave them alone
@@ -104,7 +119,16 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 // bare word — and keep them, so every alternative is re-wrapped in the SAME
                 // markers. Markers COMPOSE with expansion rather than being overridden by it: a
                 // grammar- or fuzzy-marked word expands to alternatives carrying those markers.
-                string core = PeelMarkers(token, out string lead, out string trail);
+                // Per-word markers: '+' is consumed here; '^' rides on every alternative so
+                // they all get the spelling variants the user asked this word for.
+                string marks = LeadingWordMarkers(token);
+                if (onlyMarked && marks.IndexOf('+') < 0)
+                {
+                    rewritten.Append(token);
+                    continue;
+                }
+                string core = PeelMarkers(token.Substring(marks.Length), out string lead, out string trail);
+                if (marks.IndexOf('^') >= 0) lead = "^" + lead;
 
                 string bare = BareHebrew(core);
                 if (bare.Length < MinBareLength)

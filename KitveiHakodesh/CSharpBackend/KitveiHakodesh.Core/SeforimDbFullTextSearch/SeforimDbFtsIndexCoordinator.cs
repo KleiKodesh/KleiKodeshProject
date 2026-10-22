@@ -710,7 +710,7 @@ public sealed class SeforimDbFtsIndexCoordinator
         bool expandRelated = false)
     {
         EnsureIndexing();
-        if (expandRelated) query = RewriteRelated(query);
+        if (WantsRelated(query, expandRelated)) query = RewriteRelated(query, expandRelated);
         var result = new FtsSearchResult();
         if (!HasDb || !_isReady)
         {
@@ -750,8 +750,12 @@ public sealed class SeforimDbFtsIndexCoordinator
         return result;
     }
 
-    private string RewriteRelated(string query) =>
-        _expander is null ? query : _expander.RewriteQuery(query, SeforimDbFtsRelatedFormExpander.PerTermLimit);
+    /// <summary>Related forms for every word (the flag) or only the '+'-marked ones.</summary>
+    private static bool WantsRelated(string query, bool expandRelated) =>
+        expandRelated || SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query);
+
+    private string RewriteRelated(string query, bool allWords) =>
+        _expander is null ? query : _expander.RewriteQuery(query, SeforimDbFtsRelatedFormExpander.PerTermLimit, onlyMarked: !allWords);
 
     // ── Streaming search (ftsSearchStream) ───────────────────────────────────────
     // The service PUSHES result frames continuously over the caller's single pipe
@@ -779,10 +783,10 @@ public sealed class SeforimDbFtsIndexCoordinator
         Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false)
     {
         EnsureIndexing();
-        if (expandRelated)
+        if (WantsRelated(query, expandRelated))
         {
             try { await emit(new FtsStreamChunk { Stage = "rewrite" }); } catch { /* client gone */ }
-            query = RewriteRelated(query);
+            query = RewriteRelated(query, expandRelated);
         }
         if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
         if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }

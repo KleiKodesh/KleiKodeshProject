@@ -9,7 +9,7 @@
     "placeholderFilterHint": "הוסף {'@'} לסינון לפי ספר או קטגוריה",
     "filterCount": "סינון: {n} ספרים",
     "filterResults": "סינון תוצאות",
-    "advancedOptions": "אפשרויות מתקדמות",
+    "searchOptions": "אפשרויות חיפוש",
     "cancelSearch": "ביטול חיפוש",
     "search": "חיפוש"
   },
@@ -54,24 +54,29 @@
     "closePreview": "סגור תצוגה מקדימה",
     "showMore": "הצג עוד"
   },
-  "adv": {
-    "title": "אפשרויות חיפוש מתקדמות",
+  "options": {
+    "title": "אפשרויות חיפוש",
     "syntax": "תחביר חיפוש",
+    "allWords": "כל המילים",
+    "perWord": "לפי מילה",
+    "perWordEmpty": "הקלד מילים בתיבת החיפוש",
+    "clear": "נקה",
     "wordDistance": "מרחק מקסימלי בין מילים",
-    "contextWords": "הקשר לפני ואחרי (מילים)",
+    "contextWords": "הקשר לפני ואחרי (במילים)",
     "wordOrder": "סדר מילים לפי שאילתא",
     "grammarWrap": "תחיליות וסופיות דקדוקיות",
     "wildcardWrap": "תחיליות וסופיות",
     "fuzzy": "חיפוש מטושטש",
     "spellingVariants": "הרחב כתיב חסר/מלא",
-    "expanded": "חיפוש מורחב",
-    "expandedHint": "(נטיות ומילים נרדפות)",
+    "expanded": "נטיות ומילים נרדפות",
     "syntaxWildcard": "תחיליות וסופיות",
     "syntaxOptional": "תו אופציונלי (כתיב חסר/מלא)",
     "syntaxFuzzy": "דומה עם שגיאה (מרחק 1)",
     "syntaxFuzzyN": "דומה עם שגיאה מותאמת (1–3)",
     "syntaxOr": "או (בחירה אחת או יותר)",
     "syntaxGrammar": "קידומות/סיומות דקדוקיות",
+    "syntaxKetiv": "כתיב חסר/מלא למילה",
+    "syntaxRelated": "נטיות ומילים נרדפות למילה",
     "no": "לא",
     "yes": "כן"
   }

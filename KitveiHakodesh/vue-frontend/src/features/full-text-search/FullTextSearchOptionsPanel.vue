@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import {
+  WORD_OPTIONS, WRAP_OPTIONS, isWrapOption, parseQueryWord, renderQueryWord, hasOption, withOption,
+} from './queryWordSyntax'
+import type { QueryWord, WordOption } from './queryWordSyntax'
 
 const props = defineProps<{
   maxWordDistance: number
@@ -11,6 +15,8 @@ const props = defineProps<{
   grammarWrap: boolean
   fuzzy: boolean
   wildcardWrap: boolean
+  /** Live search-bar text. It holds the per-word options as syntax (see queryWordSyntax). */
+  query: string
   /** Rendered inline as a centered card on the empty search page, not as a popup. */
   asCard?: boolean
 }>()
@@ -24,11 +30,123 @@ const emit = defineEmits<{
   'update:grammarWrap': [boolean]
   'update:fuzzy': [boolean]
   'update:wildcardWrap': [boolean]
+  'update:query': [string]
   close: []
 }>()
 
 type ActiveTab = 'options' | 'syntax'
 const activeTab = ref<ActiveTab>('options')
+
+// Each option row: [all words | per word], a pair where at most one is on. "All words" is
+// the persisted global setting; "per word" writes the option into the query as syntax.
+const LABEL_KEYS: Record<WordOption, string> = {
+  wildcard: 'wildcardWrap', grammar: 'grammarWrap', fuzzy: 'fuzzy', ketiv: 'spellingVariants', related: 'expanded',
+}
+const GLOBAL_EVENTS = {
+  wildcard: 'update:wildcardWrap', grammar: 'update:grammarWrap', fuzzy: 'update:fuzzy',
+  ketiv: 'update:expandKetiv', related: 'update:expandRelated',
+} as const
+
+function isAllWords(option: WordOption): boolean {
+  return { wildcard: props.wildcardWrap, grammar: props.grammarWrap, fuzzy: props.fuzzy,
+           ketiv: props.expandKetiv, related: props.expandRelated }[option]
+}
+function setAllWords(option: WordOption, on: boolean) {
+  // emit's overloads cannot take a union of event names.
+  ;(emit as (event: string, value: boolean) => void)(GLOBAL_EVENTS[option], on)
+}
+
+// The query's tokens; words whose syntax the toggles can't express stay as typed.
+const tokens = computed(() => props.query.trim().split(/\s+/).filter(Boolean))
+const parsedTokens = computed(() => tokens.value.map(parseQueryWord))
+const queryWords = computed(() => [
+  ...new Set(parsedTokens.value.filter((w): w is QueryWord => w !== null).map((w) => w.core)),
+])
+
+// Rows switched to "per word" before any word is checked; one with a checked word shows by
+// that alone. Not persisted: the query's syntax is the per-search state.
+const perWordRows = ref(new Set<WordOption>())
+function isPerWord(option: WordOption): boolean {
+  if (isAllWords(option)) return false
+  return perWordRows.value.has(option) || parsedTokens.value.some((w) => w && hasOption(w, option))
+}
+
+function wordHas(core: string, option: WordOption): boolean {
+  return parsedTokens.value.some((w) => w?.core === core && hasOption(w, option))
+}
+
+/** Rewrite the query, mapping each parseable word. */
+function rewrite(map: (word: QueryWord) => QueryWord) {
+  const text = tokens.value
+    .map((token, i) => {
+      const word = parsedTokens.value[i]
+      return word ? renderQueryWord(map(word)) : token
+    })
+    .join(' ')
+  if (text !== tokens.value.join(' ')) emit('update:query', text)
+}
+
+function markPerWord(option: WordOption, on: boolean) {
+  const rows = new Set(perWordRows.value)
+  if (on) rows.add(option)
+  else rows.delete(option)
+  perWordRows.value = rows
+}
+
+/** A wrap row that was "all words" becomes "per word" with every word but `except` checked,
+ *  so turning one word to another wrap never contradicts it. */
+function splitOtherWrapRows(option: WordOption, except: string | null): ((w: QueryWord) => QueryWord)[] {
+  if (!isWrapOption(option)) return []
+  const maps: ((w: QueryWord) => QueryWord)[] = []
+  for (const other of WRAP_OPTIONS) {
+    if (other === option || !isAllWords(other)) continue
+    setAllWords(other, false)
+    markPerWord(other, true)
+    maps.push((w) => (w.core === except || w.wrap ? w : withOption(w, other, true)))
+  }
+  return maps
+}
+
+function toggleAllWords(option: WordOption) {
+  const on = !isAllWords(option)
+  setAllWords(option, on)
+  markPerWord(option, false)
+  if (on && isWrapOption(option))
+    for (const other of WRAP_OPTIONS) if (other !== option) { setAllWords(other, false); markPerWord(other, false) }
+  // All words (or none): the option's per-word syntax is redundant, so drop it, and with
+  // a wrap made global, every other wrap goes too.
+  rewrite((w) => (on && isWrapOption(option) ? { ...w, wrap: null } : withOption(w, option, false)))
+}
+
+function togglePerWord(option: WordOption) {
+  if (isPerWord(option)) {
+    markPerWord(option, false)
+    rewrite((w) => withOption(w, option, false))
+    return
+  }
+  // From "all words": keep every word checked, now as syntax.
+  const fromAll = isAllWords(option)
+  setAllWords(option, false)
+  markPerWord(option, true)
+  if (!fromAll) return
+  if (isWrapOption(option))
+    for (const other of WRAP_OPTIONS) if (other !== option) setAllWords(other, false)
+  rewrite((w) => withOption(w, option, true))
+}
+
+function toggleWord(core: string, option: WordOption) {
+  const on = !wordHas(core, option)
+  const others = on ? splitOtherWrapRows(option, core) : []
+  rewrite((w) => {
+    let next = w
+    for (const map of others) next = map(next)
+    return next.core === core ? withOption(next, option, on) : next
+  })
+}
+
+function clearRow(option: WordOption) {
+  rewrite((w) => withOption(w, option, false))
+}
 
 function onDistanceInput(event: Event) {
   const value = parseInt((event.target as HTMLInputElement).value, 10)
@@ -42,7 +160,7 @@ function onContextWordsInput(event: Event) {
 </script>
 
 <template>
-  <div class="advanced-panel" :class="{ 'as-card': asCard }" @keydown.esc.stop="emit('close')">
+  <div class="options-panel" :class="{ 'as-card': asCard }" @keydown.esc.stop="emit('close')">
     <div class="panel-header">
       <div class="tabs">
         <button
@@ -50,14 +168,14 @@ function onContextWordsInput(event: Event) {
           :class="{ active: activeTab === 'options' }"
           @click="activeTab = 'options'"
         >
-          {{ $t('fullTextSearch.adv.title') }}
+          {{ $t('fullTextSearch.options.title') }}
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'syntax' }"
           @click="activeTab = 'syntax'"
         >
-          {{ $t('fullTextSearch.adv.syntax') }}
+          {{ $t('fullTextSearch.options.syntax') }}
         </button>
       </div>
       <button v-if="!asCard" class="close-btn" :title="$t('fullTextSearch.close')" @click="emit('close')">
@@ -68,7 +186,7 @@ function onContextWordsInput(event: Event) {
     <div v-if="activeTab === 'options'" class="panel-body">
       <!-- Word distance -->
       <div class="option-row">
-        <label class="option-label" for="word-distance-input">{{ $t('fullTextSearch.adv.wordDistance') }}</label>
+        <label class="option-label" for="word-distance-input">{{ $t('fullTextSearch.options.wordDistance') }}</label>
         <input
           id="word-distance-input"
           type="number"
@@ -80,9 +198,26 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
- <!-- Context words -->
+      <!-- Order mode -->
       <div class="option-row">
-        <label class="option-label" for="context-words-input">{{ $t('fullTextSearch.adv.contextWords') }}</label>
+        <span class="option-label">{{ $t('fullTextSearch.options.wordOrder') }}</span>
+        <div class="toggle-group">
+          <button
+            class="toggle-btn"
+            :class="{ active: !props.requireOrdered }"
+            @click="emit('update:requireOrdered', false)"
+          >{{ $t('fullTextSearch.options.no') }}</button>
+          <button
+            class="toggle-btn"
+            :class="{ active: props.requireOrdered }"
+            @click="emit('update:requireOrdered', true)"
+          >{{ $t('fullTextSearch.options.yes') }}</button>
+        </div>
+      </div>
+
+      <!-- Context words -->
+      <div class="option-row">
+        <label class="option-label" for="context-words-input">{{ $t('fullTextSearch.options.contextWords') }}</label>
         <input
           id="context-words-input"
           type="number"
@@ -96,86 +231,37 @@ function onContextWordsInput(event: Event) {
 
       <div class="option-separator" />
 
-      <!-- Order mode -->
-      <div class="option-row">
-        <span class="option-label">{{ $t('fullTextSearch.adv.wordOrder') }}</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.requireOrdered }"
-            @click="emit('update:requireOrdered', false)"
-          >{{ $t('fullTextSearch.adv.no') }}</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.requireOrdered }"
-            @click="emit('update:requireOrdered', true)"
-          >{{ $t('fullTextSearch.adv.yes') }}</button>
+      <!-- Per-word options: [all words | per word]; per word lists the query's words. -->
+      <div v-for="option in WORD_OPTIONS" :key="option" class="wrap-row">
+        <div class="option-row">
+          <span class="option-label">{{ $t(`fullTextSearch.options.${LABEL_KEYS[option]}`) }}</span>
+          <div class="toggle-group">
+            <button
+              v-if="isPerWord(option) && queryWords.some((w) => wordHas(w, option))"
+              class="toggle-btn"
+              @click="clearRow(option)"
+            >{{ $t('fullTextSearch.options.clear') }}</button>
+            <button
+              class="toggle-btn"
+              :class="{ active: isAllWords(option) }"
+              @click="toggleAllWords(option)"
+            >{{ $t('fullTextSearch.options.allWords') }}</button>
+            <button
+              class="toggle-btn"
+              :class="{ active: isPerWord(option) }"
+              @click="togglePerWord(option)"
+            >{{ $t('fullTextSearch.options.perWord') }}</button>
+          </div>
         </div>
-      </div>    
-
-      <!-- Wildcard wrap (*word*: any prefix/suffix, not only grammatical) -->
-      <div class="option-row">
-        <span class="option-label">{{ $t('fullTextSearch.adv.wildcardWrap') }}</span>
-        <div class="toggle-group">
-          <button class="toggle-btn" :class="{ active: !props.wildcardWrap }" @click="emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.no') }}</button>
-          <button class="toggle-btn" :class="{ active: props.wildcardWrap }" @click="emit('update:wildcardWrap', true); emit('update:grammarWrap', false); emit('update:fuzzy', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
-        </div>
-      </div>
-
-      <!-- Grammar wrap -->
-      <div class="option-row">
-        <span class="option-label">{{ $t('fullTextSearch.adv.grammarWrap') }}</span>
-        <div class="toggle-group">
-          <button class="toggle-btn" :class="{ active: !props.grammarWrap }" @click="emit('update:grammarWrap', false)">{{ $t('fullTextSearch.adv.no') }}</button>
-          <button class="toggle-btn" :class="{ active: props.grammarWrap }" @click="emit('update:grammarWrap', true); emit('update:fuzzy', false); emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
-        </div>
-      </div>
-
-      <!-- Fuzzy (edit distance 1 on every plain word) -->
-      <div class="option-row">
-        <span class="option-label">{{ $t('fullTextSearch.adv.fuzzy') }}</span>
-        <div class="toggle-group">
-          <button class="toggle-btn" :class="{ active: !props.fuzzy }" @click="emit('update:fuzzy', false)">{{ $t('fullTextSearch.adv.no') }}</button>
-          <button class="toggle-btn" :class="{ active: props.fuzzy }" @click="emit('update:fuzzy', true); emit('update:grammarWrap', false); emit('update:wildcardWrap', false)">{{ $t('fullTextSearch.adv.yes') }}</button>
-        </div>
-      </div>
-
-      <!-- כתיב expansion -->
-      <div class="option-row">
-        <span class="option-label">{{ $t('fullTextSearch.adv.spellingVariants') }}</span>
-        <div class="toggle-group">
+        <div v-if="isPerWord(option)" class="word-toggles">
+          <span v-if="!queryWords.length" class="option-hint">{{ $t('fullTextSearch.options.perWordEmpty') }}</span>
           <button
-            class="toggle-btn"
-            :class="{ active: !props.expandKetiv }"
-            @click="emit('update:expandKetiv', false)"
-          >{{ $t('fullTextSearch.adv.no') }}</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.expandKetiv }"
-            @click="emit('update:expandKetiv', true)"
-          >{{ $t('fullTextSearch.adv.yes') }}</button>
-        </div>
-      </div>
-
-      <div class="option-separator" />
-
-      <!-- Related-forms expansion (inflections / vetted synonyms / Targum bridge) -->
-      <div class="option-row">
-        <span class="option-label">
-          {{ $t('fullTextSearch.adv.expanded') }}
-          <span class="option-hint">{{ $t('fullTextSearch.adv.expandedHint') }}</span>
-        </span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            :class="{ active: !props.expandRelated }"
-            @click="emit('update:expandRelated', false)"
-          >{{ $t('fullTextSearch.adv.no') }}</button>
-          <button
-            class="toggle-btn"
-            :class="{ active: props.expandRelated }"
-            @click="emit('update:expandRelated', true)"
-          >{{ $t('fullTextSearch.adv.yes') }}</button>
+            v-for="word in queryWords"
+            :key="word"
+            class="toggle-btn word-toggle"
+            :class="{ active: wordHas(word, option) }"
+            @click="toggleWord(word, option)"
+          >{{ word }}</button>
         </div>
       </div>
     </div>
@@ -183,28 +269,36 @@ function onContextWordsInput(event: Event) {
     <div v-else-if="activeTab === 'syntax'" class="syntax-help">
       <div class="syntax-reference">
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxWildcard') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxWildcard') }}</div>
           <div class="usage"><span class="example">ישר*</span> <span class="example">*לום</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxOptional') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxOptional') }}</div>
           <div class="usage"><span class="example">שלו?ם</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxFuzzy') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxFuzzy') }}</div>
           <div class="usage"><span class="example">יצחק~</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxFuzzyN') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxFuzzyN') }}</div>
           <div class="usage"><span class="example">משה~2</span> <span class="example">משה~3</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxOr') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxOr') }}</div>
           <div class="usage"><span class="example">משה | אהרן</span></div>
         </div>
         <div class="syntax-row">
-          <div class="intent">{{ $t('fullTextSearch.adv.syntaxGrammar') }}</div>
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxGrammar') }}</div>
           <div class="usage"><span class="example">%שלום%</span> <span class="example">%שלום</span> <span class="example">שלום%</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxKetiv') }}</div>
+          <div class="usage"><span class="example">^שלום</span></div>
+        </div>
+        <div class="syntax-row">
+          <div class="intent">{{ $t('fullTextSearch.options.syntaxRelated') }}</div>
+          <div class="usage"><span class="example">+שלום</span></div>
         </div>
       </div>
     </div>
@@ -212,7 +306,7 @@ function onContextWordsInput(event: Event) {
 </template>
 
 <style scoped>
-.advanced-panel {
+.options-panel {
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
@@ -236,7 +330,7 @@ function onContextWordsInput(event: Event) {
 
 /* Empty-page card: in-flow, bordered, centered by the page. Doubled class overrides the
    popup rule above. */
-.advanced-panel.as-card {
+.options-panel.as-card {
   position: static;
   /* Drop the popup's z-index: as a flex item of the page card it still applies while
      static, and stacked the card above the narrow filter overlay (z-index 10). */
@@ -395,7 +489,8 @@ function onContextWordsInput(event: Event) {
 }
 .toggle-btn {
   height: 26px;
-  min-width: 56px;
+  /* Same width as the number inputs, so every control column lines up. */
+  min-width: 64px;
   font-size: 12px;
 }
 .syntax-row {
@@ -448,4 +543,21 @@ function onContextWordsInput(event: Event) {
   white-space: nowrap;
 }
 
+.wrap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.word-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* Word toggles size to their word and may shrink below it on a narrow panel. */
+.toggle-btn.word-toggle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>

@@ -785,7 +785,7 @@ function getSideEditionOutlineTarget(): string | undefined {
   max-width: calc(100% - var(--bottom-filter-offset, 0px) - 12px);
   overflow: hidden;
   background: var(--bg-secondary);
-  /* The app's floating-panel chrome (FullTextSearchAdvancedPanel, BookViewNoteBubble):
+  /* The app's floating-panel chrome (FullTextSearchOptionsPanel, BookViewNoteBubble):
      1px border, 8px radius on all four corners, soft shadow. */
   border: 1px solid var(--border-color);
   border-radius: 8px;

@@ -406,7 +406,7 @@ namespace FtsLib.Fts5
             if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar && !group.IsUnindexed)
             {
                 var single = new List<string> { group.Pattern };
-                if (expandKetiv)
+                if (expandKetiv || group.Alternatives[0].ExpandKetiv)
                     foreach (var variant in KetivExpander.Expand(group.Pattern)) single.Add(variant);
                 return single;
             }
@@ -425,6 +425,9 @@ namespace FtsLib.Fts5
                 // group is skipped but still counts in OriginalGroupCount (it keeps its position).
                 if (alt.IsUnindexed) continue;
 
+                // The global flag, or this word's own '^' marker.
+                bool ketiv = expandKetiv || alt.ExpandKetiv;
+
                 List<string> expanded;
                 if (alt.IsFuzzy)
                 {
@@ -436,7 +439,7 @@ namespace FtsLib.Fts5
                     expanded = ExpandWildcard(alt.Pattern, ref anyRealConstraint);
                     // Spelling variants apply to the literal core too, or *word* would match
                     // FEWER lines than plain word (which gets its ketiv variants).
-                    if (expandKetiv && TrySplitStarCore(alt.Pattern, out string lead, out string core, out string trail))
+                    if (ketiv && TrySplitStarCore(alt.Pattern, out string lead, out string core, out string trail))
                         foreach (var variant in KetivExpander.Expand(core))
                             expanded.AddRange(ExpandWildcard(lead + variant + trail, ref anyRealConstraint));
                 }
@@ -445,7 +448,7 @@ namespace FtsLib.Fts5
                     anyRealConstraint = true;
                     expanded = GrammarExpander.Expand(alt.Pattern, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments);
                     // Same as wildcards: %word% must not lose the variants plain word gets.
-                    if (expandKetiv)
+                    if (ketiv)
                         foreach (var variant in KetivExpander.Expand(alt.Pattern))
                             expanded.AddRange(GrammarExpander.Expand(variant, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments));
                 }
@@ -453,7 +456,7 @@ namespace FtsLib.Fts5
                 {
                     anyRealConstraint = true;
                     expanded = new List<string> { alt.Pattern };
-                    if (expandKetiv)
+                    if (ketiv)
                         foreach (var variant in KetivExpander.Expand(alt.Pattern)) expanded.Add(variant);
                 }
 

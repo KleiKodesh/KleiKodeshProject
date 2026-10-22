@@ -9,7 +9,7 @@
     "placeholderFilterHint": "Add {'@'} to filter by book or category",
     "filterCount": "Filter: {n} books",
     "filterResults": "Filter results",
-    "advancedOptions": "Advanced options",
+    "searchOptions": "Search options",
     "cancelSearch": "Cancel search",
     "search": "Search"
   },
@@ -54,24 +54,29 @@
     "closePreview": "Close preview",
     "showMore": "Show more"
   },
-  "adv": {
-    "title": "Advanced search options",
+  "options": {
+    "title": "Search options",
     "syntax": "Search syntax",
+    "allWords": "All words",
+    "perWord": "Per word",
+    "perWordEmpty": "Type words in the search box",
+    "clear": "Clear",
     "wordDistance": "Maximum distance between words",
-    "contextWords": "Context before and after (words)",
+    "contextWords": "Context before and after (in words)",
     "wordOrder": "Keep query word order",
     "grammarWrap": "Grammatical prefixes and suffixes",
     "wildcardWrap": "Prefixes and suffixes",
     "fuzzy": "Fuzzy search",
     "spellingVariants": "Expand defective/full spelling",
-    "expanded": "Expanded search",
-    "expandedHint": "(inflections and synonyms)",
+    "expanded": "Inflections and synonyms",
     "syntaxWildcard": "Prefixes and suffixes",
     "syntaxOptional": "Optional character (defective/full spelling)",
     "syntaxFuzzy": "Similar with a typo (distance 1)",
     "syntaxFuzzyN": "Similar with custom typo distance (1–3)",
     "syntaxOr": "Or (one or more alternatives)",
     "syntaxGrammar": "Grammatical prefixes/suffixes",
+    "syntaxKetiv": "Defective/full spelling for a word",
+    "syntaxRelated": "Inflections and synonyms for a word",
     "no": "No",
     "yes": "Yes"
   }

@@ -23,8 +23,10 @@ const props = defineProps<{
   totalResultCount: number
   filterCount: number
   atFilterCount: number
-  isAdvancedOpen: boolean
-  isAdvancedActive: boolean
+  isOptionsOpen: boolean
+  isOptionsActive: boolean
+  /** False while the options show as the empty page's card: a dropdown of them is redundant. */
+  showOptionsToggle?: boolean
   sortOrder: FullTextSearchSortOrder
   disabled?: boolean
 }>()
@@ -32,14 +34,14 @@ const emit = defineEmits<{
   search: [string]
   cancel: []
   toggleFilter: []
-  toggleAdvanced: []
+  toggleOptions: []
   clear: []
   'update:searchQuery': [string]
   'update:sortOrder': [FullTextSearchSortOrder]
 }>()
 
 const filterBtnRef = ref<HTMLElement | null>(null)
-const advancedBtnRef = ref<HTMLElement | null>(null)
+const optionsBtnRef = ref<HTMLElement | null>(null)
 
 // The app's own recent-searches list (works in WebView2, unlike the browser's native
 // form autofill). recents.query IS the input's model. Committing a suggestion
@@ -130,7 +132,7 @@ function onInputKeydown(e: KeyboardEvent) {
   else if (e.key === 'Escape') handleClear()
 }
 
-defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
+defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
 </script>
 
 <template>
@@ -146,11 +148,12 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         <IconFilter20Regular />
       </button>
       <button
-        ref="advancedBtnRef"
+        v-if="showOptionsToggle !== false"
+        ref="optionsBtnRef"
         class="bar-btn"
-        :class="{ 'filter-active': isAdvancedOpen || isAdvancedActive }"
-        :title="$t('fullTextSearch.bar.advancedOptions')"
-        @click.stop="$emit('toggleAdvanced')"
+        :class="{ 'filter-active': isOptionsOpen || isOptionsActive }"
+        :title="$t('fullTextSearch.bar.searchOptions')"
+        @click.stop="$emit('toggleOptions')"
       >
         <IconOptions20Regular />
       </button>
