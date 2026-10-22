@@ -18,8 +18,8 @@ namespace DocDesign.Columns
             public float yPos { get; set; }
         }
 
-        int _maxSpacingChange = 40;
-        public int MaxSpaceAfter { get => _maxSpacingChange; set => SetProperty(ref _maxSpacingChange, value); }
+        int _maxSpacingChange = DocDesignSettings.GetInt(nameof(MaxSpaceAfter), 40);
+        public int MaxSpaceAfter { get => _maxSpacingChange; set { if (SetProperty(ref _maxSpacingChange, value)) DocDesignSettings.Save(nameof(MaxSpaceAfter), value); } }
         //public float MinSpacingChange { get; set; } = 0.1f;
 
         public void FindNext(bool repeat = true)
