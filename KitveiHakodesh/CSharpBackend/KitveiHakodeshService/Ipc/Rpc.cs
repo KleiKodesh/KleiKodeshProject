@@ -311,6 +311,9 @@ public sealed class HbDeleteLocalArgs
 {
     public string? BookId { get; set; }
     public string? LocalFolder { get; set; }
+    /// <summary>Move to the Recycle Bin instead of deleting permanently. Dev only: the installed
+    /// service runs as LocalSystem, so the hosted page recycles through its user-side host.</summary>
+    public bool ToRecycleBin { get; set; }
 }
 
 /// <summary>Result of <c>deleteHbLocalFile</c>.</summary>
@@ -319,6 +322,8 @@ public sealed class HbDeleteLocalResult
 {
     public bool Ok { get; set; }
     public bool NotFound { get; set; }
+    /// <summary>The file's drive has no Recycle Bin; nothing was deleted.</summary>
+    public bool NoRecycleBin { get; set; }
     public string? Error { get; set; }
 }
 

@@ -1,4 +1,5 @@
 using KitveiHakodeshLib.Bridge;
+using KitveiHakodesh.Core.Common;
 using KitveiHakodesh.Core.HebrewBooks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -158,6 +159,33 @@ namespace KitveiHakodeshLib.HebrewBooks
 
                 Process.Start("explorer.exe", "/select,\"" + filePath + "\"");
                 _bridge.Reply(id, new { ok = true });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>
+        /// Moves {bookId}.pdf into the Recycle Bin. Done here, not in the service: the installed
+        /// service runs as LocalSystem and would fill SYSTEM's bin; this host runs as the user.
+        /// Replies { ok } / { notFound } / { noRecycleBin } (drive has no bin, file untouched) / { error }.
+        /// </summary>
+        public void HandleRecycleHbLocalFile(JsonElement root, string id)
+        {
+            try
+            {
+                string bookId = root.GetProperty("bookId").GetString();
+                if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                localFolder = HebrewBooksLocalFolder.Resolve(localFolder);
+                if (string.IsNullOrWhiteSpace(localFolder)) { _bridge.Reply(id, new { error = HebrewBooksTexts.NoLocalFolderConfigured }); return; }
+
+                string filePath = HebrewBooksLocalFolder.LocalFolderHit(localFolder, bookId);
+                if (filePath == null) { _bridge.Reply(id, new { notFound = true }); return; }
+
+                RecycleBinOutcome outcome = RecycleBin.Send(filePath);
+                _bridge.Reply(id,
+                    outcome == RecycleBinOutcome.Recycled ? new { ok = true }
+                    : outcome == RecycleBinOutcome.NoRecycleBin ? (object)new { noRecycleBin = true }
+                    : new { error = "delete failed" });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }

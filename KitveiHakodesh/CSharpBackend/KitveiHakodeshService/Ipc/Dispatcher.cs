@@ -528,8 +528,8 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbDeleteLocalArgs>(req.Args);
                     string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
-                    var (ok, notFound, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder);
-                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, Error = error }));
+                    var (ok, notFound, noRecycleBin, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder, a.ToRecycleBin);
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, NoRecycleBin = noRecycleBin, Error = error }));
                 }
 
                 // HB local folder in the SHARED registry (same key the hosted AppSettings uses),

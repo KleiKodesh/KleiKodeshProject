@@ -3,10 +3,12 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import MessageBanner from '@/components/MessageBanner.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
+import type { HebrewBook } from './hebrewBooksCatalog'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -35,6 +37,16 @@ const {
   deleteLocalFile,
   revealInFolder,
 } = useHebrewBooks()
+
+// The book whose delete button was clicked, awaiting the user's choice in the confirm
+// dialog: delete permanently, move to the Recycle Bin, or cancel.
+const pendingDeleteBook = ref<HebrewBook | null>(null)
+
+function resolveDelete(toRecycleBin: boolean | null) {
+  const book = pendingDeleteBook.value
+  pendingDeleteBook.value = null
+  if (book && toRecycleBin !== null) deleteLocalFile(book, toRecycleBin)
+}
 
 const searchInputRef = ref<HTMLInputElement>()
 const scrollEl = ref<HTMLElement | null>(null)
@@ -136,7 +148,7 @@ function onBookClicked(
               @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
               :downloading="downloadingBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @download-clicked="downloadBook"
-              @delete-clicked="deleteLocalFile"
+              @delete-clicked="pendingDeleteBook = $event"
               @reveal-clicked="revealInFolder"
             />
           </div>
@@ -155,6 +167,17 @@ function onBookClicked(
       class="hb-error-banner"
       :message="downloadErrorMessage"
       @dismiss="downloadErrorMessage = null"
+    />
+
+    <ConfirmDialog
+      v-if="pendingDeleteBook"
+      :title="$t('hebrewBooks.deleteConfirm.title', { title: pendingDeleteBook.title })"
+      :desc="$t('hebrewBooks.deleteConfirm.warning')"
+      :confirm-label="$t('hebrewBooks.deleteConfirm.moveToRecycleBin')"
+      :extra-label="$t('hebrewBooks.deleteConfirm.deletePermanently')"
+      @confirm="resolveDelete(true)"
+      @extra="resolveDelete(false)"
+      @cancel="resolveDelete(null)"
     />
   </div>
 </template>

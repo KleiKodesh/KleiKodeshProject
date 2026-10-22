@@ -186,6 +186,9 @@
     <Compile Include="..\KitveiHakodesh.Core\Settings\UserProfile.cs">
       <Link>Core\Settings\UserProfile.cs</Link>
     </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\Common\RecycleBin.cs">
+      <Link>Core\Common\RecycleBin.cs</Link>
+    </Compile>
     <Compile Include="..\KitveiHakodesh.Core\HebrewBooks\HebrewBooksLocalFolder.cs">
       <Link>Core\HebrewBooks\HebrewBooksLocalFolder.cs</Link>
     </Compile>
