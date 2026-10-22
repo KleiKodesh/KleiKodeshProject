@@ -198,6 +198,20 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
+      <!-- Context words -->
+      <div class="option-row">
+        <label class="option-label" for="context-words-input">{{ $t('fullTextSearch.options.contextWords') }}</label>
+        <input
+          id="context-words-input"
+          type="number"
+          class="distance-input"
+          :value="props.contextWords"
+          min="0"
+          max="9999"
+          @input="onContextWordsInput"
+        />
+      </div>
+
       <!-- Order mode -->
       <div class="option-row">
         <span class="option-label">{{ $t('fullTextSearch.options.wordOrder') }}</span>
@@ -213,20 +227,6 @@ function onContextWordsInput(event: Event) {
             @click="emit('update:requireOrdered', true)"
           >{{ $t('fullTextSearch.options.yes') }}</button>
         </div>
-      </div>
-
-      <!-- Context words -->
-      <div class="option-row">
-        <label class="option-label" for="context-words-input">{{ $t('fullTextSearch.options.contextWords') }}</label>
-        <input
-          id="context-words-input"
-          type="number"
-          class="distance-input"
-          :value="props.contextWords"
-          min="0"
-          max="9999"
-          @input="onContextWordsInput"
-        />
       </div>
 
       <div class="option-separator" />
