@@ -2,7 +2,7 @@
 import { t } from '@/i18n'
 import PageCard from '@/components/PageCard.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
+import { useElementSize, useMediaQuery } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -122,6 +122,9 @@ const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
 const isOptionsOpen = ref(false)
 const optionsPanelRef = ref<HTMLElement | null>(null)
+// The options dropdown fills the whole height under the bar, i.e. the results area's.
+const resultsAreaRef = ref<HTMLElement | null>(null)
+const { height: resultsAreaHeight } = useElementSize(resultsAreaRef)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 // Set for one tick while the searchRestore watcher is applying a history position, so the
 // new-search reset can recognize that navigation no matter which watcher runs first.
@@ -466,7 +469,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="search-page">
     <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
-    <div v-show="!showOptionsCard" class="search-bar-dock">
+    <div v-show="!showOptionsCard" class="search-bar-dock" :style="{ '--options-panel-height': `${resultsAreaHeight}px` }">
       <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
            instance (no remount), so typing, focus and refs survive the hop back to the top. -->
       <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showOptionsCard">
@@ -506,7 +509,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div class="results-area">
+    <div ref="resultsAreaRef" class="results-area">
       <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
       <PageCard v-show="showOptionsCard">
         <div :id="cardBarSlotId" class="card-bar-slot" />

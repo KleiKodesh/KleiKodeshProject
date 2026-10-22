@@ -327,9 +327,10 @@ function onContextWordsInput(event: Event) {
   z-index: 20;
   width: 360px;
   max-width: calc(100% - 16px);
-  /* Viewport units, NOT a percentage: the containing block (.search-bar-dock)
-     is sized by its content, so a percentage would resolve against the bar. */
-  max-height: min(60vh, 420px);
+  /* Fills the full height under the bar. The page measures it (the containing block,
+     .search-bar-dock, is sized by its content, so a percentage would resolve against
+     the bar); 60vh is the fallback when no host sets it. */
+  height: var(--options-panel-height, 60vh);
   min-height: 0;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -349,6 +350,7 @@ function onContextWordsInput(event: Event) {
   /* No cap of its own: the page card around it bounds the height (up to the full
      results area) and the body scrolls past that. */
   max-height: none;
+  height: auto;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
