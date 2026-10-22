@@ -109,10 +109,14 @@ if ($ManualVersion -and $version -ne $ManualVersion) {
     }
     Write-Host "  Version: $version (corrected)" -ForegroundColor Cyan
 }
-elseif (-not $ManualVersion -and $version -eq $versionBefore) {
+elseif (-not $ManualVersion -and $version -eq $versionBefore -and
+        (git ls-remote --tags origin "refs/tags/$version")) {
+    # Unchanged is fine when a previous build failed after stamping: the constant already
+    # holds the next version and that tag is not released yet. Only an already-released
+    # tag means a stale stamp.
     # Auto-increment path: there is no independently-known expected version to compare
     # against, so the guard above cannot apply. But an UNCHANGED constant is
-    # unambiguously a failed stamp -- every increment must move it -- and this is the
+    # a failed stamp when its tag is already released -- and this is the
     # path that produced the v9.1.0 mis-stamp. Fail rather than tag a stale version.
     Write-Host "ERROR: version stamp did not change the constant (still $version)." -ForegroundColor Red
     Write-Host "  UpdateVersion.ps1 reported success but AddinInstaller.cs was not updated." -ForegroundColor Red
