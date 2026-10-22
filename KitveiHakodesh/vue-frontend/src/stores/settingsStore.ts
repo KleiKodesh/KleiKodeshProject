@@ -181,7 +181,7 @@ const DEFAULTS = {
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
   searchContextMarginWords: 30,
-  // Advanced full-text search settings
+  // Full-text search options
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,

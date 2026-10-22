@@ -22,6 +22,7 @@ import { chronologicalKey } from './chronology'
 import { bookTitleOf } from './fullTextSearchReferences'
 import { seedLineTexts } from './fullTextSearchSnippets'
 import { matchedTermIdsOf } from './fullTextSearchTypes'
+import { splitMarks } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -83,13 +84,15 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (!settings.searchGrammarWrap && !settings.searchWildcardWrap && !settings.searchFuzzy) return normalizedQuery
     return normalizedQuery
       .split(/\s+/)
-      .map((word) => {
-        if (!word) return word
-        if (/[*~|%]/.test(word)) return word  // already has special syntax
+      .map((token) => {
+        // Per-word '+' / '^' markers stay outermost; the wrap goes on the word inside them.
+        const { marks, rest: word } = splitMarks(token)
+        if (!word) return token
+        if (/[*~|%]/.test(word)) return token  // already has special syntax
         // The panel keeps fuzzy / wildcard wrap / grammar wrap mutually exclusive.
-        if (settings.searchFuzzy) return `${word}~1`
-        if (settings.searchWildcardWrap) return `*${word}*`
-        return `%${word}%`
+        if (settings.searchFuzzy) return `${marks}${word}~1`
+        if (settings.searchWildcardWrap) return `${marks}*${word}*`
+        return `${marks}%${word}%`
       })
       .join(' ')
   }
