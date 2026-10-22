@@ -53,8 +53,10 @@ const KEYS = {
   SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
   SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
   SETTINGS_SEARCH_EXPAND_RELATED: 'search.expandRelated',
-  SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
-  SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
+  SETTINGS_SEARCH_WILDCARD_PREFIX: 'search.wildcardPrefix',
+  SETTINGS_SEARCH_WILDCARD_SUFFIX: 'search.wildcardSuffix',
+  SETTINGS_SEARCH_GRAMMAR_PREFIX: 'search.grammarPrefix',
+  SETTINGS_SEARCH_GRAMMAR_SUFFIX: 'search.grammarSuffix',
   SETTINGS_SEARCH_FUZZY: 'search.fuzzy',
 
   // App shell / chrome
@@ -186,8 +188,10 @@ const DEFAULTS = {
   searchRequireOrdered: false,
   searchExpandKetiv: true,
   searchExpandRelated: false,
-  searchWildcardWrap: false,
-  searchGrammarWrap: false,
+  searchWildcardPrefix: false,
+  searchWildcardSuffix: false,
+  searchGrammarPrefix: false,
+  searchGrammarSuffix: false,
   searchFuzzy: false,
   copyCleanText: false,
   // Join the selected lines into one continuous run of text with NO line break
@@ -304,8 +308,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
   const searchExpandRelated = ref(DEFAULTS.searchExpandRelated)
-  const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
-  const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
+  const searchWildcardPrefix = ref(DEFAULTS.searchWildcardPrefix)
+  const searchWildcardSuffix = ref(DEFAULTS.searchWildcardSuffix)
+  const searchGrammarPrefix = ref(DEFAULTS.searchGrammarPrefix)
+  const searchGrammarSuffix = ref(DEFAULTS.searchGrammarSuffix)
   const searchFuzzy = ref(DEFAULTS.searchFuzzy)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
@@ -456,8 +462,10 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_RELATED, searchExpandRelated)
-    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
-    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
+    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX, searchWildcardPrefix)
+    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX, searchWildcardSuffix)
+    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX, searchGrammarPrefix)
+    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX, searchGrammarSuffix)
     loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
@@ -551,8 +559,10 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
   persistSetting(searchExpandRelated, KEYS.SETTINGS_SEARCH_EXPAND_RELATED)
-  persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
-  persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
+  persistSetting(searchWildcardPrefix, KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX)
+  persistSetting(searchWildcardSuffix, KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX)
+  persistSetting(searchGrammarPrefix, KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX)
+  persistSetting(searchGrammarSuffix, KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX)
   persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
@@ -735,8 +745,10 @@ export const useSettingsStore = defineStore('settings', () => {
     searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
     searchExpandRelated.value = DEFAULTS.searchExpandRelated
-    searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
-    searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
+    searchWildcardPrefix.value = DEFAULTS.searchWildcardPrefix
+    searchWildcardSuffix.value = DEFAULTS.searchWildcardSuffix
+    searchGrammarPrefix.value = DEFAULTS.searchGrammarPrefix
+    searchGrammarSuffix.value = DEFAULTS.searchGrammarSuffix
     searchFuzzy.value = DEFAULTS.searchFuzzy
     copyCleanText.value = DEFAULTS.copyCleanText
     copyJoinLines.value = DEFAULTS.copyJoinLines
@@ -784,7 +796,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showClock,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap, searchFuzzy,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyCleanText,
     copyJoinLines,
     copySourcePosition,

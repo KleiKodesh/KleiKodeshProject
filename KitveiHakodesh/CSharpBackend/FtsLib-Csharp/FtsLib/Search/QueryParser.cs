@@ -22,15 +22,18 @@ namespace FtsLib.Search
     ///     as word chars: other transparent chars (. [ ] ~ ^ $ \ +, bidi controls) join and
     ///     vanish, quotes vanish from the term (FtsLib's terms carry none), marks are stripped,
     ///     presentation forms fold, every script is lowercased and none splits from another.
-    ///   - A word with '*' or '?' is a wildcard (it wins over '~' and '%').
+    ///   - A word with '*' or '?' is a wildcard (it wins over '~' and '%'), except that '*' on
+    ///     one side and '%' on the other combine: "*word%" = any prefix + grammatical
+    ///     suffixes, "%word*" = grammatical prefixes + any suffix.
     ///   - A literal of any length is a word (one letter included). One whose term has
     ///     HebrewChars.MaxTermBytes bytes or more has no index term (Otzaria's RemoveLongFilter):
     ///     it is an unindexed slot, which matches nothing but keeps its one position (it counts
     ///     in the word distance's denominator, as a skipped wildcard).
     ///   - Every word of a piece takes the piece's operators.
-    ///   - Per-word markers, leading, before any other operator: '^' = spelling variants for
-    ///     this word; '+' = related forms, which the host rewrites before parsing, so here it
-    ///     is only dropped.
+    ///   - Per-word markers: '^' anywhere among a piece's leading signs ("*^word" = "^*word")
+    ///     = spelling variants for this word; '+' among its trailing signs ("word%+", or
+    ///     leading) = related forms, which the host rewrites before parsing, so here it is only
+    ///     dropped.
     /// </summary>
     internal static class QueryParser
     {
@@ -126,9 +129,7 @@ namespace FtsLib.Search
         /// <summary>One piece: its operators, then its words by the word rule.</summary>
         private static void ParsePiece(string raw, List<SubPattern> into)
         {
-            string unmarked = raw.TrimStart('^', '+');
-            bool expandKetiv = raw.Substring(0, raw.Length - unmarked.Length).IndexOf('^') >= 0;
-            raw = unmarked;
+            WordMarkers.Split(raw, out bool expandKetiv, out _, out raw);
 
             bool grammarPrefix = raw.StartsWith("%", StringComparison.Ordinal);
             bool grammarSuffix = raw.EndsWith("%", StringComparison.Ordinal);
@@ -163,7 +164,11 @@ namespace FtsLib.Search
 
                 bool isWildcard = normalised.IndexOf('*') >= 0 || normalised.IndexOf('?') >= 0;
                 bool fuzzy = isFuzzy && !isWildcard;        // a wildcard wins over '~'
-                bool prefixes = grammarPrefix && !isWildcard, suffixes = grammarSuffix && !isWildcard;
+                // '%' survives a wildcard only on the side without a '*' (and with no '?').
+                string stars = normalised.Trim('*');
+                bool starsOnly = isWildcard && stars.Length > 0 && stars.IndexOf('*') < 0 && stars.IndexOf('?') < 0;
+                bool prefixes = grammarPrefix && (!isWildcard || (starsOnly && !normalised.StartsWith("*", StringComparison.Ordinal)));
+                bool suffixes = grammarSuffix && (!isWildcard || (starsOnly && !normalised.EndsWith("*", StringComparison.Ordinal)));
 
                 // A literal whose term is too long has no index term: an unindexed slot.
                 bool unindexed = !isWildcard && !fuzzy && !prefixes && !suffixes
@@ -176,6 +181,7 @@ namespace FtsLib.Search
                                         expandKetiv: expandKetiv));
             }
         }
+
 
         /// <summary>FtsLib's terms carry no quotes.</summary>
         private static string StripQuotes(string s)

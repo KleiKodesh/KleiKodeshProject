@@ -18,6 +18,7 @@ import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
 import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
+import { WORD_OPTIONS } from './queryWordSyntax'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const paneNavigation = usePaneNavigation()
@@ -71,11 +72,8 @@ const {
   searchError,
   maxWordDistance,
   requireOrdered,
-  expandKetiv,
-  expandRelated,
-  grammarWrap,
-  fuzzy,
-  wildcardWrap,
+  allWords,
+  setAllWords,
   sortOrder,
   executeSearch,
   cancelSearch,
@@ -145,11 +143,7 @@ const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
 
 const isOptionsActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
-     || !expandKetiv.value
-     || expandRelated.value
-     || grammarWrap.value
-     || fuzzy.value
-     || wildcardWrap.value
+     || WORD_OPTIONS.some((option) => allWords.value[option] !== (option === 'ketiv'))
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -190,30 +184,36 @@ useDropdownClose(
   { toggleButton: computed(() => searchBarRef.value?.optionsBtnRef ?? null) },
 )
 
-// Re-run the search whenever any search option changes — the current results
-// were generated with the old setting values and are now stale.
+// A search on screen re-runs when an option changes (its results are stale), once per user
+// action: one panel click can change both a setting and the query's syntax.
+let rerunTerm: string | null = null
+let rerunScheduled = false
+function scheduleRerun(term?: string) {
+  if (term !== undefined) rerunTerm = term
+  if (rerunScheduled) return
+  rerunScheduled = true
+  void nextTick(() => {
+    rerunScheduled = false
+    const next = rerunTerm ?? executedQuery.value
+    rerunTerm = null
+    if (hasSearched.value && executedQuery.value && next) handleSearch(next)
+  })
+}
+
 watch(
   [
     maxWordDistance,
     requireOrdered,
-    expandKetiv,
-    expandRelated,
-    grammarWrap,
-    fuzzy,
-    wildcardWrap,
+    allWords,
     () => settings.searchContextMarginWords,
   ],
-  () => {
-    if (hasSearched.value && executedQuery.value) {
-      handleSearch(executedQuery.value)
-    }
-  },
+  () => scheduleRerun(),
 )
 
-// The per-word toggles rewrite the query's syntax; a search already on screen re-runs with it.
+// The per-word toggles rewrite the query's syntax; a search on screen re-runs with its term.
 function onPerWordQuery(query: string) {
   searchQuery.value = query
-  if (hasSearched.value && executedQuery.value) handleSearch(query)
+  scheduleRerun(parseSearchQuery(query).term)
 }
 
 // The index builds in the background; a search issued before the first segments
@@ -495,20 +495,12 @@ onBeforeUnmount(() => {
         :max-word-distance="maxWordDistance"
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
-        :expand-ketiv="expandKetiv"
-        :expand-related="expandRelated"
-        :grammar-wrap="grammarWrap"
-        :fuzzy="fuzzy"
-        :wildcard-wrap="wildcardWrap"
+        :all-words="allWords"
         :query="searchQuery"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
-        @update:expand-ketiv="expandKetiv = $event"
-        @update:expand-related="expandRelated = $event"
-        @update:grammar-wrap="grammarWrap = $event"
-        @update:fuzzy="fuzzy = $event"
-        @update:wildcard-wrap="wildcardWrap = $event"
+        @set-all-words="setAllWords"
         @update:query="onPerWordQuery"
         @close="isOptionsOpen = false"
       />
@@ -523,20 +515,12 @@ onBeforeUnmount(() => {
           :max-word-distance="maxWordDistance"
           :require-ordered="requireOrdered"
           :context-words="settings.searchContextMarginWords"
-          :expand-ketiv="expandKetiv"
-          :expand-related="expandRelated"
-          :grammar-wrap="grammarWrap"
-          :fuzzy="fuzzy"
-          :wildcard-wrap="wildcardWrap"
+          :all-words="allWords"
           :query="searchQuery"
             @update:max-word-distance="maxWordDistance = $event"
           @update:require-ordered="requireOrdered = $event"
           @update:context-words="settings.searchContextMarginWords = $event"
-          @update:expand-ketiv="expandKetiv = $event"
-          @update:expand-related="expandRelated = $event"
-          @update:grammar-wrap="grammarWrap = $event"
-          @update:fuzzy="fuzzy = $event"
-          @update:wildcard-wrap="wildcardWrap = $event"
+          @set-all-words="setAllWords"
           @update:query="onPerWordQuery"
         />
       </PageCard>

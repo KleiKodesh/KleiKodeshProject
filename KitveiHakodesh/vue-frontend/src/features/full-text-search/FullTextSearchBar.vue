@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -15,6 +15,7 @@ import RecentSearchesDropdown from '@/components/common/RecentSearchesDropdown.v
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useRecentSearches } from '@/composables/useRecentSearches'
 import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
+import { syntaxSegments } from './queryWordSyntax'
 
 const props = defineProps<{
   searchQuery: string
@@ -83,6 +84,18 @@ watch(
 )
 watch(localQuery, (v) => emit('update:searchQuery', v))
 
+// ── Syntax coloring ───────────────────────────────────────────────────────────
+// An input can't color part of its text, so a mirror under it paints the query with the
+// syntax signs greyed, and the input's own text is transparent (its caret and selection
+// stay). The mirror follows the input's horizontal scroll.
+const querySegments = computed(() => syntaxSegments(localQuery.value))
+const mirrorRef = ref<HTMLElement | null>(null)
+function syncMirrorScroll() {
+  const input = recents.inputEl.value
+  if (input && mirrorRef.value) mirrorRef.value.scrollLeft = input.scrollLeft
+}
+watch(localQuery, () => nextTick(syncMirrorScroll))
+
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
 const PLACEHOLDERS = [
@@ -123,6 +136,12 @@ function handleClear() {
   recents.inputEl.value?.focus()
 }
 
+// The native search field's clear button empties the text and fires `search`; clear the
+// results with it, as Esc does. (Enter fires `search` too; keydown already handled it.)
+function onNativeSearch() {
+  if (!localQuery.value) handleClear()
+}
+
 // Recent-searches navigation runs first; if it consumed the key (accepted a suggestion,
 // or closed the dropdown on Esc) it preventDefaults and we don't act.
 function onInputKeydown(e: KeyboardEvent) {
@@ -158,20 +177,30 @@ defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
         <IconOptions20Regular />
       </button>
     </template>
-    <input
-      :ref="recents.setInput"
-      v-model="localQuery"
-      type="text"
-      class="search-input"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      spellcheck="true"
-      autocomplete="off"
-      @focus="recents.onFocus"
-      @input="recents.onInput"
-      @blur="recents.onBlur"
-      @keydown="onInputKeydown"
-    />
+    <div class="query-field">
+      <div ref="mirrorRef" class="query-mirror" aria-hidden="true">
+        <span v-for="(segment, i) in querySegments" :key="i" :class="{ 'query-sign': segment.sign }">{{ segment.text }}</span>
+      </div>
+      <input
+        :ref="recents.setInput"
+        v-model="localQuery"
+        type="search"
+        class="search-input"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        spellcheck="true"
+        autocomplete="off"
+        @focus="recents.onFocus"
+        @input="recents.onInput"
+        @blur="recents.onBlur"
+        @keydown="onInputKeydown"
+        @scroll="syncMirrorScroll"
+        @select="syncMirrorScroll"
+        @keyup="syncMirrorScroll"
+        @search="onNativeSearch"
+      />
+    </div>
+
     <RecentSearchesDropdown :controller="recents" />
     <template #right>
       <!-- Sort dropdown — shown only after results finish streaming in (hidden while
@@ -218,12 +247,38 @@ defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
 </template>
 
 <style scoped>
-.search-input {
+.query-field {
+  position: relative;
+  display: flex;
   flex: 1;
   /* Text inputs have an intrinsic minimum width (default size attribute), so in
      a tight bar the input refuses to shrink and pushes the buttons and the
      count badge out of the pill. Let it shrink instead. */
   min-width: 40px;
+  /* TopSearchBar's type size reaches only a directly slotted input. */
+  font-size: 13px;
+}
+/* The input and its mirror must lay text out identically: same font, no padding. */
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font-size: inherit;
+  color: transparent;
+  caret-color: var(--text-primary);
+}
+.query-mirror {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  color: var(--text-primary);
+}
+.query-sign {
+  color: var(--accent-color);
 }
 /* Box, hover, press, disabled and the .active state come from the global .bar-btn
    rule (main.css). Only the size differs: these sit inside the search pill, which

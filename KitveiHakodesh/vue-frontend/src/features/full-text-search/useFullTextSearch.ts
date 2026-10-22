@@ -22,7 +22,8 @@ import { chronologicalKey } from './chronology'
 import { bookTitleOf } from './fullTextSearchReferences'
 import { seedLineTexts } from './fullTextSearchSnippets'
 import { matchedTermIdsOf } from './fullTextSearchTypes'
-import { splitMarks } from './queryWordSyntax'
+import { WORD_OPTIONS, applyAllWords } from './queryWordSyntax'
+import type { AllWords, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -72,7 +73,22 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap, searchWildcardWrap, searchFuzzy } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered } = storeToRefs(settings)
+
+  // Each option's persisted "all words" setting, keyed by option.
+  const ALL_WORDS_SETTINGS = {
+    wildcardPrefix: 'searchWildcardPrefix', wildcardSuffix: 'searchWildcardSuffix',
+    grammarPrefix: 'searchGrammarPrefix', grammarSuffix: 'searchGrammarSuffix',
+    fuzzy: 'searchFuzzy', ketiv: 'searchExpandKetiv', related: 'searchExpandRelated',
+  } as const satisfies Record<WordOption, keyof typeof settings>
+  const allWords = computed<AllWords>(() => {
+    const out = {} as AllWords
+    for (const option of WORD_OPTIONS) out[option] = settings[ALL_WORDS_SETTINGS[option]]
+    return out
+  })
+  function setAllWords(option: WordOption, on: boolean) {
+    settings[ALL_WORDS_SETTINGS[option]] = on
+  }
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
@@ -80,31 +96,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
   const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
-  // Every option reaches the service as query syntax: the "all words" settings are applied
-  // here to each word that lacks them (per-word choices are already in the query).
+  // Every option reaches the service as query syntax: the "all words" settings are written
+  // onto each word that lacks them (per-word choices are already in the query). Pipes are
+  // padded first, so "a|b" gets them on both words.
   function _buildQueryToSend(normalizedQuery: string): string {
-    const wrapAll = settings.searchGrammarWrap || settings.searchWildcardWrap || settings.searchFuzzy
-    if (!wrapAll && !settings.searchExpandKetiv && !settings.searchExpandRelated) return normalizedQuery
-    return normalizedQuery
-      .replace(/\|/g, ' | ')
-      .split(/\s+/)
-      .map((token) => {
-        // Per-word '+' / '^' markers stay outermost; the wrap goes on the word inside them.
-        const { marks, rest } = splitMarks(token)
-        if (!rest || rest === '|') return token
-        const related = marks.includes('+') || settings.searchExpandRelated ? '+' : ''
-        const ketiv = marks.includes('^') || settings.searchExpandKetiv ? '^' : ''
-        let word = rest
-        // The panel keeps fuzzy / wildcard wrap / grammar wrap mutually exclusive.
-        if (wrapAll && !/[*~%?]/.test(rest)) {  // a word with its own syntax keeps it
-          if (settings.searchFuzzy) word = `${rest}~1`
-          else if (settings.searchWildcardWrap) word = `*${rest}*`
-          else word = `%${rest}%`
-        }
-        return related + ketiv + word
-      })
-      .filter(Boolean)
-      .join(' ')
+    return applyAllWords(normalizedQuery.replace(/\|/g, ' | '), allWords.value)
   }
 
   function _buildCacheKey(normalizedQuery: string): string {
@@ -451,11 +447,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     searchError,
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
-    expandKetiv: searchExpandKetiv,
-    expandRelated: searchExpandRelated,
-    grammarWrap: searchGrammarWrap,
-    fuzzy: searchFuzzy,
-    wildcardWrap: searchWildcardWrap,
+    allWords,
+    setAllWords,
     sortOrder,
     executeSearch,
     cancelSearch,
