@@ -104,10 +104,22 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// book instead of a failed open.
         /// </summary>
         public static SeforimDbLineContentCodec Create(DbConnection connection)
+            => Create(connection, "main", null);
+
+        /// <summary>
+        /// Same as <see cref="Create(DbConnection)"/>, but for the dictionaries of an ATTACHed
+        /// schema (an additional library, see <see cref="SeforimDbAttachedLibraries"/>).
+        /// <paramref name="libraryPath"/> is the attached file: the dictionary cache is keyed on
+        /// IT (path + write time + length), never on the connection's own data source, which is
+        /// the PRIMARY database - keying on that would decode one library's frames with another
+        /// library's dictionary.
+        /// </summary>
+        public static SeforimDbLineContentCodec Create(DbConnection connection, string schema, string? libraryPath)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
+            if (string.IsNullOrEmpty(schema)) schema = "main";
 
-            var dictionaries = DictionariesFor(connection);
+            var dictionaries = DictionariesFor(connection, schema, libraryPath);
             if (dictionaries.Length == 0) return Plain;
 
             var decompressorsByDictionaryId = new Dictionary<uint, Decompressor>();
@@ -138,27 +150,31 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Every dictionary in the database behind <paramref name="connection"/>, read once per
         /// file and cached. An empty array means the database stores plain text.
         /// </summary>
-        private static byte[][] DictionariesFor(DbConnection connection)
+        private static byte[][] DictionariesFor(DbConnection connection, string schema, string? libraryPath)
         {
             // An in-memory database has no file to key on, and two of them share a connection
-            // string while holding different data - so never cache one.
-            string? cacheKey = CacheKeyFor(connection);
+            // string while holding different data - so never cache one. An attached schema is
+            // keyed on its OWN file, never on the primary's data source.
+            string? cacheKey = libraryPath != null
+                ? CacheKeyForPath(libraryPath)
+                : (schema == "main" ? CacheKeyFor(connection) : null);
+            if (cacheKey != null && schema != "main") cacheKey = schema + "@" + cacheKey;
             if (cacheKey != null && DictionaryBytesByDatabase.TryGetValue(cacheKey, out var cached))
                 return cached;
 
-            var dictionaries = ReadDictionaries(connection);
+            var dictionaries = ReadDictionaries(connection, schema);
             if (cacheKey != null) DictionaryBytesByDatabase[cacheKey] = dictionaries;
             return dictionaries;
         }
 
-        private static byte[][] ReadDictionaries(DbConnection connection)
+        private static byte[][] ReadDictionaries(DbConnection connection, string schema)
         {
-            if (!SeforimDbSchema.TableExists(connection, "zstd_dict")) return Array.Empty<byte[]>();
+            if (!SeforimDbSchema.TableExists(connection, "zstd_dict", schema)) return Array.Empty<byte[]>();
 
             var dictionaries = new List<byte[]>();
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "SELECT dict FROM zstd_dict";
+                command.CommandText = "SELECT dict FROM " + schema + ".zstd_dict";
                 using (var reader = command.ExecuteReader())
                 {
                     while (reader.Read())
@@ -191,7 +207,11 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// </summary>
         private static string? CacheKeyFor(DbConnection connection)
         {
-            string? dataSource = connection.DataSource;
+            return CacheKeyForPath(connection.DataSource);
+        }
+
+        private static string? CacheKeyForPath(string? dataSource)
+        {
             if (string.IsNullOrWhiteSpace(dataSource)) return null;
             if (string.Equals(dataSource, ":memory:", StringComparison.OrdinalIgnoreCase)) return null;
 

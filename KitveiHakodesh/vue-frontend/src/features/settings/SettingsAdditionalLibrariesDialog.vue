@@ -8,6 +8,12 @@ import {
   removeAdditionalSeforimLibrary,
   type AdditionalLibraryInfo,
 } from '@/webview-host/bridge'
+import {
+  additionalLibraryErrorText,
+  additionalLibraryReasonText,
+  describeFailure,
+  waitForServiceRestart,
+} from './additionalLibrariesFlow'
 
 // Visual twin of SettingsExcludedFoldersDialog (same list-box + footer layout, same RTL
 // button mirroring), but NOT the same persistence model: excluded folders are batched and
@@ -28,10 +34,23 @@ const isBusy = ref(false)
 const isRestarting = ref(false)
 const errorMessage = ref('')
 
-onMounted(async () => {
-  libraries.value = await getAdditionalSeforimLibraries()
-  isLoading.value = false
-})
+/** Set when the LIST could not be loaded (as opposed to "no libraries configured"). */
+const loadError = ref('')
+
+async function loadLibraries() {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    libraries.value = await getAdditionalSeforimLibraries()
+  } catch (err) {
+    loadError.value = describeFailure(err)
+  } finally {
+    // Always cleared: the dialog used to stay on "טוען…" forever when the call failed.
+    isLoading.value = false
+  }
+}
+
+onMounted(loadLibraries)
 
 useEventListener('keydown', (event: KeyboardEvent) => {
   if (event.code === 'Escape' && !isRestarting.value) {
@@ -40,27 +59,19 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   }
 })
 
-/** The service resolves additional libraries once, at construction, exactly like the primary
- *  DB path — so a change needs the same restart-then-reload the primary path field does
- *  (onDbPathChanged in webview-host/seforimDb.ts). 800ms matches that delay. */
-function scheduleReloadAfterRestart() {
+/** The service resolves additional libraries once, at construction — so a change needs a
+ *  restart, then a page reload. The reload used to fire after a FIXED 800ms, usually before the
+ *  service was back; now it waits until the service answers again (and says so if it never
+ *  does, instead of reloading into a dead pipe). */
+async function reloadAfterRestart() {
   isRestarting.value = true
-  setTimeout(() => window.location.reload(), 800)
-}
-
-function additionalLibraryErrorText(code: string): string {
-  switch (code) {
-    case 'empty path':
-      return 'לא נבחר נתיב'
-    case "path contains ';' or '|'":
-      return "הנתיב מכיל תו שאינו נתמך (';' או '|')"
-    case 'already configured':
-      return 'הספרייה הזו כבר מוגדרת'
-    case 'no more library slots available':
-      return 'הגעת למספר המרבי של ספריות נוספות שניתן להוסיף בהתקנה זו'
-    default:
-      return 'לא ניתן היה להוסיף את הספרייה'
+  const back = await waitForServiceRestart(() => getAdditionalSeforimLibraries())
+  if (back) {
+    window.location.reload()
+    return
   }
+  isRestarting.value = false
+  errorMessage.value = 'השירות לא חזר לפעול בזמן. נסה לסגור ולפתוח מחדש את התוכנה.'
 }
 
 async function addLibrary() {
@@ -69,13 +80,15 @@ async function addLibrary() {
   errorMessage.value = ''
   try {
     const result = await pickAdditionalSeforimLibrary()
-    if (!result) return // cancelled, or the native dialog failed outright
+    if (!result) return // the user cancelled the native dialog
     libraries.value = result.libraries
     if (result.error) {
       errorMessage.value = additionalLibraryErrorText(result.error)
     } else if (result.restarting) {
-      scheduleReloadAfterRestart()
+      await reloadAfterRestart()
     }
+  } catch (err) {
+    errorMessage.value = describeFailure(err)
   } finally {
     isBusy.value = false
   }
@@ -88,8 +101,14 @@ async function removeSelected() {
   try {
     const result = await removeAdditionalSeforimLibrary(selectedPath.value)
     libraries.value = result.libraries
-    selectedPath.value = null
-    if (result.restarting) scheduleReloadAfterRestart()
+    if (result.error) {
+      errorMessage.value = additionalLibraryErrorText(result.error)
+    } else {
+      selectedPath.value = null
+      if (result.restarting) await reloadAfterRestart()
+    }
+  } catch (err) {
+    errorMessage.value = describeFailure(err)
   } finally {
     isBusy.value = false
   }
@@ -98,7 +117,8 @@ async function removeSelected() {
 /** Per-row status text — null when the library is simply working. */
 function statusText(library: AdditionalLibraryInfo): string | null {
   if (!library.exists) return 'הקובץ לא נמצא'
-  if (!library.attached) return 'לא תואמת לסכמת seforim.db, או שה־id-ים שלה חורגים מהמותר'
+  if (!library.attached)
+    return additionalLibraryReasonText(library.reason) ?? 'הספרייה לא נטענה (סיבה לא ידועה)'
   return null
 }
 </script>
@@ -115,6 +135,10 @@ function statusText(library: AdditionalLibraryInfo): string | null {
 
         <div class="additional-list">
           <p v-if="isLoading" class="additional-empty">טוען…</p>
+          <div v-else-if="loadError" class="additional-empty">
+            <p class="additional-error">{{ loadError }}</p>
+            <button class="additional-add-button" @click="loadLibraries">נסה שוב</button>
+          </div>
           <p v-else-if="libraries.length === 0" class="additional-empty">
             לא הוגדרו ספריות נוספות
           </p>

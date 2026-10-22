@@ -195,13 +195,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Lines for a book that belongs to an attached library (see
         /// <see cref="SeforimDbAttachedLibraries"/>), rather than the primary seforim.db.
         ///
-        /// Restricted to the PLAIN content shape (not split into `line_content`, not
-        /// zstd-compressed) — this version's codec caching (<see cref="SeforimDbLineContentCodec"/>)
-        /// keys dictionaries by the PRIMARY connection's own data source, which is wrong for an
-        /// attached schema, so wiring compressed/split attached libraries through it would risk
-        /// silently decoding one library's lines with another's dictionary. A library in either
-        /// of those shapes still appears in the catalog (<see cref="GetAllBooks"/>); only reading
-        /// its text throws, clearly, instead of guessing.
+        /// Supports every content shape (plain, split into `line_content`, zstd-compressed):
+        /// the sidecar join and the zstd dictionaries come from the library's OWN schema, and the
+        /// codec's dictionary cache is keyed on the library's file, so one library's lines are
+        /// never decoded with another's dictionary.
         /// </summary>
         private List<LineRow> GetLinesPagedFromAttachedLibrary(int libraryIndex, int localBookId, int limit, int offset, int versionId)
         {
@@ -215,15 +212,14 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             using var conn = Open();
             var schema = SeforimDbSchema.ForDatabase(conn, found.Path, found.Alias);
-            if (schema.HasSplitLineContent || schema.HasCompressedContent)
-                throw new NotSupportedException(
-                    $"The additional library '{found.Label}' stores line text in a shape " +
-                    "(split/compressed, SeforimLibrary schema 6+) that is not yet supported for " +
-                    "additional libraries — only the primary seforim.db reads that shape today.");
+            // Split/compressed (SeforimLibrary schema 6+) libraries: the sidecar and the zstd
+            // dictionaries are read from THIS library's own schema, and the codec's cache is keyed
+            // on this library's file - never on the primary connection's data source.
+            using var codec = SeforimDbLineContentCodec.Create(conn, found.Alias, found.Path);
 
             var list = new List<LineRow>();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesPagedIn(found.Alias);
+            cmd.CommandText = SeforimDbSqlStrings.GetLinesPagedIn(found.Alias, schema);
             cmd.Parameters.AddWithValue("@bookId", localBookId);
             cmd.Parameters.AddWithValue("@limit", limit);
             cmd.Parameters.AddWithValue("@offset", offset);
@@ -234,7 +230,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 {
                     Id = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
                     LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                    Content = codec.DecodeColumnOrEmpty(r, 2),
                 });
             }
             return list;

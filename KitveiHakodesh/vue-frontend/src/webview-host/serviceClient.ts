@@ -161,13 +161,51 @@ export async function serviceCall<T = unknown>(
   op: string,
   args: object = {},
   signal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<T> {
-  const res = await postRpc('/rpc', encodeRequest(op, args), signal)
-  if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
-  const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
-  if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)
-  if (!env.Result || env.Result.length === 0) return undefined as T
-  return transformKeys(mpDecode(env.Result), decodeKey) as T
+  // `timeoutMs` bounds the WHOLE call, retry ladder and body read included. Without it a
+  // service that accepts the connection and never answers (or restarts mid-request) leaves
+  // the caller - and any "loading" state hanging off it - pending forever.
+  const { signal: effectiveSignal, dispose } = withCallTimeout(op, signal, timeoutMs)
+  try {
+    const res = await postRpc('/rpc', encodeRequest(op, args), effectiveSignal)
+    if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
+    const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
+    if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)
+    if (!env.Result || env.Result.length === 0) return undefined as T
+    return transformKeys(mpDecode(env.Result), decodeKey) as T
+  } finally {
+    dispose()
+  }
+}
+
+/** Thrown by a call that exceeded its `timeoutMs`. */
+export class ServiceCallTimeoutError extends Error {
+  constructor(public readonly op: string, public readonly timeoutMs: number) {
+    super(`service '${op}' did not answer within ${Math.round(timeoutMs / 1000)}s`)
+    this.name = 'ServiceCallTimeoutError'
+  }
+}
+
+/** The caller's signal, additionally aborted (with a ServiceCallTimeoutError) after `timeoutMs`. */
+function withCallTimeout(
+  op: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+): { signal: AbortSignal | undefined; dispose: () => void } {
+  if (!timeoutMs || timeoutMs <= 0) return { signal, dispose: () => {} }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new ServiceCallTimeoutError(op, timeoutMs)), timeoutMs)
+  const onCallerAbort = () => controller.abort(signal?.reason ?? new Error('aborted'))
+  if (signal?.aborted) onCallerAbort()
+  else signal?.addEventListener('abort', onCallerAbort, { once: true })
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onCallerAbort)
+    },
+  }
 }
 
 /** Fire-and-forget variant (warmups etc.) — swallows every error. */

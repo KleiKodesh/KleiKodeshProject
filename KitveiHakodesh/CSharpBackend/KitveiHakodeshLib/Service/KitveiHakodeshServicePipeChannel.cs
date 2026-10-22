@@ -26,11 +26,21 @@ namespace KitveiHakodeshLib.Service
 
         private readonly string _pipeName;
         private readonly int _connectTimeoutMilliseconds;
+        private readonly int _readTimeoutMilliseconds;
 
-        public KitveiHakodeshServicePipeChannel(string pipeName = null, int connectTimeoutMilliseconds = 5000)
+        /// <summary>Upper bound on one request/response round trip once connected. The connect
+        /// timeout alone left a hung or restarting service blocking the caller (and so the page
+        /// on "loading") forever. Generous because some calls legitimately take minutes (a
+        /// native file dialog the user is looking at); the page applies its own, shorter limits
+        /// to the calls that should be quick.</summary>
+        public const int DefaultReadTimeoutMilliseconds = 5 * 60 * 1000;
+
+        public KitveiHakodeshServicePipeChannel(string pipeName = null, int connectTimeoutMilliseconds = 5000,
+            int readTimeoutMilliseconds = DefaultReadTimeoutMilliseconds)
         {
             _pipeName = !string.IsNullOrEmpty(pipeName) ? pipeName : ResolvePipeName();
             _connectTimeoutMilliseconds = connectTimeoutMilliseconds;
+            _readTimeoutMilliseconds = readTimeoutMilliseconds;
         }
 
         public string PipeName => _pipeName;
@@ -47,10 +57,23 @@ namespace KitveiHakodeshLib.Service
             using (NamedPipeClientStream pipe = await ConnectAsync(cancellationToken).ConfigureAwait(false))
             {
                 byte[] response;
+                using (CancellationTokenSource roundTrip = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                // Closing the pipe on cancel guarantees the pending read ends even where the
+                // runtime's pipe stream does not honour the token (.NET Framework).
+                using (roundTrip.Token.Register(() => { try { pipe.Dispose(); } catch { } }))
                 try
                 {
-                    await KitveiHakodeshServiceFrameProtocol.WriteFrameAsync(pipe, requestEnvelope, cancellationToken).ConfigureAwait(false);
-                    response = await KitveiHakodeshServiceFrameProtocol.ReadFrameAsync(pipe, cancellationToken).ConfigureAwait(false);
+                    if (_readTimeoutMilliseconds > 0) roundTrip.CancelAfter(_readTimeoutMilliseconds);
+                    await KitveiHakodeshServiceFrameProtocol.WriteFrameAsync(pipe, requestEnvelope, roundTrip.Token).ConfigureAwait(false);
+                    response = await KitveiHakodeshServiceFrameProtocol.ReadFrameAsync(pipe, roundTrip.Token).ConfigureAwait(false);
+                }
+                catch (Exception ex) when ((ex is OperationCanceledException || ex is ObjectDisposedException)
+                                           && !cancellationToken.IsCancellationRequested)
+                {
+                    // Our own round-trip limit fired, not the caller: the service accepted the
+                    // connection but never answered. Same "not there" the caller retries.
+                    throw new KitveiHakodeshServiceUnavailableException(
+                        "The KitveiHakodesh service did not answer within " + (_readTimeoutMilliseconds / 1000) + " seconds.");
                 }
                 catch (IOException ex)
                 {

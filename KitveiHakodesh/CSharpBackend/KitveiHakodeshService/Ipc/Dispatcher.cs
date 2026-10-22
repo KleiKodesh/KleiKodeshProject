@@ -414,7 +414,9 @@ public sealed class Dispatcher(
                             Cancelled = true,
                         }));
 
-                    var pickerOutcome = SeforimDbLocator.AddAdditionalLibrary(picked);
+                    SeforimDbAdditionalLibraries.AddOutcome pickerOutcome;
+                    try { pickerOutcome = SeforimDbLocator.AddAdditionalLibrary(picked); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "pickAdditionalSeforimLibrary"); }
                     if (pickerOutcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
                         return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
                         {
@@ -434,7 +436,9 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
                     string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
-                    var outcome = SeforimDbLocator.AddAdditionalLibrary(p);
+                    SeforimDbAdditionalLibraries.AddOutcome outcome;
+                    try { outcome = SeforimDbLocator.AddAdditionalLibrary(p); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "addAdditionalSeforimLibrary"); }
                     if (outcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
                         return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
                         {
@@ -454,7 +458,9 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
                     string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
-                    bool removed = SeforimDbLocator.RemoveAdditionalLibrary(p);
+                    bool removed;
+                    try { removed = SeforimDbLocator.RemoveAdditionalLibrary(p); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "removeAdditionalSeforimLibrary"); }
                     if (!removed)
                         return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
                         {
@@ -970,6 +976,24 @@ public sealed class Dispatcher(
             onCarryOverFailed: ex =>
                 logger.LogWarning(ex, "Could not carry user settings over to the new library"));
 
+    /// <summary>A failed additional-library write is answered as a normal result carrying the
+    /// error (no restart is scheduled), never as a dropped connection the page waits on forever.</summary>
+    private byte[] AdditionalLibrariesFailure(Exception ex, string op)
+    {
+        logger.LogError(ex, "{Op} failed", op);
+        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+        {
+            Libraries = SafeAdditionalLibraries(),
+            Error = "could not save the setting: " + ex.Message,
+        }));
+    }
+
+    private List<AdditionalLibraryRow> SafeAdditionalLibraries()
+    {
+        try { return seforim.GetAdditionalLibraries(); }
+        catch (Exception ex) { logger.LogError(ex, "listing additional libraries failed"); return new(); }
+    }
+
     /// <summary>A stable, English, machine-readable reason string for an additional-library
     /// op's <see cref="AdditionalLibrariesResult.Error"/> — the settings page maps this to its
     /// own (Hebrew) wording, same convention as every other error string in this dispatcher.</summary>
@@ -979,6 +1003,7 @@ public sealed class Dispatcher(
         SeforimDbAdditionalLibraries.AddOutcome.InvalidCharacters => "path contains ';' or '|'",
         SeforimDbAdditionalLibraries.AddOutcome.AlreadyConfigured => "already configured",
         SeforimDbAdditionalLibraries.AddOutcome.SlotsExhausted => "no more library slots available",
+        SeforimDbAdditionalLibraries.AddOutcome.SaveFailed => "could not save the setting (registry write failed)",
         _ => "could not add library",
     };
 

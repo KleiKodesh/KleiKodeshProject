@@ -20,9 +20,8 @@
 //      mode that would silently reassign a user's saved highlights to the wrong book.
 //   7. A library whose own ids reach OffsetUnit is refused (not attached) rather than silently
 //      colliding with the next library's band.
-//   8. A library using the split line-content shape (line_content/zstd_dict) still appears in
-//      the catalog, but reading its lines throws a clear NotSupportedException instead of
-//      guessing at a codec built for a different connection's dictionaries.
+//   8. A library using the split line-content shape (line_content/zstd_dict) appears in the
+//      catalog AND its lines are readable (compressed shape: see HardeningVerify.cs).
 //   9. SeforimDbAdditionalLibraries' own parsing/counter logic (ParseEntries, SerializeEntries,
 //      NextIndexFrom) round-trips and never reuses a retired index — tested directly via
 //      InternalsVisibleTo, without touching the real Windows registry.
@@ -233,13 +232,14 @@ namespace KitveiHakodeshService.Tests
                         else
                         {
                             Ok("split-content library still appears in the catalog (book/category work without touching line text)");
-                            bool threw = false;
-                            try { queries.GetLinesPaged(book.Id, 10, 0); }
-                            catch (NotSupportedException) { threw = true; }
-                            if (!threw)
-                                Fail("GetLinesPaged on a split-content attached library did not throw NotSupportedException — it would have returned wrong/garbage content instead");
+                            // Split/compressed attached libraries are SUPPORTED now (hardening branch):
+                            // the sidecar is joined from the library's own schema.
+                            var splitLines = queries.GetLinesPaged(book.Id, 10, 0);
+                            if (splitLines.Count != 1 || splitLines[0].Content != "תוכן מפוצל")
+                                Fail("GetLinesPaged on a split-content attached library did not return its sidecar text: "
+                                     + string.Join("|", splitLines.Select(l => l.Content)));
                             else
-                                Ok("GetLinesPaged on a split-content attached library throws NotSupportedException instead of guessing");
+                                Ok("GetLinesPaged on a split-content attached library reads its line_content sidecar");
                         }
                     }
                 }

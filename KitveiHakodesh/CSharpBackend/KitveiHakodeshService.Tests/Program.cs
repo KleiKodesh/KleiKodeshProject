@@ -71,7 +71,13 @@ if (variantMode)
     // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
     return VariantVerify.Run() == 0 ? 0 : 1;
 if (multiLibMode)
+{
+    // Its Add()/Remove() concurrency block used to run against the REAL HKCU registry (with a
+    // backup/restore). An in-memory store makes it never touch a real user's settings.
+    KitveiHakodesh.Core.Settings.AppSettingsRegistry.InMemoryStore = new();
     return MultiLibraryVerify.Run() == 0 ? 0 : 1;
+}
+if (args.Contains("--hardening")) return HardeningVerify.Run() == 0 ? 0 : 1;
 if (multiLibIndexMode)
     return MultiLibraryIndexVerify.Run() == 0 ? 0 : 1;
 

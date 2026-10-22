@@ -235,6 +235,10 @@ public sealed class AdditionalLibraryRow
     /// means it is configured but failed the schema check.</summary>
     public bool Attached { get; set; }
     public string Label { get; set; } = "";
+    /// <summary>Why <see cref="Attached"/> is false (or null when it is true): a short English,
+    /// machine-readable reason (file not visible to the service account, missing tables, line
+    /// text unreadable, restart pending...). The settings page shows it next to the path.</summary>
+    public string? Reason { get; set; }
 }
 
 /// <summary>Result for every additional-library op: the FULL, current list, so a settings page

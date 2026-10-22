@@ -121,6 +121,9 @@ namespace KitveiHakodesh.Core.Settings
             /// free its slot (by design — see the class remarks), so this is a lifetime budget,
             /// not a concurrent-libraries limit.</summary>
             SlotsExhausted,
+            /// <summary>The settings store refused the write (see <see cref="AppSettingsRegistry.TrySet"/>).
+            /// Nothing was added; a slot may have been burned, which is harmless.</summary>
+            SaveFailed,
         }
 
         /// <summary>Adds <paramref name="path"/> if it is not already present (case-insensitive,
@@ -146,13 +149,24 @@ namespace KitveiHakodesh.Core.Settings
                 if (current.Any(e => string.Equals(TryFullPath(e.Path), full, StringComparison.OrdinalIgnoreCase)))
                     return AddOutcome.AlreadyConfigured;
 
+                // Never hand out a slot at or below one already in use, even if the counter value
+                // was lost or a previous counter write failed: a reused slot would silently
+                // re-point existing highlights/bookmarks at a different library.
                 int index = ReadNextIndex();
+                foreach (var e in current)
+                    if (e.Index >= index) index = e.Index + 1;
                 if (index > SeforimDbLibraryId.MaxLibraryIndex)
                     return AddOutcome.SlotsExhausted;
 
-                AppSettingsRegistry.Set(RegistryApp, RegistrySection, NextIndexValueName,
-                    (index + 1).ToString(CultureInfo.InvariantCulture));
-                Save(current.Append(new Entry(index, path)));
+                // Counter FIRST, list second: a failure (or crash) between the two burns a slot
+                // - harmless - instead of leaving a listed library whose slot the counter would
+                // hand out again. If the list write fails we report SaveFailed rather than throw.
+                if (!AppSettingsRegistry.TrySet(RegistryApp, RegistrySection, NextIndexValueName,
+                        (index + 1).ToString(CultureInfo.InvariantCulture), out _))
+                    return AddOutcome.SaveFailed;
+                if (!AppSettingsRegistry.TrySet(RegistryApp, RegistrySection, RegistryValueName,
+                        SerializeEntries(current.Append(new Entry(index, path))), out _))
+                    return AddOutcome.SaveFailed;
                 return AddOutcome.Added;
             }
         }

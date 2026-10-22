@@ -17,6 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The host-side pipe channel (net48 Lib project, but plain BCL code): compiled here so its
+         round-trip timeout is exercised for real against a silent pipe server. -->
+    <Compile Include="..\KitveiHakodeshLib\Service\KitveiHakodeshServicePipeChannel.cs" Link="LinkedLib\KitveiHakodeshServicePipeChannel.cs" />
+    <Compile Include="..\KitveiHakodeshLib\Service\KitveiHakodeshServiceFrameProtocol.cs" Link="LinkedLib\KitveiHakodeshServiceFrameProtocol.cs" />
+    <Compile Include="..\KitveiHakodeshLib\Service\IKitveiHakodeshServiceChannel.cs" Link="LinkedLib\IKitveiHakodeshServiceChannel.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\KitveiHakodeshService\KitveiHakodeshService.csproj" />
   </ItemGroup>
 

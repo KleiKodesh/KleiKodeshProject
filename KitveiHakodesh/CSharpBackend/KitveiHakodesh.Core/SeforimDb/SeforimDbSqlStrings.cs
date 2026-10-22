@@ -91,6 +91,16 @@ namespace KitveiHakodesh.Core.SeforimDb
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";
 
+        /// <summary>Shape-aware form of <see cref="GetLinesPagedIn(string)"/>: an attached library
+        /// in the split (line_content sidecar) shape joins ITS OWN sidecar, schema-qualified.
+        /// Compressed values are decoded by the caller's codec for that library.</summary>
+        public static string GetLinesPagedIn(string librarySchema, SeforimDbSchema shape) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId
+            ORDER BY l.lineIndex
+            LIMIT @limit OFFSET @offset";
+
         // ── TOC ───────────────────────────────────────────────────────────────────
 
         /// <summary>All TOC entries for a book, flat — the frontend builds the tree in memory.</summary>

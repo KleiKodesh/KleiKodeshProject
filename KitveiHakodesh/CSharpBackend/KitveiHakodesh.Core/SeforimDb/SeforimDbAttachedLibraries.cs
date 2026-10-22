@@ -47,8 +47,83 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// full path and the file's last-write time — so a rebuilt file is re-probed instead of
         /// stuck on a stale verdict for the life of the process, but an unchanged file is only
         /// probed once no matter how many connections get opened.</summary>
-        private static readonly ConcurrentDictionary<string, (DateTime WriteTimeUtc, bool Compatible)> CompatibilityCache =
+        private static readonly ConcurrentDictionary<string, (DateTime WriteTimeUtc, string? Rejection)> CompatibilityCache =
             new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Why a configured path is not (or is) attached, for a settings page and for logs:
+        /// <see cref="Rejection"/> is null exactly when the library is attachable. The reasons
+        /// are short English machine-readable strings the UI maps to its own wording. Probing
+        /// never throws: a probe failure IS the reason, because an exception swallowed here
+        /// (the file checks run as LocalSystem, where a per-user network path or a permission
+        /// problem is the usual cause) left the user with a silent "not attached".
+        /// </summary>
+        public readonly struct Status
+        {
+            public Status(SeforimDbAdditionalLibraries.Entry entry, Library? library, string? rejection)
+            {
+                Entry = entry;
+                Library = library;
+                Rejection = rejection;
+            }
+
+            public SeforimDbAdditionalLibraries.Entry Entry { get; }
+            public Library? Library { get; }
+            public string? Rejection { get; }
+        }
+
+        /// <summary>Same selection as <see cref="Resolve"/>, but reports EVERY configured entry
+        /// with the reason it was left out, instead of dropping it silently.</summary>
+        public static IReadOnlyList<Status> ResolveWithStatus(IReadOnlyList<SeforimDbAdditionalLibraries.Entry> configuredLibraries)
+        {
+            var result = new List<Status>(configuredLibraries.Count);
+            var usedIndices = new HashSet<int>();
+            foreach (var entry in configuredLibraries)
+            {
+                if (entry.Index < 1 || entry.Index > SeforimDbLibraryId.MaxLibraryIndex)
+                { result.Add(new Status(entry, null, "invalid library index")); continue; }
+                if (!usedIndices.Add(entry.Index))
+                { result.Add(new Status(entry, null, "duplicate library index")); continue; }
+
+                string? rejection = Rejection(entry.Path);
+                result.Add(new Status(entry,
+                    rejection is null ? new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path)) : null,
+                    rejection));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Opens the library read-only and decodes ONE line of text through the same codec path
+        /// the reader uses. Returns null when the text is readable, else the reason. This is the
+        /// check that makes "attached" mean "its text can actually be read" - a library can have
+        /// every catalog table and still have no usable line text (missing sidecar, empty
+        /// zstd_dict, corrupt frames).
+        /// </summary>
+        public static string? CheckTextReadable(string path)
+        {
+            try
+            {
+                using var connection = Common.SqliteConnectionFactory.OpenCorpusProbe(path);
+                var schema = SeforimDbSchema.Probe(connection);
+                bool hasText = schema.HasSplitLineContent
+                    ? SeforimDbSchema.TableExists(connection, "line_content")
+                    : SeforimDbSchema.ColumnExists(connection, "line", "content");
+                if (!hasText) return "no line text (neither line.content nor line_content)";
+
+                using var codec = SeforimDbLineContentCodec.Create(connection);
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT " + SeforimDbLineContentSql.ContentColumn(schema, "l") +
+                    " FROM line l" + SeforimDbLineContentSql.ContentJoin(schema, "l") + " LIMIT 1";
+                using var reader = command.ExecuteReader();
+                if (reader.Read()) codec.DecodeColumnOrEmpty(reader, 0);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return "line text unreadable: " + ex.GetType().Name + ": " + ex.Message;
+            }
+        }
 
         /// <summary>
         /// One additional library, resolved to the alias it is ATTACHed under, its index (which
@@ -93,7 +168,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 if (entry.Index < 1 || entry.Index > SeforimDbLibraryId.MaxLibraryIndex) continue;
                 if (!usedIndices.Add(entry.Index)) continue;
-                if (!IsCompatible(entry.Path)) continue;
+                if (Rejection(entry.Path) is not null) continue;
 
                 result.Add(new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path)));
             }
@@ -180,27 +255,33 @@ namespace KitveiHakodesh.Core.SeforimDb
             catch { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
         }
 
-        private static bool IsCompatible(string path)
+        /// <summary>Null when the library at <paramref name="path"/> is attachable, else why not.</summary>
+        private static string? Rejection(string path)
         {
             DateTime writeTimeUtc;
-            try { writeTimeUtc = File.GetLastWriteTimeUtc(path); }
-            catch { return false; }
+            try
+            {
+                if (!File.Exists(path)) return "file not found (or not visible to the service account)";
+                writeTimeUtc = File.GetLastWriteTimeUtc(path);
+            }
+            catch (Exception ex) { return "file not accessible: " + ex.GetType().Name + ": " + ex.Message; }
 
             if (CompatibilityCache.TryGetValue(path, out var cached) && cached.WriteTimeUtc == writeTimeUtc)
-                return cached.Compatible;
+                return cached.Rejection;
 
-            bool compatible = Probe(path);
-            CompatibilityCache[path] = (writeTimeUtc, compatible);
-            return compatible;
+            string? rejection = Probe(path);
+            CompatibilityCache[path] = (writeTimeUtc, rejection);
+            return rejection;
         }
 
-        private static bool Probe(string path)
+        private static string? Probe(string path)
         {
             try
             {
                 using var connection = Common.SqliteConnectionFactory.OpenCorpusProbe(path);
-                if (!RequiredTables.All(table => SeforimDbSchema.TableExists(connection, table)))
-                    return false;
+                var missing = RequiredTables.Where(table => !SeforimDbSchema.TableExists(connection, table)).ToArray();
+                if (missing.Length > 0)
+                    return "missing required table(s): " + string.Join(", ", missing);
 
                 // The required tables exist, but do their OWN ids actually fit the band this
                 // library's index will offset them into? A library built independently of
@@ -215,16 +296,17 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // SELECT: a file with the right table NAMES but other columns would otherwise attach
                 // fine and then throw in the middle of an index build, after the primary was
                 // already indexed. Rejected here, before any enumeration begins.
-                return HasColumns(connection)
-                    && MaxIdFits(connection, "book")
-                    && MaxIdFits(connection, "category")
-                    && MaxIdFits(connection, "line");
+                if (!HasColumns(connection)) return "required tables have unexpected columns";
+                foreach (string table in new[] { "book", "category", "line" })
+                    if (!MaxIdFits(connection, table)) return $"ids in table '{table}' exceed the per-library id range";
+                return null;
             }
-            catch
+            catch (Exception ex)
             {
                 // Not a SQLite file, or one SQLite refuses to open read-only (mid-write, wrong
-                // permissions). Not compatible; not fatal to the primary database.
-                return false;
+                // permissions). Not compatible; not fatal to the primary database. The reason is
+                // returned, not swallowed.
+                return "cannot be opened as a SQLite database: " + ex.GetType().Name + ": " + ex.Message;
             }
         }
 

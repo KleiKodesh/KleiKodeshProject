@@ -341,8 +341,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     // Structure ids are internal bookkeeping (never surfaced to the frontend),
                     // but globalized so two libraries' alt-TOC structures cannot collide. 0 (the
                     // "regular TOC" sentinel) is never a real id and stays untranslated.
-                    foreach (var kv in LoadAltStructures(conn))
-                        srcAlt[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
+                    // alt_toc_structure/alt_toc_entry are OPTIONAL: a library built without
+                    // alternative TOCs is a perfectly good library, just with none to index.
+                    if (HasAltToc(conn))
+                        foreach (var kv in LoadAltStructures(conn))
+                            srcAlt[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
                 }
                 catch (Exception ex) when (index != 0)
                 {
@@ -438,6 +441,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
               try
               {
                 // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
+                if (HasRegularToc(conn))
                 foreach (var group in StreamTocRowsByBook(conn))
                 {
                     ct.ThrowIfCancellationRequested();
@@ -449,6 +453,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 }
 
                 // Alt-TOC docs — alternative structures (parshiot/aliyot, dapim, …), same shape.
+                if (HasAltToc(conn))
                 foreach (var group in StreamAltTocRowsByStructure(conn))
                 {
                     ct.ThrowIfCancellationRequested();
@@ -548,6 +553,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
         using var codec = SeforimDbLineContentCodec.Create(conn);
+        bool hasRegularToc = HasRegularToc(conn);
 
         int added = 0;
         foreach (var book in books)
@@ -562,7 +568,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             int localBookId = SeforimDbLibraryId.Resolve(book.Id).LocalId;
 
             // The book's TOC entries (chapters), root-stripped, with resolved paths.
-            var rows = StripTitleRoots(LoadTocRowsForBook(conn, localBookId), book.Title, localBookId);
+            var rows = StripTitleRoots(
+                hasRegularToc ? LoadTocRowsForBook(conn, localBookId) : new List<TocRow>(), book.Title, localBookId);
             var byId = rows.ToDictionary(r => r.Id);
             var chainCache = new Dictionary<int, (string Path, int Level)>();
             (string Path, int Level) GetChain(TocRow row)
@@ -629,6 +636,18 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         }
         return added;
     }
+
+    /// <summary>True when the database has the regular TOC tables. A library without them is
+    /// indexed by its book titles only.</summary>
+    private static bool HasRegularToc(SqliteConnection conn) =>
+        SeforimDbSchema.TableExists(conn, "tocEntry") && SeforimDbSchema.TableExists(conn, "tocText");
+
+    /// <summary>True when the database has the alternative-TOC tables (all three needed by
+    /// the alt-TOC queries). Absent in many libraries; never a reason to drop one.</summary>
+    private static bool HasAltToc(SqliteConnection conn) =>
+        SeforimDbSchema.TableExists(conn, "alt_toc_structure")
+        && SeforimDbSchema.TableExists(conn, "alt_toc_entry")
+        && SeforimDbSchema.TableExists(conn, "tocText");
 
     private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId)
     {

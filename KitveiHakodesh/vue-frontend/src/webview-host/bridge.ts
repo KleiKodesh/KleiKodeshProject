@@ -1154,7 +1154,16 @@ export interface AdditionalLibraryInfo {
   attached: boolean
   /** Display label (the file name without its extension) — NOT an identifier. */
   label: string
+  /** Why `attached` is false (short English reason from the service: file not visible to the
+   *  service account, missing tables, line text unreadable, restart pending...). */
+  reason?: string
 }
+
+/** Bounds for the additional-libraries calls: a listing is quick; add/remove persist a
+ *  setting (the restart happens AFTER the reply). A native picker has no bound — the user may
+ *  take as long as they like. */
+export const ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS = 20_000
+export const ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS = 60_000
 
 export interface AdditionalLibrariesResult {
   libraries: AdditionalLibraryInfo[]
@@ -1166,14 +1175,17 @@ export interface AdditionalLibrariesResult {
   cancelled?: boolean
 }
 
-/** Every configured additional library and its current status. */
+/**
+ * Every configured additional library and its current status.
+ *
+ * REJECTS when the service cannot answer (timeout, unavailable, error). It used to return []
+ * in that case, which a settings page cannot tell apart from "no libraries configured" - the
+ * failure was shown as an empty list, or not at all.
+ */
 export async function getAdditionalSeforimLibraries(): Promise<AdditionalLibraryInfo[]> {
-  try {
-    const result = await serviceCall<AdditionalLibrariesResult>('getAdditionalSeforimLibraries')
-    return result?.libraries ?? []
-  } catch {
-    return []
-  }
+  const result = await serviceCall<AdditionalLibrariesResult>(
+    'getAdditionalSeforimLibraries', {}, undefined, ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS)
+  return result?.libraries ?? []
 }
 
 /**
@@ -1183,18 +1195,22 @@ export async function getAdditionalSeforimLibraries(): Promise<AdditionalLibrary
  * ';' or '|' in it, or this install has used up every id-space slot it can ever address.
  */
 export async function addAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
-  return serviceCall<AdditionalLibrariesResult>('addAdditionalSeforimLibrary', { path })
+  return serviceCall<AdditionalLibrariesResult>(
+    'addAdditionalSeforimLibrary', { path }, undefined, ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS)
 }
 
 /** Remove a configured path. */
 export async function removeAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
-  return serviceCall<AdditionalLibrariesResult>('removeAdditionalSeforimLibrary', { path })
+  return serviceCall<AdditionalLibrariesResult>(
+    'removeAdditionalSeforimLibrary', { path }, undefined, ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS)
 }
 
 /**
  * Show the native open-file dialog for an additional library and persist it if chosen.
- * Null means the user cancelled or it failed outright (not the same as an `error` result,
- * which still carries the current list).
+ * Null means the user CANCELLED - and only that. A failure (service down, timeout, a native
+ * dialog that errored) REJECTS: it used to return null too, which the page could not tell
+ * apart from a cancel, so a failed add looked like the user changing their mind.
+ * (An `error` result is different again: it still carries the current list.)
  *
  * Hosted: reuses the exact SAME native dialog action as the primary DB path picker — it only
  * ever returns a filesystem path, persistence always goes through the RPC below, so there is
@@ -1202,18 +1218,15 @@ export async function removeAdditionalSeforimLibrary(path: string): Promise<Addi
  * desktop and persists in one step, mirroring pickDbPath's dev branch above.
  */
 export async function pickAdditionalSeforimLibrary(): Promise<AdditionalLibrariesResult | null> {
-  try {
-    if (typeof window.__webviewAction === 'function') {
-      const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
-      if (picked?.cancelled || picked?.error || !picked?.path) return null
-      return await addAdditionalSeforimLibrary(picked.path)
-    }
-    const result = await serviceCall<AdditionalLibrariesResult>('pickAdditionalSeforimLibrary')
-    if (result?.cancelled) return null
-    return result
-  } catch {
-    return null
+  if (typeof window.__webviewAction === 'function') {
+    const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
+    if (picked?.error) throw new Error(picked.error)
+    if (picked?.cancelled || !picked?.path) return null
+    return await addAdditionalSeforimLibrary(picked.path)
   }
+  const result = await serviceCall<AdditionalLibrariesResult>('pickAdditionalSeforimLibrary')
+  if (result?.cancelled) return null
+  return result
 }
 
 /**

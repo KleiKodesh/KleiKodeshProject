@@ -64,11 +64,56 @@ public sealed class UserSessionBinding(
             return;
         }
 
-        _dataHost = Program.BuildDataHost(Array.Empty<string>());
-        await _dataHost.StartAsync(stoppingToken);
+        // Keep the pipe LISTENING while the data host is built: with only the single held
+        // connection nothing was armed, and every further client got PIPE_BUSY for as long as
+        // the build took. Their requests are read and held, then answered once it is up.
+        var holder = new StartupConnectionHolder(
+            () => WindowsServiceMode.CreatePipe(pipeName), 3, stoppingToken,
+            (message, ex) => logger.LogWarning(ex, "{Message}", message));
+        holder.Start();
+
+        try
+        {
+            _dataHost = Program.BuildDataHost(Array.Empty<string>());
+            await _dataHost.StartAsync(stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            holder.Abandon();
+            await holder.StopAcceptingAsync();
+            firstConnection.Dispose();
+            return;
+        }
+        catch (Exception ex)
+        {
+            // A data host that cannot be built (database unreadable, a store failing at
+            // construction) used to leave the held first request unanswered forever. Answer it
+            // with the error, close everything else, and stop so the next client starts a
+            // fresh attempt.
+            logger.LogError(ex, "Could not build or start the data host; stopping");
+            holder.Abandon();
+            await holder.StopAcceptingAsync();
+            try
+            {
+                await FrameProtocol.WriteFrameAsync(
+                    firstConnection, RpcResponse.Err("service failed to start: " + ex.Message), CancellationToken.None);
+            }
+            catch { /* the client may already be gone */ }
+            firstConnection.Dispose();
+            try { _dataHost?.Dispose(); } catch { }
+            _dataHost = null;
+            serviceLifetime.StopApplication();
+            return;
+        }
+
+        var dispatcher = _dataHost.Services.GetRequiredService<Dispatcher>();
+        holder.Ready((pipe, request, ct) => AnswerAsync(dispatcher, pipe, request, ct));
+        // The data host's own PipeServer is armed now (StartAsync ran its accept loops up to
+        // their first await), so the holder can stop listening.
+        await holder.StopAcceptingAsync();
         // The request that told us who we serve is answered like any other, once the data host
         // is up - the first caller sees nothing special.
-        _ = AnswerAsync(_dataHost.Services.GetRequiredService<Dispatcher>(), firstConnection, firstRequest, stoppingToken);
+        _ = AnswerAsync(dispatcher, firstConnection, firstRequest, stoppingToken);
         try
         {
             // Ends when the data host stops itself or the SCM stops us.

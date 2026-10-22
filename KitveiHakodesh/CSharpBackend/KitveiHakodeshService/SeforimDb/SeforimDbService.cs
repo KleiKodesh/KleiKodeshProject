@@ -36,8 +36,10 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     {
         var attached = _queries.AttachedLibraries;
         var rows = new List<AdditionalLibraryRow>();
-        foreach (var path in CoreSettings.SeforimDbAdditionalLibraries.GetAllRaw())
+        foreach (var status in SeforimDbAttachedLibraries.ResolveWithStatus(
+                     CoreSettings.SeforimDbAdditionalLibraries.GetAllEntriesRaw()))
         {
+            string path = status.Entry.Path;
             SeforimDbAttachedLibraries.Library? live = null;
             foreach (var library in attached)
             {
@@ -48,12 +50,22 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
                 }
             }
 
+            // "Attached" must mean "its text can actually be read", not just "its tables exist":
+            // a library whose line text cannot be decoded is reported as not attached, with the
+            // reason, instead of looking healthy while every read of it fails.
+            string? reason = status.Rejection;
+            if (reason is null) reason = SeforimDbAttachedLibraries.CheckTextReadable(path);
+            if (reason is null && live is null) reason = "not loaded yet (restart pending)";
+            if (reason is not null)
+                logger.LogWarning("Additional library {Path} is not attached: {Reason}", path, reason);
+
             rows.Add(new AdditionalLibraryRow
             {
                 Path = path,
                 Exists = FileExists(path),
-                Attached = live is not null,
+                Attached = reason is null,
                 Label = live?.Label ?? System.IO.Path.GetFileNameWithoutExtension(path),
+                Reason = reason,
             });
         }
         return rows;
