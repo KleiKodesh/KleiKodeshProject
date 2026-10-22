@@ -41,8 +41,8 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>Same query against an ATTACHed library's schema — see
         /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
-        public static string GetAllBooksIn(string schema) => $@"
-            SELECT b.id, b.categoryId, b.title, b.hasTeamim,
+        public static string GetAllBooksIn(string schema, bool hasTeamim = true) => $@"
+            SELECT b.id, b.categoryId, b.title, {(hasTeamim ? "b.hasTeamim" : "NULL")},
                    group_concat(a.name, ', ') AS authors
             FROM {schema}.book b
             LEFT JOIN {schema}.book_author ba ON ba.bookId = b.id
@@ -60,12 +60,18 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>Same query against an ATTACHed library's schema — see
         /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
-        public static string GetBookByIdIn(string schema) => $@"
-            SELECT totalLines, hasTeamim,
-                   hasTargumConnection, hasReferenceConnection, hasSourceConnection,
-                   hasCommentaryConnection, hasOtherConnection
+        public static string GetBookByIdIn(string schema, System.Func<string, bool>? hasColumn = null)
+        {
+            // A library built by another tool may lack the optional has* flags; those read as 0
+            // (flag off) rather than making the whole library unusable.
+            string Col(string name) => hasColumn is null || hasColumn(name) ? name : "0 AS " + name;
+            return $@"
+            SELECT totalLines, {Col("hasTeamim")},
+                   {Col("hasTargumConnection")}, {Col("hasReferenceConnection")}, {Col("hasSourceConnection")},
+                   {Col("hasCommentaryConnection")}, {Col("hasOtherConnection")}
             FROM {schema}.book
             WHERE id = @id";
+        }
 
         // ── Lines ─────────────────────────────────────────────────────────────────
 

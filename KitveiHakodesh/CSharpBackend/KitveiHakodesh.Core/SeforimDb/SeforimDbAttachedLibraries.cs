@@ -311,7 +311,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>Selecting each column the catalog/full-text readers use, with LIMIT 0, proves
-        /// the columns exist without reading a row. Line TEXT is deliberately not checked here:
+        /// the columns exist without reading a row. Only columns the code cannot work without are
+        /// listed: optional ones (book.hasTeamim and the other has* flags, line.heRef, ...) are
+        /// absent from libraries built by other tools and are defaulted at query time instead. Line TEXT is deliberately not checked here:
         /// it lives in line.content or line_content depending on schema version, and the full-text
         /// corpus validates that itself (see CompositeFtsCorpus).</summary>
         private static bool HasColumns(SqliteConnection connection)
@@ -319,7 +321,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             string[] probes =
             {
                 "SELECT id, parentId, title, level FROM category LIMIT 0",
-                "SELECT id, categoryId, title, orderIndex, hasTeamim, totalLines FROM book LIMIT 0",
+                "SELECT id, categoryId, title, orderIndex, totalLines FROM book LIMIT 0",
                 "SELECT id, name FROM author LIMIT 0",
                 "SELECT bookId, authorId FROM book_author LIMIT 0",
                 "SELECT id, bookId, lineIndex FROM line LIMIT 0",

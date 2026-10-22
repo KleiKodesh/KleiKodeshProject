@@ -86,7 +86,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var conn = Open();
             AppendBooks(conn, SeforimDbSqlStrings.GetAllBooks, null, 0, list);
             foreach (var library in _attachedLibraries)
-                AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(library.Alias), library.Label, library.Index, list);
+                AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(library.Alias,
+                    SeforimDbSchema.ColumnExists(conn, "book", "hasTeamim", library.Alias)), library.Label, library.Index, list);
 
             if (list.Count > 0)
                 lock (_catalogCacheLock) _booksCache ??= list;
@@ -133,7 +134,9 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // moved between the catalog being cached and this call) — not found, same as
                 // any other id nothing matches.
                 if (library is not { } found) return null;
-                cmd.CommandText = SeforimDbSqlStrings.GetBookByIdIn(found.Alias);
+                var alias = found.Alias;
+                cmd.CommandText = SeforimDbSqlStrings.GetBookByIdIn(alias,
+                    column => SeforimDbSchema.ColumnExists(conn, "book", column, alias));
             }
 
             cmd.Parameters.AddWithValue("@id", localId);
