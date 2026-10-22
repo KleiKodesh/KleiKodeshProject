@@ -31,6 +31,7 @@ bool variantMode = false;
 bool abbrevMode = false;
 var ktivSimQueries = new List<string>();
 bool treeOrderSelfTest = false;
+bool expanderSelfTest = false;
 string? treeOrderDump = null;
 string? exhaustiveOut = null;
 int exhLevels = 2, exhEvery = 1, exhShard = 0, exhShards = 1;
@@ -50,6 +51,7 @@ for (int i = 0; i < args.Length; i++)
         case "--abbrev": abbrevMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
+        case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
         case "--exhaustive": exhaustiveOut = args[++i]; break;
         case "--exh-levels": exhLevels = int.Parse(args[++i]); break;
@@ -72,6 +74,8 @@ if (abbrevProblems.Count > 0)
 
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
+if (expanderSelfTest)
+    return RelatedFormExpanderCheck.SelfTest() == 0 ? 0 : 1;
 if (treeOrderSelfTest)
     return TreeOrderCheck.SelfTest() == 0 ? 0 : 1;
 if (variantMode)
