@@ -17,9 +17,15 @@ internal partial class KhsMsgPackResolver;
 
 internal static class MsgPack
 {
+    /// <summary>The source-generated resolvers, and nothing behind them. Kept apart from
+    /// <see cref="Options"/> so the tests can serialize through exactly the formatters native AOT
+    /// has (see SerializationVerify) instead of through StandardResolver's reflection fallback.</summary>
+    public static readonly IFormatterResolver Generated =
+        CompositeResolver.Create(KhsMsgPackResolver.Instance);
+
     public static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithResolver(
-            CompositeResolver.Create(KhsMsgPackResolver.Instance, StandardResolver.Instance));
+            CompositeResolver.Create(Generated, StandardResolver.Instance));
 
     /// <summary>Serialize a DTO to MessagePack bytes.</summary>
     public static byte[] Ser<T>(T value) => MessagePackSerializer.Serialize(value, Options);

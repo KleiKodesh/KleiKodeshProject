@@ -78,6 +78,7 @@ if (multiLibMode)
     return MultiLibraryVerify.Run() == 0 ? 0 : 1;
 }
 if (args.Contains("--reload")) return ReloadVerify.Run() == 0 ? 0 : 1;
+if (args.Contains("--serialization")) return SerializationVerify.Run() == 0 ? 0 : 1;
 if (args.Contains("--personalshape")) return PersonalLibraryShapeVerify.Run() == 0 ? 0 : 1;
 if (args.Contains("--catalogcoverage")) return CatalogCoverageVerify.Run() == 0 ? 0 : 1;
 if (args.Contains("--hardening")) return HardeningVerify.Run() == 0 ? 0 : 1;
