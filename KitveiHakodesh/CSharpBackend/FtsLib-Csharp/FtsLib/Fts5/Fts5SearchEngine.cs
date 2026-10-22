@@ -289,7 +289,7 @@ namespace FtsLib.Fts5
         // ── FM-index expansion (same rules as the production expanders) ──
 
         /// <summary>
-        /// FuzzyExpander.Expand semantics: every term within Levenshtein distance d (d clamped
+        /// FuzzyExpander.Expand semantics: every term within edit distance d (a swap is one edit) (d clamped
         /// to 1..MaxAllowedDistance), capped at FuzzyExpander.MaxExpandedTerms keeping the
         /// closest (distance, then shorter, then higher document count, then ordinal).
         /// </summary>

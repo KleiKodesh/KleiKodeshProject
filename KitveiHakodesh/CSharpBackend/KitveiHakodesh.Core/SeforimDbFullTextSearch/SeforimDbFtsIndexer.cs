@@ -61,7 +61,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // join a word, letters of every script are word chars (no Hebrew/Latin split, Unicode
         // lowercase), a trailing geresh belongs to its word, typographic quotes and presentation
         // forms fold, and a term of 128 UTF-8 bytes or more (quotes included) is left out.
-        public const string IndexFormatVersion = "fts8";
+        // fts9 (2026-10-22): an unterminated '<' (no '>' after it) is a plain separator, as in
+        // Otzaria; fts8 treated it as a tag and dropped the rest of the line.
+        public const string IndexFormatVersion = "fts9";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

@@ -478,7 +478,8 @@ namespace FtsLib.Fts5
             // ── Fuzzy ─────────────────────────────────────────────────
 
             /// <summary>
-            /// Every term within Levenshtein distance <paramref name="maxDistance"/> of
+            /// Every term within edit distance <paramref name="maxDistance"/> (a swap of two
+            /// adjacent letters is one edit, as <see cref="FtsLib.Search.Levenshtein"/>) of
             /// <paramref name="query"/>, as (rowid, distance), sorted by rowid.
             ///
             /// Backward search from SEP walks a trie of the REVERSED terms: the range for the
@@ -500,7 +501,7 @@ namespace FtsLib.Fts5
                 var search = new FuzzySearch(this, reversedQuery, maxDistance);
                 var firstRow = new int[m + 1];
                 for (int j = 0; j <= m; j++) firstRow[j] = j;
-                search.Visit(_c[SeparatorCode], _c[SeparatorCode + 1], firstRow, depth: 0);
+                search.Visit(_c[SeparatorCode], _c[SeparatorCode + 1], firstRow, depth: 0, parentRow: null, lastCode: 0);
                 search.Results.Sort((a, b) => a.RowId.CompareTo(b.RowId));
                 return search.Results;
             }
@@ -522,7 +523,9 @@ namespace FtsLib.Fts5
                     _rows = new int[_m + maxDistance + 3][];
                 }
 
-                public void Visit(int lo, int hi, int[] row, int depth)
+                /// <param name="parentRow">The row one level up (null at the root): an adjacent
+                /// swap of <paramref name="lastCode"/> and the child's symbol reads it.</param>
+                public void Visit(int lo, int hi, int[] row, int depth, int[] parentRow, ushort lastCode)
                 {
                     var children = _children[depth] ??= new List<(ushort, int, int)>(64);
                     children.Clear();
@@ -548,6 +551,10 @@ namespace FtsLib.Fts5
                             int delete = row[j] + 1, insert = next[j - 1] + 1;
                             if (delete < v) v = delete;
                             if (insert < v) v = insert;
+                            // adjacent swap (reversed strings: still an adjacent swap)
+                            if (parentRow != null && j > 1 && _query[j - 1] == lastCode && _query[j - 2] == code
+                                && parentRow[j - 2] + 1 < v)
+                                v = parentRow[j - 2] + 1;
                             next[j] = v;
                             if (v < min) min = v;
                         }
@@ -555,7 +562,9 @@ namespace FtsLib.Fts5
 
                         // The child's own children overwrite _rows[depth + 2], never this row,
                         // and siblings are processed after the child returns — so next is safe.
-                        Visit(_reader._c[code] + occLo, _reader._c[code] + occHi, next, depth + 1);
+                        // Pruning stays sound with swaps: a grandchild's swap cell, row[j-2] + 1,
+                        // is never below next[j-1] (<= row[j-2] + 1), so min > limit kills it too.
+                        Visit(_reader._c[code] + occLo, _reader._c[code] + occHi, next, depth + 1, row, code);
                     }
                 }
 
