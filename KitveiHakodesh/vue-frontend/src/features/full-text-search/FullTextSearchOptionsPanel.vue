@@ -115,7 +115,7 @@ function toggleAllWords(option: WordOption) {
     for (const other of WRAP_OPTIONS) if (other !== option) { setAllWords(other, false); markPerWord(other, false) }
   // All words (or none): the option's per-word syntax is redundant, so drop it, and with
   // a wrap made global, every other wrap goes too.
-  rewrite((w) => (on && isWrapOption(option) ? { ...w, wrap: null } : withOption(w, option, false)))
+  rewrite((w) => (on && isWrapOption(option) ? (w.wrap ? withOption(w, w.wrap, false) : w) : withOption(w, option, false)))
 }
 
 function togglePerWord(option: WordOption) {

@@ -40,7 +40,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     private readonly string? _dbPath;
     private readonly string _indexPath;
     private readonly Action<FtsIndexLogLevel, string, Exception?> _log;
-    /// <summary>The related-form query rewrite (expandRelated). Null = queries pass through.</summary>
+    /// <summary>The related-form query rewrite ('+'-marked words). Null = queries pass through.</summary>
     private readonly SeforimDbFtsRelatedFormExpander? _expander;
 
     /// <param name="databasePath">The seforim DB to index and search; null when none was found.</param>
@@ -49,7 +49,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// (the service's FTS_INDEX_PATH) — never built into, never wiped.</param>
     /// <param name="log">The host's log sink.</param>
     /// <param name="relatedFormExpander">Rewrites a query with related forms when a search asks
-    /// for expandRelated; null leaves queries unexpanded.</param>
+    /// for '+'-marked words; null leaves queries unexpanded.</param>
     public SeforimDbFtsIndexCoordinator(
         string? databasePath, string indexPath, bool indexIsExternal,
         Action<FtsIndexLogLevel, string, Exception?> log,
@@ -704,13 +704,12 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>The one-shot search (ftsSearch). Ready = false while still building (or no
     /// DB). Full-text search results are NEVER capped: <paramref name="cap"/> &lt;= 0 means
     /// unlimited; a positive cap is only honoured if a caller ever explicitly asks for one.
-    /// <paramref name="expandRelated"/> rewrites the query with its related forms first.</summary>
+    /// Words marked '+' get their related forms first; '^' (spelling variants) is the engine's.</summary>
     public FtsSearchResult Search(
-        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        bool expandRelated = false)
+        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords)
     {
         EnsureIndexing();
-        if (WantsRelated(query, expandRelated)) query = RewriteRelated(query, expandRelated);
+        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query)) query = RewriteRelated(query);
         var result = new FtsSearchResult();
         if (!HasDb || !_isReady)
         {
@@ -728,7 +727,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             // enrichment as the streaming path.
             var terms = new FtsTermTable();
             foreach (var batch in Searcher.SearchInBatches(
-                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms))
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms))
             {
                 result.Results.AddRange(batch.Hits);
                 foreach (var entry in batch.LineTexts) result.LineTexts[entry.Key] = entry.Value;
@@ -750,12 +749,8 @@ public sealed class SeforimDbFtsIndexCoordinator
         return result;
     }
 
-    /// <summary>Related forms for every word (the flag) or only the '+'-marked ones.</summary>
-    private static bool WantsRelated(string query, bool expandRelated) =>
-        expandRelated || SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query);
-
-    private string RewriteRelated(string query, bool allWords) =>
-        _expander is null ? query : _expander.RewriteQuery(query, SeforimDbFtsRelatedFormExpander.PerTermLimit, onlyMarked: !allWords);
+    private string RewriteRelated(string query) =>
+        _expander is null ? query : _expander.RewriteQuery(query, SeforimDbFtsRelatedFormExpander.PerTermLimit);
 
     // ── Streaming search (ftsSearchStream) ───────────────────────────────────────
     // The service PUSHES result frames continuously over the caller's single pipe
@@ -779,14 +774,14 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// ending with a <c>Done</c> frame. The connection is the stream: the caller passes
     /// an emit that writes one frame per chunk on the client's connection.</summary>
     public async Task StreamSearch(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false)
+        string query, int maxWordDistance, bool requireOrdered, int contextWords,
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
     {
         EnsureIndexing();
-        if (WantsRelated(query, expandRelated))
+        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
         {
             try { await emit(new FtsStreamChunk { Stage = "rewrite" }); } catch { /* client gone */ }
-            query = RewriteRelated(query, expandRelated);
+            query = RewriteRelated(query);
         }
         if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
         if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }
@@ -831,7 +826,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                 // this cannot deadlock.
                 bool resultsSent = false;
                 string? stageSinceLastResults = null;
-                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
+                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords,
                     linked.Token,
                     (built, newTerms, lineTexts) =>
                     {
@@ -877,7 +872,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
+        string query, int maxWordDistance, bool requireOrdered, int contextWords,
         CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
         Action<string>? onStage = null)
     {
@@ -888,7 +883,7 @@ public sealed class SeforimDbFtsIndexCoordinator
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms, ct, onStage))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage))
         {
             await onBatch(batch.Hits, terms.TakeNewTerms(), batch.LineTexts);
         }

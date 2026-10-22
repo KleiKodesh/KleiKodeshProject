@@ -103,14 +103,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <param name="requireOrdered">Only match windows where the query words appear in
         /// query order.</param>
         /// <param name="contextWords">Words of context requested per side of the match.</param>
-        /// <param name="expandKetiv">Engine-side ketiv/qere expansion.</param>
         public IEnumerable<SeforimDbFtsHitBatch> SearchInBatches(
             SeforimDbFtsEngine engine,
             string query,
             int maxWordDistance,
             bool requireOrdered,
             int contextWords,
-            bool expandKetiv,
             FtsTermTable terms,
             CancellationToken cancellationToken = default,
             Action<string>? onStage = null)
@@ -129,7 +127,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             int seedLeft = SeedLineTextHitCount;
             var batch = new List<SearchResult>(FirstBatchSize);
 
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken,
+            foreach (var hit in index.Search(query, cap: 0, ct: cancellationToken,
                                              onStage: stage, batchSizeAt: BatchSizeAt))
             {
                 cancellationToken.ThrowIfCancellationRequested();

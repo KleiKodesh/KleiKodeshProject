@@ -80,20 +80,30 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
   const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
+  // Every option reaches the service as query syntax: the "all words" settings are applied
+  // here to each word that lacks them (per-word choices are already in the query).
   function _buildQueryToSend(normalizedQuery: string): string {
-    if (!settings.searchGrammarWrap && !settings.searchWildcardWrap && !settings.searchFuzzy) return normalizedQuery
+    const wrapAll = settings.searchGrammarWrap || settings.searchWildcardWrap || settings.searchFuzzy
+    if (!wrapAll && !settings.searchExpandKetiv && !settings.searchExpandRelated) return normalizedQuery
     return normalizedQuery
+      .replace(/\|/g, ' | ')
       .split(/\s+/)
       .map((token) => {
         // Per-word '+' / '^' markers stay outermost; the wrap goes on the word inside them.
-        const { marks, rest: word } = splitMarks(token)
-        if (!word) return token
-        if (/[*~|%]/.test(word)) return token  // already has special syntax
+        const { marks, rest } = splitMarks(token)
+        if (!rest || rest === '|') return token
+        const related = marks.includes('+') || settings.searchExpandRelated ? '+' : ''
+        const ketiv = marks.includes('^') || settings.searchExpandKetiv ? '^' : ''
+        let word = rest
         // The panel keeps fuzzy / wildcard wrap / grammar wrap mutually exclusive.
-        if (settings.searchFuzzy) return `${marks}${word}~1`
-        if (settings.searchWildcardWrap) return `${marks}*${word}*`
-        return `${marks}%${word}%`
+        if (wrapAll && !/[*~%?]/.test(rest)) {  // a word with its own syntax keeps it
+          if (settings.searchFuzzy) word = `${rest}~1`
+          else if (settings.searchWildcardWrap) word = `*${rest}*`
+          else word = `%${rest}%`
+        }
+        return related + ketiv + word
       })
+      .filter(Boolean)
       .join(' ')
   }
 
@@ -103,8 +113,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       queryToSend,
       `d${settings.searchMaxWordDistance}`,
       settings.searchRequireOrdered ? 'ord' : '',
-      settings.searchExpandKetiv ? 'ktv' : '',
-      settings.searchExpandRelated ? 'rel' : '',
       `ctx${settings.searchContextMarginWords}`,
       // Results stream in catalog order since the FTS5 index; entries cached before that are
       // in line-id order (and from the old index), so they must not match.
@@ -323,8 +331,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         maxWordDistance: settings.searchMaxWordDistance,
         requireOrdered: settings.searchRequireOrdered,
         contextWords: settings.searchContextMarginWords,
-        expandKetiv: settings.searchExpandKetiv,
-        expandRelated: settings.searchExpandRelated,
       }, abort.signal)
 
       // Flush the accumulator into the reactive ref on the adaptive cadence
