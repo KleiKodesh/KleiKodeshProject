@@ -17,6 +17,11 @@
 //   F. Host pipe channel: a service that accepts but never answers ends in
 //      KitveiHakodeshServiceUnavailableException within the read timeout.
 //   G. SeforimDbService.GetAdditionalLibraries reports Attached/Reason truthfully.
+//   H. Damaged additional libraries (garbled mid-file, truncated) between healthy ones: the OFFICIAL
+//      full-text index is still built and searchable, healthy libraries stay searchable, the damaged
+//      ones are named with a reason (log + settings rows). Restart over the result is ready at once.
+//   I. A library that passed every check but fails MID-BUILD (changed in place): dropped, index rebuilt.
+//   J. Startup holder: a client that connects and sends nothing is closed after a short timeout.
 using System.IO.Pipes;
 using System.Text;
 using KitveiHakodesh.Core.SeforimDb;
@@ -389,6 +394,174 @@ namespace KitveiHakodeshService.Tests
                     Check(!rGone.Attached && !rGone.Exists && rGone.Reason is { } gr && gr.StartsWith("file not found"), "missing file: Exists=false, Attached=false, reason given", $"gone: {rGone.Exists}/{rGone.Attached}/{rGone.Reason}");
                     AppSettingsRegistry.InMemoryStore = new();
                 }
+
+                // ── H. a damaged additional library never costs the official index ────────
+                Console.WriteLine("H. damaged additional libraries vs the primary / healthy libraries' full-text index");
+                {
+                    AppSettingsRegistry.InMemoryStore = new();
+                    string hdir = Path.Combine(dir, "H");
+                    Directory.CreateDirectory(hdir);
+                    string hPrimary = Path.Combine(hdir, "seforim.db");
+                    BuildBulkLibrary(hPrimary, "ראשי", 3);
+                    string goodA = Path.Combine(hdir, "good-a.db");
+                    BuildBulkLibrary(goodA, "טובא", 400);
+                    string garbled = Path.Combine(hdir, "garbled-mid.db");
+                    BuildBulkLibrary(garbled, "משובש", 6000);
+                    string truncated = Path.Combine(hdir, "truncated.db");
+                    BuildBulkLibrary(truncated, "קטוע", 6000);
+                    string goodB = Path.Combine(hdir, "good-b.db");
+                    BuildBulkLibrary(goodB, "טובב", 400);
+
+                    var gbytes = File.ReadAllBytes(garbled);
+                    var rnd = new Random(1);
+                    for (int p = gbytes.Length / 2; p < gbytes.Length / 2 + 40000 && p < gbytes.Length; p++) gbytes[p] = (byte)rnd.Next(256);
+                    File.WriteAllBytes(garbled, gbytes);
+                    var tbytes = File.ReadAllBytes(truncated);
+                    File.WriteAllBytes(truncated, tbytes.Take((int)(tbytes.Length * 0.6)).ToArray());
+
+                    // Order matters: healthy libraries sit BEFORE and AFTER the damaged ones.
+                    SeforimDbAdditionalLibraries.Add(goodA);
+                    SeforimDbAdditionalLibraries.Add(garbled);
+                    SeforimDbAdditionalLibraries.Add(truncated);
+                    SeforimDbAdditionalLibraries.Add(goodB);
+
+                    var hLog = new List<string>();
+                    var coordinator = new SeforimDbFtsIndexCoordinator(
+                        hPrimary, Path.Combine(hdir, "fts"), indexIsExternal: false,
+                        (level, msg, ex) => { lock (hLog) hLog.Add($"{level}: {msg}" + (ex is null ? "" : " :: " + ex.GetType().Name)); },
+                        additionalLibraries: SeforimDbAdditionalLibraries.GetAllEntries());
+                    try
+                    {
+                        var status = WaitForIndex(coordinator, TimeSpan.FromMinutes(3));
+                        Check(status.IsReady && !status.IsIndexing && !status.Failed,
+                            "official full-text index is built and ready although two attached libraries are damaged",
+                            $"index not ready: ready={status.IsReady} indexing={status.IsIndexing} failed={status.Failed}\n    log: {string.Join("\n         ", hLog)}");
+
+                        int Hits(string term) => coordinator.Search(term, 0, 0, false, 6, false).Results.Count;
+                        Check(Hits("מילהראשי") >= 1, "search in the OFFICIAL library returns its line", "primary search returned nothing");
+                        Check(Hits("מילהטובא") >= 1, "healthy library BEFORE the damaged ones stays attached and searchable", "healthy library A returned nothing");
+                        Check(Hits("מילהטובב") >= 1, "healthy library AFTER the damaged ones stays attached and searchable", "healthy library B returned nothing");
+                        Check(Hits("מילהמשובש") == 0 && Hits("מילהקטוע") == 0, "the damaged libraries contribute nothing (and searching does not throw)", "damaged library results leaked into the index");
+                        Check(hLog.Any(l => l.StartsWith("Warning") && l.Contains("garbled-mid.db")),
+                            "the library damaged mid-file is named, with its reason, in the log", "no per-library skip warning in the log:\n    " + string.Join("\n    ", hLog));
+
+                        var service = new KitveiHakodeshService.SeforimDb.SeforimDbService(NullLogger<KitveiHakodeshService.SeforimDb.SeforimDbService>.Instance);
+                        var rows = service.GetAdditionalLibraries();
+                        var rGarbled = rows.Single(r => r.Path == garbled);
+                        var rTruncated = rows.Single(r => r.Path == truncated);
+                        var rGoodA = rows.Single(r => r.Path == goodA);
+                        Check(!rGarbled.Attached && rGarbled.Reason is { } gr1 && gr1.Contains("full-text") && !rTruncated.Attached && rTruncated.Reason is not null,
+                            "settings dialog rows say WHY each damaged library is not searchable (Reason)", $"rows: garbled={rGarbled.Attached}/{rGarbled.Reason} truncated={rTruncated.Attached}/{rTruncated.Reason}");
+                        Check(rGoodA.Attached && rGoodA.Reason is null, "the healthy library's row stays Attached with no reason", $"good row: {rGoodA.Attached}/{rGoodA.Reason}");
+                    }
+                    finally { coordinator.Shutdown(); }
+
+                    // A second start over the finished index is ready at once: no wipe, no rebuild.
+                    var coordinator2 = new SeforimDbFtsIndexCoordinator(
+                        hPrimary, Path.Combine(hdir, "fts"), false, (_, _, _) => { }, additionalLibraries: SeforimDbAdditionalLibraries.GetAllEntries());
+                    try
+                    {
+                        var st2 = WaitForIndex(coordinator2, TimeSpan.FromMinutes(3));
+                        Check(st2.IsReady && !st2.Failed && coordinator2.Search("מילהראשי", 0, 0, false, 6, false).Results.Count >= 1,
+                            "restart over the same libraries: official index is ready and searchable again", $"restart: ready={st2.IsReady} failed={st2.Failed}");
+                    }
+                    finally { coordinator2.Shutdown(); }
+
+                    // ── I. a library that was readable when checked but rots before the build ──
+                    Console.WriteLine("I. library that fails mid-build after passing the pre-check");
+                    AppSettingsRegistry.InMemoryStore = new();
+                    string idir = Path.Combine(dir, "I");
+                    Directory.CreateDirectory(idir);
+                    string iPrimary = Path.Combine(idir, "seforim.db");
+                    BuildBulkLibrary(iPrimary, "ראשי", 3);
+                    string victim = Path.Combine(idir, "victim.db");
+                    BuildBulkLibrary(victim, "קורבן", 6000);
+                    string iGood = Path.Combine(idir, "good.db");
+                    BuildBulkLibrary(iGood, "שלם", 400);
+                    SeforimDbAdditionalLibraries.Add(victim);
+                    SeforimDbAdditionalLibraries.Add(iGood);
+
+                    var first = new SeforimDbFtsIndexCoordinator(iPrimary, Path.Combine(idir, "fts-first"), false, (_, _, _) => { },
+                        additionalLibraries: SeforimDbAdditionalLibraries.GetAllEntries());
+                    try
+                    {
+                        var st = WaitForIndex(first, TimeSpan.FromMinutes(3));
+                        Check(st.IsReady && first.Search("מילהקורבן", 0, 0, false, 6, false).Results.Count >= 1,
+                            "while intact, the library is indexed and searchable", $"intact victim not indexed: ready={st.IsReady}");
+                    }
+                    finally { first.Shutdown(); }
+
+                    // Damage it IN PLACE keeping its size and timestamp: everything that caches a verdict
+                    // per (path, size, mtime) still believes it is healthy.
+                    SqliteConnection.ClearAllPools();
+                    var stamp = File.GetLastWriteTimeUtc(victim);
+                    var vbytes = File.ReadAllBytes(victim);
+                    var rnd2 = new Random(7);
+                    for (int p = vbytes.Length / 2; p < vbytes.Length / 2 + 40000 && p < vbytes.Length; p++) vbytes[p] = (byte)rnd2.Next(256);
+                    File.WriteAllBytes(victim, vbytes);
+                    File.SetLastWriteTimeUtc(victim, stamp);
+
+                    var iLog = new List<string>();
+                    var second = new SeforimDbFtsIndexCoordinator(iPrimary, Path.Combine(idir, "fts-second"), false,
+                        (level, msg, ex) => { lock (iLog) iLog.Add($"{level}: {msg}" + (ex is null ? "" : " :: " + ex.GetType().Name)); },
+                        additionalLibraries: SeforimDbAdditionalLibraries.GetAllEntries());
+                    try
+                    {
+                        var st = WaitForIndex(second, TimeSpan.FromMinutes(3));
+                        Check(st.IsReady && !st.IsIndexing && !st.Failed,
+                            "library failing MID-BUILD does not fail the build: it is dropped and the index is rebuilt without it",
+                            $"mid-build failure killed the index: ready={st.IsReady} indexing={st.IsIndexing} failed={st.Failed}\n    log: {string.Join("\n         ", iLog)}");
+                        Check(second.Search("מילהראשי", 0, 0, false, 6, false).Results.Count >= 1 && second.Search("מילהשלם", 0, 0, false, 6, false).Results.Count >= 1,
+                            "official library and the healthy library are both searchable after the recovery", "post-recovery search missing results");
+                    }
+                    finally { second.Shutdown(); }
+                    AppSettingsRegistry.InMemoryStore = new();
+                }
+
+                // ── J. startup holder: a client that connects and sends nothing ─────────────
+                Console.WriteLine("J. startup connection holder: silent client");
+                {
+                    string pipeName = "khs-silentclient-" + Guid.NewGuid().ToString("N");
+                    using var cts = new CancellationTokenSource();
+                    NamedPipeServerStream NewPipe() => new(pipeName, PipeDirection.InOut,
+                        NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                    var holder = new StartupConnectionHolder(NewPipe, 2, cts.Token, null, TimeSpan.FromMilliseconds(400));
+                    holder.Start();
+                    var silent = Task.Run(async () =>
+                    {
+                        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                        await client.ConnectAsync(5000);
+                        // Sends nothing; waits to see whether the service lets go of it.
+                        try
+                        {
+                            var buffer = new byte[1];
+                            using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                            int n = await client.ReadAsync(buffer, wait.Token);
+                            return n == 0 ? "closed" : "data";
+                        }
+                        catch (IOException) { return "closed"; }
+                        catch (OperationCanceledException) { return "still-held"; }
+                    });
+                    Check(silent.Wait(10_000) && silent.Result == "closed",
+                        "a client that connects and never sends a request is closed after the short read timeout (frees its listener)",
+                        "silent client result: " + (silent.IsCompleted ? silent.Result : "STILL WAITING"));
+
+                    // A well-behaved client is still served normally.
+                    var honest = Task.Run(async () =>
+                    {
+                        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                        await client.ConnectAsync(5000);
+                        await FrameProtocol.WriteFrameAsync(client, new byte[] { 4, 2 }, CancellationToken.None);
+                        var reply = await FrameProtocol.ReadFrameAsync(client, CancellationToken.None);
+                        return reply is null ? "<closed>" : string.Join(",", reply);
+                    });
+                    var deadline2 = DateTime.UtcNow.AddSeconds(5);
+                    while (holder.HeldCount < 1 && DateTime.UtcNow < deadline2) Thread.Sleep(20);
+                    holder.Ready(async (pipe, request, ct) => { using (pipe) await FrameProtocol.WriteFrameAsync(pipe, request, ct); });
+                    holder.StopAcceptingAsync().GetAwaiter().GetResult();
+                    Check(honest.Wait(10_000) && honest.Result == "4,2", "a normal request after the silent one is answered as before", "honest client: " + (honest.IsCompleted ? honest.Result : "STILL WAITING"));
+                    cts.Cancel();
+                }
             }
             catch (Exception ex)
             {
@@ -485,6 +658,61 @@ namespace KitveiHakodeshService.Tests
             compressor.LoadDictionary(dict);
             byte[] frame = compressor.Wrap(Encoding.UTF8.GetBytes(text)).ToArray();
             return (dict, frame);
+        }
+
+        private static FtsIndexStatus WaitForIndex(SeforimDbFtsIndexCoordinator coordinator, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            FtsIndexStatus status = coordinator.Status();
+            while (DateTime.UtcNow < deadline)
+            {
+                status = coordinator.Status();
+                if ((status.IsReady && !status.IsIndexing) || status.Failed || status.DbMissing) break;
+                Thread.Sleep(100);
+            }
+            return status;
+        }
+
+        /// <summary>A seforim-shaped library whose book has <paramref name="lines"/> lines of bulky
+        /// pseudo-random text (so the file spans many pages), each line starting with
+        /// "מילה{tag}" - searchable by that token.</summary>
+        private static void BuildBulkLibrary(string path, string tag, int lines)
+        {
+            using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ConnectionString))
+            {
+                conn.Open();
+                Exec(conn, @"
+                    CREATE TABLE category(id INTEGER PRIMARY KEY, parentId INTEGER, title TEXT, level INTEGER);
+                    CREATE TABLE book(id INTEGER PRIMARY KEY, categoryId INTEGER, title TEXT, orderIndex INTEGER,
+                        hasTeamim INTEGER, totalLines INTEGER, hasTargumConnection INTEGER, hasReferenceConnection INTEGER,
+                        hasSourceConnection INTEGER, hasCommentaryConnection INTEGER, hasOtherConnection INTEGER);
+                    CREATE TABLE author(id INTEGER PRIMARY KEY, name TEXT);
+                    CREATE TABLE book_author(bookId INTEGER, authorId INTEGER);
+                    CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, lineIndex INTEGER, content TEXT);
+                    CREATE TABLE tocText(id INTEGER PRIMARY KEY, text TEXT);
+                    CREATE TABLE tocEntry(id INTEGER PRIMARY KEY, bookId INTEGER, parentId INTEGER, textId INTEGER, lineId INTEGER, level INTEGER, hasChildren INTEGER);
+                    CREATE TABLE line_toc(lineId INTEGER, tocEntryId INTEGER);
+                    CREATE TABLE alt_toc_structure(id INTEGER PRIMARY KEY, bookId INTEGER, title TEXT, heTitle TEXT);
+                    CREATE TABLE alt_toc_entry(id INTEGER PRIMARY KEY, structureId INTEGER, parentId INTEGER, textId INTEGER, lineId INTEGER);");
+                Exec(conn, $"INSERT INTO category VALUES (1, NULL, 'קט {tag}', 0)");
+                Exec(conn, $"INSERT INTO book VALUES (1, 1, 'ספר {tag}', 0, 0, {lines}, 0, 0, 0, 0, 0)");
+                using var tx = conn.BeginTransaction();
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = "INSERT INTO line VALUES ($i, 1, $i, $t)";
+                var pi = cmd.Parameters.Add("$i", SqliteType.Integer);
+                var pt = cmd.Parameters.Add("$t", SqliteType.Text);
+                var rnd = new Random(5);
+                for (int i = 1; i <= lines; i++)
+                {
+                    pi.Value = i;
+                    pt.Value = "מילה" + tag + " " + string.Join(" ", Enumerable.Range(0, 60).Select(_ => rnd.Next(1000000).ToString("x")));
+                    cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+                Exec(conn, $"INSERT INTO tocText VALUES (1, 'פרק {tag}'); INSERT INTO tocEntry VALUES (1, 1, NULL, 1, 1, 1, 0); INSERT INTO line_toc VALUES (1, 1)");
+            }
+            SqliteConnection.ClearAllPools();
         }
 
         private static void Exec(SqliteConnection conn, string sql)

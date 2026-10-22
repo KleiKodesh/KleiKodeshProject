@@ -1,4 +1,5 @@
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 using KitveiHakodeshService.Ipc;
 // Alias, not a plain `using KitveiHakodesh.Core.Settings`: this file's own namespace chain
 // (KitveiHakodeshService.KitveiHakodesh.*) already binds the simple name "KitveiHakodesh" to
@@ -56,6 +57,10 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
             string? reason = status.Rejection;
             if (reason is null) reason = SeforimDbAttachedLibraries.CheckTextReadable(path);
             if (reason is null && live is null) reason = "not loaded yet (restart pending)";
+            // Readable at the first row, but the full-text index read it end to end and found it
+            // damaged (a bad page in the middle, a truncated tail): searching skips it, say so.
+            if (reason is null && SeforimDbFtsLibraryHealth.TrySkipReason(path) is { } damaged)
+                reason = "full-text search skipped, library is damaged: " + damaged;
             if (reason is not null)
                 logger.LogWarning("Additional library {Path} is not attached: {Reason}", path, reason);
 

@@ -47,6 +47,7 @@ describe('texts', () => {
     expect(additionalLibraryReasonText('file not found (or not visible to the service account)')).toContain('לא נמצא')
     expect(additionalLibraryReasonText('missing required table(s): book')).toContain('טבלאות')
     expect(additionalLibraryReasonText('line text unreadable: X')).toContain('טקסט')
+    expect(additionalLibraryReasonText('full-text search skipped, library is damaged: X')).toContain('פגומה')
     expect(additionalLibraryReasonText('something new')).toContain('something new')
     expect(additionalLibraryErrorText('already configured')).toContain('כבר מוגדרת')
     expect(additionalLibraryErrorText('could not save the setting: x')).toContain('לשמור')

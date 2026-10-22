@@ -81,6 +81,8 @@ export function additionalLibraryReasonText(reason: string | undefined): string 
   if (reason.startsWith('cannot be opened')) return 'הקובץ אינו מסד SQLite תקין'
   if (reason.startsWith('no line text') || reason.startsWith('line text unreadable'))
     return 'לא ניתן לקרוא את טקסט השורות של הספרייה'
+  if (reason.startsWith('full-text search skipped'))
+    return 'הספרייה פגומה (קובץ משובש או קטוע) — החיפוש בתוכן מדלג עליה, וחיפוש שאר הספריות לא נפגע'
   if (reason.startsWith('not loaded yet')) return 'ממתינה להפעלה מחדש של השירות'
   return 'לא נטענה: ' + reason
 }

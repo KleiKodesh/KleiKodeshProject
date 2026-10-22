@@ -358,6 +358,20 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
+        /// True when the index on disk (completed, or an interrupted build's start stamp) was
+        /// recorded for EXACTLY the sources this indexer was given. Read-only. The coordinator uses
+        /// it to skip re-validating additional libraries that an earlier build already read in
+        /// full: a stamp only ever records the libraries that were actually included.
+        /// </summary>
+        public bool RecordedStampMatchesCurrent()
+        {
+            string? recorded = ReadStamp(Path.Combine(_indexPath, CompletedStampFileName))
+                            ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
+            return recorded != null
+                && string.Equals(recorded, ComputeStamp(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Deletes the whole index — the reset feature. The caller must have stopped the build
         /// and released every engine instance over this directory first; files that are still
         /// open surface here as the exception they cause.

@@ -26,13 +26,21 @@ internal sealed class StartupConnectionHolder
     private readonly TaskCompletionSource<Func<NamedPipeServerStream, byte[], CancellationToken, Task>> _ready =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationToken _lifetime;
+    private readonly TimeSpan _requestReadTimeout;
     private readonly List<Task> _loops = new();
     private int _held;
 
+    /// <summary>How long a freshly accepted connection may take to deliver its request. A client
+    /// that connects and never sends anything (a probe that stalled, a hung process) would otherwise
+    /// hold its pipe instance for the whole service lifetime. The wait for the data host to become
+    /// ready, after the request is in, is deliberately NOT bounded by this.</summary>
+    public static readonly TimeSpan DefaultRequestReadTimeout = TimeSpan.FromSeconds(10);
+
     public StartupConnectionHolder(
         Func<NamedPipeServerStream> createPipe, int acceptors, CancellationToken lifetime,
-        Action<string, Exception?>? log = null)
+        Action<string, Exception?>? log = null, TimeSpan? requestReadTimeout = null)
     {
+        _requestReadTimeout = requestReadTimeout ?? DefaultRequestReadTimeout;
         _createPipe = createPipe;
         _acceptors = acceptors;
         _lifetime = lifetime;
@@ -90,7 +98,19 @@ internal sealed class StartupConnectionHolder
     {
         try
         {
-            byte[]? request = await FrameProtocol.ReadFrameAsync(pipe, _lifetime);
+            byte[]? request;
+            using (var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime))
+            {
+                readTimeout.CancelAfter(_requestReadTimeout);
+                try { request = await FrameProtocol.ReadFrameAsync(pipe, readTimeout.Token); }
+                catch (OperationCanceledException) when (!_lifetime.IsCancellationRequested)
+                {
+                    // Connected but sent nothing in time: close it so the pipe instance is freed.
+                    _log("startup connection sent no request in time - closed", null);
+                    pipe.Dispose();
+                    return;
+                }
+            }
             if (request is null) { pipe.Dispose(); return; } // probe that left without a request
             Interlocked.Increment(ref _held);
             var answer = await _ready.Task.WaitAsync(_lifetime);
