@@ -22,7 +22,11 @@ namespace KitveiHakodesh.Core.Settings
     {
         // Null off Windows (portable build): there is no registry; callers guard with
         // OperatingSystem.IsWindows() before touching Hive.
+#if NET
         private static RegistryKey _hive = OperatingSystem.IsWindows() ? Registry.CurrentUser : null!;
+#else
+        private static RegistryKey _hive = Registry.CurrentUser; // net48 is Windows-only
+#endif
         private static string _roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private static string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
