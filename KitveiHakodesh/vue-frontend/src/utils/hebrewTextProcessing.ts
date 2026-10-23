@@ -1,9 +1,5 @@
 /**
  * Hebrew text processing utilities.
- * State 0: full diacritics (nikkud + cantillation)
- * State 1: remove cantillation only (U+0591–U+05AF, U+05C0)
- * State 2: remove nikkud, convert the dibbur hamatchil dash to a full stop and drop
- * the rest — delegates to stripNikkudFromHtml
  *
  * Operates directly on the HTML string with regex — no DOM parsing — so it is
  * safe to call on every render cycle without layout/GC cost.
@@ -25,23 +21,39 @@ function decodeDiacriticEntities(html: string): string {
   })
 }
 
-export function applyDiacriticsFilter(html: string, state: number): string {
-  if (state === 0 || !html || html === '\u00A0') return html
+/**
+ * The independent clean-text options, as bit flags. The book view's clean-text combo
+ * picks any set of them; the copy-clean-text paths use CLEAN_TEXT_LEGACY.
+ */
+export const CLEAN_TEXT = {
+  /** Cantillation U+0591\u2013U+05AF and paseq U+05C0. */
+  TEAMIM: 1,
+  /** Vowel points (NIKKUD_MARKS). */
+  NIKKUD: 2,
+  /** Maqaf U+05BE becomes a space, as Otzaria does. */
+  MAQAF: 4,
+  /** The first dash-space of a line (after a dibbur hamatchil) becomes a full stop; later ones go. */
+  DIBBUR_HAMATCHIL_DASH: 8,
+  /** !? \u2192 .   ; \u2192 ,   stray colons and non-acronym quotes dropped, spaces tidied. */
+  NORMALIZE_PUNCTUATION: 16,
+  /**
+   * Issue #334 / Otzaria's removePunctuation: , ; ! ? and dashes dropped, quotes kept only
+   * as acronyms, and . : kept only at the end of a line or inside parentheses.
+   */
+  REMOVE_PUNCTUATION: 32,
+} as const
 
-  const decoded = decodeDiacriticEntities(html)
+/** What "remove nikkud" always did in one go - still what copy-clean-text applies. */
+export const CLEAN_TEXT_LEGACY =
+  CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD | CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH | CLEAN_TEXT.NORMALIZE_PUNCTUATION
 
-  // stripNikkudFromHtml decodes on its own, so state 2 is correct whether callers
-  // arrive through here or call it directly.
-  if (state === 2) return stripNikkudFromHtml(decoded)
-
-  // state 1: remove cantillation only; state 3: remove vowel points only (teamim,
-  // maqaf, paseq and sof pasuq stay)
-  const marks = state === 3 ? /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g : /[\u0591-\u05AF\u05C0]/g
-  return decoded.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
-    if (tag) return tag
-    return text.replace(marks, '')
-  })
-}
+/**
+ * Nikkud U+05B0\u2013U+05BD, U+05BF, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7. U+05BF RAFE is
+ * included: it draws a bar over the letter and would read as a stray dash. U+05BE MAQAF
+ * is excluded \u2014 it is a separator, not a mark.
+ */
+const NIKKUD_MARKS = /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g
+const TEAMIM_MARKS = /[\u0591-\u05AF\u05C0]/g
 
 /**
  * Tags that end one line and start the next, so the dibbur hamatchil latch resets.
@@ -51,20 +63,14 @@ export function applyDiacriticsFilter(html: string, state: number): string {
 const BLOCK_BOUNDARY_TAG = /^<\/?(?:div|p|br|li|tr|td|th|h[1-6]|section|article|blockquote)\b/i
 
 /**
- * Strip cantillation marks and nikkud, convert the dibbur hamatchil dash to a full
- * stop (dropping later dashes), and
- * normalize punctuation from an HTML string. Tag attributes are preserved.
- *
- * This is the canonical nikkud-stripping logic shared by the book-view renderer
- * (via cleanHebrewText in hebrewTextCleaning.ts). Any change to what
- * "remove nikkud" strips must be made here and nowhere else.
+ * Apply the per-text-node clean-text options (CLEAN_TEXT) to an HTML string. Tag
+ * attributes are preserved. The options that need to scan across characters
+ * (NORMALIZE_PUNCTUATION's colon/quote/space rules, REMOVE_PUNCTUATION's period/colon
+ * rule) live in cleanHebrewText, which calls this first.
  *
  * Transformations applied to text nodes only (tags are passed through unchanged):
- *   - Cantillation marks U+0591–U+05AF, U+05C0 removed
- *   - Nikkud U+05B0–U+05BD, U+05BF, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7 removed
- *     (U+05BF RAFE included: it draws a bar over the letter and would read as a
- *     stray dash. U+05BE MAQAF is excluded — it is a separator, not a mark.)
- *   - Dash types followed by a space: the FIRST one in each line becomes a full
+ *   - TEAMIM / NIKKUD: the marks above
+ *   - DIBBUR_HAMATCHIL_DASH: dash types followed by a space: the FIRST one in each line becomes a full
  *     stop, since it separates a dibbur hamatchil (the lemma opening a
  *     Rashi/Tosafot comment) from the body. Which dash is used there is
  *     inconsistent across the corpus, so all of them convert. Every later
@@ -73,10 +79,9 @@ const BLOCK_BOUNDARY_TAG = /^<\/?(?:div|p|br|li|tr|td|th|h[1-6]|section|article|
  *       figure dash U+2012, horizontal bar U+2015 (―), minus sign U+2212 (−)
  *       A dash between two letters is preserved. The divine-name censor separator
  *       is U+2011 (non-breaking hyphen, e.g. א‑ל) and is never in this class at all.
- *   - ! → .   ? → .   ; → , (modern punctuation uncommon in older Hebrew texts)
- *     A run of ! and ? (e.g. ?! or !!) collapses to a single dot, not one per mark.
+ *   - MAQAF, and the context-free parts of the two punctuation options (finishPunctuation)
  */
-export function stripNikkudFromHtml(html: string): string {
+export function stripNikkudFromHtml(html: string, flags: number = CLEAN_TEXT_LEGACY): string {
   // The first dash-space of a line separates the dibbur hamatchil from the body, so
   // it becomes a full stop; every later dash-space is dropped as decoration. Which
   // dash the corpus uses there is inconsistent (hyphen and em dash both occur), so
@@ -91,9 +96,8 @@ export function stripNikkudFromHtml(html: string): string {
   // with the dash ("<b>lemma</b> - body"), so what precedes it in this chunk is not
   // the test — the lemma may have been the previous chunk entirely.
   let lemmaSeen = false
-  // Decoded here rather than only in applyDiacriticsFilter: cleanHebrewText calls
-  // this directly for state 2, so entity-encoded nikkud would otherwise survive the
-  // one mode whose whole job is removing it.
+  // Entity-encoded nikkud would otherwise survive the one option whose whole job is
+  // removing it.
   return decodeDiacriticEntities(html).replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
     if (tag) {
       if (BLOCK_BOUNDARY_TAG.test(tag)) {
@@ -102,7 +106,11 @@ export function stripNikkudFromHtml(html: string): string {
       }
       return tag
     }
-    text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
+    if (flags & CLEAN_TEXT.TEAMIM) text = text.replace(TEAMIM_MARKS, '')
+    if (!(flags & CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH)) {
+      if (flags & CLEAN_TEXT.NIKKUD) text = text.replace(NIKKUD_MARKS, '')
+      return finishPunctuation(text, flags)
+    }
     // The dot hugs the lemma, so the DH match also swallows any horizontal space and period
     // already sitting in front of the dash. A later dash is only decoration: it
     // goes, but its leading space stays behind as the word gap.
@@ -119,15 +127,27 @@ export function stripNikkudFromHtml(html: string): string {
     // A chunk with visible text leaves a lemma behind for a dash in the NEXT chunk,
     // which is how "<b>lemma</b> - body" survives the tag boundary.
     if (/\S/.test(text)) lemmaSeen = true
-    // U+05BF RAFE draws a bar above the letter, so a leftover one reads as a stray
-    // dash. Search already discards it (see SEARCH_IGNORED_MARKS); display matches.
-    text = text.replace(/[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g, '')
+    if (flags & CLEAN_TEXT.NIKKUD) text = text.replace(NIKKUD_MARKS, '')
+    return finishPunctuation(text, flags)
+  })
+}
+
+/** The per-text-node parts of MAQAF and the two punctuation options. */
+function finishPunctuation(text: string, flags: number): string {
+  if (flags & CLEAN_TEXT.MAQAF) text = text.replace(/\u05BE/g, ' ')
+  if (flags & CLEAN_TEXT.REMOVE_PUNCTUATION) {
+    // Semicolons, but not the one closing an HTML entity like &nbsp;
+    text = text.replace(/[,!?]|(?<!&[^;\s]{0,10});/g, '')
+    // Dashes that are punctuation: the long ones anywhere, a hyphen only standing alone
+    return text.replace(/[\u2012\u2013\u2014\u2015\u2212]|(?<!\S)-(?!\S)/g, '')
+  }
+  if (flags & CLEAN_TEXT.NORMALIZE_PUNCTUATION) {
     // A run like ?! is one mark of punctuation, so it collapses to a single dot
     text = text.replace(/[!?]+/g, '.')
     // Replace standalone semicolons but not ones inside HTML entities like &nbsp;
     text = text.replace(/(?<!&[^;\s]{0,10});/g, ',')
-    return text
-  })
+  }
+  return text
 }
 
 /**

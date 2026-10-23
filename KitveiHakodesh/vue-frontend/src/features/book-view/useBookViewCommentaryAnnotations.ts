@@ -37,7 +37,7 @@ export function useBookViewCommentaryAnnotations(
   bookTitle: string | undefined,
   settings: ReturnType<typeof useSettingsStore>,
 ) {
-  const diacriticsStateForExport = computed(() => settings.diacriticsState)
+  const cleanTextFlagsForExport = computed(() => settings.cleanTextFlags)
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
     useCommentaryHighlights(groupsForDisplay)
@@ -72,7 +72,7 @@ export function useBookViewCommentaryAnnotations(
 
   const { lineContent: renderLineForExport } = useBookViewLineRenderer(
     settings,
-    diacriticsStateForExport,
+    cleanTextFlagsForExport,
     () => ({ getHighlightsForLine: undefined, getNotesForLine }),
   )
 

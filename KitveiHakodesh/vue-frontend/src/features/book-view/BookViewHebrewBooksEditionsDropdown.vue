@@ -98,9 +98,9 @@ const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`
 /* ── Dropdown panel ── */
 .editions-dropdown {
   position: absolute;
-  min-width: 180px;
-  max-width: 300px;
-  max-height: 320px;
+  min-width: 220px;
+  max-width: 340px;
+  max-height: 360px;
   overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
