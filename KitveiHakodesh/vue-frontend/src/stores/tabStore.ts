@@ -47,6 +47,7 @@ import {
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
 import { parentFolder } from '@/utils/filePath'
+import { isWindowFullscreen } from '@/utils/isWindowFullscreen'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
   dropUncheckedCommentaryForTab,
@@ -1370,7 +1371,7 @@ export const useTabStore = defineStore('tabs', () => {
     // Replacing an empty home tab is never worth a new tab — there is nothing to lose.
     const onHome = activeTabForPane(pane).route === '/'
 
-    if (openInNewTab && !onHome && !navigatesDestinationsInPlace) {
+    if (openInNewTab && !onHome && !navigatesDestinationsInPlace && !isWindowFullscreen()) {
       if (pane === 1) openTab(patch)
       else openPane2Tab(patch)
       return
