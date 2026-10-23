@@ -198,10 +198,18 @@ jobs:
         working-directory: src
         run: |
           $lib = Join-Path $env:MLP_WORK "payload\KitveiHakodeshLib.dll"
-          $an = [Reflection.Assembly]::ReflectionOnlyLoadFrom($lib)
-          $an.GetReferencedAssemblies() | Where-Object { $_.Name -eq 'FluentChromeTabs' } | ForEach-Object { Write-Host "Lib references: $($_.FullName)" }
-          Write-Host "Lib identity: $($an.FullName)"
-
+          $fs = [IO.File]::OpenRead($lib)
+          $pe = New-Object System.Reflection.PortableExecutable.PEReader($fs)
+          $md = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($pe)
+          $self = $md.GetAssemblyDefinition()
+          Write-Host ("Lib identity: {0}, Version={1}" -f $md.GetString($self.Name), $self.Version)
+          $found = $false
+          foreach ($h in $md.AssemblyReferences) {
+            $r = $md.GetAssemblyReference($h)
+            if ($md.GetString($r.Name) -eq 'FluentChromeTabs') { $found = $true; Write-Host ("Lib references FluentChromeTabs, Version={0}" -f $r.Version); if ($r.Version.ToString() -ne '1.0.0.0') { throw 'unexpected FluentChromeTabs version' } }
+          }
+          $pe.Dispose(); $fs.Dispose()
+          if (-not $found) { Write-Host 'Lib has no FluentChromeTabs reference' }
       - name: Install Inno Setup (if missing)
         shell: pwsh
         run: |
