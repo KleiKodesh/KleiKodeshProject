@@ -128,6 +128,28 @@ namespace WebSitesLib.UI
                 all.Where(m => m.IsVisible));
         }
 
+        /// <summary>
+        /// True for non-web schemes and for any http(s) URL whose host is a whitelisted
+        /// host or one of its subdomains ("www." ignored). Everything else opens externally.
+        /// </summary>
+        internal bool IsWhitelistedUrl(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri)) return true;
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return true;
+            string host = StripWww(uri.Host);
+            if (host == "kiwix-app") return true;
+            return WebAddressModels.Any(m =>
+                Uri.TryCreate(m.Url, UriKind.Absolute, out Uri allowed) &&
+                IsSameOrSubdomain(host, StripWww(allowed.Host)));
+        }
+
+        static string StripWww(string host) =>
+            host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host.Substring(4) : host;
+
+        static bool IsSameOrSubdomain(string host, string domain) =>
+            host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
+
         #endregion
 
         #region Session
@@ -310,7 +332,7 @@ namespace WebSitesLib.UI
 
             _navigateUrl = actualUrl ?? model.Url;
 
-            WebView = new MyWebView();
+            WebView = new MyWebView { IsAllowedUrl = owner.IsWhitelistedUrl };
             WebView.NavigationCompleted += (s, e) =>
             {
                 CurrentUrl = WebView.Source?.ToString();

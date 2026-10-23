@@ -1,6 +1,7 @@
-using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -17,6 +18,9 @@ namespace WebSitesLib.UI
             "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
         static readonly string[] IosExceptions = { "dicta" };
+
+        /// <summary>Top-level navigations failing this check open in the system browser (#338).</summary>
+        public Func<string, bool> IsAllowedUrl { get; set; }
 
         public async Task Navigate(string url)
         {
@@ -45,6 +49,7 @@ namespace WebSitesLib.UI
                     {
                         _defaultUserAgent = CoreWebView2.Settings.UserAgent;
                         CoreWebView2.NavigationStarting += OnNavigationStarting;
+                        CoreWebView2.NewWindowRequested += OnNewWindowRequested;
                         SetupKiwixVirtualHost();
                         _coreInitializedTcs.TrySetResult(true);
                     }
@@ -71,8 +76,25 @@ namespace WebSitesLib.UI
             return false;
         }
 
+        bool OpenExternallyIfBlocked(string url)
+        {
+            if (IsAllowedUrl == null || IsAllowedUrl(url)) return false;
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+            return true;
+        }
+
+        void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            if (OpenExternallyIfBlocked(e.Uri)) e.Handled = true;
+        }
+
         void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
+            if (OpenExternallyIfBlocked(e.Uri))
+            {
+                e.Cancel = true;
+                return;
+            }
             CoreWebView2.Settings.UserAgent = IsIosException(e.Uri)
                 ? _defaultUserAgent
                 : IosUserAgent;
