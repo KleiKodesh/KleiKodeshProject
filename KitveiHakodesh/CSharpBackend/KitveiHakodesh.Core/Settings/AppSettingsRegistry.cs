@@ -148,6 +148,25 @@ namespace KitveiHakodesh.Core.Settings
             WriteInt("Popout", "H", height);
         }
 
+        /// <summary>
+        /// Last bounds of a window.open popup, keyed by its window name (e.g. "hameshiv").
+        /// The size falls back to what the page requested; X/Y -1 means "not positioned
+        /// yet" (the host centres it), same convention as the pop-out bounds.
+        /// </summary>
+        public static (int X, int Y, int Width, int Height) GetPopupBounds(string name, int width, int height) => (
+            ReadInt("Popup_" + name, "X", -1),
+            ReadInt("Popup_" + name, "Y", -1),
+            ReadInt("Popup_" + name, "W", width),
+            ReadInt("Popup_" + name, "H", height));
+
+        public static void SetPopupBounds(string name, int x, int y, int width, int height)
+        {
+            WriteInt("Popup_" + name, "X", x);
+            WriteInt("Popup_" + name, "Y", y);
+            WriteInt("Popup_" + name, "W", width);
+            WriteInt("Popup_" + name, "H", height);
+        }
+
         // ── Appearance ────────────────────────────────────────────────────────────────
         //
         // These mirror the Vue theme so the NATIVE chrome (title bar, tab strip) can be

@@ -28,6 +28,10 @@
       "label": "Calendar",
       "description": "Hebrew date and daily zmanim"
     },
+    "hameshiv": {
+      "label": "Hameshiv",
+      "description": "Study aid and source finder"
+    },
     "ruler": {
       "label": "Measurements",
       "description": "Convert halachic measures"
