@@ -567,7 +567,7 @@ button.active {
 .related-books-dropdown {
   position: absolute;
   min-width: 180px;
-  max-width: 300px;
+  max-width: 280px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--bg-secondary);
@@ -601,20 +601,20 @@ button.active {
 }
 
 .empty-message {
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
 .loading-message {
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
 /* ── Section captions ── */
 .section-caption {
-  padding: 4px 10px 2px;
+  padding: 6px 12px 2px;
   font-size: 10px;
   color: var(--text-secondary);
   user-select: none;
@@ -630,8 +630,8 @@ button.active {
 .book-row {
   display: block;
   width: 100%;
-  height: 28px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   text-align: start;
   font-size: 12px;
   color: var(--text-primary);

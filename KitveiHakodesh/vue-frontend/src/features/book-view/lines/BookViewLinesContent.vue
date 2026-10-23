@@ -95,7 +95,7 @@ const zoom = computed({
   set: (value: number) => bookViewStore.setLinesZoom(tabId, bookId, value),
 })
 
-const diacriticsState = computed(() => settingsStore.diacriticsState)
+const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
 const scrollerEl = ref<HTMLElement | null>(null)
@@ -169,7 +169,7 @@ const {
   // transforms, which is the text the highlight walk addresses.
   (content) =>
     annotationOffsetLength(
-      contentInAnnotationOffsetSpace(content, diacriticsState.value, settingsStore.censorOptions),
+      contentInAnnotationOffsetSpace(content, cleanTextFlags.value, settingsStore.censorOptions),
     ),
 )
 
@@ -192,7 +192,7 @@ const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAn
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
 )
 
-const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
+const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
   searchQuery: props.searchQuery,
   searchHighlightLineIndex: props.searchHighlightLineIndex,

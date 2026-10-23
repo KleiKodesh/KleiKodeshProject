@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { cleanHebrewText } from './hebrewTextCleaning'
+import { CLEAN_TEXT } from './hebrewTextProcessing'
 
 describe('cleanHebrewText — colon handling', () => {
   it('keeps chapter:verse citation colons between Hebrew letters', () => {
@@ -75,5 +76,39 @@ describe('cleanHebrewText — gershayim / quote handling', () => {
 
   it('still drops quotes at word boundaries', () => {
     expect(cleanHebrewText('"שלום"')).toBe('שלום')
+  })
+})
+
+describe('cleanHebrewText - separate options', () => {
+  const ALEF = 'א'
+  const BET = 'ב'
+  const PATAH = 'ַ'
+  const TIPCHA = '֖'
+
+  it('removes nikkud alone, keeping teamim and punctuation', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${TIPCHA} - ${BET}?`, CLEAN_TEXT.NIKKUD)).toBe(`${ALEF}${TIPCHA} - ${BET}?`)
+  })
+
+  it('removes teamim alone, keeping nikkud', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${TIPCHA}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF}${PATAH}`)
+  })
+
+  it('turns maqaf into a space', () => {
+    expect(cleanHebrewText(`${ALEF}־${BET}`, CLEAN_TEXT.MAQAF)).toBe(`${ALEF} ${BET}`)
+  })
+
+  it('remove punctuation keeps only the line-end period and parenthesized marks', () => {
+    const input = `${ALEF}, ${BET}; ${ALEF}! ${BET}. ${ALEF} — ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`
+    expect(cleanHebrewText(input, CLEAN_TEXT.REMOVE_PUNCTUATION)).toBe(
+      `${ALEF} ${BET} ${ALEF} ${BET} ${ALEF} ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`,
+    )
+  })
+
+  it('keeps an acronym quote under remove punctuation', () => {
+    expect(cleanHebrewText(`${ALEF}${BET}"${ALEF} "${BET}"`, CLEAN_TEXT.REMOVE_PUNCTUATION)).toBe(`${ALEF}${BET}"${ALEF} ${BET}`)
+  })
+
+  it('does nothing with no flags', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}, ${BET}`, 0)).toBe(`${ALEF}${PATAH}, ${BET}`)
   })
 })

@@ -85,7 +85,7 @@ function onSelect(edition: HebrewBooksEdition) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
@@ -100,10 +100,10 @@ function onSelect(edition: HebrewBooksEdition) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0;
+  gap: 2px;
   width: 100%;
-  min-height: 28px;
-  padding: 3px 10px;
+  min-height: 32px;
+  padding: 6px 12px;
   text-align: start;
   font-size: 12px;
   color: var(--text-primary);

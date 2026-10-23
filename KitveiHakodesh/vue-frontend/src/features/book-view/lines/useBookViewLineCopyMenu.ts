@@ -402,7 +402,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
    */
   function modelLineRenderer(): (raw: string, lineIndex: number, lineId: number) => string {
     if (settingsStore.copyWithNotes && options.getRenderedLineContent) return options.getRenderedLineContent
-    return (raw) => contentInAnnotationOffsetSpace(raw, settingsStore.diacriticsState, settingsStore.censorOptions)
+    return (raw) => contentInAnnotationOffsetSpace(raw, settingsStore.cleanTextFlags, settingsStore.censorOptions)
   }
 
   /**

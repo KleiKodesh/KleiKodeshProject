@@ -134,7 +134,11 @@
     "loadError": "Error loading table of contents"
   },
   "toolbar": {
+    "cleanDibburHamatchilDash": "Dibbur hamatchil dash to period",
+    "cleanMaqaf": "Maqaf to space",
     "cleanNikkud": "Vowels",
+    "cleanNormalizePunctuation": "Normalize punctuation",
+    "cleanRemovePunctuation": "Remove punctuation (keep line end)",
     "cleanTeamim": "Cantillation",
     "cleanText": "Clean text",
     "cleanTextOptions": "What to clean",

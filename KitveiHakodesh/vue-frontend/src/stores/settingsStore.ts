@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsDelete, lsKeys } from '@/utils/persistence'
+import { CLEAN_TEXT_LEGACY } from '@/utils/hebrewTextProcessing'
 
 /**
  * Disk names for the settings this store owns. Nothing else reads them.
@@ -21,8 +22,7 @@ const KEYS = {
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
   SETTINGS_CLEAN_TEXT_ACTIVE: 'text.cleanText.active',
-  SETTINGS_CLEAN_TEXT_TEAMIM: 'text.cleanText.teamim',
-  SETTINGS_CLEAN_TEXT_NIKKUD: 'text.cleanText.nikkud',
+  SETTINGS_CLEAN_TEXT_OPTIONS: 'text.cleanText.options',
   SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
 
   // Commentary display
@@ -141,8 +141,8 @@ const DEFAULTS = {
   // The toolbar's clean-text combo: the button turns cleaning on/off, its dropdown picks
   // what is removed. Global - one choice for every book.
   cleanTextActive: false,
-  cleanTextRemoveTeamim: true,
-  cleanTextRemoveNikkud: true,
+  // CLEAN_TEXT bit flags.
+  cleanTextOptions: CLEAN_TEXT_LEGACY as number,
   hiddenWordLinkMarkerBookIds: [] as number[],
   // Bundled, so headings match across machines; the Segoe faces are Windows-only and
   // now trail as fallbacks for a build with the font files stripped.
@@ -286,17 +286,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
   const otherNamesSelected = ref<OtherNameKey[]>([...DEFAULTS.otherNamesSelected])
   const cleanTextActive = ref(DEFAULTS.cleanTextActive)
-  const cleanTextRemoveTeamim = ref(DEFAULTS.cleanTextRemoveTeamim)
-  const cleanTextRemoveNikkud = ref(DEFAULTS.cleanTextRemoveNikkud)
-  /**
-   * What the renderers strip, derived from the clean-text options:
-   * 0 = nothing, 1 = teamim only, 2 = teamim and nikkud, 3 = nikkud only.
-   */
-  const diacriticsState = computed(() => {
-    if (!cleanTextActive.value) return 0
-    if (cleanTextRemoveNikkud.value) return cleanTextRemoveTeamim.value ? 2 : 3
-    return cleanTextRemoveTeamim.value ? 1 : 0
-  })
+  const cleanTextOptions = ref(DEFAULTS.cleanTextOptions)
+  /** The CLEAN_TEXT flags the renderers apply - none while cleaning is off. */
+  const cleanTextFlags = computed(() => (cleanTextActive.value ? cleanTextOptions.value : 0))
   const hiddenWordLinkMarkerBookIds = ref<number[]>([...DEFAULTS.hiddenWordLinkMarkerBookIds])
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
@@ -451,8 +443,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const storedOtherNamesSelected = normalizeOtherNamesSelected(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
     if (storedOtherNamesSelected != null) otherNamesSelected.value = storedOtherNamesSelected
     loadSetting(KEYS.SETTINGS_CLEAN_TEXT_ACTIVE, cleanTextActive)
-    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_TEAMIM, cleanTextRemoveTeamim)
-    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_NIKKUD, cleanTextRemoveNikkud)
+    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_OPTIONS, cleanTextOptions)
     loadSetting(KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, hiddenWordLinkMarkerBookIds)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
@@ -556,8 +547,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(elokimMode, KEYS.SETTINGS_CENSOR_ELOKIM)
   persistSetting(otherNamesSelected, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
   persistSetting(cleanTextActive, KEYS.SETTINGS_CLEAN_TEXT_ACTIVE)
-  persistSetting(cleanTextRemoveTeamim, KEYS.SETTINGS_CLEAN_TEXT_TEAMIM)
-  persistSetting(cleanTextRemoveNikkud, KEYS.SETTINGS_CLEAN_TEXT_NIKKUD)
+  persistSetting(cleanTextOptions, KEYS.SETTINGS_CLEAN_TEXT_OPTIONS)
   persistSetting(hiddenWordLinkMarkerBookIds, KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, applyCSSVariables)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
@@ -732,8 +722,7 @@ export const useSettingsStore = defineStore('settings', () => {
     elokimMode.value = DEFAULTS.elokimMode
     otherNamesSelected.value = [...DEFAULTS.otherNamesSelected]
     cleanTextActive.value = DEFAULTS.cleanTextActive
-    cleanTextRemoveTeamim.value = DEFAULTS.cleanTextRemoveTeamim
-    cleanTextRemoveNikkud.value = DEFAULTS.cleanTextRemoveNikkud
+    cleanTextOptions.value = DEFAULTS.cleanTextOptions
     hiddenWordLinkMarkerBookIds.value = [...DEFAULTS.hiddenWordLinkMarkerBookIds]
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
@@ -810,7 +799,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
-    diacriticsState, cleanTextActive, cleanTextRemoveTeamim, cleanTextRemoveNikkud, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
+    cleanTextFlags, cleanTextActive, cleanTextOptions, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
