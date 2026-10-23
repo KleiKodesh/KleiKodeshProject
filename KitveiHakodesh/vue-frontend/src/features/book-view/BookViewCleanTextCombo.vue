@@ -135,13 +135,14 @@ button {
 /* ── Dropdown panel (BookViewWordLinkMarkersDropdown look) ── */
 .clean-text-dropdown {
   position: absolute;
-  min-width: 140px;
+  min-width: 180px;
+  max-width: 300px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   z-index: 100;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .dropdown-top {
@@ -165,8 +166,8 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 10px;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;
