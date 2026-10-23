@@ -72,10 +72,14 @@
                 <ToggleButton x:Name="CleanOptionsToggle"
                               Grid.Column="1"
                               Style="{StaticResource CheckedToggle}"
-                              Content="▾"
                               Width="28"
+                              Padding="7"
                               Margin="4,0,0,0"
-                              ToolTip="בחר מה להסיר"/>
+                              ToolTip="בחר מה להסיר">
+                    <Path Stretch="Uniform"
+                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                          Data="M4.21967 6.96967C4.51256 6.67678 4.98744 6.67678 5.28033 6.96967L10 11.6893L14.7197 6.96967C15.0126 6.67678 15.4874 6.67678 15.7803 6.96967C16.0732 7.26256 16.0732 7.73744 15.7803 8.03033L10.5303 13.2803C10.2374 13.5732 9.76256 13.5732 9.46967 13.2803L4.21967 8.03033Z"/>
+                </ToggleButton>
             </Grid>
             <Popup x:Name="CleanOptionsPopup"
                    StaysOpen="False"
