@@ -123,6 +123,10 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerPopup.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="AppViewerTheme.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>

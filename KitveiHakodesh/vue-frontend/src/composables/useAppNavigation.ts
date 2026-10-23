@@ -2,6 +2,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pickLocalFile, pickDbPath, getDbPathInfo } from '@/webview-host/bridge'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
 import { useLocalFileStore } from '@/stores/localFileStore'
+import { openHameshivPopup } from '@/composables/hameshivPopup'
 import type { TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
 
@@ -54,6 +55,10 @@ export function useAppNavigation() {
     window.open('https://zayitapp.com/#/download', '_blank')
   }
 
+  function handleHameshiv(): void {
+    openHameshivPopup()
+  }
+
   function handleDbPicker(): void {
     void (async () => {
       // Asked BEFORE the pick: a real library switch drops the book-id-keyed state.
@@ -78,6 +83,7 @@ export function useAppNavigation() {
     if (label === 'פתח קובץ') { await handleFilePicker(false); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
     if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'המשיב') { handleHameshiv(); return }
     if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
@@ -96,6 +102,7 @@ export function useAppNavigation() {
     if (label === 'פתח קובץ') { await handleFilePicker(true); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
     if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'המשיב') { handleHameshiv(); return }
     if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 

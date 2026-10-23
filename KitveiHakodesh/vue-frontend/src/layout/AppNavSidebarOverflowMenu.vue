@@ -85,7 +85,7 @@ function overflowRow(key: string): OverflowRow {
   }
   if (key === 'pop-out') return { key, label: t('layout.popOutLabel'), icon: IconOpen28Regular }
   // A destination, keyed by its label - settings included.
-  const item = APP_NAV_ITEMS.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
+  const item = APP_NAV_ITEMS.value.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
   return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color }
 }
 

@@ -7,7 +7,8 @@ import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
-import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from '@/layout/appNavItems'
+import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM, HAMESHIV_LABEL } from '@/layout/appNavItems'
+import { useHameshivReachable } from '@/composables/useHameshivReachable'
 import { t } from '@/i18n'
 
 /** A destination's icon + colour, taken from the shared table (utils/documentIcons). */
@@ -18,7 +19,7 @@ function destinationIcon(key: DocumentIconKey): { icon: Component; color: string
 
 /** A shared destination: label (route key) + translated text + description from appNavItems, icon from the shared table. */
 function navDestination(key: DocumentIconKey, label: string) {
-  const item = [...APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM].find((navItem) => navItem.label === label)
+  const item = [...APP_NAV_ITEMS.value, APP_NAV_SETTINGS_ITEM].find((navItem) => navItem.label === label)
   return { label, text: item?.text ?? label, description: item?.description ?? '', ...destinationIcon(key) }
 }
 
@@ -33,6 +34,7 @@ function navDestination(key: DocumentIconKey, label: string) {
 export function useHomeNavCards(navigate: (label: string) => unknown) {
   const settingsStore = useSettingsStore()
   const paneId = inject<1 | 2>('paneId', 1)
+  const hameshivReachable = useHameshivReachable()
 
   return computed<HomeSuggestionCard[]>(() => {
     if (settingsStore.getNavSidebarVisible(paneId)) return []
@@ -50,6 +52,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('dict', 'מילון'),
       navDestination('calendar', 'לוח שנה'),
       navDestination('ruler', 'מידות ושיעורים'),
+      ...(hameshivReachable.value ? [navDestination('hameshiv', HAMESHIV_LABEL)] : []),
       navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({

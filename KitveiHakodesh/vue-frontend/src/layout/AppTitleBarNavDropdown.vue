@@ -47,21 +47,21 @@ useDropdownClose(menuRef, () => emit('close'), {
 })
 
 function menuRowIndex(row: MenuRow) {
-  return APP_NAV_ITEMS.length + menuRows.indexOf(row)
+  return APP_NAV_ITEMS.value.length + menuRows.indexOf(row)
 }
 
-const itemCount = APP_NAV_ITEMS.length + menuRows.length
+const itemCount = computed(() => APP_NAV_ITEMS.value.length + menuRows.length)
 
-const { focusedIndex } = useListKeys(menuRef, () => itemCount, (index) => {
+const { focusedIndex } = useListKeys(menuRef, () => itemCount.value, (index) => {
   activateIndex(index)
 })
 
 function activateIndex(index: number) {
-  if (index < APP_NAV_ITEMS.length) {
-    onTap(APP_NAV_ITEMS[index]!.label)
+  if (index < APP_NAV_ITEMS.value.length) {
+    onTap(APP_NAV_ITEMS.value[index]!.label)
     return
   }
-  const row = menuRows[index - APP_NAV_ITEMS.length]
+  const row = menuRows[index - APP_NAV_ITEMS.value.length]
   if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
   else if (row === 'navSidebar') onShowNavSidebar()
   else if (row === 'popOut') onPopOut()

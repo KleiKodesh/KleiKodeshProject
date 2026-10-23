@@ -63,7 +63,7 @@ export function useAppNavSidebarOverflow(
   // Destinations - settings included - are keyed by their labels, because the label IS the
   // routing key; the buttons that are not destinations get names of their own.
   const railButtonKeys = computed<string[]>(() => [
-    ...APP_NAV_ITEMS.map((item) => item.label),
+    ...APP_NAV_ITEMS.value.map((item) => item.label),
     ...(isSplitViewButtonVisible.value ? ['split-view'] : []),
     ...(showPopOutButton ? ['pop-out'] : []),
     APP_NAV_SETTINGS_ITEM.label,
@@ -104,7 +104,7 @@ export function useAppNavSidebarOverflow(
 
   /** The destinations still on the rail - always a prefix of APP_NAV_ITEMS, order kept. */
   const visibleNavItems = computed(() =>
-    APP_NAV_ITEMS.filter((item) => railButtonVisible(item.label)),
+    APP_NAV_ITEMS.value.filter((item) => railButtonVisible(item.label)),
   )
 
   /** The collapsed tail, in rail order - what the flyout renders. */
