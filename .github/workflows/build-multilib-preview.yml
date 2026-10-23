@@ -44,6 +44,10 @@ jobs:
       SOURCE_REF: ${{ inputs.source_ref || 'feature/multi-library-badge-toggle' }}
       VERSION_LABEL: ${{ inputs.version || 'multilib-preview-dev' }}
     steps:
+      - name: Keep LF line endings on checkout (the official build is LF; CRLF would make every text file differ)
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
       - name: Checkout CI assets (this workflow's own ref)
         uses: actions/checkout@v4
         with:
