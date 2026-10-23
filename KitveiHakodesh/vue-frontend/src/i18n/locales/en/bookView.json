@@ -134,6 +134,10 @@
     "loadError": "Error loading table of contents"
   },
   "toolbar": {
+    "cleanNikkud": "Vowels",
+    "cleanTeamim": "Cantillation",
+    "cleanText": "Clean text",
+    "cleanTextOptions": "What to clean",
     "close_bottom": "Close bottom commentary panel (Ctrl+J)",
     "close_left": "Close left commentary panel (Ctrl+Alt+J)",
     "close_right": "Close right commentary panel (Ctrl+Shift+J)",
@@ -145,11 +149,6 @@
     "open_left": "Left commentary panel (Ctrl+Alt+J)",
     "open_right": "Right commentary panel (Ctrl+Shift+J)",
     "prevSection": "Previous section (Ctrl+Right)",
-    "removeAlsoNikud": "Remove vowels too",
-    "removeNikud": "Remove vowels",
-    "removeTeamim": "Remove cantillation",
-    "restoreAll": "Restore cantillation and vowels",
-    "restoreNikud": "Restore vowels",
     "search": "Search (Ctrl+F)",
     "syncCommentaries": "Sync commentaries",
     "syncOffTitle": "Sync commentaries\nCommentaries will follow the top line automatically",

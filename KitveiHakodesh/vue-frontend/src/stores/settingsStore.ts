@@ -20,7 +20,9 @@ const KEYS = {
   SETTINGS_LINE_PADDING: 'text.linePadding',
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
-  SETTINGS_DIACRITICS: 'text.diacritics',
+  SETTINGS_CLEAN_TEXT_ACTIVE: 'text.cleanText.active',
+  SETTINGS_CLEAN_TEXT_TEAMIM: 'text.cleanText.teamim',
+  SETTINGS_CLEAN_TEXT_NIKKUD: 'text.cleanText.nikkud',
   SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
 
   // Commentary display
@@ -136,7 +138,11 @@ const DEFAULTS = {
   divineNameMode: DEFAULT_DIVINE_NAME_MODE,
   elokimMode: DEFAULT_ELOKIM_MODE,
   otherNamesSelected: DEFAULT_OTHER_NAMES_SELECTED,
-  diacriticsState: 0,
+  // The toolbar's clean-text combo: the button turns cleaning on/off, its dropdown picks
+  // what is removed. Global - one choice for every book.
+  cleanTextActive: false,
+  cleanTextRemoveTeamim: true,
+  cleanTextRemoveNikkud: true,
   hiddenWordLinkMarkerBookIds: [] as number[],
   // Bundled, so headings match across machines; the Segoe faces are Windows-only and
   // now trail as fallbacks for a build with the font files stripped.
@@ -279,7 +285,18 @@ export const useSettingsStore = defineStore('settings', () => {
   const divineNameMode = ref<DivineNameMode>(DEFAULTS.divineNameMode)
   const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
   const otherNamesSelected = ref<OtherNameKey[]>([...DEFAULTS.otherNamesSelected])
-  const diacriticsState = ref(DEFAULTS.diacriticsState)
+  const cleanTextActive = ref(DEFAULTS.cleanTextActive)
+  const cleanTextRemoveTeamim = ref(DEFAULTS.cleanTextRemoveTeamim)
+  const cleanTextRemoveNikkud = ref(DEFAULTS.cleanTextRemoveNikkud)
+  /**
+   * What the renderers strip, derived from the clean-text options:
+   * 0 = nothing, 1 = teamim only, 2 = teamim and nikkud, 3 = nikkud only.
+   */
+  const diacriticsState = computed(() => {
+    if (!cleanTextActive.value) return 0
+    if (cleanTextRemoveNikkud.value) return cleanTextRemoveTeamim.value ? 2 : 3
+    return cleanTextRemoveTeamim.value ? 1 : 0
+  })
   const hiddenWordLinkMarkerBookIds = ref<number[]>([...DEFAULTS.hiddenWordLinkMarkerBookIds])
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
@@ -433,7 +450,9 @@ export const useSettingsStore = defineStore('settings', () => {
     if (storedElokimMode != null) elokimMode.value = storedElokimMode
     const storedOtherNamesSelected = normalizeOtherNamesSelected(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
     if (storedOtherNamesSelected != null) otherNamesSelected.value = storedOtherNamesSelected
-    loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
+    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_ACTIVE, cleanTextActive)
+    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_TEAMIM, cleanTextRemoveTeamim)
+    loadSetting(KEYS.SETTINGS_CLEAN_TEXT_NIKKUD, cleanTextRemoveNikkud)
     loadSetting(KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, hiddenWordLinkMarkerBookIds)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
@@ -536,7 +555,9 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(divineNameMode, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
   persistSetting(elokimMode, KEYS.SETTINGS_CENSOR_ELOKIM)
   persistSetting(otherNamesSelected, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
-  persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
+  persistSetting(cleanTextActive, KEYS.SETTINGS_CLEAN_TEXT_ACTIVE)
+  persistSetting(cleanTextRemoveTeamim, KEYS.SETTINGS_CLEAN_TEXT_TEAMIM)
+  persistSetting(cleanTextRemoveNikkud, KEYS.SETTINGS_CLEAN_TEXT_NIKKUD)
   persistSetting(hiddenWordLinkMarkerBookIds, KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, applyCSSVariables)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
@@ -631,17 +652,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
-  function cycleDiacritics() {
-    diacriticsState.value = (diacriticsState.value + 1) % 3
-  }
-
-  /**
-   * Cycle diacritics for a book that has no cantillation marks (hasTeamim is falsy).
-   * State 1 (strip teamim only) is meaningless for such books, so the cycle skips it:
-   * 0 → 2 → 0  and  1 → 2 (state 1 is treated as "nothing stripped yet")
-   */
-  function cycleDiacriticsNoTeamim() {
-    diacriticsState.value = diacriticsState.value === 2 ? 0 : 2
+  function toggleCleanText() {
+    cleanTextActive.value = !cleanTextActive.value
   }
 
   /**
@@ -719,7 +731,9 @@ export const useSettingsStore = defineStore('settings', () => {
     divineNameMode.value = DEFAULTS.divineNameMode
     elokimMode.value = DEFAULTS.elokimMode
     otherNamesSelected.value = [...DEFAULTS.otherNamesSelected]
-    diacriticsState.value = DEFAULTS.diacriticsState
+    cleanTextActive.value = DEFAULTS.cleanTextActive
+    cleanTextRemoveTeamim.value = DEFAULTS.cleanTextRemoveTeamim
+    cleanTextRemoveNikkud.value = DEFAULTS.cleanTextRemoveNikkud
     hiddenWordLinkMarkerBookIds.value = [...DEFAULTS.hiddenWordLinkMarkerBookIds]
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
@@ -796,7 +810,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
-    diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
+    diacriticsState, cleanTextActive, cleanTextRemoveTeamim, cleanTextRemoveNikkud, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
@@ -823,7 +837,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,
-    init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
+    init, toggleCleanText, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,
   }
 })

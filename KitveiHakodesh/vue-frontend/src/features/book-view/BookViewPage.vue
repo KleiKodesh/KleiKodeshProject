@@ -145,7 +145,6 @@ const toolbarProps = computed(() => ({
   hasRelatedBooks: hasRelatedBooks.value,
   tabId,
   bookId,
-  bookHasTeamim: bookHasTeamim.value,
   exportRestricted: exportRestricted.value,
   exportingToWord: exportingToWord.value,
   filterGroups: staticFilterGroups.value,

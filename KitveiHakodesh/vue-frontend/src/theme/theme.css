@@ -28,8 +28,6 @@
   --status-success: #10b981;
   --status-warning: #d98200;
   --status-danger: #e53e3e;
-  --diacritics-1: #e07800;
-  --diacritics-2: #e03e00;
   --header-font: 'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif;
   --text-font: 'Taamey Frank CLM', David, serif;
   --teamim-text-font: 'Taamey Frank CLM', David, serif;
@@ -58,8 +56,6 @@
   --status-success: #34d399;
   --status-warning: #f0a500;
   --status-danger: #f26d6d;
-  --diacritics-1: #ff9d2e;
-  --diacritics-2: #ff6a3d;
 }
 
 * { 
