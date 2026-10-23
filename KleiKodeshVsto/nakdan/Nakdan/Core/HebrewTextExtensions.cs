@@ -7,6 +7,10 @@ namespace Nakdan.Core
         // Points only. U+05B0..U+05C7 also holds punctuation that must survive
         // as text: maqaf U+05BE, paseq U+05C0, sof pasuq U+05C3, nun hafukha U+05C6.
         // Stripping the maqaf joined hyphenated words before they reached Dicta.
+        // Same set as IsNikkudChar, as a Word wildcard / regex character-class body.
+        public const string NikkudCharClass =
+            "\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7";
+
         public static bool IsNikkudChar(this char c)
         {
             return (c >= '\u05B0' && c <= '\u05BD')   // vowels, dagesh, meteg

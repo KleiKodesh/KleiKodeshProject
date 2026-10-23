@@ -20,6 +20,21 @@ namespace Nakdan.Core
     }
 
     // ═══════════════════════════════════════════════════════════
+    //  TEXT CLEAN OPTIONS — what the "clean text" button removes
+    // ═══════════════════════════════════════════════════════════
+    [Flags]
+    public enum TextCleanOptions
+    {
+        None                   = 0,
+        Nikkud                 = 1,
+        Cantillations          = 2,
+        PeriodsAndCommas       = 4,
+        Dashes                 = 8,
+        QuestionAndExclamation = 16,
+        Colons                 = 32,
+    }
+
+    // ═══════════════════════════════════════════════════════════
     //  OPTIONS passed in from the API wrapper
     // ═══════════════════════════════════════════════════════════
     public class NakdanOptions

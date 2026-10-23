@@ -65,37 +65,21 @@ namespace Nakdan.Core
         }
 
         // ════════════════════════════════════════════════════════
-        //  Remove nikkud from current selection
+        //  Clean current selection: remove every mark kind checked
+        //  in the "clean text" dropdown (nikkud, ta'amim, punctuation...)
         // ════════════════════════════════════════════════════════
-        public void RemoveNikkud()
-        {            
-            Word.Selection selection = Helpers.VstoHelper.Application.Selection;
-
-            // Guard: make sure something is actually selected
-            if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
-                string.IsNullOrWhiteSpace(selection.Range.Text))
-                throw new InvalidOperationException(
-                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הניקוד.");
-
-            var find = selection.Range.Find;
-            find.Text = "[^0192-^0204^0209^0210]";
-            find.Replacement.Text = "";
-            find.MatchWildcards = true;
-            find.Wrap = Word.WdFindWrap.wdFindStop;
-            find.Execute(Replace: Word.WdReplace.wdReplaceAll);
-        }
-
-        // ════════════════════════════════════════════════════════
-        //  Remove cantillations (ta'amim) from current selection
-        // ════════════════════════════════════════════════════════
-        public void RemoveCantillations()
+        public void CleanSelection(TextCleanOptions options)
         {
             Word.Selection selection = Helpers.VstoHelper.Application.Selection;
 
             if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
                 string.IsNullOrWhiteSpace(selection.Range.Text))
                 throw new InvalidOperationException(
-                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הטעמים.");
+                    "אין טקסט מסומן.\nיש לסמן טקסט לפני ניקוי הטקסט.");
+
+            if (options == TextCleanOptions.None)
+                throw new InvalidOperationException(
+                    "לא נבחר מה להסיר.\nיש לסמן לפחות אפשרות אחת בתיבה הנפתחת.");
 
             var find = selection.Range.Find;
             find.MatchWildcards = true;
@@ -103,42 +87,43 @@ namespace Nakdan.Core
 
             // Maqaf and paseq are word separators: they become a space so removing them
             // never merges two words. A paseq with its surrounding spaces collapses to one.
-            ReplaceSeparatorsWithSpace(find);
+            if ((options & (TextCleanOptions.Cantillations | TextCleanOptions.Dashes)) != 0)
+                ReplaceSeparatorsWithSpace(find);
 
-            // Build a range string with the actual first and last cantillation characters
-            // U+0591 (Etnahta) through U+05AF (Masora Circle), plus meteg U+05BD
-            string first = "\u0591";
-            string last = "\u05AF";
-            find.Text = "[" + first + "-" + last + "\u05BD]";
-            find.Replacement.Text = "";
-            find.Execute(Replace: Word.WdReplace.wdReplaceAll);         
+            // Dashes (hyphen, en/em dash) separate words too: fold to one space.
+            if ((options & TextCleanOptions.Dashes) != 0)
+            {
+                ReplaceAll(find, "[ \u2009]@[\\-\u2013\u2014][ \u2009]@", " ");
+                ReplaceAll(find, "[\\-\u2013\u2014]", " ");
+            }
+
+            // Unicode code points (NOT Word ^0nnn codes: those are cp1255 bytes,
+            // which cannot express qamats qatan U+05C7 and missed meteg/rafe).
+            string marks = string.Empty;
+            if ((options & TextCleanOptions.Nikkud) != 0)
+                marks += HebrewTextExtensions.NikkudCharClass;
+            if ((options & TextCleanOptions.Cantillations) != 0)
+                marks += "\u0591-\u05AF\u05BD";   // ta'amim + meteg
+            if (marks.Length > 0)
+                ReplaceAll(find, "[" + marks + "]", "");
+
+            // Punctuation: Word wildcards treat ? ! as operators, so match literally.
+            find.MatchWildcards = false;
+            if ((options & TextCleanOptions.PeriodsAndCommas) != 0)
+                foreach (string c in new[] { ".", ",", ";" })
+                    ReplaceAll(find, c, "");
+            if ((options & TextCleanOptions.QuestionAndExclamation) != 0)
+                foreach (string c in new[] { "?", "!" })
+                    ReplaceAll(find, c, "");
+            if ((options & TextCleanOptions.Colons) != 0)
+                foreach (string c in new[] { ":", "\u05C3" })   // colon + sof pasuq
+                    ReplaceAll(find, c, "");
         }
 
-        // ════════════════════════════════════════════════════════
-        //  Remove nikkud AND cantillations from current selection
-        //  in one character-class pass
-        // ════════════════════════════════════════════════════════
-        public void RemoveNikkudAndCantillations()
+        private static void ReplaceAll(Word.Find find, string text, string replacement)
         {
-            Word.Selection selection = Helpers.VstoHelper.Application.Selection;
-
-            if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
-                string.IsNullOrWhiteSpace(selection.Range.Text))
-                throw new InvalidOperationException(
-                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הסרת הניקוד והטעמים.");
-
-            var find = selection.Range.Find;
-            find.MatchWildcards = true;
-            find.Wrap = Word.WdFindWrap.wdFindStop;
-
-            // Maqaf and paseq are word separators: they become a space so removing them
-            // never merges two words. A paseq with its surrounding spaces collapses to one.
-            ReplaceSeparatorsWithSpace(find);
-
-            // U+0591..U+05BD is contiguous: cantillation (0591-05AF) + nikkud (05B0-05BC) + meteg (05BD).
-            // Plus shin/sin dots U+05C1, U+05C2 (same as RemoveNikkud's ^0209^0210).
-            find.Text = "[\u0591-\u05BD\u05C1\u05C2]";
-            find.Replacement.Text = "";
+            find.Text = text;
+            find.Replacement.Text = replacement;
             find.Execute(Replace: Word.WdReplace.wdReplaceAll);
         }
 
