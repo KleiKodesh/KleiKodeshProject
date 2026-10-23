@@ -106,8 +106,7 @@ begin
     Log('apply-update.ps1 exit code: ' + IntToStr(Rc));
     if Rc <> 0 then
     begin
-      SuppressibleMsgBox(FmtMessage(CustomMessage('Failed'), [IntToStr(Rc), LogPath]), mbError, MB_OK, IDOK);
-      Abort;
+      RaiseException(FmtMessage(CustomMessage('Failed'), [IntToStr(Rc), LogPath]));
     end;
   end;
 end;

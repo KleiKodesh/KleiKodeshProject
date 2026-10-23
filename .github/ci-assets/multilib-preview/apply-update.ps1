@@ -27,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# מנקה נתיבי מודולים של PowerShell אחר שעלולים להיות בסביבה שהורשה (למשל pwsh 7), אחרת cmdlets כמו Get-Service לא נטענים
+$env:PSModulePath = (Join-Path $PSHOME 'Modules')
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
 if ([string]::IsNullOrWhiteSpace($TargetDir)) {
@@ -66,7 +68,11 @@ function Test-KeepIfExists([string]$rel) {
     return ($rel.Replace('/', '\') -ieq 'KitveiHakodeshService\appsettings.json')
 }
 
-function Get-Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
+function Get-Sha([string]$path) {
+    $s = [IO.File]::OpenRead($path)
+    try { $h = [Security.Cryptography.SHA256]::Create(); return ([BitConverter]::ToString($h.ComputeHash($s))).Replace('-', '') }
+    finally { $s.Dispose() }
+}
 
 # ---- שליחת פעולה לצינור השירות (כמו המתקין הרשמי: מסגרת MessagePack {Op:name}) ----
 function Test-PipeListening {
