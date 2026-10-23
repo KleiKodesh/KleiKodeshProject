@@ -1,0 +1,86 @@
+{
+  "nav": {
+    "library": {
+      "label": "Book catalog",
+      "description": "Browse books by category"
+    },
+    "search": {
+      "label": "Search",
+      "description": "Full-text search across all books"
+    },
+    "hbooks": {
+      "label": "HebrewBooks",
+      "description": "Scanned books from HebrewBooks.org"
+    },
+    "folder": {
+      "label": "Open file",
+      "description": "Open a file or folder from this computer"
+    },
+    "fileSearch": {
+      "label": "File search",
+      "description": "Search documents on this computer"
+    },
+    "dict": {
+      "label": "Dictionary",
+      "description": "Hebrew and Aramaic word meanings"
+    },
+    "calendar": {
+      "label": "Calendar",
+      "description": "Hebrew date and daily zmanim"
+    },
+    "ruler": {
+      "label": "Measurements",
+      "description": "Convert halachic measures"
+    },
+    "settings": {
+      "label": "Settings",
+      "description": "Adjust the program to your preferences"
+    }
+  },
+  "placeholderQuickSearch": "Quick search across all libraries...",
+  "placeholderPressEnter": "Press Enter to search the library text",
+  "placeholderTypeFree": "Type freely to find a book or file",
+  "removeFromHistory": "Remove from history ({key})",
+  "clearHistory": "Clear all history ({key})",
+  "searchTabTitle": "Search: {query}",
+  "searchContent": "Search library text (Enter)",
+  "closeSplitView": "Close split view",
+  "openSplitView": "Open split view",
+  "popOutToggle": "Open in a separate window or return to the pane",
+  "popOutLabel": "Window / pane",
+  "moreItems": "More items",
+  "hideSidebar": "Hide sidebar (Ctrl+Shift+M)",
+  "showSidebar": "Show sidebar (Ctrl+Shift+M)",
+  "sidebar": "Sidebar",
+  "openMenu": "Open menu",
+  "holdHint": "Press and hold to show the history list",
+  "back": "Back (Alt+Right arrow)",
+  "forward": "Forward (Alt+Left arrow)",
+  "barTitleHint": "Click for quick navigation and recent places (Ctrl+E)",
+  "hideToolbar": "Hide toolbar",
+  "showToolbar": "Show toolbar",
+  "hidePdfTitleBar": "Hide PDF toolbar",
+  "showPdfTitleBar": "Show PDF toolbar",
+  "menu": "Menu (Ctrl+M)",
+  "findInText": "Find in text (Ctrl+F)",
+  "ocrSelect": "Select text in an area (OCR)",
+  "home": "Home (Ctrl+G)",
+  "workspaces": "Workspaces (F8)",
+  "ws": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete {name}?",
+    "delete": "Delete",
+    "active": "Active",
+    "rename": "Rename",
+    "newPlaceholder": "New workspace",
+    "create": "Create"
+  },
+  "dbDownload": "Download book database",
+  "dbDownloadDescription": "Download the book library to this computer",
+  "dbChoose": "Choose book database",
+  "dbChooseDescription": "Choose an existing book library",
+  "placeholderHbExample": "hebrewbooks: {book}",
+  "placeholderFileExample": "file: {book}",
+  "placeholderAddinsExample": "addins: to show Otzaria add-ins"
+}

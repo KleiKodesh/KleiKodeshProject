@@ -40,7 +40,7 @@ The section components are independent — each imports the stores it needs dire
 
 **FontDisplaySettings.vue** — font and size controls for main text or commentary.
 
-**FontSelector.vue** — font family dropdown. Bundled fonts sort first (the te'amim-capable families, then Heebo -- see `BUNDLED_FONTS`); the "ברירת מחדל" badge marks the ONE default belonging to that particular dropdown, passed in as `defaultFont`. Loads installed Hebrew-capable fonts live on every open via `detectAvailableFonts()` from `src/webview-host/fontsApi.ts` (no cache; a loading row shows while the enumeration runs).
+**FontSelector.vue** — font family dropdown. Bundled fonts sort first (the te'amim-capable families, then Heebo -- see `BUNDLED_FONTS`); the "ברירת מחדל" badge marks the ONE default belonging to that particular dropdown, passed in as `defaultFont`. Loads installed Hebrew-capable fonts on first open via `detectAvailableFonts()` from `src/webview-host/fontsApi.ts` (host list, canvas probe fallback; cached for the session; a loading row shows while the enumeration runs).
 
 **FontPreviewBox.vue** — the live text sample shown above the font controls in the setup wizard's book and commentary steps. `position: sticky` at the top of the wizard card's scroller, so it stays visible while the controls scroll under it; the negative margins in its styles exist to cancel the step body's padding and reach the card's own edges. Sample text and font values are all props, so each step supplies its own.
 
@@ -68,7 +68,7 @@ and hold their position across the step transition. Each step's heading text the
 lives in the `STEPS` table in SetupWizard.vue, not in the step component — the header is
 part of the frame that stays put.
 
-**SetupWizardStepBookDisplay.vue**, **SetupWizardStepCommentaryDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepGeneral.vue**, **SetupWizardStepShortcuts.vue**, **SetupWizardStepTheme.vue** — the per-step body content, and nothing else: no card, no title, no nav. Multi-root templates by design.
+**SetupWizardStepBookDisplay.vue**, **SetupWizardStepCommentaryDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepDivineNames.vue**, **SetupWizardStepQuickSettings.vue**, **SetupWizardStepShortcuts.vue**, **SetupWizardStepTheme.vue** — the per-step body content, and nothing else: no card, no title, no nav. Multi-root templates by design.
 
 ## Adding a new settings section
 

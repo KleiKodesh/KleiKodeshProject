@@ -32,6 +32,8 @@ export interface LocationPosition {
   selectedLineId?: number | null
   /** Both commentary panels' saved place, keyed by slot. */
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
+  /** The HebrewBooks edition shown beside the text, and its column width. */
+  sideEdition?: import('@/features/book-view/bookViewTypes').SideEditionPersistState
   // HTML / TXT view (plain pixel scroll).
   htmlViewScrollTop?: number
   // PDF view.

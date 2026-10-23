@@ -4,8 +4,10 @@ using System.Runtime.CompilerServices;
 namespace FtsLib.Search
 {
     /// <summary>
-    /// Computes the Levenshtein (edit) distance between two strings.
-    /// Uses a two-row DP approach — O(min(a,b)) space.
+    /// Computes the edit distance between two strings: insert, delete, substitute,
+    /// and a swap of two adjacent letters, each ONE edit (optimal string alignment,
+    /// Damerau; Otzaria's fuzzy DFA is built with transposition = true).
+    /// Uses a three-row DP approach — O(min(a,b)) space.
     ///
     /// Optimizations applied:
     ///   1. stackalloc — DP rows live on the stack, no GC pressure per call.
@@ -36,6 +38,7 @@ namespace FtsLib.Search
 
             if (lenB - lenA > maxDistance) return maxDistance + 1;
 
+            var prev2 = new int[lenA + 1];  // row j - 2 (transpositions)
             var prev = new int[lenA + 1];
             var curr = new int[lenA + 1];
 
@@ -52,16 +55,21 @@ namespace FtsLib.Search
                         curr[i - 1] + 1,
                         prev[i]     + 1,
                         prev[i - 1] + cost);
+                    // adjacent swap: a[i-2..i] == b[j-1], b[j-2] reversed
+                    if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]
+                        && prev2[i - 2] + 1 < curr[i])
+                        curr[i] = prev2[i - 2] + 1;
                 }
 
                 // ── SIMD early-exit ───────────────────────────────────────────
                 // Scan curr[] for its minimum value using Vector<int>.
                 // If every cell exceeds maxDistance, no future row can improve —
-                // bail out immediately.
+                // bail out immediately. Still sound with swaps: a swap cell of the next
+                // row, prev[i-2] + 1, is never below curr[i-1] (<= prev[i-2] + 1).
                 if (RowMinExceedsThreshold(curr, lenA + 1, maxDistance))
                     return maxDistance + 1;
 
-                var swap = prev; prev = curr; curr = swap;
+                var swap = prev2; prev2 = prev; prev = curr; curr = swap;
             }
 
             return prev[lenA];

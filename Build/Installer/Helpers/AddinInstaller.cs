@@ -20,7 +20,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v1.2.1";
+        public const string Version         = "v10.2.2";
         public const string InstallFolderName = "KleiKodesh";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
@@ -430,6 +430,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         // ── Version + DB ─────────────────────────────────────────────────────────
+
+        public static bool HasSavedVersion()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                    return key?.GetValue("Version") != null;
+            }
+            catch { return false; }
+        }
 
         public static void SaveVersion()
         {

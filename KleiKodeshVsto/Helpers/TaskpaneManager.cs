@@ -361,8 +361,15 @@ namespace KleiKodesh.Helpers
             try
             {
                 Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
-                    .CloseEvent += () =>
+                    .CloseEvent += async () =>
                     {
+                        // The page's pending persistence writes (tab list, recents, reading
+                        // position) go out before its WebView2 is disposed below - the pane
+                        // closes without any of the page's unload events. Bounded (~500 ms
+                        // worst case, normally a few ms); never throws.
+                        if (userControl is KitveiHakodeshLib.AppViewer viewer)
+                            await viewer.FlushPersistenceAsync();
+
                         // Close the floating window first if the content was popped out.
                         // Disposing the host below would otherwise leave a live window
                         // owned by a document that no longer exists, with a pop-in target

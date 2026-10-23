@@ -28,6 +28,7 @@ import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { restoreLocalFile, triggerHbDownload, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
@@ -37,6 +38,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{ paneId: 1 | 2 }>()
 const emit = defineEmits<{ close: [] }>()
@@ -56,12 +60,12 @@ const dropdownEl = computed(() => dropdownRef.value?.element ?? null)
 
 // ── Animated placeholder (same phrases as the home search bar) ────────────────
 const PLACEHOLDERS = [
-  'חיפוש מהיר בכל המאגרים...',
-  'לחץ אנטר לחיפוש תוכן במאגר',
-  'הקלד חופשי לחיפוש ספר או קובץ',
-  'היברו בוקס: שבת',
-  'קובץ: ברכות',
-  'תוספים: עבור תוספי אוצריא',
+  t('layout.placeholderQuickSearch'),
+  t('layout.placeholderPressEnter'),
+  t('layout.placeholderTypeFree'),
+  t('layout.placeholderHbExample', { book: '\u05E9\u05D1\u05EA' }),
+  t('layout.placeholderFileExample', { book: '\u05D1\u05E8\u05DB\u05D5\u05EA' }),
+  t('layout.placeholderAddinsExample'),
 ]
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0, charIdx = 0, pauseTicks = 0
@@ -88,13 +92,16 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  hasIndexFailureToShow,
   isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
 } = useGlobalSearch(searchQuery)
 
-useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
+// The wrapper is the inline bar; only the popup is fitted.
+useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl], fitToViewport: false })
+useDropdownViewportFit(dropdownEl)
 
 // ── Recents list (dropdown fallback content) ──────────────────────────────────
 // Shown whenever the search has nothing to display: empty/short query, or a query
@@ -110,9 +117,10 @@ const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleLocations.val
 // An empty panel is just a floating blank rectangle, so render nothing at all
 // until there is something in it. The loading flags count as content: a search in
 // flight shows spinners, and hiding the panel until the first row lands would
-// make it flicker in and out mid-type.
+// make it flicker in and out mid-type. A failed index counts too: its section says why
+// there are no results from it (same rule as the home page's search bar).
 const hasDropdownContent = computed(
-  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
+  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny() || hasIndexFailureToShow(),
 )
 
 // The one condition the panel renders on. The field's merged styling reads this
@@ -161,11 +169,11 @@ function onClearAllLocations() {
 //   Native strip host  — Ctrl+W closes a real tab, so the history-aware close is Alt+W / Alt+X
 //   VSTO + dev         — Ctrl+W / Ctrl+X do the history-aware close (and Alt+W/X also work)
 const removeLocationTitle = hasNativeChromeTabs
-  ? 'הסר מהיסטוריה (Alt+W)'
-  : 'הסר מהיסטוריה (Ctrl+W)'
+  ? t('layout.removeFromHistory', { key: 'Alt+W' })
+  : t('layout.removeFromHistory', { key: 'Ctrl+W' })
 const clearAllLocationsTitle = hasNativeChromeTabs
-  ? 'נקה את כל ההיסטוריה (Alt+X)'
-  : 'נקה את כל ההיסטוריה (Ctrl+X)'
+  ? t('layout.clearHistory', { key: 'Alt+X' })
+  : t('layout.clearHistory', { key: 'Ctrl+X' })
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
 // Width rule: on a narrow ("android-width") shell the dropdown fills the whole
@@ -284,7 +292,7 @@ function onKeydown(e: KeyboardEvent) {
 function launchFullTextSearch() {
   const query = searchQuery.value.trim()
   if (!query) return
-  pane.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+  pane.updateActiveTab({ route: '/search', title: t('stores.tabTitle.searchQuery', { query }), searchQuery: query })
   close()
 }
 
@@ -422,7 +430,7 @@ nextTick(() => {
       v-if="searchQuery.trim()"
       class="address-bar__button"
       tabindex="-1"
-      title="חיפוש תוכן במאגר (Enter)"
+      :title="t('layout.searchContent')"
       @click.stop="launchFullTextSearch()"
     >
       <IconSearch20Regular />
@@ -507,8 +515,8 @@ nextTick(() => {
 .address-bar.is-merged {
   background: var(--bg-secondary);
   border-bottom: none;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+  border-end-end-radius: 0;
+  border-end-start-radius: 0;
   box-shadow: none;
 }
 .address-bar__field {
@@ -520,7 +528,6 @@ nextTick(() => {
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
-  direction: rtl;
   /* Explorer draws no rounded search affordance inside the box */
   padding: 0;
 }

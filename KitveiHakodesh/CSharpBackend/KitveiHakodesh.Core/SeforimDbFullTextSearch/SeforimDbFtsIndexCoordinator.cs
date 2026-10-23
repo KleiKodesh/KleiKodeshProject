@@ -1,3 +1,4 @@
+using KitveiHakodesh.Core.Common;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -41,7 +42,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     private readonly string? _dbPath;
     private readonly string _indexPath;
     private readonly Action<FtsIndexLogLevel, string, Exception?> _log;
-    /// <summary>The related-form query rewrite (expandRelated). Null = queries pass through.</summary>
+    /// <summary>The related-form query rewrite ('+' inflections, '=' synonyms). Null = queries pass through.</summary>
     private readonly SeforimDbFtsRelatedFormExpander? _expander;
     /// <summary>Every additional library to fold into the index/search alongside the primary
     /// database, resolved ONCE at construction — see <see cref="SeforimDbAttachedLibraries.Resolve"/>
@@ -67,7 +68,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// (the service's FTS_INDEX_PATH) — never built into, never wiped.</param>
     /// <param name="log">The host's log sink.</param>
     /// <param name="relatedFormExpander">Rewrites a query with related forms when a search asks
-    /// for expandRelated; null leaves queries unexpanded.</param>
+    /// for '+' or '='-marked words; null leaves queries unexpanded.</param>
     /// <param name="additionalLibraries">Extra seforim-shaped libraries to fold into this index
     /// and its searches alongside the primary database — see
     /// <see cref="SeforimDbAdditionalLibraries"/>. Null/empty keeps this type's exact
@@ -96,16 +97,17 @@ public sealed class SeforimDbFtsIndexCoordinator
         _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!, _additionalLibraries);
     private SeforimDbFtsIndexer? _indexer;
 
-    /// <summary>Snippeting, the word-distance filter, short-snippet embellishment and the
-    /// book/TOC enrichment every hit carries — all Core's, and the same code the hosted app
-    /// runs, so one query cannot come back ranked or rendered differently in the two apps.
-    /// Enrichment needs corpus queries, hence the SeforimDbQueries — given the SAME resolved
-    /// additional libraries as the index itself, so a hit's global line id (which may be an
-    /// additional library's) resolves to its real book/TOC path instead of nothing.</summary>
-    private SeforimDbFtsSearcher Searcher =>
-        _searcher ??= new SeforimDbFtsSearcher(new SeforimDbQueries(
-            _dbPath, _additionalLibraries.Select(l => new SeforimDbAdditionalLibraries.Entry(l.Index, l.Path)).ToArray()));
+    /// <summary>Snippeting, the word-distance filter and short-snippet embellishment — all
+    /// Core's, and the same code the hosted app runs, so one query cannot come back ranked or
+    /// rendered differently in the two apps. Book id and TOC entry id ride on the engine's
+    /// content fetch, so the searcher needs no queries of its own.</summary>
+    private SeforimDbFtsSearcher Searcher => _searcher ??= new SeforimDbFtsSearcher();
     private SeforimDbFtsSearcher? _searcher;
+
+    /// <summary>One-shot searches (<see cref="Search"/>) in flight. Streaming searches are
+    /// tracked by <c>_sessions</c>; these are not, so they get their own counter. Changed
+    /// under <c>_lock</c> so <see cref="ReleaseIdleResources"/> can test-and-release atomically.</summary>
+    private int _activeOneShotSearches;
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external;
 
@@ -192,11 +194,44 @@ public sealed class SeforimDbFtsIndexCoordinator
 
     /// <summary>True while background work is running (index build or live search
     /// sessions) — the idle memory trimmer must not run then.</summary>
-    public bool IsBusy => _isIndexing || !_sessions.IsEmpty;
+    public bool IsBusy => _isIndexing || !_sessions.IsEmpty || Volatile.Read(ref _activeOneShotSearches) > 0;
+
+    /// <summary>What the FTS side keeps resident right now (diagnostics).</summary>
+    public string DescribeResidentState()
+    {
+        lock (_lock) return $"engine={(_engine is null ? "none" : "created")} sessions={_sessions.Count}";
+    }
+
+    /// <summary>
+    /// Idle memory release: drops the open engine handle (the next search reopens it lazily
+    /// via <see cref="GetEngine"/>) and the search enrichment's cached catalog (reloaded on
+    /// the next search). Returns true if anything was released.
+    ///
+    /// Skipped while a build runs (the build publishes through the SAME engine instance —
+    /// see SeforimDbFtsEngine), or while any streaming or one-shot search is in flight. The
+    /// check and the release happen under <c>_lock</c>, and a one-shot search registers under
+    /// the same lock before it touches the engine; a streaming search registers in
+    /// <c>_sessions</c> before it touches the engine, so a release either sees it and skips,
+    /// or completes first and the search then opens a fresh engine.
+    ///
+    /// Note: under the FTS5 engine every search opens and disposes its own SQLite
+    /// connections (Pooling=false), so the engine object itself retains little; this mainly
+    /// matters for engines that keep segment handles open.
+    /// </summary>
+    public bool ReleaseIdleResources()
+    {
+        lock (_lock)
+        {
+            if (_isIndexing || !_sessions.IsEmpty || _activeOneShotSearches > 0) return false;
+            bool released = _engine?.IsOpen == true;
+            _engine?.Invalidate();
+            return released;
+        }
+    }
 
     private bool SegmentsExist()
     {
-        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, FtsLib.Fts5.Fts5SeforimIndex.IndexFileName).Length > 0; } // TEMPORARY (FTS5 trial): was "seg_*.dat"
+        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, FtsLib.Fts5.Fts5SeforimIndex.IndexFileName).Length > 0; }
         catch { return false; }
     }
 
@@ -262,7 +297,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             // resuming a watermark that belongs to a different database permanently skips every
             // line below it (the 2026-07-28 incident, where a DB swap under an incomplete build
             // left the whole chumash-parshanut corpus unsearchable).
-            // TEMPORARY (FTS5 trial): the trial kept its index in a separate "FtsIndexFts5"
+            // Migration: the FTS5 trial kept its index in a separate "FtsIndexFts5"
             // folder; the index lives in "FtsIndex" again (an old FtsLib index there is wiped by
             // Prepare). Best effort — a folder still held open is retried next start.
             try
@@ -318,16 +353,16 @@ public sealed class SeforimDbFtsIndexCoordinator
             return false;
         }
 
+        if (plan.DbUnreadable)
+            _log(FtsIndexLogLevel.Warning,
+                "FTS: seforim DB could not be read right now — keeping the existing index unverified", null);
+
         if (plan.KeptUnverifiableCompletedIndex)
             _log(FtsIndexLogLevel.Information,
                 "FTS provenance stamp is an older format — keeping the completed index", null);
 
         if (plan.WipedStaleState)
-        {
-            _log(FtsIndexLogLevel.Information,
-                "FTS index is stale (seforim DB changed or provenance unknown) — wiping for rebuild", null);
             _engine?.Invalidate(); // never let an already-open engine answer over the wiped directory
-        }
 
         // A completed service-owned build against the CURRENT DB → ready, no rebuild.
         if (plan.IsReady)
@@ -336,6 +371,9 @@ public sealed class SeforimDbFtsIndexCoordinator
             _buildStarted = true;
             return false;
         }
+
+        NoteBuildReason(_pendingBuildReason ?? plan.BuildReason ?? "build needed");
+        _pendingBuildReason = null;
         return true;
     }
 
@@ -636,18 +674,18 @@ public sealed class SeforimDbFtsIndexCoordinator
         // must cancel and restart rather than append the new DB's lines onto the old DB's
         // segments. No stamp means nothing built yet, and an older-format stamp is not
         // comparable; both answer "not stale" so a live index is never wiped over them.
-        bool stale;
-        try { stale = Indexer.IsIndexStale(); } catch { return false; }
-        if (!stale) return false;
+        string? staleBecause;
+        try { staleBecause = Indexer.WhyIndexIsStale(); } catch { return false; }
+        if (staleBecause == null) return false;
 
-        _log(FtsIndexLogLevel.Information, "FTS: seforim DB changed while running — wiping and rebuilding", null);
-        ResetIndex(); // cancels the in-flight build, wipes, re-arms, and rebuilds
+        ResetIndex("changed while running: " + staleBecause); // cancels the in-flight build, wipes, re-arms, and rebuilds
         return true;
     }
 
     /// <summary>Wipe the FTS index and rebuild it from scratch (dev "reset search index").
     /// Runs on a background thread and returns immediately — progress is streamed.</summary>
-    public void ResetIndex()
+    /// <param name="reason">Why, for the log and the status (<see cref="LastBuildReason"/>).</param>
+    public void ResetIndex(string reason = "reset requested")
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
         if (_shuttingDown) return; // a late watcher callback must not wipe the index on the way out
@@ -667,6 +705,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                 return;
             }
             _resetInFlight = true;
+            _pendingBuildReason = reason;
         }
 
         // Report "indexing, 0%" from the moment the reset is REQUESTED, not from whenever the
@@ -875,13 +914,12 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>The one-shot search (ftsSearch). Ready = false while still building (or no
     /// DB). Full-text search results are NEVER capped: <paramref name="cap"/> &lt;= 0 means
     /// unlimited; a positive cap is only honoured if a caller ever explicitly asks for one.
-    /// <paramref name="expandRelated"/> rewrites the query with its related forms first.</summary>
+    /// Words marked '+' (inflections) or '=' (synonyms) are expanded first; '^' (spelling variants) is the engine's.</summary>
     public FtsSearchResult Search(
-        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        bool expandRelated = false)
+        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords)
     {
         EnsureIndexing();
-        if (expandRelated) query = RewriteRelated(query);
+        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query)) query = RewriteRelated(query);
         var result = new FtsSearchResult();
         if (!HasDb || !_isReady)
         {
@@ -891,24 +929,32 @@ public sealed class SeforimDbFtsIndexCoordinator
         result.Ready = true;
         if (string.IsNullOrWhiteSpace(query)) return result;
 
+        lock (_lock) _activeOneShotSearches++;
         try
         {
             // Core's searcher yields finished batches; the one-shot path just collects them, so
             // it gets exactly the same parallel snippeting, short-snippet embellishment and
             // enrichment as the streaming path.
-            foreach (var built in Searcher.SearchInBatches(
-                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv))
+            var terms = new FtsTermTable();
+            foreach (var batch in Searcher.SearchInBatches(
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms))
             {
-                result.Results.AddRange(built);
+                result.Results.AddRange(batch.Hits);
+                foreach (var entry in batch.LineTexts) result.LineTexts[entry.Key] = entry.Value;
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
             if (cap > 0 && result.Results.Count > cap)
                 result.Results.RemoveRange(cap, result.Results.Count - cap);
+            result.Terms = terms.All();
         }
         catch (Exception ex)
         {
             _log(FtsIndexLogLevel.Error, "FTS search failed", ex);
             result.Error = ex.Message;
+        }
+        finally
+        {
+            lock (_lock) _activeOneShotSearches--;
         }
         return result;
     }
@@ -938,11 +984,15 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// ending with a <c>Done</c> frame. The connection is the stream: the caller passes
     /// an emit that writes one frame per chunk on the client's connection.</summary>
     public async Task StreamSearch(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false)
+        string query, int maxWordDistance, bool requireOrdered, int contextWords,
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
     {
         EnsureIndexing();
-        if (expandRelated) query = RewriteRelated(query);
+        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
+        {
+            try { await emit(new FtsStreamChunk { Stage = "rewrite" }); } catch { /* client gone */ }
+            query = RewriteRelated(query);
+        }
         if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
         if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }
 
@@ -975,8 +1025,31 @@ public sealed class SeforimDbFtsIndexCoordinator
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
             try
             {
-                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-                    linked.Token, built => emit(new FtsStreamChunk { Results = built }));
+                await emit(new FtsStreamChunk { Stage = "validate" });
+                // Stage changes ride alone only until the first results frame: before it they
+                // are all the client has to show. After it every batch would otherwise cost
+                // three stage-only frames (fetch, snippets, enrich) on top of its results
+                // frame, so from then on the latest stage is folded into the next results
+                // frame instead. Stage hooks fire synchronously on the enumerating thread
+                // (the batch loop already blocks it per MoveNext); blocking on emit keeps
+                // frame order intact. The service host has no SynchronizationContext, so
+                // this cannot deadlock.
+                bool resultsSent = false;
+                string? stageSinceLastResults = null;
+                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords,
+                    linked.Token,
+                    (built, newTerms, lineTexts) =>
+                    {
+                        resultsSent = true;
+                        string? stage = stageSinceLastResults;
+                        stageSinceLastResults = null;
+                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts, Stage = stage });
+                    },
+                    stage =>
+                    {
+                        if (resultsSent) stageSinceLastResults = stage;
+                        else emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult();
+                    });
                 await emit(new FtsStreamChunk { Done = true });
             }
             catch (OperationCanceledException) { /* superseded, reset, or client left */ }
@@ -1007,22 +1080,22 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>The search pipeline shared by streaming and one-shot paths: content fetch
     /// STREAMS from one SQLite reader (sequential I/O, overlaps with snippeting); snippet
     /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
-    /// enriched batch is handed to <paramref name="onBatch"/> in order.
-    ///
-    /// NOTE: a whole-set parallel fetch (SeforimIndex.SearchParallel) is ~2x faster at the
-    /// fetch step in isolation (see FetchBenchTest), but its up-front barrier delays the
-    /// first paint — streaming + parallel snippet wins on first-result latency, which is
-    /// what the search feels like. SearchParallel stays available as a bulk-fetch API.</summary>
+    /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        CancellationToken ct, Func<List<FtsHit>, Task> onBatch)
+        string query, int maxWordDistance, bool requireOrdered, int contextWords,
+        CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
+        Action<string>? onStage = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
-        // written to the caller's pipe before the next one is built.
-        foreach (var built in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
+        // written to the caller's pipe before the next one is built. Each batch goes out with
+        // the matched-term strings it introduced (hits carry ids into the search's table), and
+        // the leading SeedLineTextHitCount hits of the search with their snippet line texts,
+        // so the first screen paints without a fetch. Frames past that carry no texts.
+        var terms = new FtsTermTable();
+        foreach (var batch in Searcher.SearchInBatches(
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage))
         {
-            await onBatch(built);
+            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.LineTexts);
         }
     }
 
@@ -1049,8 +1122,23 @@ public sealed class SeforimDbFtsIndexCoordinator
             foreach (var ch in _progressSubs) ch.Writer.TryWrite(true);
     }
 
+    /// <summary>Why the index last started building, and when; null until a build starts.</summary>
+    public IndexBuildReason? LastBuildReason => _lastBuildReason;
+    private volatile IndexBuildReason? _lastBuildReason;
+
+    /// <summary>A reset's reason, carried to the build EnsureIndexing starts after the wipe
+    /// (whose own plan would only say "no index yet").</summary>
+    private string? _pendingBuildReason;
+
+    private void NoteBuildReason(string reason)
+    {
+        _lastBuildReason = IndexBuildReason.Now(reason);
+        _log(FtsIndexLogLevel.Information, "FTS index building: " + reason, null);
+    }
+
     private FtsIndexStatus Snapshot() => new()
     {
+        BuildReason = _lastBuildReason,
         IsReady = _isReady,
         IsIndexing = _isIndexing,
         Percentage = Math.Round(_pct, 1),

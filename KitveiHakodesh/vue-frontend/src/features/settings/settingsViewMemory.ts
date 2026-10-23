@@ -16,11 +16,25 @@
  * nothing to key by. Closing that tab clears both, so a freshly opened settings
  * page starts clean.
  *
- * Not persisted: the settings VALUES already live in the settings store, so this is
- * only the transient view state, and it should not outlive a reload.
+ * Persisted to localStorage so a settings tab restored on the next launch reopens
+ * at the same query and offset. Settings VALUES live in the settings store; this is
+ * only the view state.
  */
-let scrollTop = 0
-let searchQuery = ''
+import { lsGet, lsSet } from '@/utils/persistence'
+
+const STORAGE_KEY = 'settings-view-state'
+interface SettingsViewState { scrollTop: number; searchQuery: string }
+
+const saved = lsGet<SettingsViewState>(STORAGE_KEY)
+let scrollTop = saved?.scrollTop ?? 0
+let searchQuery = saved?.searchQuery ?? ''
+
+// Coalesced: scroll fires every frame, and a localStorage write per frame is waste.
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+function save(): void {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => lsSet<SettingsViewState>(STORAGE_KEY, { scrollTop, searchQuery }), 200)
+}
 
 export function getSettingsScrollTop(): number {
   return scrollTop
@@ -28,6 +42,7 @@ export function getSettingsScrollTop(): number {
 
 export function setSettingsScrollTop(value: number): void {
   scrollTop = value
+  save()
 }
 
 export function getSettingsSearchQuery(): string {
@@ -36,10 +51,12 @@ export function getSettingsSearchQuery(): string {
 
 export function setSettingsSearchQuery(value: string): void {
   searchQuery = value
+  save()
 }
 
 /** Called when a settings tab closes, so the next one opens clean. */
 export function clearSettingsViewState(): void {
   scrollTop = 0
   searchQuery = ''
+  save()
 }

@@ -125,6 +125,21 @@ const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
 // so there is no invalidation.
 const staticFilterGroupsByBook = new Map<number, Promise<CommentaryGroup[]>>()
 
+/** Every book that links to `bookId` (SOURCE / TARGUM / COMMENTARY), cached per book. */
+export async function loadStaticFilterGroupsForBook(bookId: number): Promise<CommentaryGroup[]> {
+  const booksDataStore = useBooksDataStore()
+  await booksDataStore.ensureLoaded()
+  await booksDataStore.ensureCommentaryMetadataLoaded()
+
+  let pending = staticFilterGroupsByBook.get(bookId)
+  if (!pending) {
+    pending = buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
+    staticFilterGroupsByBook.set(bookId, pending)
+    pending.catch(() => staticFilterGroupsByBook.delete(bookId))
+  }
+  return pending
+}
+
 /**
  * Loads the commentary of the current line. ONE instance per book view, shared by
  * both commentary panels: with a single anchor line the two panels would issue
@@ -335,16 +350,7 @@ export function useCommentary(
   }
 
   async function loadStaticFilterGroups(bookId: number, token: number) {
-    await booksDataStore.ensureLoaded()
-    await booksDataStore.ensureCommentaryMetadataLoaded()
-
-    let pending = staticFilterGroupsByBook.get(bookId)
-    if (!pending) {
-      pending = buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
-      staticFilterGroupsByBook.set(bookId, pending)
-      pending.catch(() => staticFilterGroupsByBook.delete(bookId))
-    }
-    const nextGroups = await pending
+    const nextGroups = await loadStaticFilterGroupsForBook(bookId)
     if (token !== staticFilterLoadToken) return
 
     staticFilterGroups.value = nextGroups

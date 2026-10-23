@@ -23,9 +23,13 @@ namespace FtsLib.Tokenization
 
         /// <summary>
         /// Cumulative count of visible characters up to but not including the first letter of
-        /// this token. Used by SnippetBuilder to measure snippet length without re-scanning.
+        /// this token. Used by SnippetWindowLocator to measure window length without re-scanning.
         /// </summary>
         public readonly int VisibleStart;
+
+        /// <summary>The word's position: one per word, except the second reading of a paired
+        /// reading (X) [Y], which shares X's position (Otzaria).</summary>
+        public readonly int Position;
 
         // Normalized form = _norm[NormStart .. NormStart+NormLen). _norm is the stream's reused buffer.
         private readonly char[] _norm;
@@ -41,7 +45,7 @@ namespace FtsLib.Tokenization
         /// </summary>
         public string Normalized => new string(_norm, NormStart, NormLen);
 
-        public TextToken(int rawStart, int rawEnd, char[] norm, int normStart, int normLen, int visibleStart)
+        public TextToken(int rawStart, int rawEnd, char[] norm, int normStart, int normLen, int visibleStart, int position)
         {
             RawStart     = rawStart;
             RawEnd       = rawEnd;
@@ -49,6 +53,7 @@ namespace FtsLib.Tokenization
             NormStart    = normStart;
             NormLen      = normLen;
             VisibleStart = visibleStart;
+            Position     = position;
         }
 
         public override string ToString() => $"[{RawStart}–{RawEnd}] \"{Normalized}\"";
@@ -87,11 +92,11 @@ namespace FtsLib.Tokenization
             return _tokens;
         }
 
-        protected override void OnWord(int rawStart, int rawEnd, int visibleStart)
+        protected override void OnWord(int rawStart, int rawEnd, int visibleStart, int position)
         {
             int len = _buffer.Length;
             _buffer.CopyTo(0, _normBuf, _normLen, len);
-            _tokens.Add(new TextToken(rawStart, rawEnd, _normBuf, _normLen, len, visibleStart));
+            _tokens.Add(new TextToken(rawStart, rawEnd, _normBuf, _normLen, len, visibleStart, position));
             _normLen += len;
         }
     }

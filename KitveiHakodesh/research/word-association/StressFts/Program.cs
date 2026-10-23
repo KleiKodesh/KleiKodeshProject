@@ -121,7 +121,7 @@ var bands = new (string Name, List<string> Words)[]
     ("hyper(800+)",         Band(800, int.MaxValue, 12)),
 };
 
-var index = new SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
+var index = new FtsLib.Fts5.Fts5SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
 
 (long Count, double Ms) RunSearch(string q, int timeBudgetMs = 30000)
 {
@@ -130,7 +130,7 @@ var index = new SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
     using var cts = new CancellationTokenSource(timeBudgetMs);
     try
     {
-        foreach (var _ in index.Search(q, cap: 0, expandKetiv: false, ct: cts.Token))
+        foreach (var _ in index.Search(q, cap: 0, ct: cts.Token))
         {
             n++;
             if (sw.ElapsedMilliseconds > timeBudgetMs) { n = -n; break; } // timed out mid-stream

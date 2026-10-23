@@ -13,7 +13,7 @@ namespace FtsLib
     /// corpus had three independent readers across the solution. This interface is the seam that
     /// ended that, and the migration behind it is now COMPLETE:
     ///
-    ///   • Supplying a corpus is the ONLY way in. The old <c>SeforimIndex(indexPath, dbPath)</c>
+    ///   • Supplying a corpus is the ONLY way in. The old <c>(indexPath, dbPath)</c>
     ///     constructor and the built-in reader it created are gone, so the engine opens no
     ///     content database and knows no corpus schema.
     ///   • The caller owns the data access. KitveiHakodesh.Core supplies the library corpus;

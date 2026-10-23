@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import type { Plugin } from 'vite'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -39,6 +40,11 @@ const KHS_FTSLIB_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
   '../CSharpBackend/FtsLib-Csharp/FtsLib',
 )
+// KitveiHakodesh.Core — the service's other project reference; same staleness rule.
+const KHS_CORE_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/KitveiHakodesh.Core',
+)
 
 /**
  * Inserts the Otzaria addin SDK stub into an HTML byte stream, right after the
@@ -72,7 +78,10 @@ function injectAddinBridgeStub(body: Buffer): Buffer {
 // bin\Release\net10.0-windows\. Pointing at the old bin\Release\net10.0\ silently runs a
 // stale exe that has no DocumentLocator.dll beside it — searches still answer (via the
 // standalone DocumentLocator service's index) so the staleness is easy to miss.
-const KHS_EXE = path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
+// KHS_EXE env overrides it (e.g. a native-AOT publish, to test what users actually run);
+// an overridden exe is used as-is, never rebuilt.
+const KHS_EXE_OVERRIDE = process.env.KHS_EXE || ''
+const KHS_EXE = KHS_EXE_OVERRIDE || path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
 const KHS_CONNECT_TIMEOUT_MS = 2_000
 const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
 const KHS_STARTUP_POLL_MS = 250
@@ -382,6 +391,7 @@ function newestSourceMtimeMs(): number {
   }
   walk(KHS_DIR)
   walk(KHS_FTSLIB_DIR)
+  walk(KHS_CORE_DIR)
   return newest
 }
 
@@ -392,6 +402,7 @@ function newestSourceMtimeMs(): number {
  * so an unchanged tree skips the build entirely.
  */
 function serviceNeedsBuild(): boolean {
+  if (KHS_EXE_OVERRIDE) return false
   let exeMtime: number
   try { exeMtime = fs.statSync(KHS_EXE).mtimeMs } catch { return true } // no exe yet → build
   return newestSourceMtimeMs() > exeMtime
@@ -778,7 +789,13 @@ function devSqlitePlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [devSqlitePlugin(), vue(), viteSingleFile()],
+  plugins: [
+    devSqlitePlugin(),
+    vue(),
+    // Precompiles src/i18n/locales/**/*.json so the runtime-only vue-i18n build ships (no message compiler).
+    VueI18nPlugin({ include: [fileURLToPath(new URL('./src/i18n/locales/**', import.meta.url))], runtimeOnly: true, compositionOnly: true, fullInstall: false }),
+    viteSingleFile(),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

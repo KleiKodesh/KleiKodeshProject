@@ -202,7 +202,7 @@ namespace FtsLibTest
                 expected: new[] { new[] { "אב", "אב" } });
 
             // ── Index-separator parity (regression: maqaf query mismatch) ──
-            // The indexer SPLITS words on maqaf, hyphens, digits, and punctuation;
+            // The indexer SPLITS words on maqaf, hyphens, and punctuation;
             // the parser used to DELETE these mid-token, gluing the fragments into
             // one term that cannot exist in the index (pasted "יום־טוב" returned
             // zero results). The parser must split exactly where the indexer does.
@@ -218,9 +218,20 @@ namespace FtsLibTest
                 expected: new[] { new[] { "יום" }, new[] { "טוב" } });
 
             Check(ref passed, ref failed,
-                "mid-token digits split like the indexer",
-                query: "אב3גד",
-                expected: new[] { new[] { "אב" }, new[] { "גד" } });
+                "digits are word characters, as in the indexer (Otzaria's word model)",
+                query: "אב3גד ב5 12",
+                expected: new[] { new[] { "אב3גד" }, new[] { "ב5" }, new[] { "12" } });
+
+            Check(ref passed, ref failed,
+                "no Hebrew/Latin split (Otzaria): a5 + bet is one word",
+                query: "a5\u05d1",
+                expected: new[] { new[] { "a5\u05d1" } });
+
+            Check(ref passed, ref failed,
+                "~ followed by two digits is not a fuzzy suffix: the digits stay in the word",
+                query: "שלום~12",
+                expected: new[] { new[] { "שלום12" } },
+                checkFuzzy: new[] { false });
 
             Check(ref passed, ref failed,
                 "surrounding punctuation stripped as separators",
@@ -240,29 +251,62 @@ namespace FtsLibTest
                 expected: new[] { new[] { "רשי" } });
 
             Check(ref passed, ref failed,
-                "mixed-script token splits at the script boundary",
-                query: "abדה",
-                expected: new[] { new[] { "ab" }, new[] { "דה" } });
+                "mixed-script token is one word (Otzaria: no script split)",
+                query: "ab\u05d3\u05d4",
+                expected: new[] { new[] { "ab\u05d3\u05d4" } });
 
             Check(ref passed, ref failed,
-                "1-char script fragment dropped after the split",
-                query: "bדה",
-                expected: new[] { new[] { "דה" } });
-
-            // ── Unindexable-length literals dropped (regression) ──────
-            // The index stores only 2..29-letter words; a 1-char (or ≥30-char)
-            // literal can never match and used to poison the whole AND query
-            // into guaranteed-zero results.
+                "letters of other scripts are word chars, lowercased",
+                query: "CAF\u00c9 \u0391\u03b2",
+                expected: new[] { new[] { "caf\u00e9" }, new[] { "\u03b1\u03b2" } });
 
             Check(ref passed, ref failed,
-                "1-char literal dropped, rest of query survives",
-                query: "ב שלום",
-                expected: new[] { new[] { "שלום" } });
+                "period, brackets and bidi marks join a word",
+                query: "\u05e4.\u05d1.\u05d9 \u05d0[\u05d1]\u05d2 \u05d3\u200f\u05d4",
+                expected: new[] { new[] { "\u05e4\u05d1\u05d9" }, new[] { "\u05d0\u05d1\u05d2" }, new[] { "\u05d3\u05d4" } });
 
             Check(ref passed, ref failed,
-                "30-char literal dropped, rest of query survives",
-                query: new string('א', 30) + " שלום",
-                expected: new[] { new[] { "שלום" } });
+                "typographic quotes and presentation forms fold",
+                query: "\u05e8\u05e9\u201d\u05d9 \u05ea\u05d5\u05e1\u2019 \ufb2b\u05dc\u05d5\u05dd",
+                expected: new[] { new[] { "\u05e8\u05e9\u05d9" }, new[] { "\u05ea\u05d5\u05e1" }, new[] { "\u05e9\u05dc\u05d5\u05dd" } });
+
+            Check(ref passed, ref failed,
+                "a run of three quotes splits the word",
+                query: "\u05d0'\"\u05d1",
+                expected: new[] { new[] { "\u05d0" }, new[] { "\u05d1" } });
+
+            Check(ref passed, ref failed,
+                "a paired reading (X) [Y] keeps Y",
+                query: "\u05d5\u05d9\u05d0\u05de\u05e8 (\u05d4\u05d5\u05e6\u05d0) [\u05d4\u05d9\u05e6\u05d0] \u05d0\u05d5\u05ea\u05dd",
+                expected: new[] { new[] { "\u05d5\u05d9\u05d0\u05de\u05e8" }, new[] { "\u05d4\u05d9\u05e6\u05d0" }, new[] { "\u05d0\u05d5\u05ea\u05dd" } });
+
+            // ── Word lengths (Otzaria's word model) ───────────────────
+            // Every word is indexed: one letter, digit runs, any length. Only a term of
+            // 128 UTF-8 bytes or more (quotes included) is not (Otzaria's RemoveLongFilter);
+            // such a literal is an unindexed slot: no term, but it keeps its one position.
+
+            Check(ref passed, ref failed,
+                "1-char literal is a word",
+                query: "\u05d1 \u05e9\u05dc\u05d5\u05dd",
+                expected: new[] { new[] { "\u05d1" }, new[] { "\u05e9\u05dc\u05d5\u05dd" } });
+
+            Check(ref passed, ref failed,
+                "63 Hebrew letters (126 bytes) is a word",
+                query: new string('\u05d0', 63) + " \u05e9\u05dc\u05d5\u05dd",
+                expected: new[] { new[] { new string('\u05d0', 63) }, new[] { "\u05e9\u05dc\u05d5\u05dd" } },
+                checkUnindexed: new[] { false, false });
+
+            Check(ref passed, ref failed,
+                "64 Hebrew letters (128 bytes) is an unindexed slot that keeps its position",
+                query: new string('\u05d0', 64) + " \u05e9\u05dc\u05d5\u05dd",
+                expected: new[] { new[] { new string('\u05d0', 64) }, new[] { "\u05e9\u05dc\u05d5\u05dd" } },
+                checkUnindexed: new[] { true, false });
+
+            Check(ref passed, ref failed,
+                "an inner quote counts one byte: 63 letters + quote + a = 128 bytes is unindexed",
+                query: new string('\u05d0', 63) + "\"a" + " \u05e9\u05dc\u05d5\u05dd",
+                expected: new[] { new[] { new string('\u05d0', 63) + "a" }, new[] { "\u05e9\u05dc\u05d5\u05dd" } },
+                checkUnindexed: new[] { true, false });
 
             Check(ref passed, ref failed,
                 "1-char FUZZY token kept (can match 2-char index terms)",
@@ -307,6 +351,7 @@ namespace FtsLibTest
             string[][] expected,
             bool[]     checkWildcard  = null,
             bool[]     checkFuzzy     = null,
+            bool[]     checkUnindexed = null,
             int[]      checkFuzzyDist = null)
         {
             var    pq      = QueryParser.Parse(query);
@@ -363,6 +408,15 @@ namespace FtsLibTest
                                 errors.Add(
                                     $"group[{g}].alt[{a}].IsFuzzy: " +
                                     $"expected {checkFuzzy[altIndex]}, got {alt.IsFuzzy}");
+                        }
+
+                        // IsUnindexed
+                        if (checkUnindexed != null && altIndex < checkUnindexed.Length)
+                        {
+                            if (alt.IsUnindexed != checkUnindexed[altIndex])
+                                errors.Add(
+                                    $"group[{g}].alt[{a}].IsUnindexed: " +
+                                    $"expected {checkUnindexed[altIndex]}, got {alt.IsUnindexed}");
                         }
 
                         // FuzzyDistance

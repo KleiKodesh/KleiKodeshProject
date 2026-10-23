@@ -14,7 +14,25 @@ import {
   getDbPathInfo,
   setDbPath,
   pickDbPath as pickDbPathWithDialog,
+  getServiceInstallOffer,
+  installService,
 } from '@/webview-host/bridge'
+
+// ── Service install ───────────────────────────────────────────────────────────
+// Offered only when the host runs without the Windows service (file search is off).
+// The install raises the admin prompt once; on success the page reloads onto the service.
+
+const serviceInstallOffer = ref(false)
+const installing = ref(false)
+
+async function runInstallService() {
+  installing.value = true
+  try {
+    if (await installService()) location.reload()
+  } finally {
+    installing.value = false
+  }
+}
 
 // ── Database path ─────────────────────────────────────────────────────────────
 // The KitveiHakodesh service owns the setting: it validates, persists (one registry
@@ -23,7 +41,8 @@ import {
 const dbPath = ref('')
 
 onMounted(async () => {
-  const info = await getDbPathInfo()
+  const [offer, info] = await Promise.all([getServiceInstallOffer(), getDbPathInfo()])
+  serviceInstallOffer.value = offer
   if (info) dbPath.value = info.path
 })
 
@@ -99,16 +118,26 @@ function openAdditionalLibraries() {
 
 <template>
   <!-- ── מתקדם ── -->
-  <div data-section="section-advanced" data-section-label="מתקדם">
-    <div id="section-advanced" class="section-label">מתקדם</div>
+  <div data-section="section-advanced" :data-section-label="$t('settings.advanced.section')">
+    <div id="section-advanced" class="section-label">{{ $t('settings.advanced.section') }}</div>
 
     <SettingRow
-      label="הגדר תיקיית ספרים מקומית של היברו בוקס"
-      hint="אם ברשותך אוסף מקומי של ספרים מהיברו בוקס, ציין את נתיב התיקייה. הספרים יטענו מהתיקייה במקום להוריד מהאינטרנט. אם ספר אינו נמצא בתיקייה, תתבצע הורדה רגילה."
+      v-if="serviceInstallOffer"
+      :label="$t('settings.advanced.service')"
+      :hint="$t('settings.advanced.serviceHint')"
+    >
+      <button class="settings-btn" :disabled="installing" @click="runInstallService">
+        {{ installing ? $t('settings.advanced.installing') : $t('settings.advanced.install') }}
+      </button>
+    </SettingRow>
+
+    <SettingRow
+      :label="$t('settings.advanced.hbFolder')"
+      :hint="$t('settings.advanced.hbFolderHint')"
     >
       <SettingsPagePathField
         :value="hebrewBooksLocalFolder"
-        placeholder="לא נבחרה תיקייה"
+        :placeholder="$t('settings.advanced.noFolder')"
         :clearable="true"
         :editable="true"
         @pick="pickHebrewBooksFolder"
@@ -118,12 +147,12 @@ function openAdditionalLibraries() {
     </SettingRow>
 
     <SettingRow
-      label="הגדר נתיב למסד הנתונים"
-      hint="שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך."
+      :label="$t('settings.advanced.dbPath')"
+      :hint="$t('settings.advanced.dbPathHint')"
     >
       <SettingsPagePathField
         :value="dbPath"
-        placeholder="לא נבחר נתיב"
+        :placeholder="$t('settings.advanced.noPath')"
         :clearable="true"
         :editable="true"
         @pick="pickDbPath"
@@ -136,14 +165,14 @@ function openAdditionalLibraries() {
       label="ספריות נוספות"
       hint="ספריות seforim.db נוספות (למשל אוסף אישי) שייטענו לצד מסד הנתונים הראשי, לעיון וקריאה. שינוי כאן מפעיל מחדש את שירות הנתונים."
     >
-      <button class="manage-btn" @click="openAdditionalLibraries">ניהול ספריות נוספות</button>
+      <button class="settings-btn" @click="openAdditionalLibraries">ניהול ספריות נוספות</button>
     </SettingRow>
 
     <SettingRow
-      label="החרג תיקיות מחיפוש הקבצים"
-      hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
+      :label="$t('settings.advanced.excluded')"
+      :hint="$t('settings.advanced.excludedHint')"
     >
-      <button class="manage-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
+      <button class="settings-btn" @click="openExcludedFolders">{{ $t('settings.advanced.manageExcluded') }}</button>
     </SettingRow>
 
     <SettingsExcludedFoldersDialog
@@ -159,26 +188,4 @@ function openAdditionalLibraries() {
 </template>
 
 <style scoped>
-.manage-btn {
-  width: 100%;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-radius: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.manage-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.manage-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 </style>

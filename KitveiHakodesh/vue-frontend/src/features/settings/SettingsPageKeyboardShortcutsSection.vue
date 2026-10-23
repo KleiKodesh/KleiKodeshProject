@@ -1,6 +1,6 @@
 <template>
-  <div data-section="section-shortcuts" data-section-label="קיצורי מקשים">
-    <div id="section-shortcuts" class="section-label">קיצורי מקשים</div>
+  <div data-section="section-shortcuts" :data-section-label="$t('settings.shortcuts.section')">
+    <div id="section-shortcuts" class="section-label">{{ $t('settings.shortcuts.section') }}</div>
     <ShortcutsReferenceList />
   </div>
 </template>

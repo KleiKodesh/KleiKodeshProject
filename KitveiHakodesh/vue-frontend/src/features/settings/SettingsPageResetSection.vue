@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { useSettings } from './useSettingsPage'
 import { resetting, resetEverything } from './appResetState'
 import { showToast } from '@/composables/useToast'
+import { useI18n } from 'vue-i18n'
 
 const { resetSettings, resetSearchIndex, resetDocumentLocatorIndex, resetCatalogTocIndex } =
   useSettings()
@@ -17,7 +18,8 @@ type ConfirmAction = {
 }
 /** The reset-all action's name. Single source for the button, the confirm dialog and the
  *  progress overlay — they named the same action in three separate literals before. */
-const RESET_ALL_LABEL = 'איפוס האפליקציה'
+const { t } = useI18n()
+const RESET_ALL_LABEL = computed(() => t('settings.reset.all'))
 
 const pendingConfirm = ref<ConfirmAction | null>(null)
 
@@ -45,43 +47,43 @@ async function resetSettingsAndReload() {
 
 function confirmResetSettings() {
   confirmAction({
-    label: 'איפוס ההגדרות',
-    desc: 'פעולה זו תאפס את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים והיסטוריית הקריאה לא יושפעו.',
+    label: t('settings.reset.settings'),
+    desc: t('settings.reset.settingsConfirm'),
     action: resetSettingsAndReload,
   })
 }
 
 function confirmResetSearchIndex() {
   confirmAction({
-    label: 'איפוס אינדקס החיפוש בתוכן המאגר',
-    desc: 'פעולה זו תמחק את אינדקס החיפוש ומטמון תוצאות החיפוש ותבנה את האינדקס מחדש. שאר נתוני האפליקציה לא יושפעו.',
+    label: t('composables.index.rebuildFullTextSearch'),
+    desc: t('settings.reset.searchIndexConfirm'),
     action: resetSearchIndex,
-    successMessage: 'איפוס אינדקס החיפוש בתוכן המאגר הושלם בהצלחה.',
+    successMessage: t('settings.reset.searchIndexDone'),
   })
 }
 
 function confirmResetCatalogTocIndex() {
   confirmAction({
-    label: 'בנייה מחדש של אינדקס החיפוש בקטלוג',
-    desc: 'פעולה זו תמחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ותבנה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.',
+    label: t('composables.index.rebuildCatalogToc'),
+    desc: t('settings.reset.catalogConfirm'),
     action: resetCatalogTocIndex,
-    successMessage: 'איפוס אינדקס החיפוש בקטלוג הושלם. הבנייה מחדש רצה כעת ברקע.',
+    successMessage: t('settings.reset.catalogDone'),
   })
 }
 
 function confirmResetDocumentLocatorIndex() {
   confirmAction({
-    label: 'בנייה מחדש של אינדקס חיפוש קבצים',
-    desc: 'פעולה זו תמחק את אינדקס חיפוש הקבצים ותבנה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.',
+    label: t('composables.index.rebuildLocalFiles'),
+    desc: t('settings.reset.filesConfirm'),
     action: resetDocumentLocatorIndex,
-    successMessage: 'איפוס אינדקס חיפוש הקבצים הושלם. הבנייה מחדש רצה כעת ברקע.',
+    successMessage: t('settings.reset.filesDone'),
   })
 }
 
 function confirmResetAll() {
   confirmAction({
-    label: RESET_ALL_LABEL,
-    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואת כל אינדקסי החיפוש ותטען אותה מחדש. בניית האינדקסים מחדש עשויה להימשך מספר דקות. לא ניתן לבטל פעולה זו.',
+    label: RESET_ALL_LABEL.value,
+    desc: t('settings.reset.allConfirm'),
     // resetEverything sets the `resetting` flag itself before it starts.
     action: resetEverything,
   })
@@ -89,38 +91,40 @@ function confirmResetAll() {
 </script>
 
 <template>
-  <div data-section="section-reset" data-section-label="איפוס">
-    <div id="section-reset" class="section-label">איפוס</div>
+  <div data-section="section-reset" :data-section-label="$t('settings.reset.section')">
+    <div id="section-reset" class="section-label">{{ $t('settings.reset.section') }}</div>
 
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
-      <p class="reset-description" data-search-ignore>
-        מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים נשמרים.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש בתוכן המאגר</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetCatalogTocIndex">בנייה מחדש של אינדקס החיפוש בקטלוג</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ובונה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">בנייה מחדש של אינדקס חיפוש קבצים</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
-      </p>
-    </div>
-    <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetAll">{{ RESET_ALL_LABEL }}</button>
-      <p class="reset-description" data-search-ignore>
-        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואת אינדקסי החיפוש בתוכן המאגר, בקטלוג, ובקבצים. לא ניתן לבטל פעולה זו.
-      </p>
+    <div class="reset-list">
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetSettings">{{ $t('settings.reset.settings') }}</button>
+        <p class="reset-description" data-search-ignore>
+          {{ $t('settings.reset.settingsDesc') }}
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetSearchIndex">{{ $t('composables.index.rebuildFullTextSearch') }}</button>
+        <p class="reset-description" data-search-ignore>
+          {{ $t('settings.reset.searchIndexDesc') }}
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetCatalogTocIndex">{{ $t('composables.index.rebuildCatalogToc') }}</button>
+        <p class="reset-description" data-search-ignore>
+          {{ $t('settings.reset.catalogDesc') }}
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetDocumentLocatorIndex">{{ $t('composables.index.rebuildLocalFiles') }}</button>
+        <p class="reset-description" data-search-ignore>
+          {{ $t('settings.reset.filesDesc') }}
+        </p>
+      </div>
+      <div class="reset-group">
+        <button class="settings-btn reset-btn" @click="confirmResetAll">{{ RESET_ALL_LABEL }}</button>
+        <p class="reset-description" data-search-ignore>
+          {{ $t('settings.reset.allDesc') }}
+        </p>
+      </div>
     </div>
   </div>
 
@@ -155,7 +159,19 @@ function confirmResetAll() {
   margin: 4px 0 0;
 }
 
-.reset-group {
+/* All reset buttons share one column, as wide as the longest label: each group is
+   a subgrid of this list, so their buttons line up at the same width. Overrides
+   the page-wide button grid in SettingsPage.vue for this section only. */
+.reset-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+}
+
+.reset-list > .reset-group {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  gap: 0;
   padding: 6px 0;
 }
 
@@ -164,20 +180,12 @@ function confirmResetAll() {
 }
 
 .reset-btn {
-  width: 100%;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
   color: var(--status-danger);
-  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, transparent);
+  border-color: color-mix(in srgb, var(--status-danger) 40%, transparent);
   background: color-mix(in srgb, var(--status-danger) 8%, transparent);
-  border-radius: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-.reset-btn:hover {
+.reset-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--status-danger) 16%, transparent);
 }
 </style>

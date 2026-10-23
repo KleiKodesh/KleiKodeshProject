@@ -20,8 +20,9 @@
  * The service's DTOs use PascalCase keys on the wire (keyAsPropertyName); this module
  * transforms keys transparently so the rest of the app stays camelCase.
  */
-import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { encode as mpEncode, decode as mpDecode, Decoder } from '@msgpack/msgpack'
 import { onWebviewEvent } from './seforimDb'
+import { serviceCallEnded, serviceCallStarted } from './serviceIdle'
 import {
   isPersistentReason,
   markServiceAvailable,
@@ -40,16 +41,26 @@ let khsEndpointPending: Promise<KhsEndpoint> | null = null
 
 async function discoverEndpoint(): Promise<KhsEndpoint> {
   // The dev server answers 503 until the service has reported its endpoint over the pipe; retry.
+  const t0 = performance.now()
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch('/khs-endpoint', { cache: 'no-store' })
       if (res.ok) {
         const { base, token } = (await res.json()) as { base: string; token: string }
-        if (base && token) return { base, token }
+        if (base && token) {
+          console.info(`[service] endpoint ${base} found after ${attempt + 1} tries, ${Math.round(performance.now() - t0)} ms`)
+          return { base, token }
+        }
       }
-    } catch { /* dev server momentarily unreachable — retry */ }
+      if (attempt % 10 === 0) console.warn(`[service] /khs-endpoint try ${attempt + 1}: ${res.status} (service not reported yet)`)
+    } catch (e) {
+      if (attempt % 10 === 0) console.warn(`[service] /khs-endpoint try ${attempt + 1}: dev server unreachable`, e)
+    }
     await new Promise((r) => setTimeout(r, Math.min(1000, 100 + attempt * 100)))
-    if (attempt > 80) throw new Error('KitveiHakodesh service endpoint never became available')
+    if (attempt > 80) {
+      console.error(`[service] endpoint never became available (${Math.round(performance.now() - t0)} ms)`)
+      throw new Error('KitveiHakodesh service endpoint never became available')
+    }
   }
 }
 
@@ -97,6 +108,7 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
         khsEndpoint = null
         lastReason = res.status === 503 ? parseUnavailableReason(res.headers.get('X-KHS-Unavailable')) : 'NotRunning'
         lastDetail = res.status === 401 ? 'service rejected the token (401)' : await res.text()
+        console.warn(`[service] ${path} attempt ${attempt + 1}: ${res.status} ${lastReason} ${lastDetail}`)
         if (isPersistentReason(lastReason)) break
         await new Promise((r) => setTimeout(r, 60 + attempt * 80))
         continue
@@ -107,11 +119,13 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
       if (signal?.aborted) throw err // a real cancel, not a transient outage — don't retry
       lastReason = 'NotRunning'
       lastDetail = err instanceof Error ? err.message : String(err)
+      console.warn(`[service] ${path} attempt ${attempt + 1}: fetch failed (${lastDetail})`)
       khsEndpoint = null // force re-discovery — port/token may have changed on a respawn
       await new Promise((r) => setTimeout(r, 60 + attempt * 80))
     }
   }
   // Out of attempts: one banner for the whole app says what is wrong (ServiceUnavailableBanner).
+  console.error(`[service] ${path} gave up after 6 attempts: ${lastReason} ${lastDetail}`)
   markServiceUnavailable(lastReason)
   throw new ServiceUnavailableError(lastReason, lastDetail)
 }
@@ -119,15 +133,40 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
 const lowerFirst = (k: string) => (k ? k.charAt(0).toLowerCase() + k.slice(1) : k)
 const upperFirst = (k: string) => (k ? k.charAt(0).toUpperCase() + k.slice(1) : k)
 
-// A few wire fields aren't plain PascalCase↔camelCase. SenseRow.SourceId is snake_case
+// A few wire fields aren't plain PascalCase<->camelCase. SenseRow.SourceId is snake_case
 // (source_id) in the hosted JSON path via [JsonPropertyName], so the dev path must deliver
 // the same name to keep dictionary consumers identical across hosted/dev.
 const decodeKey = (k: string) => (k === 'SourceId' ? 'source_id' : lowerFirst(k))
 
-/** Recursively transform object keys (arrays + nested objects); leaves values, including
- *  binary (Uint8Array/ArrayBuffer), untouched. */
+/** Wire key -> app key, memoised: the same few dozen DTO keys recur across every row of
+ *  every reply, so each key string is converted once per process rather than per object. */
+const decodedKeyByWireKey = new Map<string, string>()
+function decodeMapKey(key: unknown): string | number {
+  if (typeof key === 'number') return key
+  if (typeof key !== 'string') throw new Error(`service reply map key must be string or number, got ${typeof key}`)
+  let out = decodedKeyByWireKey.get(key)
+  if (out === undefined) {
+    out = decodeKey(key)
+    decodedKeyByWireKey.set(key, out)
+  }
+  return out
+}
+
+/** Decodes a reply payload with its keys already camelCased: the rename happens while
+ *  msgpack builds each object, so there is no second pass and no copy of the decoded tree.
+ *  The Decoder is safe to share - it clones itself when re-entered. Envelopes are decoded
+ *  with the plain `mpDecode` because their keys (Ok/Result/Error) are read in PascalCase. */
+const replyDecoder = new Decoder({ mapKeyConverter: decodeMapKey })
+const decodeReply = (bytes: Uint8Array): unknown => replyDecoder.decode(bytes)
+
+/** Recursively PascalCase the keys of an outgoing args object (arrays + nested objects);
+ *  leaves values, including binary (Uint8Array/ArrayBuffer), untouched. An array whose
+ *  first element is a primitive is returned as-is: wire arrays are homogeneous. */
 function transformKeys(v: any, fn: (k: string) => string): any {
-  if (Array.isArray(v)) return v.map((x) => transformKeys(x, fn))
+  if (Array.isArray(v)) {
+    if (v.length > 0 && (typeof v[0] !== 'object' || v[0] === null)) return v
+    return v.map((x) => transformKeys(x, fn))
+  }
   if (v && typeof v === 'object' && !(v instanceof Uint8Array) && !(v instanceof ArrayBuffer)) {
     const out: Record<string, unknown> = {}
     for (const k in v) out[fn(k)] = transformKeys((v as Record<string, unknown>)[k], fn)
@@ -147,6 +186,14 @@ interface Envelope {
   Ok: boolean
   Result?: Uint8Array
   Error?: string
+  /** Full C# exception (ToString) for the console; Error is the short message. */
+  Detail?: string
+}
+
+/** A failed envelope: print the service's full failure to the console, then throw the short message. */
+function throwEnvelopeError(op: string, env: Envelope, fallback: string): never {
+  console.error(`[service] '${op}' failed:\n${env.Detail || env.Error || fallback}`)
+  throw new Error(env.Error || fallback)
 }
 
 /**
@@ -167,15 +214,12 @@ export async function serviceCall<T = unknown>(
   // service that accepts the connection and never answers (or restarts mid-request) leaves
   // the caller - and any "loading" state hanging off it - pending forever.
   const { signal: effectiveSignal, dispose } = withCallTimeout(op, signal, timeoutMs)
+  serviceCallStarted()
   try {
-    const res = await postRpc('/rpc', encodeRequest(op, args), effectiveSignal)
-    if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
-    const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
-    if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)
-    if (!env.Result || env.Result.length === 0) return undefined as T
-    return transformKeys(mpDecode(env.Result), decodeKey) as T
+    return await serviceCallCore<T>(op, args, effectiveSignal)
   } finally {
     dispose()
+    serviceCallEnded()
   }
 }
 
@@ -208,6 +252,28 @@ function withCallTimeout(
   }
 }
 
+async function serviceCallCore<T>(op: string, args: object, signal?: AbortSignal): Promise<T> {
+  const t0 = performance.now()
+  console.debug(`[service] -> ${op}`, args)
+  const res = await postRpc('/rpc', encodeRequest(op, args), signal)
+  if (!res.ok) {
+    const msg = `service '${op}' failed: ${res.status} ${res.statusText}`
+    console.error(`[service] ${msg}\n${await res.text().catch(() => '')}`)
+    throw new Error(msg)
+  }
+  const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
+  if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' error`)
+  // An op that caught its own failure still answers Ok; Detail carries the exception.
+  if (env.Detail) console.error(`[service] '${op}' failed:\n${env.Detail}`)
+  const ms = Math.round(performance.now() - t0)
+  if (!env.Result || env.Result.length === 0) {
+    console.debug(`[service] <- ${op} ${ms} ms, EMPTY result`)
+    return undefined as T
+  }
+  console.debug(`[service] <- ${op} ${ms} ms, ${env.Result.length} bytes`)
+  return decodeReply(env.Result) as T
+}
+
 /** Fire-and-forget variant (warmups etc.) — swallows every error. */
 export function serviceCallVoid(op: string, args: object = {}): void {
   postRpc('/rpc', encodeRequest(op, args)).catch(() => {})
@@ -215,12 +281,16 @@ export function serviceCallVoid(op: string, args: object = {}): void {
 
 /**
  * The hosted leg of serviceStream. WebView2 cannot deliver a response body progressively, so
- * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes each
- * frame to the page as a `serviceStreamFrame` message (base64 of the pipe frame's envelope)
- * and finishes with `serviceStreamEnd`. The stream id is chosen HERE and sent with the POST,
+ * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes them
+ * to the page as `serviceStreamFrames` messages — an array of base64 pipe-frame envelopes, every
+ * frame that arrived since the previous message — and finishes with `serviceStreamEnd`. The
+ * stream id is chosen HERE and sent with the POST,
  * so the listener below is registered before the first frame can possibly arrive. Aborting
  * posts `/rpc-stream-cancel`, which closes the pipe — the service's cancel signal.
  */
+/** Frames consumed between `/rpc-stream-ack` credits; below the relay's StreamFrameWindow. */
+const STREAM_ACK_EVERY = 8
+
 async function* hostedRelayStream<T>(
   op: string,
   args: object,
@@ -233,14 +303,17 @@ async function* hostedRelayStream<T>(
   let wake: (() => void) | null = null
   const notify = () => { wake?.(); wake = null }
 
+  const decodeBase64Frame = (b64: unknown): Uint8Array => {
+    const bin = atob(String(b64 ?? ''))
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return bytes
+  }
   const unregister = onWebviewEvent((msg) => {
     if (msg.streamId !== streamId) return
-    if (msg.event === 'serviceStreamFrame') {
-      const b64 = String(msg.frame ?? '')
-      const bin = atob(b64)
-      const bytes = new Uint8Array(bin.length)
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-      queue.push(bytes)
+    if (msg.event === 'serviceStreamFrames') {
+      const frames = Array.isArray(msg.frames) ? (msg.frames as unknown[]) : []
+      for (const b64 of frames) queue.push(decodeBase64Frame(b64))
       notify()
     } else if (msg.event === 'serviceStreamEnd') {
       ended = true
@@ -248,6 +321,17 @@ async function* hostedRelayStream<T>(
       notify()
     }
   })
+  // The relay pushes only while it holds credits, which the page returns as it CONSUMES
+  // frames (after each yield resumes). That carries the pipe's backpressure through the
+  // fire-and-forget push, so a slow consumer holds back the service instead of piling
+  // every frame of a huge result set up in the queue (renderer out of memory).
+  let unacked = 0
+  const ack = () => {
+    const n = unacked
+    unacked = 0
+    fetch(`${HOSTED_RELAY_ENDPOINT.base}/rpc-stream-ack?id=${encodeURIComponent(streamId)}&n=${n}`, { method: 'POST' })
+      .catch(() => {})
+  }
   const onAbort = () => { ended = true; notify() }
   signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -258,10 +342,12 @@ async function* hostedRelayStream<T>(
       while (queue.length) {
         const frame = queue.shift()!
         const env = mpDecode(frame) as Envelope
-        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
-          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+          yield decodeReply(env.Result) as T
+        if (++unacked >= STREAM_ACK_EVERY) ack()
       }
+      if (unacked) ack() // queue drained: hand back the rest so the relay never stalls
       if (signal?.aborted) return
       if (ended) {
         if (endError) throw new Error(endError)
@@ -297,6 +383,7 @@ export async function* serviceStream<T = unknown>(
     yield* hostedRelayStream<T>(op, args, signal)
     return
   }
+  console.debug(`[service] -> stream ${op}`, args)
   const res = await postRpc('/rpc-stream', encodeRequest(op, args), signal)
   if (!res.ok || !res.body) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
 
@@ -321,9 +408,9 @@ export async function* serviceStream<T = unknown>(
         buf = buf.subarray(4 + len)
 
         const env = mpDecode(frame) as Envelope
-        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
-          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+          yield decodeReply(env.Result) as T
       }
     }
   } finally {

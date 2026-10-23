@@ -11,7 +11,7 @@ namespace FtsLibTest
     /// Unit tests for word-distance filtering in the snippet pipeline.
     ///
     /// Tests the full chain:
-    ///   SnippetBuilder.Build → WordDistance on SnippetResult
+    ///   SnippetWindowLocator.Locate → WordDistance on SnippetDescriptor
     ///
     /// No index or database required — all content is supplied inline.
     ///
@@ -30,7 +30,7 @@ namespace FtsLibTest
 
             // ── Helper: build a snippet and return WordDistance ───────
 
-            // We test through SnippetBuilder directly (internal access via
+            // We test through SnippetWindowLocator directly (internal access via
             // same-project reference).  Each test supplies raw HTML content
             // and a list of query groups, then asserts the WordDistance value.
 
@@ -96,6 +96,30 @@ namespace FtsLibTest
                 expectedDistance: 10);
 
             // ── 7. No match — IsMatch false ───────────────────────────
+
+            // Paired reading (X) [Y]: Y shares X's position (Otzaria), so the pair is one word.
+            Check(ref passed, ref failed,
+                name:             "paired reading counts one position: a (x) [y] b, a..b distance 1",
+                content:          "\u05d0\u05d1 (\u05d2\u05d3) [\u05d4\u05d5] \u05d6\u05d7",
+                groups:           G("\u05d0\u05d1", "\u05d6\u05d7"),
+                originalCount:    2,
+                expectedDistance: 1);
+
+            Check(ref passed, ref failed,
+                name:             "paired reading: the second reading is adjacent to the next word",
+                content:          "\u05d0\u05d1 (\u05d2\u05d3) [\u05d4\u05d5] \u05d6\u05d7",
+                groups:           G("\u05d4\u05d5", "\u05d6\u05d7"),
+                originalCount:    2,
+                expectedDistance: 0);
+
+            // A word too long to be indexed keeps its position; an unindexed query slot counts
+            // in originalCount, so the long word is not an extra word.
+            Check(ref passed, ref failed,
+                name:             "unindexed slot: a LONG b with originalCount 3 -> distance 0",
+                content:          "\u05d0\u05d1 " + new string('\u05d2', 64) + " \u05d6\u05d7",
+                groups:           G("\u05d0\u05d1", "\u05d6\u05d7"),
+                originalCount:    3,
+                expectedDistance: 0);
 
             CheckNoMatch(ref passed, ref failed,
                 name:    "term not in content → IsMatch false",
@@ -187,6 +211,36 @@ namespace FtsLibTest
                 maxWordDistance:  0,
                 expectPass:       false);
 
+            // ── Otzaria's word model: one-letter words and digit runs are words ──
+
+            Check(ref passed, ref failed,
+                name:             "a one-letter word between the terms counts → distance 1",
+                content:          "אמר ו משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 1);
+
+            Check(ref passed, ref failed,
+                name:             "a digit run between the terms counts → distance 2",
+                content:          "אמר 12 ב5 משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 2);
+
+            Check(ref passed, ref failed,
+                name:             "one-letter and digit words are query terms → distance 0",
+                content:          "סימן ה סעיף 12",
+                groups:           G("ה", "סעיף", "12"),
+                originalCount:    3,
+                expectedDistance: 0);
+
+            Check(ref passed, ref failed,
+                name:             "a word over 128 bytes still takes its place → distance 1",
+                content:          "אמר " + new string('א', 70) + " משה",
+                groups:           G("אמר", "משה"),
+                originalCount:    2,
+                expectedDistance: 1);
+
             // ── Summary ───────────────────────────────────────────────
 
             Console.WriteLine("║");
@@ -215,8 +269,8 @@ namespace FtsLibTest
             int                                            originalCount,
             int                                            expectedDistance)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(content, groups, requireOrdered: false, originalGroupCount: originalCount);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(content, groups, requireOrdered: false, originalGroupCount: originalCount);
 
             if (!result.IsMatch)
             {
@@ -249,8 +303,8 @@ namespace FtsLibTest
             string                                     content,
             IReadOnlyList<IReadOnlyCollection<string>> groups)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(content, groups);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(content, groups);
 
             if (!result.IsMatch)
             {
@@ -278,8 +332,8 @@ namespace FtsLibTest
             int                                            maxWordDistance,
             bool                                           expectPass)
         {
-            var builder  = new SnippetBuilder();
-            var result   = builder.Build(content, groups, requireOrdered: false, originalGroupCount: originalCount);
+            var locator  = new SnippetWindowLocator();
+            var result   = locator.Locate(content, groups, requireOrdered: false, originalGroupCount: originalCount);
             bool passes  = result.IsMatch && result.WordDistance <= maxWordDistance;
 
             if (passes == expectPass)

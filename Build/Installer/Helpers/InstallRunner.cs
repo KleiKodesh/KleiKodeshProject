@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -12,6 +13,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// </summary>
     public static class InstallRunner
     {
+        /// <summary>True when the last RunAsync was a first install, not an update.</summary>
+        public static bool IsCleanInstall { get; private set; }
+
         /// <summary>
         /// Returns true when the KitveiHakodesh service ended up registered — or was
         /// not part of the package, which is equally fine. False means the package
@@ -23,8 +27,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         {
             // NOTE: this assumes Word and כתבי הקודש are already closed. Enforcing that is
             // LandingPage's job — its constructor waits for them and the התקן click calls
-            // EnsureWordClosed()/EnsureKitveiHakodeshClosed(), which can actually tell the
-            // user what to close. Do not re-add a wait here; there is no useful way to
+            // EnsureWordClosed() (which can tell the user what to close) and
+            // EnsureKitveiHakodeshClosed() (which closes it silently). Do not re-add a wait here; there is no useful way to
             // stall from this far down, and duplicating the check just hides where the real
             // gate is.
             if (!Directory.Exists(AddinInstaller.InstallPath))
@@ -43,18 +47,22 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             // Stop the running KitveiHakodesh service and WAIT until it is gone: it holds its exe
             // and its databases under KitveiHakodeshService open, and extraction overwrites them.
-            await KitveiHakodeshServiceHelper.StopServiceAsync();
+            await KitveiHakodeshServiceHelper.StopServiceAsync(status);
 
-            status?.Report("מחלץ קבצים...");
+            status?.Report(Strings.Install_Extracting);
             await AddinInstaller.ExtractAsync(progress);
 
-            status?.Report("רושם תוסף...");
+            status?.Report(Strings.Install_RegisteringAddin);
             await AddinInstaller.RegisterAddInAsync(progress);
 
-            status?.Report("שומר גרסה...");
+            // No version stamp yet = first install on this machine (not an update). Read
+            // before SaveVersion writes it; the exit prompt to open Word keys off this.
+            IsCleanInstall = !AddinInstaller.HasSavedVersion();
+
+            status?.Report(Strings.Install_SavingVersion);
             AddinInstaller.SaveVersion();
 
-            status?.Report("יוצר קיצור דרך...");
+            status?.Report(Strings.Install_CreatingShortcut);
             AddinInstaller.CreateKitveiHakodeshShortcut();
 
             // Claim the kitveihakodeshapp:// scheme so deep links copied from the app
@@ -66,13 +74,17 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // Register (or re-register) the KitveiHakodesh Windows service.
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.
-            status?.Report("מתקין שירות אינדקס...");
+            status?.Report(Strings.Install_IndexService);
             bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(status);
 
-            // Trigger a background reindex of the file-system search service
-            // so it reflects any new files from this install. Fire-and-forget —
-            // the service acks immediately and rebuilds without blocking us.
-            _ = KitveiHakodeshServiceHelper.EnsureServiceRunningAndReindexAsync();
+            // Start the service now so its indexing (FTS, catalog, file index) begins right away
+            // instead of when the app first opens. AWAITED, not fire-and-forget: a service that
+            // was started but never received a request sits waiting for its first client and
+            // builds nothing (Hosting/UserSessionBinding), and an installer that closes first
+            // would leave it exactly there. Bounded by the pipe wait; the service acks the
+            // request at once and indexes in the background, stopping itself once done if no
+            // app has opened by then.
+            await KitveiHakodeshServiceHelper.EnsureServiceRunningAndReindexAsync();
 
             // EnsureServiceInstalledAsync returns false both for "registration failed"
             // and for "the package doesn't ship the service at all". Only the former

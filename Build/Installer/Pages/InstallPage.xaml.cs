@@ -1,3 +1,4 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using System;
 using System.Threading.Tasks;
@@ -62,13 +63,24 @@ namespace KleiKodeshVstoInstallerWpf
                 if (!serviceRegistered)
                 {
                     var retry = MessageBox.Show(
-                        "שירות חיפוש הקבצים לא נרשם (נדרש אישור הרשאה). לנסות שוב?",
-                        "התקנת שירות אינדקס",
+                        Strings.Service_RetryPrompt,
+                        Strings.Service_InstallTitle,
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning);
 
                     if (retry == MessageBoxResult.Yes)
                         await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(_status);
+                }
+
+                // The running service kept its exe locked (the stop prompt was declined, or it
+                // would not stop): the install finished but the OLD service version runs on.
+                if (KitveiHakodeshServiceHelper.ServiceExeUpdateFailed)
+                {
+                    MessageBox.Show(
+                        Strings.Service_StillRunning,
+                        Strings.Service_InstallTitle,
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
                 }
 
                 while (ProgressBar.Value < ProgressBar.Maximum)
@@ -77,15 +89,19 @@ namespace KleiKodeshVstoInstallerWpf
                     await Task.Delay(10);
                 }
 
-                _status.Report("ההתקנה הושלמה!");
+                // We closed כתבי הקודש silently before installing — bring it back.
+                KitveiHakodeshHelper.RelaunchIfClosed();
+
+                _status.Report(Strings.Install_Complete);
                 await Task.Delay(300);
                 if (_showSettingsAfter)
                     (Window.GetWindow(this) as MainWindow)?.NavigateToSettings();
                 else
-                    Environment.Exit(0);
+                    WordHelper.ExitAfterInstall();
             }
             catch (Exception ex)
             {
+                KitveiHakodeshHelper.RelaunchIfClosed();
                 MessageBox.Show(ex.Message);
                 Environment.Exit(1);
             }

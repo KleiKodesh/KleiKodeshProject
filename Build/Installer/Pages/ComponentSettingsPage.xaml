@@ -1,11 +1,13 @@
 ﻿<Page x:Class="KleiKodeshVstoInstallerWpf.ComponentSettingsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:KleiKodeshVstoInstallerWpf.Properties"
+        xmlns:ui="clr-namespace:KleiKodeshVstoInstallerWpf"
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       mc:Ignorable="d"
       Background="#FFFFFF"
-      FlowDirection="RightToLeft"
+      FlowDirection="{x:Static ui:UiLanguage.FlowDirection}"
       FontFamily="Segoe UI">
 
     <Page.Resources>
@@ -88,11 +90,11 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="1" Margin="28,22,28,10">
-            <TextBlock Text="הגדרות מתקדמות"
+            <TextBlock Text="{x:Static p:Strings.Adv_Title}"
                        FontSize="20"
                        FontWeight="Bold"
                        Foreground="#1F1F1F"/>
-            <TextBlock Text="הגדרות נוספות לרכיבים שבחרת"
+            <TextBlock Text="{x:Static p:Strings.Adv_Subtitle}"
                        FontSize="13"
                        Foreground="#5A5A5A"
                        Margin="0,4,0,0"
@@ -108,7 +110,7 @@
                 <!-- ── KitveiHakodesh DB section ─────────────────────────────── -->
                 <StackPanel x:Name="KitveiHakodeshSection">
 
-                    <TextBlock Text="כתבי הקודש"
+                    <TextBlock Text="{x:Static p:Strings.Comp_KitveiHakodesh}"
                                FontSize="11"
                                Foreground="#5A5A5A"
                                Margin="0,0,0,6"/>
@@ -167,7 +169,7 @@
                             </Viewbox>
                             <TextBlock x:Name="DbPathText"
                                        Grid.Column="1"
-                                       Text="ברירת מחדל"
+                                       Text="{x:Static p:Strings.Default}"
                                        FontSize="11"
                                        Foreground="#5A5A5A"
                                        HorizontalAlignment="Center"
@@ -191,7 +193,7 @@
                 <!-- ── HebrewBooks local folder section ──────────────────────── -->
                 <StackPanel x:Name="HebrewBooksSection" Margin="0,12,0,0">
 
-                    <TextBlock Text="היברו בוקס"
+                    <TextBlock Text="{x:Static p:Strings.Comp_HebrewBooks}"
                                FontSize="11"
                                Foreground="#5A5A5A"
                                Margin="0,0,0,6"/>
@@ -250,7 +252,7 @@
                             </Viewbox>
                             <TextBlock x:Name="HbLocalFolderText"
                                        Grid.Column="1"
-                                       Text="לא הוגדר — יוריד לאחסון זמני"
+                                       Text="{x:Static p:Strings.Hb_NotSet}"
                                        FontSize="11"
                                        Foreground="#5A5A5A"
                                        HorizontalAlignment="Center"
@@ -266,7 +268,7 @@
                                Opacity="0.7"
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"
-                               Text="תיקייה שבה מאוחסנים קובצי PDF — אם הספר נמצא שם לא יוריד"/>
+                               Text="{x:Static p:Strings.Hb_FolderHint}"/>
 
                 </StackPanel>
                 <!-- /HebrewBooksSection -->
@@ -276,7 +278,7 @@
                 <!-- ── Websites section ───────────────────────────────── -->
                 <StackPanel x:Name="WebsitesSection">
 
-                    <TextBlock Text="דרך האתרים"
+                    <TextBlock Text="{x:Static p:Strings.Comp_WebSites}"
                                FontSize="11"
                                Foreground="#5A5A5A"
                                Margin="0,12,0,6"/>
@@ -333,7 +335,7 @@
                                       Fill="#5A5A5A"/>
                             </Viewbox>
                             <TextBlock Grid.Column="1"
-                                       Text="ערוך רשימת אתרים מותרים"
+                                       Text="{x:Static p:Strings.Adv_EditWhitelist}"
                                        FontSize="12"
                                        Foreground="#1F1F1F"
                                        HorizontalAlignment="Center"
@@ -341,7 +343,7 @@
                         </Grid>
                     </Button>
 
-                    <TextBlock Text="בחר אילו אתרים יופיעו בסרגל הכלים"
+                    <TextBlock Text="{x:Static p:Strings.Adv_WhitelistHint}"
                                FontSize="11"
                                Foreground="#5A5A5A"
                                Opacity="0.7"
@@ -352,19 +354,19 @@
                 <!-- /WebsitesSection -->
 
                 <!-- ── Shell integration section — always last ────────────────── -->
-                <TextBlock Text="סייר הקבצים"
+                <TextBlock Text="{x:Static p:Strings.Adv_FileExplorer}"
                            FontSize="11"
                            Foreground="#5A5A5A"
                            Margin="0,12,0,6"/>
 
                 <CheckBox x:Name="ShellRegisterCheckBox"
-                          Content="הוסף את כתבי הקודש לתפריט 'פתיחה עם' של המערכת"
+                          Content="{x:Static p:Strings.Adv_OpenWith}"
                           FontSize="13"
                           Foreground="#1F1F1F"
                           Margin="0,0,0,6"
                           Checked="ShellRegisterCheckBox_Changed"
                           Unchecked="ShellRegisterCheckBox_Changed"/>
-                <TextBlock Text="מאפשר לפתוח קבצי PDF, Word ועוד ישירות בכתבי הקודש מסייר הקבצים"
+                <TextBlock Text="{x:Static p:Strings.Adv_OpenWithHint}"
                            FontSize="11"
                            Foreground="#5A5A5A"
                            Opacity="0.7"
@@ -388,13 +390,13 @@
 
                 <Button x:Name="BackButton"
                         Grid.Column="0"
-                        Content="חזור"
+                        Content="{x:Static p:Strings.Back}"
                         Style="{StaticResource SecondaryButton}"
                         Click="BackButton_Click"/>
 
                 <Button x:Name="CloseButton"
                         Grid.Column="2"
-                        Content="סגור"
+                        Content="{x:Static p:Strings.Close}"
                         Style="{StaticResource PrimaryButton}"
                         Click="CloseButton_Click"/>
             </Grid>

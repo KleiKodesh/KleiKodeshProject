@@ -40,9 +40,42 @@ public sealed class HebrewBooksService
             _catalog = new CoreHebrewBooks.HebrewBooksCatalogDbQueries(path);
     }
 
+    /// <summary>The map last located and the seforim.db it belongs to. Re-located only when
+    /// the library switches, so a book open costs one indexed lookup, not a shape probe.</summary>
+    private sealed record EditionsMap(string? SeforimDbPath, CoreHebrewBooks.OtzariaHebrewBooksCatalogDbQueries? Map);
+
+    // A reference swapped whole, so concurrent RPCs never see one library's path with another's map.
+    private volatile EditionsMap _editionsMap = new(null, null);
+
+    /// <summary>
+    /// The HebrewBooks scans Otzaria's map links to this seforim.db book, best first. Empty
+    /// when there is no map beside the library in use, or that library is Zayit's — its book
+    /// ids are not the ones the map describes.
+    /// </summary>
+    public List<HebrewBooksEdition> EditionsOf(int bookId)
+    {
+        try
+        {
+            string? seforimDbPath = global::KitveiHakodesh.Core.Settings.SeforimDbPathResolver.Resolve().Path;
+            var cached = _editionsMap;
+            if (!string.Equals(cached.SeforimDbPath, seforimDbPath, StringComparison.OrdinalIgnoreCase))
+            {
+                cached = new EditionsMap(seforimDbPath, CoreHebrewBooks.OtzariaHebrewBooksCatalogDbQueries.LocateBeside(seforimDbPath));
+                _editionsMap = cached;
+            }
+            return cached.Map?.EditionsOf(bookId) ?? new List<HebrewBooksEdition>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "getHebrewBooksEditions failed");
+            return new List<HebrewBooksEdition>();
+        }
+    }
+
     /// <summary>Outcome of an acquire: the resolved on-disk PDF path, or a reason it failed.
     /// Exactly one of Path / NotFound / Error is meaningful.</summary>
-    public readonly record struct HbAcquireResult(string? Path, bool NotFound, string? Error);
+    /// <param name="Detail">Full failure detail (exception ToString, response facts) for the console only.</param>
+    public readonly record struct HbAcquireResult(string? Path, bool NotFound, string? Error, string? Detail = null);
 
     /// <summary>Bytes received / total for an in-flight download of <paramref name="bookId"/>,
     /// or null when no download is active for it.</summary>
@@ -86,7 +119,7 @@ public sealed class HebrewBooksService
 
         // Core answers with a typed failure; the dispatcher's wire shape predates it and still
         // distinguishes the same cases by string. Mapped here rather than at every call site.
-        return result.Failure switch
+        var mapped = result.Failure switch
         {
             // Upstream has no such book. NotFound, so the caller says so rather than showing
             // an error the user can do nothing about.
@@ -105,33 +138,37 @@ public sealed class HebrewBooksService
             CoreHebrewBooks.HebrewBookAcquireFailure.InvalidBookId => new HbAcquireResult(null, false, "invalid book id"),
 
             // Core carries the bare status number; the sentence around it is the host's wording.
+            // The frontend prefixes its own "the download failed:" so this is the reason only.
             CoreHebrewBooks.HebrewBookAcquireFailure.HttpStatus =>
-                new HbAcquireResult(null, false, $"download failed (HTTP {result.Detail})"),
+                new HbAcquireResult(null, false, $"HTTP {result.HttpStatusCode}"),
 
-            _ => new HbAcquireResult(null, false, result.Detail ?? "download failed"),
+            // Banner gets the exception's first line ("Type: message"); the console gets all of it.
+            _ => new HbAcquireResult(null, false, result.Detail?.Split('\n')[0].Trim() ?? "download failed"),
         };
+        return mapped with { Detail = $"{result.Failure}: {result.Detail}" };
     }
 
     public List<string> CheckLocalFiles(IEnumerable<string> bookIds, string? localFolder) =>
         _downloader.WhichAreDownloaded(bookIds, localFolder);
 
-    public (bool ok, bool notFound, string? error) DeleteLocalFile(string bookId, string? localFolder)
+    public (bool ok, bool notFound, bool noRecycleBin, string? error) DeleteLocalFile(string bookId, string? localFolder, bool toRecycleBin = false)
     {
-        var outcome = _downloader.DeleteDownloaded(bookId, localFolder);
+        var outcome = _downloader.DeleteDownloaded(bookId, localFolder, toRecycleBin);
         return outcome switch
         {
-            CoreHebrewBooks.HebrewBookDeleteOutcome.Deleted => (true, false, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.Deleted => (true, false, false, null),
 
             // The only true "nothing to delete": the folder is configured and holds no such file.
-            CoreHebrewBooks.HebrewBookDeleteOutcome.NotThere => (false, true, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.NotThere => (false, true, false, null),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.NoRecycleBin => (false, false, true, null),
 
             // These two are errors the user can act on, NOT a missing file. Reporting them as
             // notFound would silently swallow "you have not chosen a save folder yet".
             CoreHebrewBooks.HebrewBookDeleteOutcome.NoLocalFolderConfigured =>
-                (false, false, "לא הוגדרה תיקיית שמירה"),
-            CoreHebrewBooks.HebrewBookDeleteOutcome.InvalidBookId => (false, false, "invalid book id"),
+                (false, false, false, "לא הוגדרה תיקיית שמירה"),
+            CoreHebrewBooks.HebrewBookDeleteOutcome.InvalidBookId => (false, false, false, "invalid book id"),
 
-            _ => (false, false, "delete failed"),
+            _ => (false, false, false, "delete failed"),
         };
     }
 }

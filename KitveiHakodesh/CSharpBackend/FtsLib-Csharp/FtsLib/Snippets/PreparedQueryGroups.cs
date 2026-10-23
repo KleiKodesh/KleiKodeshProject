@@ -6,7 +6,7 @@ namespace FtsLib.Snippets
     /// Immutable term→group lookup for one query, prepared ONCE and shared by every
     /// snippet build over that query's results — across result lines AND threads.
     ///
-    /// Why this exists: SnippetBuilder used to rebuild the term→group map (plus two
+    /// Why this exists: SnippetWindowLocator (then SnippetBuilder) used to rebuild the term→group map (plus two
     /// auxiliary term sets) from the raw query groups on EVERY result line. That
     /// made per-snippet cost O(#expanded terms) — at 27k+ expanded terms (*כי*),
     /// the rebuilds dwarfed the actual tokenize-and-window work by an order of
@@ -20,8 +20,22 @@ namespace FtsLib.Snippets
     /// </summary>
     internal sealed class PreparedQueryGroups
     {
-        /// <summary>Term → indices of every group that contains it. Frozen after construction.</summary>
-        private readonly Dictionary<string, int[]> _termToGroups;
+        /// <summary>
+        /// One query term: its ordinal (0..TermCount-1, first-seen order over the groups) and
+        /// the indices of every group that contains it.
+        /// </summary>
+        public readonly struct PreparedTerm
+        {
+            public readonly int   Ordinal;
+            public readonly int[] Groups;
+            internal PreparedTerm(int ordinal, int[] groups) { Ordinal = ordinal; Groups = groups; }
+        }
+
+        /// <summary>Term → its ordinal and groups. Frozen after construction.</summary>
+        private readonly Dictionary<string, PreparedTerm> _termToGroups;
+
+        /// <summary>The terms by ordinal — what a mark's term ordinal resolves to.</summary>
+        private readonly string[] _terms;
 
         /// <summary>
         /// Span-keyed view of <see cref="_termToGroups"/> (net9+ alternate lookup, supported by
@@ -30,7 +44,7 @@ namespace FtsLib.Snippets
         /// snippet generation over result-heavy queries.
         /// </summary>
 #if NET9_0_OR_GREATER
-        private readonly Dictionary<string, int[]>.AlternateLookup<System.ReadOnlySpan<char>> _spanLookup;
+        private readonly Dictionary<string, PreparedTerm>.AlternateLookup<System.ReadOnlySpan<char>> _spanLookup;
 #endif
 
         /// <summary>
@@ -43,9 +57,16 @@ namespace FtsLib.Snippets
         /// <summary>True when the query has no terms at all — no snippet possible.</summary>
         public bool IsEmpty => GroupCount == 0;
 
-        private PreparedQueryGroups(Dictionary<string, int[]> termToGroups, int groupCount)
+        /// <summary>Number of distinct terms; ordinals are 0..TermCount-1.</summary>
+        public int TermCount => _terms.Length;
+
+        /// <summary>The term with the given ordinal (<see cref="PreparedTerm.Ordinal"/>).</summary>
+        public string TermAt(int ordinal) => _terms[ordinal];
+
+        private PreparedQueryGroups(Dictionary<string, PreparedTerm> termToGroups, string[] terms, int groupCount)
         {
             _termToGroups = termToGroups;
+            _terms        = terms;
             GroupCount    = groupCount;
 #if NET9_0_OR_GREATER
             _spanLookup   = termToGroups.GetAlternateLookup<System.ReadOnlySpan<char>>();
@@ -55,7 +76,11 @@ namespace FtsLib.Snippets
         /// <summary>Group indices for <paramref name="term"/>, or false when the term
         /// is not part of the query.</summary>
         public bool TryGetGroups(string term, out int[] groups)
-            => _termToGroups.TryGetValue(term, out groups);
+        {
+            bool found = _termToGroups.TryGetValue(term, out var entry);
+            groups = entry.Groups;
+            return found;
+        }
 
         /// <summary>
         /// Span overload for the snippet scan path.
@@ -66,23 +91,19 @@ namespace FtsLib.Snippets
         /// means the snippet path is written once for both legs.
         /// </summary>
         public bool TryGetGroups(System.ReadOnlySpan<char> term, out int[] groups)
-#if NET9_0_OR_GREATER
-            => _spanLookup.TryGetValue(term, out groups);
-#else
-            => _termToGroups.TryGetValue(term.ToString(), out groups);
-#endif
+        {
+            bool found = TryGetTerm(term, out var entry);
+            groups = entry.Groups;
+            return found;
+        }
 
-        /// <summary>True when <paramref name="term"/> is one of the query's terms —
-        /// the highlight-membership test.</summary>
-        public bool ContainsTerm(string term)
-            => _termToGroups.ContainsKey(term);
-
-        /// <summary>Span overload for the highlight-membership test — see TryGetGroups.</summary>
-        public bool ContainsTerm(System.ReadOnlySpan<char> term)
+        /// <summary>The term's ordinal and groups — the mark-collection lookup, which needs
+        /// WHICH term a token matched, not only that it matched.</summary>
+        public bool TryGetTerm(System.ReadOnlySpan<char> term, out PreparedTerm entry)
 #if NET9_0_OR_GREATER
-            => _spanLookup.ContainsKey(term);
+            => _spanLookup.TryGetValue(term, out entry);
 #else
-            => _termToGroups.ContainsKey(term.ToString());
+            => _termToGroups.TryGetValue(term.ToString(), out entry);
 #endif
 
         // ── Factories ─────────────────────────────────────────────────
@@ -139,10 +160,16 @@ namespace FtsLib.Snippets
         private static PreparedQueryGroups Freeze(
             Dictionary<string, List<int>> building, int groupCount)
         {
-            var frozen = new Dictionary<string, int[]>(building.Count, System.StringComparer.Ordinal);
-            foreach (var kv in building)
-                frozen[kv.Key] = kv.Value.ToArray();
-            return new PreparedQueryGroups(frozen, groupCount);
+            var frozen  = new Dictionary<string, PreparedTerm>(building.Count, System.StringComparer.Ordinal);
+            var terms   = new string[building.Count];
+            int ordinal = 0;
+            foreach (var kv in building)   // enumeration = insertion order (never removed from)
+            {
+                terms[ordinal] = kv.Key;
+                frozen[kv.Key] = new PreparedTerm(ordinal, kv.Value.ToArray());
+                ordinal++;
+            }
+            return new PreparedQueryGroups(frozen, terms, groupCount);
         }
     }
 }

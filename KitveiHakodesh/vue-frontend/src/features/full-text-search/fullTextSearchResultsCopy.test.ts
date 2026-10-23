@@ -19,9 +19,12 @@ import { describe, it, expect } from 'vitest'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 
-/** A result carrying just the fields the copy path reads. */
+/** A result carrying just the fields the copy path reads, plus its (already rendered)
+ *  snippet HTML and citation parts, which the real list resolves on demand and hands in
+ *  through the renderers. */
+type TestResult = FullTextSearchResult & { snippet: string; bookTitle: string; tocText: string }
 function makeResult(lineId: number, bookTitle: string, tocText: string, snippet: string) {
-  return { lineId, bookId: 1, bookTitle, tocText, snippet } as FullTextSearchResult
+  return { lineId, bookId: 1, bookTitle, tocText, snippet } as TestResult
 }
 
 const RESULTS = [
@@ -32,19 +35,23 @@ const RESULTS = [
 ]
 
 /** Identity renderer — the censor is exercised by its own suite. */
-const passThrough = (snippet: string) => snippet
+const passThrough = (result: FullTextSearchResult) => (result as TestResult).snippet
+const referenceOf = (result: FullTextSearchResult) => {
+  const r = result as TestResult
+  return resultReference(r.bookTitle, r.tocText)
+}
 
 function build(range: { firstRowIndex: number; lastRowIndex: number } | null) {
-  return buildSelectedResultsHtml(RESULTS, range, passThrough, false)
+  return buildSelectedResultsHtml(RESULTS, range, passThrough, referenceOf, false)
 }
 
 describe('resultReference', () => {
   it('joins the book title and TOC path the way the rows display them', () => {
-    expect(resultReference(RESULTS[0]!)).toBe('BookOne › ChapterA')
+    expect(resultReference('BookOne', 'ChapterA')).toBe('BookOne › ChapterA')
   })
 
   it('is the title alone when the result has no TOC path', () => {
-    expect(resultReference(RESULTS[2]!)).toBe('BookTwo')
+    expect(resultReference('BookTwo', '')).toBe('BookTwo')
   })
 })
 
@@ -63,7 +70,7 @@ describe('buildSelectedResultsHtml', () => {
     const html = build({ firstRowIndex: 0, lastRowIndex: 3 })!
     for (const result of RESULTS) {
       expect(html).toContain(result.snippet)
-      expect(html).toContain(resultReference(result))
+      expect(html).toContain(referenceOf(result))
     }
   })
 
@@ -110,6 +117,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     expect(html).not.toContain('<mark')
@@ -130,6 +138,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     expect(html).toContain('words and more')
@@ -148,6 +157,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     expect(html).toContain('two  spaces')
@@ -167,6 +177,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     // Asserts the CHARACTERS, not merely that the entity source is gone: a
@@ -190,6 +201,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     expect(html).toContain('Book &lt;One&gt;')
@@ -206,6 +218,7 @@ describe('buildSelectedResultsHtml', () => {
       results,
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
+      referenceOf,
       false,
     )!
     // The reference still lands; only the empty text block is skipped.
@@ -219,7 +232,8 @@ describe('buildSelectedResultsHtml', () => {
     const html = buildSelectedResultsHtml(
       RESULTS,
       { firstRowIndex: 0, lastRowIndex: 1 },
-      (snippet) => snippet.replace("first", "RENDERED"),
+      (result) => passThrough(result).replace("first", "RENDERED"),
+      referenceOf,
       false,
     )!
     expect(html).toContain('RENDERED snippet')

@@ -1,8 +1,8 @@
 // A time printed the way the Itim Labina client prints it (their `roundedTime`), in the place's time zone:
-// - '15sc': rounded to the nearest 15 seconds (half up), shown with seconds, e.g. 5:33:15.
-// - 'plusminus': cut to the minute, e.g. 3:42. (Their '.'/':' seconds marker is deliberately left out.)
+// - '15sc': rounded to the nearest 15 seconds (half up), shown with seconds, e.g. 05:33:15.
+// - 'plusminus': cut to the minute, e.g. 03:42. (Their '.'/':' seconds marker is deliberately left out.)
 // - 'candle1': like 'plusminus', except that past 52.5 seconds it is rounded up to the next minute.
-// Hours are 1-24 ('he' with hourCycle h24), so the hour after midnight prints as 24.
+// Hours are two digits, 01-24 ('he' with hourCycle h24), so the hour after midnight prints as 24.
 import type { RoundType } from './itimLabinaLuachot'
 
 const MINUTE_MS = 60_000
@@ -14,7 +14,7 @@ function clockFormat(timeZone: string, withSeconds: boolean): Intl.DateTimeForma
   let format = formatters.get(key)
   if (!format) {
     format = new Intl.DateTimeFormat('he', {
-      hour: 'numeric',
+      hour: '2-digit',
       minute: 'numeric',
       second: withSeconds ? 'numeric' : undefined,
       hourCycle: 'h24',

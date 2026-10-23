@@ -30,7 +30,7 @@ internal static class MsgPack
 
     public static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithResolver(
-            CompositeResolver.Create(Generated, StandardResolver.Instance));
+            CompositeResolver.Create(KhsMsgPackResolver.Instance, global::KitveiHakodesh.Core.CoreMessagePackResolver.Instance, StandardResolver.Instance));
 
     /// <summary>Serialize a DTO to MessagePack bytes.</summary>
     public static byte[] Ser<T>(T value) => MessagePackSerializer.Serialize(value, Options);
@@ -50,6 +50,9 @@ public sealed class RpcEnvelope
     public bool Ok { get; set; }
     public byte[]? Result { get; set; }
     public string? Error { get; set; }
+    /// <summary>Full C# failure (exception ToString, with op name) — the client prints it to
+    /// the webview console. Error stays the short message callers may show.</summary>
+    public string? Detail { get; set; }
 }
 
 // ── Tiny status-flag result DTOs (preserve the current response shapes) ──────────

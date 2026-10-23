@@ -4,9 +4,7 @@ using System.IO;
 using System.Threading;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
-// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
-// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
+using FtsLib.Fts5;
 using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
@@ -52,15 +50,28 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // segments — a different on-disk format, so every fts2 index rebuilds.
         // fts4 (2026-10-12): lines are stored in catalog tree order (rowid = position), so
         // results stream in the order the app shows the library; fts3 rowids were line ids.
-        public const string IndexFormatVersion = "fts4";
+        // fts5 (2026-10-14): tree order walks a category's subcategories before its own books,
+        // as the catalog view lists them — fts4 positions are in the old order.
+        // fts6 (2026-10-19): tree order puts a folder's BASE texts ahead of its subfolders and
+        // negative-orderIndex ("mefarshim") folders after their siblings, so a text's lines
+        // come before its commentaries' — fts5 positions are in the folders-first order.
+        // fts7 (2026-10-21): Otzaria's word model: every word is indexed (one letter, digit runs
+        // such as 12 or ב5, any length; a term over 128 UTF-8 bytes is left out) — fts6 indexed
+        // only words of 2..29 letters and treated digits as separators.
+        // fts8 (2026-10-21): Otzaria's remaining tokenizer rules: . [ ] and bidi/zero-width chars
+        // join a word, letters of every script are word chars (no Hebrew/Latin split, Unicode
+        // lowercase), a trailing geresh belongs to its word, typographic quotes and presentation
+        // forms fold, and a term of 128 UTF-8 bytes or more (quotes included) is left out.
+        // fts9 (2026-10-22): an unterminated '<' (no '>' after it) is a plain separator, as in
+        // Otzaria; fts8 treated it as a tag and dropped the rest of the line.
+        public const string IndexFormatVersion = "fts9";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";
         private const string ResumeWatermarkFileName = "build.progress";
-        // TEMPORARY (FTS5 trial): FtsLib's pattern is "seg_*.dat".
-        private const string SegmentFilePattern = SeforimIndex.IndexFileName;
-        // TEMPORARY (FTS5 trial): FtsLib's own segment files. Finding one means the folder
-        // holds an index of the OLD engine, whatever its stamps say — see Prepare.
+        private const string SegmentFilePattern = Fts5SeforimIndex.IndexFileName;
+        // The OLD engine's segment files (FtsLib's own engine, removed). Finding one means the
+        // folder holds an index of the old engine, whatever its stamps say — see Prepare.
         private const string FtsLibSegmentFilePattern = "seg_*.dat";
 
         /// <summary>Progress is reported every this-many lines — often enough for a live
@@ -165,24 +176,21 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             var plan = new SeforimDbFtsIndexPlan();
 
-            // TEMPORARY (FTS5 trial): an index built by FtsLib's own engine is unusable here,
+            // Migration: an index built by FtsLib's old segment engine is unusable here,
             // whatever its stamps claim. The format bump to fts4 catches every stamped one; this
             // catches the rest — no stamp, a legacy stamp, or a half-built FtsLib index — which
             // the checks below would not even see as index state, because SegmentFilePattern
             // now names the FTS5 file. Left in place it would also hold ~650 MB of dead segments.
-            // Only while the engine is NOT FtsLib's own: removing the SeforimIndex alias makes
-            // SegmentFilePattern "seg_*.dat" again and switches this off by itself — otherwise it
-            // would wipe every valid FtsLib index on every start.
-            if (SegmentFilePattern != FtsLibSegmentFilePattern && HasFtsLibSegments())
+            if (HasFtsLibSegments())
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
                 plan.IsReady = false;
+                plan.BuildReason = "an index from the old FtsLib engine was found";
                 return plan;
             }
 
             string completedStampPath = Path.Combine(_indexPath, CompletedStampFileName);
-            string currentStamp = ComputeStamp();
             string? recordedStamp = ReadStamp(completedStampPath)
                                  ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
 
@@ -190,6 +198,19 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool hasIndexState = SegmentsExist() || hasResumeWatermark;
             bool completedBuild = File.Exists(completedStampPath) && SegmentsExist() && !hasResumeWatermark;
 
+            string currentStamp;
+            try { currentStamp = ComputeStamp(); }
+            catch (SeforimDbUnreadableException)
+            {
+                // Cannot tell whether the DB changed — a momentary lock is not evidence that it
+                // did. Keep whatever is on disk: a completed index stays ready, an incomplete one
+                // waits for a later check rather than being wiped.
+                plan.DbUnreadable = true;
+                plan.IsReady = completedBuild;
+                return plan;
+            }
+
+            string? change = SeforimDbContentFingerprint.DescribeChange(recordedStamp, currentStamp);
             if (SeforimDbContentFingerprint.IsLegacy(recordedStamp) && completedBuild)
             {
                 plan.KeptUnverifiableCompletedIndex = true;
@@ -200,9 +221,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
+                plan.BuildReason = change;
             }
 
             plan.IsReady = File.Exists(completedStampPath) && SegmentsExist();
+            if (!plan.IsReady && plan.BuildReason == null)
+                plan.BuildReason = hasIndexState ? "resuming an interrupted build" : "no index yet";
             return plan;
         }
 
@@ -334,9 +358,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
-        /// Whether the index no longer matches the database — the live-change check the DB
+        /// Why the index no longer matches the database, in words; null when it still does — the live-change check the DB
         /// watcher calls while the app runs. READ-ONLY and cheap (two file reads and a
-        /// fingerprint); acting on a true answer — cancelling a build, wiping, rebuilding —
+        /// fingerprint); acting on an answer — cancelling a build, wiping, rebuilding —
         /// is the orchestrator's move.
         ///
         /// Checks fts.ver first and falls back to fts.src, because a database swapped
@@ -346,15 +370,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// stamp is not comparable, and calling it "changed" would wipe a live index over a
         /// format change, so it reads as not-stale; the next build re-stamps it.
         /// </summary>
-        public bool IsIndexStale()
+        public string? WhyIndexIsStale()
         {
             string? builtFrom = ReadStamp(Path.Combine(_indexPath, CompletedStampFileName))
                              ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
-            if (builtFrom == null) return false;
-            if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return false;
+            if (builtFrom == null) return null;
+            if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return null;
 
-            string current = ComputeStamp();
-            return !string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase);
+            string current;
+            try { current = ComputeStamp(); }
+            catch (SeforimDbUnreadableException) { return null; }   // cannot tell — not stale
+            return SeforimDbContentFingerprint.DescribeChange(builtFrom, current);
         }
 
         /// <summary>
@@ -405,5 +431,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// worth a log line, since its provenance is trust rather than proof until it next
         /// rebuilds.</summary>
         public bool KeptUnverifiableCompletedIndex { get; set; }
+
+        /// <summary>The seforim DB could not be read at the moment of the check, so its stamp
+        /// could not be compared. Nothing was wiped; a completed index is still ready.</summary>
+        public bool DbUnreadable { get; set; }
+
+        /// <summary>Why a build follows (stale stamp in words, an interrupted build, no index
+        /// yet); null when the index is ready.</summary>
+        public string? BuildReason { get; set; }
     }
 }

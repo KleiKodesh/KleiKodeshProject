@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
+import MessageBanner from '@/components/MessageBanner.vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog } from '@/webview-host/bridge'
 import {
   IconFolderOpen20Regular,
@@ -23,7 +27,16 @@ onMounted(() => {
 
 async function pickDbPath() {
   const previous = (await getDbPathInfo())?.path ?? ''
-  const picked = await pickDbPathWithDialog()
+  devError.value = ''
+  let picked: string | null
+  try {
+    picked = await pickDbPathWithDialog({ throwSaveErrors: true })
+  } catch (err) {
+    devError.value = err instanceof Error && /not found/i.test(err.message)
+      ? t('settings.db.notFound')
+      : t('settings.db.saveFailed')
+    return
+  }
   if (!picked) return
   dbPath.value = picked
   await onDbPathChanged(previous, picked)
@@ -41,8 +54,8 @@ async function applyDevPath() {
     await onDbPathChanged(previous, p)
   } catch (err) {
     devError.value = err instanceof Error && /not found/i.test(err.message)
-      ? 'הקובץ לא נמצא בנתיב שצוין'
-      : 'שמירת הנתיב נכשלה'
+      ? t('settings.db.notFound')
+      : t('settings.db.saveFailed')
   }
 }
 
@@ -61,16 +74,16 @@ function downloadOtzaria() {
 <template>
   <button class="db-pick-card" @click="downloadOtzaria">
     <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">הורד את אוצריא</span>
+    <span class="db-card-path placeholder">{{ $t('settings.db.downloadOtzaria') }}</span>
   </button>
   <button class="db-pick-card" @click="downloadZayit">
     <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">הורד את זית</span>
+    <span class="db-card-path placeholder">{{ $t('settings.db.downloadZayit') }}</span>
   </button>
   <button class="db-pick-card" @click="pickDbPath">
     <IconFolderOpen20Regular class="db-card-icon" />
     <span class="db-card-path" :class="{ placeholder: !dbPath }">
-      {{ dbPath || 'בחר קובץ מסד נתונים' }}
+      {{ dbPath || $t('settings.db.pick') }}
     </span>
   </button>
     <div class="db-pick-card db-dev-row">
@@ -78,13 +91,13 @@ function downloadOtzaria() {
       <input
         v-model="devInput"
         class="db-dev-input"
-        placeholder="נתיב מלא לקובץ seforim.db"
+        :placeholder="$t('settings.db.devPlaceholder')"
         spellcheck="false"
         @keydown.enter="applyDevPath"
       />
-      <button class="db-dev-apply" @click="applyDevPath">אישור</button>
+      <button class="db-dev-apply" @click="applyDevPath">{{ $t('settings.ok') }}</button>
     </div>
-    <p v-if="devError" class="db-dev-error">{{ devError }}</p>
+    <MessageBanner v-if="devError" class="db-dev-error" :message="devError" @dismiss="devError = ''" />
     <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
 </template>
 
@@ -126,12 +139,11 @@ function downloadOtzaria() {
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: ltr;
-  text-align: left;
+  text-align: end;
   min-width: 0;
 }
 .db-card-path.placeholder {
-  direction: rtl;
-  text-align: right;
+  text-align: start;
   font-style: italic;
 }
 
@@ -147,7 +159,7 @@ function downloadOtzaria() {
   color: var(--text-primary);
   font-size: 11px;
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 .db-dev-apply {
   flex-shrink: 0;
@@ -163,15 +175,13 @@ function downloadOtzaria() {
   border-color: var(--accent-color);
 }
 .db-dev-error {
-  margin: 6px 2px 0;
-  font-size: 11px;
-  color: var(--danger-color, #d13438);
+  margin-top: 6px;
 }
 .db-dev-ok {
   margin: 6px 2px 0;
   font-size: 11px;
   color: var(--text-secondary);
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 </style>

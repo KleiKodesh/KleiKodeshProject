@@ -146,7 +146,7 @@ public static class SeforimDbCatalogTextNormalizer
         var raws = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < raws.Length; )
         {
-            if (TryMatchAbbrev(raws, i, out var alts, out int consumed))
+            if (!IsNumeralAfterCounter(raws, i) && TryMatchAbbrev(raws, i, out var alts, out int consumed, indexSide: true))
             {
                 // Abbreviation words are already clean Hebrew (no punctuation) and never
                 // carry a daf/amud mark, so they bypass the amud and strip steps. The
@@ -178,8 +178,28 @@ public static class SeforimDbCatalogTextNormalizer
         var raws = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < raws.Length; )
         {
-            if (TryMatchAbbrev(raws, i, out var alts, out int consumed))
+            if (!IsNumeralAfterCounter(raws, i) && TryMatchAbbrev(raws, i, out var alts, out int consumed, indexSide: false))
             {
+                // A lone UNQUOTED word that is also a key keeps its literal form as one more
+                // alternative: the index never expands such a word (see TryMatchAbbrev), so
+                // "bamidbar" must still find the book Bamidbar and "md" the section md, while
+                // the expansion still finds Bamidbar Rabbah and Midrash. Quoted forms are
+                // unambiguous acronyms and get the expansion only.
+                if (consumed == 1 && !HasQuoteGlyph(raws[i]))
+                {
+                    var literal = new List<string>();
+                    EmitNormalizedToken(raws[i], literal);
+                    if (literal.Count == 1)
+                    {
+                        var withLiteral = new string[alts.Length + 1][];
+                        Array.Copy(alts, withLiteral, alts.Length);
+                        withLiteral[alts.Length] = [literal[0]];
+                        result.Add(new QueryToken(withLiteral, preferLiteral: true));
+                        flat.Add(literal[0]);
+                        i += consumed;
+                        continue;
+                    }
+                }
                 result.Add(new QueryToken(alts));
                 // An abbreviation's expansion is never "דף", so the amud lookback below
                 // simply sees a non-"דף" previous token.
@@ -197,6 +217,68 @@ public static class SeforimDbCatalogTextNormalizer
         return result;
     }
 
+    /// <summary>
+    /// Counter words after which a SHORT Hebrew token is a numeral, never an abbreviation:
+    /// "perek mb" is chapter 42, not Mishnah Berurah; "siman sq" is siman 160, not seif katan.
+    /// Quote glyphs do not decide it — the library writes numerals both as mb and m"b. The
+    /// seif-katan key itself (quote-stripped) and "katan" count as counters, so "s"q b" keeps
+    /// its numeral. Unicode escapes keep this block ASCII-safe.
+    /// </summary>
+    private static readonly HashSet<string> CounterWords = new(StringComparer.Ordinal)
+    {
+        "\u05E4\u05E8\u05E7",        // perek
+        "\u05E1\u05D9\u05DE\u05DF",  // siman
+        "\u05D3\u05E3",              // daf
+        "\u05D4\u05DC\u05DB\u05D4",  // halacha
+        "\u05E1\u05E2\u05D9\u05E3",  // seif
+        "\u05E2\u05DE\u05D5\u05D3",  // amud
+        "\u05D0\u05D5\u05EA",        // ot
+        "\u05E4\u05E1\u05D5\u05E7",  // pasuk
+        "\u05DE\u05E9\u05E0\u05D4",  // mishnah
+        "\u05E1\u05E7",              // s"q, quote-stripped
+        "\u05E7\u05D8\u05DF",        // katan
+        "\u05DB\u05DC\u05DC",        // klal
+        "\u05E9\u05E2\u05E8",        // shaar
+        "\u05D7\u05DC\u05E7",        // chelek
+        "\u05DE\u05E6\u05D5\u05D4",  // mitzvah
+        "\u05DE\u05D0\u05DE\u05E8",  // maamar
+        "\u05E8\u05DE\u05D6",        // remez
+        "\u05D3\u05D9\u05DF",        // din
+        "\u05D3\u05E8\u05D5\u05E9",  // derush
+        "\u05DE\u05D6\u05DE\u05D5\u05E8",  // mizmor
+        "\u05E4\u05E1\u05E7\u05D0",  // piska
+        "\u05E4\u05E1\u05E7\u05D4",  // piska, spelled with he
+        "\u05EA\u05DC\u05DE\u05D5\u05D3",  // talmud (Meiri: "talmud mb." = daf 42)
+        // NOT "pirush" / "bayit": "pirush shu"a" is a commentary on an acronym-named book.
+    };
+
+    /// <summary>True when raw token <paramref name="i"/> is a numeral position: it follows a
+    /// <see cref="CounterWords"/> word (with or without a leading he) and is 1-4 Hebrew letters
+    /// once quote glyphs and edge punctuation are stripped. Such a token is emitted as a plain
+    /// token, never looked up as an abbreviation, in BOTH the index and the query tokenizer.</summary>
+    private static bool IsNumeralAfterCounter(string[] raws, int i)
+    {
+        string raw = raws[i];
+        string tok = StripQuoteGlyphs(TrimEdgeNonWord(raw));
+        if (tok.Length is 0 or > 4) return false;
+        foreach (char c in tok)
+            if (!IsHebrewLetter(c)) return false;
+
+        // A daf mark ("mb." / "mb:") or parenthesised reference ("(ma mb)") is a numeral
+        // whatever precedes it — TOC paths cite pages and verses that way. Up to three letters
+        // unquoted; quoted only up to two (m"b. is a page, but shu"a: is an acronym with a colon).
+        bool quoted = StripQuoteGlyphs(raw).Length != raw.Length;
+        if (tok.Length <= (quoted ? 2 : 3)
+            && (raw.EndsWith('.') || raw.EndsWith(':') || raw.StartsWith('(') || raw.EndsWith(')')))
+            return true;
+
+        if (i == 0) return false;
+        string prev = StripQuoteGlyphs(TrimEdgeNonWord(raws[i - 1]));
+        if (prev.Length > 1 && prev[0] == '\u05D4' && CounterWords.Contains(prev.Substring(1)))
+            prev = prev.Substring(1);
+        return CounterWords.Contains(prev);
+    }
+
     /// <summary>Greedy longest-match abbreviation lookup starting at raw token
     /// <paramref name="start"/>. Tries the longest window first (up to
     /// <see cref="MaxKeyWords"/>), so a multi-word key (משנה תורה, שו"ע הגר"ז) wins over
@@ -206,11 +288,24 @@ public static class SeforimDbCatalogTextNormalizer
     /// the definite article and only ever attaches to the leading word of a phrase, so
     /// only that position is tried). On a hit, <paramref name="consumed"/> is the number
     /// of raw tokens the key spans.</summary>
-    private static bool TryMatchAbbrev(string[] raws, int start, out string[][] alts, out int consumed)
+    private static bool TryMatchAbbrev(string[] raws, int start, out string[][] alts, out int consumed, bool indexSide)
     {
+        // A key never contains the path separator, so no window may cross one. Without this
+        // the two-raw window "/ mb" edge-trims to "mb" and bypasses the single-word guard below.
+        if (raws[start] == PathSeparator) { alts = null!; consumed = 0; return false; }
         int maxWindow = Math.Min(MaxKeyWords, raws.Length - start);
+        for (int i = 1; i < maxWindow; i++)
+            if (raws[start + i] == PathSeparator) { maxWindow = i; break; }
+
         for (int w = maxWindow; w >= 1; w--)
         {
+            // INDEX side: a lone word is an abbreviation only when it carries a quote glyph.
+            // Unquoted it is what it says — a numeral in a TOC path ("perush she" = perush
+            // 375, "chadar mb" = room 42) or a plain word that happens to be a key ("bamidbar"
+            // is the Chumash, not Bamidbar Rabbah) — and the counter list above cannot name
+            // every such case. The QUERY side stays lenient: a user typing "shve" or "mb"
+            // without the glyph gets the expansion AND the literal (see TokenizeQuery).
+            if (w == 1 && indexSide && !HasQuoteGlyph(raws[start])) continue;
             string candidate = w == 1 ? raws[start] : string.Join(" ", raws, start, w);
             if (TryLookup(candidate, out alts!))
             {
@@ -246,6 +341,11 @@ public static class SeforimDbCatalogTextNormalizer
         return false;
     }
 
+    /// <summary>The " / " joiner of a stored TOC path, as the whitespace split sees it.</summary>
+    private const string PathSeparator = "/";
+
+    private static bool HasQuoteGlyph(string raw) => StripQuoteGlyphs(raw).Length != raw.Length;
+
     /// <summary>Probe the abbreviation map with quote glyphs stripped off the candidate —
     /// the map's keys are stored stripped, so this is what lets ט"ז / ט״ז / ט''ז / טז all
     /// hit the same entry. A candidate that carries no glyph is probed as-is.</summary>
@@ -262,7 +362,8 @@ public static class SeforimDbCatalogTextNormalizer
         // trailing ":" means עמוד ב. Applies to any דף TOC (and to queries typed the same
         // way), and must see the mark before stripping.
         string? amud = null;
-        if (tokens.Count > 0 && tokens[^1] == "דף" && tok.Length > 1)
+        // "talmud X." is the Meiri's way of writing "daf X." — same amud marks.
+        if (tokens.Count > 0 && (tokens[^1] == "דף" || tokens[^1] == "\u05EA\u05DC\u05DE\u05D5\u05D3") && tok.Length > 1)
         {
             if (tok.EndsWith(".", StringComparison.Ordinal)) amud = "א";
             else if (tok.EndsWith(":", StringComparison.Ordinal)) amud = "ב";
@@ -307,8 +408,18 @@ public static class SeforimDbCatalogTextNormalizer
         /// <summary>The plain word (valid only when <see cref="IsPlain"/>).</summary>
         public string Word => Alternatives[0][0];
 
-        public QueryToken(string word) => Alternatives = [[word]];
-        public QueryToken(string[][] alternatives) => Alternatives = alternatives;
+        /// <summary>True for an UNQUOTED word that is also an abbreviation key: the last
+        /// alternative is the word itself, and it is what the user most likely meant
+        /// ("bamidbar" is the Chumash before it is Bamidbar Rabbah). Matching still tries
+        /// every alternative; the ranking's notion of "the query's words" takes the literal.</summary>
+        public readonly bool PreferLiteral;
+
+        /// <summary>The alternative the ranking treats as the typed words: the literal one
+        /// when <see cref="PreferLiteral"/>, else the first (canonical) expansion.</summary>
+        public string[] RankingWords => PreferLiteral ? Alternatives[^1] : Alternatives[0];
+
+        public QueryToken(string word) { Alternatives = [[word]]; PreferLiteral = false; }
+        public QueryToken(string[][] alternatives, bool preferLiteral = false) { Alternatives = alternatives; PreferLiteral = preferLiteral; }
     }
 
     private static string TrimEdgeNonWord(string s)
@@ -436,6 +547,18 @@ public static class SeforimDbCatalogTextNormalizer
         foreach (var w in sb.ToString().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             words.Add(w);
         return words;
+    }
+
+    /// <summary>True when a root TOC entry only repeats the book title: a title variant that
+    /// adds no word of its own. "Rosh Yosef al Chullin, chelek 1" is a variant of "Rosh Yosef
+    /// al Chullin" but carries "chelek 1", so it is NOT a repeat and must stay in the index.</summary>
+    public static bool IsTitleRepeat(string bookTitle, string rootText)
+    {
+        if (!IsTitleVariant(bookTitle, rootText)) return false;
+        var bt = NormTitleWords(bookTitle);
+        foreach (var w in NormTitleWords(rootText))
+            if (!bt.Contains(w)) return false;
+        return true;
     }
 
     /// <summary>Fuzzy title comparison for root stripping: shorter word set must be a

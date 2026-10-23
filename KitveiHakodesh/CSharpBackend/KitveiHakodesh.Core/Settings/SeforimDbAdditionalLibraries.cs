@@ -131,9 +131,14 @@ namespace KitveiHakodesh.Core.Settings
         /// exist yet — a user may add a path before restoring the file, exactly like the primary
         /// path setting. The new entry's index comes from the ever-increasing counter, never from
         /// "one more than however many are configured right now" — see the class remarks.</summary>
+        /// <summary>Trims whitespace and surrounding quotes (a pasted "C:\...\seforim.db"). Same rule as
+        /// SeforimDbLibrarySwitcher.NormalizePath, kept here so this type does not depend on the switcher
+        /// (which the OS-neutral Core.Portable build leaves out).</summary>
+        private static string NormalizePath(string? rawPath) => (rawPath ?? "").Trim().Trim('"');
+
         public static AddOutcome Add(string? rawPath)
         {
-            string path = SeforimDbLibrarySwitcher.NormalizePath(rawPath);
+            string path = NormalizePath(rawPath);
             if (path.Length == 0) return AddOutcome.EmptyPath;
             if (path.IndexOf(Separator) >= 0 || path.IndexOf(IndexPathSeparator) >= 0)
                 return AddOutcome.InvalidCharacters;
@@ -176,7 +181,7 @@ namespace KitveiHakodesh.Core.Settings
         /// of a different path (or even the same path again) gets a NEW index, never this one.</summary>
         public static bool Remove(string? rawPath)
         {
-            string path = SeforimDbLibrarySwitcher.NormalizePath(rawPath);
+            string path = NormalizePath(rawPath);
             string full = TryFullPath(path);
 
             // Same reasoning as Add's lock: reading the current list and writing the filtered

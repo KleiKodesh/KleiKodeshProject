@@ -8,9 +8,9 @@ defineProps<{
 </script>
 
 <template>
-  <div class="zman-popup" role="dialog" aria-label="זמני היום">
+  <div class="zman-popup" role="dialog" :aria-label="$t('home.zmanimTitle')">
     <div class="zp-head">
-      <span class="zp-title">זמני היום</span>
+      <span class="zp-title">{{ $t('home.zmanimTitle') }}</span>
       <span class="zp-city">{{ cityName }}</span>
     </div>
     <div class="zp-grid">
@@ -30,7 +30,6 @@ defineProps<{
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
   padding: 8px 10px 10px;
   min-width: 220px;
-  direction: rtl;
   max-height: inherit;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -72,7 +71,7 @@ defineProps<{
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  text-align: start;
+  text-align: end;
 }
 .zp-label.passed,
 .zp-value.passed {

@@ -6,10 +6,11 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { libraryBadgeText, libraryTooltipText } from './catalogCardLines'
+import { titleWithAuthor } from './titleWithAuthor'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -27,7 +28,7 @@ function activateIndex(index: number, openInNewTab = false) {
 }
 
 function getTitle(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : item.book.title
+  return item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors)
 }
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
@@ -35,7 +36,7 @@ function getTooltip(item: FsItem) {
   const library = libraryTooltipText(getLibraryLabel(item))
   const titled = library ? `${getTitle(item)}
 ${library}` : getTitle(item)
-  return item.kind === 'folder' ? titled : withNewTabHint(titled)
+  return item.kind === 'folder' ? titled : withNewTabHint(titled, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 /**
@@ -82,7 +83,7 @@ function selectItem(index: number, event?: MouseEvent) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <div v-else ref="scrollEl" class="scroller">
     <div class="list-items">
       <div
@@ -101,7 +102,6 @@ function selectItem(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
-        <span v-if="item.kind === 'book' && item.book.authors" class="author-tag">{{ item.book.authors }}</span>
         <span v-if="showLibraryBadge && libraryBadgeText(getLibraryLabel(item))" class="author-tag library-tag" dir="auto">{{
           libraryBadgeText(getLibraryLabel(item))
         }}</span>
@@ -133,6 +133,9 @@ function selectItem(index: number, event?: MouseEvent) {
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
+  /* Off-screen rows skip rendering — big folders without a virtualizer. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--catalog-row-height, 38px);
 }
 .fs-item:hover {
   background: var(--hover-bg);

@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { i18n, uiLanguage } from './i18n'
 import './assets/styles/main.css'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import { useTabStore } from './stores/tabStore'
@@ -11,10 +12,12 @@ import { initPdfThemeObserver } from './theme/themes'
 import { dbReady, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
-import { useLocalFileStore } from './stores/localFileStore'
+import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
+import { installBrowserPersistenceFlush, installHostPersistenceFlush } from './webview-host/persistenceFlush'
+import { whenStartupContentDrawn } from './webview-host/serviceIdle'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
@@ -25,8 +28,16 @@ await checkAndExecPendingReset()
 // read the cleaned state on this boot rather than needing another reload.
 await checkAndExecPendingDbSwitchCleanup()
 
+// Before any store or view exists: hide / reload / close flush every pending
+// persistence write from here, position captures first (persistenceFlush.ts).
+installBrowserPersistenceFlush()
+
 const pinia = createPinia()
-const app = createApp(App).use(pinia)
+// Hebrew UI is RTL; English UI chrome is LTR. Content (book text, results, TOC,
+// dictionary) carries its own dir="rtl" so it stays RTL in both.
+document.documentElement.lang = uiLanguage
+document.documentElement.dir = uiLanguage === 'en' ? 'ltr' : 'rtl'
+const app = createApp(App).use(pinia).use(i18n)
 
 // All synchronous — reads from localStorage
 useWorkspaceStore().init()
@@ -68,25 +79,26 @@ function warmBooksDataInBackground() {
 // answer so a missing library does not fire queries that can only fail.
 void probeDbReady().then(warmBooksDataInBackground)
 
-// Restore persisted local file tabs after mount so the UI paints immediately.
-// PDF/HTML tabs render their loading placeholder right away; the virtual URL
-// is filled in asynchronously once the C# bridge confirms the file is ready.
-const localFileStore = useLocalFileStore()
 // Register the host-search listener before 'appReady' is posted below, so any search
 // request queued C#-side (context menu clicked before Vue mounted) is delivered.
 useHostSearchStore()
-const tabStore = useTabStore()
-void Promise.all(
-  tabStore.tabs
-    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view' || t.route === '/txt-view')
-    .map((t) => localFileStore.restoreTab(t.id)),
-)
+// Restore persisted local file tabs after mount so the UI paints immediately: only the
+// active tab per pane now, the rest when first shown (see localFileTabLazyRestore).
+restoreLocalFileTabsLazily()
 
 // Signal C# that the Vue app has fully mounted and all event listeners are registered.
 // C# uses this to dispatch any pending file path from an "Open With" launch — this
 // replaces the unreliable fixed 1500ms delay that would drop the event on slow machines.
 if (hasHostBridge) {
+  // The host closes its window without firing pagehide/beforeunload; this is how it
+  // asks for every pending persistence write first (AppViewer.FlushPersistenceAsync).
+  installHostPersistenceFlush()
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
+  // The desktop host keeps its last-session snapshot up until this: hiding it on
+  // 'appReady' would show the restored view empty while its content is still loading.
+  void whenStartupContentDrawn().then(() =>
+    window.chrome?.webview?.postMessage({ id: '0', action: 'contentReady' }),
+  )
 }
 
 // DEV-only test hook: lets the Playwright rigs open a local file and inspect

@@ -1,8 +1,0 @@
-{
-  "configProperties": {
-    "System.GC.Server": false,
-    "System.GC.Concurrent": true,
-    "System.GC.RetainVM": false,
-    "System.GC.ConserveMemory": 9
-  }
-}

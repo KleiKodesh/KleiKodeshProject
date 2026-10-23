@@ -93,11 +93,10 @@ export function useCopyExportData(opts: {
       for (const chunk of chunked(missing)) {
         if (disposed) return // the view is gone; stop walking the rest of the book
         try {
-          const [contents, tocPaths] = await Promise.all([
+          const [contents, tocByLine] = await Promise.all([
             getLineContents(chunk),
             getTocPathsForLines(chunk),
           ])
-          const tocByLine = new Map(tocPaths.map((row) => [row.lineId, row.tocPath]))
           for (const row of contents) {
             targetsByLineId.set(row.id, { html: row.content, tocPath: tocByLine.get(row.id) ?? '' })
           }

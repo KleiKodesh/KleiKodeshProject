@@ -17,6 +17,9 @@ import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { BookVersionRow } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   versions: BookVersionRow[]
@@ -63,7 +66,7 @@ const activeVersion = computed(() =>
 )
 
 const buttonTitle = computed(() =>
-  activeVersion.value ? `נוסח: ${labelFor(activeVersion.value)}` : 'נוסחים',
+  activeVersion.value ? t('bookView.versions.active', { name: labelFor(activeVersion.value) }) : t('bookView.versions.title'),
 )
 
 function onSelect(versionId: number | null) {
@@ -90,7 +93,7 @@ function onSelect(versionId: number | null) {
         :class="{ selected: activeVersionId == null }"
         @click="onSelect(null)"
       >
-        נוסח ברירת המחדל
+        {{ $t('bookView.versions.default') }}
       </button>
       <button
         v-for="version in versions"
@@ -148,22 +151,22 @@ button.active {
 /* ── Positioning based on toolbar position ── */
 .dropdown-top {
   top: calc(100% + 4px);
-  right: 0;
+  inset-inline-start: 0;
 }
 
 .dropdown-bottom {
   bottom: calc(100% + 4px);
-  right: 0;
+  inset-inline-start: 0;
 }
 
 .dropdown-left {
   top: 0;
-  left: calc(100% + 4px);
+  inset-inline-end: calc(100% + 4px);
 }
 
 .dropdown-right {
   top: 0;
-  right: calc(100% + 4px);
+  inset-inline-start: calc(100% + 4px);
 }
 
 /* ── Version rows ── */
@@ -172,7 +175,7 @@ button.active {
   width: 100%;
   min-height: 32px;
   padding: 6px 12px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

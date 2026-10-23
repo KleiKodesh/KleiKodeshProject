@@ -20,6 +20,18 @@ Never assert facts about the codebase, database, runtime state, or system config
 
 A statement presented as a fact but derived from absence of evidence ("I didn't find X, therefore X doesn't exist") is a guess. Mark it as uncertain and verify before acting on it.
 
+## Speed Is Canon
+
+Everything in the app must feel instant. Speed is a top-priority requirement, not a nice-to-have, and it applies to every layer: service queries, the wire, decoding, reactivity, rendering, and persistence.
+
+- First paint of any view and the first screen of any result set must be immediate; the rest streams or loads lazily behind it.
+- Never do per-row work that could be done once (per-hit strings, per-row DB round-trips, per-frame copies, per-scroll-tick writes).
+- Data crossing the wire or going into persistence carries ids and numbers, not derivable strings. Resolve titles, paths and labels from the catalog at render time.
+- Large lists are `shallowRef`/`markRaw`, never deep reactive. Never copy a large payload more than once (no JSON round-trips, no transform-by-copy of decoded replies).
+- Persistence writes are coalesced and off the hot path (debounced, flushed on hide/unload). Nothing writes on every scroll tick or keystroke.
+- Never trade speed for a result cap: correctness of the full result set stays; make the pipeline faster instead.
+- When adding a feature, state its cost on the hot path. If a change makes something slower, say so before making it.
+
 ## Virtual Scroller Rules
 
 `@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management.
@@ -223,6 +235,18 @@ Never use `position: absolute`, `grid`, or add `flex-grow` to `.bar-title`. Neve
 
 In RTL layout, the leftmost button is always the "next/advance" button. For prev/next navigation pairs, always use `IconChevronLeft` for next (advance) and `IconChevronRight` for prev (back). The correct button order reading left→right on screen is: `<` (next) · `>` (prev) · home · toggle. Never reverse this — the chevron icon direction matches the reading direction, not the semantic direction.
 
+## UI Translations (i18n)
+
+The UI is bilingual (Hebrew default, English option) via vue-i18n. Hebrew mode: whole UI RTL. English mode: UI chrome is LTR (`main.ts` sets `<html dir>` from `uiLanguage`), CONTENT stays RTL. Every user-visible UI string goes through `t()` / `$t()` — never hard-code Hebrew UI text.
+
+- Any change that adds or edits UI text MUST update BOTH `src/i18n/locales/he/<ns>.json` and `src/i18n/locales/en/<ns>.json`, same key set. A Hebrew-only change is incomplete.
+- One namespace file per area (`bookView`, `settings`, `layout`, ...); keys are `'<ns>.<key>'`. `.vue` uses `$t` / `useI18n()`; plain `.ts` imports `t` from `@/i18n`.
+- Strings that double as data (nav labels = route keys, commentary section labels, city names, theme names) keep their Hebrew value for matching/persistence and are translated at DISPLAY time only via a helper (`appNavItems` `.text`, `displayCommentaryLabel`, `cityDisplayName`).
+- Never translate book content, DB data, search-syntax examples, regex/normalization tables, Hebrew month/weekday names, divine-name tables.
+- Content containers (book lines, commentary, TOC, search results/snippets, catalog/book lists, dictionary, txt/html views, book-data tooltips) carry an explicit `dir="rtl"` on their root; query inputs use `dir="auto"`. Chrome CSS uses logical properties (`margin-inline-start`, `inset-inline-end`, `text-align: start`), never physical left/right, so it mirrors correctly in both directions.
+- Switching language reloads the page (`setUiLanguage`), so module-level `t()` constants are fine.
+- EXCEPTION - the CATALOG page (`src/features/book-catalog`) is never translated and is always RTL, in both UI languages: its root carries `dir="rtl"`, `locales/en/bookCatalog.json` is an exact copy of the Hebrew file, and shared strings rendered inside it use `tHe` (`@/i18n`) or Hebrew variants (`OPEN_IN_NEW_TAB_HINT_HE`, `useSearchIndexStatus(index, tHe)`). `.dir-icon` does not mirror inside any `[dir=rtl]` subtree. The catalog's nav label / tab title in the title bar is chrome and stays translated.
+
 ## Git
 
 - Never use git commands unless explicitly asked by the user
@@ -258,7 +282,7 @@ Book catalog search applies Hebrew-specific text transformations so that variant
 - `bookCatalogSearchNormalizer.ts` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), Hebrew word decomposition into consonantal skeleton + vowel-letter set for חסר/מלא matching, and definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed tokens at build time and query words at search time.
 - `bookCatalogSearchMatcher.ts` — the score tiers (`SCORE_EXACT` 3, `SCORE_PREFIX` 2, `SCORE_NONE` 0) and per-token scoring. Knows nothing about the index or catalog.
 - `bookCatalogSearch.ts` — the inverted index and query execution: `buildSearchIndex` and `filterBooksByWords`.
-- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`).
+- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`).
 
 `bookCatalogTree.ts` owns tree building and category metadata (`buildTree`, `assignSubtreeBookIds`, `assignFullPaths`, `findCategoryMeta`) — it is not part of the search stack.
 

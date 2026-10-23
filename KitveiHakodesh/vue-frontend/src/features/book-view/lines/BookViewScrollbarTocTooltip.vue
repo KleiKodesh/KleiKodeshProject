@@ -56,7 +56,7 @@ const style = computed(() => {
 
 <template>
   <Teleport to="body">
-    <div ref="labelEl" class="scrollbar-toc-tooltip" :style="style">
+    <div dir="rtl" ref="labelEl" class="scrollbar-toc-tooltip" :style="style">
       <div v-if="data.bookTitle" class="book-title">{{ data.bookTitle }}</div>
       <div v-if="data.path" class="toc-path">{{ data.path }}</div>
     </div>

@@ -50,6 +50,8 @@ namespace KitveiHakodesh.Core.Settings
         {
             if (InMemoryStore is { } store)
                 return store.TryGetValue(app + "\\" + section + "\\" + key, out var v) ? v : fallback;
+            // No registry off Windows (portable build): every setting reads as its fallback.
+            if (!OperatingSystem.IsWindows()) return fallback;
             try
             {
                 using var registryKey = UserProfile.Hive.OpenSubKey(SubKey(app, section));
@@ -89,6 +91,7 @@ namespace KitveiHakodesh.Core.Settings
                     store[app + "\\" + section + "\\" + key] = value ?? "";
                     return true;
                 }
+                if (!OperatingSystem.IsWindows()) return true; // no registry off Windows: not persisted
                 using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
                 registryKey?.SetValue(key, value ?? "");
                 return true;
@@ -202,6 +205,22 @@ namespace KitveiHakodesh.Core.Settings
 
         public static string GetBorderColor() => Get(AppKitveiHakodesh, "Appearance", "BorderColor", "");
         public static void SetBorderColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "BorderColor", hex);
+
+        // Vue's UI language ("he" | "en"), so the native chrome starts in the right direction/texts.
+        public static string GetUiLanguage() => Get(AppKitveiHakodesh, "Appearance", "UiLanguage", "he");
+        public static void SetUiLanguage(string lang) => Set(AppKitveiHakodesh, "Appearance", "UiLanguage", lang);
+
+        // ── Service ───────────────────────────────────────────────────────────────────
+        // The one unasked "install the service?" prompt a host may raise, on the first launch
+        // that finds the product installed but its service not registered. Afterwards the
+        // settings page's row is the only way. Missing value = not shown yet (a full clean
+        // wipes it, so a clean reinstall asks once again).
+
+        public static bool GetServiceInstallPromptShown() =>
+            Get(AppKitveiHakodesh, "Service", "InstallPromptShown", "0") == "1";
+
+        public static void SetServiceInstallPromptShown() =>
+            Set(AppKitveiHakodesh, "Service", "InstallPromptShown", "1");
 
         // ── Helpers ───────────────────────────────────────────────────────────────────
 

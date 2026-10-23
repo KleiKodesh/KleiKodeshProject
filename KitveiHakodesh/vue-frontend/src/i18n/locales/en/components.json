@@ -1,0 +1,42 @@
+{
+  "ok": "OK",
+  "cancel": "Cancel",
+  "close": "Close",
+  "clock": "Clock",
+  "notFound": "Not found",
+  "searchPlaceholder": "Search...",
+  "recentSearches": "Recent searches",
+  "copy": "Copy",
+  "copyIntoWord": "Copy into Word",
+  "copyCleanText": "Copy clean text",
+  "service": {
+    "notRunningTitle": "The Kitvei Hakodesh service is not responding",
+    "notRunningBody": "Books and search are unavailable right now. The service may be restarting - please click \"Try again\".",
+    "notInstalledTitle": "The Kitvei Hakodesh service is not installed",
+    "notInstalledBody": "Books and search need this service, and it is not installed on this computer. You can install it now: clicking \"Install service\" installs it, and Windows will ask for administrator approval.",
+    "installDeclinedTitle": "Service installation was not approved",
+    "installDeclinedBody": "Books and search need the Kitvei Hakodesh service, and installing it requires administrator approval. Please click \"Try again\" and approve the permission prompt.",
+    "installFailedTitle": "Service installation failed",
+    "installFailedBody": "Books and search need the Kitvei Hakodesh service, but installing or repairing it failed. Please click \"Try again\"; if the problem persists, reinstall the program (Klei Kodesh).",
+    "startFailedTitle": "The service cannot be started",
+    "startFailedBody": "The Kitvei Hakodesh service is installed, but Windows does not start it. Clicking \"Repair\" repairs it, and Windows will ask for administrator approval.",
+    "retry": "Try again",
+    "install": "Install service",
+    "repair": "Repair",
+    "retrying": "Retrying...",
+    "dbInterruptedTitle": "The Otzaria library update did not finish",
+    "dbInterruptedBody": "The Otzaria book library update was interrupted, so books cannot load right now. Please open Otzaria and let it finish the update - the library will reload here automatically. Do not delete files in the library folder.",
+    "dbMissingTitle": "Library not found",
+    "dbMissingBody": "No book library (Otzaria library) was found on this computer, so books and search are unavailable. Click \"Choose library\" to point to the seforim.db file, or install Otzaria.",
+    "dbUnreadableTitle": "The library cannot be read",
+    "dbUnreadableBody": "The book library file exists but cannot be opened (not a valid database, corrupted, or locked by another program). Click \"Choose library\" to pick another file.",
+    "pickLibrary": "Choose library"
+  },
+  "update": {
+    "title": "New version available",
+    "body": "Klei Kodesh version {version} has been downloaded and is ready to install. Installing will close Word and the program.",
+    "installNow": "Install now",
+    "later": "Later",
+    "installFailed": "The installer could not be started. Please try again later."
+  }
+}

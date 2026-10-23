@@ -12,6 +12,11 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
+import { useI18n } from 'vue-i18n'
+
+// Chrome, not content: follows the UI direction (set once at boot in main.ts) even inside the always-RTL book body row.
+const uiDir = document.documentElement.dir || 'rtl'
+const { t } = useI18n()
 
 const props = defineProps<{
   groups: CommentaryGroup[]
@@ -58,7 +63,7 @@ const activeGroup = computed(() =>
 const openBookTooltip = computed(() => {
   const bookTitle = activeGroup.value?.bookTitle ?? ''
   const full = props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
-  return full ? `פתח ספר זה בלשונית חדשה\n${full}` : 'פתח ספר זה בלשונית חדשה'
+  return full ? t('bookView.commentary.openInNewTabNamed', { name: full }) : t('bookView.commentary.openInNewTab')
 })
 
 const activeFullLabel = computed(() => {
@@ -123,12 +128,12 @@ function handleKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="nav">
+  <div class="nav" :dir="uiDir">
     <button
       ref="filterBtnRef"
       class="btn c-pointer hover-bg"
       :class="{ active: filterVisible }"
-      title="עץ מפרשים"
+      :title="$t('bookView.commentary.tree')"
       @click.stop="emit('toggle-filter')"
     >
       <IconFilter20Regular />
@@ -141,7 +146,7 @@ function handleKeydown(e: KeyboardEvent) {
         type="text"
         class="search-input"
         :list="`commentary-list-${componentId}`"
-        :placeholder="activeFullLabel || 'חפש מפרש...'"
+        :placeholder="activeFullLabel || $t('bookView.commentary.searchPlaceholder')"
         @input="onInput"
         @change="handleSelect"
         @keydown="handleKeydown"
@@ -153,7 +158,7 @@ function handleKeydown(e: KeyboardEvent) {
     <button
       class="btn c-pointer hover-bg"
       :disabled="!hasPrevious"
-      title="מפרש קודם"
+      :title="$t('bookView.commentary.prevCommentary')"
       @click="navigateToGroup(groups[activeIndex - 1]!)"
     >
       <IconChevronUp20Regular />
@@ -161,7 +166,7 @@ function handleKeydown(e: KeyboardEvent) {
     <button
       class="btn c-pointer hover-bg"
       :disabled="!hasNext"
-      title="מפרש הבא"
+      :title="$t('bookView.commentary.nextCommentary')"
       @click="navigateToGroup(groups[activeIndex + 1]!)"
     >
       <IconChevronDown20Regular />
@@ -169,19 +174,19 @@ function handleKeydown(e: KeyboardEvent) {
     <div class="sep" />
     <button
       class="btn c-pointer hover-bg"
-      title="קטע קודם"
+      :title="$t('bookView.commentary.prevSection')"
       :disabled="!activePinnedGroup"
       @click="activePinnedGroup && emit('navigate-section', 'prev', activePinnedGroup.bookId)"
     >
-      <IconChevronRight20Regular />
+      <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
       class="btn c-pointer hover-bg"
-      title="קטע הבא"
+      :title="$t('bookView.commentary.nextSection')"
       :disabled="!activePinnedGroup"
       @click="activePinnedGroup && emit('navigate-section', 'next', activePinnedGroup.bookId)"
     >
-      <IconChevronLeft20Regular />
+      <IconChevronLeft20Regular class="dir-icon" />
     </button>
     <div class="sep" />
     <button
@@ -193,7 +198,7 @@ function handleKeydown(e: KeyboardEvent) {
     </button>
     <button
       class="btn c-pointer hover-bg close-btn"
-      title="סגור חלונית מפרשים"
+      :title="$t('bookView.commentary.closePanel')"
       @click.stop="emit('close')"
     >
       <IconMinimize20Regular />
@@ -258,7 +263,7 @@ function handleKeydown(e: KeyboardEvent) {
 }
 .search-icon {
   position: absolute;
-  left: 2px;
+  inset-inline-end: 2px;
   width: 12px;
   height: 12px;
   color: var(--text-secondary);

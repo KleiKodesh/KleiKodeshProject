@@ -24,6 +24,63 @@
  * pdfjsVersion = 5.7.284
  * pdfjsBuild = 7e5b36c2d
  */
+// [KleiKodesh] Outline target handed over by the host (khOutline hash key) - see
+// CUSTOMIZATIONS.md "Open at an outline entry". Read and STRIPPED here, before
+// PDFViewerApplication captures location.hash as its initial bookmark, so PDF.js never
+// sees it as a destination and a hash holding nothing else leaves ViewHistory restore
+// exactly as it was.
+const khInitialOutlineTarget = (() => {
+  const params = new URLSearchParams(document.location.hash.substring(1));
+  const target = params.get("khOutline");
+  if (target === null) {
+    return null;
+  }
+  params.delete("khOutline");
+  const rest = params.toString();
+  history.replaceState(history.state, "", document.location.pathname + document.location.search + (rest ? "#" + rest : ""));
+  return target.trim() || null;
+})();
+
+/**
+ * [KleiKodesh] Finds the outline item for a middle-dot-separated section path (a book
+ * view breadcrumb). Deepest segment first, then shallower ones; among items whose
+ * title matches a segment, the one with the most matching ancestors wins. Exact
+ * normalised equality beats containment. Returns null when nothing matches.
+ */
+function khFindOutlineItem(outline, path) {
+  const normalize = text => (text || "").replace(/[֑-ׇ]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const segments = path.split("·").map(normalize).filter(Boolean);
+  const flat = [];
+  const walk = (items, ancestors) => {
+    for (const item of items || []) {
+      const title = normalize(item.title);
+      flat.push({ item, title, ancestors });
+      walk(item.items, [...ancestors, title]);
+    }
+  };
+  walk(outline, []);
+  const matches = (title, segment, exact) => exact ? title === segment : title.includes(segment) || (title.length > 0 && segment.includes(title));
+  for (const exact of [true, false]) {
+    for (let i = segments.length - 1; i >= 0; i--) {
+      let best = null, bestScore = -1;
+      for (const entry of flat) {
+        if (!entry.item.dest || !matches(entry.title, segments[i], exact)) {
+          continue;
+        }
+        const score = segments.slice(0, i).filter(s => entry.ancestors.some(a => matches(a, s, exact))).length;
+        if (score > bestScore) {
+          best = entry.item;
+          bestScore = score;
+        }
+      }
+      if (best) {
+        return best;
+      }
+    }
+  }
+  return null;
+}
+
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
 /******/ 
@@ -17649,6 +17706,19 @@ class Toolbar {
 
 ;// ./web/view_history.js
 const DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
+// Scroll-driven writes are coalesced: onUpdateViewarea calls setMultiple on every
+// scroll tick, and each call used to JSON.stringify the whole history database into
+// localStorage. Instances with a pending write are flushed when the frame is hidden
+// or torn down so the last position is never lost to the delay.
+const VIEW_HISTORY_WRITE_DELAY_MS = 250;
+const pendingViewHistoryWrites = new Set();
+function flushPendingViewHistoryWrites() {
+  for (const history of pendingViewHistoryWrites) history._flushWrite();
+}
+window.addEventListener("pagehide", flushPendingViewHistoryWrites);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushPendingViewHistoryWrites();
+});
 class ViewHistory {
   constructor(fingerprint, cacheSize = DEFAULT_VIEW_HISTORY_CACHE_SIZE) {
     this.fingerprint = fingerprint;
@@ -17683,13 +17753,27 @@ class ViewHistory {
     const databaseStr = JSON.stringify(this.database);
     localStorage.setItem("pdfjs.history", databaseStr);
   }
+  // Trailing-timer coalescing for the scroll-driven set/setMultiple writes; the
+  // one-shot setSync below still writes through immediately.
+  _scheduleWrite() {
+    if (this._writeTimer) return;
+    pendingViewHistoryWrites.add(this);
+    this._writeTimer = setTimeout(() => this._flushWrite(), VIEW_HISTORY_WRITE_DELAY_MS);
+  }
+  _flushWrite() {
+    if (!this._writeTimer) return;
+    clearTimeout(this._writeTimer);
+    this._writeTimer = null;
+    pendingViewHistoryWrites.delete(this);
+    this._writeToStorage();
+  }
   async _readFromStorage() {
     return localStorage.getItem("pdfjs.history");
   }
   async set(name, val) {
     await this._initializedPromise;
     this.file[name] = val;
-    return this._writeToStorage();
+    this._scheduleWrite();
   }
   setSync(name, val) {
     // Discrete one-shot settings (unlike scrolling, which re-fires constantly)
@@ -17701,7 +17785,9 @@ class ViewHistory {
       return false;
     }
     this.file[name] = val;
-    this._writeToStorage();
+    // A pending coalesced write is folded into this one.
+    if (this._writeTimer) this._flushWrite();
+    else this._writeToStorage();
     return true;
   }
   async setMultiple(properties) {
@@ -17709,7 +17795,7 @@ class ViewHistory {
     for (const name in properties) {
       this.file[name] = properties[name];
     }
-    return this._writeToStorage();
+    this._scheduleWrite();
   }
   async get(name, defaultValue) {
     await this._initializedPromise;
@@ -18779,6 +18865,9 @@ const PDFViewerApplication = {
       this.pdfDocumentProperties?.setDocument(null);
     }
     this.pdfLinkService.externalLinkEnabled = true;
+    // The next document's ViewHistory reads the store from localStorage as it is
+    // constructed, so a coalesced write still pending here must land first.
+    this.store?._flushWrite();
     this.store = null;
     this.isInitialViewSet = false;
     this.url = "";
@@ -19095,6 +19184,14 @@ const PDFViewerApplication = {
             outline,
             pdfDocument
           });
+          // [KleiKodesh] One-shot jump to the host's outline target (first document only).
+          if (khInitialOutlineTarget && !this._khOutlineTargetDone) {
+            this._khOutlineTargetDone = true;
+            const item = outline ? khFindOutlineItem(outline, khInitialOutlineTarget) : null;
+            if (item) {
+              this.pdfLinkService.goToDestination(item.dest);
+            }
+          }
         });
       }
       if (this.pdfAttachmentViewer) {

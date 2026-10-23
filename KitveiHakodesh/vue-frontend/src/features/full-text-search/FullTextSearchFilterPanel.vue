@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { computed, ref, shallowRef, markRaw, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import {
   IconMinimize20Regular,
@@ -39,7 +39,7 @@ const booksStore = useBooksDataStore()
 const bookListRef = ref<InstanceType<typeof FullTextSearchFilterBookList> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const inputText = ref('')
-const filteredBooks = ref<BookRow[]>([])
+const filteredBooks = shallowRef<BookRow[]>(markRaw([]))
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
 
@@ -173,9 +173,9 @@ function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[]
 
 const runSearch = useDebounceFn(() => {
   const books = computeFilteredBooks(props.atFilters, inputText.value)
-  filteredBooks.value = props.hasSearched
+  filteredBooks.value = markRaw(props.hasSearched
     ? books.filter((b) => (props.resultCounts.get(b.id) ?? 0) > 0)
-    : books
+    : books)
 }, 150)
 
 watch(
@@ -233,18 +233,18 @@ function onInputKeydown(e: KeyboardEvent) {
           <span class="check-mark">✓</span>
           <span class="dash-mark">–</span>
         </span>
-        <span class="panel-title">בחר הכל</span>
+        <span class="panel-title">{{ $t('fullTextSearch.filter.selectAll') }}</span>
       </div>
       <button
         v-if="!isSearching && !booksStore.loading"
         class="expand-all-btn c-pointer hover-bg"
-        :title="allExpanded ? 'כווץ הכל' : 'הרחב הכל'"
+        :title="allExpanded ? $t('fullTextSearch.filter.collapseAll') : $t('fullTextSearch.filter.expandAll')"
         @click.stop="toggleExpandAll"
       >
         <IconChevronDoubleUp20Regular v-if="allExpanded" />
         <IconChevronDoubleDown20Regular v-else />
       </button>
-      <button class="close-btn c-pointer hover-bg" title="סגור" @click.stop="emit('close')">
+      <button class="close-btn c-pointer hover-bg" :title="$t('fullTextSearch.close')" @click.stop="emit('close')">
         <IconMinimize20Regular />
       </button>
     </div>
@@ -304,14 +304,9 @@ function onInputKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-/* A menu panel, not a wall: the app's dropdown surface (--bg-secondary + 1px border +
-   4px radius + drop shadow, per AppTitleBarNavDropdown) inset from the edges of the area
-   it fills, so it reads as a sheet floating over the results rather than a second column
-   fused to them. It still fills the full height of that area - the inset is a margin, and
-   the list inside is what grows. */
 .panel {
   position: absolute;
-  right: 0;
+  inset-inline-start: 0;
   top: 0;
   bottom: 0;
   z-index: 10;
@@ -319,13 +314,11 @@ function onInputKeydown(e: KeyboardEvent) {
   flex-direction: column;
   min-width: 180px;
   max-width: 300px;
-  margin: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  /* The rounded corners have to clip the header band and the scrolling list, or both
-     square themselves off against the radius. */
+  /* Same surface as the book-view side panel: flush, full height, toolbar color,
+     one edge line. */
+  background: var(--bg-toolbar);
+  --tree-bg: var(--bg-toolbar);
+  border-inline-end: 1px solid var(--border-color);
   overflow: hidden;
 }
 /* Menu-height rows throughout (32px, matching the nav dropdown) - the old 26px band was
@@ -465,7 +458,6 @@ function onInputKeydown(e: KeyboardEvent) {
   outline: none;
   font-size: 12px;
   color: var(--text-primary);
-  direction: rtl;
   padding: 0;
 }
 .search-input::placeholder {

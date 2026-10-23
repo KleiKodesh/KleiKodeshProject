@@ -5,15 +5,25 @@
  * one connection (`ftsSearchStream`) until the search finishes. In dev that connection is the
  * service's loopback HTTP host; in the hosted app it is the C# relay in front of the service's
  * named pipe. Aborting the stream is the cancel signal, and the service itself supersedes the
- * previous search when a new one starts. Hits arrive fully enriched (bookId + tocText).
+ * previous search when a new one starts. Hits are NUMBERS ONLY (see FullTextSearchResult):
+ * book id + TOC entry id, a snippet descriptor, and ids into the search's matched-term
+ * table, which streams once per search (`newTerms` per frame) and is resolved here
+ * (matchedTermsOf, from the term id of each snippet mark). Titles, TOC paths and snippet
+ * HTML are built per rendered row.
  */
-import { ref, shallowRef, watch } from 'vue'
+import { t } from '@/i18n'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { serviceStream } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
+import { bookTitleOf } from './fullTextSearchReferences'
+import { seedLineTexts } from './fullTextSearchSnippets'
+import { matchedTermIdsOf } from './fullTextSearchTypes'
+import { WORD_OPTIONS, applyAllWords } from './queryWordSyntax'
+import type { AllWords, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -34,15 +44,52 @@ function _flushDelayFor(count: number): number {
 interface SearchStreamChunk {
   ready: boolean
   results: FullTextSearchResult[]
+  /** Matched-term strings first seen in this frame, in id order — appended to the
+   *  search's term table, which the hits' mark term ids index into. */
+  newTerms?: string[]
+  /** Snippet line texts (line id -> text) for the search's first hits, riding on the frame
+   *  (not on the hits): seeded into the snippet cache so the first screen paints without a
+   *  fetch. Later frames carry none. Int map keys arrive as strings from MessagePack. */
+  lineTexts?: Record<string, string>
   done: boolean
   error?: string
+  /** What the engine is doing right now (stable ASCII key). A frame of its own before the
+   *  first results frame; folded onto results frames after it. */
+  stage?: string
+}
+
+/** Short labels for the service's search stage keys. Unknown keys show nothing. */
+export const SEARCH_STAGE_LABELS: Record<string, string> = {
+  rewrite: t('fullTextSearch.stage.rewrite'),
+  parse: t('fullTextSearch.stage.parse'),
+  expand: t('fullTextSearch.stage.expand'),
+  lookup: t('fullTextSearch.stage.lookup'),
+  fetch: t('fullTextSearch.stage.fetch'),
+  snippets: t('fullTextSearch.stage.snippets'),
+  enrich: t('fullTextSearch.stage.enrich'),
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered } = storeToRefs(settings)
+
+  // Each option's persisted "all words" setting, keyed by option.
+  const ALL_WORDS_SETTINGS = {
+    wildcardPrefix: 'searchWildcardPrefix', wildcardSuffix: 'searchWildcardSuffix',
+    grammarPrefix: 'searchGrammarPrefix', grammarSuffix: 'searchGrammarSuffix',
+    fuzzy: 'searchFuzzy', ketiv: 'searchExpandKetiv',
+    inflections: 'searchExpandInflections', synonyms: 'searchExpandSynonyms',
+  } as const satisfies Record<WordOption, keyof typeof settings>
+  const allWords = computed<AllWords>(() => {
+    const out = {} as AllWords
+    for (const option of WORD_OPTIONS) out[option] = settings[ALL_WORDS_SETTINGS[option]]
+    return out
+  })
+  function setAllWords(option: WordOption, on: boolean) {
+    settings[ALL_WORDS_SETTINGS[option]] = on
+  }
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
@@ -50,16 +97,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
   const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
+  // Every option reaches the service as query syntax: the "all words" settings are written
+  // onto each word that lacks them (per-word choices are already in the query). Pipes are
+  // padded first, so "a|b" gets them on both words.
   function _buildQueryToSend(normalizedQuery: string): string {
-    if (!settings.searchGrammarWrap) return normalizedQuery
-    return normalizedQuery
-      .split(/\s+/)
-      .map((word) => {
-        if (!word) return word
-        if (/[*~|%]/.test(word)) return word  // already has special syntax
-        return `%${word}%`
-      })
-      .join(' ')
+    return applyAllWords(normalizedQuery.replace(/\|/g, ' | '), allWords.value)
   }
 
   function _buildCacheKey(normalizedQuery: string): string {
@@ -68,19 +110,73 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       queryToSend,
       `d${settings.searchMaxWordDistance}`,
       settings.searchRequireOrdered ? 'ord' : '',
-      settings.searchExpandKetiv ? 'ktv' : '',
-      settings.searchExpandRelated ? 'rel' : '',
       `ctx${settings.searchContextMarginWords}`,
       // Results stream in catalog order since the FTS5 index; entries cached before that are
       // in line-id order (and from the old index), so they must not match.
       'catalog',
+      // Hits are numbers only (snippet descriptor, tocEntryId) since the on-demand
+      // snippets/references. Entries cached in the earlier shapes (snippet HTML, or the
+      // descriptor with per-hit strings) must not match — they are discarded by LRU
+      // eviction, never migrated.
+      'num',
+      // Marks are (start, length, termId) triples and the hit's matched term ids are read
+      // off them (no per-hit termIds field any more; stride-2 entries would render wrong).
+      'mk3t',
     ]
       .filter(Boolean)
       .join('|')
   }
 
   const results = shallowRef<FullTextSearchResult[]>([])
+  /** The current result set's matched-term table (the hits' mark term ids index into it). */
+  let searchTerms: string[] = []
+  /** The concrete index terms that matched a hit — what the book view highlights. */
+  function matchedTermsOf(hit: FullTextSearchResult): string[] {
+    const out: string[] = []
+    for (const id of matchedTermIdsOf(hit)) {
+      const term = searchTerms[id]
+      if (term !== undefined) out.push(term)
+    }
+    return out
+  }
   const isSearching = ref(false)
+  /** Live stage key of the running search; null when idle, done, failed or cancelled. */
+  const currentStage = ref<string | null>(null)
+  /** Stage label shown only once a stage has lasted 1s; '' until then. */
+  const settledStageLabel = ref('')
+  let stageTimer: ReturnType<typeof setTimeout> | null = null
+  function clearStageLabel() {
+    if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
+    settledStageLabel.value = ''
+    shownStage = null
+    resultsArrived = false
+  }
+  /** Stage key whose label is on screen; when it ends, the next stage shows at once. */
+  let shownStage: string | null = null
+  /** Once hits stream in, the label locks on the results label for the rest of the search. */
+  let resultsArrived = false
+  function enterStage(stage: string) {
+    if (resultsArrived) return
+    const shownJustEnded = shownStage !== null && shownStage === currentStage.value && stage !== shownStage
+    currentStage.value = stage
+    if (stageTimer) clearTimeout(stageTimer)
+    shownStage = null
+    // Only the stage right after a slow (1s-settled) one shows at once; it does not chain.
+    if (shownJustEnded && SEARCH_STAGE_LABELS[stage]) settledStageLabel.value = SEARCH_STAGE_LABELS[stage]
+    stageTimer = setTimeout(() => {
+      stageTimer = null
+      if (currentStage.value === stage && SEARCH_STAGE_LABELS[stage]) { shownStage = stage; settledStageLabel.value = SEARCH_STAGE_LABELS[stage] }
+    }, 1000)
+  }
+  function enterResultsStage() {
+    if (resultsArrived) return
+    resultsArrived = true
+    if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
+    settledStageLabel.value = SEARCH_STAGE_LABELS.fetch ?? ''
+  }
+  onScopeDispose(clearStageLabel)
+  /** Text for the stage indicator: generic "searching" until a stage settles. */
+  const stageLabel = computed(() => isSearching.value ? (settledStageLabel.value || t('fullTextSearch.stage.searching')) : '')
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
@@ -126,7 +222,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     } else if (sortOrder.value === 'bookName') {
       // Alphabetical by book title (Hebrew collation), then streamed order so lines within the
       // same book stay in document order.
-      sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || byStream(a, b))
+      sorted.sort((a, b) => bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') || byStream(a, b))
     } else if (sortOrder.value === 'authorName') {
       // Alphabetical by author name (Hebrew collation), then book name, then streamed order.
       // Authorless books (empty author string) sort last. book.authors is the comma-joined
@@ -137,7 +233,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         const aa = authorOf(a), ab = authorOf(b)
         if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
         return aa.localeCompare(ab, 'he') ||
-          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
           byStream(a, b)
       })
     } else if (sortOrder.value === 'chronological') {
@@ -155,11 +251,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         let key = keyCache.get(r.bookId)
         if (!key) {
           const book = bookMap.get(r.bookId)
-          // r.bookTitle backs up book.title so the canonical-work lookup still resolves for
-          // a hit whose book is missing from allBooksMap.
-          const { year, precision } = chronologicalKey(
-            book ? { ...book, title: book.title ?? r.bookTitle } : { title: r.bookTitle },
-          )
+          const { year, precision } = chronologicalKey(book ?? { title: '' })
           // Finite fallback, not Infinity — the comparator subtracts these and
           // Infinity-Infinity is NaN (see YEAR_UNKNOWN in chronology/index.ts).
           key = { year, precision, treeOrder: book?.treeOrder ?? Number.MAX_SAFE_INTEGER }
@@ -174,7 +266,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           keyA.year - keyB.year ||
           keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
-          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
           byStream(a, b)
         )
       })
@@ -201,6 +293,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       _streamAbort = null
     }
     isSearching.value = false
+    currentStage.value = null
+    clearStageLabel()
   }
 
   async function executeSearch(q: string) {
@@ -211,6 +305,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     hasSearched.value = true
     results.value = []
     streamedOrder = []
+    searchTerms = []
     sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
     executedQuery.value = q
@@ -227,13 +322,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     _streamAbort = abort
     try {
       const acc: FullTextSearchResult[] = []
+      const terms = searchTerms
       const stream = serviceStream<SearchStreamChunk>('ftsSearchStream', {
         query: _buildQueryToSend(normalizedQuery),
         maxWordDistance: settings.searchMaxWordDistance,
         requireOrdered: settings.searchRequireOrdered,
         contextWords: settings.searchContextMarginWords,
-        expandKetiv: settings.searchExpandKetiv,
-        expandRelated: settings.searchExpandRelated,
       }, abort.signal)
 
       // Flush the accumulator into the reactive ref on the adaptive cadence
@@ -253,16 +347,20 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
       for await (const chunk of stream) {
         if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+        if (chunk.stage) enterStage(chunk.stage)
+        if (chunk.newTerms?.length) for (const t of chunk.newTerms) terms.push(t)
+        seedLineTexts(chunk.lineTexts) // before the hits reach the list: its first render finds them
         if (chunk.ready === false) {
           searchError.value = 'indexNotReady'
           return
         }
         const hits = chunk.results ?? []
         if (hits.length) {
+          enterResultsStage()
           for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
           dirty = true
           if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
-          if (cacheable) await cache.appendBatch(cacheKey, hits).catch(() => {/* best-effort */})
+          if (cacheable) cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
         }
         if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
         if (chunk.error) {
@@ -278,7 +376,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           // Done here rather than in `finally` so it runs only on genuine completion,
           // not when the loop exits early via supersession/error.
           await finalizeSort()
-          if (cacheable) await cache.markComplete(cacheKey, false).catch(() => {/* non-fatal */})
+          if (cacheable) await cache.markComplete(cacheKey, false, terms).catch(() => {/* non-fatal */})
           break
         }
       }
@@ -294,13 +392,18 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       }
     } finally {
       if (_streamAbort === abort) _streamAbort = null
-      if (executedQuery.value === q) isSearching.value = false
+      if (executedQuery.value === q) {
+        isSearching.value = false
+        currentStage.value = null
+        clearStageLabel()
+      }
     }
   }
 
   function clearSearch() {
     results.value = []
     streamedOrder = []
+    searchTerms = []
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
@@ -328,6 +431,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
     results.value = cached.results
     streamedOrder = cached.results   // cached in the order it streamed
+    searchTerms = cached.terms
     executedQuery.value = q
     hasSearched.value = true
     return true
@@ -335,15 +439,17 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   return {
     results,
+    matchedTermsOf,
     isSearching,
+    currentStage,
+    stageLabel,
     hasSearched,
     executedQuery,
     searchError,
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
-    expandKetiv: searchExpandKetiv,
-    expandRelated: searchExpandRelated,
-    grammarWrap: searchGrammarWrap,
+    allWords,
+    setAllWords,
     sortOrder,
     executeSearch,
     cancelSearch,

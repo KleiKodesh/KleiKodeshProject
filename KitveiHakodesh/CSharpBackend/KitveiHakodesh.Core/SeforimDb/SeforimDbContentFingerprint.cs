@@ -35,6 +35,14 @@ namespace KitveiHakodesh.Core.SeforimDb
     /// Cost is index seeks and a header read. COUNT(*) over `line` is a multi-second full scan
     /// on a real corpus and is deliberately NOT part of the fingerprint.
     /// </summary>
+    /// <summary>The seforim DB exists but its content could not be probed right now, so no
+    /// fingerprint can be computed. Transient by nature; never evidence of a changed DB.</summary>
+    public sealed class SeforimDbUnreadableException : IOException
+    {
+        public SeforimDbUnreadableException(string databasePath)
+            : base("seforim DB could not be read right now (locked or busy): " + databasePath) { }
+    }
+
     public static class SeforimDbContentFingerprint
     {
         /// <summary>Fingerprint format version. Bump when the SHAPE changes, so an older value
@@ -64,8 +72,51 @@ namespace KitveiHakodesh.Core.SeforimDb
             string? content = TryReadContent(databasePath);
             if (content != null) return head + content + ReleaseStamp(databasePath);
 
-            try { return head + "len=" + new FileInfo(databasePath).Length; }
-            catch (Exception) { return head + "unreadable"; }
+            // The file is there but could not be read right now (SQLITE_BUSY/locked by another
+            // process, a drive still waking up, AV holding it). This used to fall back to
+            // "len=<size>" — a value that can never equal a recorded content stamp, so one
+            // transient failure read as "different database" and WIPED a good index. An
+            // exception instead: callers comparing stamps treat it as "cannot tell, keep what
+            // is there and check again later".
+            throw new SeforimDbUnreadableException(databasePath);
+        }
+
+        /// <summary>
+        /// Why <paramref name="recorded"/> (what an index was built from) differs from
+        /// <paramref name="current"/>, in words for a log line: the index format, the database
+        /// path, or which parts of the database's content. Null when they are equal.
+        /// </summary>
+        public static string? DescribeChange(string? recorded, string current)
+        {
+            if (string.Equals(recorded, current, StringComparison.OrdinalIgnoreCase)) return null;
+            if (recorded == null) return "the existing index has no provenance stamp";
+            if (IsLegacy(recorded)) return "the existing index has a pre-" + FormatTag + " stamp";
+
+            string[] was = recorded.Split('|'), now = current.Split('|');
+            int wasTag = Array.IndexOf(was, FormatTag), nowTag = Array.IndexOf(now, FormatTag);
+            string wasPrefix = string.Join("|", was, 0, Math.Max(wasTag, 0));
+            string nowPrefix = string.Join("|", now, 0, Math.Max(nowTag, 0));
+            if (wasTag < 0 || nowTag < 0 || wasPrefix != nowPrefix)
+                return $"index format changed ({wasPrefix} -> {nowPrefix})";
+
+            string wasPath = wasTag + 1 < was.Length ? was[wasTag + 1] : "";
+            string nowPath = nowTag + 1 < now.Length ? now[nowTag + 1] : "";
+            if (!string.Equals(wasPath, nowPath, StringComparison.OrdinalIgnoreCase))
+                return $"seforim DB path changed ({wasPath} -> {nowPath})";
+
+            // The rest are key=value parts (schema=, line=, book=, tail=, dbv=, release=) or "missing".
+            var changed = new System.Collections.Generic.List<string>();
+            var wasParts = new System.Collections.Generic.HashSet<string>(was, StringComparer.OrdinalIgnoreCase);
+            var nowParts = new System.Collections.Generic.HashSet<string>(now, StringComparer.OrdinalIgnoreCase);
+            foreach (string part in now)
+                if (!wasParts.Contains(part)) changed.Add(KeyOf(part));
+            foreach (string part in was)
+                if (!nowParts.Contains(part) && !changed.Contains(KeyOf(part))) changed.Add(KeyOf(part));
+            return changed.Count == 0
+                ? "seforim DB content changed"
+                : "seforim DB content changed (" + string.Join(", ", changed) + ")";
+
+            static string KeyOf(string part) { int eq = part.IndexOf('='); return eq < 0 ? part : part.Substring(0, eq); }
         }
 
         /// <summary>
@@ -99,8 +150,27 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             var sb = new System.Text.StringBuilder(combined);
             foreach (var library in ordered)
-                sb.Append("||lib").Append(library.Index).Append('=').Append(Compute(library.Path));
+                sb.Append("||lib").Append(library.Index).Append('=').Append(ComputeAdditional(library.Path));
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// An ADDITIONAL library's part of the combined stamp. Unlike the primary database, a
+        /// library that cannot be read right now (corrupt, not a database, locked) must never
+        /// make the whole stamp - and with it the primary's index - unavailable: it contributes
+        /// a stable "unreadable" value keyed on its size instead. That value differs from any
+        /// content stamp, so the index is rebuilt when the library becomes readable (or changes),
+        /// and the primary's own unreadability still surfaces from <see cref="Compute"/>.
+        /// </summary>
+        private static string ComputeAdditional(string libraryPath)
+        {
+            try { return Compute(libraryPath); }
+            catch (SeforimDbUnreadableException)
+            {
+                long length = -1;
+                try { length = new FileInfo(libraryPath).Length; } catch { /* size unknown: still stable */ }
+                return "unreadable|len=" + length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         /// <summary>

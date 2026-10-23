@@ -2,6 +2,7 @@
 import { ref, nextTick } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 
 export interface BreadcrumbItem {
   id: number
@@ -28,7 +29,10 @@ const dropdownLeft = ref(0)
 const { justClosed } = useDropdownClose(wrapperRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
   ignore: [dropdownRef],
+  // The wrapper sits inline in the breadcrumb; only the popup is fitted.
+  fitToViewport: false,
 })
+useDropdownViewportFit(dropdownRef)
 
 function onToggle(event: MouseEvent) {
   event.stopPropagation()
@@ -62,7 +66,7 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
       ref="toggleButtonRef"
       class="toc-chevron-button"
       :class="{ open: isOpen }"
-      title="פתח תפריט"
+      :title="$t('layout.openMenu')"
       @click="onToggle"
     >
       <IconChevronDown16Regular />
@@ -169,7 +173,6 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
   padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .toc-chevron-dropdown-item {
@@ -177,7 +180,7 @@ function onSelectItem(item: BreadcrumbItem, event: MouseEvent) {
   width: 100%;
   height: 26px;
   padding: 0 10px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

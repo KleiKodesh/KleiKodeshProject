@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { t } from '@/i18n'
+import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useNow, useWindowSize } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
@@ -12,8 +13,11 @@ import { useNextZman } from './useNextZman'
 import { useHomeDateBarFit } from './useHomeDateBarFit'
 import { computeBarPopupAnchor, type BarPopupAnchor } from './homeBarPopupAnchor'
 import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
+// Lazy — the month grid pulls in @hebcal/core, kept out of the home bundle.
+const HomeCalendarPopup = defineAsyncComponent(() => import('./HomeCalendarPopup.vue'))
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
+import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 
 const paneNavigation = usePaneNavigation()
 const { showClock } = storeToRefs(useSettingsStore())
@@ -58,12 +62,12 @@ watch(() => dateReference.value.toDateString(), () => loadDateInfo(dateReference
 // "בעוד ..." phrasing: minutes only under an hour, otherwise hours (+ minutes).
 const nextZmanCountdown = computed(() => {
   const total = nextZman.value?.minutesUntil ?? 0
-  if (total < 60) return `בעוד ${total} דקות`
+  if (total < 60) return t('home.dateBar.inMinutes', { n: total })
   const hours = Math.floor(total / 60)
   const minutes = total % 60
-  const hoursText = hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`
-  if (minutes === 0) return `בעוד ${hoursText}`
-  return `בעוד ${hoursText} ו-${minutes} דקות`
+  const hoursText = hours === 1 ? t('home.dateBar.oneHour') : hours === 2 ? t('home.dateBar.twoHours') : t('home.dateBar.nHours', { n: hours })
+  if (minutes === 0) return t('home.dateBar.inHours', { hours: hoursText })
+  return t('home.dateBar.inHoursMinutes', { hours: hoursText, n: minutes })
 })
 
 const dailyLearningEntries = useHomeDailyLearningEntries()
@@ -129,7 +133,45 @@ function toggleZmanPopup() {
   }
 }
 
+// ── Calendar popup ────────────────────────────────────────────────────────────
+
+const isCalendarOpen = ref(false)
+const calendarBarItemRef = ref<HTMLElement | null>(null)
+const calendarButtonRef = ref<HTMLElement | null>(null)
+const calendarPopupRef = ref<HTMLElement | null>(null)
+const calendarAnchor = ref<BarPopupAnchor>({ left: 0, bottom: 0, maxHeight: 0 })
+const calendarPopupStyle = computed(() => ({
+  left: `${calendarAnchor.value.left}px`,
+  bottom: `${calendarAnchor.value.bottom}px`,
+  maxHeight: `${calendarAnchor.value.maxHeight}px`,
+}))
+
+function computeCalendarAnchor() {
+  const button = calendarButtonRef.value
+  if (!button) return
+  calendarAnchor.value = computeBarPopupAnchor(button, calendarPopupRef.value?.offsetWidth || 440)
+}
+
+const calendarCloser = useDropdownClose(
+  calendarBarItemRef,
+  () => {
+    isCalendarOpen.value = false
+  },
+  { ignore: [calendarPopupRef] },
+)
+
+function toggleCalendarPopup() {
+  if (calendarCloser.justClosed.value) return
+  const opening = !isCalendarOpen.value
+  isCalendarOpen.value = opening
+  if (opening) {
+    computeCalendarAnchor()
+    nextTick(computeCalendarAnchor)
+  }
+}
+
 function openHebrewCalendar() {
+  isCalendarOpen.value = false
   paneNavigation.navigateToDestination('/hebrew-calendar')
 }
 
@@ -213,7 +255,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
             `zman--${nextZman.urgency}`,
             { on: isZmanPopupOpen, 'zman--flash': nextZman.flash },
           ]"
-          :title="`${nextZmanCountdown} · לחץ לכל הזמנים`"
+          :title="$t('home.dateBar.nextZmanTitle', { countdown: nextZmanCountdown })"
           @click="toggleZmanPopup"
         >
           <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
@@ -221,14 +263,32 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
       </div>
       <Teleport to="body">
         <div v-if="isZmanPopupOpen" class="zman-popup-anchor" :style="zmanPopupStyle">
-          <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="zmanCity.name" />
+          <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="cityDisplayName(zmanCity)" />
         </div>
       </Teleport>
       <span class="bar-sep">·</span>
     </template>
-    <button class="bar-item bar-item--btn" @click="openHebrewCalendar">
-      {{ dateInfo.hebrewDate }}
-    </button>
+    <div ref="calendarBarItemRef" class="calendar-wrap">
+      <button
+        ref="calendarButtonRef"
+        class="bar-item bar-item--btn calendar-btn"
+        :class="{ on: isCalendarOpen }"
+        :title="$t('home.dateBar.calendarTitle')"
+        @click="toggleCalendarPopup"
+      >
+        {{ dateInfo.hebrewDate }}
+      </button>
+    </div>
+    <Teleport to="body">
+      <div
+        v-if="isCalendarOpen"
+        ref="calendarPopupRef"
+        class="calendar-popup-anchor"
+        :style="calendarPopupStyle"
+      >
+        <HomeCalendarPopup @open-full="openHebrewCalendar" />
+      </div>
+    </Teleport>
     <template v-if="dailyLearningEntries.length">
       <span class="bar-sep">·</span>
       <div ref="learningBarItemRef" class="learning-wrap">
@@ -236,9 +296,10 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           ref="learningButtonRef"
           class="bar-item bar-item--btn learning-btn"
           :class="{ on: isLearningOpen }"
+          :title="$t('home.dateBar.dailyLearningTitle')"
           @click="toggleLearningMenu"
         >
-          לימוד יומי
+          {{ $t('home.dateBar.dailyLearning') }}
         </button>
       </div>
       <Teleport to="body">
@@ -247,7 +308,6 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           ref="learningMenuRef"
           class="learning-menu"
           :style="learningMenuStyle"
-          dir="rtl"
           tabindex="-1"
           @keydown="onLearningMenuKeydown"
         >
@@ -261,7 +321,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
             }"
             :disabled="!entry.open"
             :data-nav-item="entry.open ? '' : undefined"
-            :title="entry.open ? undefined : 'הספר אינו בספרייה'"
+            :title="entry.open ? undefined : $t('home.dateBar.bookNotInLibrary')"
             tabindex="-1"
             @click="openLearningItem(entry, wantsNewTab($event))"
             @mouseenter="entry.open && (learningFocusedIndex = navigableLearningEntries.indexOf(entry))"
@@ -417,8 +477,19 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 .learning-menu-path {
   font-weight: 600;
 }
-.zman-popup-anchor {
+.zman-popup-anchor,
+.calendar-popup-anchor {
   position: fixed;
   z-index: 200;
+}
+.calendar-popup-anchor {
+  display: flex;
+}
+.calendar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.calendar-btn.on {
+  color: var(--accent-color);
 }
 </style>

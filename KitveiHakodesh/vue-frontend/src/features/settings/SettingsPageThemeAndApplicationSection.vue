@@ -7,6 +7,11 @@ import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
+import ThemeBackgroundTintSlider from './ThemeBackgroundTintSlider.vue'
+import { useI18n } from 'vue-i18n'
+import UiLanguageToggle from './UiLanguageToggle.vue'
+
+const { t } = useI18n()
 
 const settings = useSettingsStore()
 const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
@@ -24,17 +29,17 @@ function applyPdfPageFilters(value: boolean) {
   if (value !== pdfPageFilters.value) settings.togglePdfPageFilters()
 }
 
-const TITLE_BAR_BUTTONS = [
-  { id: 'hamburger',      label: 'תפריט' },
-  { id: 'theme-toggle',   label: 'ערכת נושא' },
-  { id: 'toolbar-toggle', label: 'סרגל כלים' },
-  { id: 'split-view',     label: 'תצוגה מפוצלת' },
+const TITLE_BAR_BUTTONS = computed(() => [
+  { id: 'hamburger',      label: t('settings.titleBarButton.menu') },
+  { id: 'theme-toggle',   label: t('settings.titleBarButton.theme') },
+  { id: 'toolbar-toggle', label: t('settings.titleBarButton.bookToolbar') },
+  { id: 'split-view',     label: t('settings.titleBarButton.splitView') },
   { id: 'ocr',            label: 'OCR' },
-  { id: 'home',           label: 'בית' },
-  { id: 'workspaces',     label: 'סביבות עבודה' },
-  { id: 'prev-tab',       label: 'חזור' },
-  { id: 'next-tab',       label: 'קדימה' },
-]
+  { id: 'home',           label: t('settings.titleBarButton.home') },
+  { id: 'workspaces',     label: t('settings.titleBarButton.workspaces') },
+  { id: 'prev-tab',       label: t('settings.titleBarButton.back') },
+  { id: 'next-tab',       label: t('settings.titleBarButton.forward') },
+])
 
 function isTitleBarButtonEnabled(buttonId: string): boolean {
   return !titleBarHiddenButtons.value.includes(buttonId)
@@ -51,94 +56,100 @@ function toggleTitleBarButton(buttonId: string) {
 
 <template>
   <!-- ── ערכת נושא ── -->
-  <div data-section="section-theme" data-section-label="ערכת נושא">
-    <div id="section-theme" class="section-label">ערכת נושא</div>
+  <div data-section="section-theme" :data-section-label="$t('settings.theme.section')">
+    <div id="section-theme" class="section-label">{{ $t('settings.theme.section') }}</div>
 
-    <SettingRow id="nav-theme-picker" data-nav-label="ערכת נושא" label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
+    <SettingRow id="nav-theme-picker" :data-nav-label="$t('settings.theme.section')" :label="$t('settings.theme.section')" :hint="$t('settings.theme.pickerHint')">
       <ThemePicker />
     </SettingRow>
 
-    <SettingRow id="nav-dark-mode" data-nav-label="מצב כהה" label="מצב כהה" hint="החלף בין מצב בהיר לכהה">
+    <ThemeBackgroundTintSlider id="nav-background-tint" :data-nav-label="$t('settings.theme.tintNav')" />
+
+    <SettingRow id="nav-dark-mode" :data-nav-label="$t('settings.theme.darkMode')" :label="$t('settings.theme.darkMode')" :hint="$t('settings.theme.darkModeHint')">
       <ToggleGroup
         :model-value="isDarkMode"
         :options="[
-          { label: 'בהיר', value: false },
-          { label: 'כהה', value: true },
+          { label: $t('settings.theme.light'), value: false },
+          { label: $t('settings.theme.dark'), value: true },
         ]"
         @update:model-value="applyDarkMode"
       />
     </SettingRow>
 
-    <SettingRow id="nav-pdf-filters" data-nav-label="החל על דפי PDF" label="החל ערכת נושא על דפי PDF" hint="מחיל את צבעי ערכת הנושא על תוכן דפי PDF">
+    <SettingRow id="nav-pdf-filters" :data-nav-label="$t('settings.theme.pdfNav')" :label="$t('settings.theme.pdf')" :hint="$t('settings.theme.pdfHint')">
       <ToggleGroup
         :model-value="pdfPageFilters"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
         @update:model-value="applyPdfPageFilters"
       />
     </SettingRow>
 
-    <SettingRow id="nav-scrollbars-hidden" data-nav-label="הסתר פסי גלילה" label="הסתר פסי גלילה" hint="פסי הגלילה יוסתרו לחלוטין ויופיעו רק בזמן גלילה (Ctrl+Shift+H)">
+    <SettingRow id="nav-scrollbars-hidden" :data-nav-label="$t('settings.theme.hideScrollbars')" :label="$t('settings.theme.hideScrollbars')" :hint="$t('settings.theme.hideScrollbarsHint')">
       <ToggleGroup
         v-model="scrollbarsHidden"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
 
     <SliderSetting
       id="nav-app-zoom"
-      data-nav-label="גודל תצוגה"
-      label="גודל תצוגה"
+      :data-nav-label="$t('settings.theme.zoom')"
+      :label="$t('settings.theme.zoom')"
       v-model="appZoom"
       :min="0.5"
       :max="1.5"
       :step="0.05"
-      hint="משנה את גודל כל ממשק האפליקציה"
+      :hint="$t('settings.theme.zoomHint')"
     />
   </div>
 
   <!-- ── אפליקציה ── -->
-  <div data-section="section-app" data-section-label="אפליקציה">
-    <div id="section-app" class="section-label">אפליקציה</div>
+  <div data-section="section-app" :data-section-label="$t('settings.app.section')">
+    <div id="section-app" class="section-label">{{ $t('settings.app.section') }}</div>
 
-    <SettingRow id="nav-new-tab-page" data-nav-label="פתח טאב חדש אל" label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
+    <SettingRow id="nav-ui-language" :data-nav-label="$t('settings.app.uiLanguage')" :label="$t('settings.app.uiLanguage')" :hint="$t('settings.app.uiLanguageHint')">
+      <UiLanguageToggle />
+    </SettingRow>
+
+    <SettingRow id="nav-new-tab-page" :data-nav-label="$t('settings.app.newTab')" :label="$t('settings.app.newTab')" :hint="$t('settings.app.newTabHint')" wrap>
       <ToggleGroup
         v-model="newTabPage"
         :options="[
-          { label: 'דף הבית', value: 'homepage' },
-          { label: 'פתיחת ספר', value: 'openfile' },
-          { label: 'היברו בוקס', value: 'hebrewbooks' },
-          { label: 'חיפוש', value: 'search' },
+          { label: $t('settings.app.newTabHome'), value: 'homepage' },
+          { label: $t('settings.app.newTabOpenFile'), value: 'openfile' },
+          { label: $t('settings.app.newTabHebrewBooks'), value: 'hebrewbooks' },
+          { label: $t('settings.app.newTabSearch'), value: 'search' },
         ]"
       />
     </SettingRow>
 
-    <SettingRow id="nav-show-recently-opened" data-nav-label="הצג פתוחים לאחרונה" label="הצג מסמכים שנפתחו לאחרונה בדף הבית" hint="מציג אריחי קיצור דרך לקבצים שנפתחו לאחרונה בתחתית דף הבית">
+    <SettingRow id="nav-show-recently-opened" :data-nav-label="$t('settings.app.recentNav')" :label="$t('settings.app.recent')" :hint="$t('settings.app.recentHint')">
       <ToggleGroup
         v-model="showRecentlyOpened"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
 
-    <SettingRow id="nav-show-frequent-folders" data-nav-label="תיקיות נפוצות" label="הצג תיקיות נפוצות בדף הבית" hint="התיקיות שמהן נפתחים הכי הרבה קבצים, לחיצה פותחת בחירת קובץ בתיקייה">
+    <SettingRow id="nav-show-frequent-folders" :data-nav-label="$t('settings.app.frequentNav')" :label="$t('settings.app.frequent')" :hint="$t('settings.app.frequentHint')">
       <ToggleGroup
         v-model="showFrequentFolders"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
 
-    <SettingRow id="nav-title-bar-buttons" data-nav-label="כפתורים בסרגל הכלים" label="כפתורים בסרגל הכלים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+    <SettingRow id="nav-title-bar-buttons" :data-nav-label="$t('settings.app.titleBarButtons')" :label="$t('settings.app.titleBarButtons')" :hint="$t('settings.app.titleBarButtonsHint')" wrap>
       <div class="title-bar-chips">
         <button
           v-for="button in TITLE_BAR_BUTTONS"

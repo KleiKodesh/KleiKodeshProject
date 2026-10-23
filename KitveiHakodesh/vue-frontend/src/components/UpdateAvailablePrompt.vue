@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
+import MessageBanner from './MessageBanner.vue'
 import {
   UPDATE_PROMPT_TITLE,
   updatePromptBody,
@@ -10,9 +11,10 @@ import {
 } from './updateAvailableTexts'
 
 // Asks the user before an update is installed. The KitveiHakodesh service checks for updates
-// once a week and downloads them in the background, but never launches the installer on its
-// own: this prompt asks the service whether a downloaded update is ready and, only when the
-// user agrees, asks it to start the installer (useSelfUpdate, shared with the settings
+// (every app start, and weekly) and downloads them in the background, but never launches the
+// installer on its own: the service pushes the finished download the moment it lands
+// (useSelfUpdate -> useUpdateDownloadProgress), this prompt then shows, and only when the
+// user agrees asks it to start the installer (useSelfUpdate, shared with the settings
 // page) - which then asks to close Word and the app. "Later" hides the prompt until the app
 // is opened again. Mount ONCE at the app root.
 
@@ -53,7 +55,7 @@ onBeforeUnmount(() => {
         <div class="update-prompt-text">
           <strong>{{ UPDATE_PROMPT_TITLE }}</strong>
           <span>{{ updatePromptBody(promptedVersion) }}</span>
-          <span v-if="hasInstallFailed" class="update-prompt-error">{{ UPDATE_INSTALL_FAILED }}</span>
+          <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         </div>
         <div class="update-prompt-actions">
           <button class="update-prompt-install" :disabled="isInstalling" @click="installUpdate">
@@ -74,8 +76,8 @@ onBeforeUnmount(() => {
      Word task pane gets the full width, never half of it. Bottom corner, like the toast. */
   position: fixed;
   bottom: 20px;
-  left: 16px;
-  right: 16px;
+  inset-inline-end: 16px;
+  inset-inline-start: 16px;
   margin-inline: auto;
   width: fit-content;
   max-width: 480px;
@@ -85,7 +87,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px 14px;
   padding: 14px 16px;
-  direction: rtl;
   font-family: var(--header-font);
   font-size: 13px;
   line-height: 1.45;
@@ -102,10 +103,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.update-prompt-error {
-  color: var(--status-danger);
 }
 
 .update-prompt-actions {

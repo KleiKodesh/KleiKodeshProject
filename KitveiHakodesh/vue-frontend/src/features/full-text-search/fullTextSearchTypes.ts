@@ -1,18 +1,62 @@
+/**
+ * One full-text hit as the service streams it and as the IndexedDB search cache stores it.
+ *
+ * NUMBERS ONLY — every field is an int or a list of ints. A high-frequency word is hundreds
+ * of thousands of hits held for the life of the result set and cached on disk, so nothing
+ * per hit may be a string. What a row DISPLAYS is resolved on demand, by id, for rendered
+ * rows only: the book title from `booksDataStore.allBooksMap` and the TOC path from the
+ * book's TOC (fullTextSearchReferences.ts), the snippet from its line texts
+ * (fullTextSearchSnippets.ts), the matched terms from the search's term table via the
+ * term id of each `snippetMarks` triple (useFullTextSearch's matchedTermsOf).
+ *
+ * Mirror of FtsHit in SeforimDbFtsModels.cs (the service's wire type).
+ */
 export interface FullTextSearchResult {
   lineId: number
   bookId: number
-  bookTitle: string
-  tocText: string
+  /** The line's own TOC entry id; 0 when it has none (custom books). */
+  tocEntryId: number
   /** Character span of the tightest window covering all query terms (smaller = closer). */
   score: number
   /** Word distance of the tightest window — number of tokens between the outermost matched
    *  words (0 = adjacent). This is the primary relevancy key. */
   wordDistance: number
-  snippet: string
-  /** Concrete index terms that matched — one flat list of all expanded forms across all query groups.
-   *  Used by the book view to highlight the actual matched words (e.g. the fuzzy expansion ביצחק
-   *  when the query was יצחק~) rather than the raw query string. */
-  matchedTerms: string[]
+  /**
+   * Snippet DESCRIPTOR (the service no longer sends snippet HTML). The texts of
+   * `snippetLineIds`, joined by single spaces, are the source; the snippet is its raw window
+   * [snippetStart, snippetEnd) with `snippetMarks` highlighted — flat (start, length, termId)
+   * triples (SNIPPET_MARK_STRIDE), the term id naming which term that mark matched.
+   * Rebuilt on demand for rendered rows by fullTextSearchSnippets.ts.
+   */
+  snippetLineIds: number[]
+  snippetStart: number
+  snippetEnd: number
+  snippetMarks: number[]
+  /** Bit flags — see SNIPPET_FLAG_LEADING_ELLIPSIS / SNIPPET_FLAG_TRAILING_ELLIPSIS. */
+  snippetFlags: number
+}
+
+/** "…" before the snippet window — it starts mid-text. */
+export const SNIPPET_FLAG_LEADING_ELLIPSIS = 1
+/** "…" after the snippet window — it ends before the text does. */
+export const SNIPPET_FLAG_TRAILING_ELLIPSIS = 2
+/** Ints per entry of `snippetMarks`: start, length, termId. */
+export const SNIPPET_MARK_STRIDE = 3
+
+/**
+ * The distinct ids (into the search's term table) of the concrete index terms that occur in
+ * this hit's marks — e.g. the one fuzzy expansion of a `~` query word this line contains, not
+ * the raw query, not the whole expansion: typically 1-3. Read off the marks' third ints; the
+ * service does not send them separately.
+ */
+export function matchedTermIdsOf(hit: FullTextSearchResult): number[] {
+  const marks = hit.snippetMarks ?? []
+  const ids: number[] = []
+  for (let i = SNIPPET_MARK_STRIDE - 1; i < marks.length; i += SNIPPET_MARK_STRIDE) {
+    const id = marks[i]
+    if (id !== undefined && !ids.includes(id)) ids.push(id)
+  }
+  return ids
 }
 
 /**

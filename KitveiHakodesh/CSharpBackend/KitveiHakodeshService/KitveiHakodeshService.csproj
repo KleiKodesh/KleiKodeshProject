@@ -40,7 +40,15 @@
          Note: elevation is NOT optional for the product — without USN access PathIndex has
          no watcher at all and the index freezes at build time. See Properties\app.manifest. -->
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+    <!-- Same icon as the app: the service exe shows in Task Manager and the UAC prompt. -->
+    <ApplicationIcon>..\KitveiHakodeshDemoApp\KitveiHakodeshLarge.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- GCConserveMemory has no MSBuild property, and PublishAot ignores
+       runtimeconfig.template.json, so it is set here. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="KitveiHakodeshService.Tests" />
@@ -52,10 +60,13 @@
          fails with a sharing violation. 10.0.9 matches FtsLib and is AOT/AnyCPU-friendly. -->
     <PackageReference Include="MessagePack" Version="3.1.8" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
     <!-- Windows-service lifetime (SCM start/stop) for the installed service; a no-op when the
          exe is spawned as a console process (dev, portable). -->
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.9" />
     <!-- Catalog TOC-path search (Catalog/CatalogTocIndex). 4.8 beta — the only line. -->
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
   </ItemGroup>
@@ -81,4 +92,11 @@
          (IsAotCompatible) because this project publishes native AOT. -->
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj" />
   </ItemGroup>
+  <!-- A release must ship the HebrewBooks download fallbacks. hb-mirror.json is kept out of git
+       (it holds the R2 keys), so a machine without it would publish a service that silently
+       downloads from the official handler only. Publish-only: dev builds are not blocked. -->
+  <Target Name="RequireHebrewBooksMirrorConfig" BeforeTargets="PrepareForPublish"
+          Condition="!Exists('$(MSBuildThisFileDirectory)..\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json')">
+    <Error Text="KitveiHakodesh.Core\HebrewBooks\hb-mirror.json is missing. It holds the HebrewBooks download fallbacks (public mirror + R2 keys) and is not in git - copy it onto this machine before publishing a release, or released downloads will have no fallback when hebrewbooks.org is blocked." />
+  </Target>
 </Project>

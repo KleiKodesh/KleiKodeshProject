@@ -21,6 +21,7 @@ import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { catalogTocSearch } from '@/webview-host/bridge'
+import { reportCatalogTocSearchResponse, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import type { BookRow } from '@/webview-host/queries.types'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -42,8 +43,8 @@ export type SearchFsItem = BookFsItem | TocFsItem
 type CatalogTocServiceHit = {
   bookId: number
   lineIndex: number // -1 = no resolved line
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
@@ -55,6 +56,10 @@ type CatalogTocServiceResult = {
   /** True when a newer search cancelled this one server-side — discard and retry. */
   superseded?: boolean
   error?: string | null
+  dbMissing?: boolean
+  builtBooks?: number
+  totalBooks?: number
+  buildFailure?: string | null
 }
 
 /** Poll interval while the service is still building the index (first start after a
@@ -83,13 +88,9 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
       if (hit.level === 0) {
         items.push({ uid: `b-${book.id}`, kind: 'book', book })
       } else {
-        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book title
-        // itself, so show only the TOC part. Navigation is line-based (tocEntryId is
-        // no longer carried by the index).
-        const titlePrefix = `${book.title} / `
-        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
-          ? hit.fullTocPath.slice(titlePrefix.length)
-          : hit.fullTocPath
+        // The UI prepends the book title itself. Navigation is line-based (tocEntryId
+        // is no longer carried by the index).
+        const tocPath = hit.tocPath
         items.push({
           uid: `toc-${hit.bookId}-${hit.treeOrder}`,
           kind: 'toc',
@@ -130,6 +131,13 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
         for (;;) {
           const res = await catalogTocSearch(query)
           if (generation !== searchGeneration) return
+          reportCatalogTocSearchResponse(res)
+          // Terminal failure (index unreadable, or no seforim DB) — stop polling; the
+          // shared index status tells the user why.
+          if (res.error || res.dbMissing || res.buildFailure) {
+            results.value = []
+            break
+          }
           if (res.ready && !res.superseded) {
             results.value = toItems(res.results ?? [])
             break
@@ -140,7 +148,10 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
           if (generation !== searchGeneration) return
         }
       } catch {
-        if (generation === searchGeneration) results.value = []
+        if (generation === searchGeneration) {
+          reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'serviceError' })
+          results.value = []
+        }
       } finally {
         if (generation === searchGeneration) searching.value = false
       }

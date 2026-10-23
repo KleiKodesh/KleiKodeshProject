@@ -240,7 +240,7 @@ defineExpose({ show, showAtPosition, hide })
           @click="openSubmenu(index)"
         >
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
-          <span class="submenu-chevron"><IconChevronLeft16Regular /></span>
+          <span class="submenu-chevron"><IconChevronLeft16Regular class="dir-icon" /></span>
           <div
             v-if="openSubmenuIndex === index"
             :ref="setSubmenuElement"
@@ -291,7 +291,6 @@ defineExpose({ show, showAtPosition, hide })
     0 2px 8px rgba(0, 0, 0, 0.12),
     0 8px 24px rgba(0, 0, 0, 0.08);
   min-width: 140px;
-  direction: rtl;
   border-radius: 4px;
   /* No padding-block, and no overflow:hidden — see the ROW METRICS note below for the
      padding, and note that the submenu panel is positioned outside this box, so

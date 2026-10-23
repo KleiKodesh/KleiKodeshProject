@@ -82,6 +82,54 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
         catch { return false; }
     }
 
+    public enum ReadState { Readable, Busy, Unreadable }
+
+    private string? _lastReadFailure; // polled every few seconds: log a failure once, not per poll
+
+    /// <summary>Whether the database exists AND answers a query. <see cref="ReadState.Busy"/>
+    /// = a TRANSIENT failure (SQLITE_BUSY / SQLITE_LOCKED, a file I/O error — another process
+    /// is writing or updating it) that clears by itself; <see cref="ReadState.Unreadable"/> =
+    /// not a seforim database, corrupt, or missing. One cheap read; the page polls it for its
+    /// "library cannot be read" banner, which it shows only for Unreadable.</summary>
+    public ReadState CheckRead()
+    {
+        if (!HasDb) return ReadState.Unreadable;
+        try
+        {
+            _queries.GetBookById(1);
+            _lastReadFailure = null;
+            return ReadState.Readable;
+        }
+        catch (Exception ex)
+        {
+            bool transient = IsTransientReadError(ex);
+            string key = (transient ? "busy: " : "unreadable: ") + ex.GetType().Name + ": " + ex.Message;
+            if (key != _lastReadFailure)
+            {
+                _lastReadFailure = key;
+                if (transient) logger.LogInformation(ex, "seforim DB read check: busy (transient)");
+                else logger.LogWarning(ex, "seforim DB read check: unreadable");
+            }
+            return transient ? ReadState.Busy : ReadState.Unreadable;
+        }
+    }
+
+    private static bool IsTransientReadError(Exception ex)
+    {
+        for (Exception? e = ex; e != null; e = e.InnerException)
+        {
+            // SQLITE_BUSY = 5, SQLITE_LOCKED = 6 (primary code; extended codes keep it in the low byte).
+            if (e is Microsoft.Data.Sqlite.SqliteException sql
+                && ((sql.SqliteErrorCode & 0xFF) == 5 || (sql.SqliteErrorCode & 0xFF) == 6))
+                return true;
+            if (e is IOException) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Idle memory trim: drop the cached book/category catalog (see Core).</summary>
+    public void ClearCatalogCache() => _queries.ClearCatalogCache();
+
     /// <summary>
     /// Client-triggered warm-up — called by an app when IT loads (never at service boot; boot
     /// stays idle by design). Pays the one-time cold costs in the background so the user's first
@@ -183,8 +231,8 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LinkTargetRow> GetLinkTargetForSourceLineAndBook(int sourceLineId, int targetBookId) =>
         Run(() => _queries.GetLinkTargetForSourceLineAndBook(sourceLineId, targetBookId), new List<LinkTargetRow>(), "getLinkTargetForSourceLineAndBook");
 
-    public List<TocPathRow> GetTocPathsForLines(List<int> lineIds) =>
-        Run(() => _queries.GetTocPathsForLines(lineIds), new List<TocPathRow>(), "getTocPathsForLines");
+    public TocPathsForLinesResult GetTocPathsForLines(List<int> lineIds) =>
+        Run(() => _queries.GetTocPathsForLines(lineIds), new TocPathsForLinesResult(), "getTocPathsForLines");
 
     public List<EnclosingTocPathRow> GetEnclosingTocPathForLineRanges(List<int> triples) =>
         Run(() => _queries.GetEnclosingTocPathForLineRanges(triples), new List<EnclosingTocPathRow>(), "getEnclosingTocPathForLineRanges");

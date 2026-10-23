@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import { ref, computed, watch, nextTick } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
+import { titleWithAuthor } from './titleWithAuthor'
 
 const props = defineProps<{
   items: SearchFsItem[]
@@ -19,17 +20,6 @@ const emit = defineEmits<{
 }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
-const tilesEl = ref<HTMLElement | null>(null)
-
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.view === 'tiles' ? 0 : props.items.length,
-    getScrollElement: () => scrollEl.value,
-    estimateSize: () => 44,
-    overscan: 10,
-    measureElement: (el: Element) => el.getBoundingClientRect().height,
-  })),
-)
 
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
@@ -37,48 +27,49 @@ const virtualizer = useVirtualizer(
 const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
   getCount: () => (props.view === 'tiles' ? 0 : props.items.length),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  getVirtualizer: () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  containerElement: scrollEl,
 })
 
-const { activeIndex: tilesActiveIndex, onKeydown: onTilesKeydown } = useInputListNavigation({
-  getCount: () => (props.view === 'tiles' ? props.items.length : 0),
-  onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  containerElement: tilesEl,
-  getColumnsPerRow: () => countGridColumns(tilesEl.value),
-})
+// The grid view (cards; legacy BookCatalogSearch.Tiles.vue is a drop-in swap)
+// owns its own highlight and keyboard navigation.
+const gridRef = ref<InstanceType<typeof BookCatalogSearchCards> | null>(null)
 
 // New results make the old highlight point at a different item — drop it.
 watch(
   () => props.items,
   () => {
     listActiveIndex.value = -1
-    tilesActiveIndex.value = -1
   },
 )
 
-// Switching view carries the highlight across rather than dropping it. Unlike the
-// browse views, which `<component :is>` destroys and rebuilds at -1, both indices
-// live in this one instance for the life of the results — so without this the
-// highlight would vanish on the way out and a stale one would reappear on the way
-// back, pointing at a row that may now be scrolled out of sight.
+// Switching view carries the highlight across rather than dropping it. The list
+// index lives here for the life of the results, so without this the highlight
+// would vanish on the way out and a stale one would reappear on the way back.
+// Pre-flush: on the way out the grid is still mounted; on the way in it mounts
+// after, so its index is set on the next tick.
 watch(
   () => props.view,
   (view) => {
-    if (view === 'tiles') tilesActiveIndex.value = listActiveIndex.value
-    else listActiveIndex.value = tilesActiveIndex.value
+    if (view === 'tiles') {
+      const index = listActiveIndex.value
+      nextTick(() => {
+        if (gridRef.value) gridRef.value.focusedIndex = index
+      })
+    } else listActiveIndex.value = gridRef.value?.focusedIndex ?? -1
   },
 )
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} ${item.tocPath}` : item.book.title
+  item.kind === 'toc'
+    ? `${item.book.title} / ${item.tocPath}`
+    : titleWithAuthor(item.book.title, item.book.authors)
 
 function itemTooltip(item: SearchFsItem): string {
-  const title = item.kind === 'toc' ? `${item.book.title} — ${item.tocPath}` : item.book.title
+  const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
   if (item.book.parentPath) parts.push(item.book.parentPath)
-  return withNewTabHint(parts.join('\n'))
+  return withNewTabHint(parts.join('\n'), OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 function onSelect(item: SearchFsItem, openInNewTab = false) {
@@ -89,85 +80,42 @@ function onSelect(item: SearchFsItem, openInNewTab = false) {
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) =>
-    props.view === 'tiles' ? onTilesKeydown(event) : onListKeydown(event),
+    props.view === 'tiles' ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
 })
 
 function selectListItem(i: number, event?: MouseEvent) {
   listActiveIndex.value = i
   onSelect(props.items[i]!, wantsNewTab(event))
 }
-
-function selectTileItem(i: number, event?: MouseEvent) {
-  tilesActiveIndex.value = i
-  onSelect(props.items[i]!, wantsNewTab(event))
-}
 </script>
 
 <template>
-  <p v-if="!items.length && !searching" class="empty">לא נמצאו תוצאות</p>
+  <p v-if="!items.length && !searching" class="empty">{{ $t('bookCatalog.noResults') }}</p>
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
-    <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-      <div
-        v-for="vRow in virtualizer.getVirtualItems()"
-        :key="String(vRow.key)"
-        :ref="(el) => el && virtualizer.measureElement(el as Element)"
-        :data-index="vRow.index"
-        :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          transform: `translateY(${vRow.start}px)`,
-        }"
-      >
-        <div
-          class="fs-item"
-          data-nav-item
-          :class="{
-            'is-focused': listActiveIndex === vRow.index,
-          }"
-          :title="itemTooltip(items[vRow.index]!)"
-          @mousedown.prevent
-          @click="selectListItem(vRow.index, $event)"
-          @auxclick.middle="selectListItem(vRow.index, $event)"
-        >
-          <span class="icon"><IconBookRtl20 /></span>
-          <span class="item-text">
-            <span class="item-title-row">
-              <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
-              <span v-if="items[vRow.index]!.book.authors" class="item-author-tag">{{
-                items[vRow.index]!.book.authors
-              }}</span>
-            </span>
-            <span v-if="items[vRow.index]!.book.parentPath" class="item-path">{{
-              items[vRow.index]!.book.parentPath
-            }}</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div v-else ref="tilesEl" class="tiles-grid">
-    <!-- A <button>, like the browse grid's and the home page's: it is a control,
-         and unlike a div it does not stretch to fill its grid cell, which is what
-         keeps it the same 72px as theirs. -->
-    <button
-      v-for="(item, i) in items"
+    <div
+      v-for="(item, index) in items"
       :key="item.uid"
-      type="button"
-      class="tile"
+      class="fs-item"
       data-nav-item
-      tabindex="-1"
-      :class="{ 'is-focused': tilesActiveIndex === i }"
+      :class="{ 'is-focused': listActiveIndex === index }"
       :title="itemTooltip(item)"
       @mousedown.prevent
-      @click="selectTileItem(i, $event)"
-      @auxclick.middle="selectTileItem(i, $event)"
+      @click="selectListItem(index, $event)"
+      @auxclick.middle="selectListItem(index, $event)"
     >
-      <div class="tile-icon"><IconBookRtl20 /></div>
-      <span class="tile-label">{{ itemTitle(item) }}</span>
-    </button>
+      <span class="icon"><IconBookRtl20 /></span>
+      <span class="item-text">
+        <span class="item-title">{{ itemTitle(item) }}</span>
+        <span v-if="item.book.parentPath" class="item-path">{{ item.book.parentPath }}</span>
+      </span>
+    </div>
   </div>
+  <BookCatalogSearchCards
+    v-else
+    ref="gridRef"
+    :items="items"
+    @select="onSelect"
+  />
 </template>
 
 <style scoped>
@@ -195,6 +143,9 @@ function selectTileItem(i: number, event?: MouseEvent) {
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
+  /* Results can run to thousands: off-screen rows skip rendering (no virtualizer). */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
 }
 .fs-item:hover {
   background: var(--hover-bg);
@@ -228,22 +179,6 @@ function selectTileItem(i: number, event?: MouseEvent) {
   min-width: 0;
   flex-shrink: 1;
 }
-.item-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  overflow: hidden;
-  justify-content: space-between;
-}
-.item-author-tag {
-  font-size: 10px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
-  border-radius: 4px;
-  padding: 1px 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
 .item-path {
   font-size: 11px;
   color: var(--text-secondary);
@@ -253,79 +188,4 @@ function selectTileItem(i: number, event?: MouseEvent) {
   text-overflow: ellipsis;
 }
 
-.tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-  padding: 12px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-  align-content: flex-start;
-}
-/* The same tile as the browse grid's (BookCatalogView.Tiles.vue), which is the
-   home page's: one catalog, one tile. Only the icon differs — these are always
-   books, never folders. */
-.tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  width: 72px;
-  padding: 6px 4px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.tile:hover .tile-icon {
-  transform: scale(1.15);
-}
-.tile:active .tile-icon {
-  transform: scale(0.95);
-}
-/* Keyboard focus reads as the grown icon rather than the global
-   `[data-nav-item].is-focused` fill, matching the browse grid: DOM focus stays in
-   the search field, so the class is the only signal, and a filled square under a
-   grown icon is the same thing said twice. */
-.tile.is-focused {
-  background: none;
-}
-.tile.is-focused .tile-icon {
-  transform: scale(1.25);
-}
-.tile-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: none;
-  font-size: 24px;
-  transition:
-    transform 0.15s ease,
-    opacity 0.12s ease;
-}
-.tile-icon svg {
-  width: 1em;
-  height: 1em;
-  color: #c1440e;
-}
-.tile-label {
-  font-size: 11px;
-  color: var(--text-primary);
-  text-align: center;
-  line-height: 1.3;
-  max-width: 68px;
-  overflow: hidden;
-  white-space: normal;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
 </style>

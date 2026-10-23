@@ -43,21 +43,6 @@ namespace FtsLib.Indexing
         public static void Write(string category, string message)
             => Write("[" + category + "] " + message);
 
-        /// <summary>Write a section separator — useful at startup / key lifecycle events.</summary>
-        public static void Separator(string label = null)
-        {
-            string bar = "═══════════════════════════════════════════════════════════════";
-            if (string.IsNullOrEmpty(label))
-            {
-                Write(bar);
-            }
-            else
-            {
-                int tail = bar.Length - (label.Length + 4);
-                Write("══ " + label + " " + (tail > 0 ? bar.Substring(0, tail) : "══"));
-            }
-        }
-
         /// <summary>Delete the log file so the next run starts with a clean slate.</summary>
         public static void Clear()
         {

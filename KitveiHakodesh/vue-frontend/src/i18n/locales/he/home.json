@@ -1,0 +1,92 @@
+{
+  "calendar": {
+    "prevMonth": "חודש קודם",
+    "backToToday": "חזרה להיום",
+    "nextMonth": "חודש הבא",
+    "openFull": "פתח את לוח השנה המלא",
+    "full": "לוח מלא"
+  },
+  "searchButtonTitle": "הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ",
+  "dateBar": {
+    "inMinutes": "בעוד {n} דקות",
+    "oneHour": "שעה",
+    "twoHours": "שעתיים",
+    "nHours": "{n} שעות",
+    "inHours": "בעוד {hours}",
+    "inHoursMinutes": "בעוד {hours} ו-{n} דקות",
+    "nextZmanTitle": "{countdown} · לחץ לכל הזמנים",
+    "calendarTitle": "לחץ להצגת לוח שנה",
+    "dailyLearningTitle": "לחץ להצגת הלימוד היומי (דף יומי ועוד)",
+    "dailyLearning": "לימוד יומי",
+    "bookNotInLibrary": "הספר אינו בספרייה"
+  },
+  "card": {
+    "unpin": "בטל הצמדה",
+    "pin": "הצמד",
+    "remove": "הסר מהרשימה"
+  },
+  "worldClock": {
+    "israel": "ישראל",
+    "newYork": "ניו יורק",
+    "losAngeles": "לוס אנג׳לס",
+    "london": "לונדון",
+    "paris": "פריז",
+    "antwerp": "אנטוורפן",
+    "moscow": "מוסקבה",
+    "johannesburg": "יוהנסבורג",
+    "buenosAires": "בואנוס איירס",
+    "melbourne": "מלבורן",
+    "tomorrow": "מחר",
+    "yesterday": "אתמול",
+    "title": "לחץ להצגת שעון עולמי"
+  },
+  "zmanimTitle": "זמני היום",
+  "zman": {
+    "chatzotNight": "חצות הלילה",
+    "alot": "עלות השחר",
+    "misheyakir": "משיכיר",
+    "sunrise": "הנץ החמה",
+    "sofShmaMga": "סו״ז ק״ש (מג״א)",
+    "sofShmaGra": "סו״ז ק״ש (גר״א)",
+    "sofTfillaMga": "סו״ז תפילה (מג״א)",
+    "sofTfillaGra": "סו״ז תפילה (גר״א)",
+    "chatzot": "חצות היום",
+    "minchaGedola": "מנחה גדולה",
+    "minchaKetana": "מנחה קטנה",
+    "plag": "פלג המנחה",
+    "sunset": "שקיעה",
+    "tzeit": "צאת הכוכבים"
+  },
+  "searchHint": {
+    "quick": "חיפוש מהיר בכל המאגרים...",
+    "enter": "לחץ אנטר לחיפוש תוכן במאגר",
+    "free": "הקלד חופשי לחיפוש ספר או קובץ",
+    "hbPrefix": "כדי להקדים תוצאות מהיברו בוקס כתוב",
+    "pcPrefix": "כדי להקדים תוצאות מהמחשב כתוב",
+    "addins": "הקלד תוספים: עבור תוספי אוצריא",
+    "hbExample1": "היברו בוקס: {book}",
+    "hbExample2": "או היברו: {book}",
+    "hbExample3": "או: {shorthand} {book}",
+    "pcExample1": "קובץ: {book}",
+    "pcExample2": "או מחשב: {book}",
+    "pcExample3": "או: {shorthand} {book}"
+  },
+  "searchTabTitle": "חיפוש: {query}",
+  "daily": {
+    "parsha": "פרשת השבוע",
+    "nach": "נ\"ך יומי",
+    "tehillim": "תהילים יומי",
+    "mishnaYomit": "משנה יומית",
+    "perekYomi": "פרק יומי",
+    "avot": "פרקי אבות",
+    "dafYomi": "דף יומי",
+    "dafWeekly": "דף שבועי",
+    "amudYomi": "עמוד יומי",
+    "yerushalmi": "ירושלמי יומי",
+    "chofetzChaim": "חפץ חיים",
+    "shmirasHalashon": "שמירת הלשון",
+    "kitzur": "קיצור שולחן ערוך",
+    "rambam1": "רמב\"ם פרק אחד",
+    "rambam3": "רמב\"ם שלושה פרקים"
+  }
+}

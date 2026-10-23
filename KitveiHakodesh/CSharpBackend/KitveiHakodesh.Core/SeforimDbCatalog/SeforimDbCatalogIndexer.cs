@@ -94,6 +94,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldLineIndex = "l";
     private const string FieldLevel = "v";
     private const string FieldTreeOrder = "o";
+    private const string FieldTitleLength = "t";   // chars of the book title at the head of "p"
     private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
     private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
     private const string FieldStructureDv = "sdv"; // numeric doc-values (truncation group)
@@ -119,6 +120,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private IndexSearcher? _searcher;
     private IndexWriter? _writer;   // non-null only while a build is in flight
     private VariantIndex? _variants; // lazily (re)built off the current reader — see GetVariantsLocked
+    private Dictionary<long, List<string>>? _titleTokensByRank; // lazily built off the current reader — see GetTitleTokensLocked
 
     public string RootPath => rootPath;
 
@@ -201,14 +203,25 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// truncation collapses to the old per-book behavior meanwhile. Old results, never
     /// wrong paths — and OpenMode.CREATE means a reader is all-v19 or all-v20, never a
     /// mix.
-    /// v21: no index-format change; forces ONE rebuild of every index built before the
+    /// v21: each doc also stores the LENGTH of the book title at the head of its path, so the
+    /// searcher can hand the client the path without the title (the title is prefixed client-
+    /// side from the catalog). Full rebuild, same no-downtime window as v20; the searcher falls
+    /// back to splitting at the first " / " while a pre-v21 index is still serving.
+    /// v22: tree order (the "o"/"odv" sort key) puts a folder's base texts ahead of its
+    /// subfolders and negative-orderIndex folders after their siblings — see
+    /// <see cref="SeforimDbBookTreeOrder"/>. Also: alt-TOC entries that repeat a regular entry
+    /// (same text, same line) are no longer indexed; line-less alt parents take their first
+    /// child's line; a numeral after a counter word (perek mb) is no longer expanded as an
+    /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
+    /// v23: root TOC entries are stripped only when they add no word beyond the title.
+    /// v24: no index-format change; forces ONE rebuild of every index built before the
     /// additional-library hardening. Those builds dropped a library they could not read
     /// whole (a schema-6+ library without alt_toc_structure was one) yet stamped the index
     /// with the fingerprint of the FULL library set, and that stamp is the same string a
     /// current build computes for the same files - so the current build trusted the old
     /// index and never rebuilt it, leaving the library's book titles out of book-name
     /// search for as long as its file did not change.</summary>
-    public const string IndexFormatVersion = "v21";
+    public const string IndexFormatVersion = "v24";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -341,6 +354,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             var books = new List<(int Id, string Title, int CategoryId, string? Authors)>();
             var firstLines = new Dictionary<int, (int LineId, int LineIndex)>();
             var altStructures = new Dictionary<int, (int BookId, string Title, string HeTitle)>();
+            // bookId (GLOBAL) -> precedence: the ONE order (SeforimDbBookTreeOrder, also what
+            // GetAllBooks ships and the full-text index stores by), computed per source and laid
+            // end to end - the primary keeps exactly its own order, each library follows it.
+            var bookRank = new Dictionary<int, int>();
+            int nextRank = 0;
 
             // Every id read from a library above 0 is translated to its GLOBAL id right here, at
             // the load boundary — everything below this point (tree order, catalog paths, the
@@ -356,6 +374,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 var srcBooks = new List<(int Id, string Title, int CategoryId, string? Authors)>();
                 var srcFirstLines = new Dictionary<int, (int LineId, int LineIndex)>();
                 var srcAlt = new Dictionary<int, (int BookId, string Title, string HeTitle)>();
+                var srcRank = new Dictionary<int, int>();
                 try
                 {
                     foreach (var c in LoadCategories(conn))
@@ -372,6 +391,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     if (HasAltToc(conn))
                         foreach (var kv in LoadAltStructures(conn))
                             srcAlt[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
+                    foreach (var kv in SeforimDbBookTreeOrder.Load(conn))
+                        srcRank[Global(index, kv.Key)] = kv.Value;
                 }
                 catch (Exception ex) when (index != 0)
                 {
@@ -386,10 +407,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 books.AddRange(srcBooks);
                 foreach (var kv in srcFirstLines) firstLines[kv.Key] = kv.Value;
                 foreach (var kv in srcAlt) altStructures[kv.Key] = kv.Value;
+                foreach (var kv in srcRank) bookRank[kv.Key] = nextRank + kv.Value;
+                if (srcRank.Count > 0) nextRank += srcRank.Values.Max() + 1;
             }
-
-            var bookRank = SeforimDbBookTreeOrder.Compute(
-                categoryList.ConvertAll(c => (c.Id, c.ParentId)), books.ConvertAll(b => (b.Id, b.CategoryId)));
 
             // Full catalog (category) path per book — part of SearchText so a query can
             // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
@@ -452,6 +472,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     bookId: b.Id,
                     lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
                     fullTocPath: b.Title,
+                    titleLength: b.Title.Length,
                     level: 0,
                     treeOrder: TreeOrder(b.Id),
                     structureId: RegularTocStructureId));
@@ -653,6 +674,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         bookId: book.Id,
                         lineIndex: lineIndex,
                         fullTocPath: path,
+                        titleLength: book.Title.Length,
                         level: chapterLevel + 1,
                         treeOrder: treeOrder(book.Id),
                         // Generated from the regular TOC's chapters, so they truncate
@@ -722,8 +744,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// the order rule's reference text) and stored (the display path). Catalog path and
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
-        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int level, long treeOrder,
-        int structureId)
+        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int titleLength, int level,
+        long treeOrder, int structureId)
     {
         var doc = new Document
         {
@@ -732,6 +754,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             new StoredField(FieldLineIndex, lineIndex),
             new StoredField(FieldLevel, level),
             new StoredField(FieldTreeOrder, treeOrder),
+            new StoredField(FieldTitleLength, titleLength),
             // Level + TreeOrder ALSO as numeric doc-values: column-stored, so the sort
             // that decides which docs to materialize can read them per-doc without
             // decompressing the (expensive) stored-fields blob. This is what lets the
@@ -763,6 +786,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         rows = StripTitleRoots(rows, book.Title, book.Id);
         rows = ExpandDafAmudim(rows);
         var byId = rows.ToDictionary(r => r.Id);
+        ResolveLinelessParents(rows);
 
         // Memoized (path, level) per entry, root→leaf.
         var chainCache = new Dictionary<int, (string Path, int Level)>();
@@ -786,6 +810,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         int added = 0;
         foreach (var row in rows)
         {
+            if (row.DupOfRegular) continue;   // the regular TOC already indexed this address
             var (path, level) = GetChain(row);
             writer.AddDocument(MakeDoc(
                 catalogPath: catalogPath,
@@ -793,12 +818,30 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 bookId: book.Id,
                 lineIndex: row.LineIndex,
                 fullTocPath: path,
+                titleLength: book.Title.Length,
                 level: level,
                 treeOrder: treeOrder(book.Id),
                 structureId: structureId));
             added++;
         }
         return added;
+    }
+
+    /// <summary>An entry with no line of its own (a section heading in some alt structures)
+    /// navigates to the first line beneath it, so its hit opens the book where the section
+    /// starts instead of nowhere. Entries are in tree order, so a child's own resolution is
+    /// final before its parent asks; the deepest line-less chain resolves bottom-up.</summary>
+    private static void ResolveLinelessParents(List<TocRow> rows)
+    {
+        Dictionary<int, int>? firstChildLine = null;
+        for (int i = rows.Count - 1; i >= 0; i--)
+        {
+            var r = rows[i];
+            if (r.LineIndex < 0 && firstChildLine != null && firstChildLine.TryGetValue(r.Id, out int line))
+                r.LineIndex = line;
+            if (r.LineIndex >= 0 && r.ParentId is { } pid)
+                (firstChildLine ??= [])[pid] = r.LineIndex;   // walking backwards, the FIRST child wins last
+        }
     }
 
     /// <summary>Each book's full catalog (category) path, root→leaf, space-joined —
@@ -835,7 +878,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         if (string.IsNullOrEmpty(bookTitle) || rows.Count == 0) return rows;
         var rootIds = new HashSet<int>();
         foreach (var r in rows)
-            if (r.ParentId is null && SeforimDbCatalogTextNormalizer.IsTitleVariant(bookTitle, r.Text))
+            if (r.ParentId is null && SeforimDbCatalogTextNormalizer.IsTitleRepeat(bookTitle, r.Text))
                 rootIds.Add(r.Id);
         if (rootIds.Count == 0) return rows;
 
@@ -907,6 +950,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 Id = r.Id,
                 ParentId = parent.Id,
                 BookId = r.BookId,
+                DupOfRegular = r.DupOfRegular,
                 Text = isAmudB ? "עמוד ב" : "עמוד א",
                 LineIndex = r.LineIndex,
             });
@@ -924,6 +968,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         public int BookId;
         public int LineIndex; // -1 = none
         public string Text = "";
+        /// <summary>Alt-TOC only: the entry repeats a regular TOC entry (same text, same line).
+        /// It stays in the tree, so its children keep their path, but gets no document.</summary>
+        public bool DupOfRegular;
     }
 
     private SqliteConnection OpenDb() => SqliteConnectionFactory.OpenCorpusRead(dbPath);
@@ -954,7 +1001,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     {
         var list = new List<(int, string, int, string?)>();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBooks;
+        // The tree-order columns at the tail are read by SeforimDbBookTreeOrder.Load, not here.
+        cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBooks(hasIsBaseBook: false, hasDependenceType: false);
         using var r = cmd.ExecuteReader();
         while (r.Read())
             list.Add((r.GetInt32(0), r.IsDBNull(2) ? "" : r.GetString(2), r.IsDBNull(1) ? 0 : r.GetInt32(1),
@@ -1048,6 +1096,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
                 Text = r.IsDBNull(3) ? "" : r.GetString(3),
                 LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),
+                DupOfRegular = !r.IsDBNull(5) && r.GetInt32(5) != 0,
             });
         }
         if (group is not null) yield return group;

@@ -34,9 +34,22 @@ public sealed class Dispatcher(
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
+    /// <summary>One id per DATA HOST (one per Dispatcher): a DB-path or library change rebuilds
+    /// the data host - in the same process when the service stays up - and the page waits until
+    /// a reply carries a DIFFERENT id before it reloads (see DbPathResult.InstanceId, and
+    /// PongResult.Instance, which tells a caller "the old host" from "the rebuilt one").</summary>
+    private readonly string InstanceId = Guid.NewGuid().ToString("N");
+
+    /// <summary>Ops a host sends on a timer or to poll state, not because the user did
+    /// something. They never touch the idle clock (see DispatchAsync).</summary>
+    private static bool IsHousekeepingOp(string op) => op is
+        "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
+        or "getSeforimDbPath" or "getUpdateStatus"
+        or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress"
+        or "indexBuildReasons";
+
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
-        IdleMemoryTrimmer.Touch(); // re-arm the idle memory trimmer on every RPC
         RpcRequest? req;
         try
         {
@@ -44,11 +57,16 @@ public sealed class Dispatcher(
         }
         catch (Exception ex)
         {
-            return RpcResponse.Err("Invalid request: " + ex.Message);
+            return RpcResponse.Err("Invalid request: " + ex.Message, ex.ToString());
         }
 
         if (req is null || string.IsNullOrEmpty(req.Op))
             return RpcResponse.Err("Missing 'op'.");
+
+        // Re-arm the idle memory trimmer on real work only. An open app sends housekeeping on
+        // timers (owner heartbeat every 30 s, DB-health poll every 5 s, status polls); counting
+        // those as activity meant an open-but-idle app never let the trim run (80-100 MB kept).
+        if (!IsHousekeepingOp(req.Op)) IdleMemoryTrimmer.Touch();
 
         // A Windows service lives in session 0: no desktop, no user Word, no shell. The hosts do
         // those themselves; a request that still arrives here is answered, not left to hang.
@@ -114,7 +132,7 @@ public sealed class Dispatcher(
                         }
                         catch (Exception ex)
                         {
-                            return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }));
+                            return RpcResponse.OkWithFailure(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }), req.Op, ex);
                         }
                     }
                     string fileName = LocalFileOpenRules.ServedFileName(full, needsConvert, renderedAsHtml);
@@ -198,10 +216,10 @@ public sealed class Dispatcher(
                     }
                     catch (Exception ex)
                     {
-                        return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
+                        return RpcResponse.OkWithFailure(MsgPack.Ser(new ExcludedFoldersResult
                         {
                             Folders = locator.GetExcludedFolders(), Error = ex.Message,
-                        }));
+                        }), req.Op, ex);
                     }
                 }
 
@@ -220,18 +238,6 @@ public sealed class Dispatcher(
                         ? new OpenInDefaultAppResult { Ok = true }
                         : new OpenInDefaultAppResult { Error = openError }));
                 }
-
-                // System font families that can render Hebrew — the dev-mode equivalent of the
-                // hosted app's "getFonts" bridge action. Hosted asks WPF; this service is
-                // native-AOT with no WPF, so HebrewFontsProvider goes to DirectWrite (the API WPF
-                // wraps) and applies the SAME test: does the family have a glyph for א? Returns
-                // an empty list rather than failing if DirectWrite is unavailable, and the
-                // frontend falls back to its canvas probe.
-                case "getFonts":
-                    return RpcResponse.Ok(MsgPack.Ser(new FontsResult
-                    {
-                        Fonts = global::KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts(),
-                    }));
 
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
                 // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word
@@ -270,6 +276,7 @@ public sealed class Dispatcher(
                 case "checkForUpdateNow":
                 {
                     string checkError = "";
+                    Exception? checkException = null;
                     if (!Hosting.WindowsServiceMode.IsWindowsService)
                         checkError = "updates are checked only by the installed service";
                     else if (AppSettingsRegistry.GetTurnOffUpdates())
@@ -282,11 +289,14 @@ public sealed class Dispatcher(
                         {
                             logger.LogWarning(ex, "Update check (on demand) failed");
                             checkError = ex.Message;
+                            checkException = ex;
                         }
                     }
                     UpdateStatusResult status = ReadUpdateStatus();
                     status.CheckError = checkError;
-                    return RpcResponse.Ok(MsgPack.Ser(status));
+                    return checkException is null
+                        ? RpcResponse.Ok(MsgPack.Ser(status))
+                        : RpcResponse.OkWithFailure(MsgPack.Ser(status), req.Op, checkException);
                 }
                 case "installUpdate":
                 {
@@ -331,14 +341,18 @@ public sealed class Dispatcher(
                     // known not to exist, so the settings page is told plainly that there is no
                     // database rather than being shown a path it would report as missing.
                     string? p = SeforimDbLocator.Resolve();
+                    var readState = p is null ? SeforimDbService.ReadState.Unreadable : seforim.CheckRead();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p ?? "",
                         IsCustom = SeforimDbLocator.IsCustom(),
                         Exists = p is not null,
                         // Detected only, never repaired: deleting the journal would corrupt the
                         // database; Otzaria rolls it back or completes it on its next run.
                         UpdateInterrupted = SeforimDbLibrarySwitcher.IsUpdateInterrupted(p),
+                        Readable = readState == SeforimDbService.ReadState.Readable,
+                        ReadBusy = readState == SeforimDbService.ReadState.Busy,
                     }));
                 }
 
@@ -349,13 +363,14 @@ public sealed class Dispatcher(
                     switch (SwitchLibrary(p))
                     {
                         case SeforimDbLibrarySwitcher.SwitchOutcome.EmptyPath:
-                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Error = "empty path" }));
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Error = "empty path" }));
                         case SeforimDbLibrarySwitcher.SwitchOutcome.FileNotFound:
-                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Path = p, Error = "file not found" }));
                     }
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p, IsCustom = true, Exists = true, Restarting = true,
                     }));
                 }
@@ -369,12 +384,13 @@ public sealed class Dispatcher(
                     string? picked = await NativeFilePicker.PickAsync(
                         NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle);
                     if (picked is null)
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Cancelled = true }));
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Cancelled = true }));
                     if (SwitchLibrary(picked) != SeforimDbLibrarySwitcher.SwitchOutcome.Switched)
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = picked, Error = "file not found" }));
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Path = picked, Error = "file not found" }));
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = picked, IsCustom = true, Exists = true, Restarting = true,
                     }));
                 }
@@ -386,6 +402,7 @@ public sealed class Dispatcher(
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p ?? "", IsCustom = false, Exists = p is not null, Restarting = true,
                     }));
                 }
@@ -534,10 +551,11 @@ public sealed class Dispatcher(
                     }
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: true, ct);
                     if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path), Path = r.Path }));
-                    if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true }));
+                    // Detail = full C# failure (exception ToString / response facts), printed to the webview console.
+                    if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true, Detail = r.Detail }));
                     if (r.Error == "cancelled") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Cancelled = true }));
-                    if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true }));
-                    return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed" }));
+                    if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true, Detail = r.Detail }));
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed", Detail = r.Detail }));
                 }
 
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
@@ -584,6 +602,12 @@ public sealed class Dispatcher(
                         : new HbDownloadResult { Redownload = true }));
                 }
 
+                case "getHebrewBooksEditions":
+                {
+                    var a = MsgPack.De<HebrewBooksEditionsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new HebrewBooksEditionsResult { Editions = hebrewBooks.EditionsOf(a.BookId) }));
+                }
+
                 case "checkHbLocalFiles":
                 {
                     var a = MsgPack.De<HbCheckLocalArgs>(req.Args);
@@ -596,8 +620,8 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbDeleteLocalArgs>(req.Args);
                     string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
-                    var (ok, notFound, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder);
-                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, Error = error }));
+                    var (ok, notFound, noRecycleBin, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder, a.ToRecycleBin);
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, NoRecycleBin = noRecycleBin, Error = error }));
                 }
 
                 // HB local folder in the SHARED registry (same key the hosted AppSettings uses),
@@ -797,7 +821,7 @@ public sealed class Dispatcher(
                 case "getTocPathsForLines":
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new TocPathsResult { Rows = seforim.GetTocPathsForLines(a.LineIds) }));
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetTocPathsForLines(a.LineIds)));
                 }
 
                 case "getEnclosingTocPathForLineRanges":
@@ -874,7 +898,7 @@ public sealed class Dispatcher(
                 case "ftsSearch":
                 {
                     var a = MsgPack.De<FtsSearchArgs>(req.Args);
-                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv, a.ExpandRelated);
+                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords);
                     return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
@@ -895,6 +919,16 @@ public sealed class Dispatcher(
                 case "catalogTocStatus":
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
 
+                // Why each index last (re)built — polled by the frontend, which logs each new
+                // reason to its console. Read-only: never starts a build.
+                case "indexBuildReasons":
+                    return RpcResponse.Ok(MsgPack.Ser(new global::KitveiHakodesh.Core.Common.IndexBuildReasons
+                    {
+                        FullTextSearch = fts.Coordinator.LastBuildReason,
+                        CatalogToc = catalogToc.Coordinator.LastBuildReason,
+                        LocalFiles = locator.LastBuildReason,
+                    }));
+
                 case "catalogTocResetIndex":
                     catalogToc.ResetIndex();
                     return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));
@@ -909,7 +943,7 @@ public sealed class Dispatcher(
         }
         catch (Exception ex)
         {
-            return RpcResponse.Err(ex.Message);
+            return RpcResponse.Err(req.Op, ex);
         }
     }
 
@@ -926,6 +960,21 @@ public sealed class Dispatcher(
         try { req = MessagePack.MessagePackSerializer.Deserialize<RpcRequest>(request, MsgPack.Options); }
         catch { return false; }
 
+        try
+        {
+            return await DispatchStreamOpAsync(req, writeFrame, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Send the failure as a frame so the client console shows the whole exception
+            // instead of a dropped connection. A broken pipe makes that write fail too — ignore.
+            try { await writeFrame(RpcResponse.Err(req!.Op!, ex)); } catch { }
+            return true;
+        }
+    }
+
+    private async Task<bool> DispatchStreamOpAsync(RpcRequest? req, Func<byte[], Task> writeFrame, CancellationToken ct)
+    {
         switch (req?.Op)
         {
             // Full-text search: result batches stream until Done.
@@ -934,8 +983,8 @@ public sealed class Dispatcher(
                 IdleMemoryTrimmer.Touch();
                 var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
                 await fts.StreamSearch(
-                    a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv,
-                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct, a.ExpandRelated);
+                    a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords,
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
                 return true;
             }
 
@@ -948,6 +997,15 @@ public sealed class Dispatcher(
                 return true;
             }
 
+            // Self-update download: progress while downloading, then the ready update - pushed
+            // the moment it lands, so the app shows its prompt at once. Open for the app's session.
+            case "updateProgressStream":
+            {
+                await updater.StreamProgressAsync(
+                    f => writeFrame(RpcResponse.Ok(MsgPack.Ser(f))), ct);
+                return true;
+            }
+
             default:
                 return false;
         }
@@ -957,9 +1015,6 @@ public sealed class Dispatcher(
     /// cancels the FTS build cleanly (resumable) and releases the index lock; the dev
     /// courier (or the SCM, when installed) starts a fresh instance that re-resolves
     /// the seforim DB path.</summary>
-    /// <summary>Identifies this data host (one per Dispatcher): changes on every in-process reload.</summary>
-    private readonly string InstanceId = Guid.NewGuid().ToString("N");
-
     private void RestartSoon() =>
         _ = Task.Run(async () =>
         {

@@ -53,7 +53,61 @@
     },
     "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
   },
-"fluent-light": {
+  "violetbeige-light": {
+    "name": "בז'",
+    "family": "violetbeige",
+    "isDark": false,
+    "reading": {
+      "bgPrimary": "#fdfbf7",
+      "bgSecondary": "#f8f4ed",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e8e0d3",
+      "accentColor": "#7333ff",
+      "hoverBg": "rgba(0, 0, 0, 0.06)",
+      "activeBg": "rgba(0, 0, 0, 0.09)"
+    },
+    "ui": {
+      "bgPrimary": "#fdfbf7",
+      "bgSecondary": "#f8f4ed",
+      "bgTertiary": "#f1ebe1",
+      "textPrimary": "#1f1f1f",
+      "textSecondary": "#5a5a5a",
+      "borderColor": "#e8e0d3",
+      "accentColor": "#7333ff",
+      "hoverBg": "rgba(0, 0, 0, 0.06)",
+      "activeBg": "rgba(0, 0, 0, 0.09)"
+    },
+    "pdfFilter": "none"
+  },
+  "violetbeige-dark": {
+    "name": "בז'",
+    "family": "violetbeige",
+    "isDark": true,
+    "reading": {
+      "bgPrimary": "#211e1b",
+      "bgSecondary": "#2e2a26",
+      "textPrimary": "#d4d4d4",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#433d36",
+      "accentColor": "#a57bff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "ui": {
+      "bgPrimary": "#211e1b",
+      "bgSecondary": "#2e2a26",
+      "bgTertiary": "#38332e",
+      "textPrimary": "#d4d4d4",
+      "textSecondary": "#a6a6a6",
+      "borderColor": "#433d36",
+      "accentColor": "#a57bff",
+      "hoverBg": "rgba(255, 255, 255, 0.08)",
+      "activeBg": "rgba(255, 255, 255, 0.12)"
+    },
+    "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
+  },
+  "fluent-light": {
     "name": "עיצוב זורם",
     "family": "fluent",
     "isDark": false,

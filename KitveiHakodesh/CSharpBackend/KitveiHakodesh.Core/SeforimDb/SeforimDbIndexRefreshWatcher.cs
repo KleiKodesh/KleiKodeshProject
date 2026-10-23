@@ -69,13 +69,24 @@ public sealed class SeforimDbIndexRefreshWatcher : IDisposable
 
     public void Start()
     {
-        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(_dbPath)) return;
+        if (!OperatingSystem.IsWindows()) return;
 
-        // Watch the DB-choice registry value too: the user can SWITCH databases
-        // (Otzaria <-> Zayit) from another app, which writes the registry directly.
+        // Watch the DB-choice registry value FIRST, and even when no database resolved at
+        // startup. The user can SWITCH databases (Otzaria <-> Zayit) from another app, which
+        // writes the registry directly - and the installer does exactly that AFTER it has
+        // already sent the service its first request: on a machine with no library at a
+        // default location the service came up with no database, and without this watch it
+        // sat there ignoring the path the user then picked until something restarted it.
         _registryWatcher = new RegistryValueWatcher(
             SeforimDbPathResolver.RegistryKeyPath, OnPossibleDbSwitch, "khs-db-registry-watch");
         _registryWatcher.Start();
+
+        if (string.IsNullOrWhiteSpace(_dbPath))
+        {
+            _log(FtsIndexLogLevel.Information,
+                "no seforim DB configured - watching only the DB-choice setting for one to appear", null);
+            return;
+        }
 
         _fileWatcher = new DbChangeWatcher(_dbPath!, OnSettled, _settleWindow, _maxDeferral);
 
@@ -145,8 +156,10 @@ public sealed class SeforimDbIndexRefreshWatcher : IDisposable
         if (current is null) return;
         if (string.Equals(current, _dbPath, StringComparison.OrdinalIgnoreCase)) return;
 
+        // A path appearing where there was none (the installer's settings page, a first-run
+        // wizard) is a switch too: this process has no database and must restart to get one.
         _log(FtsIndexLogLevel.Information,
-            $"seforim DB switched outside the service ({_dbPath} → {current}) — restarting so the fresh " +
+            $"seforim DB switched outside the service ({_dbPath ?? "<none>"} → {current}) — restarting so the fresh " +
             "process re-resolves everything; both index stamps include the path, so both reindex", null);
         _onDatabaseSwitched();
     }

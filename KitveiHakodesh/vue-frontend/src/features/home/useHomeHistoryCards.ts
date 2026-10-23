@@ -1,3 +1,4 @@
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { documentIcon, iconKeyForRoute } from '@/utils/documentIcons'
@@ -30,8 +31,8 @@ export interface HomeHistoryCardActions {
 }
 
 /**
- * The history cards: recently opened documents, then frequently visited folders
- * — file-system folders and book-catalog categories, ranked together.
+ * The history cards: frequently visited folders, then recently opened documents
+ * (folders are file-system folders and book-catalog categories, ranked together).
  *
  * A book card's path is the full place it resumes to — category › book › TOC
  * breadcrumb. The breadcrumb comes from tabStore's recents location for the same
@@ -76,7 +77,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     if (entry.route === '/book-view' && entry.bookId !== undefined) {
       // The entry has the identity fields locationKey reads; it is not a full location.
       const tocPath = tocPathByDocumentKey.value.get(locationKey(entry as unknown as NavLocation))
-      return bookResumePath(booksDataStore.allBooksMap.get(entry.bookId), entry.title, tocPath)
+      return bookResumePath(booksDataStore.allBooksMap.get(entry.bookId), catalogBookTitle(entry), tocPath)
     }
     return entry.localFilePath || entry.localFileName || ''
   }
@@ -86,7 +87,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
       const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
       return {
         key: `recent:${entry.key}`,
-        title: entry.title,
+        title: catalogBookTitle(entry),
         path: recentPath(entry),
         icon: icon.icon24,
         color: icon.color,
@@ -129,5 +130,5 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     frequentFoldersStore.getList().then((list) => (frequentFolderList.value = list))
   })
 
-  return computed(() => [...recentCards.value, ...folderCards.value])
+  return computed(() => [...folderCards.value, ...recentCards.value])
 }

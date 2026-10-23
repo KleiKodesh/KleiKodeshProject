@@ -50,25 +50,25 @@ function argbToCss(signedArgb: number): string {
   <div class="annotation-menu-row">
     <AlertDialog
       v-if="showNoSelectionAlert"
-      message="יש לסמן טקסט תחילה"
+      :message="$t('bookView.annotation.selectFirst')"
       @close="showNoSelectionAlert = false"
     />
     <div class="note-row" @click="onNote">
       <IconEdit20Regular class="note-icon" />
-      <span class="note-label">הוסף הערה</span>
+      <span class="note-label">{{ $t('bookView.annotation.addNote') }}</span>
     </div>
     <div class="separator" />
     <div class="highlight-row">
-      <span class="highlight-label">סמן</span>
+      <span class="highlight-label">{{ $t('bookView.annotation.highlight') }}</span>
       <button
         v-for="colorArgb in HIGHLIGHT_COLORS_LIST"
         :key="colorArgb"
         class="color-swatch"
         :style="{ background: argbToCss(colorArgb) }"
-        :aria-label="`סמן בצבע`"
+        :aria-label="$t('bookView.annotation.highlightColor')"
         @click="onColorClick(colorArgb)"
       />
-      <button class="clear-button" :aria-label="'הסר סימון'" @click="onClear">
+      <button class="clear-button" :aria-label="$t('bookView.annotation.clear')" @click="onClear">
         <IconEraser20Regular />
       </button>
     </div>
@@ -76,10 +76,6 @@ function argbToCss(signedArgb: number): string {
 </template>
 
 <style scoped>
-.annotation-menu-row {
-  direction: rtl;
-}
-
 /* These rows sit inside ContextMenu.vue, which cannot style them (they belong to this
    child component) — so they take the menu's published row metrics from its CSS
    variables rather than restating the numbers. Do not inline literals here: the height
@@ -128,7 +124,6 @@ function argbToCss(signedArgb: number): string {
 
 .highlight-row {
   gap: 5px;
-  direction: rtl;
 }
 
 .highlight-label {

@@ -28,6 +28,10 @@
  * Source-priority prefixes (stripped before searching):
  *   HebrewBooks first: היברו, היברובוקס, היברו בוקס, \ (single backslash)
  *   Files first:       מחשב, קובץ, \\ (double backslash)
+ *   English aliases, accepted in both UI languages, case-insensitive, and only
+ *   as a whole word (followed by a colon, space or end):
+ *     HebrewBooks first: hebrewbooks, hebrew books, hb
+ *     Files first:       file, files, pc, computer
  *   The backslash shorthands also work as a suffix: "query\" and "query\\".
  *   Default (no prefix): catalog first
  *
@@ -45,6 +49,13 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
+import {
+  reportCatalogTocSearchResponse,
+  reportLocalFileSearchFailure,
+  reportSearchIndexStatus,
+  useLocalFileIndexBuildPolling,
+  useSearchIndexStatus,
+} from '@/composables/useSearchIndexStatus'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,8 +87,8 @@ interface CatalogTocServiceHit {
   bookId: number
   /** -1 = no resolved line. */
   lineIndex: number
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
@@ -105,6 +116,10 @@ const SUPERSEDED_RETRY_MS = 150
 // longer one (\\) is matched first.
 const HEBREWBOOKS_PREFIXES = ['היברו בוקס', 'היברובוקס', 'היברו']
 const FILES_PREFIXES = ['מחשב', 'קובץ']
+// English aliases: whole-word only, so an English file name such as "filename"
+// or "hbx" is never mistaken for a prefix. One anchored regex test each.
+const HEBREWBOOKS_PREFIX_EN = /^(?:hebrew\s*books|hb)(?=[\s:]|$)/i
+const FILES_PREFIX_EN = /^(?:files?|pc|computer)(?=[\s:]|$)/i
 const HEBREWBOOKS_SHORTHAND = '\\'
 const FILES_SHORTHAND = '\\\\'
 
@@ -128,7 +143,7 @@ function stripShorthandFromQuery(trimmed: string): string {
   return trimmed.replace(/^\\+|\\+$/g, '').replace(/^\s*:\s*/, '').trim()
 }
 
-function parseQueryPrefix(rawQuery: string): ParsedQuery {
+export function parseQueryPrefix(rawQuery: string): ParsedQuery {
   const trimmed = rawQuery.trim()
 
   // Check the backslash shorthands first, as prefix or suffix — \\ (files)
@@ -150,6 +165,14 @@ function parseQueryPrefix(rawQuery: string): ParsedQuery {
     if (trimmed.startsWith(prefix)) {
       return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, prefix) }
     }
+  }
+  const hebrewBooksEn = HEBREWBOOKS_PREFIX_EN.exec(trimmed)
+  if (hebrewBooksEn) {
+    return { priority: 'hebrewbooks', effectiveQuery: stripPrefixFromQuery(trimmed, hebrewBooksEn[0]) }
+  }
+  const filesEn = FILES_PREFIX_EN.exec(trimmed)
+  if (filesEn) {
+    return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, filesEn[0]) }
   }
   // "תוספים" also puts files first, but it is a search TERM rather than a prefix —
   // the file search rewrites it to the index's addin prefix, so it must survive here.
@@ -243,12 +266,8 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       if (hit.level === 0) {
         if (books.length < MAX_RESULTS_PER_SOURCE) books.push({ source: 'catalog', book })
       } else if (tocItems.length < MAX_RESULTS_PER_SOURCE) {
-        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book
-        // title itself, so show only the TOC part. Navigation is line-based.
-        const titlePrefix = `${book.title} / `
-        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
-          ? hit.fullTocPath.slice(titlePrefix.length)
-          : hit.fullTocPath
+        // Navigation is line-based.
+        const tocPath = hit.tocPath
         tocItems.push({
           uid: `toc-${hit.bookId}-${hit.treeOrder}`,
           kind: 'toc',
@@ -327,9 +346,10 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       for (;;) {
         const res = await catalogTocSearch(effectiveQuery)
         if (generation !== catalogGeneration) return
-        // A hard failure (index missing or unreadable) is terminal — retrying it
-        // would poll forever and hold the spinner on for the life of the query.
-        if (res.error) {
+        reportCatalogTocSearchResponse(res)
+        // A hard failure (index missing or unreadable, or no seforim DB) is terminal —
+        // retrying it would poll forever and hold the spinner on for the life of the query.
+        if (res.error || res.dbMissing || res.buildFailure) {
           setCatalog([])
           setCatalogToc([])
           appliedCatalogQuery = effectiveQuery
@@ -349,6 +369,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
       }
     } catch {
       if (generation === catalogGeneration) {
+        reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'serviceError' })
         setCatalog([])
         setCatalogToc([])
         appliedCatalogQuery = effectiveQuery
@@ -415,9 +436,11 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
         .then((response) => {
           if (generation !== asyncGeneration) return
           if (response.error || !response.results) {
+            void reportLocalFileSearchFailure()
             setFiles([])
             return
           }
+          reportSearchIndexStatus('localFiles', { kind: 'ready' })
           setFiles(response.results.map((item) => ({
             source: 'files' as const,
             fileName: item.fileName,
@@ -437,6 +460,9 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     },
     { immediate: true },
   )
+
+  // The file search blocks while the file index builds — say so instead of a bare spinner.
+  useLocalFileIndexBuildPolling(isLoadingFiles)
 
   function clearResults() {
     asyncGeneration++
@@ -462,6 +488,13 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     hebrewBooksResults.value.length > 0 ||
     fileResults.value.length > 0
 
+  // An unavailable index has no results and no spinner, but its section still has
+  // something to say — the dropdown must open to show it.
+  const catalogIndexStatus = useSearchIndexStatus('catalogToc')
+  const fileIndexStatus = useSearchIndexStatus('localFiles')
+  const hasIndexFailureToShow = () =>
+    catalogIndexStatus.isUnavailable.value || fileIndexStatus.isUnavailable.value
+
   const isLoadingAny = () =>
     isLoadingCatalogToc.value || isLoadingHebrewBooks.value || isLoadingFiles.value
 
@@ -475,6 +508,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     isLoadingHebrewBooks,
     isLoadingFiles,
     hasAnyResults,
+    hasIndexFailureToShow,
     isLoadingAny,
     clearResults,
     pause,

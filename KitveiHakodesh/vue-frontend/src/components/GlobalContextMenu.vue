@@ -20,6 +20,9 @@ import { pasteIntoWord } from '@/webview-host/bridge'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const settingsStore = useSettingsStore()
 
@@ -55,12 +58,12 @@ function onPasteIntoWord(): void {
 }
 
 const items = computed<ContextMenuItem[]>(() => [
-  { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
-  { label: 'העתק לתוך וורד', action: onPasteIntoWord },
+  { label: t('components.copy'), action: onCopy, shortcut: 'Ctrl+C' },
+  { label: t('components.copyIntoWord'), action: onPasteIntoWord },
   { type: 'separator' },
   {
     type: 'checkbox',
-    label: 'העתק טקסט נקי',
+    label: t('components.copyCleanText'),
     get checked() { return settingsStore.copyCleanText },
     onChange: (value: boolean) => { settingsStore.copyCleanText = value },
   },

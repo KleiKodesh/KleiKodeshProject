@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { ref, computed, watch, markRaw } from 'vue'
 import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
@@ -11,6 +12,7 @@ import { getCatalogCardLines, getLibraryName, hasLibraryBadges } from './catalog
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { titleWithAuthor } from './titleWithAuthor'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
@@ -47,8 +49,9 @@ const cards = computed((): CardData[] =>
     const { path, badge } = getCatalogCardLines(item, showLibraryBadge.value)
     return {
       key: item.uid,
-      title: item.kind === 'folder' ? item.node.title : item.book.title,
-      path,
+      title: item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors),
+      // A book's author rides on its title; the second line is the folder's book count only.
+      path: item.kind === 'folder' ? path : '',
       badge,
       sourceLibrary: getLibraryName(item),
       reserveBadge: reserveBadge.value,
@@ -94,7 +97,7 @@ defineExpose({
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <!-- Host is the size container so the grid's cqi tracks the pane width. -->
   <div v-else class="catalog-cards-host">
     <div ref="cardsEl" class="catalog-cards" @mousedown.prevent>
@@ -134,7 +137,17 @@ defineExpose({
 }
 /* Keyboard highlight: DOM focus never reaches a card, so it comes from a class
    on the card's root wrapper and is painted on the inner button. */
+/* Off-screen cards skip rendering — big folders without a virtualizer. */
+.catalog-cards > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 49px;
+}
 .is-focused :deep(.card) {
-  background: var(--input-bg-focus);
+  background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
+}
+/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
+.catalog-cards :deep(.card-title) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

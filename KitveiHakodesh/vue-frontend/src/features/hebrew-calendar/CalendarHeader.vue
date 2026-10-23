@@ -9,6 +9,7 @@ import {
   IconCalendarMonth20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { HEB_MONTHS, GREG_MONTHS } from './useMonthlyView'
 
 const props = defineProps<{
@@ -66,9 +67,16 @@ const hebYearListRef = ref<HTMLElement | null>(null)
 const gregYearListRef = ref<HTMLElement | null>(null)
 
 // Close whenever the click lands outside the whole header (covers all four).
-useDropdownClose(rootRef, () => {
-  openDrop.value = null
-})
+// The root is the inline header; only the open drop (one at a time) is fitted.
+useDropdownClose(
+  rootRef,
+  () => {
+    openDrop.value = null
+  },
+  { fitToViewport: false },
+)
+const openDropEl = ref<HTMLElement | null>(null)
+useDropdownViewportFit(openDropEl)
 
 function toggleDrop(id: Exclude<DropId, null>) {
   const willOpen = openDrop.value !== id
@@ -109,7 +117,7 @@ function selectGregYear(y: number) {
         <span class="label-btn" @click="toggleDrop('hebMonth')">
           {{ labelMonth(hebrewLabel) }}
         </span>
-        <div v-if="openDrop === 'hebMonth'" class="drop month-drop">
+        <div v-if="openDrop === 'hebMonth'" ref="openDropEl" class="drop month-drop">
           <button
             v-for="m in HEB_MONTHS"
             :key="m.num"
@@ -125,7 +133,7 @@ function selectGregYear(y: number) {
         <span class="label-btn" @click="toggleDrop('hebYear')">
           {{ labelYear(hebrewLabel) }}
         </span>
-        <div v-if="openDrop === 'hebYear'" class="drop year-drop">
+        <div v-if="openDrop === 'hebYear'" ref="openDropEl" class="drop year-drop">
           <div ref="hebYearListRef" class="year-list">
             <button
               v-for="y in HEB_YEARS"
@@ -143,19 +151,19 @@ function selectGregYear(y: number) {
 
     <!-- Center: navigation + view toggle -->
     <div class="nav">
-      <button class="nav-btn" title="הבא" @click="emit('next')">
-        <IconChevronLeft20Regular />
+      <button class="nav-btn nav-next" :title="$t('hebrewCalendar.nav.next')" @click="emit('next')">
+        <IconChevronLeft20Regular class="dir-icon" />
       </button>
-      <button class="nav-btn" title="הקודם" @click="emit('prev')">
-        <IconChevronRight20Regular />
+      <button class="nav-btn nav-prev" :title="$t('hebrewCalendar.nav.prev')" @click="emit('prev')">
+        <IconChevronRight20Regular class="dir-icon" />
       </button>
       <div class="sep" />
-      <button class="nav-btn" title="היום" @click="emit('today')"><IconHome20Regular /></button>
+      <button class="nav-btn" :title="$t('hebrewCalendar.nav.today')" @click="emit('today')"><IconHome20Regular /></button>
       <div class="sep" />
       <button
         class="nav-btn"
         :class="{ active: viewMode === 'monthly' }"
-        title="חודשי"
+        :title="$t('hebrewCalendar.nav.monthly')"
         @click="emit('set-view', 'monthly')"
       >
         <IconCalendarMonth20Regular />
@@ -163,7 +171,7 @@ function selectGregYear(y: number) {
       <button
         class="nav-btn"
         :class="{ active: viewMode === 'weekly' }"
-        title="שבועי"
+        :title="$t('hebrewCalendar.nav.weekly')"
         @click="emit('set-view', 'weekly')"
       >
         <IconCalendarAgenda20Regular />
@@ -176,7 +184,7 @@ function selectGregYear(y: number) {
         <span class="label-btn" @click="toggleDrop('gregMonth')">
           {{ labelMonth(gregLabel) }}
         </span>
-        <div v-if="openDrop === 'gregMonth'" class="drop month-drop greg-drop">
+        <div v-if="openDrop === 'gregMonth'" ref="openDropEl" class="drop month-drop greg-drop">
           <button
             v-for="(name, i) in GREG_MONTHS"
             :key="i"
@@ -192,7 +200,7 @@ function selectGregYear(y: number) {
         <span class="label-btn" @click="toggleDrop('gregYear')">
           {{ labelYear(gregLabel) }}
         </span>
-        <div v-if="openDrop === 'gregYear'" class="drop year-drop greg-drop">
+        <div v-if="openDrop === 'gregYear'" ref="openDropEl" class="drop year-drop greg-drop">
           <div ref="gregYearListRef" class="year-list">
             <button
               v-for="y in GREG_YEARS"
@@ -296,10 +304,37 @@ function selectGregYear(y: number) {
   overflow: hidden;
 }
 .side--he .drop {
-  right: 0;
+  inset-inline-start: 0;
 }
 .side--greg .drop {
-  left: 0;
+  inset-inline-end: 0;
+}
+/* English (LTR) reads Gregorian first: it takes the inline-start side. */
+:root[dir='ltr'] .side--greg {
+  order: -1;
+  justify-content: flex-start;
+}
+:root[dir='ltr'] .side--he {
+  order: 1;
+  justify-content: flex-end;
+}
+:root[dir='ltr'] .side--greg .drop {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+}
+/* .nav is physically LTR (next, prev). English reads prev then next. */
+:root[dir='ltr'] .nav > * {
+  order: 2;
+}
+:root[dir='ltr'] .nav > .nav-prev {
+  order: 0;
+}
+:root[dir='ltr'] .nav > .nav-next {
+  order: 1;
+}
+:root[dir='ltr'] .side--he .drop {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
 }
 
 .month-drop {

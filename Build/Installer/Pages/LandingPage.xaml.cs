@@ -1,4 +1,4 @@
-using KleiKodeshVstoInstallerWpf.Helpers;
+﻿using KleiKodeshVstoInstallerWpf.Helpers;
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,11 +32,22 @@ namespace KleiKodeshVstoInstallerWpf
         private void InstallButton_Click(object sender, RoutedEventArgs e)
         {
             if (!WordHelper.EnsureWordClosed()) return;
-            if (!KitveiHakodeshHelper.EnsureKitveiHakodeshClosed()) return;
+            KitveiHakodeshHelper.EnsureKitveiHakodeshClosed();
             // showSettingsAfter: true — after install completes, navigate to SettingsPage
             // so the user can configure ribbon visibility and the default button.
             _host.NavigateToInstall(showSettingsAfter: true);
         }
+        // Switches the installer language and reloads the window so every page
+        // picks up the new texts and flow direction.
+        private void LanguageButton_Click(object sender, RoutedEventArgs e)
+        {
+            UiLanguage.Set(UiLanguage.Current == UiLanguage.English ? UiLanguage.Hebrew : UiLanguage.English);
+            var window = new MainWindow();
+            Application.Current.MainWindow = window;
+            window.Show();
+            _host.Close();
+        }
+
         private void CancelButton_Click(object sender, RoutedEventArgs e) => Environment.Exit(1);
         private void RepairButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToRepair();
     }

@@ -8,7 +8,7 @@ import {
 import type { HebrewBook } from './hebrewBooksCatalog'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
-const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
+const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean; downloading?: boolean }>()
 const emit = defineEmits<{
   'book-clicked': [book: HebrewBook, openInNewTab: boolean]
   'download-clicked': [book: HebrewBook]
@@ -36,7 +36,7 @@ const tooltip = computed(() => {
 </script>
 
 <template>
-  <div
+  <div dir="rtl"
     class="item"
     data-nav-item
     :class="{ 'is-focused': focused }"
@@ -53,7 +53,7 @@ const tooltip = computed(() => {
         <button
           v-if="hasLocalFile"
           class="dl-btn reveal-btn"
-          :title="'פתח בסייר הקבצים: ' + book.title"
+          :title="$t('hebrewBooks.item.openInExplorer', { title: book.title })"
           tabindex="-1"
           @click.stop="emit('reveal-clicked', book)"
         >
@@ -62,19 +62,23 @@ const tooltip = computed(() => {
         <button
           v-if="hasLocalFile"
           class="dl-btn delete-btn"
-          :title="'מחק מהתיקייה: ' + book.title"
+          :title="$t('hebrewBooks.item.deleteFromFolder', { title: book.title })"
           tabindex="-1"
           @click.stop="emit('delete-clicked', book)"
         >
           <IconDelete20Regular />
         </button>
         <button
+          v-if="!hasLocalFile"
           class="dl-btn"
-          :title="'הורד ' + book.title"
+          :title="$t('hebrewBooks.item.download', { title: book.title })"
           tabindex="-1"
+          :disabled="downloading"
+          :aria-busy="downloading"
           @click.stop="emit('download-clicked', book)"
         >
-          <IconArrowDownload20Regular />
+          <span v-if="downloading" class="download-spinner" />
+          <IconArrowDownload20Regular v-else />
         </button>
       </div>
     </div>
@@ -162,6 +166,20 @@ const tooltip = computed(() => {
 }
 .reveal-btn:hover {
   color: #3478f6;
+}
+
+/* Same ring as the book-view toolbar's export-to-Word button. */
+.download-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: download-spin 0.8s linear infinite;
+}
+@keyframes download-spin {
+  to { transform: rotate(360deg); }
 }
 
 .row-bottom {

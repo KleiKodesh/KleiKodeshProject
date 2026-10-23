@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodesh.Core.LocalFiles;
 
@@ -65,6 +66,13 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     private readonly SemaphoreSlim _buildGate = new(1, 1);
     private Task<LocalFileIndex>? _buildTask;
 
+    // Guards the hand-off between searches and an idle release: a search registers itself
+    // on the CURRENT index under this lock, and ReleaseIdleResources detaches the index
+    // under the same lock only when no search is registered. So a search never runs on an
+    // index that is being disposed, and a release never disposes one in use.
+    private readonly object _useLock = new();
+    private int _activeSearches;
+
     // ── Build status ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -77,6 +85,22 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// documents.</para>
     /// </summary>
     private volatile string? _buildStatusMessage;
+
+    /// <summary>Why the last build attempt failed (exception message); null when it succeeded
+    /// or a new attempt is running. Reported by <see cref="GetIndexStatus"/>.</summary>
+    private volatile string? _lastBuildFailure;
+
+    /// <summary>Estimated build progress 0-100 (see LocalFileIndex.Build); -1 when unknown
+    /// or no build runs.</summary>
+    private volatile int _buildProgressPercent = -1;
+
+    /// <summary>Why the index last (re)built from scratch — a full crawl of a drive, or a
+    /// reindex — and when; null while every start only caught up from the journal.</summary>
+    public IndexBuildReason? LastBuildReason => _lastBuildReason;
+    private volatile IndexBuildReason? _lastBuildReason;
+
+    /// <summary>A reindex's reason, carried to the build that follows it.</summary>
+    private string? _pendingBuildReason;
 
     /// <summary>
     /// Placeholder status for the window between a build being queued and the crawler
@@ -96,7 +120,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     {
         // _index is assigned only after the build completes, so a non-null index means
         // ready. Checking it first keeps the common (warm) case a single field read.
-        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false };
+        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false, BuildReason = _lastBuildReason };
 
         // Read the task ONCE: it can be replaced (by a reindex) or nulled (by a faulted
         // build being dropped) between reads, and a torn view here would be reported as a
@@ -112,6 +136,9 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         {
             IsBuilding = build is not null && !build.IsCompleted,
             Message = _buildStatusMessage,
+            BuildFailure = build is not null && !build.IsCompleted ? null : _lastBuildFailure,
+            ProgressPercent = build is not null && !build.IsCompleted ? _buildProgressPercent : -1,
+            BuildReason = _lastBuildReason,
         };
     }
 
@@ -173,7 +200,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         try
         {
             ours = ReferenceEquals(_buildTask, build);
-            if (ours) _index = built;
+            if (ours) lock (_useLock) _index = built;
         }
         finally
         {
@@ -191,13 +218,24 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// exactly once per index instance, memoized in <c>_buildTask</c>.</summary>
     private LocalFileIndex BuildIndex()
     {
-        var index = new LocalFileIndex(IndexPath);
+        _lastBuildFailure = null;
+        LocalFileIndex index;
+        try
+        {
+            index = new LocalFileIndex(IndexPath);
+        }
+        catch (Exception ex)
+        {
+            _lastBuildFailure = ex.Message;
+            throw;
+        }
         try
         {
             return BuildAndStartWatchers(index);
         }
-        catch
+        catch (Exception ex)
         {
+            _lastBuildFailure = ex.Message;
             // Anything past the ctor throwing (starting the USN watchers, the rescan timer)
             // leaves an index nobody will ever be handed: dispose it here or its Lucene write
             // lock is held for the process lifetime. The faulted task is dropped by
@@ -213,6 +251,8 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         // The flag was already raised by EnsureIndexAsync when it queued this build; here we
         // only refine it with real progress. Cleared in the finally: once the crawl is over
         // the caller is waiting on the watchers below, not on the index, and that wait is short.
+        var crawlReasons = new List<string>();
+        string? pending = Interlocked.Exchange(ref _pendingBuildReason, null);
         try
         {
             index.Build(
@@ -221,7 +261,9 @@ public sealed class LocalFileIndexCoordinator : IDisposable
                     _buildStatusMessage = msg;
                     _log(LocalFileIndexLogLevel.Debug, "[LocalFileIndex] " + msg, null);
                 },
-                CancellationToken.None);
+                CancellationToken.None,
+                crawlReasons.Add,
+                percent => _buildProgressPercent = percent);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -232,6 +274,13 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         finally
         {
             _buildStatusMessage = null;
+            _buildProgressPercent = -1;
+            if (pending != null || crawlReasons.Count > 0)
+            {
+                string reason = pending ?? "full crawl — " + string.Join("; ", crawlReasons);
+                _lastBuildReason = IndexBuildReason.Now(reason);
+                _log(LocalFileIndexLogLevel.Information, "[LocalFileIndex] index built: " + reason, null);
+            }
         }
 
         // Start the live USN journal update loop now that the initial build is done.
@@ -248,7 +297,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
             // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
             _ = Task.Run(async () =>
             {
-                try { await ReindexAsync(CancellationToken.None); }
+                try { await ReindexAsync(CancellationToken.None, "live update failed: " + message); }
                 catch (Exception rebuildEx)
                 {
                     _log(LocalFileIndexLogLevel.Error, "[LocalFileIndex] Rebuild after live-update failure failed", rebuildEx);
@@ -279,10 +328,17 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         if (string.IsNullOrWhiteSpace(query))
             return new LocateDocumentsResult();
 
-        var index = await EnsureIndexAsync(ct);
-
+        var index = await AcquireIndexAsync(ct);
         int total;
-        var entries = index.Search(query, drive: null, limit: max, total: out total);
+        List<PathEntry> entries;
+        try
+        {
+            entries = index.Search(query, drive: null, limit: max, total: out total);
+        }
+        finally
+        {
+            lock (_useLock) _activeSearches--;
+        }
 
         // Apply user-defined folder exclusions AFTER the Lucene query, via the library so
         // this matches the net48 host exactly. Adjusts `total` for the dropped entries.
@@ -323,17 +379,113 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     }
 
     /// <summary>
+    /// Opens (or reopens, after an idle release) the index and registers one search on it.
+    /// The caller MUST decrement <c>_activeSearches</c> under <c>_useLock</c> when done.
+    /// Loops if an idle release detached the index between the open and the registration.
+    /// </summary>
+    private async Task<LocalFileIndex> AcquireIndexAsync(CancellationToken ct)
+    {
+        while (true)
+        {
+            var index = await EnsureIndexAsync(ct);
+            lock (_useLock)
+            {
+                if (ReferenceEquals(_index, index))
+                {
+                    _activeSearches++;
+                    return index;
+                }
+            }
+            // Released (or reindexed) in between — open the current one instead.
+        }
+    }
+
+    // ── Idle release ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True while the index is being built, a search is running on it, or a live USN delta /
+    /// periodic rescan is writing it. The host's idle trimmer must not release it then.
+    /// </summary>
+    public bool IsBusy
+    {
+        get
+        {
+            var build = _buildTask;
+            if (build is not null && !build.IsCompleted) return true;
+            if (Volatile.Read(ref _activeSearches) > 0) return true;
+            return _index?.IsWriting == true;
+        }
+    }
+
+    /// <summary>What the local-file index keeps resident right now (diagnostics).</summary>
+    public string DescribeResidentState() => _index is null ? "closed" : "open (writer + reader + live watchers)";
+
+    /// <summary>
+    /// Idle memory release: closes the Lucene writer + reader (segment term indexes, stored-field
+    /// buffers, the writer's RAM buffer) and stops the live USN watcher threads. Returns true if
+    /// an index was released.
+    ///
+    /// Reload: the next search goes through <see cref="EnsureIndexAsync"/>, which reopens the
+    /// index and runs <see cref="LocalFileIndex.Build"/>. Build reads the per-drive USN cursor
+    /// files the live threads saved after every applied delta, so it applies exactly the file
+    /// changes made while the index was closed (or does a full rebuild of a drive whose journal
+    /// wrapped/was recreated), then restarts the live watchers. No change is lost.
+    ///
+    /// Skipped (returns false) when busy (see <see cref="IsBusy"/>), or when some drive has no
+    /// live USN watcher (unelevated run): there the cursor cannot be read, so reopening would
+    /// mean a full drive crawl on the next search — far worse than the memory it saves.
+    /// Thread safety: takes the build gate without waiting (skip if a build/reindex holds it),
+    /// then detaches the index under <c>_useLock</c> only when no search is registered.
+    /// </summary>
+    public bool ReleaseIdleResources()
+    {
+        if (!_buildGate.Wait(0)) return false;
+        LocalFileIndex? detached;
+        try
+        {
+            var build = _buildTask;
+            if (build is not null && !build.IsCompleted) return false;
+
+            lock (_useLock)
+            {
+                var index = _index;
+                if (index is null || _activeSearches > 0 || index.IsWriting || index.HasUnwatchedDrives)
+                    return false;
+                detached = index;
+                _index = null;
+                _buildTask = null;
+            }
+
+            // Disposed while still holding the build gate, so a concurrent search's rebuild
+            // cannot open a new writer before this one has released the Lucene write lock.
+            detached.Dispose();
+        }
+        finally
+        {
+            _buildGate.Release();
+        }
+
+        _log(LocalFileIndexLogLevel.Debug, "[LocalFileIndex] Released idle index (reopens on next search)", null);
+        return true;
+    }
+
+    /// <summary>
     /// Wipe the index and trigger a full rebuild. Fire-and-forget — the rebuild
     /// runs in the background; the next search call will block until it finishes.
     /// </summary>
-    public async Task ReindexAsync(CancellationToken ct)
+    /// <param name="reason">Why, for the log and the status (<see cref="LastBuildReason"/>).</param>
+    public async Task ReindexAsync(CancellationToken ct, string reason = "reindex requested")
     {
+        Volatile.Write(ref _pendingBuildReason, reason);
         // Dispose the current index so the writer lock is released, then rebuild.
         await _buildGate.WaitAsync(ct);
         try
         {
-            _index?.Dispose();
-            _index = null;
+            // Under _useLock so a search registering itself sees the index gone (it then
+            // reopens) rather than racing the dispose.
+            LocalFileIndex? old;
+            lock (_useLock) { old = _index; _index = null; }
+            old?.Dispose();
             _buildTask = null;
             // Stale the moment the index it described is gone. The rebuild republishes as
             // it crawls; until then the status carries no detail, only "building".

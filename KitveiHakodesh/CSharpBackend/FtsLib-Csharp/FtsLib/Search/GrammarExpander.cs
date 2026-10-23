@@ -19,8 +19,9 @@ namespace FtsLib.Search
     ///   '?' — compatible: optional-char variants are generated first (by
     ///         <see cref="HebrewWildcardExpander"/>), then grammar expansion is
     ///         applied to each variant independently.
-    ///   '*' — overrides '%': a token that contains '*' is treated as a plain
-    ///         wildcard; any '%' markers are ignored.
+    ///   '*' — on the same side, overrides '%'. On opposite sides they combine
+    ///         ("*word%", "%word*"): the engine runs one '*' scan per grammatical
+    ///         form of the '%' side (<see cref="PrefixForms"/>, <see cref="SuffixForms"/>).
     ///
     /// Lookup strategy (same as <see cref="KetivExpander"/>):
     ///   All candidate forms are generated in C#, then each is verified with an
@@ -36,7 +37,7 @@ namespace FtsLib.Search
         //
         // Sources: standard Biblical/Rabbinic Hebrew grammar.
         //   Single:   ו ב כ ל מ ש ה + ד for aramaic
-        //   Double:   וב וכ ול ום וש וה מה שה לה כש מש לכ
+        //   Double:   וב וכ ול ומ וש וה מה שה לה כש מש לכ
         //   Triple:   ובש ולש וכש ומש ולכ ומה ושה ולה וכה מהש לכש
         //   Quad:     ולכש ומהש ובשה
         //
@@ -65,7 +66,7 @@ namespace FtsLib.Search
             "\u05D5\u05D1",               // וב
             "\u05D5\u05DB",               // וכ
             "\u05D5\u05DC",               // ול
-            "\u05D5\u05DE",               // ום
+            "\u05D5\u05DE",               // ומ
             "\u05D5\u05E9",               // וש
             "\u05D5\u05D4",               // וה
             "\u05DE\u05D4",               // מה
@@ -155,14 +156,30 @@ namespace FtsLib.Search
         public static List<string> Expand(string                       word,
                                           bool                         expandPrefixes,
                                           bool                         expandSuffixes,
-                                          IReadOnlyList<SegmentHandle> segments,
-                                          TermChunkCache               cache = null)
+                                          IReadOnlyList<SegmentHandle> segments)
         {
             if (string.IsNullOrEmpty(word))
                 return new List<string>();
 
             var candidates = BuildCandidates(word, expandPrefixes, expandSuffixes);
-            return Verify(candidates, segments, cache);
+            return Verify(candidates, segments);
+        }
+
+        /// <summary>The word bare and behind every grammatical prefix ("%word*").</summary>
+        internal static List<string> PrefixForms(string word)
+        {
+            var forms = new List<string>(Prefixes.Length + 1) { word };
+            foreach (var prefix in Prefixes) forms.Add(prefix + word);
+            return forms;
+        }
+
+        /// <summary>The word bare and its stem followed by every grammatical suffix ("*word%").</summary>
+        internal static List<string> SuffixForms(string word)
+        {
+            string stem = NormaliseFinalLetter(word);
+            var forms = new List<string>(Suffixes.Length + 1) { word };
+            foreach (var suffix in Suffixes) forms.Add(stem + suffix);
+            return forms;
         }
 
         // ── Candidate generation ──────────────────────────────────────
@@ -249,14 +266,9 @@ namespace FtsLib.Search
         /// Filters <paramref name="candidates"/> to those that exist in at least one
         /// segment's term_index, using exact equality (same strategy as KetivExpander).
         ///
-        /// Every candidate is probed against EVERY segment (no early exit once
-        /// confirmed): the probe also piggybacks the chunk metadata into
-        /// <paramref name="cache"/> (F01), and a cached chunk list must cover all
-        /// segments containing the term or resolve would silently drop postings.
         /// </summary>
         private static List<string> Verify(HashSet<string>              candidates,
-                                            IReadOnlyList<SegmentHandle> segments,
-                                            TermChunkCache               cache = null)
+                                            IReadOnlyList<SegmentHandle> segments)
         {
             var confirmed = new HashSet<string>(StringComparer.Ordinal);
             var results   = new List<string>(candidates.Count);
@@ -276,12 +288,6 @@ namespace FtsLib.Search
                         using (var reader = cmd.ExecuteReader())
                         {
                             if (!reader.Read()) continue;
-                            cache?.Add(candidate, new SegmentChunk(seg,
-                                reader.GetInt64(0),
-                                reader.GetInt32(1),
-                                reader.GetInt64(2),
-                                reader.GetInt32(3),
-                                reader.GetInt32(4)));
                             if (confirmed.Add(candidate))
                                 results.Add(candidate);
                         }

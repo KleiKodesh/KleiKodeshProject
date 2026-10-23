@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { onLongPress } from '@vueuse/core'
 import { IconArrowRight20Regular, IconArrowLeft20Regular } from '@iconify-prerendered/vue-fluent'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { documentIcon, iconKeyForRoute } from '@/utils/documentIcons'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 /**
  * One Back/Forward button in the title bar, browser-style: a click steps one
@@ -22,14 +26,14 @@ const props = defineProps<{
 }>()
 
 const pane = useAppShellPane(props.paneId)
-const isBack = props.direction === 'back'
+const isBack = computed(() => props.direction === 'back')
 
-const isEnabled = computed(() => (isBack ? pane.canGoBack.value : pane.canGoForward.value))
+const isEnabled = computed(() => (isBack.value ? pane.canGoBack.value : pane.canGoForward.value))
 
-const HOLD_HINT = 'לחיצה ממושכת מציגה את רשימת ההיסטוריה'
-const title = isBack
-  ? 'חזור (Alt+חץ ימני)\n' + HOLD_HINT
-  : 'קדימה (Alt+חץ שמאלי)\n' + HOLD_HINT
+const HOLD_HINT = t('layout.holdHint')
+const title = computed(() => isBack.value
+  ? t('layout.back') + '\n' + HOLD_HINT
+  : t('layout.forward') + '\n' + HOLD_HINT)
 
 /** The frames on this button's side of the cursor, nearest step first — like
  *  the browser's own hold-to-show list. Each keeps its real entries index so a
@@ -40,13 +44,13 @@ const listItems = computed(() => {
     const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
     return {
       index,
-      label: entry.tocPath ? entry.title + ' · ' + entry.tocPath : entry.title,
+      label: entry.tocPath ? catalogBookTitle(entry) + ' · ' + entry.tocPath : catalogBookTitle(entry),
       iconComponent: icon.icon20,
       iconColor: icon.color,
     }
   })
   const cursor = pane.historyCursor.value
-  return isBack ? items.slice(0, cursor).reverse() : items.slice(cursor + 1)
+  return isBack.value ? items.slice(0, cursor).reverse() : items.slice(cursor + 1)
 })
 
 const buttonRef = ref<HTMLElement | null>(null)
@@ -87,7 +91,7 @@ function onClick() {
     isOpen.value = false
     return
   }
-  if (isBack) pane.goBack()
+  if (isBack.value) pane.goBack()
   else pane.goForward()
 }
 
@@ -107,8 +111,8 @@ function onSelectItem(index: number) {
     @pointerdown="suppressClick = false"
     @click.stop="onClick"
   >
-    <IconArrowRight20Regular v-if="isBack" />
-    <IconArrowLeft20Regular v-else />
+    <IconArrowRight20Regular class="dir-icon" v-if="isBack" />
+    <IconArrowLeft20Regular class="dir-icon" v-else />
   </button>
 
   <Teleport to="body">
@@ -153,7 +157,6 @@ function onSelectItem(index: number) {
   padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .history-button-dropdown-item {
@@ -176,7 +179,7 @@ function onSelectItem(index: number) {
 .history-button-dropdown-item-label {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: start;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

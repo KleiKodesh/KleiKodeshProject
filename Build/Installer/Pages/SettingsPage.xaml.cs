@@ -82,13 +82,13 @@ namespace KleiKodeshVstoInstallerWpf
             if (KitveiHakodesh || webSites)
                 _host.NavigateToComponentSettings(KitveiHakodesh, webSites);
             else
-                Environment.Exit(0);
+                WordHelper.ExitAfterInstall();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             CommitSettings();
-            Environment.Exit(0);
+            WordHelper.ExitAfterInstall();
         }
     }
 }

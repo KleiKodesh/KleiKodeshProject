@@ -3,20 +3,10 @@ import { useElementSize } from '@vueuse/core'
 
 /**
  * Geometry the fit arithmetic mirrors from the toolbar's CSS (BookViewToolbar and the
- * `--toolbar-*` variables in main.css) - a 28px button with no gap between buttons, and a
- * 1px separator carrying 2px of margin on each side. Change any of them there, change
- * them here.
+ * `--toolbar-*` variables in main.css) - a 28px button with no gap between buttons.
+ * Change it there, change it here.
  */
 const TOOLBAR_BUTTON_SIZE = 28
-/**
- * A separator, as a share of a button-width: a 1px rule with 2px of margin on each side.
- * Charged at its real size rather than rounded up to a button.
- *
- * The toolbar has two, and they are charged to different owners: the one that introduces the
- * zoom pair collapses with it and so belongs to zoom's width (see widthOf), while the other
- * is pinned and counts among the toolbar's pinned children. Each is charged exactly once.
- */
-export const TOOLBAR_SEPARATOR_IN_BUTTONS = (1 + 2 * 2) / TOOLBAR_BUTTON_SIZE
 /**
  * How far the anchored more button sits from the edge it is pinned to. Mirrors
  * `--toolbar-edge-inset` in BookViewToolbar.
@@ -57,6 +47,10 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  * first to go. Fixed by product decision, not by position in the toolbar: these are the
  * controls a reader can do without while the pane is cramped, worst-first.
  *
+ * The HebrewBooks editions dropdown is the one list-opening control that IS here (second,
+ * by product decision): in the flyout its row expands the editions inline beneath it, the
+ * same way the book-info row expands its panel, so no second floating layer is involved.
+ *
  * The versions and related-books dropdowns are deliberately NOT here: they open lists of
  * their own, and a list opening out of a row in the flyout is a second floating layer that
  * has to be measured and clamped against the window - in exactly the narrow window that
@@ -68,6 +62,7 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  */
 export const TOOLBAR_OVERFLOW_ORDER = [
   'book-info',
+  'hebrewbooks-editions',
   'export-to-word',
   'sync-commentaries',
   'diacritics',
@@ -78,15 +73,13 @@ export type ToolbarOverflowKey = (typeof TOOLBAR_OVERFLOW_ORDER)[number]
 
 /**
  * How much toolbar room a key is worth, in button-widths. Only zoom differs: it is a pair of
- * buttons and their separator collapsing as one control into a single flyout row, so it
+ * buttons collapsing as one control into a single flyout row, so it
  * frees more than twice what any other key does. Counting it as one would make the toolbar
  * think collapsing it saved a fraction of what it does, and stop collapsing a button early.
  */
 export function widthOf(key: ToolbarOverflowKey): number {
-  // Zoom is a PAIR - zoom out and zoom in - plus the separator that introduces them, all of
-  // which collapse together into one flyout row. The separator is charged here rather than
-  // among the pinned children for exactly that reason: it goes when they go.
-  return key === 'zoom' ? 2 + TOOLBAR_SEPARATOR_IN_BUTTONS : 1
+  // Zoom is a PAIR - zoom out and zoom in - collapsing together into one flyout row.
+  return key === 'zoom' ? 2 : 1
 }
 
 /**
@@ -148,6 +141,19 @@ export function keysToCollapse(
     collapsed.push(key)
     needed -= costOf(key)
   }
+
+  // Zoom frees more than two buttons, so collapsing it can leave room for a cheaper control
+  // that went before it. Give those back - latest first - while they fit, so nothing sits in
+  // the flyout with its own room still free on the toolbar.
+  for (let i = collapsed.length - 2; i >= 0; i--) {
+    const key = collapsed[i]!
+    const budget = currentlyCollapsed.includes(key)
+      ? availableLengthPx - TOOLBAR_HYSTERESIS_PX
+      : availableLengthPx
+    if (needed + costOf(key) > budget) continue
+    needed += costOf(key)
+    collapsed.splice(i, 1)
+  }
   return collapsed
 }
 
@@ -172,7 +178,7 @@ export function keysToCollapse(
  *                        TOOLBAR_OVERFLOW_ORDER. A book with no commentaries has no
  *                        sync button, and a control nothing renders must not be counted
  *                        against the fit.
- * @param pinnedCount   - how much room the non-collapsible buttons and the separators take,
+ * @param pinnedCount   - how much room the non-collapsible buttons take,
  *                        in button-widths. They always have theirs, so it comes off before
  *                        anything collapsible is measured.
  */

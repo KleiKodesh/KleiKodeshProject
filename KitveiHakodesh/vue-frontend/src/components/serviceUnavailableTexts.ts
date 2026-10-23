@@ -1,42 +1,57 @@
 import type { ServiceUnavailableReason } from '@/webview-host/serviceAvailability'
+import { t } from '@/i18n'
 
-/** Hebrew texts of ServiceUnavailableBanner.vue, one entry per reason. */
+/** UI texts of ServiceUnavailableBanner.vue, one entry per reason. */
 export const SERVICE_UNAVAILABLE_TEXTS: Record<ServiceUnavailableReason, { title: string; body: string }> = {
   NotRunning: {
-    title: 'שירות כתבי הקודש אינו מגיב',
-    body: 'הספרים והחיפוש אינם זמינים כרגע. ייתכן שהשירות מופעל מחדש - נא ללחוץ על "נסה שוב".',
+    title: t('components.service.notRunningTitle'),
+    body: t('components.service.notRunningBody'),
   },
   NotInstalled: {
-    title: 'שירות כתבי הקודש אינו מותקן',
-    body: 'הספרים והחיפוש זקוקים לשירות זה, והוא אינו מותקן במחשב. אפשר להתקין אותו עכשיו: לחיצה על "התקן שירות" תתקין אותו, והמחשב יבקש אישור מנהל.',
+    title: t('components.service.notInstalledTitle'),
+    body: t('components.service.notInstalledBody'),
   },
   InstallDeclined: {
-    title: 'התקנת השירות לא אושרה',
-    body: 'הספרים והחיפוש זקוקים לשירות כתבי הקודש, והתקנתו דורשת אישור מנהל במחשב. נא ללחוץ על "נסה שוב" ולאשר את חלון ההרשאה.',
+    title: t('components.service.installDeclinedTitle'),
+    body: t('components.service.installDeclinedBody'),
   },
   InstallFailed: {
-    title: 'התקנת השירות נכשלה',
-    body: 'הספרים והחיפוש זקוקים לשירות כתבי הקודש, אך התקנתו או תיקונו נכשלו. נא ללחוץ על "נסה שוב"; אם הבעיה חוזרת, יש להתקין מחדש את התוכנה (כלי קודש).',
+    title: t('components.service.installFailedTitle'),
+    body: t('components.service.installFailedBody'),
   },
   StartFailed: {
-    title: 'לא ניתן להפעיל את השירות',
-    body: 'שירות כתבי הקודש מותקן, אך מערכת ההפעלה אינה מפעילה אותו. לחיצה על "תקן" תתקן אותו, והמחשב יבקש אישור מנהל.',
+    title: t('components.service.startFailedTitle'),
+    body: t('components.service.startFailedBody'),
   },
 }
 
 /** The banner button's label per reason. */
 export const SERVICE_ACTION_LABELS: Record<ServiceUnavailableReason, string> = {
-  NotRunning: 'נסה שוב',
-  NotInstalled: 'התקן שירות',
-  InstallDeclined: 'נסה שוב',
-  InstallFailed: 'נסה שוב',
-  StartFailed: 'תקן',
+  NotRunning: t('components.service.retry'),
+  NotInstalled: t('components.service.install'),
+  InstallDeclined: t('components.service.retry'),
+  InstallFailed: t('components.service.retry'),
+  StartFailed: t('components.service.repair'),
 }
 
-export const SERVICE_RETRYING_LABEL = 'מנסה...'
+export const SERVICE_RETRYING_LABEL = t('components.service.retrying')
 
 /** Banner texts for a seforim DB left mid-update by Otzaria (hot journal beside the file). */
 export const SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS = {
-  title: 'עדכון ספריית אוצריא לא הושלם',
-  body: 'עדכון מאגר הספרים של אוצריא נקטע באמצע, ולכן הספרים אינם נטענים כרגע. נא לפתוח את אוצריא ולתת לה להשלים את העדכון - הספרייה תיטען כאן מחדש אוטומטית. אין למחוק קבצים בתיקיית הספרייה.',
+  title: t('components.service.dbInterruptedTitle'),
+  body: t('components.service.dbInterruptedBody'),
 }
+
+/** Banner texts when no seforim DB (the Otzaria library) exists at the configured path. */
+export const SEFORIM_DB_MISSING_TEXTS = {
+  title: t('components.service.dbMissingTitle'),
+  body: t('components.service.dbMissingBody'),
+}
+
+/** Banner texts when the seforim DB file exists but cannot be opened. */
+export const SEFORIM_DB_UNREADABLE_TEXTS = {
+  title: t('components.service.dbUnreadableTitle'),
+  body: t('components.service.dbUnreadableBody'),
+}
+
+export const SEFORIM_DB_PICK_LABEL = t('components.service.pickLibrary')

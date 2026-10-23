@@ -89,7 +89,12 @@ namespace KitveiHakodeshService.Tests
                         Ok("GetBookIdsForLines resolves a line from BOTH the primary and an attached library to the correct GLOBAL bookId");
 
                     var tocPaths = queries.GetTocPathsForLines(new List<int> { primaryLineId, additionalLineId });
-                    var tocByLine = tocPaths.ToDictionary(r => r.LineId);
+                    // The result carries each line's TOC entry once and each distinct entry's path once.
+                    var pathByEntry = tocPaths.Paths.ToDictionary(p => p.TocEntryId, p => p.Path);
+                    var tocByLine = tocPaths.Lines
+                        .Where(l => pathByEntry.ContainsKey(l.TocEntryId))
+                        .GroupBy(l => l.LineId)
+                        .ToDictionary(g => g.Key, g => (BookId: g.First().BookId, TocPath: pathByEntry[g.First().TocEntryId]));
                     if (!tocByLine.TryGetValue(additionalLineId, out var additionalToc) || additionalToc.BookId != additionalBook.Id
                         || !additionalToc.TocPath.Contains("מיוחד"))
                         Fail($"GetTocPathsForLines did not resolve the attached library's line to its own TOC path/book: "
@@ -159,9 +164,9 @@ namespace KitveiHakodeshService.Tests
                     {
                         Ok("SeforimDbFtsIndexer.Build completes with an additional library configured");
 
-                        var searcher = new SeforimDbFtsSearcher(new SeforimDbQueries(primaryPath, additionalEntries));
+                        var searcher = new SeforimDbFtsSearcher();
                         var hits = searcher.SearchInBatches(engine, "מיוחד", maxWordDistance: 0, requireOrdered: false,
-                            contextWords: 6, expandKetiv: false).SelectMany(b => b).ToList();
+                            contextWords: 6, terms: new FtsTermTable()).SelectMany(b => b.Hits).ToList();
 
                         if (hits.Count == 0)
                         {
@@ -178,7 +183,7 @@ namespace KitveiHakodeshService.Tests
                         }
 
                         var primaryHits = searcher.SearchInBatches(engine, "ראשי", maxWordDistance: 0, requireOrdered: false,
-                            contextWords: 6, expandKetiv: false).SelectMany(b => b).ToList();
+                            contextWords: 6, terms: new FtsTermTable()).SelectMany(b => b.Hits).ToList();
                         if (primaryHits.Count == 0 || !primaryHits.Any(h => h.BookId == primaryBook.Id))
                             Fail("FTS search for the PRIMARY database's own word regressed once an additional library was configured");
                         else
@@ -238,7 +243,7 @@ namespace KitveiHakodeshService.Tests
                         Ok("SeforimDbContentFingerprint.ComputeAll is stable for an unchanged library set");
                 }
 
-                // ── 6. End-to-end: SeforimDbFtsIndexer.IsIndexStale() actually flips when the
+                // ── 6. End-to-end: (SeforimDbFtsIndexer.WhyIndexIsStale() != null) actually flips when the
                 //      library SET changes under an index directory that was built WITHOUT the
                 //      additional library — the real mechanism RebuildIfDbChanged depends on,
                 //      not just the fingerprint function in isolation (section 5 above). ───────
@@ -248,18 +253,18 @@ namespace KitveiHakodeshService.Tests
                     using (var engineNoLib = new SeforimDbFtsEngine(ftsIndexPath2, primaryPath))
                         indexerNoLib.Build(engineNoLib);
 
-                    if (indexerNoLib.IsIndexStale())
+                    if ((indexerNoLib.WhyIndexIsStale() != null))
                     {
                         Fail("a just-built single-library index reports itself stale with no changes — setup broken, cannot verify the library-set-change detection");
                     }
                     else
                     {
                         var indexerWithLib = new SeforimDbFtsIndexer(ftsIndexPath2, primaryPath, resolvedLibraries);
-                        if (!indexerWithLib.IsIndexStale())
-                            Fail("SeforimDbFtsIndexer.IsIndexStale() did NOT detect that an additional library was added since the index was built — "
+                        if (!(indexerWithLib.WhyIndexIsStale() != null))
+                            Fail("(SeforimDbFtsIndexer.WhyIndexIsStale() != null) did NOT detect that an additional library was added since the index was built — "
                                + "RebuildIfDbChanged would never pick up the new library's content");
                         else
-                            Ok("SeforimDbFtsIndexer.IsIndexStale() detects a library added since the index was built, at the real mechanism level (not just the fingerprint function)");
+                            Ok("(SeforimDbFtsIndexer.WhyIndexIsStale() != null) detects a library added since the index was built, at the real mechanism level (not just the fingerprint function)");
                     }
                 }
 
@@ -303,10 +308,10 @@ namespace KitveiHakodeshService.Tests
                     var indexer = new SeforimDbFtsIndexer(idx, mp, libs);
                     using var engine = new SeforimDbFtsEngine(idx, mp, libs);
                     indexer.Build(engine);
-                    var searcher = new SeforimDbFtsSearcher(new SeforimDbQueries(mp, entries));
-                    var gold = searcher.SearchInBatches(engine, "זהב", 0, false, 6, false).SelectMany(b => b).ToList();
+                    var searcher = new SeforimDbFtsSearcher();
+                    var gold = searcher.SearchInBatches(engine, "זהב", 0, false, 6, new FtsTermTable()).SelectMany(b => b.Hits).ToList();
                     var addBook2 = allBooks.Single(b => b.LibraryLabel == "multi-personal" && b.Title.StartsWith("בטא"));
-                    var common = searcher.SearchInBatches(engine, "חמור", 0, false, 6, false).SelectMany(b => b).ToList();
+                    var common = searcher.SearchInBatches(engine, "חמור", 0, false, 6, new FtsTermTable()).SelectMany(b => b.Hits).ToList();
                     if (gold.Count != 1 || gold[0].BookId != addBook2.Id || gold[0].LineId != SeforimDbLibraryId.ToGlobal(1, 5))
                         Fail($"multi-book FTS: expected exactly line {SeforimDbLibraryId.ToGlobal(1, 5)} in book {addBook2.Id}, got {Dump(gold.Select(h => (h.LineId, h.BookId)))}");
                     else if (common.Count != 10 || common.Select(h => h.LineId).Distinct().Count() != 10)
@@ -363,12 +368,12 @@ namespace KitveiHakodeshService.Tests
                     using var engine = new SeforimDbFtsEngine(fidx, good, libs);
                     bool built = false; Exception? buildEx = null;
                     try { built = indexer.Build(engine); } catch (Exception ex) { buildEx = ex; }
-                    if (buildEx != null || !built || indexer.IsIndexStale()
-                        || new SeforimDbFtsIndexer(fidx, good, SeforimDbAttachedLibraries.Resolve(entries)).IsIndexStale())
-                        Fail($"FTS build with bad additional libraries failed or left an unstable stamp: built={built} ex={buildEx} stale={indexer.IsIndexStale()}");
+                    if (buildEx != null || !built || (indexer.WhyIndexIsStale() != null)
+                        || new SeforimDbFtsIndexer(fidx, good, SeforimDbAttachedLibraries.Resolve(entries)).WhyIndexIsStale() != null)
+                        Fail($"FTS build with bad additional libraries failed or left an unstable stamp: built={built} ex={buildEx} stale={(indexer.WhyIndexIsStale() != null)}");
                     else
                     {
-                        var hits = new SeforimDbFtsSearcher(new SeforimDbQueries(good, entries)).SearchInBatches(engine, "יחיד", 0, false, 6, false).SelectMany(b => b).ToList();
+                        var hits = new SeforimDbFtsSearcher().SearchInBatches(engine, "יחיד", 0, false, 6, new FtsTermTable()).SelectMany(b => b.Hits).ToList();
                         if (hits.Count == 0) Fail("primary FTS not searchable when bad additional libraries are configured");
                         else Ok("primary FTS index builds, is searchable, and its stamp is stable across a fresh resolve with bad libraries configured");
                     }

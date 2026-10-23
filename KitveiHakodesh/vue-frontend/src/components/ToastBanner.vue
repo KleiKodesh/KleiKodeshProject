@@ -53,7 +53,6 @@ onBeforeUnmount(dismissToast)
   gap: 10px;
   max-width: min(360px, calc(100vw - 40px));
   padding: 12px 14px;
-  direction: rtl;
   font-family: var(--header-font);
   font-size: 13px;
   line-height: 1.4;

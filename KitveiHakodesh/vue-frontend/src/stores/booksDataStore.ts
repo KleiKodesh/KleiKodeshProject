@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { markRaw, ref, shallowRef } from 'vue'
 import { ensureCategorySchema } from '@/webview-host/seforimDb'
 import { getAllCategories, getAllBooks } from '@/webview-host/seforimApi'
 import {
@@ -11,20 +11,19 @@ import {
 import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
 import type { CategoryNode } from '../features/book-catalog/bookCatalogTree'
 import type { CategoryRow, BookRow } from '@/webview-host/queries.types'
+import { t } from '@/i18n'
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const allBooks = ref<BookRow[]>([])
-  const allBooksMap = ref(new Map<number, BookRow>())
-  const ROOT = ref<CategoryNode>({
-    id: -1,
-    parentId: null,
-    title: '',
-    level: -1,
-    children: [],
-    books: [],
-  })
+  // The catalog is thousands of rows read everywhere and never edited in place after
+  // load: shallow refs holding raw objects, assigned whole. Deep-proxying every row
+  // would tax every read on the hot path for nothing.
+  const allBooks = shallowRef<BookRow[]>(markRaw([]))
+  const allBooksMap = shallowRef(markRaw(new Map<number, BookRow>()))
+  const ROOT = shallowRef<CategoryNode>(
+    markRaw({ id: -1, parentId: null, title: '', level: -1, children: [], books: [] }),
+  )
   let loadPromise: Promise<void> | null = null
   let commentaryMetaPromise: Promise<void> | null = null
   let commentaryMetaLoaded = false
@@ -55,11 +54,9 @@ export const useBooksDataStore = defineStore('booksData', () => {
         assignSubtreeBookIds(children)
         const orderedBooks = assignFullPaths(children)
 
-        ROOT.value = { ...ROOT.value, children }
-        allBooks.value = orderedBooks
-        // Build the id→book map immediately so consumers like book-view can read
-        // book metadata (e.g. hasTeamim) without waiting for ensureCommentaryMetadataLoaded.
-        allBooksMap.value = new Map(orderedBooks.map((book) => [book.id, book]))
+        ROOT.value = markRaw({ ...ROOT.value, children })
+        allBooks.value = markRaw(orderedBooks)
+        allBooksMap.value = markRaw(new Map(orderedBooks.map((book) => [book.id, book])))
         loaded.value = true
 
         // Build the search index asynchronously in the background — yields between
@@ -68,12 +65,12 @@ export const useBooksDataStore = defineStore('booksData', () => {
       } catch (e) {
         const msg = e instanceof Error ? e.message : ''
         if (msg.toLowerCase().includes('failed to fetch')) {
-          error.value = 'שגיאה בטעינת הנתונים — לא ניתן להתחבר לשרת'
+          error.value = t('stores.loadErrorNoServer')
         } else if (msg.includes('0x8007000B') || msg.toLowerCase().includes('incorrect format')) {
           error.value =
-            'שגיאה בטעינת הנתונים — קובץ ה־SQLite אינו תואם לגרסת המערכת (32/64 סיביות). יש להתקין מחדש את האפליקציה.'
+            t('stores.loadErrorSqlite')
         } else {
-          error.value = msg || 'שגיאה בטעינת הנתונים'
+          error.value = msg || t('stores.loadError')
         }
       } finally {
         loading.value = false
@@ -110,7 +107,10 @@ export const useBooksDataStore = defineStore('booksData', () => {
         book.rootCategory = meta.root ?? undefined
       }
 
-      allBooksMap.value = new Map(allBooks.value.map((book) => [book.id, book]))
+      // The rows above were mutated in place (raw, not reactive): reassign both so anything
+      // derived from the list or the map recomputes with the period/root metadata.
+      allBooks.value = markRaw(allBooks.value.slice())
+      allBooksMap.value = markRaw(new Map(allBooks.value.map((book) => [book.id, book])))
       commentaryMetaLoaded = true
       commentaryMetaPromise = null
     })

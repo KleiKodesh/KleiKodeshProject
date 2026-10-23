@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Settings;
@@ -36,6 +35,21 @@ namespace KitveiHakodesh.Core.SeforimDb
         private List<CategoryRow>? _categoriesCache;
         private List<BookRow>? _booksCache;
         private readonly object _catalogCacheLock = new();
+
+        /// <summary>
+        /// Idle memory release: drops the cached catalog (every book + category row). The next
+        /// <see cref="GetAllBooks"/>/<see cref="GetAllCategories"/> reloads it from the database
+        /// once. Thread-safe: callers already holding a list keep using it unchanged; a load
+        /// racing this simply re-caches correct data.
+        /// </summary>
+        public void ClearCatalogCache()
+        {
+            lock (_catalogCacheLock)
+            {
+                _categoriesCache = null;
+                _booksCache = null;
+            }
+        }
 
         public List<CategoryRow> GetAllCategories()
         {
@@ -88,6 +102,34 @@ namespace KitveiHakodesh.Core.SeforimDb
             foreach (var library in _attachedLibraries)
                 AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(library.Alias,
                     SeforimDbSchema.ColumnExists(conn, "book", "hasTeamim", library.Alias)), library.Label, library.Index, list);
+
+            // The precedence every consumer ranks by, computed ONCE here (not in the frontend,
+            // not per index) and shipped on the row; rows go out in that order. Each attached
+            // library is ranked within its own schema, then placed after everything before it,
+            // so the primary library keeps exactly its own order and the orders stay unique.
+            var primaryOrder = SeforimDbBookTreeOrder.Load(conn);
+            var orderByLibrary = new Dictionary<int, (Dictionary<int, int> Order, int Offset)>
+            {
+                [0] = (primaryOrder, 0),
+            };
+            int nextOffset = primaryOrder.Count == 0 ? 0 : primaryOrder.Values.Max() + 1;
+            foreach (var library in _attachedLibraries)
+            {
+                Dictionary<int, int> libraryOrder;
+                try { libraryOrder = SeforimDbBookTreeOrder.Load(conn, library.Alias); }
+                catch (SqliteException) { continue; } // rows keep int.MaxValue: ranked last, still shown
+                orderByLibrary[library.Index] = (libraryOrder, nextOffset);
+                nextOffset += libraryOrder.Count == 0 ? 0 : libraryOrder.Values.Max() + 1;
+            }
+            foreach (var row in list)
+            {
+                var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(row.Id);
+                row.TreeOrder = orderByLibrary.TryGetValue(libraryIndex, out var entry)
+                                && entry.Order.TryGetValue(localId, out int o)
+                    ? entry.Offset + o
+                    : int.MaxValue;
+            }
+            list = list.OrderBy(b => b.TreeOrder).ToList();
 
             if (list.Count > 0)
                 lock (_catalogCacheLock) _booksCache ??= list;
@@ -427,24 +469,25 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        // Whether the link_anchor table exists (Otzaria has it; Zayit does not, and its word
-        // links come from the inline commentator markers instead). Detected once — the seforim
-        // DB is static for the life of the process (see _linkHasTargetLineIndex).
+        // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
+        // Zayit nor Otzaria v1 DB has it). Detected once — the seforim DB is static for the
+        // life of the process (see _linkHasTargetLineIndex).
         private bool? _hasLinkAnchorTable;
 
-        /// <summary>Word-level link anchors for a batch of source lines — from link_anchor, or on
-        /// a database without it, from the inline commentator markers. Always Supported.</summary>
+        /// <summary>Word-level link anchors for a batch of source lines. Returns Supported=false
+        /// (and no rows) on DBs whose schema predates link_anchor, so callers can stop asking.</summary>
         public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds)
         {
-            var result = new WordLinkAnchorsResult { Supported = true };
-            if (lineIds is null || lineIds.Count == 0) return result;
-            using var conn = Open();
-            _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
-            if (!_hasLinkAnchorTable.Value)
+            var result = new WordLinkAnchorsResult();
+            if (lineIds is null || lineIds.Count == 0)
             {
-                result.Rows = GetInlineMarkerAnchorsForLines(conn, lineIds);
+                result.Supported = _hasLinkAnchorTable ?? true; // unknown yet — don't tell callers to stop
                 return result;
             }
+            using var conn = Open();
+            _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
+            result.Supported = _hasLinkAnchorTable.Value;
+            if (!result.Supported) return result;
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetWordLinkAnchorsForLines(lineIds.Count, _linkHasTargetLineIndex.Value);
@@ -468,18 +511,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>Distinct word-link targets (commentary book id + anchor label) for one source
-        /// book — from link_anchor, or from the inline commentator markers. Always Supported.</summary>
+        /// book. Returns Supported=false (and no rows) on DBs whose schema predates link_anchor.</summary>
         public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId)
         {
             var result = new WordLinkTargetsResult();
             using var conn = Open();
             _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
-            result.Supported = true;
-            if (!_hasLinkAnchorTable.Value)
-            {
-                result.Rows = InlineMarkerResolutionFor(conn, bookId).Targets;
-                return result;
-            }
+            result.Supported = _hasLinkAnchorTable.Value;
+            if (!result.Supported) return result;
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetWordLinkAnchorTargetsForBook;
             cmd.Parameters.AddWithValue("@bookId", bookId);
@@ -493,99 +532,6 @@ namespace KitveiHakodesh.Core.SeforimDb
                 });
             }
             return result;
-        }
-
-        // Per source book: what its inline commentator-marker names resolve to. Static for the
-        // life of the process, like the rest of this database.
-        private readonly ConcurrentDictionary<int, SeforimDbInlineCommentatorMarkers.BookResolution> _inlineMarkerBooks = new();
-
-        /// <summary>Word-link anchors built from the inline commentator markers in the line text —
-        /// the stand-in for link_anchor on databases that lack it. See
-        /// <see cref="SeforimDbInlineCommentatorMarkers"/>.</summary>
-        private List<WordLinkAnchorRow> GetInlineMarkerAnchorsForLines(SqliteConnection conn, List<int> lineIds)
-        {
-            var rows = new List<WordLinkAnchorRow>();
-
-            var markerLines = new List<(int LineId, int BookId, List<SeforimDbInlineCommentatorMarkers.Marker> Markers)>();
-            using (var codec = CodecFor(conn))
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = SeforimDbSqlStrings.GetLineBookIdsAndContents(SchemaOf(conn), lineIds.Count);
-                BindList(cmd, "p", lineIds);
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                {
-                    var markers = SeforimDbInlineCommentatorMarkers.Parse(codec.DecodeColumnOrEmpty(r, 2));
-                    if (markers.Count > 0) markerLines.Add((r.GetInt32(0), r.GetInt32(1), markers));
-                }
-            }
-            if (markerLines.Count == 0) return rows;
-
-            var withMarkers = markerLines.Select(l => l.LineId).ToList();
-            var linkedLines = new Dictionary<int, List<SeforimDbInlineCommentatorMarkers.LinkedLine>>();
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = SeforimDbSqlStrings.GetLinkedLinesForLines(withMarkers.Count);
-                BindList(cmd, "p", withMarkers);
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                {
-                    int lineId = r.GetInt32(0);
-                    if (!linkedLines.TryGetValue(lineId, out var list)) linkedLines[lineId] = list = new();
-                    list.Add(new SeforimDbInlineCommentatorMarkers.LinkedLine(r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
-                }
-            }
-
-            foreach (var line in markerLines)
-            {
-                if (!linkedLines.TryGetValue(line.LineId, out var linked)) continue;
-                var resolution = InlineMarkerResolutionFor(conn, line.BookId);
-                rows.AddRange(SeforimDbInlineCommentatorMarkers.AnchorsForLine(
-                    line.LineId, line.BookId, line.Markers, linked, resolution));
-            }
-            rows.Sort((a, b) => a.LineId != b.LineId ? a.LineId.CompareTo(b.LineId) : a.CharStart.CompareTo(b.CharStart));
-            return rows;
-        }
-
-        /// <summary>Resolves one source book's marker names, once: reads every line of the book
-        /// and the books each line is linked with.</summary>
-        private SeforimDbInlineCommentatorMarkers.BookResolution InlineMarkerResolutionFor(SqliteConnection conn, int bookId)
-        {
-            if (_inlineMarkerBooks.TryGetValue(bookId, out var cached)) return cached;
-
-            var markersByLine = new Dictionary<int, List<SeforimDbInlineCommentatorMarkers.Marker>>();
-            using (var codec = CodecFor(conn))
-            using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = SeforimDbSqlStrings.GetBookLineContents(SchemaOf(conn));
-                cmd.Parameters.AddWithValue("@bookId", bookId);
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                {
-                    var markers = SeforimDbInlineCommentatorMarkers.Parse(codec.DecodeColumnOrEmpty(r, 1));
-                    if (markers.Count > 0) markersByLine[r.GetInt32(0)] = markers;
-                }
-            }
-
-            var linkedBooks = new Dictionary<int, HashSet<int>>();
-            if (markersByLine.Count > 0)
-            {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = SeforimDbSqlStrings.GetLinkedBooksForBookLines;
-                cmd.Parameters.AddWithValue("@bookId", bookId);
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                {
-                    int lineId = r.GetInt32(0);
-                    if (!markersByLine.ContainsKey(lineId)) continue;
-                    if (!linkedBooks.TryGetValue(lineId, out var set)) linkedBooks[lineId] = set = new();
-                    set.Add(r.GetInt32(1));
-                }
-            }
-
-            var resolution = SeforimDbInlineCommentatorMarkers.ResolveBook(
-                markersByLine.Select(kv => (kv.Value, linkedBooks.TryGetValue(kv.Key, out var set) ? set : new HashSet<int>())));
-            return _inlineMarkerBooks.GetOrAdd(bookId, resolution);
         }
 
         public List<LineContentRow> GetLineContents(List<int> lineIds)
@@ -744,10 +690,12 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC paths & line→book/index helpers ──────────────────────────────────────
 
+        /// <summary>Lines → their TOC entry, plus each distinct entry's path once. Lines of one
+        /// section share an entry, so the path walk (and the wire) is per entry, not per line.</summary>
         /// <summary>
         /// Groups a batch of GLOBAL ids (see <see cref="SeforimDbLibraryId"/>) by the library
         /// that owns them, resolved to LOCAL ids ready to bind into that library's own schema.
-        /// Shared by every multi-library batch lookup below — a full-text search hit or a line
+        /// Shared by every multi-library batch lookup below - a full-text search hit or a line
         /// range can span the primary database and any number of attached libraries at once.
         /// </summary>
         private static Dictionary<int, List<int>> GroupByLibrary(List<int> globalIds)
@@ -763,42 +711,72 @@ namespace KitveiHakodesh.Core.SeforimDb
             return byLibrary;
         }
 
-        public List<TocPathRow> GetTocPathsForLines(List<int> lineIds)
+        /// <summary>Lines -> their TOC entry, plus each distinct entry's path once. Lines of one
+        /// section share an entry, so the path walk (and the wire) is per entry, not per line.
+        /// One query per library the ids actually touch (see <see cref="GroupByLibrary"/>); line,
+        /// book and TOC-entry ids of an attached library are translated back to global ids.</summary>
+        public TocPathsForLinesResult GetTocPathsForLines(List<int> lineIds)
         {
-            var list = new List<TocPathRow>();
-            if (lineIds is null || lineIds.Count == 0) return list;
+            var result = new TocPathsForLinesResult();
+            if (lineIds is null || lineIds.Count == 0) return result;
             using var conn = Open();
 
-            // One query per library the ids actually touch — see GroupByLibrary. The common
-            // case (every id from the primary database) runs exactly the query and binding this
-            // method always ran; an id from an attached library runs the same recursive CTE
-            // against that library's own schema and translates lineId/bookId back to global.
+            var globalEntryIds = new List<int>();
+            var seen = new HashSet<int>();
             foreach (var (libraryIndex, localIds) in GroupByLibrary(lineIds))
             {
                 using var cmd = conn.CreateCommand();
                 if (libraryIndex == 0)
                 {
-                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLines(localIds.Count);
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocEntryForLines(localIds.Count);
                 }
                 else
                 {
                     var library = FindAttached(libraryIndex);
-                    if (library is not { } found) continue; // no longer attached — nothing to resolve
-                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForLinesIn(found.Alias, localIds.Count);
+                    if (library is not { } found) continue; // no longer attached - nothing to resolve
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocEntryForLinesIn(found.Alias, localIds.Count);
                 }
                 BindList(cmd, "p", localIds);
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
                 {
-                    list.Add(new TocPathRow
+                    int entryId = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(2));
+                    result.Lines.Add(new LineTocEntryRow
                     {
                         LineId = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
                         BookId = r.IsDBNull(1) ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(1)),
-                        TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
+                        TocEntryId = entryId,
+                    });
+                    if (seen.Add(entryId)) globalEntryIds.Add(entryId);
+                }
+            }
+            if (globalEntryIds.Count == 0) return result;
+
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(globalEntryIds))
+            {
+                using var cmd = conn.CreateCommand();
+                if (libraryIndex == 0)
+                {
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForTocEntries(localIds.Count);
+                }
+                else
+                {
+                    var library = FindAttached(libraryIndex);
+                    if (library is not { } found) continue;
+                    cmd.CommandText = SeforimDbSqlStrings.GetTocPathsForTocEntriesIn(found.Alias, localIds.Count);
+                }
+                BindList(cmd, "e", localIds);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    result.Paths.Add(new TocEntryPathRow
+                    {
+                        TocEntryId = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                        Path = r.IsDBNull(1) ? "" : r.GetString(1),
                     });
                 }
             }
-            return list;
+            return result;
         }
 
         /// <summary>triples = flat [groupKey, firstLineId, lastLineId, …].</summary>

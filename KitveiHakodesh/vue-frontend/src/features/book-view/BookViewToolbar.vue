@@ -16,10 +16,13 @@ import {
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
   IconInfo20Regular,
+  IconDocumentPdf20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
+import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDropdown.vue'
+import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
@@ -29,16 +32,19 @@ import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
   TOOLBAR_OVERFLOW_ORDER,
-  TOOLBAR_SEPARATOR_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
+import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
-import type { BookVersionRow } from '@/webview-host/queries.types'
+import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   searchVisible: boolean
@@ -53,11 +59,15 @@ const props = defineProps<{
   bookHasTeamim: boolean
   // Set for books whose publisher forbids an editable export; the button is not rendered.
   exportRestricted?: boolean
+  // True while an export to Word runs; the button shows a spinner.
+  exportingToWord?: boolean
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   // The book's alternate versions. Empty for most books, which hides the control.
   versions: BookVersionRow[]
   activeVersionId: number | null
+  // The book's scanned editions on HebrewBooks. Empty for most books, which hides the control.
+  hebrewBooksEditions: HebrewBooksEdition[]
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
@@ -79,9 +89,9 @@ const diacriticsState = computed(() => settingsStore.diacriticsState)
 // When the book has no teamim the cycle is 0→2→0, so the title reflects only two stages.
 const diacriticsTitle = computed(() => {
   if (!props.bookHasTeamim) {
-    return diacriticsState.value === 0 ? 'הסר ניקוד' : 'שחזר ניקוד'
+    return diacriticsState.value === 0 ? t('bookView.toolbar.removeNikud') : t('bookView.toolbar.restoreNikud')
   }
-  return ['הסר טעמים', 'הסר גם ניקוד', 'שחזר טעמים וניקוד'][diacriticsState.value]!
+  return [t('bookView.toolbar.removeTeamim'), t('bookView.toolbar.removeAlsoNikud'), t('bookView.toolbar.restoreAll')][diacriticsState.value]!
 })
 
 function onDiacriticsClick() {
@@ -93,23 +103,29 @@ function onDiacriticsClick() {
 }
 
 /** The export control's name - its tooltip on the toolbar, its text in the flyout. */
-const EXPORT_TO_WORD_LABEL = 'ייצא ל-Word'
+const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
 
 /** The overflow button's name - the same word the nav rail's overflow button wears. */
-const MORE_LABEL = 'פריטים נוספים'
+const MORE_LABEL = t('bookView.toolbar.more')
 
 /** The book-info control's name - its tooltip on the toolbar, its row text in the flyout. */
-const BOOK_INFO_LABEL = 'פרטי הספר'
+const BOOK_INFO_LABEL = t('bookView.bookInfo.title')
 
 /** Whether the book-info row in the flyout has its panel expanded beneath it. */
 const bookInfoExpandedInOverflow = ref(false)
+
+/** The HebrewBooks editions control's name - its row text in the flyout. */
+const HEBREWBOOKS_EDITIONS_LABEL = t('bookView.hebrewBooks.title')
+
+/** Whether the editions row in the flyout has its list expanded beneath it. */
+const hebrewBooksEditionsExpandedInOverflow = ref(false)
 
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
  * tooltip - the tooltip carries the name followed by an explanation, and a row wants just
  * the name.
  */
-const SYNC_COMMENTARIES_LABEL = 'סנכרן מפרשים'
+const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
 
 // The diacritics control has no fixed name: its tooltip names the NEXT stage of the cycle,
 // which is what a row should say too, so the row reads the same text the button's tooltip
@@ -156,8 +172,8 @@ onBeforeUnmount(stopContinuousZoom)
 
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
-    ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
-    : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה',
+    ? t('bookView.toolbar.syncOnTitle')
+    : t('bookView.toolbar.syncOffTitle'),
 )
 
 // Pane-scoped zoom percentages — the store's `zoom`/`commentaryZoom` computeds
@@ -189,11 +205,11 @@ const ZOOM_LABEL = computed(
 )
 
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
+  () => t('bookView.toolbar.zoomOutTitle', { text: Math.round(linesZoomPct.value), commentary: commentaryZoomLabel.value }),
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
+  () => t('bookView.toolbar.zoomInTitle', { text: Math.round(linesZoomPct.value), commentary: commentaryZoomLabel.value }),
 )
 
 // The panels are independent, so each title names its own panel in both states —
@@ -201,20 +217,20 @@ const zoomInTitle = computed(
 // two side panels are named by their edge, not just "בצד".
 const bottomCommentaryTitle = computed(() =>
   props.bottomCommentaryVisible
-    ? 'סגור חלונית מפרשים תחתונה (Ctrl+J)'
-    : 'חלונית מפרשים תחתונה (Ctrl+J)',
+    ? t('bookView.toolbar.close_bottom')
+    : t('bookView.toolbar.open_bottom'),
 )
 
 const sideCommentaryTitle = computed(() =>
   props.sideCommentaryVisible
-    ? 'סגור חלונית מפרשים מימין (Ctrl+Shift+J)'
-    : 'חלונית מפרשים מימין (Ctrl+Shift+J)',
+    ? t('bookView.toolbar.close_right')
+    : t('bookView.toolbar.open_right'),
 )
 
 const sideLeftCommentaryTitle = computed(() =>
   props.sideLeftCommentaryVisible
-    ? 'סגור חלונית מפרשים משמאל (Ctrl+Alt+J)'
-    : 'חלונית מפרשים משמאל (Ctrl+Alt+J)',
+    ? t('bookView.toolbar.close_left')
+    : t('bookView.toolbar.open_left'),
 )
 
 // ── Overflow ───────────────────────────────────────────────────────────────────
@@ -225,11 +241,13 @@ const sideLeftCommentaryTitle = computed(() =>
 // which of those controls this book actually has, how much room the pinned ones take, and
 // the flyout's state.
 const toolbarEl = ref<HTMLElement | null>(null)
+const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
 )
 
 const hasVersions = computed(() => props.versions.length > 0)
+const hasHebrewBooksEditions = computed(() => props.hebrewBooksEditions.length > 0)
 
 /** Whether the word-link markers control is on the toolbar - it tells us; see its own note. */
 const wordLinkMarkersPresent = ref(false)
@@ -241,6 +259,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
   TOOLBAR_OVERFLOW_ORDER.filter((key) => {
     if (key === 'sync-commentaries') return props.hasCommentaries
     if (key === 'export-to-word') return !props.exportRestricted
+    if (key === 'hebrewbooks-editions') return hasHebrewBooksEditions.value
     return true
   }),
 )
@@ -257,7 +276,9 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
  */
 const pinnedButtonCount = computed(() => {
   const alwaysOn = 3 // TOC, previous section, next section
-  const dropdowns = (props.hasRelatedBooks ? 1 : 0) + (hasVersions.value ? 1 : 0)
+  const dropdowns =
+    (props.hasRelatedBooks ? 1 : 0) +
+    (hasVersions.value ? 1 : 0)
   const commentaryToggles = props.hasCommentaries
     ? 1 + (props.canUseSidePanel ? 2 : 0) // bottom panel, plus both side panels when they fit
     : 0
@@ -265,16 +286,7 @@ const pinnedButtonCount = computed(() => {
   // Reported by the control itself rather than predicted here: it renders out of a list it
   // fetches, so nothing on this side can know in advance whether it is there.
   const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  // One separator, not two: the other one introduces the zoom pair and collapses with it,
-  // so it is the zoom control's own cost rather than a pinned one.
-  return (
-    alwaysOn +
-    dropdowns +
-    commentaryToggles +
-    search +
-    wordLinkMarkers +
-    TOOLBAR_SEPARATOR_IN_BUTTONS
-  )
+  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers
 })
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
@@ -301,38 +313,43 @@ watch(hasToolbarOverflow, (has) => {
   if (!has) overflowOpen.value = false
 })
 
-// Each opening of the flyout starts with the info panel folded, like a fresh dropdown.
+// Each opening of the flyout starts with the info panel and editions list folded, like a fresh dropdown.
 watch(overflowOpen, (open) => {
-  if (!open) bookInfoExpandedInOverflow.value = false
+  if (open) return
+  bookInfoExpandedInOverflow.value = false
+  hebrewBooksEditionsExpandedInOverflow.value = false
 })
 
 defineExpose({ tocBtnRef })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" :class="`toolbar-${toolbarPosition}`">
+  <div ref="toolbarEl" class="book-view-toolbar" :dir="isVerticalToolbar ? 'rtl' : undefined" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" :title="$t('bookView.toolbar.dragHint')">
+    <Teleport to="body">
+      <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
+    </Teleport>
     <button
       ref="tocBtnRef"
       :class="{ active: tocVisible }"
       :disabled="!hasToc"
-      title="תוכן עניינים (Ctrl+K)"
+      :title="$t('bookView.toolbar.toc')"
       @click="$emit('toggleToc')"
     >
       <IconTreeRtl />
     </button>
     <button
       :disabled="!hasToc"
-      title="קטע הקודם (Ctrl+חץ ימני)"
+      :title="$t('bookView.toolbar.prevSection')"
       @click="$emit('navigateToPreviousSection')"
     >
-      <IconChevronRight20Regular />
+      <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
       :disabled="!hasToc"
-      title="קטע הבא (Ctrl+חץ שמאלי)"
+      :title="$t('bookView.toolbar.nextSection')"
       @click="$emit('navigateToNextSection')"
     >
-      <IconChevronLeft20Regular />
+      <IconChevronLeft20Regular class="dir-icon" />
     </button>
     <BookViewRelatedBooksDropdown
       v-if="hasRelatedBooks"
@@ -352,6 +369,15 @@ defineExpose({ tocBtnRef })
       :versions="versions"
       :active-version-id="activeVersionId"
       @select="$emit('selectVersion', $event)"
+    />
+    <!-- Only for books with scanned editions on HebrewBooks; absent otherwise, like versions.
+         The second control to collapse; in the flyout its row expands the list inline. -->
+    <BookViewHebrewBooksEditionsDropdown
+      v-if="hasHebrewBooksEditions"
+      class="collapsible hebrewbooks-editions-toolbar-item"
+      :class="{ collapsed: !toolbarButtonVisible('hebrewbooks-editions') }"
+      :inert="!toolbarButtonVisible('hebrewbooks-editions')"
+      :editions="hebrewBooksEditions"
     />
     <!--
       RTL: first child sits physically right. The three buttons run right → bottom
@@ -406,7 +432,7 @@ defineExpose({ tocBtnRef })
     </button>
     <button
       :class="{ active: searchVisible }"
-      title="חיפוש (Ctrl+F)"
+      :title="$t('bookView.toolbar.search')"
       @click="$emit('toggleSearch')"
     >
       <IconSearch20Regular />
@@ -420,9 +446,6 @@ defineExpose({ tocBtnRef })
       :is-collapsed="!toolbarButtonVisible('book-info')"
       :book-id="bookId"
     />
-
-    <!-- The separator belongs to the zoom pair it introduces, so it goes when they go. -->
-    <div aria-hidden="true" class="separator collapsible" :class="{ collapsed: !toolbarButtonVisible('zoom') }" />
 
     <button
       class="collapsible"
@@ -451,8 +474,6 @@ defineExpose({ tocBtnRef })
       <IconZoomIn20Regular />
     </button>
 
-    <div aria-hidden="true" class="separator" />
-
     <button
       class="collapsible"
       :inert="!toolbarButtonVisible('diacritics')"
@@ -477,9 +498,12 @@ defineExpose({ tocBtnRef })
       :class="{ collapsed: !toolbarButtonVisible('export-to-word') }"
       :inert="!toolbarButtonVisible('export-to-word')"
       :title="EXPORT_TO_WORD_LABEL"
+      :disabled="exportingToWord"
+      :aria-busy="exportingToWord"
       @click="$emit('exportToWord')"
     >
-      <BookViewExportToWordGlyph />
+      <span v-if="exportingToWord" class="export-spinner" />
+      <BookViewExportToWordGlyph v-else />
     </button>
     <!--
       Stands in for whatever the pane was too narrow to hold. It holds ONE place, at the
@@ -541,13 +565,40 @@ defineExpose({ tocBtnRef })
           :book-id="bookId"
         />
       </template>
+      <!-- Same inline-expand as book-info: the editions list opens beneath its row. -->
+      <template v-if="isOverflowed('hebrewbooks-editions')">
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :class="{ active: hebrewBooksEditionsExpandedInOverflow }"
+          aria-haspopup="menu"
+          :aria-expanded="hebrewBooksEditionsExpandedInOverflow"
+          @click="hebrewBooksEditionsExpandedInOverflow = !hebrewBooksEditionsExpandedInOverflow"
+        >
+          <IconDocumentPdf20Regular />
+          <span>{{ HEBREWBOOKS_EDITIONS_LABEL }}</span>
+        </button>
+        <div
+          v-if="hebrewBooksEditionsExpandedInOverflow"
+          role="menu"
+          class="overflow-editions-list"
+        >
+          <BookViewHebrewBooksEditionsList
+            :editions="hebrewBooksEditions"
+            @picked="overflowOpen = false"
+          />
+        </div>
+      </template>
       <button
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
         class="overflow-row"
+        :disabled="exportingToWord"
+        :aria-busy="exportingToWord"
         @click="overflowOpen = false; $emit('exportToWord')"
       >
-        <BookViewExportToWordGlyph />
+        <span v-if="exportingToWord" class="export-spinner" />
+        <BookViewExportToWordGlyph v-else />
         <span>{{ EXPORT_TO_WORD_LABEL }}</span>
       </button>
       <button
@@ -635,6 +686,18 @@ defineExpose({ tocBtnRef })
   background: var(--bg-toolbar);
   flex-shrink: 0;
   transition: background 120ms;
+  cursor: grab;
+  touch-action: none;
+}
+.book-view-toolbar.dragging {
+  cursor: grabbing;
+}
+.toolbar-drop-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: #d0d0d0;
+  opacity: 0.5;
 }
 
 /* ── Orientation ── */
@@ -659,18 +722,35 @@ defineExpose({ tocBtnRef })
   padding-block-end: var(--toolbar-reserved-edge);
 }
 
-/* ── Borders ── */
-.toolbar-top {
-  border-bottom: 1px solid var(--border-color);
+/* ── Borders ──
+   Drawn as an overlay line, not a CSS border: the overflow button is opaque, full button
+   size and stacked above the row (see .overflow-btn), so a real border would sit under its
+   fill. The line is painted above it instead. */
+.book-view-toolbar::after {
+  content: '';
+  position: absolute;
+  /* A border, not a 1px background: at fractional DPI (150%) Chromium snaps a 1px box to 1
+     or 2 device pixels depending on its offset, so the bottom/right line came out double.
+     Border widths are snapped consistently. */
+  border: 0 solid var(--border-color);
+  pointer-events: none;
+  z-index: 2;
 }
-.toolbar-bottom {
-  border-top: 1px solid var(--border-color);
+.toolbar-top::after {
+  inset: auto 0 0 0;
+  border-top-width: 1px;
 }
-.toolbar-left {
-  border-right: 1px solid var(--border-color);
+.toolbar-bottom::after {
+  inset: 0 0 auto 0;
+  border-top-width: 1px;
 }
-.toolbar-right {
-  border-left: 1px solid var(--border-color);
+.toolbar-left::after {
+  inset: 0 0 0 auto;
+  border-inline-end-width: 1px;
+}
+.toolbar-right::after {
+  inset: 0 auto 0 0;
+  border-inline-end-width: 1px;
 }
 
 /* ── Buttons ── */
@@ -768,7 +848,7 @@ button:disabled {
    where the logical end edge maps to the physical right - the wrong side. */
 .overflow-btn {
   position: absolute;
-  left: var(--toolbar-edge-inset);
+  inset-inline-end: var(--toolbar-edge-inset);
   top: 50%;
   transform: translateY(-50%);
   /* Painted on the toolbar's own surface rather than over a transparent hole: it sits ABOVE
@@ -822,10 +902,23 @@ button:disabled {
 }
 
 
-/* The info dropdown hangs out of its box, so its clipping is lifted while it is on the bar;
-   collapsing it still clips, as .collapsible intends. */
-.collapsible.book-info-toolbar-item:not(.collapsed) {
+/* The info and editions dropdowns hang out of their boxes, so their clipping is lifted while
+   they are on the bar; collapsing them still clips, as .collapsible intends. */
+.collapsible.book-info-toolbar-item:not(.collapsed),
+.collapsible.hebrewbooks-editions-toolbar-item:not(.collapsed) {
   overflow: visible;
+}
+/* Indented under its row so it reads as that row's sub-list; scrolls within the flyout,
+   which itself clamps to the viewport. */
+.overflow-editions-list {
+  display: flex;
+  flex-direction: column;
+  max-width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-inline-start: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .overflow-book-info-panel {
   max-width: 320px;
@@ -834,29 +927,23 @@ button:disabled {
   padding: 4px 12px 8px;
 }
 
-/* ── Separators ── */
-.separator {
-  background: var(--border-color);
-  flex-shrink: 0;
-}
-.toolbar-top .separator,
-.toolbar-bottom .separator {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-}
-.toolbar-left .separator,
-.toolbar-right .separator {
-  width: 18px;
-  height: 1px;
-  margin: 2px 0;
-}
-
 /* ── Diacritics ── */
 .diacritics-btn.state-1 {
   color: var(--diacritics-1);
 }
 .diacritics-btn.state-2 {
   color: var(--diacritics-2);
+}
+.export-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: export-spin 0.8s linear infinite;
+}
+@keyframes export-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

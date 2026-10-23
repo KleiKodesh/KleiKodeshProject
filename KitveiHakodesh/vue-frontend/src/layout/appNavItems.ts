@@ -1,5 +1,6 @@
 import type { Component } from 'vue'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
+import { t } from '@/i18n'
 
 /**
  * The one list of app destinations, in menu order.
@@ -14,16 +15,23 @@ import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
  * here without renaming it there silently breaks that destination.
  */
 export interface AppNavItem {
+  /** Routing key (Hebrew, never translated). Display with `text`. */
   label: string
+  /** The label in the UI language. */
+  text: string
   icon: Component
   /** Undefined means "no explicit colour" - the icon inherits the surrounding text colour. */
   color: string | undefined
   shortcut: string
+  /** One short line on what the destination is for (tooltip / home card subtitle). */
+  description: string
 }
 
 function navItem(label: string, iconKey: DocumentIconKey, shortcut: string): AppNavItem {
   const icon = documentIcon(iconKey)
-  return { label, icon: icon.icon24, color: icon.color || undefined, shortcut }
+  const text = t(`layout.nav.${iconKey}.label`)
+  const description = t(`layout.nav.${iconKey}.description`)
+  return { label, text, icon: icon.icon24, color: icon.color || undefined, shortcut, description }
 }
 
 export const APP_NAV_ITEMS: AppNavItem[] = [

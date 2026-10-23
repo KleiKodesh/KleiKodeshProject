@@ -18,26 +18,26 @@ Both repos share the same local files. There is no automatic sync between them.
 
 A full-text search library for a Hebrew/Aramaic seforim database (~5.4M lines, SQLite). Answers one question: **which lines contain all the search terms?**
 
-Built on a custom LSM-style segment index with delta+varint compressed posting lists and skip-list accelerated intersection.
+Built on SQLite FTS5 (`FtsLib/Fts5/`): a line table indexed by FTS5, plus a term dictionary with an FM-index and trigram sidecar for wildcard and fuzzy expansion. The older custom segment engine (`SeforimIndex`) was removed; see git history.
 
 ---
 
 ## Quick start
 
 ```csharp
-var index = new SeforimIndex(indexPath, dbPath);
+var index = new Fts5SeforimIndex(indexPath, () => new MyCorpus(dbPath)); // IFtsCorpus
 
-// Build once (~17 min for full DB)
+// Build once
 index.BuildIndex(onProgress: n => Console.WriteLine($"{n} lines indexed"));
 
 // Search
 foreach (var result in index.Search("שלום תורה"))
     Console.WriteLine($"{result.BookTitle}: {result.Content}");
 
-// Snippet with highlighting
-var snippet = index.GenerateSnippet(result);
-if (snippet.IsMatch)
-    Console.WriteLine(snippet.Html);
+// Snippet window (offsets only; the consumer renders)
+var window = index.LocateSnippetWindow(result);
+if (window.IsMatch)
+    Console.WriteLine(window.SnapStart + ".." + window.SnapEnd);
 ```
 
 ---
@@ -56,9 +56,21 @@ if (snippet.IsMatch)
 
 Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. Wildcard/fuzzy tokens are expanded internally before intersection.
 
+**Words** follow Otzaria's tokenizer (index, query and word distance alike; index format `fts8`):
+a word starts at a letter or digit of any script (no Hebrew/Latin split; terms lowercased in every
+script) and runs over letters, digits and marks, any length, one letter included. `.` `[` `]` `*` `~`
+`^` `$` `\` `+` backtick and zero-width / bidi controls join a word and vanish; between letters one
+geresh, two gereshes or one gershayim join (typographic quotes count), and a trailing geresh belongs
+to the word (terms carry no quotes). Hebrew presentation forms fold. In a paired reading `(X) [Y]`,
+Y shares X's position (word distance), and a query keeps only Y. A word whose term (quotes included)
+has 128 UTF-8 bytes or more is not indexed; it keeps its position, and in a query it is an unindexed
+slot that counts in the word distance. The word rule is `Tokenization/WordRule.cs` (plain text) and
+`HtmlWordScanner` (HTML, single pass); `UnicodeTables.cs` is generated from Rust's
+`is_alphanumeric` / `to_lowercase`, so the seforim engine tokenizes identically.
+
 ---
 
-## API — `SeforimIndex`
+## API — `Fts5SeforimIndex`
 
 ### `BuildIndex`
 
@@ -66,7 +78,7 @@ Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. 
 index.BuildIndex(limit: 0, onProgress: n => { ... });
 ```
 
-`limit: 0` = all lines. Blocking. Crash-safe (WAL recovery on restart).
+`limit: 0` = all lines. Blocking. An interrupted build resumes after the last committed line.
 
 ### `Search`
 
@@ -88,13 +100,6 @@ var ids     = index.SearchIds(query, filterIds: myLineIds);
 Semantics: `null` = search everything (default); an empty collection matches
 nothing; duplicates and unknown IDs are fine (negative IDs are ignored).
 
-The filter is applied *inside* the posting intersection, not on the output —
-a small filter set becomes the driver of the intersection (candidate-driven
-probing, same idea as Lucene's cost-sorted `FILTER` clause), so heavy
-wildcard/fuzzy queries get **faster** when filtered, never slower than
-post-filtering the results yourself. Verified with `FtsLibTest.exe filtertest full`:
-`בני*` drops 343 ms → 62 ms with a ~1k-ID filter; `*כי* ביצחק` 6.7 s → 4.1 s
-(the remainder is term expansion, which no filter can skip).
 
 **`SearchResult` properties:**
 
@@ -103,23 +108,25 @@ post-filtering the results yourself. Verified with `FtsLibTest.exe filtertest fu
 | `LineId` | `int` | Line ID in the seforim DB |
 | `BookTitle` | `string` | Book the line belongs to |
 | `Content` | `string` | Raw HTML content of the line |
-| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Expanded term groups per query token — pass to `GenerateSnippet(result)` |
+| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Expanded term groups per query token — pass to `LocateSnippetWindow(result)` |
 
-### `GenerateSnippet`
+### `LocateSnippetWindow`
+
+Returns a `SnippetDescriptor` — where the snippet is, as offsets into the line text. No HTML
+is produced; the consumer renders (see `FtsLib/Snippets/README.md`).
 
 ```csharp
 // Preferred — uses pre-computed matched terms (no extra DB fetch)
-SnippetResult snippet = index.GenerateSnippet(result);
-
-// Fallback — re-parses query; use when you have a lineId but no SearchResult
-SnippetResult snippet = index.GenerateSnippet(lineId, query);
+SnippetDescriptor window = index.LocateSnippetWindow(result);
 ```
 
-**`SnippetResult` properties:**
+**`SnippetDescriptor` properties:**
 
 | Property | Type | Description |
 |---|---|---|
-| `Html` | `string` | Highlighted HTML with `<mark>` tags around matched terms |
+| `SnapStart` / `SnapEnd` | `int` | Window as raw char offsets into the source text |
+| `MarkRanges` | `IReadOnlyList<int>` | Flat (start, length, termOrdinal) triples to highlight (`MatchedTermAt` names the term); a view of per-thread scratch — copy before the next locate |
+| `LeadingEllipsis` / `TrailingEllipsis` | `bool` | "…" before / after the window |
 | `Score` | `int` | Character span of the tightest window — smaller is better |
 | `WordDistance` | `int` | Token count between leftmost and rightmost matched terms |
 | `IsMatch` | `bool` | False = index false positive; filter this result out |

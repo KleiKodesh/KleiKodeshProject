@@ -158,8 +158,19 @@ export function useBookViewScrollSync(
    * Forces a one-time TOC path sync for a known line index without waiting for
    * a scroll event. Used by session restore so the breadcrumb is populated
    * immediately when a book reloads to its saved position.
+   *
+   * The saved index is the first row with ANY pixel showing, while the live
+   * derivation (readCurrentPosition) skips a top sliver up to the landing gap.
+   * Left at a section boundary with a sliver of the previous line above, the
+   * saved index is that previous line — whose entry is the adjacent section (the
+   * other amud). So when the view has already landed on the saved row, the fresh
+   * read decides, exactly as the settle pass would; it is accepted only at the
+   * saved row or the one after it (the sliver case), never a pre-landing read.
    */
-  function syncTocPathForLineIndex(lineIndex: number) {
+  function syncTocPathForLineIndex(savedLineIndex: number) {
+    const live = readLivePosition()
+    const landed = live != null && live.lineIndex >= savedLineIndex && live.lineIndex <= savedLineIndex + 1
+    const lineIndex = landed ? live.lineIndex : savedLineIndex
     const entry = getActiveTocEntry(lineIndex)
     if (entry) {
       activeTocEntryId.value = entry.id

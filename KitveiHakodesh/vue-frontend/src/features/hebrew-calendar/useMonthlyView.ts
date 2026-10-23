@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, computed } from 'vue'
 import { HDate } from '@hebcal/hdate'
 
@@ -17,20 +18,9 @@ export const HEB_MONTHS = [
   { num: 13, name: 'אדר ב׳' },
 ]
 
-export const GREG_MONTHS = [
-  'ינואר',
-  'פברואר',
-  'מרץ',
-  'אפריל',
-  'מאי',
-  'יוני',
-  'יולי',
-  'אוגוסט',
-  'ספטמבר',
-  'אוקטובר',
-  'נובמבר',
-  'דצמבר',
-]
+export const GREG_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].map((k) =>
+  t(`hebrewCalendar.gregMonths.${k}`),
+)
 
 function hebYearGem(year: number): string {
   try {

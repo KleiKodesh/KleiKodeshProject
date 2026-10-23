@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,10 +10,10 @@ namespace KitveiHakodesh.Core.Common
     /// Enumerates system font families that can render Hebrew, through DirectWrite.
     ///
     /// THE ONE COPY. This replaces three identical implementations — KitveiHakodeshLib's
-    /// FontsProvider, the service's HebrewFontsProvider and WpfLib's FontsProvider — which
+    /// FontsProvider, the service's former HebrewFontsProvider and WpfLib's FontsProvider — which
     /// differed only in the factory import and in which subset of the surface each exposed.
     /// This is the union: every consumer (the font dropdown, WpfLib's FontsHelper, RegexFindLib's
-    /// picker, the service) reads it, and an enumeration or cmap bug now gets fixed once.
+    /// picker) reads it, and an enumeration or cmap bug now gets fixed once. The service no longer serves fonts.
     ///
     /// WHY DIRECTWRITE AND NOT WPF (verified 2026-08-20): WPF's Fonts.SystemFontFamilies is a
     /// process-lifetime snapshot. After a per-user font install plus AddFontResource plus a
@@ -114,7 +115,7 @@ namespace KitveiHakodesh.Core.Common
         // Deliberately stateless: the app is long-running and fonts can be installed or
         // removed under it, so every call enumerates fresh (checkForUpdates below re-scans) —
         // no cache to hold memory or go stale. The picker shows a loading row for the ~1s an
-        // enumeration takes, and it only runs when someone opens the font dropdown.
+        // enumeration takes; the hosted app runs it once per session, at launch.
         /// <summary>Names of every system font family that has a glyph for א, sorted alphabetically.
         /// Returns an empty array if DirectWrite is unavailable — the caller falls back to the
         /// frontend's canvas probe. Never throws.</summary>

@@ -1,6 +1,6 @@
 import { onScopeDispose, ref, watch } from 'vue'
-import { getBookById, getBookVersions, getLinesPaged } from '@/webview-host/seforimApi'
-import type { BookVersionRow } from '@/webview-host/queries.types'
+import { getBookById, getBookVersions, getHebrewBooksEditions, getLinesPaged } from '@/webview-host/seforimApi'
+import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 
 export interface LineItem {
   id: number
@@ -53,6 +53,10 @@ export function useLines(bookId: () => number | undefined) {
   const versions = ref<BookVersionRow[]>([])
   // null = the book's own merged text. Otherwise a book_version.id.
   const activeVersionId = ref<number | null>(null)
+
+  // The book's scanned editions on HebrewBooks. Same rules as versions: starts empty and
+  // fails closed, because only some books have editions and the control must not flash in.
+  const hebrewBooksEditions = ref<HebrewBooksEdition[]>([])
 
   // Queue of backfill ranges: [offset, limit] pairs.
   let fetchQueue: Array<{ offset: number; limit: number }> = []
@@ -314,6 +318,7 @@ export function useLines(bookId: () => number | undefined) {
     // would read its text through an id belonging to a different book entirely.
     versions.value = []
     activeVersionId.value = null
+    hebrewBooksEditions.value = []
 
     let metadataFailed = false
     const metadataPromise = getBookById(id).catch(() => {
@@ -359,7 +364,11 @@ export function useLines(bookId: () => number | undefined) {
 
     // Versions are toolbar-only and most books have none, so this trails the text
     // rather than gating first paint. Failure leaves the list empty and simply hides
-    // the control — nothing about reading the book depends on it.
+    // the control — nothing about reading the book depends on it. Editions are the same
+    // kind of toolbar-only extra, fetched alongside rather than after.
+    void getHebrewBooksEditions(id).then((rows) => {
+      if (currentBookId === id) hebrewBooksEditions.value = rows
+    })
     try {
       const rows = await getBookVersions(id)
       if (currentBookId === id) versions.value = rows
@@ -380,5 +389,6 @@ export function useLines(bookId: () => number | undefined) {
     lines, prioritise, prefetch, holdBackfill, releaseBackfill,
     hasCommentaries, hasRelatedBooks, hasTeamim,
     versions, activeVersionId, setVersion,
+    hebrewBooksEditions,
   }
 }

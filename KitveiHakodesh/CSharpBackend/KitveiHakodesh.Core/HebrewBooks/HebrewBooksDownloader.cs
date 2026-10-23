@@ -24,9 +24,6 @@ namespace KitveiHakodesh.Core.HebrewBooks
     /// </summary>
     public sealed class HebrewBooksDownloader
     {
-        private const string DownloadUrlFormat =
-            "https://download.hebrewbooks.org/downloadhandler.ashx?req={0}";
-
         /// <summary>How many downloaded PDFs the app cache keeps. The user's own folder is
         /// not subject to this — we never delete from a folder the user chose.</summary>
         private const int MaxCachedPdfs = 10;
@@ -40,6 +37,9 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
         private readonly HttpClient _http;
         private readonly string _cacheDirectory;
+
+        /// <summary>The official handler, then the hb-mirror.json fallbacks.</summary>
+        private readonly HebrewBooksDownloadSources _sources = HebrewBooksDownloadSources.Load();
 
         /// <summary>Byte progress per in-flight download, keyed by book id. Entries exist only
         /// while a download is running, so "no entry" means "not downloading" — already
@@ -132,66 +132,77 @@ namespace KitveiHakodesh.Core.HebrewBooks
             CancellationToken downloadToken = cancellation.Token;
 
             string? partPath = null;
+            // Known once the body is confirmed a PDF; a disk failure reports the folder it was
+            // writing to, so the user can tell a full drive from a folder they cannot write.
+            string? destination = null;
             try
             {
-                string url = string.Format(DownloadUrlFormat, bookId);
-                using var response = await _http
-                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, downloadToken)
-                    .ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    return response.StatusCode == HttpStatusCode.NotFound
-                        ? HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream)
-                        : HebrewBookAcquireResult.Failed(
-                            HebrewBookAcquireFailure.HttpStatus, ((int)response.StatusCode).ToString());
-                }
-
-                long total = response.Content.Headers.ContentLength ?? 0;
-                _progress[bookId] = new HebrewBookDownloadProgress { Received = 0, Total = total };
-
-                using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-
-                byte[] signature = new byte[PdfSignatureLength];
-                int signatureLength = await ReadFullyAsync(body, signature, downloadToken).ConfigureAwait(false);
-                if (!IsPdfSignature(signature, signatureLength))
-                    return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream);
-
-                string destination = ChooseDestination(localFolder, bookId, cachedPath);
-
+                destination = ChooseDestination(localFolder, bookId, cachedPath);
                 // Written to a .part first and moved into place only once complete, so a
                 // cancelled or failed download can never leave a truncated PDF that the
                 // cache-hit check above would later trust.
                 partPath = destination + ".part";
-                long received = signatureLength;
 
-                using (var file = new FileStream(
-                    partPath, FileMode.Create, FileAccess.Write, FileShare.None,
-                    CopyBufferBytes, useAsync: true))
+                // The official handler first, then the mirrors. The handler is authoritative:
+                // its 404 means no such book and ends the search, and when every source fails
+                // its failure is the one reported. Each mirror's failure is appended to that
+                // detail so the console shows why the fallbacks did not save it either.
+                HebrewBookAcquireResult? officialFailure = null;
+                foreach (HttpRequestMessage request in _sources.RequestsFor(bookId))
                 {
-                    await file.WriteAsync(signature, 0, signatureLength, downloadToken).ConfigureAwait(false);
-                    _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
-
-                    byte[] buffer = new byte[CopyBufferBytes];
-                    int read;
-                    while ((read = await body.ReadAsync(buffer, 0, buffer.Length, downloadToken).ConfigureAwait(false)) > 0)
+                    HebrewBookAcquireResult attempt;
+                    using (request)
                     {
-                        await file.WriteAsync(buffer, 0, read, downloadToken).ConfigureAwait(false);
-                        received += read;
-                        _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+                        // A source that cannot be reached at all (refused, DNS, TLS, timeout) is
+                        // that source failing, not the download: the next one must still be tried —
+                        // a network that blocks hebrewbooks.org outright is the case mirrors exist for.
+                        try
+                        {
+                            attempt = await TryDownloadFromAsync(request, bookId, partPath, downloadToken).ConfigureAwait(false);
+                        }
+                        catch (HttpRequestException ex)
+                        {
+                            attempt = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.ToString());
+                        }
+                        catch (OperationCanceledException ex) when (!cancellation.IsCancellationRequested)
+                        {
+                            // Neither the user nor the host cancelled — HttpClient's own timeout.
+                            attempt = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, "Timeout: " + ex);
+                        }
+                    }
+
+                    if (attempt.Succeeded)
+                    {
+                        MoveIntoPlace(partPath, destination);
+                        partPath = null;
+                        if (destination == cachedPath) EvictCache();
+                        return HebrewBookAcquireResult.Success(destination);
+                    }
+
+                    if (officialFailure == null)
+                    {
+                        if (attempt.Failure == HebrewBookAcquireFailure.NotFoundUpstream
+                            && attempt.HttpStatusCode == (int)HttpStatusCode.NotFound)
+                            return attempt;
+                        officialFailure = attempt;
+                    }
+                    else
+                    {
+                        officialFailure.Detail += $"\n\nFallback {request.RequestUri?.Host} failed: {attempt.Failure}: {attempt.Detail}";
                     }
                 }
 
-                MoveIntoPlace(partPath, destination);
-                partPath = null;
-
-                if (destination == cachedPath) EvictCache();
-                return HebrewBookAcquireResult.Success(destination);
+                return officialFailure!;
             }
             catch (OperationCanceledException)
                 when (cancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Cancelled);
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Neither the user nor the host cancelled — HttpClient's own timeout.
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, "Timeout: " + ex);
             }
             catch (OperationCanceledException)
             {
@@ -199,15 +210,19 @@ namespace KitveiHakodesh.Core.HebrewBooks
             }
             catch (HttpRequestException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.ToString());
             }
             catch (IOException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, DiskFailureDetail(ex, destination));
             }
             catch (UnauthorizedAccessException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, DiskFailureDetail(ex, destination));
+            }
+            catch (Exception ex)
+            {
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.ToString());
             }
             finally
             {
@@ -215,6 +230,75 @@ namespace KitveiHakodesh.Core.HebrewBooks
                 _downloads.TryRemove(bookId, out _);
                 if (partPath != null) await DeleteWithRetryAsync(partPath).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// One source's attempt: streams its PDF into <paramref name="partPath"/> and returns
+        /// Success, or returns why this source did not yield a PDF. The .part is overwritten by
+        /// each attempt, so a failed source leaves nothing the next one could mistake for its own.
+        /// </summary>
+        private async Task<HebrewBookAcquireResult> TryDownloadFromAsync(
+            HttpRequestMessage request, string bookId, string partPath, CancellationToken downloadToken)
+        {
+            string url = request.RequestUri?.ToString() ?? "";
+            using var response = await _http
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, downloadToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    var notFound = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'");
+                    notFound.HttpStatusCode = 404;
+                    return notFound;
+                }
+                var failed = HebrewBookAcquireResult.Failed(
+                    HebrewBookAcquireFailure.HttpStatus,
+                    await DescribeFailedResponseAsync(_http, url, response, downloadToken).ConfigureAwait(false));
+                failed.HttpStatusCode = (int)response.StatusCode;
+                return failed;
+            }
+
+            long total = response.Content.Headers.ContentLength ?? 0;
+            _progress[bookId] = new HebrewBookDownloadProgress { Received = 0, Total = total };
+
+            using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+
+            byte[] signature = new byte[PdfSignatureLength];
+            int signatureLength = await ReadFullyAsync(body, signature, downloadToken).ConfigureAwait(false);
+            if (!IsPdfSignature(signature, signatureLength))
+            {
+                var notPdf = HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream,
+                    $"Not a PDF. Status {(int)response.StatusCode}, Content-Type '{response.Content.Headers.ContentType}', " +
+                    $"final URL '{response.RequestMessage?.RequestUri}', first bytes '{System.Text.Encoding.UTF8.GetString(signature, 0, signatureLength)}'");
+                // hebrewbooks.org answers a missing book by redirecting to its own message page
+                // (message.aspx) with a 200 — that is its 404, so it is recorded as one. Any
+                // other non-PDF (a filter's block page) is left for the mirrors to try.
+                if (response.RequestMessage?.RequestUri?.AbsolutePath.EndsWith("/message.aspx", StringComparison.OrdinalIgnoreCase) == true)
+                    notPdf.HttpStatusCode = (int)HttpStatusCode.NotFound;
+                return notPdf;
+            }
+
+            long received = signatureLength;
+            using (var file = new FileStream(
+                partPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                CopyBufferBytes, useAsync: true))
+            {
+                await file.WriteAsync(signature, 0, signatureLength, downloadToken).ConfigureAwait(false);
+                _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+
+                byte[] buffer = new byte[CopyBufferBytes];
+                int read;
+                while ((read = await body.ReadAsync(buffer, 0, buffer.Length, downloadToken).ConfigureAwait(false)) > 0)
+                {
+                    await file.WriteAsync(buffer, 0, read, downloadToken).ConfigureAwait(false);
+                    received += read;
+                    _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
+                }
+            }
+
+            return HebrewBookAcquireResult.Success(partPath);
         }
 
         /// <summary>Which of <paramref name="bookIds"/> already have a PDF in the user's folder.
@@ -238,8 +322,11 @@ namespace KitveiHakodesh.Core.HebrewBooks
             return present;
         }
 
-        /// <summary>Removes a downloaded PDF from the user's folder.</summary>
-        public HebrewBookDeleteOutcome DeleteDownloaded(string bookId, string? localFolder)
+        /// <summary>Removes a downloaded PDF from the user's folder - permanently, or into the
+        /// Recycle Bin when <paramref name="toRecycleBin"/> is set. The bin is the calling
+        /// process's account's, so the installed (LocalSystem) service never recycles: the
+        /// user-side host calls <see cref="RecycleBin"/> itself; this path serves dev only.</summary>
+        public HebrewBookDeleteOutcome DeleteDownloaded(string bookId, string? localFolder, bool toRecycleBin = false)
         {
             if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) return HebrewBookDeleteOutcome.InvalidBookId;
             if (string.IsNullOrWhiteSpace(localFolder)) return HebrewBookDeleteOutcome.NoLocalFolderConfigured;
@@ -248,6 +335,15 @@ namespace KitveiHakodesh.Core.HebrewBooks
             {
                 string path = Path.Combine(localFolder, bookId + ".pdf");
                 if (!File.Exists(path)) return HebrewBookDeleteOutcome.NotThere;
+                if (toRecycleBin)
+                {
+                    switch (RecycleBin.Send(path))
+                    {
+                        case RecycleBinOutcome.Recycled: return HebrewBookDeleteOutcome.Deleted;
+                        case RecycleBinOutcome.NoRecycleBin: return HebrewBookDeleteOutcome.NoRecycleBin;
+                        default: return HebrewBookDeleteOutcome.DeleteFailed;
+                    }
+                }
                 File.Delete(path);
                 return HebrewBookDeleteOutcome.Deleted;
             }
@@ -281,6 +377,72 @@ namespace KitveiHakodesh.Core.HebrewBooks
             && head[0] == (byte)'%' && head[1] == (byte)'P' && head[2] == (byte)'D'
             && head[3] == (byte)'F' && head[4] == (byte)'-';
 
+        /// <summary>
+        /// Everything needed to diagnose a refused download on a machine we cannot reach: which
+        /// URL, where redirects ended, every header (Server/Via/cf-* tell a filtering proxy or
+        /// Cloudflare from hebrewbooks.org itself) and the start of the error page's text.
+        /// </summary>
+        private static async Task<string> DescribeFailedResponseAsync(
+            HttpClient http, string url, HttpResponseMessage response, CancellationToken ct)
+        {
+            var text = new System.Text.StringBuilder();
+            text.Append($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}\n");
+            text.Append($"Request URL: {url}\n");
+            text.Append($"Final URL: {response.RequestMessage?.RequestUri}\n");
+            text.Append("Headers:\n");
+            foreach (var header in response.Headers)
+                text.Append($"  {header.Key}: {string.Join(", ", header.Value)}\n");
+            foreach (var header in response.Content.Headers)
+                text.Append($"  {header.Key}: {string.Join(", ", header.Value)}\n");
+
+            try
+            {
+                using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                byte[] buffer = new byte[4096];
+                int length = await ReadFullyAsync(body, buffer, ct).ConfigureAwait(false);
+                string html = System.Text.Encoding.UTF8.GetString(buffer, 0, length);
+                string plain = System.Text.RegularExpressions.Regex.Replace(html, "<script[\\s\\S]*?</script>|<style[\\s\\S]*?</style>|<[^>]+>", " ");
+                plain = System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(plain), "\\s+", " ").Trim();
+                if (plain.Length > 600) plain = plain.Substring(0, 600) + "…";
+                text.Append($"Body ({length} bytes read): {plain}");
+            }
+            catch (Exception ex) when (ex is IOException || ex is HttpRequestException)
+            {
+                text.Append($"Body unreadable: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            // Cloudflare never says why it challenged; the site owner sees that by CF-RAY. Its
+            // public trace endpoint does show what it saw of us: public IP (filter / VPN /
+            // carrier), colo, WARP/Gateway, TLS and HTTP versions, the User-Agent received.
+            if (response.Headers.Contains("Cf-Mitigated") && response.RequestMessage?.RequestUri is Uri requested)
+                text.Append("\nCloudflare trace:\n").Append(await CloudflareTraceAsync(http, requested, ct).ConfigureAwait(false));
+
+            return text.ToString();
+        }
+
+        private static async Task<string> CloudflareTraceAsync(HttpClient http, Uri site, CancellationToken ct)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            string traceUrl = site.GetLeftPart(UriPartial.Authority) + "/cdn-cgi/trace";
+            try
+            {
+                using var trace = await http.GetAsync(traceUrl, timeout.Token).ConfigureAwait(false);
+                string body = await trace.Content.ReadAsStringAsync().ConfigureAwait(false);
+                return trace.IsSuccessStatusCode
+                    ? body.Trim()
+                    : $"HTTP {(int)trace.StatusCode} from '{traceUrl}'";
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return $"timed out: '{traceUrl}'";
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is IOException)
+            {
+                return $"failed: '{traceUrl}': {ex.Message}";
+            }
+        }
+
         /// <summary>Reads until the buffer is full or the stream ends, returning how much
         /// arrived. A single ReadAsync may return fewer bytes than asked for, which would make
         /// a signature check on its result wrong rather than merely incomplete.</summary>
@@ -299,6 +461,15 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// <summary>Swaps the completed .part into its real name. net48 has no overwriting
         /// File.Move, so the existing file goes first — by this point we hold a complete PDF
         /// and whatever is there is the one we set out to replace.</summary>
+        /// <summary>The exception's own message plus the folder being written, when known. A
+        /// FileStream failure usually names the file already; "not enough space on the disk"
+        /// and friends do not, and the folder is what the user needs to fix either way.</summary>
+        private static string DiskFailureDetail(Exception ex, string? destination)
+        {
+            string? folder = destination is null ? null : Path.GetDirectoryName(destination);
+            return string.IsNullOrEmpty(folder) ? ex.ToString() : $"{ex} ({folder})";
+        }
+
         private static void MoveIntoPlace(string partPath, string destination)
         {
             if (File.Exists(destination)) File.Delete(destination);

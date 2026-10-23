@@ -13,7 +13,7 @@ const isDark = computed(() => store.themePreset.includes('-dark'))
 <template>
   <button
     class="bar-btn"
-    :title="isDark ? 'עבור למצב בהיר (Ctrl+L)' : 'עבור למצב כהה (Ctrl+L)'"
+    :title="isDark ? $t('theme.toLight') : $t('theme.toDark')"
     @click.stop="store.toggleDarkMode()"
   >
     <IconWeatherMoon20Regular v-if="isDark" />

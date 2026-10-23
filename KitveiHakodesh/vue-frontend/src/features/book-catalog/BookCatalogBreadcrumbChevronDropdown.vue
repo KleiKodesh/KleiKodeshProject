@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 
 const props = defineProps<{
@@ -28,7 +29,10 @@ const dropdownLeft = ref(0)
 const { justClosed } = useDropdownClose(wrapperRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
   ignore: [dropdownRef],
+  // The wrapper sits inline in the breadcrumb; only the popup is fitted.
+  fitToViewport: false,
 })
+useDropdownViewportFit(dropdownRef)
 
 function onToggle() {
   if (justClosed.value) return
@@ -57,7 +61,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
       ref="toggleButtonRef"
       class="chevron-button"
       :class="{ open: isOpen }"
-      :title="isOpen ? 'סגור' : 'הצג תיקיות'"
+      :title="isOpen ? $t('bookCatalog.breadcrumb.close') : $t('bookCatalog.breadcrumb.showFolders')"
       @mousedown.prevent
       @click.stop="onToggle"
     >
@@ -69,6 +73,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
         v-if="isOpen"
         ref="dropdownRef"
         class="chevron-dropdown"
+        dir="rtl"
         :style="{ top: dropdownTop + 'px', left: dropdownLeft + 'px' }"
       >
         <button
@@ -162,7 +167,6 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
   padding: 4px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .chevron-dropdown-item {
@@ -170,7 +174,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
   width: 100%;
   height: 26px;
   padding: 0 10px;
-  text-align: right;
+  text-align: start;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

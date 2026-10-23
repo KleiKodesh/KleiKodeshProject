@@ -1,3 +1,5 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows;
@@ -38,16 +40,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (wordProcs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "וורד פתוח כעת.\nהאם לסגור את וורד כדי להמשיך בהתקנה?",
-                "וורד פתוח",
+                Strings.Word_OpenContinue,
+                Strings.Word_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (r == MessageBoxResult.No)
             {
                 MessageBox.Show(
-                    "ההתקנה בוטלה. אנא סגור את וורד ונסה שוב.",
-                    "התקנה בוטלה",
+                    Strings.Word_Cancelled,
+                    Strings.InstallCancelledTitle,
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return false;
@@ -60,6 +62,29 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
+        /// Exits the installer after a successful install. On a clean install (not an
+        /// update) the add-in only finishes setting up the first time Word loads it, so
+        /// offer to open Word first.
+        /// </summary>
+        public static void ExitAfterInstall()
+        {
+            if (InstallRunner.IsCleanInstall && !IsWordRunning())
+            {
+                var r = MessageBox.Show(
+                    Strings.Word_OpenToFinish,
+                    Strings.Word_OpenToFinishTitle,
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes,
+                    UiLanguage.MessageBoxOptions);
+
+                if (r == MessageBoxResult.Yes)
+                    try { Process.Start(new ProcessStartInfo("winword.exe") { UseShellExecute = true }); } catch { }
+            }
+            Environment.Exit(0);
+        }
+
+        /// <summary>
         /// Variant used by RepairPage — asks to close Word before cleanup (not install).
         /// Returns true if safe to proceed.
         /// </summary>
@@ -69,12 +94,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (wordProcs.Length == 0) return true;
 
             var r = MessageBox.Show(
-                "וורד פתוח כעת. יש לסגור אותו לפני הניקוי.\nהאם לסגור את וורד כעת?",
-                "וורד פתוח",
+                Strings.Word_OpenClean,
+                Strings.Word_OpenTitle,
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.Yes,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                UiLanguage.MessageBoxOptions);
 
             if (r != MessageBoxResult.Yes) return false;
 

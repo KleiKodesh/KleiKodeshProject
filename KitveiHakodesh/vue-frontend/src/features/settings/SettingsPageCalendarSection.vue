@@ -6,6 +6,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
+import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 const { showClock } = storeToRefs(useSettingsStore())
@@ -20,8 +21,7 @@ const cityDropdownStyle = ref<Record<string, string>>({})
 
 useDropdownClose(
   cityDropdownRef,
-  (e) => {
-    if (cityBoxRef.value?.contains((e as MouseEvent).target as Node)) return
+  () => {
     cityOpen.value = false
   },
   { ignore: [cityBoxRef] },
@@ -56,12 +56,12 @@ function pickCity(name: string) {
 </script>
 
 <template>
-  <div data-section="section-calendar" data-section-label="לוח שנה ושעון">
-    <div id="section-calendar" class="section-label">לוח שנה ושעון</div>
+  <div data-section="section-calendar" :data-section-label="$t('settings.calendar.section')">
+    <div id="section-calendar" class="section-label">{{ $t('settings.calendar.section') }}</div>
 
-    <SettingRow label="עיר לזמני היום" hint="זמני היום בלוח השנה יחושבו לפי מיקום העיר">
+    <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHint')">
       <div ref="cityBoxRef" class="city-select-box" tabindex="0" @click="toggleCityDropdown">
-        <span class="city-select-display">{{ activeCity.name }}</span>
+        <span class="city-select-display">{{ cityDisplayName(activeCity) }}</span>
         <component
           :is="cityOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
           class="city-select-chevron"
@@ -82,18 +82,18 @@ function pickCity(name: string) {
             :class="{ selected: activeCity.name === c.name }"
             @click="pickCity(c.name)"
           >
-            {{ c.name }}
+            {{ cityDisplayName(c) }}
           </div>
         </div>
       </Teleport>
     </SettingRow>
 
-    <SettingRow label="הצג שעון במצב מסך מלא" hint="שעון שקוף בפינה השמאלית התחתונה, בעת שימוש במצב מסך מלא">
+    <SettingRow :label="$t('settings.calendar.clock')" :hint="$t('settings.calendar.clockHint')">
       <ToggleGroup
         v-model="showClock"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
       />
     </SettingRow>
@@ -144,7 +144,6 @@ function pickCity(name: string) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  direction: rtl;
 }
 
 .city-option {

@@ -59,7 +59,7 @@ const emit = defineEmits<{
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
-  text-align: right;
+  text-align: start;
   transition: background 100ms, transform 80ms;
 }
 
@@ -69,7 +69,7 @@ const emit = defineEmits<{
 
 .side-nav-section-label {
   flex: 1;
-  text-align: right;
+  text-align: start;
   white-space: normal;
   overflow-wrap: break-word;
 }

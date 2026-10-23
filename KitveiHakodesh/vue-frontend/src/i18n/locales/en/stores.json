@@ -1,0 +1,24 @@
+{
+  "tabTitle": {
+    "home": "Home",
+    "search": "Search",
+    "searchQuery": "Search: {query}",
+    "catalog": "Book catalog",
+    "hebrewbooks": "HebrewBooks",
+    "settings": "Settings",
+    "calendar": "Calendar",
+    "dictionary": "Dictionary",
+    "midot": "Measurements",
+    "fileSearch": "File search",
+    "kitveiHakodesh": "Kitvei Hakodesh"
+  },
+  "loadError": "Error loading data",
+  "loadErrorNoServer": "Error loading data - cannot connect to the server",
+  "loadErrorSqlite": "Error loading data - the SQLite file does not match the system version (32/64-bit). Please reinstall the application.",
+  "noInternet": "No internet connection",
+  "bookNotDownloadable": "The requested book is not available for download",
+  "downloadFailedWith": "Download failed: {error}",
+  "downloadFailed": "Download failed",
+  "defaultWorkspace": "Default",
+  "workspace": "Workspace"
+}

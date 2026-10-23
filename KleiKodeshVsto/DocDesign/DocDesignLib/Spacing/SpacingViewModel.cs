@@ -6,14 +6,14 @@ namespace DocDesign.Spacing
 {
     public class SpacingViewModel : ViewModelBase
     {
-        float _stepSize = (float)0.5;
+        float _stepSize = DocDesignSettings.GetFloat(nameof(StepSize), 0.5f);
         float _spaceAfter;
         float _spaceBefore;
         float _lineSpacing;
         float _wordSpacing;
         float _characterStretch;
 
-        public float StepSize { get => _stepSize; set => SetProperty(ref _stepSize, value); }
+        public float StepSize { get => _stepSize; set { if (SetProperty(ref _stepSize, value)) DocDesignSettings.Save(nameof(StepSize), value); } }
         public float SpaceAfter { get => _spaceAfter; set => SetSpaceAfter(value); }
         public float SpaceBefore { get => _spaceBefore; set => SetSpaceBefore(value); }
         public float LineSpacing { get => _lineSpacing; set => SetLineSpacing(value); }

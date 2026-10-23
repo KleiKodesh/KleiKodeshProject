@@ -16,9 +16,16 @@ import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import MessageBanner from '@/components/MessageBanner.vue'
+import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
+import { tHe } from '@/i18n'
 import type { ComponentPublicInstance } from 'vue'
 
 const paneNavigation = usePaneNavigation()
+// While the catalog index builds, the search spinner says so (with progress); when the
+// index is unavailable, the search area says why instead of spinning.
+const { statusText: catalogIndexStatusText, isUnavailable: isCatalogIndexUnavailable } =
+  useSearchIndexStatus('catalogToc', tHe)
 const tabStore = useTabStore()
 const {
   loading,
@@ -94,17 +101,6 @@ watch(
   { immediate: true },
 )
 
-// A category to open at, stamped on the tab by a home folder card. One-shot like
-// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
-// cold start stamps it before the categories exist.
-watch(
-  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
-  ([categoryId]) => {
-    if (categoryId === undefined) return
-    if (openCategory(categoryId)) paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
-  },
-  { immediate: true },
-)
 
 // ── Diagnostics (auto-runs when a bitness-mismatch error is detected) ─────────
 
@@ -256,8 +252,26 @@ function onGoHome() {
   focusSearchInput()
 }
 
+// A category to open at, stamped on the tab by a home folder card. One-shot like
+// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
+// cold start stamps it before the categories exist. Arriving at a folder is like
+// entering one: the bar shows the path, not the field.
+watch(
+  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
+  ([categoryId]) => {
+    if (categoryId === undefined) return
+    if (!openCategory(categoryId)) return
+    paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
+    editingSearch.value = false
+    focusSearchInput()
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   load()
+  // Already at a folder (a home folder card) — keep the path showing.
+  if (path.value.length > 1) return
   // Open with the field ready to type in — the catalog is a place you usually
   // arrive at looking for something. openSearch (not a bare focus call) because
   // the input only exists while showSearch is true: the default is the crumbs, so
@@ -295,7 +309,8 @@ function onSearchEnter() {
 </script>
 
 <template>
-  <div class="books-page">
+  <!-- Never translated, always RTL in every UI language (user decision). -->
+  <div class="books-page" dir="rtl">
     <BookCatalogTitleBar
       :view="view"
       :path="path"
@@ -323,10 +338,10 @@ function onSearchEnter() {
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
-        <span class="error-msg">{{ error }}</span>
-        <button class="retry-btn" @click="load()">נסה שוב</button>
+        <MessageBanner class="error-msg" :message="error" :dismissible="false" />
+        <button class="retry-btn" @click="load()">{{ $t('bookCatalog.retry') }}</button>
         <template v-if="isBitnessMismatch(error)">
-          <div v-if="diagLoading" class="diag-loading">אוסף נתוני אבחון...</div>
+          <div v-if="diagLoading" class="diag-loading">{{ $t('bookCatalog.diag.loading') }}</div>
           <div v-else-if="diagData" class="diag-panel">
             <div class="diag-table">
               <div v-for="(val, key) in diagData" :key="key" class="diag-row">
@@ -351,7 +366,7 @@ function onSearchEnter() {
                 >
               </div>
             </div>
-            <button class="diag-copy-btn" @click="copyDiagnostics">העתק לדוח</button>
+            <button class="diag-copy-btn" @click="copyDiagnostics">{{ $t('bookCatalog.diag.copy') }}</button>
           </div>
         </template>
       </div>
@@ -367,7 +382,16 @@ function onSearchEnter() {
         <!-- select-book/select-toc emit (item, openInNewTab) — the boolean is
              forwarded straight through to the pane-navigation helper. -->
         <template v-if="isSearching">
-          <LoadingAnimation v-if="tocSearching && !searchItems.length" />
+          <MessageBanner
+            v-if="isCatalogIndexUnavailable && catalogIndexStatusText && !searchItems.length"
+            class="error-msg"
+            :message="catalogIndexStatusText"
+            :dismissible="false"
+          />
+          <LoadingAnimation
+            v-else-if="tocSearching && !searchItems.length"
+            :text="catalogIndexStatusText ?? undefined"
+          />
           <BookCatalogSearch
             ref="searchResultsRef"
             v-else
@@ -398,11 +422,9 @@ function onSearchEnter() {
 .state.error {
   padding: 32px 16px;
   text-align: center;
-  color: var(--status-danger);
   font-size: 15px;
 }
 .error-msg {
-  display: block;
   margin-bottom: 12px;
 }
 .retry-btn {

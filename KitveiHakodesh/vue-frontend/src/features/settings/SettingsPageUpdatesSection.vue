@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import SettingRow from './SettingRow.vue'
+import SettingsPageReportProblemRow from './SettingsPageReportProblemRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
+import { useUpdateDownloadProgress } from '@/composables/useUpdateDownloadProgress'
+import { useI18n } from 'vue-i18n'
 import {
   updatePromptBody,
   UPDATE_INSTALL_LABEL,
   UPDATE_INSTALL_FAILED,
 } from '@/components/updateAvailableTexts'
 
-// The KitveiHakodesh service checks for updates once a week and downloads them in the
-// background; it never installs on its own. This section shows the installed version and
-// whether a downloaded update is ready, runs a check on demand, installs through the same path
+// The KitveiHakodesh service checks for updates (every app start, and weekly) and downloads them
+// in the background; it never installs on its own. This section shows the installed version,
+// a live progress bar while the service downloads (pushed, useUpdateDownloadProgress), whether
+// a downloaded update is ready, runs a check on demand, installs through the same path
 // as UpdateAvailablePrompt (useSelfUpdate), and holds the "turn off automatic updates" toggle.
 
 const {
@@ -31,89 +36,100 @@ const {
   applyAutomaticUpdateTurnedOff,
 } = useSelfUpdate()
 
+const { progress: downloadProgress } = useUpdateDownloadProgress()
+const isDownloading = computed(() => !readyVersion.value && downloadProgress.value.downloadingVersion !== '')
+
 const isUpdateStatusLoaded = ref(false)
 
 onMounted(async () => {
-  await loadAutomaticUpdateTurnedOff()
-  await loadUpdateStatus()
+  await Promise.all([loadAutomaticUpdateTurnedOff(), loadUpdateStatus()])
   isUpdateStatusLoaded.value = true
 })
+
+const { t } = useI18n()
 
 // ── Update status line ────────────────────────────────────────────────────────
 
 const updateStatusText = computed(() => {
-  if (!isUpdateStatusLoaded.value) return 'טוען...'
-  if (isUpdateStatusUnavailable.value) return 'לא ניתן לקבל את מצב העדכונים כרגע — שירות הנתונים אינו זמין.'
+  if (!isUpdateStatusLoaded.value) return t('settings.updates.loading')
+  if (isUpdateStatusUnavailable.value) return t('settings.updates.unavailable')
   if (readyVersion.value) return updatePromptBody(readyVersion.value)
-  if (isAutomaticUpdateTurnedOff.value) return 'בדיקת העדכונים האוטומטית כבויה.'
-  if (isCheckingForUpdate.value) return 'בודק אם יש גרסה חדשה. אם יש, היא תורד עכשיו — זה עשוי לקחת כמה דקות.'
-  if (hasCheckFailed.value) return 'לא ניתן היה לבדוק אם יש עדכון. נא לנסות שוב מאוחר יותר.'
-  if (hasCheckedForUpdate.value) return 'הגרסה המותקנת היא העדכנית ביותר.'
-  return 'אין עדכון שמוכן להתקנה. התוכנה בודקת אוטומטית פעם בשבוע אם יש גרסה חדשה ומורידה אותה ברקע.'
+  if (isDownloading.value)
+    return t('settings.updates.downloading', {
+      version: downloadProgress.value.downloadingVersion,
+      percent: downloadProgress.value.percent,
+    })
+  if (isAutomaticUpdateTurnedOff.value) return t('settings.updates.off')
+  if (isCheckingForUpdate.value) return t('settings.updates.checking')
+  if (hasCheckFailed.value) return t('settings.updates.failed')
+  if (hasCheckedForUpdate.value) return t('settings.updates.upToDate')
+  return t('settings.updates.idle')
 })
 
 // Hidden while updates are turned off, and once an update is ready (install is the next step).
 const isCheckNowVisible = computed(
-  () => isUpdateStatusLoaded.value && !isAutomaticUpdateTurnedOff.value && !readyVersion.value,
+  () =>
+    isUpdateStatusLoaded.value && !isAutomaticUpdateTurnedOff.value && !readyVersion.value && !isDownloading.value,
 )
 </script>
 
 <template>
   <!-- ── עדכונים ── -->
-  <div data-section="section-updates" data-section-label="עדכונים">
-    <div id="section-updates" class="section-label">עדכונים</div>
+  <div data-section="section-updates" :data-section-label="$t('settings.updates.section')">
+    <div id="section-updates" class="section-label">{{ $t('settings.updates.section') }}</div>
 
-    <SettingRow v-if="installedVersion" label="גרסה מותקנת">
-      <span class="updates-status-text">{{ installedVersion }}</span>
-    </SettingRow>
-
-    <SettingRow label="מצב עדכון">
+    <SettingRow :label="$t('settings.updates.status')">
       <div class="updates-status">
+        <span v-if="installedVersion" class="updates-status-text">{{ $t('settings.updates.installed', { version: installedVersion }) }}</span>
         <span class="updates-status-text">{{ updateStatusText }}</span>
-        <span v-if="hasInstallFailed" class="updates-status-error">{{ UPDATE_INSTALL_FAILED }}</span>
+        <div
+          v-if="isDownloading"
+          class="updates-progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="downloadProgress.percent"
+        >
+          <div class="updates-progress-fill" :style="{ width: downloadProgress.percent + '%' }" />
+        </div>
+        <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         <button
           v-if="readyVersion"
-          class="updates-install-button"
+          class="settings-btn updates-install-button"
           :disabled="isInstalling"
           @click="installUpdate"
         >
           {{ UPDATE_INSTALL_LABEL }}
         </button>
-        <button
-          v-if="isCheckNowVisible"
-          class="updates-check-button"
-          :disabled="isCheckingForUpdate"
-          @click="checkForUpdateNow"
-        >
-          {{ isCheckingForUpdate ? 'בודק...' : 'בדוק עכשיו' }}
+        <span v-if="isInstalling" class="updates-status-text">{{ $t('settings.updates.waitInstaller') }}</span>
+        <button v-if="isCheckNowVisible" class="settings-btn" :disabled="isCheckingForUpdate" @click="checkForUpdateNow">
+          {{ isCheckingForUpdate ? $t('settings.updates.checkingShort') : $t('settings.updates.checkNow') }}
         </button>
       </div>
     </SettingRow>
 
     <SettingRow
       id="nav-turn-off-updates"
-      data-nav-label="כבה בדיקת עדכונים"
-      label="כבה בדיקת עדכונים אוטומטית"
-      hint="בבחירת 'כן' התוכנה לא תבדוק אם יש גרסה חדשה ולא תוריד אותה. ההגדרה משותפת עם התוסף לוורד."
+      :data-nav-label="$t('settings.updates.disableNav')"
+      :label="$t('settings.updates.disable')"
+      :hint="$t('settings.updates.disableHint')"
     >
       <ToggleGroup
         :model-value="isAutomaticUpdateTurnedOff"
         :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
         ]"
         @update:model-value="applyAutomaticUpdateTurnedOff"
       />
     </SettingRow>
+
+    <SettingsPageReportProblemRow />
   </div>
 </template>
 
 <style scoped>
 .updates-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
   width: 100%;
 }
 
@@ -122,38 +138,27 @@ const isCheckNowVisible = computed(
   color: var(--text-secondary);
 }
 
-.updates-status-error {
-  font-size: 12px;
-  color: var(--status-danger);
+.updates-progress-track {
+  height: 4px;
+  margin-block: 6px;
+  border-radius: 2px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.updates-progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.25s ease;
 }
 
 .updates-install-button {
-  height: 28px;
-  padding: 0 14px;
-  font-size: 12px;
   color: var(--text-on-accent, #fff);
   background: var(--accent-color);
-  border: none;
-  border-radius: 4px;
+  border-color: var(--accent-color);
 }
 
-.updates-check-button {
-  height: 28px;
-  padding: 0 14px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-
-.updates-check-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.updates-install-button:disabled,
-.updates-check-button:disabled {
-  opacity: 0.6;
-  cursor: default;
+.updates-install-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-color) 85%, #000);
 }
 </style>

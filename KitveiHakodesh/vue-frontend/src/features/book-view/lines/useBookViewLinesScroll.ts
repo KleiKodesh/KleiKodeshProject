@@ -22,6 +22,7 @@
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
 import type { LineItem } from './useBookViewLinesTable'
 import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
@@ -33,6 +34,7 @@ import type {
   CommentarySlot,
   CommentaryTreeState,
   CommentaryTreeStatePersist,
+  SideEditionPersistState,
   TocPersistState,
 } from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
@@ -64,6 +66,8 @@ export interface BookViewLinesScrollProps {
    * time like the panels above. null = the book's merged text.
    */
   versionPersistState?: () => string | null
+  /** The side-by-side HebrewBooks edition and its column width, read at save time. */
+  sideEditionPersistState?: () => SideEditionPersistState
   /**
    * The alternate version being rendered, or null for the merged text. Part of the
    * line renderer's cache key — a swap changes a line's text while its index and id
@@ -404,7 +408,10 @@ export function useBookViewLinesScroll(
     return result
   }
 
-  function savePos() {
+  // Returns the last-read put so a host flush (persistenceFlush.ts) can wait for it;
+  // every other caller is fire-and-forget. The per-tab state put is the same kind of
+  // write to the same driver, so one of the two is enough to wait on.
+  function savePos(): Promise<void> | undefined {
     // Mid-flight programmatic positions are transient — persisting one would
     // overwrite the reader's real place with wherever a jump happened to be
     // passing through.
@@ -415,6 +422,7 @@ export function useBookViewLinesScroll(
     const commentaryPanels = commentaryPanelsForSave()
     const toc = props.tocPersistState?.()
     const versionTitle = props.versionPersistState?.() ?? null
+    const sideEdition = props.sideEditionPersistState?.()
 
     tabStore.setBookViewState(tabId, bookId, {
       ...position,
@@ -424,8 +432,9 @@ export function useBookViewLinesScroll(
       commentaryPanels,
       toc,
       versionTitle,
+      sideEdition,
     })
-    tabStore.setLastReadPos(bookId, {
+    return tabStore.setLastReadPos(bookId, {
       ...position,
       selectedLineId: props.selectedLineId,
       // Zoom rides along here too, so reopening a book in a new tab restores the
@@ -434,6 +443,7 @@ export function useBookViewLinesScroll(
       commentaryPanels,
       toc,
       versionTitle,
+      sideEdition,
     })
   }
 
@@ -442,12 +452,18 @@ export function useBookViewLinesScroll(
     (visible) => { if (!visible) savePos() },
   )
 
-  useEventListener(document, 'visibilitychange', () => {
-    if (document.visibilityState === 'hidden') savePos()
-  })
-  useEventListener(window, 'beforeunload', savePos)
+  // Hidden / reload / close in the browser, window.__khsFlushPersistence in the
+  // WebView2 hosts (which fire none of those), and the tab's own close (by tab id)
+  // all take the position through this one registration - see persistenceFlush.ts
+  // for why the position must be captured BEFORE the coalesced stores flush.
+  let lastCaptureSuppressed = false
+  const unregisterHostFlush = registerPositionCapture(() => {
+    lastCaptureSuppressed = saveSuppressed
+    return savePos()
+  }, tabId)
 
   onBeforeUnmount(() => {
+    unregisterHostFlush()
     scrollTeardown = true
     cancelStabilize?.()
     saveSuppressed = false
@@ -455,7 +471,14 @@ export function useBookViewLinesScroll(
       clearTimeout(saveSuppressTimer)
       saveSuppressTimer = null
     }
-    savePos()
+    // A view leaving while its tab stays open (tab switch, navigation within the
+    // tab) has only this save. A closed tab's view unmounts after the tab has left
+    // the list, and the close already captured this same position (disposeClosedTab
+    // -> capturePositionsForTab): saving again would only repeat the last-read put
+    // (the per-tab put the store drops anyway). The one exception is a close that
+    // fell inside a suppressed window - that capture wrote nothing, so this is its
+    // save, as it was before the close-time capture existed.
+    if (tabStore.isOpenTab(tabId) || lastCaptureSuppressed) savePos()
   })
 
   // ── Scroll handler ──────────────────────────────────────────────────────────

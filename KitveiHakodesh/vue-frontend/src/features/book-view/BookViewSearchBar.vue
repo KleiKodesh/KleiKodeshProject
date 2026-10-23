@@ -14,6 +14,9 @@ import { useRecentSearches } from '@/composables/useRecentSearches'
 import BookViewSearchRecentsDropdown from './BookViewSearchRecentsDropdown.vue'
 import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
 import type { CommentarySlot, SearchMode } from './bookViewTypes'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   visible: boolean
@@ -105,7 +108,7 @@ watch(() => props.openCommentarySlots, (slots) => {
 const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
 
 const placeholder = computed(() =>
-  searchMode.value === 'content' ? 'חיפוש בטקסט...' : 'חיפוש במפרשים...',
+  searchMode.value === 'content' ? t('bookView.search.placeholderText') : t('bookView.search.placeholderCommentary'),
 )
 
 const matchLabel = computed(() => {
@@ -154,7 +157,7 @@ function onKeydown(event: KeyboardEvent) {
 // each field's aria-controls to the other pane's listbox.
 const listboxId = `book-view-recents-${Math.random().toString(36).slice(2)}`
 
-const RECENTS_TITLE = 'חיפושים אחרונים'
+const RECENTS_TITLE = t('bookView.search.recents')
 
 /**
  * The recents chevron — the ONLY thing that opens the list here. Focus and typing
@@ -220,10 +223,10 @@ const MODE_ICONS: Record<SearchMode, Component> = {
 
 // Labels reuse the toolbar's wording for the text zoom and the panel toggles.
 const MODE_LABELS: Record<SearchMode, string> = {
-  content: 'טקסט',
-  'commentary-bottom': 'מפרשים למטה',
-  'commentary-side': 'מפרשים מימין',
-  'commentary-side-left': 'מפרשים משמאל',
+  content: t('bookView.search.scopeText'),
+  'commentary-bottom': t('bookView.search.scopeBottom'),
+  'commentary-side': t('bookView.search.scopeRight'),
+  'commentary-side-left': t('bookView.search.scopeLeft'),
 }
 
 // Offers the book text plus each open commentary panel, so the menu only ever
@@ -368,8 +371,8 @@ defineExpose({ focus: focusInput })
   position: absolute;
   z-index: 9999;
   top: 4px;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -410,7 +413,6 @@ defineExpose({ focus: focusInput })
   font-size: 13px;
   color: var(--text-primary);
   cursor: text;
-  direction: rtl;
   /* Pinned, like the reference widget's 25px input row: without it the bar's height is
      whatever the glyphs happen to be, and it drifts between fonts and zoom levels. */
   height: 24px;

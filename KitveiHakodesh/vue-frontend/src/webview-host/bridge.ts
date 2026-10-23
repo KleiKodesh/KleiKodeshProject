@@ -8,8 +8,10 @@
 
 import { hasHostBridge, emitWebviewEvent } from './seforimDb'
 import { serviceCall, serviceCallVoid } from './serviceClient'
+import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { showToast } from '@/composables/useToast'
+import { t } from '@/i18n'
 
 declare global {
   interface Window {
@@ -152,8 +154,9 @@ export async function pickLocalFile(
       }>('openLocalFile', { path: filePath })
       if (!r?.handle) {
         if (r?.cancelled) return null // user pressed ביטול — tab already reset, stay quiet
+        console.error('[bridge] openLocalFile returned no handle', { filePath, reply: r })
         if (!isDirect)
-          emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || 'פתיחת הקובץ נכשלה' })
+          emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || t('webviewHost.fileOpenFailed') })
         return null
       }
 
@@ -184,7 +187,8 @@ export async function pickLocalFile(
       // Converted: the caller finalizes the placeholder from this reply
       // (finalizeConvertingFromReply), mirroring the hosted cached-conversion path.
       return { url, fileName: servedName, filePath }
-    } catch {
+    } catch (err) {
+      console.error('[bridge] pickLocalFile failed', err)
       return null
     } finally {
       _pendingPickOpenInNewTab = null
@@ -234,7 +238,10 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
         'openLocalFile',
         { path: filePath },
       )
-      if (!r?.handle) return null
+      if (!r?.handle) {
+        console.error('[bridge] restoreLocalFile: openLocalFile returned no handle', { filePath, reply: r })
+        return null
+      }
       // The service reports what it will actually serve: a converted Word doc comes back as
       // *.pdf (Word) or *.html (Office-free fallback) — the viewer route must follow suit.
       const servedExt = r.fileName?.toLowerCase().endsWith('.html') ? '.html' : '.pdf'
@@ -247,12 +254,16 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
         ? `/khs-file/${r.folderHandle}/${encodeURIComponent(r.fileName ?? '')}`
         : `/khs-file/${r.handle}`
       return { url, kind }
-    } catch {
+    } catch (err) {
+      console.error('[bridge] restoreLocalFile failed', { filePath }, err)
       return null
     }
   }
   const res = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath })
-  if (res.error || !res.url) return null
+  if (res.error || !res.url) {
+    console.error('[bridge] restoreLocalFile failed in the host', { filePath, reply: res })
+    return null
+  }
   return { url: res.url }
 }
 
@@ -342,7 +353,8 @@ async function servedPdfUrl(r: { handle?: string; path?: string }): Promise<stri
   if (typeof window.__webviewAction !== 'function') return `/khs-file/${r.handle}`
   if (!r.path) return null
   const hosted = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath: r.path })
-  return hosted.url || null
+  if (!hosted?.url) console.error('[hb-download] host could not serve the PDF', { path: r.path, reply: hosted })
+  return hosted?.url || null
 }
 
 /**
@@ -369,8 +381,10 @@ export async function restoreHbPdf(
       triggerHbDownload(bookId, bookTitle, '', tabId, localFolder, navigator.onLine)
       return { redownload: true }
     }
+    console.error('[hb-download] restoreHbPdf: no PDF and no redownload', { bookId, reply: r })
     return null
-  } catch {
+  } catch (err) {
+    console.error('[hb-download] restoreHbPdf failed', { bookId }, err)
     return null
   }
 }
@@ -493,8 +507,8 @@ export type CatalogTocHit = {
   bookId: number
   /** -1 = no resolved line. */
   lineIndex: number
-  /** Display path: book title, then " / "-joined TOC segments. */
-  fullTocPath: string
+  /** " / "-joined TOC segments WITHOUT the book title (prefixed client-side); "" for a title hit. */
+  tocPath: string
   /** 0 = book-title hit, 1+ = TOC depth. */
   level: number
   treeOrder: number
@@ -507,6 +521,34 @@ export type CatalogTocSearchResult = {
   /** True when a newer search superseded this one — discard and retry. */
   superseded?: boolean
   error?: string | null
+  /** With ready = false: the seforim DB is missing — the index can never become ready. */
+  dbMissing?: boolean
+  /** Build progress while not ready. */
+  builtBooks?: number
+  totalBooks?: number
+  /** With ready = false: the last build failed and none is running — stop retrying. */
+  buildFailure?: string | null
+  /** The last build failed and an automatic retry is running now. */
+  retryingAfterBuildFailure?: boolean
+  /** Not built yet; a timed retry is pending (DB mid-update, index locked). Transient. */
+  waiting?: boolean
+}
+
+/** Where the catalog TOC index stands (catalogTocStatus wire shape, camelCased). */
+export type CatalogTocIndexStatus = {
+  ready: boolean
+  indexing: boolean
+  builtBooks: number
+  totalBooks: number
+  dbMissing: boolean
+  buildFailure?: string | null
+  retryingAfterBuildFailure?: boolean
+  waiting?: boolean
+}
+
+/** Catalog TOC index status. Polled only while a build is known to run. */
+export function catalogTocIndexStatus(): Promise<CatalogTocIndexStatus | null> {
+  return serviceCall<CatalogTocIndexStatus>('catalogTocStatus').catch(() => null)
 }
 
 /**
@@ -665,9 +707,20 @@ export function fileSystemSearch(
  * waiting. Any failure is reported as not-building, because the search call itself is
  * what surfaces real errors.
  */
-export function localFileIndexStatus(): Promise<{ isBuilding: boolean; message?: string }> {
-  return serviceCall<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(
-    () => ({ isBuilding: false }),
+export type LocalFileIndexStatus = {
+  isBuilding: boolean
+  message?: string
+  /** Why the last build failed, when none is running. */
+  buildFailure?: string | null
+  /** Estimated build progress 0-100 (Core estimates it); -1 when unknown. */
+  progressPercent?: number
+  /** Set only by this wrapper: the call itself failed, so nothing is known. */
+  unreachable?: boolean
+}
+
+export function localFileIndexStatus(): Promise<LocalFileIndexStatus> {
+  return serviceCall<LocalFileIndexStatus>('localFileIndexStatus').catch(
+    () => ({ isBuilding: false, unreachable: true }),
   )
 }
 
@@ -767,6 +820,7 @@ export function copyImageToClipboard(dataUrl: string): Promise<{ ok?: boolean; e
  * chromeColor is the theme's title-bar background (hex) — the native chrome tab
  * strip derives its full palette from it so it matches the Vue theme exactly.
  * accentColor drives the active-tab indicator in the native tab-list dropdown.
+ * uiLanguage ('he' | 'en') switches the native chrome's direction (RTL/LTR) and texts.
  * Fire-and-forget — no meaningful return value.
  */
 export function setTheme(
@@ -774,10 +828,12 @@ export function setTheme(
   chromeColor?: string,
   accentColor?: string,
   borderColor?: string,
+  uiLanguage?: string,
 ): void {
   if (typeof window.__webviewAction !== 'function') return
   action('setTheme', {
     isDark,
+    ...(uiLanguage ? { uiLanguage } : {}),
     ...(chromeColor ? { chromeColor } : {}),
     ...(accentColor ? { accentColor } : {}),
     ...(borderColor ? { borderColor } : {}),
@@ -854,6 +910,53 @@ export function notifyTabIcons(icons: { key: string; png: string }[]): void {
   action('tabIcons', { icons }).catch(() => {})
 }
 
+/** How fetching a HebrewBooks PDF ended - `url` when it can be shown, else the reason. */
+export type HbPdfFetchResult =
+  | { url: string; cancelled?: undefined; notFound?: undefined; noInternet?: undefined; error?: undefined }
+  | { url?: undefined; cancelled: true; notFound?: undefined; noInternet?: undefined; error?: undefined }
+  | { url?: undefined; cancelled?: undefined; notFound: boolean; noInternet: boolean; error?: string }
+
+/**
+ * Fetches a HebrewBooks PDF (local folder, then cache, then download) and resolves to a URL
+ * the PDF.js viewer can load - ONE implementation shared by the tab download flow
+ * (`triggerHbDownload`, which turns the result into hbPdfReady / hbPdfCancelled events) and
+ * callers that show the PDF without a tab, like the book view's side-by-side edition.
+ */
+export async function fetchHbPdfUrl(
+  bookId: string,
+  localFolder?: string,
+  isOnline?: boolean,
+): Promise<HbPdfFetchResult> {
+  try {
+    const r = await serviceCall<{
+      handle?: string
+      path?: string
+      notFound?: boolean
+      noInternet?: boolean
+      cancelled?: boolean
+      error?: string
+      detail?: string
+    }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
+    const url = await servedPdfUrl(r)
+    if (url) return { url }
+    // The user aborted the download; nothing to show.
+    if (r?.cancelled) return { cancelled: true }
+    console.error(`[hb-download] book ${bookId} failed:
+${r?.detail || r?.error || JSON.stringify(r)}`)
+    // Anything else carries the service's reason (HTTP status, disk error with the folder,
+    // invalid id) so the caller can show it instead of failing silently.
+    return { notFound: !!r?.notFound, noInternet: !!r?.noInternet, error: r?.error || undefined }
+  } catch (e) {
+    console.error(`[hb-download] book ${bookId} threw:`, e)
+    const noInternet = !navigator.onLine
+    return {
+      notFound: false,
+      noInternet,
+      error: noInternet ? undefined : e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
 /**
  * Trigger a HebrewBooks PDF download, then open it. The service checks {localFolder}\{bookId}.pdf
  * and its cache first, otherwise downloads the PDF ENTIRELY in C# (HttpClient) and answers
@@ -871,31 +974,20 @@ export function triggerHbDownload(
   isOnline?: boolean,
 ): Promise<{ ok?: boolean }> {
   ;(async () => {
-    try {
-      const r = await serviceCall<{
-        handle?: string
-        path?: string
-        notFound?: boolean
-        noInternet?: boolean
-        cancelled?: boolean
-        error?: string
-      }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
-      const url = await servedPdfUrl(r)
-      if (url) {
-        emitWebviewEvent({ event: 'hbPdfReady', url, bookId, bookTitle, tabId })
-      } else if (r?.cancelled) {
-        // The user aborted the download; the tab was already reset, nothing to show.
-        emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
-      } else {
-        emitWebviewEvent({
-          event: 'hbPdfCancelled',
-          tabId,
-          notFound: !!r?.notFound,
-          noInternet: !!r?.noInternet,
-        })
-      }
-    } catch {
-      emitWebviewEvent({ event: 'hbPdfCancelled', tabId, noInternet: !navigator.onLine })
+    const result = await fetchHbPdfUrl(bookId, localFolder, isOnline)
+    if (result.url) {
+      emitWebviewEvent({ event: 'hbPdfReady', url: result.url, bookId, bookTitle, tabId })
+    } else if (result.cancelled) {
+      // The tab was already reset, nothing to show.
+      emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
+    } else {
+      emitWebviewEvent({
+        event: 'hbPdfCancelled',
+        tabId,
+        notFound: result.notFound,
+        noInternet: result.noInternet,
+        error: result.error,
+      })
     }
   })()
   return Promise.resolve({ ok: true })
@@ -956,18 +1048,30 @@ export function checkHbLocalFiles(
   }).catch(() => ({ existingIds: [] }))
 }
 
+type HbDeleteLocalResult = { ok?: boolean; notFound?: boolean; noRecycleBin?: boolean; error?: string }
+
 /**
- * Delete a HebrewBooks PDF from the user's configured local folder.
+ * Delete a HebrewBooks PDF from the user's configured local folder - permanently, or into
+ * the Recycle Bin when `toRecycleBin` is set.
  * Returns { ok: true } on success, { notFound: true } if the file is not there,
+ * { noRecycleBin: true } if the drive has no Recycle Bin (file left in place),
  * or { error: "..." } on failure.
+ *
+ * The Recycle Bin move goes through the user-side host when there is one: the installed
+ * service runs as LocalSystem and would fill SYSTEM's bin. Dev has no host bridge, but its
+ * service runs as the user, so the service path is right there.
  */
 export function deleteHbLocalFile(
   bookId: string,
   localFolder: string,
-): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
-  return serviceCall<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+  toRecycleBin = false,
+): Promise<HbDeleteLocalResult> {
+  if (toRecycleBin && typeof window.__webviewAction === 'function')
+    return action<HbDeleteLocalResult>('recycleHbLocalFile', { bookId, localFolder })
+  return serviceCall<HbDeleteLocalResult>('deleteHbLocalFile', {
     bookId,
     localFolder,
+    toRecycleBin,
   })
 }
 
@@ -1013,31 +1117,30 @@ export function setHbLocalFolderInRegistry(path: string): void {
 }
 
 /**
- * Trigger a HebrewBooks PDF Save As dialog.
+ * Download a book through the native Save As dialog. Resolves only when the save ends -
+ * saved, cancelled, failed or book not found - so the caller can show progress meanwhile.
  */
-export function triggerHbSaveAs(
+export async function triggerHbSaveAs(
   bookId: string,
   bookTitle: string,
   url: string,
-): Promise<{ ok?: boolean }> {
+): Promise<{ ok?: boolean; cancelled?: boolean; notFound?: boolean; error?: string }> {
   if (typeof window.__webviewAction !== 'function') {
     // Dev: no native Save As dialog. Fetch the book into the configured local folder (or the
     // app cache) via the same in-service download, then reveal it so the user can find/move it.
-    ;(async () => {
-      try {
-        const r = await serviceCall<{ handle?: string }>('triggerHbDownload', {
-          bookId,
-          localFolder: '',
-          isOnline: navigator.onLine,
-        })
-        if (r?.handle) window.open(`/khs-file/${r.handle}`, '_blank')
-      } catch {
-        /* ignore — dev convenience only */
-      }
-    })()
-    return Promise.resolve({ ok: true })
+    try {
+      const r = await serviceCall<{ handle?: string }>('triggerHbDownload', {
+        bookId,
+        localFolder: '',
+        isOnline: navigator.onLine,
+      })
+      if (r?.handle) window.open(`/khs-file/${r.handle}`, '_blank')
+      return { ok: true }
+    } catch {
+      return { ok: false } // dev convenience only
+    }
   }
-  return action<{ ok?: boolean }>('triggerHbSaveAs', { bookId, bookTitle, url })
+  return action('triggerHbSaveAs', { bookId, bookTitle, url })
 }
 
 /**
@@ -1078,6 +1181,48 @@ export interface DbPathInfo {
   /** An Otzaria update of the DB stopped half-way (hot journal left behind); no book loads
    *  until Otzaria finishes it. */
   updateInterrupted?: boolean
+  /** The database answers a query; false with `exists` true = the file cannot be read. */
+  readable?: boolean
+  /** With readable = false: the failure is transient (DB busy/locked by a writer). */
+  readBusy?: boolean
+  /** Which service instance answered. Changes when the service restarts after a path change. */
+  instanceId?: string
+}
+
+/** The id of the instance that accepted the last path change — it is the one going DOWN.
+ *  Null until a change has been made, or when the service predates the field. */
+let switchedFromInstanceId: string | null = null
+
+/**
+ * Resolves once a NEW service instance answers after a path change (set / pick / clear).
+ *
+ * The instance that accepts the change keeps serving the OLD database for a few seconds
+ * after it replied "restarting" (measured 0.5–3.7 s on the installed service), so reloading
+ * on a fixed timer loaded the old library's catalog and then lost the connection mid-way.
+ * Polls until the answering id differs from the one that accepted the change; a service
+ * without the field (no id known) falls back to a short fixed wait. Bounded so a service
+ * that never comes back still lets the page reload and show its unavailable banner.
+ */
+export async function waitForServiceRestart(timeoutMs = 30_000): Promise<void> {
+  const old = switchedFromInstanceId
+  switchedFromInstanceId = null
+  if (!old) {
+    await new Promise((r) => setTimeout(r, 800))
+    return
+  }
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const info = await serviceCall<DbPathInfo>('getSeforimDbPath')
+      if (info?.instanceId && info.instanceId !== old) return
+    } catch (err) {
+      // The service going down mid-restart is the expected case; the client flags it
+      // unavailable until the next answer clears it. A reason that will not fix itself
+      // (install declined, will not start) means no new instance is coming: reload now.
+      if (err instanceof ServiceUnavailableError && isPersistentReason(err.reason)) return
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
 }
 
 /** Current seforim DB path (+ whether user-set and whether the file exists). */
@@ -1090,28 +1235,75 @@ export async function getDbPathInfo(): Promise<DbPathInfo | null> {
 }
 
 /**
+ * Hosted only: whether the product's Windows service is NOT the one serving right now (a
+ * console copy is), so the settings page can offer to install it. Dev: never.
+ */
+export async function getServiceInstallOffer(): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') return false
+  try {
+    return (await action<{ canInstall?: boolean }>('getServiceStatus'))?.canInstall ?? false
+  } catch {
+    return false
+  }
+}
+
+/** Hosted only: install / repair the Windows service (one admin prompt). False when declined or failed. */
+export async function installService(): Promise<boolean> {
+  try {
+    return (await action<{ ok?: boolean }>('installService'))?.ok ?? false
+  } catch {
+    return false
+  }
+}
+
+/**
  * Show the native open-file dialog for the seforim DB and persist the choice. Returns the
  * chosen path, or null when the user cancelled or it failed.
  *
  * Hosted: the WebView2 host owns the dialog (an installed service may run in a session with
  * no desktop to show one on), then the path goes to the service like a typed one. Dev: the
  * service shows the dialog on its own desktop and persists in one step.
+ *
+ * `throwSaveErrors`: a path was chosen but could not be saved (file not found, service down
+ * past the brief retry) → throw instead of returning null, so the caller can tell the user.
  */
-export async function pickDbPath(): Promise<string | null> {
+export async function pickDbPath(options: { throwSaveErrors?: boolean } = {}): Promise<string | null> {
   try {
     if (typeof window.__webviewAction === 'function') {
       const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
       if (picked?.cancelled || picked?.error || !picked?.path) return null
-      await setDbPath(picked.path)
+      await setDbPathRetryingWhileUnavailable(picked.path)
       return picked.path
     }
-    const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string }>(
+    const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string; instanceId?: string }>(
       'pickSeforimDbPath',
     )
-    if (result?.cancelled || result?.error || !result?.path) return null
+    if (result?.cancelled || !result?.path) {
+      if (result?.error) throw new Error(result.error)
+      return null
+    }
+    if (result.error) throw new Error(result.error)
+    switchedFromInstanceId = result.instanceId ?? null
     return result.path
-  } catch {
+  } catch (err) {
+    console.error('[bridge] pickDbPath failed:', err)
+    if (options.throwSaveErrors) throw err
     return null
+  }
+}
+
+/** setDbPath, retried for a few seconds while the service is unreachable (e.g. restarting).
+ *  A real error (file not found, ...) is thrown at once. */
+async function setDbPathRetryingWhileUnavailable(path: string): Promise<void> {
+  const deadline = Date.now() + 8000
+  for (;;) {
+    try {
+      await setDbPath(path)
+      return
+    } catch (err) {
+      if (!(err instanceof ServiceUnavailableError) || Date.now() >= deadline) throw err
+      await new Promise((r) => setTimeout(r, 500))
+    }
   }
 }
 
@@ -1120,8 +1312,9 @@ export async function pickDbPath(): Promise<string | null> {
  * itself; throws when the file doesn't exist.
  */
 export async function setDbPath(path: string): Promise<void> {
-  const res = await serviceCall<{ path: string; error?: string }>('setSeforimDbPath', { path })
+  const res = await serviceCall<{ path: string; error?: string; instanceId?: string }>('setSeforimDbPath', { path })
   if (res.error) throw new Error(res.error)
+  switchedFromInstanceId = res.instanceId ?? null
 }
 
 /**
@@ -1131,7 +1324,8 @@ export async function setDbPath(path: string): Promise<void> {
  */
 export async function clearDbPath(): Promise<string | null> {
   try {
-    const res = await serviceCall<{ path: string }>('clearSeforimDbPath')
+    const res = await serviceCall<{ path: string; instanceId?: string }>('clearSeforimDbPath')
+    switchedFromInstanceId = res.instanceId ?? null
     return res.path ?? null
   } catch {
     return null

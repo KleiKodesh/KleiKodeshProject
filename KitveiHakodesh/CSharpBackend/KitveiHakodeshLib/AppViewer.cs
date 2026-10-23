@@ -114,18 +114,26 @@ namespace KitveiHakodeshLib
         private HebrewBooksHandler _hb;
         private string _dbInjectionScriptId;
 
-        // A file path queued before the Vue app has finished mounting.
+        // File paths queued before the Vue app has finished mounting.
         // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
         // event listeners (localFileStore) are live before the push event fires.
-        private string _pendingFilePath;
+        // A list, not one slot: Explorer opens a multi-file selection as one launch
+        // per file, so several can arrive before the app is ready.
+        private readonly System.Collections.Generic.List<string> _pendingFilePaths = new System.Collections.Generic.List<string>();
         // A search request queued before the Vue app has finished mounting, dispatched
-        // on 'appReady' just like _pendingFilePath. Only the last request is kept.
+        // on 'appReady' just like _pendingFilePaths. Only the last request is kept.
         private (string text, string target)? _pendingSearch;
         // An open-book (deep link) request queued before the Vue app is ready. Same
         // dispatch-on-'appReady' pattern; only the last request is kept.
         private HostLink _pendingOpenBook;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
+        // Completed by the page's 'persistenceFlushed' message while FlushPersistenceAsync
+        // is waiting for it; null the rest of the time.
+        private TaskCompletionSource<bool> _persistenceFlushAck;
+        // CloseAfterPersistenceFlush has already run for the host form: the next close
+        // goes straight through.
+        private bool _hostCloseFlushDone;
 
 
         // ── Public API ──────────────────────────────────────────────────────────────
@@ -166,7 +174,7 @@ namespace KitveiHakodeshLib
             if (!_appReady)
             {
                 // Vue event listeners not live yet — queue until appReady fires.
-                _pendingFilePath = filePath;
+                _pendingFilePaths.Add(filePath);
             }
             else
             {
@@ -244,6 +252,70 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
+        /// Asks the page to write out everything it still owes to storage (coalesced tab
+        /// list and recents writes, the open book's reading position) and waits for its
+        /// ack. Call before disposing the control: closing a WinForms window fires none
+        /// of the page's unload events, so a write still sitting in its trailing timer
+        /// would be lost. Bounded by <paramref name="timeoutMs"/>; normally a few ms.
+        /// Never throws; returns at once when the page is gone or not loaded.
+        /// UI thread only (ExecuteScriptAsync).
+        /// </summary>
+        public async Task FlushPersistenceAsync(int timeoutMs = 500)
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
+
+            var ack = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _persistenceFlushAck = ack;
+            try
+            {
+                var deadline = Task.Delay(timeoutMs);
+                // The page answers 'pending' synchronously and posts 'persistenceFlushed'
+                // once its IndexedDB puts have landed. Anything else (no such function:
+                // a page that never mounted, or a navigation away from the app) means
+                // there is nothing to wait for.
+                Task<string> script = _webView.CoreWebView2.ExecuteScriptAsync(
+                    "typeof window.__khsFlushPersistence==='function'?window.__khsFlushPersistence():'none'");
+                Task first = await Task.WhenAny(script, ack.Task, deadline);
+                if (first == script && script.Status == TaskStatus.RanToCompletion && script.Result == "\"pending\"")
+                    await Task.WhenAny(ack.Task, deadline);
+            }
+            catch (Exception) { /* WebView2 torn down mid-flight: nothing left to flush */ }
+            finally
+            {
+                _persistenceFlushAck = null;
+            }
+        }
+
+        /// <summary>
+        /// Call from the host form's FormClosing (after any other work the handler does).
+        /// The first close is cancelled, <see cref="FlushPersistenceAsync"/> runs, and the
+        /// form is closed again once the page has acked (or the bound has passed); that
+        /// second close goes straight through. No message pumping: the wait is an ordinary
+        /// await on the UI thread, so the close is delayed by the ack and nothing else.
+        /// A Windows shutdown is never held - the flush is fired and the close proceeds.
+        /// </summary>
+        public async void CloseAfterPersistenceFlush(Form form, FormClosingEventArgs e)
+        {
+            if (form == null || e == null || e.Cancel || _hostCloseFlushDone) return;
+            _hostCloseFlushDone = true;
+            if (e.CloseReason == CloseReason.WindowsShutDown)
+            {
+                _ = FlushPersistenceAsync();
+                return;
+            }
+
+            e.Cancel = true;
+            if (form.WindowState != FormWindowState.Minimized) await SaveSnapshotAsync();
+            await FlushPersistenceAsync();
+            try
+            {
+                // Closed by the user again while we waited: nothing left to do.
+                if (!form.IsDisposed) form.Close();
+            }
+            catch (Exception) { /* the form went away during the wait */ }
+        }
+
+        /// <summary>
         /// Opens a book at a specific line inside the app from the VSTO host — driven
         /// by an otzaria://, kitveihakodeshapp:// or zayit:// deep link found in the Word
         /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and this app's own
@@ -292,9 +364,14 @@ namespace KitveiHakodeshLib
         // Stored as a readonly field so it is captured before InitAsync runs.
         private readonly string _webCacheFolder;
 
-        public AppViewer(string webCacheFolder = "webcache")
+        /// <param name="snapshotSplash">
+        /// Show the page as it looked when the window last closed instead of the logo
+        /// splash (see AppViewerSplash). Off for the VSTO pane.
+        /// </param>
+        public AppViewer(string webCacheFolder = "webcache", bool snapshotSplash = false)
         {
             _webCacheFolder = webCacheFolder;
+            _snapshotSplash = snapshotSplash;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
@@ -564,10 +641,14 @@ namespace KitveiHakodeshLib
                 new KitveiHakodeshLib.Service.KitveiHakodeshServiceSelfStartingChannel(
                     new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
                     serviceLauncher));
-            // Start it now rather than on the first data call, so the page's first requests
-            // find it listening instead of paying the start on the hot path. Never with a UAC
-            // prompt: one popping up unasked while the window opens lands behind Word; the
-            // install / repair prompt waits for a real request or the banner's "try again".
+            // The first thing this window does: bring the service up, so the page's first requests
+            // find it listening instead of paying the start on the hot path. Every window, every
+            // time - the service stops itself when nobody uses it, so "already running" is never
+            // assumed; a second Word pane finds it listening and returns at once. This is also the
+            // one place that may raise the "install the service?" UAC prompt unasked, on the first
+            // launch that finds the product installed but unregistered (the launcher's per-user
+            // flag); it runs here, after the window exists, so the prompt has an owner window
+            // instead of opening behind as a flashing taskbar button.
             // A console instance of the service (dev, portable) lives as long as some program uses
             // it: this window counts until it closes (Service/KitveiHakodeshServiceOwnership). The
             // plain pipe channel, not the self-starting one: a heartbeat must not revive a
@@ -578,7 +659,7 @@ namespace KitveiHakodeshLib
             {
                 try
                 {
-                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false);
+                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None);
                     KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.RegisterNow();
                 }
                 catch { /* the page's first request reports it */ }

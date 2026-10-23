@@ -13,8 +13,9 @@ namespace KitveiHakodeshLib
     /// </summary>
     public class ChromeThemeChangedEventArgs : EventArgs
     {
-        public ChromeThemeChangedEventArgs(bool isDark, string chromeColor, string accentColor, string borderColor)
+        public ChromeThemeChangedEventArgs(bool isDark, string chromeColor, string accentColor, string borderColor, string uiLanguage = null)
         {
+            UiLanguage = uiLanguage;
             IsDark = isDark;
             ChromeColor = chromeColor;
             AccentColor = accentColor;
@@ -29,6 +30,9 @@ namespace KitveiHakodeshLib
 
         /// <summary>The Vue theme's border color (hex), so the strip's split divider matches Vue's; null when not sent.</summary>
         public string BorderColor { get; }
+
+        /// <summary>Vue's UI language ("he" | "en") for the native chrome's direction and texts; null when not sent.</summary>
+        public string UiLanguage { get; }
     }
 
     // Title-bar theme (DarkNet) wiring for AppViewer.
@@ -150,11 +154,16 @@ namespace KitveiHakodeshLib
                                  bc.ValueKind == System.Text.Json.JsonValueKind.String
                 ? bc.GetString()
                 : null;
+            string uiLanguage = root.TryGetProperty("uiLanguage", out var ul) &&
+                                ul.ValueKind == System.Text.Json.JsonValueKind.String
+                ? ul.GetString()
+                : null;
 
             AppSettingsRegistry.SetDarkMode(isDark);
             if (chromeColor != null) AppSettingsRegistry.SetChromeColor(chromeColor);
             if (accentColor != null) AppSettingsRegistry.SetAccentColor(accentColor);
             if (borderColor != null) AppSettingsRegistry.SetBorderColor(borderColor);
+            if (uiLanguage != null) AppSettingsRegistry.SetUiLanguage(uiLanguage);
 
             if (InvokeRequired)
                 Invoke(new Action(() =>
@@ -179,7 +188,7 @@ namespace KitveiHakodeshLib
             ApplySplashTheme(isDark);
 
             // Let a native chrome-tabs host (ChromeTabsMirror) re-derive its strip palette.
-            ChromeThemeChanged?.Invoke(this, new ChromeThemeChangedEventArgs(isDark, chromeColor, accentColor, borderColor));
+            ChromeThemeChanged?.Invoke(this, new ChromeThemeChangedEventArgs(isDark, chromeColor, accentColor, borderColor, uiLanguage));
         }
     }
 }

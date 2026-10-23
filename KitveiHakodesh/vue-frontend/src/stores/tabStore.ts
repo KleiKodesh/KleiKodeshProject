@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch, nextTick } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
+import { useCoalescedWrite } from '@/composables/useCoalescedWrite'
+import { capturePositionsForTab } from '@/webview-host/persistenceFlush'
 import { tabsListKey } from './workspaceStore'
 import { useWorkspaceStore } from './workspaceStore'
 import {
@@ -50,6 +52,7 @@ import {
   dropUncheckedCommentaryForTab,
   pruneUncheckedCommentary,
 } from '@/features/book-view/commentary/uncheckedCommentaryBooks'
+import { t } from '@/i18n'
 
 export type TabRoute =
   | '/'
@@ -82,6 +85,11 @@ export interface Tab {
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
   localFileDownloadProgress?: string // in-memory only — live HB download progress text (e.g. "6.2 / 13.2 MB · 47%")
   pdfViewerTitleBarVisible?: boolean // persisted — whether to show PDF.js viewer title bar (default true)
+  // Outline entry a /pdf-view tab opens at, as a book-view breadcrumb path - set when a
+  // HebrewBooks edition is opened from a text book. One-shot: PdfViewPage hands it to the
+  // viewer on the tab's first load and clears it. Deliberately NOT a position field: the
+  // download flow that follows changes the tab's identity, which would wipe it. Not persisted.
+  pdfInitialOutlineTarget?: string
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state
   bookId?: number
@@ -169,7 +177,7 @@ const IDENTITY_FIELDS = [
  */
 const HOME_PATCH = {
   route: '/' as TabRoute,
-  title: 'בית',
+  title: t('stores.tabTitle.home'),
   bookId: undefined,
   localFilePath: undefined,
   localFileName: undefined,
@@ -211,6 +219,7 @@ const TRANSIENT_FIELDS = [
   'localFileConverting',
   'localFileLoadingType',
   'localFileDownloadProgress',
+  'pdfInitialOutlineTarget',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
@@ -260,7 +269,7 @@ interface PersistedTabList {
   accessOrder?: Record<string, number>
 }
 
-const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
+const DEFAULT_TAB: Tab = { id: '1', title: t('stores.tabTitle.home'), route: '/' }
 
 /**
  * Dev guard for the one list that must be maintained by hand: anything that survives
@@ -385,20 +394,28 @@ export const useTabStore = defineStore('tabs', () => {
     '/file-search',
   ]
   const DESTINATION_TITLES: Record<string, string> = {
-    '/settings': 'הגדרות',
-    '/books': 'קטלוג הספרים',
-    '/hebrewbooks': 'היברו-בוקס',
-    '/hebrew-calendar': 'לוח שנה',
-    '/dictionary': 'מילון',
-    '/midot': 'מידות ושיעורים',
-    '/file-search': 'חיפוש קבצים',
+    '/settings': t('stores.tabTitle.settings'),
+    '/books': t('stores.tabTitle.catalog'),
+    '/hebrewbooks': t('stores.tabTitle.hebrewbooks'),
+    '/hebrew-calendar': t('stores.tabTitle.calendar'),
+    '/dictionary': t('stores.tabTitle.dictionary'),
+    '/midot': t('stores.tabTitle.midot'),
+    '/file-search': t('stores.tabTitle.fileSearch'),
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
 
-  function persistTabs() {
-    const wsId = useWorkspaceStore().activeId
-    const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
+  // The workspace id is bound when the write is SCHEDULED, not when it runs: a
+  // workspace switch reassigns activeId and reloads, and a write landing in between
+  // must still go to the workspace these tabs belong to.
+  function persistTabs(wsId: string) {
+    // A workspace deleted while its write was pending must not come back as an orphan key.
+    if (!useWorkspaceStore().workspaces.some((w) => w.id === wsId)) return
+    // Settings is the one destination that survives a restart: reopening on the
+    // settings page (and its scroll, see settingsViewMemory) is where the user left off.
+    const persistable = tabs.value.filter(
+      (t) => t.route === '/settings' || !DESTINATION_ROUTES.includes(t.route),
+    )
     lsSet<PersistedTabList>(tabsListKey(wsId), {
       tabs: persistable.map(withoutTransientFields).map((t) => {
         if (import.meta.env.DEV) assertWatched(t)
@@ -435,6 +452,7 @@ export const useTabStore = defineStore('tabs', () => {
         scrollOffset: saved.scrollOffset,
         selectedLineId: saved.selectedLineId,
         commentaryPanels: saved.commentaryPanels,
+        sideEdition: saved.sideEdition,
       }
     }
     const tabState = peekTabViewState(tab.id)
@@ -540,6 +558,13 @@ export const useTabStore = defineStore('tabs', () => {
   function showLocationWithoutRecording(tab: Tab, location: NavLocation) {
     const patch = tabPatchForLocation(location)
     applyLocationPosition(patch, location)
+    // Same rule as applyTabPatch: the outgoing document's pending jump must not
+    // survive into the location we step to. Without this, Back from a book opened
+    // at a line (commentary header, word link) applied THAT book's line index to
+    // the previous book whenever the frame had no captured scroll index.
+    if (changesIdentity(tab, patch)) {
+      for (const field of POSITION_FIELDS) delete tab[field]
+    }
     Object.assign(tab, patch)
   }
 
@@ -569,14 +594,27 @@ export const useTabStore = defineStore('tabs', () => {
    * recents, so the row keeps the position the reader had on arrival — usually none
    * at all. Wrapping the writer is the narrowest hook: every position save in the
    * app already goes through it.
+   *
+   * A save for a tab that has left the list is dropped. A closing tab's view unmounts
+   * after the tab is gone — by then disposeClosedTab has captured that same position
+   * and deleted the tab's state, so a write would only resurrect one orphan
+   * `book:`/`tab:` record that nothing ever reads or deletes. The book view's own
+   * unmount save already skips a closed tab (useBookViewLinesScroll, by isOpenTab);
+   * this is the backstop for every other writer.
    */
+  function isOpenTab(tabId: string): boolean {
+    return tabs.value.some((t) => t.id === tabId)
+  }
+
   function setBookViewStateTracked(tabId: string, bookId: number, state: Parameters<typeof setBookViewState>[2]) {
+    if (!isOpenTab(tabId)) return Promise.resolve()
     const result = setBookViewState(tabId, bookId, state)
     captureCurrentPosition(tabId)
     return result
   }
 
   function setTabViewStateTracked(tabId: string, state: Parameters<typeof setTabViewState>[1]) {
+    if (!isOpenTab(tabId)) return Promise.resolve()
     const result = setTabViewState(tabId, state)
     captureCurrentPosition(tabId)
     return result
@@ -648,6 +686,12 @@ export const useTabStore = defineStore('tabs', () => {
    * state destroyed. Recents itself is untouched: the location outlives the tab.
    */
   function disposeClosedTab(id: string) {
+    // The tab's view is still mounted: have it save where the reader is NOW, so the
+    // capture below folds the closing position into the recents row. The view's own
+    // unmount save runs after the tab has left the list - too late for recents - and
+    // skips itself for a closed tab (isOpenTab), so it neither repeats the last-read
+    // put nor brings back the state deleted below.
+    capturePositionsForTab(id)
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
     dropHistory(id)
@@ -656,7 +700,7 @@ export const useTabStore = defineStore('tabs', () => {
     // ever one), which means deleteAllStateForTab cannot reach it. Read the route
     // BEFORE the tab is gone.
     if (tabs.value.find((t) => t.id === id)?.route === '/settings') clearSettingsViewState()
-    // Deferred: closing a tab unmounts its book view, and that unmount runs one
+    // Deferred: closing a tab unmounts its book view, and that unmount may run one
     // last savePos() which reads the commentary check-trees. Dropping them inline
     // would make that final save write an empty filter over the last-read record,
     // so the reader's ticks would vanish on reopening the book.
@@ -677,18 +721,39 @@ export const useTabStore = defineStore('tabs', () => {
   // be added here too - the dev assertion in persistTabs shouts if one is forgotten.
   const _persistedSnapshot = computed(() =>
     tabs.value
-      .filter((t) => !DESTINATION_ROUTES.includes(t.route))
+      .filter((t) => t.route === '/settings' || !DESTINATION_ROUTES.includes(t.route))
       .map((t) => WATCHED_FIELDS.map((f) => t[f])),
   )
   // accessOrder is included so a pane-2 switch (which changes neither the snapshot
   // nor activeTabId) still persists the new recency.
-  watch([_persistedSnapshot, activeTabId, accessOrder], persistTabs)
+  // Both writes are coalesced (trailing ~300ms, flushed on hide/unload): a scroll moves
+  // the breadcrumb on every tick, and each move used to rewrite the whole tab list and
+  // the whole recents list.
+  let pendingTabsWorkspaceId = ''
+  const tabsWrite = useCoalescedWrite(() => persistTabs(pendingTabsWorkspaceId))
+  watch([_persistedSnapshot, activeTabId, accessOrder], () => {
+    const wsId = useWorkspaceStore().activeId
+    // A write still pending for the previous workspace goes out as-is first.
+    if (pendingTabsWorkspaceId !== wsId) tabsWrite.flush()
+    pendingTabsWorkspaceId = wsId
+    tabsWrite.schedule()
+  })
 
   // Locations are plain data, so the list persists whole. Deep watch: positions are
   // folded into existing entries in place by captureCurrentPosition.
+  let pendingRecentsWorkspaceId = ''
+  // The put's promise is handed back so a host flush can wait for it to land.
+  const recentsWrite = useCoalescedWrite(() =>
+    saveRecentLocations(pendingRecentsWorkspaceId, recentLocations.value),
+  )
   watch(
     recentLocations,
-    () => { void saveRecentLocations(useWorkspaceStore().activeId, recentLocations.value) },
+    () => {
+      const wsId = useWorkspaceStore().activeId
+      if (pendingRecentsWorkspaceId !== wsId) recentsWrite.flush()
+      pendingRecentsWorkspaceId = wsId
+      recentsWrite.schedule()
+    },
     { deep: true },
   )
 
@@ -772,7 +837,7 @@ export const useTabStore = defineStore('tabs', () => {
     return (
       tabs.value.find((t) => t.id === id && t.pane === 2) ??
       pane2Tabs.value[0] ??
-      { id: '', title: 'בית', route: '/', pane: 2 as const }
+      { id: '', title: t('stores.tabTitle.home'), route: '/', pane: 2 as const }
     )
   }
 
@@ -829,7 +894,7 @@ export const useTabStore = defineStore('tabs', () => {
         // Pane 2 must never be left with no tab — mirror the pane-1 closeTab guarantee.
         // Without this, pane2ActiveTabId stays '' and any subsequent navigateToDestination
         // call hits the `if (!id) return` guard in updatePane2ActiveTab and silently does nothing.
-        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         pane2ActiveTabId.value = home.id
       }
@@ -849,7 +914,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (own.length > 0) {
       activeTabId.value = own[0]!.id
     } else {
-      const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
     }
@@ -876,7 +941,7 @@ export const useTabStore = defineStore('tabs', () => {
         if (own.length > 0) {
           activeTabId.value = own[0]!.id
         } else {
-          const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+          const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
           tabs.value.push(home)
           activeTabId.value = home.id
         }
@@ -888,7 +953,7 @@ export const useTabStore = defineStore('tabs', () => {
       // Pane 2 must never be left empty while split view is open.
       const remaining = tabs.value.filter((t) => t.pane === 2)
       if (remaining.length === 0) {
-        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), pane: 2, title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         pane2ActiveTabId.value = home.id
       } else if (pane2ActiveTabId.value === id) {
@@ -906,7 +971,7 @@ export const useTabStore = defineStore('tabs', () => {
       }
       return pane2ActiveTabId.value
     }
-    const tab = openPane2Tab({ title: 'בית', route: '/' })
+    const tab = openPane2Tab({ title: t('stores.tabTitle.home'), route: '/' })
     return tab.id
   }
 
@@ -1056,12 +1121,12 @@ export const useTabStore = defineStore('tabs', () => {
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       disposeClosedTab(tab.id)
     }
-    const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+    const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
     // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
     // Deferred for the same reason as the drop in disposeClosedTab: the closing
-    // views have not unmounted yet, and their final savePos() still needs to read
+    // views have not unmounted yet, and a final savePos() may still need to read
     // the check-trees. Snapshot the live ids now — by the time this runs the tab
     // list may have moved on.
     const liveIds = tabs.value.map((t) => t.id)
@@ -1140,12 +1205,12 @@ export const useTabStore = defineStore('tabs', () => {
       if (visible.length > 0) {
         activeTabId.value = visible[Math.min(Math.max(visIdx, 0), visible.length - 1)]!.id
       } else {
-        const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+        const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
         tabs.value.push(home)
         activeTabId.value = home.id
       }
     } else if (tabs.value.length === 0) {
-      const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+      const home: Tab = { id: String(++nextId), title: t('stores.tabTitle.home'), route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
     }
@@ -1256,7 +1321,7 @@ export const useTabStore = defineStore('tabs', () => {
   // browser opens a fresh new-tab page each time rather than switching to the one
   // already open. Home holds no app-wide state, so copies cannot go stale.
   function openNewHomeTab() {
-    openTab({ title: 'בית', route: '/' })
+    openTab({ title: t('stores.tabTitle.home'), route: '/' })
   }
 
   // Destination pages (the tool routes listed in DESTINATION_ROUTES). Never
@@ -1366,6 +1431,7 @@ export const useTabStore = defineStore('tabs', () => {
     setTabViewState: setTabViewStateTracked,
     getBookViewState,
     setBookViewState: setBookViewStateTracked,
+    isOpenTab,
     clearBookViewState,
     togglePdfViewerTitleBar,
   }

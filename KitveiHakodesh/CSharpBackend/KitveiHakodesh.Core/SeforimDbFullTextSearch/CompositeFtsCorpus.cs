@@ -38,7 +38,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// <see cref="SeforimDbFtsCorpus"/> directly in that (overwhelmingly common) case, so
     /// single-library behaviour and performance are completely unchanged by this type's existence.
     /// </summary>
-    internal sealed class CompositeFtsCorpus : IFtsCorpus, IFtsOrderedCorpus
+    internal sealed class CompositeFtsCorpus : IFtsCorpus, IFtsOrderedCorpus, IFtsPlacedCorpus, ISeforimDbFtsPositionCorpus
     {
         private readonly struct Source
         {
@@ -249,6 +249,71 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 foreach (var (localId, text, title) in source.Corpus.FetchDocuments(localIds))
                     yield return (SeforimDbLibraryId.ToGlobal(libraryIndex, localId), text, title);
             }
+        }
+
+        /// <summary>Same as <see cref="FetchDocuments"/>, plus each line's placement - translated
+        /// to the global id space like the ids themselves: the book id and (when the line has
+        /// one) its TOC entry id are the owning library's LOCAL ids lifted by that library's
+        /// offset, so a hit's book/entry resolves to exactly what getAllBooks and
+        /// getTocPathsForLines serve for it. lineIndex is a position, not an id.</summary>
+        public IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids)
+        {
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(ids))
+            {
+                if (Find(libraryIndex) is not { } source) continue; // no longer attached
+                foreach (var (localId, text, placement) in source.Corpus.FetchPlacedDocuments(localIds))
+                {
+                    yield return (
+                        SeforimDbLibraryId.ToGlobal(libraryIndex, localId),
+                        text,
+                        new FtsDocumentPlacement(
+                            placement.BookId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.BookId),
+                            placement.LineIndex,
+                            placement.TocEntryId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.TocEntryId)));
+                }
+            }
+        }
+
+        /// <summary>Lines at (GLOBAL book id, lineIndex) positions: each library answers for its
+        /// own books, ids and book ids come back global.</summary>
+        public List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(IReadOnlyList<(int BookId, int LineIndex)> positions)
+        {
+            var lines = new List<SeforimDbFtsLineAtPosition>(positions?.Count ?? 0);
+            if (positions == null || positions.Count == 0) return lines;
+
+            var byLibrary = new Dictionary<int, List<(int BookId, int LineIndex)>>();
+            foreach (var (bookId, lineIndex) in positions)
+            {
+                var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+                if (!byLibrary.TryGetValue(libraryIndex, out var list))
+                    byLibrary[libraryIndex] = list = new List<(int, int)>();
+                list.Add((localBookId, lineIndex));
+            }
+
+            foreach (var (libraryIndex, local) in byLibrary)
+            {
+                if (Find(libraryIndex) is not { } source) continue;
+                foreach (var line in source.Corpus.FetchLinesAtBookPositions(local))
+                    lines.Add(new SeforimDbFtsLineAtPosition(
+                        SeforimDbLibraryId.ToGlobal(libraryIndex, line.Id),
+                        SeforimDbLibraryId.ToGlobal(libraryIndex, line.BookId),
+                        line.LineIndex,
+                        line.Text));
+            }
+            return lines;
+        }
+
+        private static Dictionary<int, List<int>> GroupByLibrary(IEnumerable<int> globalIds)
+        {
+            var byLibrary = new Dictionary<int, List<int>>();
+            foreach (int id in globalIds)
+            {
+                var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(id);
+                if (!byLibrary.TryGetValue(libraryIndex, out var localIds))
+                    byLibrary[libraryIndex] = localIds = new List<int>();
+                localIds.Add(localId);
+            }
+            return byLibrary;
         }
 
         public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(IReadOnlyList<int> ids, int radius)

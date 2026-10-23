@@ -59,6 +59,8 @@ To add one: put a default in `DEFAULTS`, declare a `ref`, call `loadSetting(KEYS
 
 **localFileStore** — Local file and Word file state. Manages conversion, HebrewBooks download state, and PDF/HTML tab session restore. Listens to C# push events. Any code opening or closing a local file tab should go through this store.
 
+**localFileTabLazyRestore** — `restoreLocalFileTabsLazily()`, called once from `main.ts`: restores the persisted /pdf-view and /html-view tabs through `localFileStore.restoreTab`, but only the active tab per pane at boot; every other one is restored the first time it becomes active.
+
 **searchCacheStore** — LRU cache for full-text search results, capped at 100 entries. Do not cache search results anywhere else.
 
 **hebrewBooksHistoryStore** — owns the `app-hb-history` IDB database. Tracks which HebrewBooks PDFs the user has downloaded, LRU-capped at 25 entries. All history reads and writes go through here — do not import from `persistence.ts` for this database anywhere else.

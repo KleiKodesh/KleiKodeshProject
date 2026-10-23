@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The OS-neutral part of KitveiHakodesh.Core: the seforim database reader, the FTS
+    engine wrapper (SeforimDbFullTextSearch) and the catalog, compiled from Core's OWN
+    source files on plain net10.0, so they build and run on macOS / Linux too (used by
+    the SeforimdbSerachEngine parity / benchmark tools). Core itself stays
+    net10.0-windows and is unchanged; this project adds no source of its own.
+    Windows-only calls in the linked files (registry, kernel32) are behind
+    OperatingSystem.IsWindows() guards.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>KitveiHakodesh.Core</RootNamespace>
+    <AssemblyName>KitveiHakodesh.Core.Portable</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CoreDir>$(MSBuildThisFileDirectory)..\KitveiHakodesh.Core\</CoreDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(CoreDir)SeforimDbFullTextSearch\**\*.cs" LinkBase="SeforimDbFullTextSearch" />
+    <Compile Include="$(CoreDir)SeforimDb\**\*.cs" LinkBase="SeforimDb" Exclude="$(CoreDir)SeforimDb\SeforimDbIndexRefreshWatcher.cs" />
+    <Compile Include="$(CoreDir)SeforimDbCatalog\**\*.cs" LinkBase="SeforimDbCatalog" />
+    <Compile Include="$(CoreDir)Settings\**\*.cs" LinkBase="Settings" Exclude="$(CoreDir)Settings\SeforimDbLibrarySwitcher.cs" />
+    <Compile Include="$(CoreDir)Common\**\*.cs" LinkBase="Common" Exclude="$(CoreDir)Common\ShellRegistration.cs;$(CoreDir)Common\RegistryValueWatcher.cs;$(CoreDir)Common\RecycleBin.cs;$(CoreDir)Common\HebrewFonts.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+    <PackageReference Include="MessagePack" Version="3.1.8" />
+    <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
+  </ItemGroup>
+</Project>

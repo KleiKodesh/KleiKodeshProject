@@ -55,6 +55,12 @@ namespace KitveiHakodeshLib
                         // install / repair prompt and bring the service up.
                         case "retryService": await HandleRetryService(id); break;
                         case "startService": await HandleStartService(id); break;
+                        // The settings page's "install the service" row (shown while a console
+                        // copy serves instead of the Windows service).
+                        case "getServiceStatus":
+                            _bridge.Reply(id, new { canInstall = KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher.CanInstallService() });
+                            break;
+                        case "installService": await HandleInstallService(id); break;
                         // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
                         // cannot meaningfully await a navigation that destroys the page making the
                         // call, so the reply exists only to settle the promise. Both frontend
@@ -74,8 +80,12 @@ namespace KitveiHakodeshLib
                         case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
+                        // The restored view has fetched and painted: the snapshot splash can go.
+                        case "contentReady": _HideSplash(); break;
+                        case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
+                        case "recycleHbLocalFile": _hb.HandleRecycleHbLocalFile(root, id); break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
@@ -210,6 +220,19 @@ namespace KitveiHakodeshLib
             }
         }
 
+        private async Task HandleInstallService(string id)
+        {
+            try
+            {
+                await Task.Run(() => _serviceLauncher.InstallServiceAsync(System.Threading.CancellationToken.None));
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)
+            {
+                _bridge.Reply(id, new { ok = false, reason = ex.Reason.ToString(), detail = ex.Message });
+            }
+        }
+
         /// <summary>
         /// The native open-file dialog for a seforim database. Only the dialog: the page hands
         /// the chosen path to the service (setSeforimDbPath), which validates, persists and
@@ -284,11 +307,12 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { });
             _appReady = true;
-            if (_pendingFilePath != null)
+            if (_pendingFilePaths.Count > 0)
             {
-                string path = _pendingFilePath;
-                _pendingFilePath = null;
-                _ = _localFile.OpenFileFromPathAsync(path);
+                string[] paths = _pendingFilePaths.ToArray();
+                _pendingFilePaths.Clear();
+                foreach (string path in paths)
+                    _ = _localFile.OpenFileFromPathAsync(path);
             }
             if (_pendingSearch != null)
             {

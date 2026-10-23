@@ -14,11 +14,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// (<see cref="IFtsCorpus"/>) — Core reads the lines, the engine indexes and searches them,
     /// and the engine's own built-in reader is never used.
     ///
-    /// This is step 2 of the gradual FtsLib boundary (MIGRATION-PLAN slice 4b): construct
-    /// <c>SeforimIndex(indexPath, () => new SeforimDbFtsCorpus(dbPath))</c> and the engine opens
-    /// no content database of its own. Callers still on <c>SeforimIndex(indexPath, dbPath)</c>
-    /// keep working; the two routes build byte-identical indexes because these queries are
-    /// ports of the built-in reader's, kept semantically identical on purpose.
+    /// The engine is constructed as
+    /// <c>Fts5SeforimIndex(indexPath, () => new SeforimDbFtsCorpus(dbPath))</c> and opens no
+    /// content database of its own.
     ///
     /// ONE CONNECTION PER INSTANCE, ONE INSTANCE PER OPERATION — that is the seam's contract
     /// (see IFtsCorpus: lazy result sequences need the corpus to outlive the call, and
@@ -30,14 +28,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// queries and wrong for an indexing scan that streams millions of rows over one handle.
     /// Different lifetime, different class.
     /// </summary>
-    public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus
+    public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus, IFtsPlacedCorpus, ISeforimDbFtsPositionCorpus
     {
-        /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.</summary>
-        private const int NeighborChunkSize = 999;
-
-        /// <summary>Result fetches use smaller chunks so the first hits reach the caller after
-        /// 200 rows, not after the whole ID list — this feeds a UI that streams results in.</summary>
-        private const int FetchChunkSize = 200;
+        /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.
+        /// How many ids a fetch is asked for at a time is the CALLER's decision (the searcher's
+        /// batch plan); this only splits a request that would not fit one statement.</summary>
+        private const int SqliteInListChunkSize = 999;
 
         private readonly SqliteConnection _connection;
 
@@ -178,63 +174,134 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
+        /// <summary>Search-result content without placement - the plain corpus seam. The
+        /// Title slot is left empty on purpose: Core enriches hits with their book ID instead
+        /// and never reads the engine's title. The engine's own diagnostics run over the test
+        /// corpus, which does fill it.</summary>
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
         {
-            var chunk = new List<int>(FetchChunkSize);
+            foreach (var (id, text, _) in FetchPlacedDocuments(ids)) yield return (id, text, "");
+        }
+
+        /// <summary>Search-result content plus each line's placement (book id, lineIndex, own
+        /// TOC entry), from the one `line` row the content fetch reads - what lets the
+        /// searcher finish a hit without a second query. See
+        /// <see cref="SeforimDbSqlStrings.FtsFetchPlacedLines"/>.</summary>
+        public IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids)
+        {
+            var chunk = new List<int>(SqliteInListChunkSize);
 
             using var command = _connection.CreateCommand();
-            string[] parameterNames = AddChunkParameters(command, FetchChunkSize);
+            string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
 
             foreach (int id in ids)
             {
                 chunk.Add(id);
-                if (chunk.Count == FetchChunkSize)
+                if (chunk.Count == SqliteInListChunkSize)
                 {
-                    foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
+                    foreach (var row in FetchPlacedChunk(command, parameterNames, chunk)) yield return row;
                     chunk.Clear();
                 }
             }
 
             if (chunk.Count > 0)
-                foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
+                foreach (var row in FetchPlacedChunk(command, parameterNames, chunk)) yield return row;
         }
 
-        private IEnumerable<(int Id, string Text, string Title)> FetchChunk(
+        private IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedChunk(
             SqliteCommand command, string[] parameterNames, List<int> ids)
         {
-            command.CommandText = SeforimDbSqlStrings.FtsFetchLinesWithTitles(_schema, ids.Count);
+            command.CommandText = SeforimDbSqlStrings.FtsFetchPlacedLines(_schema, ids.Count);
             for (int i = 0; i < ids.Count; i++)
                 command.Parameters[parameterNames[i]].Value = ids[i];
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                yield return (
-                    reader.GetInt32(0),
-                    _codec.DecodeColumnOrEmpty(reader, 1),
-                    reader.IsDBNull(2) ? "" : reader.GetString(2));
+                var placement = new FtsDocumentPlacement(
+                    bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+                    lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
+                    tocEntryId: reader.GetInt32(4));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), placement);
             }
+        }
+
+        /// <summary>
+        /// The lines at the given (bookId, lineIndex) positions: id, position and text. One
+        /// statement per 499 positions (two parameters each, under SQLite's 999 limit). What
+        /// the searcher asks for a batch's short hits' neighbours — the positions it could
+        /// not already serve from the batch's own fetched content. A position with no line
+        /// is absent; empty lines are returned (the caller skips them, as the self-join did).
+        /// </summary>
+        public List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(
+            IReadOnlyList<(int BookId, int LineIndex)> positions)
+        {
+            var lines = new List<SeforimDbFtsLineAtPosition>(positions?.Count ?? 0);
+            if (positions == null || positions.Count == 0) return lines;
+
+            const int positionsPerStatement = SqliteInListChunkSize / 2;
+            using var command = _connection.CreateCommand();
+            string[] parameterNames = AddChunkParameters(command, positionsPerStatement * 2);
+
+            for (int start = 0; start < positions.Count; start += positionsPerStatement)
+            {
+                int count = Math.Min(positionsPerStatement, positions.Count - start);
+                command.CommandText = SeforimDbSqlStrings.FtsFetchLinesAtBookPositions(_schema, count);
+                for (int i = 0; i < count; i++)
+                {
+                    command.Parameters[parameterNames[2 * i]].Value = positions[start + i].BookId;
+                    command.Parameters[parameterNames[2 * i + 1]].Value = positions[start + i].LineIndex;
+                }
+
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    lines.Add(new SeforimDbFtsLineAtPosition(
+                        id: reader.GetInt32(0),
+                        bookId: reader.GetInt32(1),
+                        lineIndex: reader.GetInt32(2),
+                        text: _codec.DecodeColumnOrEmpty(reader, 3)));
+                }
+            }
+            return lines;
         }
 
         public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(
             IReadOnlyList<int> ids, int radius)
         {
             var neighbours = new Dictionary<int, (string Previous, string Next)>(ids?.Count ?? 0);
+            foreach (var entry in FetchNeighbourLines(ids, radius))
+                neighbours[entry.Key] = (entry.Value.Previous, entry.Value.Next);
+            return neighbours;
+        }
+
+        /// <summary>
+        /// <see cref="FetchNeighbourText"/> plus WHICH lines each side was joined from, in the
+        /// same document order. Empty neighbour lines are skipped on both counts, so joining
+        /// the ids' texts with single spaces reproduces <c>Previous</c> / <c>Next</c>. One
+        /// self-join per chunk of ids; the searcher no longer uses this — it serves its short
+        /// hits' neighbours from the batch's own content plus
+        /// <see cref="FetchLinesAtBookPositions"/> — so it only backs the plain corpus seam.
+        /// </summary>
+        private IDictionary<int, SeforimDbFtsNeighbourLines> FetchNeighbourLines(
+            IReadOnlyList<int>? ids, int radius)
+        {
+            var neighbours = new Dictionary<int, SeforimDbFtsNeighbourLines>(ids?.Count ?? 0);
             if (ids == null || ids.Count == 0 || radius <= 0) return neighbours;
 
             // Neighbour lines per matched id, keyed by their lineIndex delta, so each side joins
             // back in document order: previous = negative deltas ascending, next = positive.
-            var previousParts = new Dictionary<int, SortedList<int, string>>();
-            var nextParts = new Dictionary<int, SortedList<int, string>>();
+            var previousParts = new Dictionary<int, SortedList<int, (int Id, string Text)>>();
+            var nextParts = new Dictionary<int, SortedList<int, (int Id, string Text)>>();
 
             using (var command = _connection.CreateCommand())
             {
-                string[] parameterNames = AddChunkParameters(command, NeighborChunkSize);
+                string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
                 command.Parameters.AddWithValue("@radius", radius);
 
-                for (int start = 0; start < ids.Count; start += NeighborChunkSize)
+                for (int start = 0; start < ids.Count; start += SqliteInListChunkSize)
                 {
-                    int count = Math.Min(NeighborChunkSize, ids.Count - start);
+                    int count = Math.Min(SqliteInListChunkSize, ids.Count - start);
                     command.CommandText = SeforimDbSqlStrings.FtsFetchNeighborLines(_schema, count);
                     for (int i = 0; i < count; i++)
                         command.Parameters[parameterNames[i]].Value = ids[start + i];
@@ -246,23 +313,36 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                         int delta = reader.GetInt32(1);
                         string text = _codec.DecodeColumnOrEmpty(reader, 2);
                         if (text.Length == 0) continue;
+                        int neighbourId = reader.GetInt32(3);
 
                         var side = delta < 0 ? previousParts : nextParts;
                         if (!side.TryGetValue(matchedId, out var parts))
-                            side[matchedId] = parts = new SortedList<int, string>();
-                        parts[delta] = text;
+                            side[matchedId] = parts = new SortedList<int, (int, string)>();
+                        parts[delta] = (neighbourId, text);
                     }
                 }
             }
 
             foreach (int id in ids)
             {
-                string previous = previousParts.TryGetValue(id, out var p) ? string.Join(" ", p.Values) : "";
-                string next = nextParts.TryGetValue(id, out var n) ? string.Join(" ", n.Values) : "";
-                if (previous.Length > 0 || next.Length > 0) neighbours[id] = (previous, next);
+                var entry = new SeforimDbFtsNeighbourLines();
+                if (previousParts.TryGetValue(id, out var p)) Collect(p, entry.PreviousIds, out entry.Previous);
+                if (nextParts.TryGetValue(id, out var n)) Collect(n, entry.NextIds, out entry.Next);
+                if (entry.Previous.Length > 0 || entry.Next.Length > 0) neighbours[id] = entry;
             }
 
             return neighbours;
+
+            static void Collect(SortedList<int, (int Id, string Text)> parts, List<int> idsOut, out string joined)
+            {
+                var texts = new List<string>(parts.Count);
+                foreach (var part in parts.Values)
+                {
+                    idsOut.Add(part.Id);
+                    texts.Add(part.Text);
+                }
+                joined = string.Join(" ", texts);
+            }
         }
 
         /// <summary>Pre-registers @p0..@pN once per command, so chunk loops only assign values
@@ -285,5 +365,33 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             _codec.Dispose();
             _connection.Dispose();
         }
+    }
+
+    /// <summary>One line of the library with its position: what
+    /// <see cref="SeforimDbFtsCorpus.FetchLinesAtBookPositions"/> returns.</summary>
+    public readonly struct SeforimDbFtsLineAtPosition
+    {
+        public SeforimDbFtsLineAtPosition(int id, int bookId, int lineIndex, string text)
+        {
+            Id = id;
+            BookId = bookId;
+            LineIndex = lineIndex;
+            Text = text;
+        }
+
+        public int Id { get; }
+        public int BookId { get; }
+        public int LineIndex { get; }
+        public string Text { get; }
+    }
+
+    /// <summary>One matched line's same-book neighbours: each side's joined text and the ids
+    /// it was joined from, in document order. See <see cref="SeforimDbFtsCorpus.FetchNeighbourText"/>.</summary>
+    internal sealed class SeforimDbFtsNeighbourLines
+    {
+        public string Previous = "";
+        public string Next = "";
+        public readonly List<int> PreviousIds = new List<int>();
+        public readonly List<int> NextIds = new List<int>();
     }
 }

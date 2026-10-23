@@ -149,8 +149,8 @@ namespace KitveiHakodeshService.Tests
                     var indexer = new SeforimDbFtsIndexer(fidx, primary, libs);
                     using var engine = new SeforimDbFtsEngine(fidx, primary, libs);
                     Check(indexer.Build(engine), "FTS index builds with compressed libraries configured", "FTS build returned false");
-                    var searcher = new SeforimDbFtsSearcher(q);
-                    var hits = searcher.SearchInBatches(engine, "בטא", 0, false, 6, false).SelectMany(b => b).ToList();
+                    var searcher = new SeforimDbFtsSearcher();
+                    var hits = searcher.SearchInBatches(engine, "בטא", 0, false, 6, new FtsTermTable()).SelectMany(b => b.Hits).ToList();
                     var c2Book = books.Single(b => b.LibraryLabel == "compressed2");
                     Check(hits.Count == 1 && hits[0].BookId == c2Book.Id,
                         "FTS search finds a word that exists only inside a COMPRESSED additional library, with the right book",
@@ -437,7 +437,7 @@ namespace KitveiHakodeshService.Tests
                             "official full-text index is built and ready although two attached libraries are damaged",
                             $"index not ready: ready={status.IsReady} indexing={status.IsIndexing} failed={status.Failed}\n    log: {string.Join("\n         ", hLog)}");
 
-                        int Hits(string term) => coordinator.Search(term, 0, 0, false, 6, false).Results.Count;
+                        int Hits(string term) => coordinator.Search(term, 0, 0, false, 6).Results.Count;
                         Check(Hits("מילהראשי") >= 1, "search in the OFFICIAL library returns its line", "primary search returned nothing");
                         Check(Hits("מילהטובא") >= 1, "healthy library BEFORE the damaged ones stays attached and searchable", "healthy library A returned nothing");
                         Check(Hits("מילהטובב") >= 1, "healthy library AFTER the damaged ones stays attached and searchable", "healthy library B returned nothing");
@@ -462,7 +462,7 @@ namespace KitveiHakodeshService.Tests
                     try
                     {
                         var st2 = WaitForIndex(coordinator2, TimeSpan.FromMinutes(3));
-                        Check(st2.IsReady && !st2.Failed && coordinator2.Search("מילהראשי", 0, 0, false, 6, false).Results.Count >= 1,
+                        Check(st2.IsReady && !st2.Failed && coordinator2.Search("מילהראשי", 0, 0, false, 6).Results.Count >= 1,
                             "restart over the same libraries: official index is ready and searchable again", $"restart: ready={st2.IsReady} failed={st2.Failed}");
                     }
                     finally { coordinator2.Shutdown(); }
@@ -486,7 +486,7 @@ namespace KitveiHakodeshService.Tests
                     try
                     {
                         var st = WaitForIndex(first, TimeSpan.FromMinutes(3));
-                        Check(st.IsReady && first.Search("מילהקורבן", 0, 0, false, 6, false).Results.Count >= 1,
+                        Check(st.IsReady && first.Search("מילהקורבן", 0, 0, false, 6).Results.Count >= 1,
                             "while intact, the library is indexed and searchable", $"intact victim not indexed: ready={st.IsReady}");
                     }
                     finally { first.Shutdown(); }
@@ -511,7 +511,7 @@ namespace KitveiHakodeshService.Tests
                         Check(st.IsReady && !st.IsIndexing && !st.Failed,
                             "library failing MID-BUILD does not fail the build: it is dropped and the index is rebuilt without it",
                             $"mid-build failure killed the index: ready={st.IsReady} indexing={st.IsIndexing} failed={st.Failed}\n    log: {string.Join("\n         ", iLog)}");
-                        Check(second.Search("מילהראשי", 0, 0, false, 6, false).Results.Count >= 1 && second.Search("מילהשלם", 0, 0, false, 6, false).Results.Count >= 1,
+                        Check(second.Search("מילהראשי", 0, 0, false, 6).Results.Count >= 1 && second.Search("מילהשלם", 0, 0, false, 6).Results.Count >= 1,
                             "official library and the healthy library are both searchable after the recovery", "post-recovery search missing results");
                     }
                     finally { second.Shutdown(); }

@@ -3,6 +3,7 @@ import { pickLocalFile, pickDbPath, getDbPathInfo } from '@/webview-host/bridge'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import type { TabRoute } from '@/stores/tabStore'
+import { t } from '@/i18n'
 
 /**
  * Central navigation handler for all app destinations.
@@ -71,7 +72,7 @@ export function useAppNavigation() {
       return
     }
     if (label === 'חיפוש') {
-      pane.updateActiveTab({ route: '/search', title: 'חיפוש' })
+      pane.updateActiveTab({ route: '/search', title: t('stores.tabTitle.search') })
       return
     }
     if (label === 'פתח קובץ') { await handleFilePicker(false); return }
@@ -89,7 +90,7 @@ export function useAppNavigation() {
       return
     }
     if (label === 'חיפוש') {
-      pane.openTab({ route: '/search', title: 'חיפוש' })
+      pane.openTab({ route: '/search', title: t('stores.tabTitle.search') })
       return
     }
     if (label === 'פתח קובץ') { await handleFilePicker(true); return }

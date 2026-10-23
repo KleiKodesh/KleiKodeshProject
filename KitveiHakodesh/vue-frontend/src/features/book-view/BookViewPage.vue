@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, inject } from 'vue'
+import { ref, computed, watch, nextTick, inject, onBeforeUnmount } from 'vue'
 import { useResizeObserver, watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
@@ -15,8 +15,15 @@ import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
+import BookViewHebrewBooksSideEdition from './BookViewHebrewBooksSideEdition.vue'
+import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
+import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
-import type { CommentarySlot } from './bookViewTypes'
+import type { CommentarySlot, SideEditionPersistState } from './bookViewTypes'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
@@ -32,7 +39,7 @@ const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const booksDataStore = useBooksDataStore()
 // Shown when a publisher-restricted book's export is attempted anyway (see exportRestriction.ts).
-const EXPORT_RESTRICTED_MESSAGE = 'ספר זה אינו ניתן לייצוא לוורד לפי בקשת המול״ל. ניתן לעיין בו ולהדפיסו כרגיל.'
+const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 const paneId = inject<1 | 2>('paneId', 1)
 
 // Track the shell's own width instead of the viewport width so that in split
@@ -57,6 +64,7 @@ const {
   tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   versions, activeVersionId, selectVersion, versionPersistState,
+  hebrewBooksEditions,
   filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
@@ -66,7 +74,7 @@ const {
   prepareCommentaryExportData, prepareCommentaryExportTargets, resolveCommentaryWordLinkTarget,
   commentaryTocPaths,
   currentScrollLineIndex,
-  scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+  scrollStateReady, idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
   flashOpenLine,
   activeMatchCount, activeMatchIdx, contentSearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
@@ -139,10 +147,12 @@ const toolbarProps = computed(() => ({
   bookId,
   bookHasTeamim: bookHasTeamim.value,
   exportRestricted: exportRestricted.value,
+  exportingToWord: exportingToWord.value,
   filterGroups: staticFilterGroups.value,
   relatedBooksLoaded: staticFilterGroupsLoaded.value,
   versions: versions.value,
   activeVersionId: activeVersionId.value,
+  hebrewBooksEditions: hebrewBooksEditions.value,
   currentScrollLineIndex: currentScrollLineIndex.value,
   lines: lines.value,
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
@@ -253,8 +263,11 @@ function onSplitPointerMove(e: PointerEvent) {
   // so dragging one column wide can never squeeze the text out between them.
   const otherSlot: CommentarySlot = slot === 'side' ? 'side-left' : 'side'
   const otherOpen = otherSlot === 'side' ? sideCommentaryOpen.value : sideLeftCommentaryOpen.value
-  const max = otherOpen ? 1 - MIN_LINES_FRACTION - panels[otherSlot].fraction.value : 0.9
-  panels[slot].fraction.value = Math.min(max, Math.max(0.1, distance / rect.width))
+  const otherFraction = otherSlot === 'side-left' ? leftColumnFraction.value : panels.side.fraction.value
+  const max = otherOpen ? 1 - MIN_LINES_FRACTION - otherFraction : 0.9
+  const fraction = Math.min(max, Math.max(0.1, distance / rect.width))
+  if (slot === 'side-left' && sideEditionShown.value) sideEditionFraction.value = fraction
+  else panels[slot].fraction.value = fraction
 }
 function onSplitPointerUp() {
   draggingSideSlot.value = null
@@ -301,12 +314,20 @@ const exportRestricted = computed(() =>
 //
 // Checked here as well as hiding the button, so no second entry point to the export
 // can get past the restriction.
-function onExportToWord() {
+// Drives the toolbar button's spinner; also blocks a second click mid-export.
+const exportingToWord = ref(false)
+async function onExportToWord() {
   if (exportRestricted.value) {
     showToast(EXPORT_RESTRICTED_MESSAGE, { variant: 'error' })
     return
   }
-  linesContentRef.value?.pasteAllIntoWord()
+  if (exportingToWord.value) return
+  exportingToWord.value = true
+  try {
+    await linesContentRef.value?.pasteAllIntoWord()
+  } finally {
+    exportingToWord.value = false
+  }
 }
 
 // Opening or closing EITHER side commentary column re-wraps the text, so the lines
@@ -367,6 +388,67 @@ watch(() => bookViewStore.toggleCommentaryPanelSignal, (signal) => {
   if (signal.paneId === paneId) toggleCommentaryPanel(signal.slot)
 })
 watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId === paneId) toggleTocPanel() })
+
+// ── HebrewBooks edition side by side ─────────────────────────────────────────
+// With the editions toggle on (and room for it - see useHebrewBooksSideEditionMode), the
+// left side column shows a scanned edition instead of commentary: the one picked in the
+// editions dropdown, else the book's best. Picking one opens the column.
+const paneNavigation = usePaneNavigation()
+const sideEditionStore = useHebrewBooksSideEditionStore()
+const { opensSideBySide: editionOpensSideBySide } = useHebrewBooksSideEditionMode(paneId)
+
+const sideEdition = computed(() => {
+  const editions = hebrewBooksEditions.value
+  if (!editionOpensSideBySide.value || !editions.length) return null
+  const pickedId = sideEditionStore.getPickedEditionId(tabId, bookId)
+  return editions.find((e) => e.id === pickedId) ?? editions.find((e) => e.isBest) ?? editions[0]!
+})
+const sideEditionShown = computed(() => sideLeftCommentaryOpen.value && sideEdition.value != null)
+
+// A scanned page needs room to be readable, so the edition gets its own width - half
+// and half with the text by default - instead of the commentary column's saved one.
+// With the right commentary open too, it splits what that column leaves.
+const sideEditionFraction = ref<number | null>(null)
+const sideEditionDefaultFraction = computed(() =>
+  sideCommentaryOpen.value ? (1 - panels.side.fraction.value) / 2 : 0.5,
+)
+const leftColumnFraction = computed(() =>
+  sideEditionShown.value ? (sideEditionFraction.value ?? sideEditionDefaultFraction.value) : panels['side-left'].fraction.value,
+)
+
+watch(
+  () => (sideEditionShown.value ? sideEdition.value!.id : null),
+  (shownId) => sideEditionStore.setShownEditionId(paneId, shownId),
+  { immediate: true },
+)
+// Session restore (tab, last-read, back/forward) hands back the saved pick and width.
+watch(restoredSideEdition, (saved) => {
+  if (!saved) return
+  if (saved.editionId != null) sideEditionStore.restorePickedEdition(tabId, bookId, saved.editionId)
+  sideEditionFraction.value = saved.fraction
+}, { immediate: true })
+
+/** The pick and the edition column's width, for persistence alongside the position. */
+function sideEditionPersistState(): SideEditionPersistState {
+  return { editionId: sideEditionStore.getPickedEditionId(tabId, bookId), fraction: sideEditionFraction.value }
+}
+
+watch(() => sideEditionStore.pickSignal, (signal) => {
+  if (signal.paneId === paneId && isWideScreen.value) panels['side-left'].visible.value = true
+})
+onBeforeUnmount(() => {
+  sideEditionStore.setShownEditionId(paneId, null)
+})
+
+// The left column is not commentary while an edition is shown, so the search bar must not
+// offer (or stay on) searching it - its host is not mounted.
+const searchableCommentarySlots = computed(() =>
+  sideEditionShown.value ? openCommentarySlots.value.filter((slot) => slot !== 'side-left') : openCommentarySlots.value,
+)
+
+function getSideEditionOutlineTarget(): string | undefined {
+  return paneNavigation.activeTab.tocPath
+}
 </script>
 
 <template>
@@ -387,7 +469,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       @select-version="selectVersion"
     />
     <!-- Middle row: side toolbar + main area (RTL: first child = physical right) -->
-    <div class="body-row">
+    <!-- dir=rtl in both UI languages: left/right settings and the side/side-left commentary slots name PHYSICAL sides, laid out as in Hebrew. -->
+    <div class="body-row" dir="rtl">
       <BookViewToolbar
         v-if="toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
@@ -488,6 +571,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     :commentary-persist-state="commentaryPersistState"
                     :toc-persist-state="tocPersistState"
                     :version-persist-state="versionPersistState"
+                    :side-edition-persist-state="sideEditionPersistState"
                     :active-version-id="activeVersionId"
                     :initial-line-index="initialLineIndex"
                     :initial-scroll-index="initialScrollTop"
@@ -536,9 +620,15 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               />
               <div
                 class="side-commentary"
-                :style="{ width: `${panels['side-left'].fraction.value * 100}%` }"
+                :style="{ width: `${leftColumnFraction * 100}%` }"
               >
+                <BookViewHebrewBooksSideEdition
+                  v-if="sideEditionShown"
+                  :edition="sideEdition!"
+                  :get-outline-target="getSideEditionOutlineTarget"
+                />
                 <CommentaryPanelHost
+                  v-else
                   ref="sideLeftHostRef"
                   :panel="panels['side-left']"
                   v-bind="commentarySharedProps"
@@ -560,8 +650,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             :toolbar-position="toolbarPosition"
             :match-count="activeMatchCount"
             :current-match="activeMatchIdx"
-            :commentary-visible="anyCommentaryVisible"
-            :open-commentary-slots="openCommentarySlots"
+            :commentary-visible="searchableCommentarySlots.length > 0"
+            :open-commentary-slots="searchableCommentarySlots"
             :mode="searchMode"
             :query="activeSearchQuery"
             @close="searchVisible = false"
@@ -695,7 +785,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
   max-width: calc(100% - var(--bottom-filter-offset, 0px) - 12px);
   overflow: hidden;
   background: var(--bg-secondary);
-  /* The app's floating-panel chrome (FullTextSearchAdvancedPanel, BookViewNoteBubble):
+  /* The app's floating-panel chrome (FullTextSearchOptionsPanel, BookViewNoteBubble):
      1px border, 8px radius on all four corners, soft shadow. */
   border: 1px solid var(--border-color);
   border-radius: 8px;

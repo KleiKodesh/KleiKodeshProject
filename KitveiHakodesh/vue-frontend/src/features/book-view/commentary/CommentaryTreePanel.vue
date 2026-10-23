@@ -14,6 +14,9 @@ import {
   setCommentaryAllChecked,
   isCommentaryBookUnchecked,
 } from './uncheckedCommentaryBooks'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   groups: CommentaryGroup[]
@@ -26,7 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 /** "Close the commentator tree" */
-const closeTitle = 'סגור עץ מפרשים'
+const closeTitle = t('bookView.commentary.closeTree')
 
 const searchInputRef = ref<HTMLInputElement | null>(null)
 onMounted(() => nextTick(() => searchInputRef.value?.focus({ preventScroll: true })))
@@ -146,7 +149,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
 </script>
 
 <template>
-  <div class="filter-panel">
+  <div dir="rtl" class="filter-panel">
     <div class="tree-scroll">
       <div
         class="all-row"
@@ -157,7 +160,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           <span class="check-mark">&#10003;</span>
           <span class="dash-mark">&#8211;</span>
         </span>
-        <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
+        <span class="row-label ui-chrome">{{ $t('bookView.commentary.showAll') }}</span>
         <!-- click.stop: the whole row is a toggle-all target. -->
         <button
           class="close-btn c-pointer hover-bg"
@@ -197,8 +200,8 @@ function toggleItem(item: CommentaryVisibilityItem) {
             <span class="check-mark">&#10003;</span>
           </button>
         </div>
-        <div v-if="searchResults.length === 0" class="no-results">
-          &#x5DC;&#x5D0; &#x5E0;&#x5DE;&#x5E6;&#x5D0;
+        <div v-if="searchResults.length === 0" class="no-results ui-chrome">
+          {{ $t('components.notFound') }}
         </div>
       </template>
     </div>
@@ -232,7 +235,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   width: fit-content;
   min-width: 140px;
   max-width: 100%;
-  background: var(--bg-secondary);
+  background: var(--tree-bg, var(--bg-secondary));
   direction: rtl;
 }
 
@@ -324,7 +327,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   padding-block: 6px;
   padding-inline: 8px;
   gap: 2px;
-  text-align: right;
+  text-align: start;
   background: none;
   border: none;
   cursor: pointer;
@@ -376,7 +379,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   border-top: 1px solid var(--border-color);
   padding: 5px 6px 6px;
   box-sizing: border-box;
-  background: var(--bg-secondary);
+  background: var(--tree-bg, var(--bg-secondary));
 }
 
 .search-inner {

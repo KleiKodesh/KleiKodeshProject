@@ -48,7 +48,7 @@ function cancelEdit() {
     <button
       class="folder-btn"
       :disabled="props.disabled"
-      title="בחר"
+      :title="$t('settings.path.browse')"
       @click="emit('pick')"
     >
       <IconFolderOpen20Regular />
@@ -77,7 +77,7 @@ function cancelEdit() {
     <button
       v-if="!editing && props.clearable && props.value"
       class="clear-btn"
-      title="נקה נתיב"
+      :title="$t('settings.path.clear')"
       @click="emit('clear')"
     >
       <IconDismiss20Regular />
@@ -139,13 +139,12 @@ function cancelEdit() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+  text-align: end;
   min-width: 0;
 }
 
 .path-text.placeholder {
-  direction: rtl;
-  text-align: right;
+  text-align: start;
   opacity: 0.6;
 }
 
@@ -163,7 +162,7 @@ function cancelEdit() {
   padding: 0 8px;
   font-size: 11px;
   direction: ltr;
-  text-align: left;
+  text-align: end;
   background: transparent;
   border: none;
   outline: none;

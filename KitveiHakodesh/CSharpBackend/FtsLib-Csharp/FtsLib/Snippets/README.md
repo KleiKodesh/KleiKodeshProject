@@ -1,80 +1,52 @@
 # Snippets/
 
-Snippet generation with search term highlighting.
-
-## Overview
-
-Generates highlighted text excerpts showing search results in context. Finds the tightest window containing all query terms and wraps matches in `<mark>` tags.
+Locates the snippet window for a search hit and describes it as OFFSETS. No HTML is
+produced on the search path — the consumer (the page) renders from the descriptor.
 
 ## Files
 
 | File | Class | Purpose |
 |---|---|---|
-| `SnippetBuilder.cs` | `SnippetBuilder` | Main snippet generation logic |
-| `SnippetResult.cs` | `SnippetResult` | Result data structure |
+| `SnippetWindowLocator.cs` | `SnippetWindowLocator` | Finds the tightest window, expands it by context words, records mark ranges |
+| `SnippetDescriptor.cs` | `SnippetDescriptor` | The result: window offsets, mark ranges, ellipsis flags, scores |
+| `PreparedQueryGroups.cs` | `PreparedQueryGroups` | The query's term→group map, built once per query |
 
 ## Algorithm
 
-1. **Tokenize** the line content using `HtmlWordScanner`
-2. **Locate** all occurrences of each search term
-3. **Find tightest window** containing at least one occurrence of each term
-4. **Extend window** with context (neighboring words)
-5. **Render HTML** with `<mark>` tags around matched terms
-6. **Calculate scores** — Character span and word distance
+1. **Tokenize** the line content once (`TokenStream`, raw char positions kept)
+2. **Find tightest window** containing at least one token of every query group
+3. **Expand window** by `contextWords` tokens on each side (safety ceiling in visible chars)
+4. **Collect mark ranges** — every query-term token inside the window
+5. **Score** — character span and word distance
 
-## SnippetBuilder
+## SnippetWindowLocator
 
 ```csharp
-var builder = new SnippetBuilder();
-var result = builder.Build(
-    htmlContent: line.Html,
-    queryTerms: matchedGroups,
-    lineId: line.LineId
-);
+var locator = new SnippetWindowLocator(contextWords: 8);
+var prepared = PreparedQueryGroups.FromGroups(result.MatchedGroups);   // once per query
+SnippetDescriptor descriptor = locator.Locate(line.Html, prepared);
 ```
 
-## SnippetResult
+Holds only scratch buffers; zero per-call allocation. One instance per thread.
+
+## SnippetDescriptor
 
 | Property | Type | Description |
 |---|---|---|
-| `Html` | `string` | Highlighted HTML with `<mark>` tags |
-| `Score` | `int` | Character span of tightest window (smaller = better) |
-| `IsMatch` | `bool` | False = index false positive |
+| `IsMatch` | `bool` | False = index false positive, drop the hit |
+| `SnapStart` / `SnapEnd` | `int` | Window as raw char offsets into the source |
+| `MarkRanges` | `IReadOnlyList<int>` | Flat (start, length, termOrdinal) triples (`MarkStride` = 3) of highlighted tokens; `MatchedTermAt(ordinal)` names the term; a VIEW of locator scratch, copy before the next `Locate` |
+| `LeadingEllipsis` / `TrailingEllipsis` | `bool` | "…" before / after the window |
+| `WindowWordCount` | `int` | Words in the window — below `contextWords` means "short", extend over neighbour lines |
+| `Score` | `int` | Char span of the tightest window (smaller = better) |
+| `WordDistance` | `int` | Tokens between leftmost and rightmost matches |
 
-## Scoring
+## Rendering
 
-- **Score** — Number of characters in the tightest window covering all terms. Smaller scores indicate terms are closer together.
+The page rebuilds the HTML from the source text and the descriptor
+is the reference implementation the port must match: window with tags and `{X}` paragraph
+markers stripped, each mark range wrapped in `<mark>`, "…" on each cut side.
 
-- **WordDistance** — Number of tokens between leftmost and rightmost matches (stored in `SearchResult`).
-
-These scores help rank results by relevance.
-
-## HTML Output
-
-Example:
 ```html
-...השלום <mark>בית</mark> של <mark>תורה</mark>...
+…השלום <mark>בית</mark> של <mark>תורה</mark>…
 ```
-
-Matched terms are wrapped in `<mark>` elements for easy styling.
-
-## False Positives
-
-`IsMatch` may be `false` when:
-- The index contained the term but the document doesn't (rare, due to concurrent modifications)
-- All terms were removed by HTML tag stripping
-
-Always check `IsMatch` before displaying:
-```csharp
-if (snippet.IsMatch)
-    Display(snippet.Html);
-```
-
-## Context Extension
-
-The builder extends the tightest window by:
-- Adding words before the first match
-- Adding words after the last match
-- Stopping at sentence boundaries when possible
-
-This provides readable context while keeping snippets concise.

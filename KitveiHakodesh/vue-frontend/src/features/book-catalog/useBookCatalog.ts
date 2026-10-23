@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -23,7 +23,7 @@ export function useBookCatalog() {
     children: withoutHiddenCategories(FULL_ROOT.value.children),
   }))
 
-  const path = ref<CategoryNode[]>([ROOT.value])
+  const path = shallowRef<CategoryNode[]>([ROOT.value])
 
   watch(
     ROOT,

@@ -149,9 +149,26 @@ export function isSearchIgnoredMark(ch: string): boolean {
   return code >= 0x0591 && code <= 0x05C7 && code !== 0x05BE
 }
 
+/**
+ * Abbreviation marks come in many spellings — the reader types ASCII " or ',
+ * the text may hold gershayim U+05F4 / geresh U+05F3, curly quotes, or an
+ * &quot; entity. Search folds every one to a single canonical character
+ * (one char for one char, so match positions stay aligned with the HTML).
+ */
+const SEARCH_DOUBLE_QUOTES = /["״“”„]/g
+const SEARCH_SINGLE_QUOTES = /['׳‘’‚`]/g
+const SEARCH_QUOTE_ENTITIES: Record<string, string> = {
+  '&quot;': '"', '&#34;': '"', '&#x22;': '"',
+  '&apos;': "'", '&#39;': "'", '&#x27;': "'",
+}
+
+function foldQuotesForSearch(text: string): string {
+  return text.replace(SEARCH_DOUBLE_QUOTES, '"').replace(SEARCH_SINGLE_QUOTES, "'")
+}
+
 /** Strip Hebrew diacritics for search matching, keeping the maqaf as a space. */
 export function removeDiacriticsForSearch(text: string): string {
-  return text.replace(SEARCH_IGNORED_MARKS, '').split(MAQAF).join(' ')
+  return foldQuotesForSearch(text.replace(SEARCH_IGNORED_MARKS, '').split(MAQAF).join(' '))
 }
 
 /**
@@ -183,8 +200,9 @@ export function stripHtmlForSearch(html: string): string {
         if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
       }
       if (entityEnd !== -1) {
-        // Valid entity — collapse to sentinel and skip past the `;`.
-        result += '\x00'
+        // Valid entity — collapse to one char and skip past the `;`. Quote
+        // entities become the folded quote so abbreviations match.
+        result += SEARCH_QUOTE_ENTITIES[html.slice(i, entityEnd + 1).toLowerCase()] ?? '\x00'
         i = entityEnd + 1
         continue
       }
@@ -197,7 +215,7 @@ export function stripHtmlForSearch(html: string): string {
     // The maqaf survives as a space so it still occupies one position — the
     // walkers that map positions back into the HTML count it the same way.
     if (ch === MAQAF) result += ' '
-    else if (!isSearchIgnoredMark(ch)) result += ch
+    else if (!isSearchIgnoredMark(ch)) result += foldQuotesForSearch(ch)
     i++
   }
   return result

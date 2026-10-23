@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -74,6 +74,24 @@ export async function getBookVersions(bookId: number): Promise<BookVersionRow[]>
   } catch {
     // DB not ready, or swapped under us. [] means "no versions to offer", which is also what
     // a library without the version tables answers — the toolbar shows no version control.
+    return []
+  }
+}
+
+// ── HebrewBooks editions ─────────────────────────────────────────────────────
+
+/**
+ * The book's scanned editions on HebrewBooks, best first.
+ *
+ * [] means "none to offer" - the book has none, or the library carries no editions map
+ * (Zayit, or a map file that is missing). The toolbar then shows no editions control.
+ */
+export async function getHebrewBooksEditions(bookId: number): Promise<HebrewBooksEdition[]> {
+  if (bookId <= 0) return []
+  try {
+    return (await seforimOp<{ editions: HebrewBooksEdition[] }>('getHebrewBooksEditions', { bookId })).editions ?? []
+  } catch {
+    // Service not ready, or the DB swapped under us - same answer as "no editions".
     return []
   }
 }
@@ -253,8 +271,23 @@ export async function getLinkTargetForSourceLineAndBook(
 
 // ── TOC paths & line→book/index helpers ───────────────────────────────────────
 
-export async function getTocPathsForLines(lineIds: number[]): Promise<{ lineId: number; bookId: number; tocPath: string }[]> {
-  return (await seforimOp<{ rows: { lineId: number; bookId: number; tocPath: string }[] }>('getTocPathsForLines', { lineIds })).rows
+/**
+ * TOC path per line id. The wire carries each line's TOC entry id and each distinct
+ * entry's path once (lines of a section share an entry); this expands that back into
+ * the per-line map every caller wants. Lines with no TOC entry are absent.
+ */
+export async function getTocPathsForLines(lineIds: number[]): Promise<Map<number, string>> {
+  const { lines, paths } = await seforimOp<{
+    lines: { lineId: number; bookId: number; tocEntryId: number }[]
+    paths: { tocEntryId: number; path: string }[]
+  }>('getTocPathsForLines', { lineIds })
+  const pathByEntry = new Map(paths.map((p) => [p.tocEntryId, p.path]))
+  const pathByLine = new Map<number, string>()
+  for (const line of lines) {
+    const path = pathByEntry.get(line.tocEntryId)
+    if (path !== undefined && !pathByLine.has(line.lineId)) pathByLine.set(line.lineId, path)
+  }
+  return pathByLine
 }
 
 /** triples = flat [groupKey, firstLineId, lastLineId, …]. */

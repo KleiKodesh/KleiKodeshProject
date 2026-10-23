@@ -1,0 +1,92 @@
+{
+  "calendar": {
+    "prevMonth": "Previous month",
+    "backToToday": "Back to today",
+    "nextMonth": "Next month",
+    "openFull": "Open the full calendar",
+    "full": "Full calendar"
+  },
+  "searchButtonTitle": "Type to search a book title. Click here to search content in the library",
+  "dateBar": {
+    "inMinutes": "in {n} min",
+    "oneHour": "1 hour",
+    "twoHours": "2 hours",
+    "nHours": "{n} hours",
+    "inHours": "in {hours}",
+    "inHoursMinutes": "in {hours} and {n} min",
+    "nextZmanTitle": "{countdown} · click for all times",
+    "calendarTitle": "Click to show the calendar",
+    "dailyLearningTitle": "Click to show daily learning (Daf Yomi and more)",
+    "dailyLearning": "Daily learning",
+    "bookNotInLibrary": "The book is not in the library"
+  },
+  "card": {
+    "unpin": "Unpin",
+    "pin": "Pin",
+    "remove": "Remove from list"
+  },
+  "worldClock": {
+    "israel": "Israel",
+    "newYork": "New York",
+    "losAngeles": "Los Angeles",
+    "london": "London",
+    "paris": "Paris",
+    "antwerp": "Antwerp",
+    "moscow": "Moscow",
+    "johannesburg": "Johannesburg",
+    "buenosAires": "Buenos Aires",
+    "melbourne": "Melbourne",
+    "tomorrow": "Tomorrow",
+    "yesterday": "Yesterday",
+    "title": "Click to show the world clock"
+  },
+  "zmanimTitle": "Today's zmanim",
+  "zman": {
+    "chatzotNight": "Midnight (Chatzot)",
+    "alot": "Dawn (Alot)",
+    "misheyakir": "Misheyakir",
+    "sunrise": "Sunrise",
+    "sofShmaMga": "Latest Shema (MGA)",
+    "sofShmaGra": "Latest Shema (GRA)",
+    "sofTfillaMga": "Latest Tefilla (MGA)",
+    "sofTfillaGra": "Latest Tefilla (GRA)",
+    "chatzot": "Midday (Chatzot)",
+    "minchaGedola": "Mincha Gedola",
+    "minchaKetana": "Mincha Ketana",
+    "plag": "Plag HaMincha",
+    "sunset": "Sunset",
+    "tzeit": "Nightfall (Tzeit)"
+  },
+  "searchHint": {
+    "quick": "Quick search across all libraries...",
+    "enter": "Press Enter to search content",
+    "free": "Type freely to find a book or file",
+    "hbPrefix": "To show HebrewBooks results first, type",
+    "pcPrefix": "To show computer files first, type",
+    "addins": "Type addins: to show Otzaria add-ins",
+    "hbExample1": "hebrewbooks: {book}",
+    "hbExample2": "or hb: {book}",
+    "hbExample3": "or: {shorthand} {book}",
+    "pcExample1": "file: {book}",
+    "pcExample2": "or pc: {book}",
+    "pcExample3": "or: {shorthand} {book}"
+  },
+  "searchTabTitle": "Search: {query}",
+  "daily": {
+    "parsha": "Weekly parsha",
+    "nach": "Daily Nach",
+    "tehillim": "Daily Tehillim",
+    "mishnaYomit": "Daily Mishna",
+    "perekYomi": "Daily Perek",
+    "avot": "Pirkei Avot",
+    "dafYomi": "Daf Yomi",
+    "dafWeekly": "Weekly Daf",
+    "amudYomi": "Daily Amud",
+    "yerushalmi": "Daily Yerushalmi",
+    "chofetzChaim": "Chofetz Chaim",
+    "shmirasHalashon": "Shmiras HaLashon",
+    "kitzur": "Kitzur Shulchan Aruch",
+    "rambam1": "Rambam, one chapter",
+    "rambam3": "Rambam, three chapters"
+  }
+}

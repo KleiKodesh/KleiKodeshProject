@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useEventListener, useMediaQuery } from '@vueuse/core'
+import { t } from '@/i18n'
+import PageCard from '@/components/PageCard.vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
+import { useElementSize, useMediaQuery } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useFullTextSearch } from './useFullTextSearch'
@@ -14,7 +17,8 @@ import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
-import FullTextSearchAdvancedPanel from './FullTextSearchAdvancedPanel.vue'
+import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
+import { WORD_OPTIONS } from './queryWordSyntax'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const paneNavigation = usePaneNavigation()
@@ -60,15 +64,16 @@ watch(
 
 const {
   results,
+  matchedTermsOf,
   isSearching,
+  stageLabel,
   hasSearched,
   executedQuery,
   searchError,
   maxWordDistance,
   requireOrdered,
-  expandKetiv,
-  expandRelated,
-  grammarWrap,
+  allWords,
+  setAllWords,
   sortOrder,
   executeSearch,
   cancelSearch,
@@ -99,6 +104,7 @@ const {
 } = useFullTextSearchFilters(
   () => results.value,
   () => executedQuery.value,
+  matchedTermsOf,
   executeSearch,
   clearSearch,
 )
@@ -114,8 +120,11 @@ const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null
 const _scrollMirror = lsGet<{ i: number; o: number }>(scrollMirrorKey)
 const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
-const isAdvancedOpen = ref(false)
-const advancedPanelRef = ref<HTMLElement | null>(null)
+const isOptionsOpen = ref(false)
+const optionsPanelRef = ref<HTMLElement | null>(null)
+// The options dropdown fills the whole height under the bar, i.e. the results area's.
+const resultsAreaRef = ref<HTMLElement | null>(null)
+const { height: resultsAreaHeight } = useElementSize(resultsAreaRef)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 // Set for one tick while the searchRestore watcher is applying a history position, so the
 // new-search reset can recognize that navigation no matter which watcher runs first.
@@ -123,11 +132,21 @@ let restoringNonce: number | null = null
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
 
-const isAdvancedActive = computed(
+// Clean page (nothing searched yet, no popup open): offer the search options up front
+// as a centered card so the user can set them before launching the first search.
+const showOptionsCard = computed(
+  () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isOptionsOpen.value
+     && !indexingState.value.dbNotFound && !searchError.value
+     // A tab returning to a saved search restores it asynchronously (onMounted); the saved
+     // query is known synchronously, so gate on it or the card flashes before the restore.
+     && !paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery,
+)
+
+const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
+
+const isOptionsActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
-     || !expandKetiv.value
-     || expandRelated.value
-     || grammarWrap.value
+     || WORD_OPTIONS.some((option) => allWords.value[option] !== (option === 'ketiv'))
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -145,10 +164,13 @@ useDropdownClose(
   {
     toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
     enabled: isOverlayMode,
+    // A full-height side panel, not a popup: the viewport fit would cap it 8px short
+    // of the bottom edge (same opt-out as BookViewSidePanel).
+    fitToViewport: false,
   },
 )
 
-// The advanced panel is a popup over the results in every size, so unlike the filter
+// The options panel is a popup over the results in every size, so unlike the filter
 // panel it closes on outside-click unconditionally — no overlay-mode gate.
 //
 // The toggle button has to be named, or clicking it while the panel is open would close
@@ -158,30 +180,44 @@ useDropdownClose(
 // without closing, leaving the single close to the button's toggle. Nothing reads the
 // returned `justClosed` — that guard is for toggles that set the flag themselves.
 useDropdownClose(
-  advancedPanelRef,
+  optionsPanelRef,
   () => {
-    if (isAdvancedOpen.value) isAdvancedOpen.value = false
+    if (isOptionsOpen.value) isOptionsOpen.value = false
   },
-  { toggleButton: computed(() => searchBarRef.value?.advancedBtnRef ?? null) },
+  { toggleButton: computed(() => searchBarRef.value?.optionsBtnRef ?? null) },
 )
 
-// Re-run the search whenever any advanced setting changes — the current results
-// were generated with the old setting values and are now stale.
+// A search on screen re-runs when an option changes (its results are stale), once per user
+// action: one panel click can change both a setting and the query's syntax.
+let rerunTerm: string | null = null
+let rerunScheduled = false
+function scheduleRerun(term?: string) {
+  if (term !== undefined) rerunTerm = term
+  if (rerunScheduled) return
+  rerunScheduled = true
+  void nextTick(() => {
+    rerunScheduled = false
+    const next = rerunTerm ?? executedQuery.value
+    rerunTerm = null
+    if (hasSearched.value && executedQuery.value && next) handleSearch(next)
+  })
+}
+
 watch(
   [
     maxWordDistance,
     requireOrdered,
-    expandKetiv,
-    expandRelated,
-    grammarWrap,
+    allWords,
     () => settings.searchContextMarginWords,
   ],
-  () => {
-    if (hasSearched.value && executedQuery.value) {
-      handleSearch(executedQuery.value)
-    }
-  },
+  () => scheduleRerun(),
 )
+
+// The per-word toggles rewrite the query's syntax; a search on screen re-runs with its term.
+function onPerWordQuery(query: string) {
+  searchQuery.value = query
+  scheduleRerun(parseSearchQuery(query).term)
+}
 
 // The index builds in the background; a search issued before the first segments
 // flush returns 'indexNotReady' and the results area shows that error until the
@@ -226,14 +262,14 @@ function resetScrollForNewSearch() {
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
-  paneNavigation.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
+  paneNavigation.updateActiveTab({ searchQuery: q, title: t('fullTextSearch.tabTitleQuery', { q: term || q }) })
   if (term) {
     resetScrollForNewSearch()
     handleSearch(term)
   }
 }
 function onClearSearch() {
-  paneNavigation.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
+  paneNavigation.updateActiveTab({ searchQuery: undefined, title: t('fullTextSearch.tabTitle') })
   handleClearSearch()
 }
 
@@ -250,7 +286,7 @@ watch(
     searchQuery.value = q
     const { term, atFilters: tokens } = parseSearchQuery(q)
     setAtFilters(tokens)
-    paneNavigation.updateActiveTab({ title: `חיפוש: ${term || q}` })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q: term || q }) })
     if (term) {
       resetScrollForNewSearch()
       handleSearch(term)
@@ -338,7 +374,7 @@ async function restoreFromTab() {
   searchQuery.value = savedQuery
   const { term, atFilters: tokens } = parseSearchQuery(savedQuery)
   setAtFilters(tokens)
-  paneNavigation.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
+  paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q: term || savedQuery }) })
   const fromCache = await loadCachedResults(term || savedQuery)
   if (!fromCache) handleSearch(term || savedQuery)
 }
@@ -403,16 +439,11 @@ onMounted(async () => {
   searchBarRef.value?.focus({ silent: true, selectAll: true })
 })
 
-// Save filter state whenever the page goes hidden or is unmounted.
+// Save filter state whenever the page goes hidden, the host closes, or the page unmounts.
+// The shared flush (persistenceFlush) covers browser hide/unload AND the WebView2 host's
+// close, which fires no browser event; unmount is handled below.
 // /search is keyed by tabId so unmount = this tab's search instance is gone (tab switched or closed).
-// Tab close triggers closeTab() which deletes the IDB key anyway, but saving first is harmless.
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') saveFilterState()
-})
-// Reload safety net: the synchronous localStorage mirror inside saveFilterState is the part
-// that must land during teardown; running it from beforeunload guarantees it even if the
-// visibilitychange ordering varies. Idempotent with the handler above.
-useEventListener(window, 'beforeunload', () => { saveFilterState() })
+onScopeDispose(registerPositionCapture(() => saveFilterState(), tabId))
 onBeforeUnmount(() => {
   // Stop the backend search. This page is NOT kept alive — it unmounts on a tab switch,
   // on a same-tab navigation to another route, and on tab close. Without this, the C#
@@ -437,7 +468,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="search-page">
-    <div class="search-bar-dock">
+    <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
+    <div v-show="!showOptionsCard" class="search-bar-dock" :style="{ '--options-panel-height': `${resultsAreaHeight}px` }">
+      <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
+           instance (no remount), so typing, focus and refs survive the hop back to the top. -->
+      <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showOptionsCard">
       <FullTextSearchBar
         ref="searchBarRef"
         v-model:search-query="searchQuery"
@@ -446,36 +481,66 @@ onBeforeUnmount(() => {
         :total-result-count="results.length"
         :filter-count="checkedBookIds.size"
         :at-filter-count="atFilters.length"
-        :is-advanced-open="isAdvancedOpen"
-        :is-advanced-active="isAdvancedActive"
+        :is-options-open="isOptionsOpen"
+        :is-options-active="isOptionsActive"
+        :show-options-toggle="!showOptionsCard"
         v-model:sort-order="sortOrder"
         @search="onSearch"
         @cancel="cancelSearch"
         @toggle-filter="isFilterOpen = !isFilterOpen"
-        @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
+        @toggle-options="isOptionsOpen = !isOptionsOpen"
         @clear="onClearSearch"
       />
-      <FullTextSearchAdvancedPanel
-        v-if="isAdvancedOpen"
-        ref="advancedPanelRef"
+      </Teleport>
+      <FullTextSearchOptionsPanel
+        v-if="isOptionsOpen"
+        ref="optionsPanelRef"
         :max-word-distance="maxWordDistance"
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
-        :expand-ketiv="expandKetiv"
-        :expand-related="expandRelated"
-        :grammar-wrap="grammarWrap"
+        :all-words="allWords"
+        :query="searchQuery"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
-        @update:expand-ketiv="expandKetiv = $event"
-        @update:expand-related="expandRelated = $event"
-        @update:grammar-wrap="grammarWrap = $event"
-        @close="isAdvancedOpen = false"
+        @set-all-words="setAllWords"
+        @update:query="onPerWordQuery"
+        @close="isOptionsOpen = false"
       />
     </div>
 
-    <div class="results-area">
-      <div class="results-list-wrap">
+    <div ref="resultsAreaRef" class="results-area">
+      <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
+      <PageCard v-show="showOptionsCard">
+        <div :id="cardBarSlotId" class="card-bar-slot" />
+        <FullTextSearchOptionsPanel
+          as-card
+          :max-word-distance="maxWordDistance"
+          :require-ordered="requireOrdered"
+          :context-words="settings.searchContextMarginWords"
+          :all-words="allWords"
+          :query="searchQuery"
+            @update:max-word-distance="maxWordDistance = $event"
+          @update:require-ordered="requireOrdered = $event"
+          @update:context-words="settings.searchContextMarginWords = $event"
+          @set-all-words="setAllWords"
+          @update:query="onPerWordQuery"
+        />
+      </PageCard>
+      <div v-if="!showOptionsCard" class="results-list-wrap">
+        <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
+             column, runs the full height beside it, and the options dropdown covers it. -->
+        <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
+        <div class="search-stage-row" aria-live="polite">
+          <template v-if="isSearching">
+            {{ stageLabel }}
+            <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
+          </template>
+          <span v-else-if="results.length" dir="auto">
+            <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
+            {{ $t('fullTextSearch.results') }}
+          </span>
+        </div>
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
@@ -486,6 +551,7 @@ onBeforeUnmount(() => {
           :has-searched="hasSearched"
           :search-error="searchError"
           :db-not-found="indexingState.dbNotFound"
+          :index-build-failed="indexingState.buildFailed"
           :initial-scroll-index="initialScrollIndex"
           :initial-scroll-offset="initialScrollOffset"
           :zoom="zoom"
@@ -494,7 +560,7 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div v-if="isFilterOpen" class="filter-shell" @click.self="isFilterOpen = false">
+      <div v-if="isFilterOpen" class="filter-shell" :class="{ floating: showOptionsCard }" @click.self="isFilterOpen = false">
         <FullTextSearchFilterPanel
           ref="filterPanelRef"
           :checked-book-ids="checkedBookIds"
@@ -518,6 +584,25 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.search-stage-row {
+  /* Text sits at the left edge (the row is RTL, so `end` = left). */
+  text-align: end;
+  height: 14px;
+  flex-shrink: 0;
+  line-height: 14px;
+  /* Physical: extra inset on the left nudges the left-aligned text rightward. */
+  padding: 0 12px 0 18px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-stage-count {
+  unicode-bidi: isolate;
+  direction: ltr;
+}
 .search-page {
   display: flex;
   flex-direction: column;
@@ -532,7 +617,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
 }
-/* Anchor for the advanced panel: on wide screens it floats as a popup below
+/* Anchor for the options panel: on wide screens it floats as a popup below
    the search bar, so it needs the bar's bottom edge as its containing block. */
 .search-bar-dock {
   position: relative;
@@ -540,9 +625,34 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* z-index without position:relative on the results area below means the dock's
-     popups (advanced panel, sort dropdown) paint over the results list. */
-  z-index: 5;
+  /* The results area has no stacking context, so its filter shell (z-index 10) competes
+     with this dock directly: stay above it so the dock's popups (options panel, sort
+     dropdown) paint over both the results list and the filter side panel. */
+  z-index: 11;
+}
+/* Room around the bar inside the card (TopSearchBar's own 8px/6px is tuned for the
+   page edge, too tight in the card). */
+.card-bar-slot {
+  flex-shrink: 0;
+  padding: 4px 0;
+}
+/* The card owns the frame; the panel inside is just its lower section. */
+.results-area :deep(.options-panel.as-card) {
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Full-width card (PageCard <=600px) takes the app background; the panel must
+   not paint its own bg-secondary over it. Breakpoint mirrors PageCard.vue. */
+@media (max-width: 600px) {
+  .results-area :deep(.options-panel.as-card),
+  .results-area :deep(.options-panel.as-card .panel-header) {
+    background: none;
+  }
 }
 .results-list-wrap {
   flex: 1;
@@ -574,6 +684,13 @@ onBeforeUnmount(() => {
     height: 100%;
     flex-shrink: 0;
     display: flex;
+  }
+  /* Over the clean-page card the panel floats instead of taking a column, so the
+     centered card is not pushed aside. */
+  .filter-shell.floating {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
   }
   /* `height: 100%` would resolve against the shell and then ADD the panel's own margin,
      overflowing the area by that much at top and bottom. Stretching instead lets the

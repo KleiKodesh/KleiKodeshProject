@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
@@ -15,6 +16,7 @@ import {
   type DocumentIconKey,
 } from '@/utils/documentIcons'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type {
   CatalogSearchResult,
@@ -118,6 +120,10 @@ function toggleSection(section: SearchSourcePriority) {
   collapsedSections.value = next
 }
 
+// Shown in place of an endless spinner: "building the index (n%)" or why it is unavailable.
+const { statusText: catalogIndexStatusText, isUnavailable: isCatalogIndexUnavailable } = useSearchIndexStatus('catalogToc')
+const { statusText: fileIndexStatusText, isUnavailable: isFileIndexUnavailable } = useSearchIndexStatus('localFiles')
+
 const visibleCatalogResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogResults))
 const visibleCatalogTocResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogTocResults))
 const visibleHebrewBooksResults = computed(() => (isCollapsed('hebrewbooks') ? [] : props.hebrewBooksResults))
@@ -205,7 +211,7 @@ function getTabIcon(route: string): FileIconInfo {
 
 <template>
   <Teleport to="body">
-    <div
+    <div dir="rtl"
       ref="dropdownRef"
       class="global-search-dropdown"
       :class="{ 'is-merged': mergeWithAnchor }"
@@ -219,8 +225,8 @@ function getTabIcon(route: string): FileIconInfo {
       <template v-if="tabs && tabs.length > 0">
         <!-- Clear-all row — only shown when a tooltip is supplied, so callers
              that don't support bulk-clear simply omit the prop. -->
-        <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header">
-          <span class="global-search-dropdown__recents-label">היסטוריה</span>
+        <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header ui-chrome">
+          <span class="global-search-dropdown__recents-label">{{ $t('globalSearch.history') }}</span>
           <button
             class="global-search-dropdown__clear-all"
             :title="clearAllLocationsTitle"
@@ -238,7 +244,7 @@ function getTabIcon(route: string): FileIconInfo {
             'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
           }"
           data-nav-item
-          :title="withNewTabHint(tab.tocPath ? `${tab.title} · ${tab.tocPath}` : tab.title)"
+          :title="withNewTabHint(tab.tocPath ? `${catalogBookTitle(tab)} · ${tab.tocPath}` : catalogBookTitle(tab))"
           @click="emit('selectTab', tab.id, wantsNewTab($event))"
           @auxclick.middle="emit('selectTab', tab.id, wantsNewTab($event))"
         >
@@ -248,13 +254,13 @@ function getTabIcon(route: string): FileIconInfo {
             :style="getTabIcon(tab.route).color ? { color: getTabIcon(tab.route).color } : undefined"
           />
           <span class="global-search-dropdown__item-title">
-            {{ tab.title }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
+            {{ catalogBookTitle(tab) }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
           </span>
           <!-- Forgets the location. Closes nothing: locations and tabs are
                independent, so this is "remove from history". -->
           <button
             class="global-search-dropdown__tab-close"
-            :title="removeLocationTitle ?? 'הסר מהרשימה'"
+            :title="removeLocationTitle ?? $t('globalSearch.removeFromList')"
             @click.stop="emit('forgetTab', tab.id)"
           >
             <IconDismiss20Regular />
@@ -265,9 +271,9 @@ function getTabIcon(route: string): FileIconInfo {
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
-        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
+        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc || isCatalogIndexUnavailable)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('catalog')"
             @mousedown.prevent
@@ -277,8 +283,15 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('catalog') }"
             />
-            קטלוג הספרים
+            {{ $t('globalSearch.bookCatalog') }}
             <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="global-search-dropdown__spinner" />
+          </div>
+          <div
+            v-if="catalogIndexStatusText && (isLoadingCatalogToc || isCatalogIndexUnavailable)"
+            class="global-search-dropdown__index-status ui-chrome"
+            :class="{ 'is-error': isCatalogIndexUnavailable }"
+          >
+            {{ catalogIndexStatusText }}
           </div>
           <div
             v-for="item in visibleCatalogResults"
@@ -305,12 +318,12 @@ function getTabIcon(route: string): FileIconInfo {
             class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
-            :title="withNewTabHint(`${item.book.title} ${item.tocPath}`)"
+            :title="withNewTabHint(`${item.book.title} / ${item.tocPath}`)"
             @click="emit('selectCatalogToc', item, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogToc', item, wantsNewTab($event))"
           >
             <IconLibrary20Filled class="global-search-dropdown__item-icon global-search-dropdown__item-icon--catalog" />
-            <span class="global-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
+            <span class="global-search-dropdown__item-title">{{ item.book.title }} / {{ item.tocPath }}</span>
             <span v-if="item.book.parentPath" class="global-search-dropdown__item-path">
               {{ item.book.parentPath }}
             </span>
@@ -320,7 +333,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- ── HebrewBooks section ── -->
         <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('hebrewbooks')"
             @mousedown.prevent
@@ -330,7 +343,7 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('hebrewbooks') }"
             />
-            היברו-בוקס
+            {{ $t('globalSearch.hebrewBooks') }}
             <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="global-search-dropdown__spinner" />
           </div>
           <div
@@ -349,13 +362,16 @@ function getTabIcon(route: string): FileIconInfo {
             <span v-if="item.book.author" class="global-search-dropdown__item-path">
               {{ item.book.author }}
             </span>
+            <span v-if="item.book.printingYear" class="global-search-dropdown__item-path">
+              ({{ item.book.printingYear }})
+            </span>
           </div>
         </template>
 
         <!-- ── File search section ── -->
-        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles)">
+        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles || isFileIndexUnavailable)">
           <div
-            class="global-search-dropdown__section-header"
+            class="global-search-dropdown__section-header ui-chrome"
             role="button"
             :aria-expanded="!isCollapsed('files')"
             @mousedown.prevent
@@ -365,8 +381,15 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__section-chevron"
               :class="{ 'is-expanded': !isCollapsed('files') }"
             />
-            קבצים
+            {{ $t('globalSearch.files') }}
             <IconArrowSync20Regular v-if="isLoadingFiles" class="global-search-dropdown__spinner" />
+          </div>
+          <div
+            v-if="fileIndexStatusText && (isLoadingFiles || isFileIndexUnavailable)"
+            class="global-search-dropdown__index-status ui-chrome"
+            :class="{ 'is-error': isFileIndexUnavailable }"
+          >
+            {{ fileIndexStatusText }}
           </div>
           <div
             v-for="item in visibleFileResults"
@@ -425,8 +448,8 @@ function getTabIcon(route: string): FileIconInfo {
    the panel while the top stays perfectly clean. */
 .global-search-dropdown.is-merged {
   border-top: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+  border-start-end-radius: 0;
+  border-start-start-radius: 0;
   box-shadow: 0 24px 20px -20px rgba(0, 0, 0, 0.35);
 }
 
@@ -469,6 +492,16 @@ function getTabIcon(route: string): FileIconInfo {
   transform: rotate(180deg);
 }
 
+.global-search-dropdown__index-status {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.global-search-dropdown__index-status.is-error {
+  color: var(--status-danger);
+}
+
 .global-search-dropdown__spinner {
   animation: spin 1s linear infinite;
   opacity: 0.6;
@@ -494,7 +527,7 @@ function getTabIcon(route: string): FileIconInfo {
   /* Row height matches the title bar (32px). */
   height: var(--title-bar-height);
   padding: 0 12px;
-  text-align: right;
+  text-align: start;
   background: transparent;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   cursor: pointer;

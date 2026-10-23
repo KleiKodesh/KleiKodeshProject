@@ -3,7 +3,7 @@ using FtsLib;
 using FtsLib.Indexing;
 using FtsLib.Search;
 using FtsLib.SeforimDb;
-using PreparedQueryGroups = FtsLib.Snippets.PreparedQueryGroups;
+using FtsLib.Snippets;
 using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
@@ -12,8 +12,8 @@ using System.Threading;
 namespace FtsLib.Fts5
 {
     /// <summary>
-    /// PROTOTYPE search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
-    /// SearchPipeline: QueryParser groups (AND across groups, OR within), the production
+    /// Search over an <see cref="Fts5Index"/>, with the semantics of FtsLib's former segment
+    /// engine: QueryParser groups (AND across groups, OR within), the production
     /// wildcard / fuzzy / grammar / ketiv expansion rules, AND across groups and OR within, results
     /// in the index's order (catalog order for an IFtsOrderedCorpus, else ascending line ids), content fetched from the corpus, and FtsLib's snippet pipeline — the same
     /// results, with only FtsLib's own limits (expansion caps, wildcard budgets, anchor and
@@ -105,48 +105,62 @@ namespace FtsLib.Fts5
             d.TermsByRowId = d.Handle.Conn.CreateCommand();
         }
 
-        // ── Public API (mirrors SeforimIndex) ─────────────────────────
+        // ── Public API ────────────────────────────────────────────────
 
-        const int ContentBatchSize = 200;
+        /// <summary>Content batch size when the caller passes no plan of its own.</summary>
+        const int DefaultContentBatchSize = 256;
 
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
-        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
+        public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
-            var plan = Plan(query, expandKetiv, filterIds, ct);
+            var plan = Plan(query, filterIds, ct);
             if (plan == null) yield break;
             foreach (int id in StreamIds(plan, ct)) yield return id;
         }
 
         /// <summary>
         /// Matching lines in the index's order, streamed: FTS5 produces the ids as the caller pulls, and
-        /// content is fetched one batch of <see cref="ContentBatchSize"/> ids at a time. Nothing
-        /// is collected up front, so the first results cost one batch however broad the query.
+        /// content is fetched one batch at a time. Nothing is collected up front, so the first
+        /// results cost one batch however broad the query.
         /// </summary>
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default)
+        /// <param name="onStage">Optional progress hook, fired on the ENUMERATING thread with a
+        /// stable ASCII stage key ("parse", "expand", "lookup", "fetch") as the pipeline moves.</param>
+        /// <param name="batchSizeAt">The caller's batch plan: the number of ids to fetch as
+        /// batch number n (0-based) — so a caller that processes results in batches of its
+        /// own gets them cut at the same places. Null: <see cref="DefaultContentBatchSize"/>
+        /// throughout.</param>
+        public IEnumerable<SearchResult> Search(string query, int cap = 0,
+                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                Action<string> onStage = null, Func<int, int> batchSizeAt = null)
         {
-            var plan = Plan(query, expandKetiv, filterIds, ct);
+            var plan = Plan(query, filterIds, ct, onStage);
             if (plan == null) yield break;
+            onStage?.Invoke("lookup");
             var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
 
-            IFtsCorpus corpus = null;   // opened on the first hit, like SearchPipeline
+            IFtsCorpus corpus = null;   // opened on the first hit
             try
             {
-                var batch = new List<int>(ContentBatchSize);
-                int taken = 0;              // cap counts ids, as SearchPipeline does
+                int batchIndex = 0;
+                int batchSize = Math.Max(1, batchSizeAt?.Invoke(batchIndex) ?? DefaultContentBatchSize);
+                var batch = new List<int>(batchSize);
+                int taken = 0;              // cap counts ids
                 foreach (int id in StreamIds(plan, ct))
                 {
                     batch.Add(id);
                     bool capReached = cap > 0 && ++taken >= cap;
-                    if (batch.Count < ContentBatchSize && !capReached) continue;
+                    if (batch.Count < batchSize && !capReached) continue;
+                    if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
                     foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
                     batch.Clear();
                     if (capReached) yield break;
+                    batchSize = Math.Max(1, batchSizeAt?.Invoke(++batchIndex) ?? DefaultContentBatchSize);
                 }
                 if (batch.Count > 0)
                 {
+                    if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
                     foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
                 }
@@ -154,12 +168,12 @@ namespace FtsLib.Fts5
             finally { corpus?.Dispose(); }
         }
 
-        public static SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
-                                                    int contextWords = SeforimIndex.DefaultContextWords)
+        public static SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
+                                                            int contextWords = SnippetDescriptorPipeline.DefaultContextWords)
         {
-            if (result == null || result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+            if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
             var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetPipeline.Generate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords);
+            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords);
         }
 
         // ── Pipeline ──────────────────────────────────────────────────
@@ -174,12 +188,14 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>Parse + expand. Null when the query can match nothing.</summary>
-        QueryPlan Plan(string query, bool expandKetiv, IEnumerable<int> filterIds, CancellationToken ct)
+        QueryPlan Plan(string query, IEnumerable<int> filterIds, CancellationToken ct,
+                       Action<string> onStage = null)
         {
+            onStage?.Invoke("parse");
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) return null;
 
-            HashSet<int> filter = null;   // same keep-set rule as SearchPipeline.BuildFilter
+            HashSet<int> filter = null;   // null = everything, empty = nothing, negatives ignored
             if (filterIds != null)
             {
                 filter = new HashSet<int>();
@@ -187,11 +203,12 @@ namespace FtsLib.Fts5
                 if (filter.Count == 0) return null;
             }
 
+            onStage?.Invoke("expand");
             var groups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
             foreach (var group in parsed.Groups)
             {
                 ct.ThrowIfCancellationRequested();
-                var groupTerms = ExpandGroup(group, expandKetiv, ct, out bool hardMiss);
+                var groupTerms = ExpandGroup(group, ct, out bool hardMiss);
                 if (hardMiss) return null;
                 if (groupTerms.Count == 0) continue;
                 groups.Add(groupTerms);
@@ -234,14 +251,19 @@ namespace FtsLib.Fts5
             if (ids.Count == 0) yield break;
             // A corpus may return a batch in its own order (by id); results go out in the
             // index's order, which is the order of ids.
-            var byId = new Dictionary<int, (string Content, string Title)>(ids.Count);
-            foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
-                byId[lineId] = (content, bookTitle);
+            // A placed corpus gives each line's book / position / TOC entry in the same read.
+            var byId = new Dictionary<int, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
+            if (corpus is IFtsPlacedCorpus placed)
+                foreach (var (lineId, content, placement) in placed.FetchPlacedDocuments(ids))
+                    byId[lineId] = (content, "", placement);
+            else
+                foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
+                    byId[lineId] = (content, bookTitle, default);
             foreach (int lineId in ids)
             {
                 ct.ThrowIfCancellationRequested();
                 if (byId.TryGetValue(lineId, out var row))
-                    yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared);
+                    yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared, row.Placement);
             }
         }
 
@@ -267,7 +289,7 @@ namespace FtsLib.Fts5
         // ── FM-index expansion (same rules as the production expanders) ──
 
         /// <summary>
-        /// FuzzyExpander.Expand semantics: every term within Levenshtein distance d (d clamped
+        /// FuzzyExpander.Expand semantics: every term within edit distance d (a swap is one edit) (d clamped
         /// to 1..MaxAllowedDistance), capped at FuzzyExpander.MaxExpandedTerms keeping the
         /// closest (distance, then shorter, then higher document count, then ordinal).
         /// </summary>
@@ -374,17 +396,17 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>
-        /// Copy of SearchPipeline.ExpandGroup (FtsLib/SeforimDb/SearchPipeline.cs), with the
-        /// IndexReader calls replaced by the same production expanders over terms.db.
+        /// Expands one query group to literal terms with the production expanders over the
+        /// term dictionaries (ported from the former segment engine's ExpandGroup).
         /// </summary>
-        List<string> ExpandGroup(QueryGroup group, bool expandKetiv, CancellationToken ct, out bool hardMiss)
+        List<string> ExpandGroup(QueryGroup group, CancellationToken ct, out bool hardMiss)
         {
             hardMiss = false;
 
-            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar)
+            if (group.IsSingle && !group.IsWildcard && !group.IsFuzzy && !group.IsGrammar && !group.IsUnindexed)
             {
                 var single = new List<string> { group.Pattern };
-                if (expandKetiv)
+                if (group.Alternatives[0].ExpandKetiv)
                     foreach (var variant in KetivExpander.Expand(group.Pattern)) single.Add(variant);
                 return single;
             }
@@ -399,35 +421,52 @@ namespace FtsLib.Fts5
                 ct.ThrowIfCancellationRequested();
                 if (!seenAlternatives.Add(AlternativeKey(alt))) continue;
 
+                // A literal too long to be indexed has no term and is no constraint: alone, its
+                // group is skipped but still counts in OriginalGroupCount (it keeps its position).
+                if (alt.IsUnindexed) continue;
+
+                // Spelling variants come from the word's own '^' marker.
+                bool ketiv = alt.ExpandKetiv;
+
                 List<string> expanded;
                 if (alt.IsFuzzy)
                 {
                     anyRealConstraint = true;
                     expanded = ExpandFuzzy(alt.Pattern, alt.FuzzyDistance);
                 }
+                else if (alt.IsWildcard && alt.IsGrammar
+                         && TrySplitStarCore(alt.Pattern, out string mixedLead, out string mixedCore, out _))
+                {
+                    // "*word%" / "%word*": '*' on one side, grammar on the other.
+                    bool grammarIsPrefix = mixedLead.Length == 0;
+                    expanded = ExpandStarGrammar(mixedCore, grammarIsPrefix, ref anyRealConstraint);
+                    if (ketiv)
+                        foreach (var variant in KetivExpander.Expand(mixedCore))
+                            expanded.AddRange(ExpandStarGrammar(variant, grammarIsPrefix, ref anyRealConstraint));
+                }
                 else if (alt.IsWildcard)
                 {
-                    if (IsFmWildcard(alt.Pattern, out string core, out bool suffixOnly))
-                    {
-                        anyRealConstraint = true;
-                        expanded = ExpandWildcardWithFm(core, suffixOnly);
-                    }
-                    else
-                    {
-                        expanded = HebrewWildcardExpander.Expand(alt.Pattern, _termSegments, null, out bool rejected);
-                        if (!rejected) anyRealConstraint = true;
-                    }
+                    expanded = ExpandWildcard(alt.Pattern, ref anyRealConstraint);
+                    // Spelling variants apply to the literal core too, or *word* would match
+                    // FEWER lines than plain word (which gets its ketiv variants).
+                    if (ketiv && TrySplitStarCore(alt.Pattern, out string lead, out string core, out string trail))
+                        foreach (var variant in KetivExpander.Expand(core))
+                            expanded.AddRange(ExpandWildcard(lead + variant + trail, ref anyRealConstraint));
                 }
                 else if (alt.IsGrammar)
                 {
                     anyRealConstraint = true;
                     expanded = GrammarExpander.Expand(alt.Pattern, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments);
+                    // Same as wildcards: %word% must not lose the variants plain word gets.
+                    if (ketiv)
+                        foreach (var variant in KetivExpander.Expand(alt.Pattern))
+                            expanded.AddRange(GrammarExpander.Expand(variant, alt.GrammarExpandPrefixes, alt.GrammarExpandSuffixes, _termSegments));
                 }
                 else
                 {
                     anyRealConstraint = true;
                     expanded = new List<string> { alt.Pattern };
-                    if (expandKetiv)
+                    if (ketiv)
                         foreach (var variant in KetivExpander.Expand(alt.Pattern)) expanded.Add(variant);
                 }
 
@@ -439,10 +478,57 @@ namespace FtsLib.Fts5
             return list;
         }
 
+        List<string> ExpandWildcard(string pattern, ref bool anyRealConstraint)
+        {
+            if (IsFmWildcard(pattern, out string core, out bool suffixOnly))
+            {
+                anyRealConstraint = true;
+                return ExpandWildcardWithFm(core, suffixOnly);
+            }
+            var expanded = HebrewWildcardExpander.Expand(pattern, _termSegments, out bool rejected);
+            if (!rejected) anyRealConstraint = true;
+            return expanded;
+        }
+
+        /// <summary>
+        /// "%word*" (<paramref name="grammarIsPrefix"/>) or "*word%": one '*' scan per grammatical
+        /// form of the '%' side ("form*" per prefix form, "*form" per suffix form), so every term
+        /// is exact and no unfiltered expansion can run into the cap.
+        /// </summary>
+        List<string> ExpandStarGrammar(string word, bool grammarIsPrefix, ref bool anyRealConstraint)
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+            var forms = grammarIsPrefix ? GrammarExpander.PrefixForms(word) : GrammarExpander.SuffixForms(word);
+            foreach (var form in forms)
+                foreach (var t in ExpandWildcard(grammarIsPrefix ? form + "*" : "*" + form, ref anyRealConstraint))
+                    found.Add(t);
+            return new List<string>(found);
+        }
+
+        /// <summary>
+        /// Splits a wildcard whose only wildcards are leading/trailing '*' runs (no '?', no
+        /// inner '*') into those runs and its literal core — the shape ketiv can vary.
+        /// </summary>
+        static bool TrySplitStarCore(string pattern, out string lead, out string core, out string trail)
+        {
+            lead = core = trail = null;
+            if (pattern.IndexOf('?') >= 0) return false;
+            int start = 0, end = pattern.Length;
+            while (start < end && pattern[start] == '*') start++;
+            while (end > start && pattern[end - 1] == '*') end--;
+            core = pattern.Substring(start, end - start);
+            if (core.Length == 0 || core.IndexOf('*') >= 0) return false;
+            lead = pattern.Substring(0, start);
+            trail = pattern.Substring(end);
+            return true;
+        }
+
         static string AlternativeKey(SubPattern alt)
         {
+            if (alt.IsUnindexed) return "u:" + alt.Pattern;
             if (alt.IsFuzzy)    return "f" + alt.FuzzyDistance + ":" + alt.Pattern;
-            if (alt.IsWildcard) return "w:" + alt.Pattern;
+            if (alt.IsWildcard)
+                return "w" + (alt.GrammarExpandPrefixes ? "p" : "") + (alt.GrammarExpandSuffixes ? "s" : "") + ":" + alt.Pattern;
             if (alt.IsGrammar)
                 return "g" + (alt.GrammarExpandPrefixes ? "p" : "") + (alt.GrammarExpandSuffixes ? "s" : "") + ":" + alt.Pattern;
             return "l:" + alt.Pattern;

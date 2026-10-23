@@ -177,9 +177,6 @@ public sealed class LinkTargetResult { public List<LinkTargetRow> Rows { get; se
 // ── TOC paths & line→book/index helpers ────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocPathsResult { public List<TocPathRow> Rows { get; set; } = new(); }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class EnclosingTocPathArgs { public List<int> Triples { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -233,10 +230,7 @@ public sealed class FtsSearchArgs
     public int MaxWordDistance { get; set; } = 10;
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
-    public bool ExpandKetiv { get; set; }
-    /// <summary>Expand each query word with its related forms (inflections,
-    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
-    public bool ExpandRelated { get; set; }
+    // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 
 
@@ -250,9 +244,6 @@ public sealed class FtsSearchStreamArgs
     public int MaxWordDistance { get; set; } = 10;
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
-    public bool ExpandKetiv { get; set; }
-    /// <summary>Expand each query word with its related forms (inflections,
-    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
-    public bool ExpandRelated { get; set; }
+    // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 

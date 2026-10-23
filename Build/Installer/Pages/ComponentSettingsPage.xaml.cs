@@ -1,3 +1,5 @@
+﻿using KleiKodeshVstoInstallerWpf.Properties;
+using Strings = KleiKodeshVstoInstallerWpf.Properties.Strings;
 using KleiKodesh.Helpers;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using Microsoft.VisualBasic;
@@ -73,7 +75,7 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_pendingDbPath != null)
             {
-                DbHintText.Text = "לחץ לשינוי הנתיב";
+                DbHintText.Text = Strings.ClickToChangePath;
             }
             else
             {
@@ -82,12 +84,12 @@ namespace KleiKodeshVstoInstallerWpf
                 {
                     string detected = ResolveDefaultDbPath();
                     DbHintText.Text = File.Exists(detected)
-                        ? $"ברירת מחדל: {detected}"
-                        : "לא נמצאה אפליקציית זית או אוצריה — הגדר נתיב ידנית";
+                        ? string.Format(Strings.DefaultWithValue, detected)
+                        : Strings.Db_NotFound;
                 }
                 else
                 {
-                    DbHintText.Text = "לחץ לשינוי הנתיב";
+                    DbHintText.Text = Strings.ClickToChangePath;
                 }
             }
         }
@@ -112,7 +114,7 @@ namespace KleiKodeshVstoInstallerWpf
             {
                 var dialog = new OpenFileDialog
                 {
-                    Title = "בחר קובץ מסד נתונים לכתבי הקודש",
+                    Title = Strings.Db_PickTitle,
                     Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*",
                     CheckFileExists = true
                 };
@@ -131,7 +133,7 @@ namespace KleiKodeshVstoInstallerWpf
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהגדרת מסד הנתונים: {ex.Message}", "שגיאה",
+                MessageBox.Show(string.Format(Strings.Db_Error, ex.Message), Strings.Error,
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -144,7 +146,7 @@ namespace KleiKodeshVstoInstallerWpf
             if (!string.IsNullOrEmpty(existing))
             {
                 HbLocalFolderText.Text = existing;
-                HbLocalFolderHintText.Text = "לחץ לשינוי התיקייה";
+                HbLocalFolderHintText.Text = Strings.ClickToChangeFolder;
             }
         }
 
@@ -157,7 +159,7 @@ namespace KleiKodeshVstoInstallerWpf
 
                 var dialog = new System.Windows.Forms.FolderBrowserDialog
                 {
-                    Description         = "בחר תיקייה המכילה ספרי PDF מהיברו בוקס",
+                    Description         = Strings.Hb_PickFolder,
                     ShowNewFolderButton = false,
                 };
 
@@ -168,11 +170,11 @@ namespace KleiKodeshVstoInstallerWpf
 
                 _pendingHbLocalFolder       = dialog.SelectedPath;
                 HbLocalFolderText.Text      = dialog.SelectedPath;
-                HbLocalFolderHintText.Text  = "לחץ לשינוי התיקייה";
+                HbLocalFolderHintText.Text  = Strings.ClickToChangeFolder;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהגדרת תיקיית HebrewBooks: {ex.Message}", "שגיאה",
+                MessageBox.Show(string.Format(Strings.Hb_FolderError, ex.Message), Strings.Error,
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -206,11 +208,11 @@ namespace KleiKodeshVstoInstallerWpf
             try
             {
                 Commit();
-                Environment.Exit(0);
+                WordHelper.ExitAfterInstall();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"שגיאה בהתקנה: {ex.Message}", "שגיאה",
+                MessageBox.Show(string.Format(Strings.InstallError, ex.Message), Strings.Error,
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

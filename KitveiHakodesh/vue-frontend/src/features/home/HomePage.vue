@@ -34,6 +34,7 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  hasIndexFailureToShow,
   isLoadingAny,
   clearResults,
   pause: pauseSearch,
@@ -47,7 +48,7 @@ const {
 const searchBar = useHomeSearchBar({
   query: homeSearchQuery,
   searchBarRef,
-  hasAnyResults,
+  hasAnyResults: () => hasAnyResults() || hasIndexFailureToShow(),
   isLoadingAny,
   clearResults,
   onSubmit: (query) => navigation.openFullTextSearch(query),
@@ -133,7 +134,7 @@ onMounted(focusSearchInput)
             <button
               class="bar-btn home-search-bar__search-button"
               tabindex="-1"
-              title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ"
+              :title="$t('home.searchButtonTitle')"
               @click="searchBar.submit"
             >
               <IconSearch20Regular />
@@ -303,7 +304,6 @@ onMounted(focusSearchInput)
   outline: none;
   font-size: 13px;
   color: var(--text-primary);
-  direction: rtl;
 }
 
 .home-search-bar__field::placeholder {

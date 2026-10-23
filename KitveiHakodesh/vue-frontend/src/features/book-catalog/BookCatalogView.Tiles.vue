@@ -6,7 +6,7 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
-import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import { libraryBadgeText } from './catalogCardLines'
 
 const props = defineProps<{ items: FsItem[] }>()
@@ -44,7 +44,7 @@ function getTooltip(item: FsItem) {
   const badge = libraryBadgeText(label)
   const titledTooltip = badge ? `${title}
 ספרייה נוספת: ${badge}` : title
-  return item.kind === 'folder' ? titledTooltip : withNewTabHint(titledTooltip)
+  return item.kind === 'folder' ? titledTooltip : withNewTabHint(titledTooltip, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 
@@ -79,7 +79,7 @@ function selectItem(i: number, event?: MouseEvent) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <p v-if="!items.length" class="empty">{{ $t('bookCatalog.noItems') }}</p>
   <div v-else ref="tilesEl" class="tiles-grid">
     <!-- A <button>, like the home page tiles: it is a control, so it gets the
          semantics for free — and, unlike a div, it does not stretch to fill its

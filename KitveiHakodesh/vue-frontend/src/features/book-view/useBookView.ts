@@ -150,6 +150,7 @@ export function useBookView(
     lines, prioritise, prefetch, holdBackfill, releaseBackfill,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim,
     versions, activeVersionId, setVersion,
+    hebrewBooksEditions,
   } = useLines(() => bookId)
 
   // Warm up the connection type ID table immediately — single tiny query that must
@@ -597,7 +598,7 @@ export function useBookView(
 
   const {
     initialLineIndex, initialScrollTop, initialScrollOffset,
-    scrollStateReady, idbResolved, restoredVersionTitle, restore: restoreSession,
+    scrollStateReady, idbResolved, restoredVersionTitle, restoredSideEdition, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     panels,
@@ -743,6 +744,8 @@ export function useBookView(
     bookHasTeamim,
     // alternate versions (empty for most books — the toolbar control hides)
     versions, activeVersionId, selectVersion, versionPersistState,
+    // scanned editions on HebrewBooks (empty for most books — the toolbar control hides)
+    hebrewBooksEditions,
     // UI state
     selectedLineId,
     searchMode: searchPanel.searchMode,
@@ -774,7 +777,7 @@ export function useBookView(
     buildExportHtml, bookTitle,
     // scroll / search state
     currentScrollLineIndex,
-    scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+    scrollStateReady, idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
     flashOpenLine,
     activeMatchCount: searchPanel.activeMatchCount,
     activeMatchIdx: searchPanel.activeMatchIdx,

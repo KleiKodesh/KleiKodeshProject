@@ -52,9 +52,13 @@ const KEYS = {
   SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
   SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
   SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
-  SETTINGS_SEARCH_EXPAND_RELATED: 'search.expandRelated',
-  SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
-  SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
+  SETTINGS_SEARCH_EXPAND_INFLECTIONS: 'search.expandInflections',
+  SETTINGS_SEARCH_EXPAND_SYNONYMS: 'search.expandSynonyms',
+  SETTINGS_SEARCH_WILDCARD_PREFIX: 'search.wildcardPrefix',
+  SETTINGS_SEARCH_WILDCARD_SUFFIX: 'search.wildcardSuffix',
+  SETTINGS_SEARCH_GRAMMAR_PREFIX: 'search.grammarPrefix',
+  SETTINGS_SEARCH_GRAMMAR_SUFFIX: 'search.grammarSuffix',
+  SETTINGS_SEARCH_FUZZY: 'search.fuzzy',
 
   // App shell / chrome
   SETTINGS_APP_ZOOM: 'app.zoom',
@@ -68,6 +72,8 @@ const KEYS = {
   // existing preference carries over.
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
   SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
+  SETTINGS_HB_EDITION_IN_SIDE_PANEL: 'app.hbEditionInSidePanel',
+  SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2: 'app.hbEditionInSidePanel.pane2',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
   SETTINGS_SHOW_LIBRARY_BADGE: 'books.showLibraryBadge',
@@ -179,13 +185,17 @@ const DEFAULTS = {
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
   searchContextMarginWords: 30,
-  // Advanced full-text search settings
+  // Full-text search options
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
-  searchExpandRelated: false,
-  searchWildcardWrap: false,
-  searchGrammarWrap: false,
+  searchExpandInflections: false,
+  searchExpandSynonyms: false,
+  searchWildcardPrefix: false,
+  searchWildcardSuffix: false,
+  searchGrammarPrefix: false,
+  searchGrammarSuffix: false,
+  searchFuzzy: false,
   copyCleanText: false,
   // Join the selected lines into one continuous run of text with NO line break
   // between them (default off = keep one line break per source line on paste).
@@ -240,7 +250,7 @@ const DEFAULTS = {
  * as it lands under one of these namespaces.
  */
 const PRESERVE_PREFIXES = ['tabs:', 'workspaces.']
-const PRESERVE_KEYS = new Set<string>([KEYS.SETTINGS_SETUP_DONE])
+const PRESERVE_KEYS = new Set<string>([KEYS.SETTINGS_SETUP_DONE, KEYS.SETTINGS_TERMS_ACCEPTED])
 
 function clearPersistedSettings(): void {
   for (const key of lsKeys()) {
@@ -302,9 +312,13 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
-  const searchExpandRelated = ref(DEFAULTS.searchExpandRelated)
-  const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
-  const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
+  const searchExpandInflections = ref(DEFAULTS.searchExpandInflections)
+  const searchExpandSynonyms = ref(DEFAULTS.searchExpandSynonyms)
+  const searchWildcardPrefix = ref(DEFAULTS.searchWildcardPrefix)
+  const searchWildcardSuffix = ref(DEFAULTS.searchWildcardSuffix)
+  const searchGrammarPrefix = ref(DEFAULTS.searchGrammarPrefix)
+  const searchGrammarSuffix = ref(DEFAULTS.searchGrammarSuffix)
+  const searchFuzzy = ref(DEFAULTS.searchFuzzy)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
@@ -335,6 +349,18 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setNavSidebarVisible(paneId: 1 | 2, value: boolean): void {
     navSidebarVisibleByPane.value[paneId] = value
+  }
+  // Per-pane: does picking a HebrewBooks edition in the book view show it in the left side
+  // panel (true) or open it in a new tab (false). Only honoured where the side panel can
+  // host it - see useHebrewBooksEditionSidePanelAvailable.
+  const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: true, 2: true })
+
+  function getHbEditionInSidePanel(paneId: 1 | 2 = 1): boolean {
+    return hbEditionInSidePanelByPane.value[paneId]
+  }
+
+  function setHbEditionInSidePanel(paneId: 1 | 2, value: boolean): void {
+    hbEditionInSidePanelByPane.value[paneId] = value
   }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
@@ -442,9 +468,13 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
-    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_RELATED, searchExpandRelated)
-    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
-    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_INFLECTIONS, searchExpandInflections)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_SYNONYMS, searchExpandSynonyms)
+    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX, searchWildcardPrefix)
+    loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX, searchWildcardSuffix)
+    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX, searchGrammarPrefix)
+    loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX, searchGrammarSuffix)
+    loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
@@ -492,6 +522,10 @@ export const useSettingsStore = defineStore('settings', () => {
     if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
     const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
     if (navSidebar2 != null) navSidebarVisibleByPane.value[2] = navSidebar2
+    const hbEditionInSidePanel1 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL)
+    if (hbEditionInSidePanel1 != null) hbEditionInSidePanelByPane.value[1] = hbEditionInSidePanel1
+    const hbEditionInSidePanel2 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2)
+    if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_SHOW_LIBRARY_BADGE, showLibraryBadge)
@@ -533,9 +567,13 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
   persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
-  persistSetting(searchExpandRelated, KEYS.SETTINGS_SEARCH_EXPAND_RELATED)
-  persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
-  persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
+  persistSetting(searchExpandInflections, KEYS.SETTINGS_SEARCH_EXPAND_INFLECTIONS)
+  persistSetting(searchExpandSynonyms, KEYS.SETTINGS_SEARCH_EXPAND_SYNONYMS)
+  persistSetting(searchWildcardPrefix, KEYS.SETTINGS_SEARCH_WILDCARD_PREFIX)
+  persistSetting(searchWildcardSuffix, KEYS.SETTINGS_SEARCH_WILDCARD_SUFFIX)
+  persistSetting(searchGrammarPrefix, KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX)
+  persistSetting(searchGrammarSuffix, KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX)
+  persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
@@ -563,6 +601,14 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(
     () => navSidebarVisibleByPane.value[2],
     (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR_PANE2, value),
+  )
+  watch(
+    () => hbEditionInSidePanelByPane.value[1],
+    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL, value),
+  )
+  watch(
+    () => hbEditionInSidePanelByPane.value[2],
+    (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2, value),
   )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
@@ -709,9 +755,13 @@ export const useSettingsStore = defineStore('settings', () => {
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
     searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
-    searchExpandRelated.value = DEFAULTS.searchExpandRelated
-    searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
-    searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
+    searchExpandInflections.value = DEFAULTS.searchExpandInflections
+    searchExpandSynonyms.value = DEFAULTS.searchExpandSynonyms
+    searchWildcardPrefix.value = DEFAULTS.searchWildcardPrefix
+    searchWildcardSuffix.value = DEFAULTS.searchWildcardSuffix
+    searchGrammarPrefix.value = DEFAULTS.searchGrammarPrefix
+    searchGrammarSuffix.value = DEFAULTS.searchGrammarSuffix
+    searchFuzzy.value = DEFAULTS.searchFuzzy
     copyCleanText.value = DEFAULTS.copyCleanText
     copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
@@ -734,6 +784,7 @@ export const useSettingsStore = defineStore('settings', () => {
       1: DEFAULTS.navSidebarVisible,
       2: DEFAULTS.navSidebarVisible,
     }
+    hbEditionInSidePanelByPane.value = { 1: true, 2: true }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
     showLibraryBadge.value = DEFAULTS.showLibraryBadge
@@ -758,7 +809,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showClock,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyCleanText,
     copyJoinLines,
     copySourcePosition,
@@ -772,6 +823,8 @@ export const useSettingsStore = defineStore('settings', () => {
     navSidebarVisibleByPane,
     getNavSidebarVisible,
     setNavSidebarVisible,
+    getHbEditionInSidePanel,
+    setHbEditionInSidePanel,
     showRecentlyOpened,
     showFrequentFolders,
     showLibraryBadge,

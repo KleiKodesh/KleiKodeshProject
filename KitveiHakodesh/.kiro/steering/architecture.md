@@ -460,6 +460,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 - `SplitPane.vue` — resizable split pane (the *bottom-panel* splitter inside book view; the left/right pane splitter is in `App.vue`)
 - `TopSearchBar.vue` (every page search bar), `ContextMenu.vue`, `GlobalContextMenu.vue`, `ConfirmDialog.vue`, `AlertDialog.vue`, `LoadingAnimation.vue`, `ToastBanner.vue`, `ClockWidget.vue`
 - `HintIcon.vue` — tooltip hint icon
+- `MessageBanner.vue` — THE inline message strip (Fluent 2 MessageBar; severity error / warning / info / success, message, optional details, dismiss). **All user-facing error / warning / info / success banners inside a page or dialog must use it** — never an ad-hoc coloured `<span>`/`<p>`. Transient messages are `ToastBanner.vue`; the app-wide service-down strip is `ServiceUnavailableBanner.vue`.
 - `common/FloatingSearchBar.vue`, `common/AutofillDropdown.vue` — shared search chrome
 - RTL/custom icon wrappers: `IconTreeRtl.vue`, `IconBookRtl20.vue`, `IconBookRtl24.vue`, `IconEverythingSearch.vue`
 
@@ -686,6 +687,11 @@ There is no `ZimHandler.cs` — ZIM/Kiwix support was removed.
 `CSharpBackend/KitveiHakodeshService/` is the native .NET 10 data front-door, AOT-published. **Browser dev mode is fully service-dependent** — the Vite dev path talks to this service, not to a JS shim. Subfolders: `SeforimDb`, `Dictionary`, `Catalog`, `HebrewBooks`, `LocalFiles`, `Pdf`, `UserSettings`, `Http`, `Ipc`, `Common`, `KitveiHakodesh`.
 
 Wire format is MessagePack with PascalCase keys; the frontend transforms to camelCase. The HTTP surface is a raw loopback `TcpListener` whose port is private — handed over an ACL'd pipe and discovered via `/khs-endpoint`, never written to a file.
+
+**AOT traps (dev JIT hides them — the hosts run the AOT exe):**
+- Every type sent over the wire (and every nested member type) needs `[MessagePackObject]`. `MsgPack.Options` ends in `StandardResolver`, whose reflection fallback makes an untagged type work in JIT dev and fail silently in the demo/VSTO hosts. A type in a new assembly also needs that assembly's `[GeneratedMessagePackResolver]` added to `Ipc/MsgPack.cs` (Core's was missing once — word links died in hosts only).
+- Only `Lucene.Net` is rooted (`<TrimmerRootAssembly>` in the service csproj). Adding another Lucene package (Analysis.Common, QueryParser, ...) needs its own root entry, or codec/SPI reflection breaks under AOT.
+- To test a host-only bug in dev, set `KHS_EXE` to an AOT-published exe (publish outside `%TEMP%`).
 
 Consequence for frontend code: `isHosted` is **true** in browser dev mode. It is therefore the wrong guard for "am I inside the C# WinForms host" — branch on `window.__webviewAction` for that instead.
 

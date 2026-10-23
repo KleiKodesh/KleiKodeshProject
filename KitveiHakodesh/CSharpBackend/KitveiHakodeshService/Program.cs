@@ -35,10 +35,17 @@ internal static partial class Program
 
         if (WindowsServiceMode.IsWindowsService)
         {
+            SingleInstanceInstalledServiceWins.EndOtherCopies();
             var service = Host.CreateApplicationBuilder(args);
             service.Services.AddWindowsService(options => options.ServiceName = WindowsServiceMode.ServiceName);
             service.Services.AddHostedService<UserSessionBinding>();
             service.Build().Run();
+            return 0;
+        }
+
+        if (!SingleInstanceInstalledServiceWins.ConsoleMayRun(out string reason))
+        {
+            Console.Error.WriteLine("Not starting: " + reason + ".");
             return 0;
         }
 
@@ -78,18 +85,25 @@ internal static partial class Program
         if (!WindowsServiceMode.IsWindowsService)
         {
             // The loopback HTTP host is the dev browser's door; a Windows service has no dev
-            // browser and should open no port. The owner watcher stops a console instance once no
-            // program that uses it is running any more (Http/OwnerWatcher).
+            // browser and should open no port.
             builder.Services.AddHostedService<HttpHostServer>();
-            builder.Services.AddHostedService<OwnerWatcher>();
         }
+        // Stops the service (console or installed) once no program that uses it is running any
+        // more; hosts restart it on demand (Http/OwnerWatcher).
+        builder.Services.AddHostedService<OwnerWatcher>();
         builder.Services.AddHostedService<FtsIndexingStarter>();
         builder.Services.AddHostedService<CatalogTocIndexingStarter>();
-        builder.Services.AddHostedService<IdleMemoryTrimmer>();
+        // The local file index too: built at start (after a short delay), not on the first search.
+        builder.Services.AddHostedService<KitveiHakodeshService.LocalFiles.LocalFileIndexingStarter>();
+        // Singleton too, so the diagnostics endpoint can trigger a trim on the same instance.
+        builder.Services.AddSingleton<IdleMemoryTrimmer>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleMemoryTrimmer>());
         // Grows the bundled HebrewBooks catalog in the background. Checks twice a day and almost
         // always finds nothing to do - the interval between actual walks is a stamp inside the
         // catalog file, not a schedule here.
-        builder.Services.AddHostedService<HebrewBooksCatalogUpdateService>();
+        // Singleton too, so the owner watcher can see a walk in progress (Http/OwnerWatcher).
+        builder.Services.AddSingleton<HebrewBooksCatalogUpdateService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<HebrewBooksCatalogUpdateService>());
         // Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
         // in-place DB change (startup uses the one-shot stamp check; this covers live updates).
         builder.Services.AddHostedService<DbChangeWatcher>();

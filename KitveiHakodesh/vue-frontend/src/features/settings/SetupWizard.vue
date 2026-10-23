@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
 import { resetting } from './appResetState'
 import { useSettings } from './useSettingsPage'
+import PageCard from '@/components/PageCard.vue'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
-import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
+import SetupWizardStepQuickSettings from './SetupWizardStepQuickSettings.vue'
 import SetupWizardStepBookDisplay from './SetupWizardStepBookDisplay.vue'
 import SetupWizardStepCommentaryDisplay from './SetupWizardStepCommentaryDisplay.vue'
+import SetupWizardStepDivineNames from './SetupWizardStepDivineNames.vue'
 import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
 import SetupWizardStepTerms from './SetupWizardStepTerms.vue'
+import UiLanguageToggle from './UiLanguageToggle.vue'
 
 const settings = useSettingsStore()
 
@@ -32,9 +35,10 @@ type Step =
   | 'welcome'
   | 'db'
   | 'theme'
-  | 'general'
+  | 'quick-settings'
   | 'book-display'
   | 'commentary-display'
+  | 'divine-names'
   | 'shortcuts'
 
 // The db step is shown when the service reports that the resolved seforim DB does
@@ -43,13 +47,21 @@ type Step =
 // skipped) the wizard before the terms existed sees ONLY the terms step. Captured
 // once at mount so accepting the terms does not reshape the flow mid-way.
 const termsOnly = settings.setupDone && !settings.termsAccepted
-const termsAgreed = ref(settings.termsAccepted)
+// An unsubmitted terms tick survives the language reload (cleared with the step key).
+const TERMS_KEY = 'setupWizardTermsTick'
+function readTermsTick(): boolean {
+  try { return sessionStorage.getItem(TERMS_KEY) === '1' } catch { return false }
+}
+const termsAgreed = ref(settings.termsAccepted || readTermsTick())
+watch(termsAgreed, v => {
+  try { sessionStorage.setItem(TERMS_KEY, v ? '1' : '0') } catch { /* ignore */ }
+})
 
 const steps = computed<Step[]>(() => {
   if (termsOnly) return ['terms']
   const s: Step[] = ['welcome']
   if (!dbReady.value) s.push('db')
-  s.push('theme', 'general', 'book-display', 'commentary-display', 'shortcuts')
+  s.push('theme', 'quick-settings', 'book-display', 'commentary-display', 'divine-names', 'shortcuts')
   s.push('terms')
   return s
 })
@@ -65,47 +77,66 @@ const steps = computed<Step[]>(() => {
  */
 const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }> = {
   terms: {
-    title: 'תנאי שימוש וזכויות יוצרים',
-    desc: 'לפני השימוש בתוכנה, נא לקרוא את התנאים ולאשר אותם.',
+    title: 'settings.wizard.terms.title',
+    desc: 'settings.wizard.terms.desc',
     component: SetupWizardStepTerms,
   },
   welcome: {
-    title: 'ברוכים הבאים לכתבי הקודש',
-    desc: 'אשף זה ילווה אותך בהגדרת האפליקציה בכמה צעדים קצרים. ניתן לשנות הכל בהמשך.',
+    title: 'settings.wizard.welcome.title',
+    desc: 'settings.wizard.welcome.desc',
   },
   db: {
-    title: 'בחירת מסד נתונים',
-    desc: 'כתבי הקודש צריכה את מסד הנתונים של אוצריא או של זית. אם אחת מהתוכנות כבר מותקנת, הפעל אותה פעם אחת לסיום ההתקנה ואז בחר את הנתיב למסד הנתונים. ניתן לשנות את הנתיב בכל עת דרך הגדרות האפליקציה.',
+    title: 'settings.wizard.db.title',
+    desc: 'settings.wizard.db.desc',
     component: SetupWizardStepDb,
   },
   theme: {
-    title: 'איך תרצה שהאפליקציה תיראה?',
-    desc: 'בחר ערכת נושא וגודל תצוגה שנוחים לך.',
+    title: 'settings.wizard.theme.title',
+    desc: 'settings.wizard.theme.desc',
     component: SetupWizardStepTheme,
   },
-  general: {
-    title: 'כמה הגדרות מהירות',
-    desc: 'הגדרות אלו ישפיעו על חוויית הקריאה היומיומית שלך.',
-    component: SetupWizardStepGeneral,
+  'quick-settings': {
+    title: 'settings.wizard.quickSettings.title',
+    desc: 'settings.wizard.quickSettings.desc',
+    component: SetupWizardStepQuickSettings,
   },
   'book-display': {
-    title: 'תצוגת הספרים',
-    desc: 'בחר גופנים ומרווחים לתצוגת הספרים.',
+    title: 'settings.wizard.bookDisplay.title',
+    desc: 'settings.wizard.bookDisplay.desc',
     component: SetupWizardStepBookDisplay,
   },
   'commentary-display': {
-    title: 'תצוגת הפירושים',
-    desc: 'הפירושים יכולים להיראות כמו הספר, או לקבל גופנים ומרווחים משל עצמם.',
+    title: 'settings.wizard.commentaryDisplay.title',
+    desc: 'settings.wizard.commentaryDisplay.desc',
     component: SetupWizardStepCommentaryDisplay,
   },
+  'divine-names': {
+    title: 'settings.wizard.divineNames.title',
+    desc: 'settings.wizard.divineNames.desc',
+    component: SetupWizardStepDivineNames,
+  },
   shortcuts: {
-    title: 'קיצורי מקשים שכדאי להכיר',
-    desc: 'ניתן לעיין בהם שוב בכל עת דרך הגדרות האפליקציה.',
+    title: 'settings.wizard.shortcuts.title',
+    desc: 'settings.wizard.shortcuts.desc',
     component: SetupWizardStepShortcuts,
   },
 }
 
-const stepIndex = ref(0)
+// Changing the UI language reloads the page; the current step is kept in
+// sessionStorage (by name, since the step list can differ) so the reload resumes there.
+const STEP_KEY = 'setupWizardStep'
+function readSavedStep(): number {
+  try {
+    const i = steps.value.indexOf(sessionStorage.getItem(STEP_KEY) as Step)
+    return i > 0 ? i : 0
+  } catch {
+    return 0
+  }
+}
+const stepIndex = ref(readSavedStep())
+watch(stepIndex, () => {
+  try { sessionStorage.setItem(STEP_KEY, steps.value[stepIndex.value] ?? '') } catch { /* ignore */ }
+})
 // `steps` is never empty (it always starts with 'welcome') and stepIndex only ever
 // moves within it, so the fallback is unreachable — it is here to keep the type
 // non-optional rather than to handle a real case.
@@ -113,6 +144,12 @@ const currentStep = computed<Step>(() => steps.value[stepIndex.value] ?? 'welcom
 const currentStepMeta = computed(() => STEPS[currentStep.value])
 const isLast = computed(() => stepIndex.value === steps.value.length - 1)
 const dismissed = ref(false)
+watch(dismissed, d => {
+  if (d) try {
+    sessionStorage.removeItem(STEP_KEY)
+    sessionStorage.removeItem(TERMS_KEY)
+  } catch { /* ignore */ }
+})
 
 const progressPct = computed(() =>
   steps.value.length > 1 ? Math.round((stepIndex.value / (steps.value.length - 1)) * 100) : 100,
@@ -159,14 +196,8 @@ function skip() {
 
     <!-- ── The card. It is the static frame: title, body, nav. Only what sits in the
          body changes between steps, so the nav never moves and the card never
-         resizes to its content.
-
-         Wrapper + card, matching the calendar page: the wrapper carries the centred
-         max-width and the page padding, the card fills it. Below 600px the wrapper
-         drops both and the card sheds its border and radius, so it fills the viewport
-         edge to edge in a small window. ── -->
-    <div class="wizard-card-outer">
-      <div class="wizard-card">
+         resizes to its content. ── -->
+    <PageCard>
         <!-- Header and body fade together as one unit, so the title changes with the
              content instead of snapping ahead of it. The nav footer is deliberately
              OUTSIDE this transition: it is the same on every step, and fading it would
@@ -177,8 +208,8 @@ function skip() {
                  hero: its title runs in the flow of its own content below, so it
                  renders no strip and the card is one uninterrupted section. -->
             <div v-if="currentStep !== 'welcome'" class="wizard-card-header">
-              <h2 class="step-title">{{ currentStepMeta.title }}</h2>
-              <p v-if="currentStepMeta.desc" class="step-desc">{{ currentStepMeta.desc }}</p>
+              <h2 class="step-title">{{ $t(currentStepMeta.title) }}</h2>
+              <p v-if="currentStepMeta.desc" class="step-desc">{{ $t(currentStepMeta.desc) }}</p>
             </div>
 
             <div class="wizard-card-body toc-thin-scroll">
@@ -189,8 +220,8 @@ function skip() {
                      content. -->
                 <div v-if="currentStep === 'welcome'" class="step-welcome">
                   <img src="/images/KitveiHakodesh.png" class="welcome-logo" alt="" />
-                  <h1 class="welcome-title">{{ currentStepMeta.title }}</h1>
-                  <p class="welcome-body">{{ currentStepMeta.desc }}</p>
+                  <h1 class="welcome-title">{{ $t(currentStepMeta.title) }}</h1>
+                  <p class="welcome-body">{{ currentStepMeta.desc && $t(currentStepMeta.desc) }}</p>
                 </div>
                 <SetupWizardStepTerms v-else-if="currentStep === 'terms'" v-model="termsAgreed" />
                 <component v-else :is="currentStepMeta.component" />
@@ -199,18 +230,21 @@ function skip() {
           </div>
         </Transition>
 
+        <template #footer>
         <div class="wizard-card-footer">
-          <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
-          <span v-else />
+          <div class="footer-start">
+            <UiLanguageToggle compact />
+            <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">{{ $t('settings.wizard.skip') }}</button>
+          </div>
           <div class="nav-btns">
-            <button v-if="stepIndex > 0" class="back-btn" @click="back">הקודם</button>
+            <button v-if="stepIndex > 0" class="back-btn" @click="back">{{ $t('settings.wizard.back') }}</button>
             <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
-              {{ currentStep === 'welcome' ? 'התחל' : isLast ? 'סיום' : 'הבא' }}
+              {{ currentStep === 'welcome' ? $t('settings.wizard.start') : isLast ? $t('settings.wizard.finish') : $t('settings.wizard.next') }}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+        </template>
+    </PageCard>
   </div>
 </template>
 
@@ -221,7 +255,6 @@ function skip() {
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  direction: rtl;
   background: var(--bg-primary);
 }
 
@@ -237,37 +270,8 @@ function skip() {
   transition: width 0.35s ease;
 }
 
-/* ── The card ──
-   One frame for every step: header, body, footer. It fills the wizard area rather
-   than sizing to its content, so the nav row sits at the same height on every step.
-
-   Split in two the way the calendar page is: the outer element owns the centred
-   max-width and the page gutter, the card fills whatever that leaves. That split is
-   what lets the small-viewport rules below drop the gutter and the card's own border
-   independently, so the card can reach the window edges. */
-.wizard-card-outer {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 20px 16px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-.wizard-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-}
-
+/* ── The card ── The frame (centred max-width, gutter, border, edge-to-edge below
+   600px) is components/PageCard.vue, shared with the FTS and calendar pages. */
 .wizard-card-header {
   flex-shrink: 0;
   padding: 18px 20px 14px;
@@ -346,7 +350,6 @@ function skip() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 20px;
-  border-top: 1px solid var(--border-color);
 }
 
 /* ── Step transitions ──
@@ -408,6 +411,12 @@ function skip() {
   max-width: 300px;
 }
 
+.footer-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .nav-btns {
   display: flex;
   align-items: center;
@@ -464,19 +473,5 @@ function skip() {
   cursor: not-allowed;
 }
 
-/* Small viewport — same treatment as the calendar page: the gutter and the max-width
-   go, and the card sheds its border and radius so it fills the window in both
-   directions rather than floating inside it. */
-@media (max-width: 600px) {
-  .wizard-card-outer {
-    max-width: 100%;
-    padding: 0;
-  }
-
-  .wizard-card {
-    border: none;
-    border-radius: 0;
-  }
-}
 
 </style>

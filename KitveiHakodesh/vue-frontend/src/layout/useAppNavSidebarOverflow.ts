@@ -5,17 +5,17 @@ import { showPopOutButton } from '@/webview-host/bridge'
 
 /**
  * Geometry the fit arithmetic mirrors from the rail's CSS (AppNavSidebar) - a 32px button
- * on a 6px gap, inside a panel that keeps 6px of padding and a 1px border for itself.
+ * on a 6px gap, inside a panel that keeps 6px of padding for itself.
  * Change any of them there, change them here.
  */
 const NAV_BUTTON_HEIGHT = 32
 const NAV_ITEM_GAP = 6
 /**
  * What the panel spends on itself before any button gets a pixel: its 6px padding top and
- * bottom plus the 1px border on each. Subtracted from the measured border box to get the
+ * bottom (it has no border). Subtracted from the measured border box to get the
  * room the buttons actually share.
  */
-const NAV_PANEL_VERTICAL_CHROME = 2 * 6 + 2 * 1
+const NAV_PANEL_VERTICAL_CHROME = 2 * 6
 
 /**
  * Which of the rail's buttons fit its height, and which must collapse into its "more"
@@ -52,7 +52,7 @@ export function useAppNavSidebarOverflow(
     box: 'border-box',
   })
 
-  /** The room the panel's flex children actually share: its border box less padding and border. */
+  /** The room the panel's flex children actually share: its border box less padding (it has no border). */
   const navPanelContentHeight = computed(() =>
     Math.max(0, navPanelBorderBoxHeight.value - NAV_PANEL_VERTICAL_CHROME),
   )

@@ -606,13 +606,13 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
           <div class="hint-container">
             <div class="hint-title">{{
               props.loadError
-                ? 'טעינת המפרשים נכשלה — ייתכן שמסד הספרים חסר או שאינו מעודכן'
-                : props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
+                ? $t('bookView.commentary.loadFailed')
+                : props.selectedLineId == null ? $t('bookView.commentary.pickLine') : $t('bookView.commentary.noneForLine')
             }}</div>
             <div v-if="props.selectedLineId == null" class="hint-instructions">
-              <div class="hint-row">לחץ על שורה מהספר כדי להציג מפרשים</div>
-              <div class="hint-row">Ctrl+לחץ על שורה כדי להתחיל בחירה על טווח שורות</div>
-              <div class="hint-row">לחץ על שורה שהיא כותרת כדי להציג מפרשים לכל הקטע</div>
+              <div class="hint-row">{{ $t('bookView.commentary.hintClick') }}</div>
+              <div class="hint-row">{{ $t('bookView.commentary.hintRange') }}</div>
+              <div class="hint-row">{{ $t('bookView.commentary.hintHeading') }}</div>
             </div>
           </div>
         </div>
@@ -620,6 +620,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
           v-else
           ref="scrollerEl"
           class="scroller"
+          dir="rtl"
           tabindex="0"
           data-ctrlf-enabled
           @scroll="onScroll"
@@ -739,8 +740,8 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 .positioning-mask {
   position: absolute;
   top: 32px;
-  left: 0;
-  right: 0;
+  inset-inline-end: 0;
+  inset-inline-start: 0;
   bottom: 0;
   z-index: 5;
   display: flex;

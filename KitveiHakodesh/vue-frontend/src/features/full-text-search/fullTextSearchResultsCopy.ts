@@ -27,29 +27,30 @@ import type { FullTextSearchResult } from './fullTextSearchTypes'
 const REFERENCE_SEPARATOR = ' › '
 
 /**
- * A result's citation: its book title, then its TOC path when it has one.
+ * A result's citation: its book title, then its TOC path when it has one. Both are
+ * resolved by the caller from the hit's ids (fullTextSearchReferences) — a hit itself
+ * carries no text.
  *
  * Exported because the row's own tooltip shows the same thing (see resultTitle in
  * FullTextSearchResultsList) — one definition so a copied citation and a displayed
  * one can never drift apart.
  */
-export function resultReference(result: FullTextSearchResult): string {
-  return result.tocText
-    ? `${result.bookTitle}${REFERENCE_SEPARATOR}${result.tocText}`
-    : result.bookTitle
+export function resultReference(bookTitle: string, tocPath: string): string {
+  return tocPath ? `${bookTitle}${REFERENCE_SEPARATOR}${tocPath}` : bookTitle
 }
 
 /**
  * One result as an HTML block: a reference line, then the snippet's own text.
  *
- * The snippet arrives as rendered HTML carrying the search-match <mark> elements.
+ * The snippet comes as rendered HTML carrying the search-match <mark> elements.
  * Those are stripped to plain text rather than carried over: a highlight is a
  * reading aid for this search, not part of the quoted source, and pasting it into
  * Word imports the mark styling with it.
  */
 function resultToHtml(
   result: FullTextSearchResult,
-  renderSnippet: (snippet: string) => string,
+  renderSnippet: (result: FullTextSearchResult) => string,
+  renderReference: (result: FullTextSearchResult) => string,
 ): string {
   // Tags out first, then entities decoded: htmlToText expects tag-free input (see its
   // contract), and the snippet still carries the search-match <mark> elements.
@@ -63,9 +64,9 @@ function resultToHtml(
   // word-joining hyphen — as a token boundary that still renders, so a match starting
   // after one puts <mark> flush against a visible character, and a space there splits
   // a word that belongs together.
-  const snippetText = htmlToText(renderSnippet(result.snippet).replace(/<[^>]*>/g, '')).trim()
+  const snippetText = htmlToText(renderSnippet(result).replace(/<[^>]*>/g, '')).trim()
   return (
-    `<div dir="rtl"><b>${escapeHtml(resultReference(result))}</b></div>` +
+    `<div dir="rtl"><b>${escapeHtml(renderReference(result))}</b></div>` +
     (snippetText ? `<div dir="rtl">${escapeHtml(snippetText)}</div>` : '')
   )
 }
@@ -80,7 +81,11 @@ function resultToHtml(
 export function buildSelectedResultsHtml(
   results: FullTextSearchResult[],
   rowIndexRange: { firstRowIndex: number; lastRowIndex: number } | null,
-  renderSnippet: (snippet: string) => string,
+  /** The result's rendered snippet HTML ('' when its text has not been fetched — the
+   *  snippet is built on demand, see fullTextSearchSnippets.ts). */
+  renderSnippet: (result: FullTextSearchResult) => string,
+  /** The result's citation ("title › path"), resolved from its ids by the caller. */
+  renderReference: (result: FullTextSearchResult) => string,
   cleanText: boolean,
 ): string | null {
   if (!rowIndexRange) return null
@@ -96,7 +101,7 @@ export function buildSelectedResultsHtml(
   for (let rowIndex = firstRowIndex; rowIndex <= lastRowIndex; rowIndex++) {
     const result = results[rowIndex]
     if (!result) continue
-    blocks.push(resultToHtml(result, renderSnippet))
+    blocks.push(resultToHtml(result, renderSnippet, renderReference))
   }
   if (!blocks.length) return null
   const html = blocks.join('')

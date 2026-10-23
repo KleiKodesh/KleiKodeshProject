@@ -9,6 +9,17 @@ const props = defineProps<{ card: HomeSuggestionCardData }>()
 
 const actions = computed(() => !!props.card.pinning)
 
+// Title+path text block direction, resolved once per title from its first strong
+// char (Hebrew/Arabic -> rtl, Latin -> ltr), so the path aligns with its title.
+// The card itself keeps the app direction, so the icon stays on the app's start side.
+const FIRST_STRONG = /[A-Za-zÀ-ɏ֐-ࣿיִ-﷿ﹰ-﻿]/
+const textDir = computed(() => {
+  const m = FIRST_STRONG.exec(props.card.title)
+  if (!m) return 'auto'
+  const c = m[0].charCodeAt(0)
+  return c >= 0x0590 ? 'rtl' : 'ltr'
+})
+
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
 
@@ -137,15 +148,14 @@ function onRemove() {
       type="button"
       class="card"
       data-nav-item
-      dir="rtl"
       :title="cardTooltip"
       @click="card.open(wantsNewTab($event))"
       @auxclick.middle="card.open(wantsNewTab($event))"
     >
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
-      <span class="card-text">
+      <span class="card-text" :dir="textDir">
         <span class="card-title">{{ card.title }}</span>
-        <span class="card-path" :class="{ 'is-single-line': card.singleLine }">{{ card.path }}</span>
+        <span v-if="card.path" class="card-path" :class="{ 'is-single-line': card.singleLine }">{{ card.path }}</span>
         <!-- Own line, fixed height. dir="auto" gives a Latin library name its own
              left-to-right run inside the right-to-left card, so Hebrew and Latin
              text never interleave, and the ellipsis lands at the end of the name. -->
@@ -161,8 +171,8 @@ function onRemove() {
         class="card-action card-action--pin"
         :class="{ 'is-active': card.pinning.pinned, 'is-popping': isPinPopping }"
         tabindex="-1"
-        :title="card.pinning.pinned ? 'בטל הצמדה' : 'הצמד'"
-        :aria-label="card.pinning.pinned ? 'בטל הצמדה' : 'הצמד'"
+        :title="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
+        :aria-label="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
         @click.stop="onPin"
         @animationend="isPinPopping = false"
       >
@@ -172,8 +182,8 @@ function onRemove() {
         type="button"
         class="card-action card-action--remove"
         tabindex="-1"
-        title="הסר מהרשימה"
-        aria-label="הסר מהרשימה"
+        :title="$t('home.card.remove')"
+        :aria-label="$t('home.card.remove')"
         @click.stop="onRemove"
       >
         <IconDelete16Filled />
@@ -198,10 +208,14 @@ function onRemove() {
   gap: 10px;
   width: 100%;
   min-width: 0;
+  min-height: 49px;
+  box-sizing: border-box;
   padding: 8px 12px;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  /* Fluent/iOS: spacing separates items, not lines. A barely-there fill gives
+     each item a body (focus) without the grid reading as boxes; no border. */
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-primary);
   text-align: start;
   cursor: pointer;
@@ -211,7 +225,7 @@ function onRemove() {
   -webkit-tap-highlight-color: transparent;
 }
 .card:hover {
-  background: var(--input-bg-focus);
+  background: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
 }
 .card:focus-visible {
   outline: 2px solid var(--accent-color);
@@ -223,7 +237,7 @@ function onRemove() {
 
 .card-icon {
   flex-shrink: 0;
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .card-text {
@@ -242,9 +256,9 @@ function onRemove() {
 }
 
 /* The full path may wrap to two lines, then clips — never overflows the card.
-   Always rendered (even empty) so every card has the same height. */
+   Omitted when empty, so a lone title centres vertically; the card's
+   min-height keeps it as tall as a title+path card. */
 .card-path {
-  min-height: 1.3em;
   font-size: 11px;
   line-height: 1.3;
   color: var(--text-secondary);

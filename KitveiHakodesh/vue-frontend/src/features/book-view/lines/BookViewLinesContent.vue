@@ -42,6 +42,9 @@ import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
@@ -387,16 +390,19 @@ async function pasteAllIntoWord(): Promise<void> {
   if (settingsStore.copyWithNotes) {
     try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
-  const copied = triggerCopy(() => pasteIntoWord().catch(() => {}))
+  // Held so the caller's progress spinner lasts until Word has the paste.
+  let pasting: Promise<unknown> = Promise.resolve()
+  const copied = triggerCopy(() => { pasting = pasteIntoWord().catch(() => {}) })
   window.getSelection()?.removeAllRanges()
-  if (!copied) showToast('ההכנה לייצוא הסתיימה — לחץ שוב על ייצוא ל-Word')
+  await pasting
+  if (!copied) showToast(t('bookView.exportReady'))
 }
 
 defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
 </script>
 
 <template>
-  <div class="lines-content">
+  <div dir="rtl" class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
@@ -571,7 +577,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 4px;
+  inset-inline-start: 4px;
   width: 3px;
   background: var(--accent-color);
   opacity: 0;

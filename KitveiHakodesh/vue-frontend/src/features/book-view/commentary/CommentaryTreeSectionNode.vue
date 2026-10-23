@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayCommentaryLabel } from './commentaryLabelDisplay'
 import { computed } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
@@ -93,7 +94,7 @@ function navigateToFirstBook() {
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
       <button class="section-title" @click="navigateToFirstBook">
-        {{ node.label }}
+        {{ displayCommentaryLabel(node.label) }}
       </button>
       <button class="checkbox-col" @click="toggleCheckbox">
         <span class="check-mark">&#10003;</span>
@@ -206,7 +207,7 @@ function navigateToFirstBook() {
 .book-title {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: start;
   padding-inline-end: 8px;
   padding-inline-start: 8px;
   color: inherit;

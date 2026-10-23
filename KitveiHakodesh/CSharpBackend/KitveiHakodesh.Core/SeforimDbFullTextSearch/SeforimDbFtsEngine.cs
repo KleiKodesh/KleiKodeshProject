@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using FtsLib;
 using FtsLib.SeforimDb;
+using FtsLib.Fts5;
 using KitveiHakodesh.Core.SeforimDb;
-// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
-// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
@@ -40,7 +38,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
         private readonly Action<string, Exception>? _onLibrarySkipped;
 
-        private SeforimIndex _index;
+        private Fts5SeforimIndex? _index;
         private bool _disposed;
 
         /// <param name="indexPath">The index directory.</param>
@@ -71,7 +69,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// when there are no additional libraries (unchanged cost and behaviour), or a
         /// <see cref="CompositeFtsCorpus"/> folding every additional library in alongside the
         /// primary when there are.</summary>
-        private IFtsCorpus OpenCorpus() =>
+        private IFtsCorpus OpenIndexCorpus() =>
             _additionalLibraries.Count == 0
                 ? new SeforimDbFtsCorpus(_seforimDbPath)
                 : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries, _onLibrarySkipped);
@@ -83,7 +81,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// A host that could reach the engine would be back to passing it around, which is the
         /// coupling this type exists to remove.
         /// </summary>
-        internal SeforimIndex Index
+        internal Fts5SeforimIndex Index
         {
             get
             {
@@ -94,10 +92,20 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     // factory (not an instance) is what IFtsCorpus requires: a search returns a
                     // LAZY sequence that must outlive this call, and concurrent searches cannot
                     // share one connection — so the engine opens one per operation and disposes it.
-                    return _index ?? (_index = new SeforimIndex(_indexPath, OpenCorpus));
+                    return _index ?? (_index = new Fts5SeforimIndex(_indexPath, OpenIndexCorpus));
                 }
             }
         }
+
+        /// <summary>
+        /// A fresh corpus over the same library the index reads — for Core-side reads the
+        /// engine's own API does not carry (snippet descriptors need neighbour line IDS, not
+        /// just their text). One per operation; the caller disposes it.
+        /// </summary>
+        internal ISeforimDbFtsPositionCorpus OpenCorpus() =>
+            _additionalLibraries.Count == 0
+                ? new SeforimDbFtsCorpus(_seforimDbPath)
+                : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries, _onLibrarySkipped);
 
         /// <summary>
         /// Whether an engine is currently open. False before the first use and after a
@@ -145,7 +153,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// only wants to decide whether to show a progress bar.
         /// </summary>
         public static bool IsBuildInProgress(string indexPath) =>
-            SeforimIndex.IsBuildInProgress(indexPath);
+            Fts5SeforimIndex.IsBuildInProgress(indexPath);
 
         /// <summary>
         /// Drops the open engine so the next caller opens a fresh one.

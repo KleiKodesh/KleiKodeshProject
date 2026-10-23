@@ -71,17 +71,20 @@
     <Content Include="HebrewBooks\HebrewBooksCatalog.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Download fallbacks for HebrewBooksDownloadSources. Kept out of git; the Condition lets a
+         clone without it build and download from the official handler alone. -->
+    <Content Include="HebrewBooks\hb-mirror.json" Condition="Exists('HebrewBooks\hb-mirror.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Codepage 1255 (Hebrew ANSI) is not built into the modern runtime, where
-         Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector
-         registers it. -->
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
     <!-- PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
          SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
          fails with a sharing violation. Matches the version KitveiHakodeshService uses. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
     <!-- Line content in SeforimLibrary schema 6+ is zstd-compressed with a dictionary that
          ships inside the database. ZstdSharp.Port is a pure-C# port: no native libzstd.dll
          to package per architecture, nothing for the per-user installer to place, and

@@ -7,7 +7,7 @@ namespace FtsLib.Search
 {
     /// <summary>
     /// Expands a fuzzy query term into the set of index terms within a given
-    /// Levenshtein edit distance.
+    /// edit distance (a swap of two adjacent letters is one edit).
     ///
     /// Algorithm (two-phase):
     ///   1. N-gram filter — generate n-grams of the query term and query each
@@ -16,16 +16,17 @@ namespace FtsLib.Search
     ///
     ///      SOUNDNESS RULE (q-gram lower bound): a term within d edits of an
     ///      L-char query shares at least (L - n + 1) - d·n of the query's
-    ///      n-grams — each edit destroys at most n grams. Requiring ≥1 shared
-    ///      gram is therefore only sound when L ≥ n·(d+1). Below that the filter
+    ///      n-grams, less one per swap: an edit destroys at most n grams, a swap of
+    ///      two adjacent letters n + 1. Requiring ≥1 shared gram is therefore only
+    ///      sound when L ≥ n + d·(n+1). Below that the filter
     ///      EXCLUDES true matches: e.g. trigrams on a 4-5 letter word at d=1 —
     ///      one mid-word substitution destroys every trigram, so distance-1
     ///      neighbours of the dominant Hebrew word length silently vanished
     ///      (שלום~1 could never find שלים).
     ///
     ///      N-gram size by term length L and distance d:
-    ///        L ≥ 3(d+1)  → trigrams
-    ///        L ≥ 2(d+1)  → bigrams
+    ///        L ≥ 3+4d  → trigrams
+    ///        L ≥ 2+3d  → bigrams
     ///        otherwise   → no gram filter is sound; scan the ±d length window
     ///                      (a Levenshtein-d match differs by ≤ d chars in length)
     ///
@@ -81,24 +82,24 @@ namespace FtsLib.Search
         public static List<string> Expand(
             string                       term,
             int                          maxDistance,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache = null)
+            IReadOnlyList<SegmentHandle> segments)
         {
             if (maxDistance > MaxAllowedDistance) maxDistance = MaxAllowedDistance;
             if (maxDistance < 1)                  maxDistance = 1;
 
             // Pick the largest n-gram size that is SOUND for this term length and
             // distance (see the class doc's q-gram lower bound): requiring ≥1
-            // shared gram only guarantees no false negatives when L ≥ n·(d+1).
+            // shared gram only guarantees no false negatives when L ≥ n + d·(n+1): an
+            // adjacent swap (one edit) destroys up to n + 1 grams.
             // When no gram size qualifies, scan the ±d length window with no gram
             // filter at all — the Levenshtein confirm below does the real work.
             int n = 0;
-            if      (term.Length >= 3 * (maxDistance + 1)) n = 3;
-            else if (term.Length >= 2 * (maxDistance + 1)) n = 2;
+            if      (term.Length >= 3 + 4 * maxDistance) n = 3;
+            else if (term.Length >= 2 + 3 * maxDistance) n = 2;
 
             Dictionary<string, long> candidates = n > 0
-                ? QueryByNgrams(BuildNgrams(term, n), segments, cache)
-                : QueryByLengthWindow(term, maxDistance, segments, cache);
+                ? QueryByNgrams(BuildNgrams(term, n), segments)
+                : QueryByLengthWindow(term, maxDistance, segments);
 
             // Phase 2: Levenshtein confirmation. The actual distance is kept so
             // the cap can prefer the closest matches.
@@ -179,8 +180,7 @@ namespace FtsLib.Search
 
         private static Dictionary<string, long> QueryByNgrams(
             List<string>                 ngrams,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache)
+            IReadOnlyList<SegmentHandle> segments)
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
 
@@ -227,12 +227,6 @@ namespace FtsLib.Search
                             int    count = reader.GetInt32(5);
                             results.TryGetValue(t, out long total);
                             results[t] = total + count;
-                            cache?.Add(t, new SegmentChunk(seg,
-                                reader.GetInt64(1),
-                                reader.GetInt32(2),
-                                reader.GetInt64(3),
-                                reader.GetInt32(4),
-                                count));
                         }
                 }
             }
@@ -283,8 +277,7 @@ namespace FtsLib.Search
         private static Dictionary<string, long> QueryByLengthWindow(
             string                       term,
             int                          maxDistance,
-            IReadOnlyList<SegmentHandle> segments,
-            TermChunkCache               cache)
+            IReadOnlyList<SegmentHandle> segments)
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
             int lo = term.Length - maxDistance; if (lo < 1) lo = 1;
@@ -309,12 +302,6 @@ namespace FtsLib.Search
                             int    count = reader.GetInt32(5);
                             results.TryGetValue(t, out long total);
                             results[t] = total + count;
-                            cache?.Add(t, new SegmentChunk(seg,
-                                reader.GetInt64(1),
-                                reader.GetInt32(2),
-                                reader.GetInt64(3),
-                                reader.GetInt32(4),
-                                count));
                         }
                 }
             }

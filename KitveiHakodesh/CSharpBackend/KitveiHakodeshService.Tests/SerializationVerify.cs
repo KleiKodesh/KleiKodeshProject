@@ -63,8 +63,8 @@ internal static class SerializationVerify
             Ready = true,
             Results =
             {
-                new CatalogTocHit { BookId = 7, LineIndex = 12, FullTocPath = "בבא מציעא / פרק א", Level = 1, TreeOrder = 99L, IsLiteral = true, StructureId = 3, WordsFound = 2 },
-                new CatalogTocHit { BookId = 8, LineIndex = -1, FullTocPath = "בבא מציעא", Level = 0, TreeOrder = 100L },
+                new CatalogTocHit { BookId = 7, LineIndex = 12, TocPath = "פרק א", Level = 1, TreeOrder = 99L, IsLiteral = true, StructureId = 3, WordsFound = 2 },
+                new CatalogTocHit { BookId = 8, LineIndex = -1, TocPath = "", Level = 0, TreeOrder = 100L },
             },
         };
         byte[]? bytes = null;
@@ -75,7 +75,7 @@ internal static class SerializationVerify
         {
             var back = MessagePackSerializer.Deserialize<CatalogTocSearchResult>(bytes, Strict);
             Check(back.Ready && back.Results.Count == 2 && back.Results[0].BookId == 7 && back.Results[0].LineIndex == 12
-                  && back.Results[0].FullTocPath == "בבא מציעא / פרק א" && back.Results[0].TreeOrder == 99L && back.Results[1].LineIndex == -1,
+                  && back.Results[0].TocPath == "פרק א" && back.Results[0].TreeOrder == 99L && back.Results[1].LineIndex == -1,
                 "S2b round trip keeps Ready / Results / hit fields");
             Check(!back.Results[0].IsLiteral && back.Results[0].StructureId == 0 && back.Results[0].WordsFound == 0,
                 "S2c [IgnoreMember] properties stay off the wire");

@@ -21,14 +21,11 @@
  * title, `id` is our numeric database id, book content is a plain-text string.
  */
 
-import {
-  getAllBooks,
-  getAllCategories,
-  getBookById,
-  getAllTocEntries,
-  getLinesPaged,
-} from '@/webview-host/seforimApi'
+import { getBookById, getAllTocEntries, getLinesPaged } from '@/webview-host/seforimApi'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { BookRow } from '@/webview-host/queries.types'
 import {
   addinStorageGet,
   addinStorageSet,
@@ -133,11 +130,46 @@ function readSafeSetting(key: string): unknown {
 
 // ── Book resolution ───────────────────────────────────────────────────────────
 
-interface AddinBookRow {
-  id: number
-  categoryId: number | null
-  title: string
-  authors?: string | null
+/**
+ * The loaded catalog, read from the books data store (one load per session, shared with
+ * the whole app) instead of a fresh getAllBooks/getAllCategories round-trip per addin call.
+ * The title map and the category map are built once per catalog instance and reused;
+ * the store reassigns `allBooks` when the catalog changes, which invalidates them.
+ */
+interface AddinCatalog {
+  books: BookRow[]
+  booksById: Map<number, BookRow>
+  booksByTitle: Map<string, BookRow>
+  categoriesById: Map<number, CategoryNode>
+  root: CategoryNode
+}
+
+let addinCatalog: AddinCatalog | null = null
+
+async function loadAddinCatalog(): Promise<AddinCatalog> {
+  const store = useBooksDataStore()
+  await store.ensureLoaded()
+  if (!store.loaded) throw new OtzariaBridgeError('INTERNAL', store.error ?? 'library not loaded')
+  if (addinCatalog && addinCatalog.books === store.allBooks) return addinCatalog
+  const booksByTitle = new Map<string, BookRow>()
+  // First title wins, matching the old `find` over the list.
+  for (const book of store.allBooks) if (!booksByTitle.has(book.title)) booksByTitle.set(book.title, book)
+  const categoriesById = new Map<number, CategoryNode>()
+  const collect = (nodes: CategoryNode[]) => {
+    for (const node of nodes) {
+      categoriesById.set(node.id, node)
+      collect(node.children)
+    }
+  }
+  collect(store.ROOT.children)
+  addinCatalog = {
+    books: store.allBooks,
+    booksById: store.allBooksMap,
+    booksByTitle,
+    categoriesById,
+    root: store.ROOT,
+  }
+  return addinCatalog
 }
 
 function toBookMeta(row: { id: number; title: string }) {
@@ -145,7 +177,7 @@ function toBookMeta(row: { id: number; title: string }) {
 }
 
 /** Resolves { bookId } (title string, or a numeric id for legacy callers) / { id } to a book row. */
-async function resolveBook(payload: Record<string, unknown>): Promise<AddinBookRow> {
+async function resolveBook(payload: Record<string, unknown>): Promise<BookRow> {
   const numericId =
     typeof payload.id === 'number' ? payload.id
     : typeof payload.bookId === 'number' ? payload.bookId
@@ -154,25 +186,21 @@ async function resolveBook(payload: Record<string, unknown>): Promise<AddinBookR
   if (numericId === null && !bookTitle)
     throw new OtzariaBridgeError('INVALID_PARAMS', 'bookId (title) or id is required')
 
-  const books = (await getAllBooks()) as AddinBookRow[]
+  const catalog = await loadAddinCatalog()
   const book = numericId !== null
-    ? books.find((row) => row.id === numericId)
-    : books.find((row) => row.title === bookTitle)
+    ? catalog.booksById.get(numericId)
+    : catalog.booksByTitle.get(bookTitle)
   if (!book) throw new OtzariaBridgeError('NOT_FOUND', 'book not found')
   return book
 }
 
-function buildCategoryPath(
-  categories: { id: number; parentId: number | null; title: string }[],
-  categoryId: number | null,
-): string {
+function buildCategoryPath(catalog: AddinCatalog, categoryId: number | null): string {
   if (categoryId == null) return ''
-  const categoriesById = new Map(categories.map((category) => [category.id, category]))
   const titles: string[] = []
-  let current = categoriesById.get(categoryId)
+  let current = catalog.categoriesById.get(categoryId)
   while (current) {
     titles.unshift(current.title)
-    current = current.parentId != null ? categoriesById.get(current.parentId) : undefined
+    current = current.parentId != null ? catalog.categoriesById.get(current.parentId) : undefined
   }
   return titles.join('/')
 }
@@ -182,19 +210,21 @@ function buildCategoryPath(
 async function findBooks(payload: Record<string, unknown>) {
   const searchText = typeof payload.query === 'string' ? payload.query.trim() : ''
   const limit = Math.min(Number(payload.limit) || 20, 200)
-  const books = (await getAllBooks()) as AddinBookRow[]
-  const matches = searchText
-    ? books.filter((row) => row.title.includes(searchText))
-    : books
-  return matches.slice(0, limit).map(toBookMeta)
+  const { books } = await loadAddinCatalog()
+  const matches: BookRow[] = []
+  for (const row of books) {
+    if (matches.length >= limit) break
+    if (!searchText || row.title.includes(searchText)) matches.push(row)
+  }
+  return matches.map(toBookMeta)
 }
 
 async function getBookMetadata(payload: Record<string, unknown>) {
   const book = await resolveBook(payload)
-  const [categories, bookInfo] = await Promise.all([getAllCategories(), getBookById(book.id)])
+  const [catalog, bookInfo] = await Promise.all([loadAddinCatalog(), getBookById(book.id)])
   return {
     ...toBookMeta(book),
-    categoryPath: buildCategoryPath(categories, book.categoryId),
+    categoryPath: buildCategoryPath(catalog, book.categoryId),
     totalLines: bookInfo?.totalLines ?? null,
     ...(book.authors ? { author: book.authors } : {}),
   }
@@ -222,38 +252,46 @@ interface TreeNode {
   books: { id: number; bookId: string; title: string; type: string; author?: string }[]
 }
 
+function toTreeBook(book: BookRow) {
+  return {
+    id: book.id,
+    bookId: book.title,
+    title: book.title,
+    type: 'text',
+    ...(book.authors ? { author: book.authors } : {}),
+  }
+}
+
+/** Walks the catalog tree once, building the addin shape; stops at the requested path when given. */
+function buildTreeNode(node: CategoryNode, path: string, includeBooks: boolean): TreeNode {
+  return {
+    title: node.title,
+    path,
+    categories: node.children.map((child) =>
+      buildTreeNode(child, path ? `${path}/${child.title}` : child.title, includeBooks),
+    ),
+    books: includeBooks ? node.books.map(toTreeBook) : [],
+  }
+}
+
+function findCategoryByPath(nodes: CategoryNode[], parentPath: string, wanted: string): [CategoryNode, string] | null {
+  for (const node of nodes) {
+    const path = parentPath ? `${parentPath}/${node.title}` : node.title
+    if (path === wanted) return [node, path]
+    const found = findCategoryByPath(node.children, path, wanted)
+    if (found) return found
+  }
+  return null
+}
+
 async function getTree(payload: Record<string, unknown>) {
   const includeBooks = payload.includeBooks !== false
-  const categories = await getAllCategories()
-
-  const nodesById = new Map<number, TreeNode>()
-  const rootNode: TreeNode = { title: '', path: '', categories: [], books: [] }
-  for (const category of categories) {
-    const parent = category.parentId != null ? nodesById.get(category.parentId) : undefined
-    const path = parent && parent.path ? `${parent.path}/${category.title}` : category.title
-    const node: TreeNode = { title: category.title, path, categories: [], books: [] }
-    nodesById.set(category.id, node)
-    ;(parent ?? rootNode).categories.push(node)
-  }
-
-  if (includeBooks) {
-    const books = (await getAllBooks()) as AddinBookRow[]
-    for (const book of books) {
-      const node = book.categoryId != null ? nodesById.get(book.categoryId) : undefined
-      ;(node ?? rootNode).books.push({
-        id: book.id,
-        bookId: book.title,
-        title: book.title,
-        type: 'text',
-        ...(book.authors ? { author: book.authors } : {}),
-      })
-    }
-  }
+  const { root } = await loadAddinCatalog()
 
   const requestedPath = typeof payload.path === 'string' ? payload.path : ''
-  if (!requestedPath) return rootNode
-  for (const node of nodesById.values()) if (node.path === requestedPath) return node
-  return null
+  if (!requestedPath) return buildTreeNode(root, '', includeBooks)
+  const found = findCategoryByPath(root.children, '', requestedPath)
+  return found ? buildTreeNode(found[0], found[1], includeBooks) : null
 }
 
 // ── Routing ───────────────────────────────────────────────────────────────────

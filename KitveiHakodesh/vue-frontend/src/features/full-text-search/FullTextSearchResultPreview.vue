@@ -143,7 +143,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 </script>
 
 <template>
-  <div ref="boxEl" class="preview-box" @scroll.passive="onScroll">
+  <div dir="rtl" ref="boxEl" class="preview-box" @scroll.passive="onScroll">
     <WordLinkTooltip
       v-if="wordLinkTooltip"
       :key="wordLinkTooltip.id"
@@ -158,7 +158,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
       :key="abbrevTooltip.id"
       :data="abbrevTooltip"
     />
-    <div v-if="state.loading && !state.lines.length" class="preview-empty">טוען…</div>
+    <div v-if="state.loading && !state.lines.length" class="preview-empty ui-chrome">{{ $t('fullTextSearch.loading') }}</div>
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div
       v-for="line in state.lines"

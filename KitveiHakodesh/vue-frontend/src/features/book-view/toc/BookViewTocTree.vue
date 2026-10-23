@@ -6,6 +6,7 @@ import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/SplitPane.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 
 const props = defineProps<{
   activeTocEntryId?: number
@@ -159,9 +160,11 @@ defineExpose({ snapshotState, restoreState })
 </script>
 
 <template>
-  <div class="toc-tree">
-    <div v-if="loading" class="toc-state">&#x5D8;&#x5D5;&#x5E2;&#x5DF;...</div>
-    <div v-else-if="error" class="toc-state error">{{ error }}</div>
+  <div dir="rtl" class="toc-tree">
+    <div v-if="loading" class="toc-state ui-chrome">{{ $t('bookView.loading') }}</div>
+    <div v-else-if="error" class="toc-state ui-chrome">
+      <MessageBanner :message="error" :dismissible="false" />
+    </div>
     <template v-else>
       <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
         <template #top>
@@ -197,7 +200,7 @@ defineExpose({ snapshotState, restoreState })
             v-model="searchQuery"
             type="search"
             class="search-input"
-            placeholder="&#x5D7;&#x5D9;&#x5E4;&#x5D5;&#x5E9;..."
+            :placeholder="$t('components.searchPlaceholder')"
             @keydown.up.prevent="focusTocList"
             @keydown.down.prevent="focusTocList"
             @keydown.tab.prevent="focusTocList"
@@ -259,9 +262,5 @@ defineExpose({ snapshotState, restoreState })
   text-align: center;
   font-size: 14px;
   color: var(--text-secondary);
-}
-
-.toc-state.error {
-  color: var(--status-danger);
 }
 </style>

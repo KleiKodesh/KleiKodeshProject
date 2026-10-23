@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -9,18 +11,27 @@ import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
+import { usePdfOcrStoreSync } from './usePdfOcrStoreSync'
+import PdfOcrToolbar from './PdfOcrToolbar.vue'
+import { buildPdfViewerSrc, outlineJumpHash } from './buildPdfViewerSrc'
 import { usePdfContextMenu } from './usePdfContextMenu'
 import { usePdfPrintShortcut } from './usePdfPrintShortcut'
 import { useIframeScrollbarsHidden } from '@/composables/useUiChromeVisibility'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
+import { attachPdfLoadErrorReporting } from './usePdfLoadErrorReporting'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const paneNavigation = usePaneNavigation()
 const pdfOcrStore = usePdfOcrStore()
 const pageTracking = usePdfViewPageTracking()
+// The PDF canvas is grey like the chrome, so beside the nav rail it needs a line to separate them.
+const settingsStore = useSettingsStore()
+const paneId = inject<1 | 2>('paneId', 1)
+const isNavSidebarVisible = computed(() => settingsStore.getNavSidebarVisible(paneId))
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
@@ -111,23 +122,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// Sync composable active state with store
-watch(pdfOcrStore, () => {
-  if (pdfOcrStore.isActive !== ocr.isActive.value) {
-    pdfOcrStore.isActive ? ocr.activate() : ocr.deactivate()
-  }
-  if (pdfOcrStore.script !== ocr.script.value) {
-    ocr.setScript(pdfOcrStore.script)
-  }
-  if (pdfOcrStore.skipExistingText !== ocr.forceOcr.value) {
-    ocr.setForceOcr(pdfOcrStore.skipExistingText)
-  }
-})
-
-// Deactivate store when composable deactivates (e.g. after selection)
-watch(ocr.isActive, (active) => {
-  if (!active && pdfOcrStore.isActive) pdfOcrStore.deactivate()
-})
+usePdfOcrStoreSync(ocr)
 
 // Update PDF.js toolbar visibility when the setting changes
 watch(
@@ -156,10 +151,15 @@ function setPdfToolbarVisible(visible: boolean) {
 }
 
 function onIframeLoad() {
+  // The viewer has read the outline target off its hash — consumed.
+  if (paneNavigation.activeTab.pdfInitialOutlineTarget) {
+    paneNavigation.updateActiveTab({ pdfInitialOutlineTarget: undefined })
+  }
   const contentWindow = iframeRef.value?.contentWindow ?? null
   iframeContentWindow.value = contentWindow
   attachIframeWheelRelay()
   if (contentWindow) {
+    attachPdfLoadErrorReporting(contentWindow, paneNavigation.activeTab.localFileVirtualUrl ?? null)
     pageTracking.attach(contentWindow)
     pdfContextMenu.attach(contentWindow)
   }
@@ -171,13 +171,21 @@ function onIframeLoad() {
   }, 100)
 }
 
+// The one-shot outline jump (tab.pdfInitialOutlineTarget) rides the src as #khOutline=
+// for the first load of that file only; viewer.mjs strips it and jumps once the outline is
+// in. onIframeLoad clears the tab field, and the hash is remembered against the file url so
+// that clearing it does not change the src (which would reload the viewer). Any other url
+// - another tab, another file - drops it, so a later visit restores the reading position
+// instead of jumping again.
+let outlineHash: { url: string; hash: string } | null = null
+
 const iframeSrc = computed(() => {
   const url = paneNavigation.activeTab.localFileVirtualUrl
   if (!url) return null
-  const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
-  const fileName = paneNavigation.activeTab.localFileName
-  if (fileName) p.set('filename', encodeURIComponent(fileName))
-  return `/pdfjs/web/viewer.html?${p}`
+  const outlineTarget = paneNavigation.activeTab.pdfInitialOutlineTarget
+  if (outlineTarget) outlineHash = { url, hash: outlineJumpHash(outlineTarget) }
+  else if (outlineHash?.url !== url) outlineHash = null
+  return buildPdfViewerSrc(url, paneNavigation.activeTab.localFileName, outlineHash?.hash)
 })
 
 // A reactive :src change (switching between two PDF tabs, or another file
@@ -221,10 +229,10 @@ const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
 // Live HebrewBooks download progress text (e.g. "6.2 / 13.2 MB · 47%"), when available.
 const downloadProgress = computed(() => paneNavigation.activeTab.localFileDownloadProgress ?? null)
 const loadingSubText = computed(() => {
-  if (loadingType.value !== 'downloading') return 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
+  if (loadingType.value !== 'downloading') return t('pdfViewer.loading.converting')
   return downloadProgress.value
-    ? `מוריד את הספר — ${downloadProgress.value}`
-    : 'מוריד את הספר — אנא המתן'
+    ? t('pdfViewer.loading.downloadingProgress', { progress: downloadProgress.value })
+    : t('pdfViewer.loading.downloadingWait')
 })
 
 function cancelConversion() {
@@ -234,7 +242,7 @@ function cancelConversion() {
 </script>
 
 <template>
-  <div class="pdf-page">
+  <div class="pdf-page" :class="{ 'pdf-page--beside-nav-sidebar': isNavSidebarVisible }">
     <div v-if="converting" class="converting">
       <div class="converting-card">
         <LoadingAnimation />
@@ -242,7 +250,7 @@ function cancelConversion() {
         <div class="converting-sub">{{ loadingSubText }}</div>
         <button class="cancel-btn" @click="cancelConversion">
           <IconDismiss20Regular />
-          <span>ביטול</span>
+          <span>{{ $t('pdfViewer.cancel') }}</span>
         </button>
       </div>
     </div>
@@ -256,60 +264,11 @@ function cancelConversion() {
           allowfullscreen
           @load="onIframeLoad"
         />
-        <div v-if="ocr.isActive.value" class="ocr-overlay" />
-        <div v-if="ocr.isActive.value" class="ocr-toolbar">
-          <div class="toolbar-content">
-            <div class="script-buttons">
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'hebrew' }"
-                @click="pdfOcrStore.setScript('hebrew')"
-                title="עברי רגיל"
-              >
-                עברי
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'rashi' }"
-                @click="pdfOcrStore.setScript('rashi')"
-                title="כתב רש״י"
-              >
-                רש"י
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'mixed' }"
-                @click="pdfOcrStore.setScript('mixed')"
-                title="עברי + רש״י"
-              >
-                מעורב
-              </button>
-              <button
-                class="script-btn"
-                :class="{ active: pdfOcrStore.script === 'english' }"
-                @click="pdfOcrStore.setScript('english')"
-                title="English"
-              >
-                English
-              </button>
-            </div>
-            <button
-              class="toggle-btn"
-              :class="{ active: pdfOcrStore.skipExistingText }"
-              @click="pdfOcrStore.toggleSkipExistingText()"
-              title="כפה — דלג על שכבת הטקסט וזהה ישירות מהתמונה"
-            >
-              כפה
-            </button>
-            <button class="close-btn" @click="ocr.deactivate()" title="סגור (Esc)">
-              <IconDismiss20Regular />
-            </button>
-          </div>
-        </div>
+        <PdfOcrToolbar :ocr="ocr" />
       </div>
     </template>
 
-    <div v-else class="pdf-empty">לא נבחר קובץ</div>
+    <div v-else class="pdf-empty">{{ $t('pdfViewer.noFile') }}</div>
 
     <PdfOcrResultPopup
       v-if="ocr.result.value"
@@ -335,6 +294,23 @@ function cancelConversion() {
   flex-direction: column;
   height: 100%;
 }
+/* The rail is the shell's first flex child, so it touches the page's inline-start edge.
+   The line runs alongside the document area only, starting below PDF.js's toolbar: 32px
+   mirrors --toolbar-height in public/pdfjs/web/viewer.css (default density). */
+.pdf-page--beside-nav-sidebar {
+  position: relative;
+}
+.pdf-page--beside-nav-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--border-color);
+  z-index: 1;
+  pointer-events: none;
+}
 .iframe-wrap {
   flex: 1;
   position: relative;
@@ -345,123 +321,6 @@ function cancelConversion() {
   height: 100%;
   border: none;
 }
-.ocr-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-  z-index: 8000;
-}
-
-.ocr-toolbar {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10000;
-  animation: slideDown 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-.toolbar-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.script-buttons {
-  display: flex;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--bg-primary);
-}
-
-.script-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.script-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-.script-btn.active {
-  background: var(--accent-color);
-  color: #fff;
-}
-
-.toggle-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 100ms ease;
-  white-space: nowrap;
-}
-
-.toggle-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
-}
-
-.toggle-btn.active {
-  background: var(--status-warning);
-  color: #fff;
-  border-color: var(--status-warning);
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 4px;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.close-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  color: var(--text-primary);
-}
-
-.close-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
 .pdf-empty {
   flex: 1;
   display: flex;

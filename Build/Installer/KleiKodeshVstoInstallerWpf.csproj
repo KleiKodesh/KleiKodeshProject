@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>1.2.1</Version>
+    <Version>10.2.2</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -49,6 +49,27 @@
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+
+  <!--
+    UI texts: Strings.resx = Hebrew (default), Strings.en.resx = English.
+    The installer is one exe, so English is embedded in the exe itself
+    (WithCulture=false) instead of an en\ satellite dll; UiLanguage serves it.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Strings.en.resx">
+      <WithCulture>false</WithCulture>
+      <LogicalName>KleiKodeshVstoInstallerWpf.Properties.Strings.en.resources</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Properties\Strings.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Strings.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <Compile Update="Properties\Strings.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>

@@ -42,7 +42,7 @@ namespace FtsLibTest
         {
             Console.OutputEncoding = Encoding.UTF8;
             int rowsPerCat = args.Length > 1 && int.TryParse(args[1], out var rp) ? rp : 80;
-            string db = BuildTest.ResolveDbPath();
+            string db = TestHelpers.ResolveDbPath();
             if (!System.IO.File.Exists(db)) { Console.WriteLine($"seforim.db not found at {db}"); return; }
             Console.WriteLine($"tokdiag: {db}");
             LoadLexicon();

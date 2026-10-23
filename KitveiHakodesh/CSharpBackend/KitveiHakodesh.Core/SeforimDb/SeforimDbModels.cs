@@ -103,6 +103,10 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>See <see cref="CategoryRow.LibraryLabel"/>.</summary>
         public string? LibraryLabel { get; set; }
+        /// <summary>The book's precedence in the library (<see cref="SeforimDbBookTreeOrder"/>):
+        /// the one order every ranking — catalog search, full-text results, commentary
+        /// panel — ties on. Rows are returned sorted by it.</summary>
+        public int TreeOrder { get; set; }
     }
 
     /// <summary>Single-book metadata — matches BookInfo in webview-host/queries.types.ts.</summary>
@@ -192,7 +196,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int SourceBookId { get; set; }
     }
 
-    /// <summary>Supported=false → the DB has no word links at all; callers should stop asking. Core always answers true today (link_anchor or inline markers).</summary>
+    /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class WordLinkAnchorsResult
     {
@@ -210,7 +214,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string? Label { get; set; }
     }
 
-    /// <summary>Supported=false → the DB has no word links at all; callers should stop asking. Core always answers true today (link_anchor or inline markers).</summary>
+    /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class WordLinkTargetsResult
     {
@@ -252,8 +256,21 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LinkTargetRow { public int TargetLineId { get; set; } public int LineIndex { get; set; } }
 
+    /// <summary>Which TOC entry a requested line sits under. The path TEXT is not here: lines of one
+    /// section share an entry, so the text rides once per entry in <see cref="TocEntryPathRow"/>.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
-    public sealed class TocPathRow { public int LineId { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
+    public sealed class LineTocEntryRow { public int LineId { get; set; } public int BookId { get; set; } public int TocEntryId { get; set; } }
+
+    /// <summary>Full TOC path (root to leaf, space-joined, book-title root stripped) of one entry.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class TocEntryPathRow { public int TocEntryId { get; set; } public string Path { get; set; } = ""; }
+
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class TocPathsForLinesResult
+    {
+        public List<LineTocEntryRow> Lines { get; set; } = new();
+        public List<TocEntryPathRow> Paths { get; set; } = new();
+    }
 
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }

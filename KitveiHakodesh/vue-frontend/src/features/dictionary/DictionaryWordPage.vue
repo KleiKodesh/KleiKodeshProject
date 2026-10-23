@@ -213,7 +213,7 @@ const allRelated = computed(() => [
 
     <!-- Related -->
     <section v-if="allRelated.length" class="related-section">
-      <h2 class="section-title">קשורים</h2>
+      <h2 class="section-title ui-chrome">{{ $t('dictionary.related') }}</h2>
       <p class="related-line">
         <span v-for="(word, wordIndex) in allRelated" :key="word">
           <button class="word-link" @click="emit('select', word)">{{ word }}</button><span v-if="wordIndex < allRelated.length - 1" class="comma">, </span>
@@ -378,7 +378,7 @@ const allRelated = computed(() => [
 
 .special-entry-label {
   display: block;
-  text-align: right;
+  text-align: start;
   font-size: 0.77em;
   font-weight: 700;
   color: var(--text-secondary);

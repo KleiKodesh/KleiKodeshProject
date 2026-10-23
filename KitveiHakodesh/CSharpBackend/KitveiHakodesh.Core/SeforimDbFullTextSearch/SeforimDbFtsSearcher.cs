@@ -2,17 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using FtsLib;
 using FtsLib.SeforimDb;
-// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
-// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
-using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
-using KitveiHakodesh.Core.SeforimDb;
+using FtsLib.Snippets;
+using FtsLib.Fts5;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
     /// <summary>
     /// SEARCHES the full-text index and turns the engine's raw matches into finished
-    /// <see cref="FtsHit"/>s — snippeted, filtered, embellished and enriched. Feeding the index
+    /// <see cref="FtsHit"/>s — snippet windows located, filtered, short windows extended over
+    /// neighbour lines. Feeding the index
     /// is <see cref="SeforimDbFtsIndexer"/>'s job; the match/rank/snippet ALGORITHMS are
     /// FtsLib's, and this class only decides what to do with their output.
     ///
@@ -28,13 +28,44 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// </summary>
     public sealed class SeforimDbFtsSearcher
     {
-        /// <summary>Batch size for parallel snippeting. Large enough to keep every core busy,
-        /// small enough that the first results reach the caller almost immediately.</summary>
-        private const int SnippetBatchSize = 256;
+        // ── Batch plan ─────────────────────────────────────────────────────────────
+        // ONE plan for the whole pipeline: the engine fetches content in batches of exactly
+        // the size the searcher snippets, so a batch is fetched, snippeted, extended and
+        // handed on as one unit. Small batches first — the first screen is on the wire
+        // after one fetch of 256 lines — then larger ones, because a broad query has
+        // hundreds of thousands of batches to go and every batch pays fixed costs (a
+        // SQLite round-trip, a Parallel.For spin-up, a frame write on the transport).
+
+        /// <summary>Batch size for the first <see cref="FirstBatchCount"/> batches. Large
+        /// enough to keep every core busy, small enough that the first results reach the
+        /// caller almost immediately.</summary>
+        public const int FirstBatchSize = 256;
+
+        /// <summary>How many batches stay at <see cref="FirstBatchSize"/> before growing —
+        /// a few screens' worth, so paging through early results feels the same.</summary>
+        public const int FirstBatchCount = 16;
+
+        /// <summary>After the first batches the size doubles per batch up to this.</summary>
+        public const int GrownBatchSize = 2048;
+
+        /// <summary>Hard ceiling on any batch the plan can ask for — what the content fetch
+        /// and the snippet arrays are sized against.</summary>
+        public const int MaxBatchSize = 4096;
+
+        /// <summary>The planned size of batch number <paramref name="batchIndex"/> (0-based).
+        /// Shared by the engine's content fetch and this class's snippeting, so both cut the
+        /// stream at the same places.</summary>
+        public static int BatchSizeAt(int batchIndex)
+        {
+            if (batchIndex < FirstBatchCount) return FirstBatchSize;
+            int size = FirstBatchSize;
+            for (int i = FirstBatchCount; i <= batchIndex && size < GrownBatchSize; i++) size *= 2;
+            return Math.Min(size, MaxBatchSize);
+        }
 
         /// <summary>
-        /// How many lines of context to pull per side when embellishing a short snippet (same
-        /// book only). Two fills the snippet's visual space (~4 clamped lines) and reaches
+        /// How many lines of context to pull per side when extending a short snippet window
+        /// (same book only). Two fills the snippet's visual space (~4 clamped lines) and reaches
         /// about the requested per-side word context for prose; measured, radius 2 costs
         /// roughly half of radius 3, because it re-tokenizes fewer neighbour lines.
         /// </summary>
@@ -44,16 +75,18 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// Words of context a snippet shows per side when the caller does not say. The engine's
         /// default, surfaced here so a host can offer it without referencing the engine.
         /// </summary>
-        public const int DefaultContextWords = SeforimIndex.DefaultContextWords;
+        public const int DefaultContextWords = Fts5SeforimIndex.DefaultContextWords;
 
-        private readonly SeforimDbQueries _queries;
-
-        /// <param name="queries">For enrichment — hits leave here carrying their book id and
-        /// TOC path, so no consumer makes a second round-trip to display a result.</param>
-        public SeforimDbFtsSearcher(SeforimDbQueries queries)
-        {
-            _queries = queries ?? throw new ArgumentNullException(nameof(queries));
-        }
+        /// <summary>
+        /// How many leading hits of a search get their snippet line texts sent along
+        /// (<see cref="SeforimDbFtsHitBatch.LineTexts"/>, then <see cref="FtsStreamChunk.LineTexts"/>
+        /// / <see cref="FtsSearchResult.LineTexts"/>) so the first screen renders without a
+        /// round-trip. About a screenful or two; the rest is fetched on demand by the page
+        /// for the rows it renders. The texts are the ones the batch fetched to snippet — the
+        /// matched lines' content and the neighbour lines a short window was extended over —
+        /// so seeding reads nothing.
+        /// </summary>
+        public const int SeedLineTextHitCount = 100;
 
         /// <summary>
         /// Runs a search and yields each finished batch of hits, in engine order, until the
@@ -70,60 +103,80 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <param name="requireOrdered">Only match windows where the query words appear in
         /// query order.</param>
         /// <param name="contextWords">Words of context requested per side of the match.</param>
-        /// <param name="expandKetiv">Engine-side ketiv/qere expansion.</param>
-        public IEnumerable<List<FtsHit>> SearchInBatches(
+        public IEnumerable<SeforimDbFtsHitBatch> SearchInBatches(
             SeforimDbFtsEngine engine,
             string query,
             int maxWordDistance,
             bool requireOrdered,
             int contextWords,
-            bool expandKetiv,
-            CancellationToken cancellationToken = default)
+            FtsTermTable terms,
+            CancellationToken cancellationToken = default,
+            Action<string>? onStage = null)
         {
             if (engine == null) throw new ArgumentNullException(nameof(engine));
+            if (terms == null) throw new ArgumentNullException(nameof(terms));
             var index = engine.Index;
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
-            var batch = new List<SearchResult>(SnippetBatchSize);
+            // Only stage CHANGES are reported: the label follows the stream back to
+            // fetch/snippets/enrich per batch without re-sending a stage twice in a row.
+            string? last = null;
+            Action<string>? stage = onStage == null ? null : s => { if (s != last) { last = s; onStage(s); } };
 
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken))
+            int batchIndex = 0;
+            int seedLeft = SeedLineTextHitCount;
+            var batch = new List<SearchResult>(FirstBatchSize);
+
+            foreach (var hit in index.Search(query, cap: 0, ct: cancellationToken,
+                                             onStage: stage, batchSizeAt: BatchSizeAt))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 batch.Add(hit);
-                if (batch.Count < SnippetBatchSize) continue;
+                if (batch.Count < BatchSizeAt(batchIndex)) continue;
 
-                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken);
+                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
                 batch.Clear();
-                if (built.Count > 0) yield return built;
+                batchIndex++;
+                seedLeft = Math.Max(0, seedLeft - built.Hits.Count);
+                if (built.Hits.Count > 0) yield return built;
+                stage?.Invoke("fetch");   // engine only reports its first fetch
             }
 
             if (batch.Count > 0)
             {
-                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken);
-                if (built.Count > 0) yield return built;
+                var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
+                if (built.Hits.Count > 0) yield return built;
             }
         }
 
         /// <summary>
-        /// One batch, engine matches → finished hits: snippets generated across all cores
-        /// (thread-safe — the engine's snippet builder is per-thread), order preserved, the
-        /// word-distance filter applied, short snippets embellished, and the survivors
-        /// enriched with book id + TOC path.
+        /// One batch, engine matches → finished hits: snippet windows located across all cores
+        /// (thread-safe — the engine's window locator is per-thread), order preserved, the
+        /// word-distance filter applied, short windows extended over neighbour lines. Book id
+        /// and TOC entry id come with the engine match (the corpus reads them in the content
+        /// fetch — <see cref="FtsDocumentPlacement"/>), so no query is needed to finish a hit.
+        /// The first <paramref name="seedLineTextHitCount"/> passing hits also get their
+        /// snippet line texts attached, from the content in hand.
         /// </summary>
-        private List<FtsHit> BuildBatch(
-            SeforimIndex index,
+        private SeforimDbFtsHitBatch BuildBatch(
+            SeforimDbFtsEngine engine,
             IReadOnlyList<SearchResult> results,
             bool requireOrdered,
             int contextWords,
             int maxWordDistance,
-            CancellationToken cancellationToken)
+            FtsTermTable terms,
+            int seedLineTextHitCount,
+            CancellationToken cancellationToken,
+            Action<string>? onStage = null)
         {
+            onStage?.Invoke("snippets");   // before Parallel.For: never call onStage from a worker
+            var index = engine.Index;
             var built = new FtsHit?[results.Count];
             var windowWords = new int[results.Count];   // 0 = the hit did not pass
 
             Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (TryBuildHitCore(index, results[i], requireOrdered, contextWords, maxWordDistance,
+                if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, terms,
                         out FtsHit? hit, out int words))
                 {
                     built[i] = hit;
@@ -131,331 +184,236 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
             });
 
-            // The tail — embellish the short snippets, then enrich — is the same work a host
-            // that batches on its own rhythm needs, so it lives in one place.
-            FinishBatchCore(index, results, built, windowWords, requireOrdered, contextWords,
-                            cancellationToken);
+            onStage?.Invoke("enrich");
+            var neighbourTextsById = ExtendShortWindowsWithNeighbourLines(
+                engine, results, built, windowWords, requireOrdered, contextWords, terms, cancellationToken);
 
             var passing = new List<FtsHit>(results.Count);
-            foreach (var hit in built)
-                if (hit != null) passing.Add(hit);
-            return passing;
+            var lineTexts = new Dictionary<int, string>();
+            for (int i = 0; i < built.Length; i++)
+            {
+                if (built[i] is not { } hit) continue;
+                passing.Add(hit);
+                if (passing.Count <= seedLineTextHitCount)
+                    CollectSnippetLineTexts(hit, results[i].Content, neighbourTextsById, lineTexts);
+            }
+            return new SeforimDbFtsHitBatch(passing, lineTexts);
         }
 
         /// <summary>
-        /// The engine's matches, with its mid-merge refusal translated into Core's own type so
-        /// a host never has to name an engine exception.
+        /// Adds the texts of one hit's snippet lines to <paramref name="lineTexts"/>: the matched
+        /// line's own content, and any neighbour line the window was extended over, from the
+        /// texts that extension already had in hand. An id neither has (cannot happen for a
+        /// descriptor built here) is left out; the page fetches what it lacks on demand.
         /// </summary>
-        private static IEnumerable<SearchResult> Matches(
-            SeforimIndex index, string query, bool expandKetiv, CancellationToken cancellationToken)
+        private static void CollectSnippetLineTexts(
+            FtsHit hit, string matchedLineContent,
+            Dictionary<int, string>? neighbourTextsById, Dictionary<int, string> lineTexts)
         {
-            IEnumerator<SearchResult> walker;
-            try
+            foreach (int id in hit.SnippetLineIds)
             {
-                walker = index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken)
-                              .GetEnumerator();
-            }
-            catch (FtsLib.Indexing.IndexMergingException ex)
-            {
-                throw new SeforimDbFtsIndexMergingException(
-                    "The full-text index is merging and cannot answer searches right now.", ex);
-            }
-
-            using (walker)
-            {
-                while (true)
-                {
-                    try
-                    {
-                        if (!walker.MoveNext()) yield break;
-                    }
-                    catch (FtsLib.Indexing.IndexMergingException ex)
-                    {
-                        throw new SeforimDbFtsIndexMergingException(
-                            "The full-text index is merging and cannot answer searches right now.", ex);
-                    }
-                    yield return walker.Current;
-                }
-            }
-        }
-
-        /// <summary>
-        /// A hit on its way to a caller that batches on its own rhythm: the finished hit, plus
-        /// the two things <see cref="FinishPendingBatch"/> still needs to complete it — the
-        /// engine match it came from and its window word count.
-        ///
-        /// Core's own type, so the engine's result type never crosses into a host.
-        /// </summary>
-        public readonly struct PendingHit
-        {
-            internal PendingHit(SearchResult match, FtsHit hit, int windowWords)
-            {
-                Match = match;
-                Hit = hit;
-                WindowWords = windowWords;
-            }
-
-            /// <summary>Internal: the engine match, needed only to re-render a short snippet.</summary>
-            internal SearchResult Match { get; }
-
-            /// <summary>The finished hit. Still missing book id and TOC path until the batch
-            /// it belongs to is finished.</summary>
-            public FtsHit Hit { get; }
-
-            internal int WindowWords { get; }
-        }
-
-        /// <summary>
-        /// Streams finished hits ONE AT A TIME, in engine order, for a host that batches on its
-        /// own rhythm — the hosted app flushes at 1, 2, 4, 8, 16 results and then on a timer, so
-        /// the first result reaches the user immediately.
-        ///
-        /// Hits that fail the match or word-distance filters are skipped, so a caller only sees
-        /// keepers. Each one still needs <see cref="FinishBatch"/> run over whatever batch the
-        /// caller assembles — that is where short snippets are re-rendered and every hit gets
-        /// its book id and TOC path.
-        ///
-        /// The engine's own result type never leaves Core — see <see cref="PendingHit"/>.
-        /// </summary>
-        public IEnumerable<PendingHit> SearchHitByHit(
-            SeforimDbFtsEngine engine,
-            string query,
-            int maxWordDistance,
-            bool requireOrdered,
-            int contextWords,
-            bool expandKetiv,
-            CancellationToken cancellationToken = default)
-        {
-            if (engine == null) throw new ArgumentNullException(nameof(engine));
-            if (string.IsNullOrWhiteSpace(query)) yield break;
-
-            var index = engine.Index;
-            // IndexMergingException is translated below, at the one place a host would see it.
-            foreach (var match in Matches(index, query, expandKetiv, cancellationToken))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (TryBuildHitCore(index, match, requireOrdered, contextWords, maxWordDistance,
-                                    out FtsHit? hit, out int windowWords))
-                {
-                    yield return new PendingHit(match, hit!, windowWords);
-                }
+                if (lineTexts.ContainsKey(id)) continue;
+                if (id == hit.LineId) lineTexts[id] = matchedLineContent;
+                else if (neighbourTextsById != null && neighbourTextsById.TryGetValue(id, out var text)) lineTexts[id] = text;
             }
         }
 
         /// <summary>
         /// One engine match → one finished hit, or false when it does not pass the match and
-        /// word-distance filters.
-        ///
-        /// Public because a host may batch on a different rhythm than
-        /// <see cref="SearchInBatches"/>: the hosted app flushes at 1, 2, 4, 8, 16 results and
-        /// then on a timer, so the user sees the first result immediately. The per-hit WORK is
-        /// the same either way, and that is what must not exist twice.
-        ///
-        /// <paramref name="windowWordCount"/> is what decides whether the snippet is "short"
-        /// and worth embellishing — see <see cref="EmbellishSnippets"/>.
+        /// word-distance filters. <paramref name="windowWordCount"/> is what decides whether
+        /// the window is "short" and worth extending — see
+        /// <see cref="ExtendShortWindowsWithNeighbourLines"/>.
         /// </summary>
-        public static bool TryBuildHit(
-            SeforimDbFtsEngine engine,
+        private static bool TryBuildHit(
+            Fts5SeforimIndex index,
             SearchResult hit,
             bool requireOrdered,
             int contextWords,
             int maxWordDistance,
-            out FtsHit? built,
-            out int windowWordCount)
-            => TryBuildHitCore(engine.Index, hit, requireOrdered, contextWords, maxWordDistance,
-                               out built, out windowWordCount);
-
-        private static bool TryBuildHitCore(
-            SeforimIndex index,
-            SearchResult hit,
-            bool requireOrdered,
-            int contextWords,
-            int maxWordDistance,
+            FtsTermTable terms,
             out FtsHit? built,
             out int windowWordCount)
         {
             built = null;
             windowWordCount = 0;
 
-            var snippet = index.GenerateSnippet(hit, requireOrdered, contextWords);
-            if (!snippet.IsMatch) return false;
-            if (snippet.WordDistance > maxWordDistance) return false;
-            windowWordCount = snippet.WindowWordCount;
-
-            var matchedTerms = new List<string>();
-            foreach (var group in hit.MatchedGroups)
-                foreach (string term in group)
-                    if (!matchedTerms.Contains(term)) matchedTerms.Add(term);
+            var window = index.LocateSnippetWindow(hit, requireOrdered, contextWords);
+            if (!window.IsMatch) return false;
+            if (window.WordDistance > maxWordDistance) return false;
+            windowWordCount = window.WindowWordCount;
 
             built = new FtsHit
             {
                 LineId = hit.LineId,
-                BookId = 0,                          // enrichment fills this
-                BookTitle = hit.BookTitle ?? "",
-                TocText = "",                        // enrichment fills this
-                Score = snippet.Score,
-                WordDistance = snippet.WordDistance,
-                Snippet = snippet.Html ?? "",
-                MatchedTerms = matchedTerms,
+                BookId = hit.Placement.BookId,
+                TocEntryId = hit.Placement.TocEntryId,
+                Score = window.Score,
+                WordDistance = window.WordDistance,
             };
+            built.SnippetLineIds = new[] { hit.LineId };
+            CopySnippetDescriptor(built, in window, terms);
             return true;
         }
 
         /// <summary>
-        /// Finishes a batch a caller assembled itself — the hosted app's progressive flush
-        /// does. Exactly the tail of <see cref="SearchInBatches"/>: the batch's short snippets
-        /// are re-rendered over their neighbouring lines, then every hit is enriched with its
-        /// book id and TOC path, so hits leave Core COMPLETE however they were batched.
+        /// Copies the located window onto the hit — offsets and highlight ranges over the text
+        /// of <see cref="FtsHit.SnippetLineIds"/> joined by single spaces, which the caller has
+        /// already set. The page rebuilds the HTML from that text only for the rows it renders.
+        /// Copied, not referenced: the engine's mark ranges view per-thread scratch that the
+        /// next locate overwrites. One exactly-sized array per hit.
         ///
-        /// The arrays are parallel, one entry per hit, and <paramref name="windowWords"/> holds
-        /// what <see cref="TryBuildHit"/> reported.
+        /// The engine's marks name their term by the query's own ordinal; here that becomes
+        /// the search-wide <see cref="FtsTermTable"/> id (the page's term table) — so the
+        /// marks also say which 1-3 concrete terms occur in this line, and nothing else
+        /// has to.
         /// </summary>
-        public void FinishBatch(
-            SeforimDbFtsEngine engine,
-            IReadOnlyList<SearchResult> results,
-            FtsHit?[] built,
-            int[] windowWords,
-            bool requireOrdered,
-            int contextWords,
-            CancellationToken cancellationToken = default)
-            => FinishBatchCore(engine.Index, results, built, windowWords, requireOrdered,
-                               contextWords, cancellationToken);
-
-        /// <summary>
-        /// Finishes a batch a host assembled from <see cref="SearchHitByHit"/>: re-renders the
-        /// short snippets over their neighbouring lines, then gives every hit its book id and
-        /// TOC path. The hits are completed IN PLACE.
-        /// </summary>
-        public void FinishPendingBatch(
-            SeforimDbFtsEngine engine,
-            IReadOnlyList<PendingHit> pending,
-            bool requireOrdered,
-            int contextWords,
-            CancellationToken cancellationToken = default)
+        private static void CopySnippetDescriptor(FtsHit hit, in SnippetDescriptor window, FtsTermTable terms)
         {
-            if (engine == null) throw new ArgumentNullException(nameof(engine));
-            if (pending == null || pending.Count == 0) return;
-
-            var matches = new SearchResult[pending.Count];
-            var built = new FtsHit?[pending.Count];
-            var windowWords = new int[pending.Count];
-            for (int i = 0; i < pending.Count; i++)
+            hit.SnippetStart = window.SnapStart;
+            hit.SnippetEnd = window.SnapEnd;
+            var marks = window.MarkRanges;
+            int tripleCount = marks.Count / SnippetDescriptor.MarkStride;
+            var copied = tripleCount == 0 ? Array.Empty<int>() : new int[tripleCount * SnippetDescriptor.MarkStride];
+            for (int t = 0; t < tripleCount; t++)
             {
-                matches[i] = pending[i].Match;
-                built[i] = pending[i].Hit;
-                windowWords[i] = pending[i].WindowWords;
+                int i = t * SnippetDescriptor.MarkStride;
+                copied[i] = marks[i];
+                copied[i + 1] = marks[i + 1];
+                copied[i + 2] = terms.IdOf(window.MatchedTermAt(marks[i + 2]));
             }
-
-            FinishBatchCore(engine.Index, matches, built, windowWords, requireOrdered,
-                            contextWords, cancellationToken);
-        }
-
-        /// <summary>The same tail, for callers inside Core that already hold the engine.</summary>
-        private void FinishBatchCore(
-            SeforimIndex index,
-            IReadOnlyList<SearchResult> results,
-            FtsHit?[] built,
-            int[] windowWords,
-            bool requireOrdered,
-            int contextWords,
-            CancellationToken cancellationToken)
-        {
-            EmbellishShortSnippets(index, results, built, windowWords, requireOrdered,
-                                   contextWords, cancellationToken);
-
-            var passing = new List<FtsHit>(built.Length);
-            foreach (var hit in built) if (hit != null) passing.Add(hit);
-            EnrichHits(passing);
+            hit.SnippetMarks = copied;
+            hit.SnippetFlags = (window.LeadingEllipsis ? FtsHit.SnippetFlagLeadingEllipsis : 0)
+                             | (window.TrailingEllipsis ? FtsHit.SnippetFlagTrailingEllipsis : 0);
         }
 
         /// <summary>
-        /// Re-renders the batch's SHORT snippets — those whose window holds fewer words than
-        /// the requested per-side context, meaning the matched line itself was too short to
-        /// fill it — over their surrounding lines from the same book.
+        /// Re-locates the batch's SHORT windows — those holding fewer words than the requested
+        /// per-side context, meaning the matched line itself was too short to fill them — over
+        /// the matched line joined with its surrounding lines from the same book, and points
+        /// the descriptor at those line ids.
         ///
-        /// One batched neighbour fetch covers every short line in the batch, and only those
-        /// hits re-render (across cores). A batch with nothing short pays nothing — no query,
-        /// no work — and a broad query's typical batch has only about one short line in six.
+        /// The neighbours are the lines at (bookId, lineIndex ± 1..<see cref="NeighborLineRadius"/>).
+        /// Results arrive in catalog order, so most of those lines are other hits of the SAME
+        /// batch whose content is already in hand; only the rest are fetched, in one statement
+        /// per batch (<see cref="SeforimDbFtsCorpus.FetchLinesAtBookPositions"/>). A batch
+        /// with nothing short pays nothing, and a broad query's typical batch has only about
+        /// one short line in six.
+        ///
+        /// Joined exactly as before — each side's non-empty lines in document order, single
+        /// spaces between — so a descriptor's offsets land on the same characters the page
+        /// re-joins (JoinWithNeighbourLines).
         /// </summary>
-        private static void EmbellishShortSnippets(
-            SeforimIndex index,
+        /// <returns>The neighbour lines' texts by line id — what seeding the first hits' line
+        /// texts draws on — or null when the batch had nothing short.</returns>
+        private static Dictionary<int, string>? ExtendShortWindowsWithNeighbourLines(
+            SeforimDbFtsEngine engine,
             IReadOnlyList<SearchResult> results,
             FtsHit?[] built,
             int[] windowWords,
             bool requireOrdered,
             int contextWords,
+            FtsTermTable terms,
             CancellationToken cancellationToken)
         {
             List<int>? shortIndexes = null;
-            List<int>? shortLineIds = null;
             for (int i = 0; i < built.Length; i++)
             {
                 if (built[i] == null || windowWords[i] >= contextWords) continue;
+                if (results[i].Placement.BookId == 0) continue;   // no placement: nothing to extend over
                 (shortIndexes ??= new List<int>()).Add(i);
-                (shortLineIds ??= new List<int>()).Add(results[i].LineId);
             }
-            if (shortLineIds == null) return;
+            if (shortIndexes == null) return null;
 
-            var neighbours = index.FetchNeighborContext(shortLineIds, NeighborLineRadius);
-            if (neighbours.Count == 0) return;
+            var linesByPosition = CollectNeighbourLines(engine, results, shortIndexes);
+            if (linesByPosition.Count == 0) return null;
+            var index = engine.Index;
 
-            Parallel.ForEach(shortIndexes!, new ParallelOptions { CancellationToken = cancellationToken }, i =>
+            Parallel.ForEach(shortIndexes, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (!neighbours.TryGetValue(results[i].LineId, out var context)) return;
+                var match = results[i];
+                var previousIds = new List<int>(NeighborLineRadius);
+                var nextIds = new List<int>(NeighborLineRadius);
+                string previous = JoinNeighbourSide(linesByPosition, match.Placement, -NeighborLineRadius, -1, previousIds);
+                string next = JoinNeighbourSide(linesByPosition, match.Placement, 1, NeighborLineRadius, nextIds);
+                if (previous.Length == 0 && next.Length == 0) return;
 
-                var rerendered = index.GenerateSnippetWithNeighbors(
-                    results[i], context.Prev, context.Next, requireOrdered, contextWords);
+                var extended = index.LocateSnippetWindowOverNeighbourLines(
+                    match, previous, next, requireOrdered, contextWords);
 
-                // Only the snippet HTML is swapped in: score and word distance stay as computed
-                // on the matched line itself, because those are the relevance keys and the
-                // neighbours are presentation. A failed re-render (should not happen — same
-                // terms) keeps the original snippet rather than blanking it.
-                if (rerendered.IsMatch && !string.IsNullOrEmpty(rerendered.Html) && built[i] is { } hit)
-                    hit.Snippet = rerendered.Html;
+                // Only the snippet descriptor is swapped in: score and word distance stay as
+                // computed on the matched line itself, because those are the relevance keys and
+                // the neighbours are presentation. A failed re-locate (should not happen — same
+                // terms) keeps the original window rather than blanking it.
+                if (extended.IsMatch && built[i] is { } hit)
+                {
+                    // The text the engine joined: previous + ' ' + line + ' ' + next, empty sides
+                    // dropped — i.e. exactly these ids' texts joined by single spaces.
+                    var lineIds = new int[previousIds.Count + 1 + nextIds.Count];
+                    previousIds.CopyTo(lineIds, 0);
+                    lineIds[previousIds.Count] = match.LineId;
+                    nextIds.CopyTo(lineIds, previousIds.Count + 1);
+                    hit.SnippetLineIds = lineIds;
+                    CopySnippetDescriptor(hit, in extended, terms);
+                }
             });
+
+            var textsById = new Dictionary<int, string>(linesByPosition.Count);
+            foreach (var line in linesByPosition.Values) textsById[line.Id] = line.Text;
+            return textsById;
         }
 
         /// <summary>
-        /// Fills each hit's book id and TOC path so results leave Core COMPLETE. One batched
-        /// query per batch; lines with no TOC entry (custom books) fall back to resolving the
-        /// book id straight off the line table, so no hit ships with BookId 0 that the corpus
-        /// can resolve.
+        /// The neighbour lines of the batch's short hits, keyed by (bookId, lineIndex): first
+        /// whatever the batch already fetched (its own results), then ONE corpus fetch for the
+        /// positions still missing. Lines of the batch that are not neighbours of a short hit
+        /// are not collected.
         /// </summary>
-        private void EnrichHits(List<FtsHit> hits)
+        private static Dictionary<(int BookId, int LineIndex), (int Id, string Text)> CollectNeighbourLines(
+            SeforimDbFtsEngine engine, IReadOnlyList<SearchResult> results, List<int> shortIndexes)
         {
-            if (hits.Count == 0) return;
-
-            var lineIds = new List<int>(hits.Count);
-            foreach (var hit in hits) lineIds.Add(hit.LineId);
-
-            var tocPaths = _queries.GetTocPathsForLines(lineIds);
-            if (tocPaths.Count > 0)
+            var wanted = new HashSet<(int BookId, int LineIndex)>(shortIndexes.Count * 2 * NeighborLineRadius);
+            foreach (int i in shortIndexes)
             {
-                var byLine = new Dictionary<int, TocPathRow>(tocPaths.Count);
-                foreach (var row in tocPaths) byLine[row.LineId] = row;
-                foreach (var hit in hits)
-                {
-                    if (byLine.TryGetValue(hit.LineId, out var row))
-                    {
-                        hit.BookId = row.BookId;
-                        hit.TocText = row.TocPath;
-                    }
-                }
+                var at = results[i].Placement;
+                for (int delta = -NeighborLineRadius; delta <= NeighborLineRadius; delta++)
+                    if (delta != 0) wanted.Add((at.BookId, at.LineIndex + delta));
             }
 
-            List<int>? withoutToc = null;
-            foreach (var hit in hits)
-                if (hit.BookId == 0) (withoutToc ??= new List<int>()).Add(hit.LineId);
-            if (withoutToc == null) return;
+            var linesByPosition = new Dictionary<(int BookId, int LineIndex), (int Id, string Text)>(wanted.Count);
+            foreach (var result in results)
+            {
+                var key = (result.Placement.BookId, result.Placement.LineIndex);
+                if (wanted.Contains(key)) linesByPosition[key] = (result.LineId, result.Content);
+            }
 
-            var books = _queries.GetBookIdsForLines(withoutToc);
-            if (books.Count == 0) return;
+            if (linesByPosition.Count < wanted.Count)
+            {
+                var missing = new List<(int BookId, int LineIndex)>(wanted.Count - linesByPosition.Count);
+                foreach (var key in wanted)
+                    if (!linesByPosition.ContainsKey(key)) missing.Add(key);
+                using var corpus = engine.OpenCorpus();
+                foreach (var line in corpus.FetchLinesAtBookPositions(missing))
+                    linesByPosition[(line.BookId, line.LineIndex)] = (line.Id, line.Text);
+            }
+            return linesByPosition;
+        }
 
-            var bookByLine = new Dictionary<int, int>(books.Count);
-            foreach (var row in books) bookByLine[row.LineId] = row.BookId;
-            foreach (var hit in hits)
-                if (hit.BookId == 0 && bookByLine.TryGetValue(hit.LineId, out int bookId))
-                    hit.BookId = bookId;
+        /// <summary>One side of a short hit's neighbours: the non-empty lines at lineIndex +
+        /// <paramref name="firstDelta"/>..<paramref name="lastDelta"/> (document order), their
+        /// texts joined by single spaces, their ids appended to <paramref name="idsOut"/>.</summary>
+        private static string JoinNeighbourSide(
+            Dictionary<(int BookId, int LineIndex), (int Id, string Text)> linesByPosition,
+            FtsDocumentPlacement at, int firstDelta, int lastDelta, List<int> idsOut)
+        {
+            string? joined = null;
+            for (int delta = firstDelta; delta <= lastDelta; delta++)
+            {
+                if (!linesByPosition.TryGetValue((at.BookId, at.LineIndex + delta), out var line)) continue;
+                if (line.Text.Length == 0) continue;
+                idsOut.Add(line.Id);
+                joined = joined == null ? line.Text : joined + " " + line.Text;
+            }
+            return joined ?? string.Empty;
         }
     }
 }

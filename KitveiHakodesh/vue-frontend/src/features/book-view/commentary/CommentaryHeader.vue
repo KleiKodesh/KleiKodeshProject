@@ -6,6 +6,9 @@ import {
   IconChevronLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { hasNativeChromeTabs } from '@/webview-host/bridge'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   bookId: number
@@ -32,8 +35,8 @@ const displayPath = computed(() => {
 // its own tab, so the hint must not promise one in the single-tab hosts.
 const tooltipText = computed(() => {
   const hint = hasNativeChromeTabs
-    ? 'לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
-    : 'לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר'
+    ? t('bookView.commentary.openBookHintNewTab')
+    : t('bookView.commentary.openBookHint')
   return `${displayPath.value}\n${hint}`
 })
 
@@ -69,17 +72,17 @@ function onHeaderDblClick() {
     <div class="header-actions" @click.stop @dblclick.stop>
       <button
         class="action-btn c-pointer hover-bg"
-        title="קטע קודם"
+        :title="$t('bookView.commentary.prevSection')"
         @click.stop="emit('navigate-section', 'prev', props.bookId)"
       >
-        <IconChevronRight20Regular />
+        <IconChevronRight20Regular class="dir-icon" />
       </button>
       <button
         class="action-btn c-pointer hover-bg"
-        title="קטע הבא"
+        :title="$t('bookView.commentary.nextSection')"
         @click.stop="emit('navigate-section', 'next', props.bookId)"
       >
-        <IconChevronLeft20Regular />
+        <IconChevronLeft20Regular class="dir-icon" />
       </button>
     </div>
   </div>

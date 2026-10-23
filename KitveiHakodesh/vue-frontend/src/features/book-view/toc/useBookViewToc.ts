@@ -1,6 +1,8 @@
-import { ref, shallowRef, computed, watch } from 'vue'
+import { t } from '@/i18n'
+import { ref, shallowRef, markRaw, computed, watch, onScopeDispose } from 'vue'
 import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
+import { registerOpenTabToc, findOpenTabToc, findOpenTabTocView, type OpenTabToc } from './openTabTocRegistry'
 import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
 
 export interface AltTocSection {
@@ -63,7 +65,7 @@ function stripBookTitleRoot(
 }
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
-  const tocEntries = ref<TocEntry[]>([])
+  const tocEntries = shallowRef<TocEntry[]>(markRaw([]))
   const altTocSections = shallowRef<AltTocSection[]>([])
   const selectedAltTocStructureId = ref<number | null>(null)
   const loading = ref(false)
@@ -97,22 +99,53 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     altStructureChosen = true
   }
 
+  // This tab's entry in the open-tab TOC lookup (not a cache: removed on dispose).
+  const openTabToc: OpenTabToc = { bookId: undefined, raw: null, pending: null, view: null }
+  onScopeDispose(registerOpenTabToc(openTabToc))
+  let loadGeneration = 0
+
   async function load(id: number) {
+    const generation = ++loadGeneration
+    const title = bookTitle?.()
+    openTabToc.bookId = id
+    openTabToc.raw = null
+    openTabToc.view = null
+    openTabToc.pending = null
     loading.value = true
     error.value = null
     try {
-      const entries = await getAllTocEntries(id)
-      const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
-      tocEntries.value = stripped
-      tocSearchTree.value = new SearchableTree(stripped)
+      // Another open tab on this book already holds its TOC: take its arrays as is.
+      const view = findOpenTabTocView(id, title, openTabToc)
+      const shared = view ? null : findOpenTabToc(id, openTabToc)
+      let raw: TocEntry[]
+      if (view) {
+        raw = findOpenTabToc(id, openTabToc) as TocEntry[]
+      } else if (shared) {
+        raw = await shared
+      } else {
+        const fetching = getAllTocEntries(id)
+        openTabToc.pending = fetching
+        raw = await fetching
+      }
+      if (generation !== loadGeneration) return // the book changed mid-flight
+      const entries = view?.entries ?? markRaw(stripBookTitleRoot(raw, title, id))
+      const searchTree = view?.searchTree ?? new SearchableTree(entries)
+      openTabToc.raw = markRaw(raw)
+      openTabToc.view = { bookTitle: title, entries, searchTree }
+      tocEntries.value = entries
+      tocSearchTree.value = searchTree
     } catch (e) {
+      if (generation !== loadGeneration) return
       // TOC load failed — show the book with no TOC rather than a blank page
-      tocEntries.value = []
+      tocEntries.value = markRaw([])
       tocSearchTree.value = new SearchableTree([])
-      error.value = e instanceof Error ? e.message : 'שגיאה בטעינת תוכן עניינים'
+      error.value = e instanceof Error ? e.message : t('bookView.toc.loadError')
     } finally {
-      loading.value = false
-      tocLoaded.value = true
+      if (generation === loadGeneration) {
+        openTabToc.pending = null
+        loading.value = false
+        tocLoaded.value = true
+      }
     }
   }
 

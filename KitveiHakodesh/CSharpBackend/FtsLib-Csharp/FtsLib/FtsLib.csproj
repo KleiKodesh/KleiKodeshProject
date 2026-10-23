@@ -26,13 +26,17 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
     <!-- For SIMD hot-path optimizations (Vector256/512 loads, hardware popcount). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The service publishes native AOT and links this lib: surface AOT/trim hazards here as warnings. -->
+    <IsAotCompatible Condition="'$(TargetFramework)'=='net10.0'">true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict).
-         This is for the engine's OWN segment files (the index), not for any content database:
+         This is for the engine's OWN index files (FTS5 line table, term dictionaries), not for any content database:
          the engine reads content only through IFtsCorpus, which the caller supplies. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
   <!-- ZstdSharp.Port and the net48 Microsoft.VisualBasic reference used to live here for the

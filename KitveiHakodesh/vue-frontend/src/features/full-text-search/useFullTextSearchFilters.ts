@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ref, shallowRef, watch } from 'vue'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
 import { normalize } from '@/utils/normalizeText'
@@ -7,6 +8,8 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
+import { snippetHtmlOf } from './fullTextSearchSnippets'
+import { bookTitleOf } from './fullTextSearchReferences'
 import type { CategoryNode } from '../book-catalog/bookCatalogTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
@@ -26,6 +29,8 @@ export function parseSearchQuery(raw: string): { term: string; atFilters: string
 export function useFullTextSearchFilters(
   results: () => FullTextSearchResult[],
   executedQuery: () => string,
+  /** The hit's concrete matched terms (useFullTextSearch.matchedTermsOf). */
+  matchedTermsOf: (result: FullTextSearchResult) => string[],
   executeSearch: (q: string) => Promise<void>,
   clearSearch: () => void,
 ) {
@@ -230,7 +235,7 @@ export function useFullTextSearchFilters(
   }
 
   async function handleSearch(q: string) {
-    paneNavigation.updateActiveTab({ title: `חיפוש: ${q}` })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitleQuery', { q }) })
     await executeSearch(q)
   }
 
@@ -238,34 +243,36 @@ export function useFullTextSearchFilters(
     clearSearch()
     searchQuery.value = ''
     atFilters.value = []
-    paneNavigation.updateActiveTab({ title: 'חיפוש' })
+    paneNavigation.updateActiveTab({ title: t('fullTextSearch.tabTitle') })
   }
 
   async function handleResultClick(result: FullTextSearchResult, openInNewTab = false) {
     try {
       // Capture the target tab up front and patch it by id: the lookup below awaits,
       // and the active tab may change during that await (same reasoning as AddressBar).
+      const title = bookTitleOf(result)
       const targetTabId = openInNewTab
-        ? paneNavigation.openTab({ title: result.bookTitle, route: '/book-view' }).id
+        ? paneNavigation.openTab({ title, route: '/book-view' }).id
         : paneNavigation.activeTabId
 
       const rows = await getLineIndexFromLineId(result.lineId)
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
       if (lineIndex == null || bookId == null) return
+      const matchedTerms = matchedTermsOf(result)
       tabStore.updateTab(targetTabId, {
-        title: result.bookTitle,
+        title,
         route: '/book-view',
         bookId,
         openTocLineIndex: lineIndex,
         searchHighlightLineIndex: lineIndex,
         searchHighlightQuery: executedQuery(),
-        searchHighlightSnippet: result.snippet,
+        searchHighlightSnippet: snippetHtmlOf(result) ?? '',  // the clicked row is rendered, so built
         // Use the concrete matched terms from FtsLib (includes fuzzy/wildcard expansions)
         // rather than splitting the raw query, so the book view highlights the actual
         // words that appeared in the line.
-        searchHighlightTerms: result.matchedTerms.length
-          ? result.matchedTerms
+        searchHighlightTerms: matchedTerms.length
+          ? matchedTerms
           : executedQuery().trim().split(/\s+/).filter(Boolean),
       })
     } catch (err) {

@@ -1,0 +1,21 @@
+name: כללי (עברית)
+description: פנייה כללית שאינה דיווח על באג או בקשה לתכונה
+title: "[כללי] "
+body:
+  - type: markdown
+    attributes:
+      value: "שימו לב: פניות שנשלחות דרך הטופס הכללי מקבלות עדיפות נמוכה יותר מפניות שנשלחות דרך הטפסים \"דיווח על באג\" או \"בקשה לתכונה\". אם אפשר, נא להשתמש באחד מהם. תודה!"
+  - type: textarea
+    id: description
+    attributes:
+      label: תיאור
+      description: "נא לתאר את הפנייה בצורה ברורה ככל האפשר."
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: צילומי מסך / קבצים מצורפים
+      description: "אפשר לגרור לכאן תמונות או קבצים."
+    validations:
+      required: false

@@ -3,6 +3,11 @@ import { ref, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import { getExcludedFolders, setExcludedFolders, pickFolder } from '@/webview-host/bridge'
+import MessageBanner from '@/components/MessageBanner.vue'
+
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // Dev-mode counterpart of the hosted app's WinForms ExcludedFoldersForm. Same behaviour —
 // list, add via the native folder dialog, remove the selected row, confirm to persist — and
@@ -38,7 +43,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 })
 
 async function addFolder() {
-  const picked = await pickFolder('בחר תיקייה להחרגה מחיפוש הקבצים')
+  const picked = await pickFolder(t('settings.excluded.pickTitle'))
   if (!picked) return
 
   // Already listed — select it and scroll it into view instead of adding a duplicate.
@@ -65,7 +70,7 @@ async function saveAndClose() {
     await setExcludedFolders(folders.value)
     emit('close')
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'שמירת התיקיות נכשלה'
+    errorMessage.value = error instanceof Error ? error.message : t('settings.excluded.saveFailed')
   } finally {
     isSaving.value = false
   }
@@ -75,15 +80,15 @@ async function saveAndClose() {
 <template>
   <Teleport to="body">
     <div class="excluded-backdrop" @click.self="emit('close')">
-      <div class="excluded-dialog" role="dialog" aria-label="תיקיות מוחרגות מחיפוש קבצים">
-        <p class="excluded-title">תיקיות מוחרגות מחיפוש קבצים</p>
+      <div class="excluded-dialog" role="dialog" :aria-label="$t('settings.excluded.title')">
+        <p class="excluded-title">{{ $t('settings.excluded.title') }}</p>
         <p class="excluded-description">
-          תיקיות אלה יוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד.
+          {{ $t('settings.excluded.desc') }}
         </p>
 
         <div class="excluded-list">
-          <p v-if="isLoading" class="excluded-empty">טוען…</p>
-          <p v-else-if="folders.length === 0" class="excluded-empty">לא הוגדרו תיקיות מוחרגות</p>
+          <p v-if="isLoading" class="excluded-empty">{{ $t('settings.loading') }}</p>
+          <p v-else-if="folders.length === 0" class="excluded-empty">{{ $t('settings.excluded.empty') }}</p>
           <div
             v-for="folder in folders"
             :key="folder"
@@ -97,17 +102,17 @@ async function saveAndClose() {
           </div>
         </div>
 
-        <p v-if="errorMessage" class="excluded-error">{{ errorMessage }}</p>
+        <MessageBanner v-if="errorMessage" :message="errorMessage" @dismiss="errorMessage = ''" />
 
         <div class="excluded-actions">
           <button class="excluded-ok-button" :disabled="isSaving" @click="saveAndClose">
-            אישור
+            {{ $t('settings.ok') }}
           </button>
-          <button class="excluded-cancel-button" @click="emit('close')">ביטול</button>
+          <button class="excluded-cancel-button" @click="emit('close')">{{ $t('settings.cancel') }}</button>
           <div class="excluded-actions-spacer" />
           <button class="excluded-add-button" @click="addFolder">
             <IconFolderAdd20Regular />
-            <span>הוסף תיקייה</span>
+            <span>{{ $t('settings.excluded.add') }}</span>
           </button>
           <button
             class="excluded-remove-button"
@@ -115,7 +120,7 @@ async function saveAndClose() {
             @click="removeSelectedFolder"
           >
             <IconDelete20Regular />
-            <span>הסר</span>
+            <span>{{ $t('settings.excluded.remove') }}</span>
           </button>
         </div>
       </div>
@@ -141,7 +146,6 @@ async function saveAndClose() {
   padding: 20px 20px 14px;
   width: 460px;
   max-width: calc(100vw - 32px);
-  direction: rtl;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -193,7 +197,7 @@ async function saveAndClose() {
   overflow: hidden;
   text-overflow: ellipsis;
   direction: ltr;
-  text-align: left;
+  text-align: end;
 }
 
 .excluded-item:hover {
@@ -202,12 +206,6 @@ async function saveAndClose() {
 
 .excluded-item.selected {
   background: color-mix(in srgb, var(--accent-color) 22%, transparent);
-}
-
-.excluded-error {
-  margin: 0;
-  font-size: 11px;
-  color: var(--status-danger);
 }
 
 .excluded-actions {

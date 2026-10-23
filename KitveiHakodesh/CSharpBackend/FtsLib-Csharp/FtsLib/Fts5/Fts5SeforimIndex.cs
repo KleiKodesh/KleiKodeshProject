@@ -1,6 +1,7 @@
 #if NET6_0_OR_GREATER
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,10 +10,7 @@ using System.Threading;
 namespace FtsLib.Fts5
 {
     /// <summary>
-    /// TEMPORARY (FTS5 trial in the service): a drop-in for <see cref="SeforimIndex"/> — the
-    /// same public members Core calls, with SQLite FTS5 doing the search. Core selects it with a
-    /// `using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;` alias; removing those aliases
-    /// restores FtsLib's own engine.
+    /// The SQLite FTS5 engine behind Core's full-text search — FtsLib's public entry point.
     ///
     /// Index files (<see cref="Fts5Index"/>) live directly in the index directory. The line
     /// table is built in place and committed in batches, so searches see every committed
@@ -25,11 +23,10 @@ namespace FtsLib.Fts5
     /// </summary>
     public sealed class Fts5SeforimIndex
     {
-        /// <summary>The file whose presence means a searchable index — what the "segments
-        /// exist" checks look for while this engine is wired in.</summary>
+        /// <summary>The file whose presence means a searchable index.</summary>
         public const string IndexFileName = Fts5Index.LinesDbName;
 
-        public const int DefaultContextWords = SeforimIndex.DefaultContextWords;
+        public const int DefaultContextWords = SnippetDescriptorPipeline.DefaultContextWords;
 
         readonly string _indexPath;
         readonly Func<IFtsCorpus> _openCorpus;
@@ -44,37 +41,40 @@ namespace FtsLib.Fts5
 
         // ── Search ────────────────────────────────────────────────────
 
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default)
+        /// <param name="batchSizeAt">The caller's batch plan — see
+        /// <see cref="Fts5SearchEngine.Search"/>.</param>
+        public IEnumerable<SearchResult> Search(string query, int cap = 0,
+                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                Action<string> onStage = null, Func<int, int> batchSizeAt = null)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (var result in engine.Search(query, cap, expandKetiv, filterIds, ct))
+            foreach (var result in engine.Search(query, cap, filterIds, ct, onStage, batchSizeAt))
                 yield return result;
         }
 
-        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
+        public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (int id in engine.SearchIds(query, expandKetiv, filterIds, ct))
+            foreach (int id in engine.SearchIds(query, filterIds, ct))
                 yield return id;
         }
 
-        // ── Snippets (FtsLib's own, unchanged) ───────────────────────
+        // ── Snippet windows (FtsLib's own, unchanged) ────────────────
 
-        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
-                                             int contextWords = DefaultContextWords)
-            => Fts5SearchEngine.GenerateSnippet(result, requireOrdered, contextWords);
+        public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
+                                                     int contextWords = DefaultContextWords)
+            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords);
 
-        public SnippetResult GenerateSnippetWithNeighbors(SearchResult result, string prevContent, string nextContent,
-                                                          bool requireOrdered = false, int contextWords = DefaultContextWords)
+        public SnippetDescriptor LocateSnippetWindowOverNeighbourLines(SearchResult result, string previousContent, string nextContent,
+                                                                       bool requireOrdered = false, int contextWords = DefaultContextWords)
         {
-            if (result == null || result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
-            var prepared = result.Prepared ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetPipeline.GenerateWithNeighbors(prevContent, result.Content, nextContent, prepared,
-                                                         requireOrdered, result.OriginalGroupCount, contextWords);
+            if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
+            var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
+            return SnippetDescriptorPipeline.LocateOverNeighbourLines(previousContent, result.Content, nextContent, prepared,
+                                                                      requireOrdered, result.OriginalGroupCount, contextWords);
         }
 
         public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)

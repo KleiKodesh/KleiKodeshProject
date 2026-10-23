@@ -4,16 +4,16 @@ namespace Nakdan.Core
 {
     public static class HebrewTextExtensions
     {
-        private const char NikkudFirst = '\u05B0';
-        private const char NikkudLast = '\u05C7';
-        private const char ShinDot = '\u05C1';
-        private const char ShinDotSin = '\u05C2';
-
+        // Points only. U+05B0..U+05C7 also holds punctuation that must survive
+        // as text: maqaf U+05BE, paseq U+05C0, sof pasuq U+05C3, nun hafukha U+05C6.
+        // Stripping the maqaf joined hyphenated words before they reached Dicta.
         public static bool IsNikkudChar(this char c)
         {
-            return (c >= NikkudFirst && c <= NikkudLast)
-                || c == ShinDot
-                || c == ShinDotSin;
+            return (c >= '\u05B0' && c <= '\u05BD')   // vowels, dagesh, meteg
+                || c == '\u05BF'                        // rafe
+                || c == '\u05C1' || c == '\u05C2'       // shin/sin dots
+                || c == '\u05C4' || c == '\u05C5'       // upper/lower dot
+                || c == '\u05C7';                       // qamats qatan
         }
 
         public static string StripNikkud(this string s)

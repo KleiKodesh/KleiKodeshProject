@@ -22,7 +22,7 @@ namespace FtsLib.Indexing
     /// ReaderWriterLockSlim is a managed lock the OS cannot see, so it gets no priority
     /// inheritance at all. Throttled I/O inside an exclusive section therefore stalls every
     /// waiter for as long as the disk is busy — turning a millisecond commit into seconds.
-    /// Use <see cref="Suspend"/> around any such section (see SegmentMerger's commit block).
+    /// Use <see cref="Suspend"/> around any such section (see Fts5SeforimIndex.BuildIndex).
     ///
     /// MUST be entered and disposed on the same thread — Windows scopes the mode to the
     /// thread itself. Dispose ALWAYS restores (thread-pool threads are reused; leaking the

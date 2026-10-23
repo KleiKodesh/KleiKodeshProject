@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { t } from '@/i18n'
+import { ref, computed, watch, onBeforeUnmount, onUpdated, onScopeDispose, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useElementSize } from '@vueuse/core'
+import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
+import { INDEX_REBUILD_BUTTON_LABELS } from '@/composables/useSearchIndexStatus'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
+import { requestSnippets, snippetHtmlOf } from './fullTextSearchSnippets'
+import { bookTitleOf, requestReferences, tocPathOf } from './fullTextSearchReferences'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 import { teamimFontStyle } from '@/utils/teamimFont'
 
@@ -32,6 +38,8 @@ const props = defineProps<{
   hasSearched: boolean
   searchError?: SearchFailReason | null
   dbNotFound?: boolean
+  /** The index build failed — searches cannot succeed until it is rebuilt. */
+  indexBuildFailed?: boolean
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -42,10 +50,13 @@ const emit = defineEmits<{
   saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
-const SEARCH_ERROR_MESSAGES: Record<string, string> = {
-  indexNotReady: 'האינדקס לא מוכן לחיפוש — נסה שוב בעוד כמה רגעים',
-  indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
-  searchFailed:  'אירעה שגיאה בחיפוש',
+const DB_NOT_FOUND_MESSAGE = t('fullTextSearch.error.dbNotFound')
+const INDEX_BUILD_FAILED_MESSAGE =
+  t('fullTextSearch.error.indexBuildFailed', { button: INDEX_REBUILD_BUTTON_LABELS.fullTextSearch })
+const SEARCH_ERROR_MESSAGES: Record<SearchFailReason, string> = {
+  indexNotReady: t('fullTextSearch.error.indexNotReady'),
+  indexMerging:  t('fullTextSearch.error.indexMerging'),
+  searchFailed:  t('fullTextSearch.error.searchFailed'),
 }
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
@@ -65,6 +76,94 @@ const fontPx = computed(() => {
   return zoomFactor * (settingsStore.fontSize / 100) * 15
 })
 let programmaticScrolling = false
+
+// ── Snippet placeholders: one bar per text line ───────────────────────────────────
+// A not-yet-loaded snippet shows one placeholder bar per line the snippet will take once
+// its text lands, so the row's height — and the scroll geometry — barely move. The line
+// count is estimated from the descriptor's raw window length (snippetEnd - snippetStart
+// chars, roughly) and the chars a line of this width holds at this font size. The width
+// comes from a zero-height measuring element styled like a result row (same padding and
+// max-width), observed by ResizeObserver via useElementSize — measured on resize only.
+const measureEl = ref<HTMLElement | null>(null)
+const { width: contentWidth } = useElementSize(measureEl)
+/** Average advance of a Hebrew text glyph (letters + spaces), in em. */
+const AVG_CHAR_EM = 0.5
+const MAX_PLACEHOLDER_LINES = 4 // the .snippet clamp
+/**
+ * Raw descriptor chars per rendered line, measured from filled snippets at the
+ * current width and font. The raw window counts tags and markers the rendered text
+ * drops, so the em estimate alone over-counts lines on most rows; this ratio
+ * absorbs both. Rolling: every filled, unclamped row the virtualizer renders adds
+ * one sample (deduped by row index), so the first screen does not freeze a skewed
+ * ratio. Running sums keep each sample O(1). Reset on width / font change and on a
+ * new search.
+ */
+const calibratedCharsPerLine = ref<number | null>(null)
+const MIN_CALIBRATION_SAMPLES = 3
+/** Dedupe set is cleared at this size; the running sums are kept. */
+const MAX_SAMPLED_INDICES = 4096
+const sampledRowIndices = new Set<number>()
+let sampledRawChars = 0
+let sampledLines = 0
+let sampleCount = 0
+function resetCharsPerLineCalibration() {
+  sampledRowIndices.clear()
+  sampledRawChars = 0
+  sampledLines = 0
+  sampleCount = 0
+  calibratedCharsPerLine.value = null
+}
+watch([contentWidth, fontPx, () => props.searchQuery], resetCharsPerLineCalibration)
+function calibrateCharsPerLine() {
+  if (!scrollEl.value) return
+  let added = false
+  for (const el of scrollEl.value.querySelectorAll<HTMLElement>('.snippet[data-raw-chars]')) {
+    const rowIndex = Number(el.dataset.rowIndex)
+    if (sampledRowIndices.has(rowIndex)) continue
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight)
+    if (!lineHeight) continue
+    const lines = Math.round(el.scrollHeight / lineHeight)
+    if (lines < 1 || lines > MAX_PLACEHOLDER_LINES) continue // clamped rows hide their real length
+    if (sampledRowIndices.size >= MAX_SAMPLED_INDICES) sampledRowIndices.clear()
+    sampledRowIndices.add(rowIndex)
+    // A row of n lines holds between n-1 and n lines' worth of chars: count it as n - 0.5.
+    sampledRawChars += Number(el.dataset.rawChars)
+    sampledLines += lines - 0.5
+    sampleCount++
+    added = true
+  }
+  if (added && sampleCount >= MIN_CALIBRATION_SAMPLES && sampledRawChars > 0) {
+    calibratedCharsPerLine.value = sampledRawChars / sampledLines
+  }
+}
+onUpdated(calibrateCharsPerLine)
+const charsPerLine = computed(() => {
+  if (calibratedCharsPerLine.value != null) return Math.max(10, calibratedCharsPerLine.value)
+  const width = contentWidth.value
+  if (!width) return 60
+  return Math.max(10, Math.floor(width / (fontPx.value * AVG_CHAR_EM)))
+})
+function rawSnippetChars(hit: FullTextSearchResult): number {
+  return Math.max(1, (hit.snippetEnd ?? 0) - (hit.snippetStart ?? 0))
+}
+/**
+ * Widths (as CSS percentages) of the placeholder bars for a hit: full bars for the whole
+ * lines, and a shorter last bar sized by the remainder — never narrower than a fifth
+ * of the row, never a hairline. A one-line snippet gets its own short bar.
+ */
+function placeholderBars(hit: FullTextSearchResult): string[] {
+  const chars = rawSnippetChars(hit)
+  const perLine = charsPerLine.value
+  const lines = Math.min(MAX_PLACEHOLDER_LINES, Math.max(1, Math.ceil(chars / perLine)))
+  const bars: string[] = []
+  for (let i = 1; i < lines; i++) bars.push('100%')
+  const remainder = chars - (lines - 1) * perLine
+  const fraction = lines === MAX_PLACEHOLDER_LINES && chars > lines * perLine
+    ? 1
+    : Math.min(1, Math.max(0.2, remainder / perLine))
+  bars.push(`${Math.round(fraction * 100)}%`)
+  return bars
+}
 
 // Progressive render window. All results stream into props.results (never capped), but we
 // only ever hand the virtualizer a slice of them — grown as the user scrolls toward its end.
@@ -135,6 +234,24 @@ function renderSnippet(snippet: string): string {
   return censorDivineNames(snippet, settingsStore.censorOptions)
 }
 
+// Snippets are built on demand (fullTextSearchSnippets.ts): every hit has its row at once,
+// but only the rows the virtualizer renders fetch their line texts. Until they land the row
+// shows a placeholder the height of a full clamped snippet. Re-asked on every range change
+// and on every results rebuild (same range, different hits) — no timers.
+watch(
+  [() => virtualizer.value.getVirtualItems(), () => props.results],
+  ([items, results]) => {
+    const hits: FullTextSearchResult[] = []
+    for (const item of items) {
+      const hit = results[item.index]
+      if (hit) hits.push(hit)
+    }
+    requestSnippets(hits)
+    requestReferences(hits)
+  },
+  { immediate: true },
+)
+
 // "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
 const { previewOf, togglePreview, loadAbove, loadBelow, reseedPreview, clearPreviews } = useFullTextSearchPreview()
 watch(
@@ -204,7 +321,8 @@ function buildSelectedResultsCopyHtml(): string | null {
   return buildSelectedResultsHtml(
     props.results,
     rowIndexRange,
-    renderSnippet,
+    (result) => renderSnippet(snippetHtmlOf(result) ?? ''),
+    referenceOf,
     settingsStore.copyCleanText,
   )
 }
@@ -244,10 +362,16 @@ function recenterPreview(result: FullTextSearchResult) {
   previewRefs.get(result.lineId)?.recenter()
 }
 
+/** The row's citation, from the hit's ids (fullTextSearchReferences). '' for the TOC path
+ *  while the book's TOC has not arrived yet. */
+function referenceOf(result: FullTextSearchResult): string {
+  return resultReference(bookTitleOf(result), tocPathOf(result) ?? '')
+}
+
 function resultTitle(result: FullTextSearchResult): string {
   // Shares resultReference with the copy path so a citation reads the same whether it
   // is hovered or pasted.
-  return withNewTabHint(resultReference(result))
+  return withNewTabHint(referenceOf(result))
 }
 
 function captureScrollPos() {
@@ -431,10 +555,8 @@ function savePos() {
   emit('saveScroll', pos)
 }
 
-useEventListener(document, 'visibilitychange', () => {
-  if (document.visibilityState === 'hidden') savePos()
-})
-useEventListener(window, 'beforeunload', savePos)
+// Browser hide/unload and the host's close all run through the shared flush.
+onScopeDispose(registerPositionCapture(savePos))
 onBeforeUnmount(() => {
   programmaticScrolling = false
   savePos()
@@ -483,14 +605,23 @@ defineExpose({
 </script>
 
 <template>
-  <div class="results-wrap">
-    <div v-if="dbNotFound || !hasSearched || (!results.length && !isSearching)" class="empty-state">
+  <div dir="rtl" class="results-wrap">
+    <div v-if="dbNotFound || indexBuildFailed || !hasSearched || (!results.length && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
-      <span v-if="dbNotFound" class="empty-msg error-msg">מסד הנתונים לא נמצא — בחר קובץ מסד נתונים בהגדרות</span>
-      <span v-else-if="searchError" class="empty-msg error-msg">
-        {{ SEARCH_ERROR_MESSAGES[searchError] ?? SEARCH_ERROR_MESSAGES.searchFailed }}
-      </span>
-      <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
+      <MessageBanner v-if="dbNotFound" class="empty-error" :message="DB_NOT_FOUND_MESSAGE" :dismissible="false" />
+      <MessageBanner
+        v-else-if="indexBuildFailed"
+        class="empty-error"
+        :message="INDEX_BUILD_FAILED_MESSAGE"
+        :dismissible="false"
+      />
+      <MessageBanner
+        v-else-if="searchError"
+        class="empty-error"
+        :message="SEARCH_ERROR_MESSAGES[searchError]"
+        :dismissible="false"
+      />
+      <span v-else-if="hasSearched && !results.length" class="empty-msg ui-chrome">{{ $t('fullTextSearch.noResults') }}</span>
     </div>
     <template v-else>
       <BookViewAbbrevTooltip
@@ -505,6 +636,7 @@ defineExpose({
         :style="{ fontSize: `${fontPx}px` }"
         @scroll="onScroll"
       >
+        <div ref="measureEl" class="result-item placeholder-measure" aria-hidden="true" />
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
@@ -526,22 +658,22 @@ defineExpose({
                 @click="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
                 @auxclick.middle="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
               >
-                <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
-                <span v-if="results[vRow.index]!.tocText" class="sep">›</span>
-                <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
-                  results[vRow.index]!.tocText
+                <span class="book-title">{{ bookTitleOf(results[vRow.index]!) }}</span>
+                <span v-if="tocPathOf(results[vRow.index]!)" class="sep">›</span>
+                <span v-if="tocPathOf(results[vRow.index]!)" class="toc-text">{{
+                  tocPathOf(results[vRow.index]!)
                 }}</span>
                 <button
                   v-if="previewOf(results[vRow.index]!)"
                   class="preview-recenter-btn"
-                  title="חזרה לשורת התוצאה"
+                  :title="$t('fullTextSearch.list.backToResultLine')"
                   @click.stop="recenterPreview(results[vRow.index]!)"
                 >
                   <IconArrowReset24Regular />
                 </button>
                 <button
                   class="preview-toggle-btn"
-                  :title="previewOf(results[vRow.index]!) ? 'סגור תצוגה מקדימה' : 'הצג עוד'"
+                  :title="previewOf(results[vRow.index]!) ? $t('fullTextSearch.list.closePreview') : $t('fullTextSearch.list.showMore')"
                   @click.stop="togglePreview(results[vRow.index]!)"
                 >
                   <IconDismiss24Regular v-if="previewOf(results[vRow.index]!)" />
@@ -558,7 +690,15 @@ defineExpose({
                 :reseed="() => reseedPreview(results[vRow.index]!)"
               />
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div v-else class="snippet" :style="teamimFontStyle(results[vRow.index]!.snippet)" v-html="renderSnippet(results[vRow.index]!.snippet)" />
+              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :data-raw-chars="rawSnippetChars(results[vRow.index]!)" :data-row-index="vRow.index" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
+              <div v-else class="snippet-placeholder">
+                <div
+                  v-for="(barWidth, barIndex) in placeholderBars(results[vRow.index]!)"
+                  :key="barIndex"
+                  class="snippet-placeholder-line"
+                  :style="{ width: barWidth }"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -592,8 +732,8 @@ defineExpose({
   font-size: 14px;
   color: var(--text-secondary);
 }
-.error-msg {
-  color: color-mix(in srgb, var(--text-primary) 70%, var(--status-danger));
+.empty-error {
+  width: min(100% - 32px, 480px);
 }
 .scroller {
   flex: 1;
@@ -714,6 +854,33 @@ defineExpose({
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Not-yet-loaded snippet: one bar per estimated text line (placeholderBars), each the
+   height of a .snippet line box so the stack matches the filled row; the bar itself is
+   the book view's line placeholder look (.line.placeholder in BookViewLinesContent.vue),
+   inset from the line box (the ::after bar). Bars hug the inline start
+   (right, in RTL) like the text they stand in for. */
+.snippet-placeholder {
+  direction: rtl;
+}
+.snippet-placeholder-line {
+  display: flex;
+  align-items: center;
+  height: calc(1em * var(--line-height, 1.5));
+}
+.snippet-placeholder-line::after {
+  content: '';
+  width: 100%;
+  height: calc(100% - 0.4em);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+/* Zero-height twin of a result row, measured for the placeholder line estimate: it gets
+   the row's padding and max-width, so its content width IS a snippet's line width. */
+.placeholder-measure {
+  height: 0;
+  padding-block: 0;
   overflow: hidden;
 }
 .snippet :deep(.match) {

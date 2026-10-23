@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 // Bar clock button + world clock dropdown (current time in other time zones).
 // Same dropdown pattern as the Limud Yomi menu in HomePageDateBar.vue.
 import { ref, computed, nextTick } from 'vue'
@@ -14,16 +15,16 @@ interface WorldClockZone {
 }
 
 const WORLD_CLOCK_ZONES: WorldClockZone[] = [
-  { timeZone: 'Asia/Jerusalem', cityLabel: 'ישראל' },
-  { timeZone: 'America/New_York', cityLabel: 'ניו יורק' },
-  { timeZone: 'America/Los_Angeles', cityLabel: 'לוס אנג׳לס' },
-  { timeZone: 'Europe/London', cityLabel: 'לונדון' },
-  { timeZone: 'Europe/Paris', cityLabel: 'פריז' },
-  { timeZone: 'Europe/Brussels', cityLabel: 'אנטוורפן' },
-  { timeZone: 'Europe/Moscow', cityLabel: 'מוסקבה' },
-  { timeZone: 'Africa/Johannesburg', cityLabel: 'יוהנסבורג' },
-  { timeZone: 'America/Argentina/Buenos_Aires', cityLabel: 'בואנוס איירס' },
-  { timeZone: 'Australia/Melbourne', cityLabel: 'מלבורן' },
+  { timeZone: 'Asia/Jerusalem', cityLabel: t('home.worldClock.israel') },
+  { timeZone: 'America/New_York', cityLabel: t('home.worldClock.newYork') },
+  { timeZone: 'America/Los_Angeles', cityLabel: t('home.worldClock.losAngeles') },
+  { timeZone: 'Europe/London', cityLabel: t('home.worldClock.london') },
+  { timeZone: 'Europe/Paris', cityLabel: t('home.worldClock.paris') },
+  { timeZone: 'Europe/Brussels', cityLabel: t('home.worldClock.antwerp') },
+  { timeZone: 'Europe/Moscow', cityLabel: t('home.worldClock.moscow') },
+  { timeZone: 'Africa/Johannesburg', cityLabel: t('home.worldClock.johannesburg') },
+  { timeZone: 'America/Argentina/Buenos_Aires', cityLabel: t('home.worldClock.buenosAires') },
+  { timeZone: 'Australia/Melbourne', cityLabel: t('home.worldClock.melbourne') },
 ]
 
 const isWorldClockOpen = ref(false)
@@ -45,7 +46,7 @@ const localDayFormatter = new Intl.DateTimeFormat('en-CA')
 
 function dayOffsetLabel(zoneDay: string, localDay: string): string {
   if (zoneDay === localDay) return ''
-  return zoneDay > localDay ? 'מחר' : 'אתמול'
+  return zoneDay > localDay ? t('home.worldClock.tomorrow') : t('home.worldClock.yesterday')
 }
 
 const worldClockRows = computed(() => {
@@ -117,7 +118,7 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       ref="worldClockButtonRef"
       class="bar-item bar-item--btn bar-clock"
       :class="{ on: isWorldClockOpen }"
-      title="שעון עולמי"
+      :title="$t('home.worldClock.title')"
       @click="toggleWorldClockMenu"
     >
       {{ clockTime }}
@@ -129,7 +130,6 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       ref="worldClockMenuRef"
       class="world-clock-menu"
       :style="worldClockMenuStyle"
-      dir="rtl"
       tabindex="-1"
       @keydown="onWorldClockMenuKeydown"
     >

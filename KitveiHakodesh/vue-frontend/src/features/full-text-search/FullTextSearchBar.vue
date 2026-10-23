@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { t } from '@/i18n'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -14,6 +15,7 @@ import RecentSearchesDropdown from '@/components/common/RecentSearchesDropdown.v
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useRecentSearches } from '@/composables/useRecentSearches'
 import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
+import { syntaxSegments } from './queryWordSyntax'
 
 const props = defineProps<{
   searchQuery: string
@@ -22,8 +24,10 @@ const props = defineProps<{
   totalResultCount: number
   filterCount: number
   atFilterCount: number
-  isAdvancedOpen: boolean
-  isAdvancedActive: boolean
+  isOptionsOpen: boolean
+  isOptionsActive: boolean
+  /** False while the options show as the empty page's card: a dropdown of them is redundant. */
+  showOptionsToggle?: boolean
   sortOrder: FullTextSearchSortOrder
   disabled?: boolean
 }>()
@@ -31,14 +35,14 @@ const emit = defineEmits<{
   search: [string]
   cancel: []
   toggleFilter: []
-  toggleAdvanced: []
+  toggleOptions: []
   clear: []
   'update:searchQuery': [string]
   'update:sortOrder': [FullTextSearchSortOrder]
 }>()
 
 const filterBtnRef = ref<HTMLElement | null>(null)
-const advancedBtnRef = ref<HTMLElement | null>(null)
+const optionsBtnRef = ref<HTMLElement | null>(null)
 
 // The app's own recent-searches list (works in WebView2, unlike the browser's native
 // form autofill). recents.query IS the input's model. Committing a suggestion
@@ -49,11 +53,11 @@ localQuery.value = props.searchQuery
 
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
 const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
-  { value: 'catalogOrder', label: 'סדר מקורי' },
-  { value: 'relevance', label: 'רלוונטיות' },
-  { value: 'bookName', label: 'שם הספר' },
-  { value: 'authorName', label: 'שם המחבר' },
-  { value: 'chronological', label: 'סדר כרונולוגי' },
+  { value: 'catalogOrder', label: t('fullTextSearch.bar.sortCatalogOrder') },
+  { value: 'relevance', label: t('fullTextSearch.bar.sortRelevance') },
+  { value: 'bookName', label: t('fullTextSearch.bar.sortBookName') },
+  { value: 'authorName', label: t('fullTextSearch.bar.sortAuthorName') },
+  { value: 'chronological', label: t('fullTextSearch.bar.sortChronological') },
 ]
 const isSortDropdownOpen = ref(false)
 const sortToggleButtonRef = ref<HTMLElement | null>(null)
@@ -80,11 +84,23 @@ watch(
 )
 watch(localQuery, (v) => emit('update:searchQuery', v))
 
+// ── Syntax coloring ───────────────────────────────────────────────────────────
+// An input can't color part of its text, so a mirror under it paints the query with the
+// syntax signs greyed, and the input's own text is transparent (its caret and selection
+// stay). The mirror follows the input's horizontal scroll.
+const querySegments = computed(() => syntaxSegments(localQuery.value))
+const mirrorRef = ref<HTMLElement | null>(null)
+function syncMirrorScroll() {
+  const input = recents.inputEl.value
+  if (input && mirrorRef.value) mirrorRef.value.scrollLeft = input.scrollLeft
+}
+watch(localQuery, () => nextTick(syncMirrorScroll))
+
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
 const PLACEHOLDERS = [
-  'הזן טקסט לחיפוש...',
-  'הוסף @ לסינון לפי ספר או קטגוריה',
+  t('fullTextSearch.bar.placeholderEnter'),
+  t('fullTextSearch.bar.placeholderFilterHint'),
   'שויתי לנגדי תמיד',
   'כי ביצחק @רשי @רמבן',
   'קיש קיש קריא @בבלי בבא מציעא',
@@ -120,6 +136,12 @@ function handleClear() {
   recents.inputEl.value?.focus()
 }
 
+// The native search field's clear button empties the text and fires `search`; clear the
+// results with it, as Esc does. (Enter fires `search` too; keydown already handled it.)
+function onNativeSearch() {
+  if (!localQuery.value) handleClear()
+}
+
 // Recent-searches navigation runs first; if it consumed the key (accepted a suggestion,
 // or closed the dropdown on Esc) it preventDefaults and we don't act.
 function onInputKeydown(e: KeyboardEvent) {
@@ -129,7 +151,7 @@ function onInputKeydown(e: KeyboardEvent) {
   else if (e.key === 'Escape') handleClear()
 }
 
-defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
+defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
 </script>
 
 <template>
@@ -139,42 +161,47 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         ref="filterBtnRef"
         class="bar-btn"
         :class="{ 'filter-active': filterCount > 0 || atFilterCount > 0 }"
-        :title="filterCount > 0 ? `סינון: ${filterCount} ספרים` : 'סינון תוצאות'"
+        :title="filterCount > 0 ? $t('fullTextSearch.bar.filterCount', { n: filterCount }) : $t('fullTextSearch.bar.filterResults')"
         @click.stop="$emit('toggleFilter')"
       >
         <IconFilter20Regular />
       </button>
       <button
-        ref="advancedBtnRef"
+        v-if="showOptionsToggle !== false"
+        ref="optionsBtnRef"
         class="bar-btn"
-        :class="{ 'filter-active': isAdvancedOpen || isAdvancedActive }"
-        title="אפשרויות מתקדמות"
-        @click.stop="$emit('toggleAdvanced')"
+        :class="{ 'filter-active': isOptionsOpen || isOptionsActive }"
+        :title="$t('fullTextSearch.bar.searchOptions')"
+        @click.stop="$emit('toggleOptions')"
       >
         <IconOptions20Regular />
       </button>
     </template>
-    <input
-      :ref="recents.setInput"
-      v-model="localQuery"
-      type="text"
-      class="search-input"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      spellcheck="true"
-      autocomplete="off"
-      @focus="recents.onFocus"
-      @input="recents.onInput"
-      @blur="recents.onBlur"
-      @keydown="onInputKeydown"
-    />
+    <div class="query-field">
+      <div ref="mirrorRef" class="query-mirror" aria-hidden="true">
+        <span v-for="(segment, i) in querySegments" :key="i" :class="{ 'query-sign': segment.sign }">{{ segment.text }}</span>
+      </div>
+      <input
+        :ref="recents.setInput"
+        v-model="localQuery"
+        type="search"
+        class="search-input"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        spellcheck="true"
+        autocomplete="off"
+        @focus="recents.onFocus"
+        @input="recents.onInput"
+        @blur="recents.onBlur"
+        @keydown="onInputKeydown"
+        @scroll="syncMirrorScroll"
+        @select="syncMirrorScroll"
+        @keyup="syncMirrorScroll"
+        @search="onNativeSearch"
+      />
+    </div>
+
     <RecentSearchesDropdown :controller="recents" />
-    <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
-      {{ resultCount.toLocaleString() }}
-      <template v-if="!isSearching && resultCount < totalResultCount">
-        / {{ totalResultCount.toLocaleString() }}
-      </template>
-    </span>
     <template #right>
       <!-- Sort dropdown — shown only after results finish streaming in (hidden while
            searching / when there are no results), so it never reorders a partial set. -->
@@ -183,7 +210,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
           ref="sortToggleButtonRef"
           class="bar-btn"
           :class="{ 'filter-active': sortOrder !== 'catalogOrder' }"
-          :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
+          :title="$t('fullTextSearch.sortTitle', { label: SORT_OPTIONS.find((o) => o.value === sortOrder)!.label })"
           @click.stop="toggleSortDropdown"
         >
           <IconArrowSort20Regular />
@@ -209,32 +236,10 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         class="bar-btn"
         type="button"
         :disabled="disabled || (!isSearching && !localQuery.trim())"
-        :title="isSearching ? 'ביטול חיפוש' : 'חיפוש'"
+        :title="isSearching ? $t('fullTextSearch.bar.cancelSearch') : $t('fullTextSearch.bar.search')"
         @click="isSearching ? $emit('cancel') : handleSearch()"
       >
-        <div v-if="isSearching" class="spinner-wrap">
-          <svg class="ring" viewBox="0 0 24 24">
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill="none"
-              stroke-width="2"
-              stroke="var(--border-color)"
-            />
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill="none"
-              stroke-width="2"
-              stroke="var(--accent-color)"
-              stroke-dasharray="31.4 31.4"
-              stroke-linecap="round"
-            />
-          </svg>
-          <IconDismiss20Regular class="cancel-icon" />
-        </div>
+        <IconDismiss20Regular v-if="isSearching" />
         <IconSearch20Regular v-else />
       </button>
     </template>
@@ -242,13 +247,38 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
 </template>
 
 <style scoped>
-.search-input {
+.query-field {
+  position: relative;
+  display: flex;
   flex: 1;
   /* Text inputs have an intrinsic minimum width (default size attribute), so in
      a tight bar the input refuses to shrink and pushes the buttons and the
      count badge out of the pill. Let it shrink instead. */
   min-width: 40px;
-  direction: rtl;
+  /* TopSearchBar's type size reaches only a directly slotted input. */
+  font-size: 13px;
+}
+/* The input and its mirror must lay text out identically: same font, no padding. */
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font-size: inherit;
+  color: transparent;
+  caret-color: var(--text-primary);
+}
+.query-mirror {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  color: var(--text-primary);
+}
+.query-sign {
+  color: var(--accent-color);
 }
 /* Box, hover, press, disabled and the .active state come from the global .bar-btn
    rule (main.css). Only the size differs: these sit inside the search pill, which
@@ -273,7 +303,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
   /* The sort toggle sits at the far-left corner of the (RTL) bar, so anchoring the
      dropdown's right edge would push it off the left of the screen. Anchor its left
      edge to the toggle's left edge instead, so it opens rightward into the viewport. */
-  left: 0;
+  inset-inline-end: 0;
   min-width: 140px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -309,37 +339,5 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
 }
 .sort-dropdown__checkmark.is-visible {
   opacity: 1;
-}
-.result-count-badge {
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 4px;
-  direction: ltr;
-}
-.spinner-wrap {
-  position: relative;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ring {
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
-}
-.cancel-icon {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  color: var(--text-secondary);
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

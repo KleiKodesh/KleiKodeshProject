@@ -6,9 +6,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Word = Microsoft.Office.Interop.Word;
 using WpfLib.ViewModels;
 
 namespace Nakdan.UI
@@ -71,8 +73,17 @@ namespace Nakdan.UI
             VowelizeSelectionCommand = new RelayCommand(VowelizeSelection,  () => !IsBusy);
             RemoveNikkudCommand      = new RelayCommand(RemoveNikkud,       () => !IsBusy);
             RemoveCantillationsCommand = new RelayCommand(RemoveCantillations, () => !IsBusy);
+            RemoveNikkudAndCantillationsCommand = new RelayCommand(RemoveNikkudAndCantillations, () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
+
+            // ── Nikud suggestions ─────────────────────────────────
+            WordOptions = new ObservableCollection<string>();
+            WordOptions.CollectionChanged += (_, __) => { OnPropertyChanged(nameof(HasWordOptions)); OnPropertyChanged(nameof(SuggestionsHint)); };
+            ApplyWordOptionCommand   = new RelayCommand<string>(ApplyWordOption);
+            ShowSuggestionsCommand   = new RelayCommand(ShowSuggestions, () => !IsBusy);
+            NextWordCommand          = new RelayCommand(() => SelectWordAndShowSuggestions(true),  () => !IsBusy);
+            PreviousWordCommand      = new RelayCommand(() => SelectWordAndShowSuggestions(false), () => !IsBusy);
         }
 
         // ── Bindable properties ────────────────────────────────
@@ -145,8 +156,10 @@ namespace Nakdan.UI
         public ICommand VowelizeSelectionCommand { get; }
         public ICommand RemoveNikkudCommand      { get; }
         public ICommand RemoveCantillationsCommand { get; }
+        public ICommand RemoveNikkudAndCantillationsCommand { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
+        public ICommand ApplyWordOptionCommand   { get; }
 
         // ── Command implementations ───────────────────────────
         private void VowelizeSelection()
@@ -226,6 +239,27 @@ namespace Nakdan.UI
             }
         }
 
+        private async void RemoveNikkudAndCantillations()
+        {
+            SetStatus(string.Empty, false);
+            IsBusy = true;
+
+            try
+            {
+                _nakdanWrapper.RemoveNikkudAndCantillations();
+                SetStatus("הניקוד והטעמים הוסרו ✓", false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                IsBusy = false;
+                await AutoHideStatusAsync();
+            }
+        }
+
         private void Cancel()
         {
             _cancellationTokenSource?.Cancel();
@@ -240,6 +274,252 @@ namespace Nakdan.UI
             await System.Threading.Tasks.Task.Delay(StatusAutoHideDelayMs);
             StatusMessage = string.Empty;
             HasError = false;
+        }
+
+        // ── Nikud suggestions ─────────────────────────────────
+        //  On explicit request (button / next-prev / Ctrl+arrows), the Word
+        //  selection's single Hebrew word fetches Dicta's alternative vocalizations for it
+        //  (in its sentence context); clicking one replaces the word.
+
+        private readonly DictaApiClient _suggestionsApi = new DictaApiClient();
+        private string _suggestionsStatus;
+        private CancellationTokenSource _suggestionsCts;
+        private Word.Range _suggestionRange;
+        private string     _suggestionWord;
+
+        public ObservableCollection<string> WordOptions { get; }
+
+        public ICommand ShowSuggestionsCommand { get; }
+        public ICommand NextWordCommand        { get; }
+        public ICommand PreviousWordCommand    { get; }
+
+        public string SuggestionsStatus
+        {
+            get => _suggestionsStatus;
+            private set
+            {
+                _suggestionsStatus = value;
+                OnPropertyChanged(nameof(SuggestionsStatus));
+                OnPropertyChanged(nameof(HasSuggestionsStatus));
+            }
+        }
+        public bool HasSuggestionsStatus => !string.IsNullOrEmpty(_suggestionsStatus);
+        public bool HasWordOptions => WordOptions.Count > 0;
+        public string SuggestionsHint => HasWordOptions
+            ? "לחיצה על הצעה מחליפה את המילה ועוברת לבאה."
+            : "בחרו מילה במסמך ולחצו הצג.";
+
+        /// <summary>Explicit request: fetch options for the word at the selection, even if it is the same word.</summary>
+        public void ShowSuggestions() => UpdateSuggestionsAsync(true);
+
+        /// <summary>Select the logically next (forward) / previous word, then show its options.</summary>
+        private void SelectWordAndShowSuggestions(bool forward)
+        {
+            try
+            {
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) return;
+                Word.Range target = FindAdjacentWord(sel.Range, forward);
+                if (target == null) return;
+                target.Select();
+            }
+            catch { return; }
+            UpdateSuggestionsAsync(true);
+        }
+
+        private void ResetSuggestions(string status)
+        {
+            _suggestionsCts?.Cancel();
+            _suggestionsCts = null;
+            _suggestionRange = null;
+            _suggestionWord = null;
+            WordOptions.Clear();
+            SuggestionsStatus = status;
+        }
+
+        private static bool IsHebrewLetter(char c) => c >= 'א' && c <= 'ת';
+
+        private static bool IsWordChar(char c) =>
+            char.IsLetter(c) || (c >= '֑' && c <= 'ׇ') || c == '"' || c == '\'' || c == '׳' || c == '״';
+
+        private async void UpdateSuggestionsAsync(bool force = false)
+        {
+            Word.Range wordRange;
+            string word, context;
+            int offset;
+            try
+            {
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) { ResetSuggestions(string.Empty); return; }
+
+                wordRange = sel.Range.Duplicate;
+                wordRange.Expand(Word.WdUnits.wdWord);
+
+                // Trim leading/trailing spaces and punctuation.
+                string text = wordRange.Text ?? string.Empty;
+                int lead = 0, trail = 0;
+                while (lead < text.Length && !IsWordChar(text[lead])) lead++;
+                while (trail < text.Length - lead && !IsWordChar(text[text.Length - 1 - trail])) trail++;
+                if (lead + trail >= text.Length) { ResetSuggestions(string.Empty); return; }
+                wordRange.SetRange(wordRange.Start + lead, wordRange.End - trail);
+                word = wordRange.Text ?? string.Empty;
+
+                // Skip multi-word selections and non-Hebrew words.
+                bool hasHebrew = false;
+                foreach (char c in word)
+                {
+                    if (char.IsWhiteSpace(c)) { ResetSuggestions(string.Empty); return; }
+                    if (IsHebrewLetter(c)) hasHebrew = true;
+                }
+                if (!hasHebrew) { ResetSuggestions(string.Empty); return; }
+
+                // Same word as last time — keep the current list.
+                if (!force && _suggestionRange != null && word == _suggestionWord
+                    && _suggestionRange.Start == wordRange.Start && _suggestionRange.End == wordRange.End)
+                return;
+
+                // Context = containing sentence, capped around the word.
+                Word.Range sentence = wordRange.Sentences[1];
+                int ctxStart = sentence.Start, ctxEnd = sentence.End;
+                const int MaxContext = 300;
+                if (ctxEnd - ctxStart > MaxContext)
+                {
+                    int half = Math.Max(0, (MaxContext - word.Length) / 2);
+                    ctxStart = Math.Max(ctxStart, wordRange.Start - half);
+                    ctxEnd = Math.Min(ctxEnd, ctxStart + MaxContext);
+                    if (ctxEnd < wordRange.End) ctxEnd = wordRange.End;
+                }
+                Word.Document doc = wordRange.Document;
+                context = doc.Range(ctxStart, ctxEnd).Text ?? string.Empty;
+
+                // Range character counts can diverge from string length (fields,
+                // hidden marks), so locate the word near its expected index.
+                string before = doc.Range(ctxStart, wordRange.Start).Text ?? string.Empty;
+                offset = context.IndexOf(word, Math.Min(before.Length, context.Length), StringComparison.Ordinal);
+                if (offset < 0) offset = context.IndexOf(word, StringComparison.Ordinal);
+                if (offset < 0) { context = word; offset = 0; }
+            }
+            catch
+            {
+                ResetSuggestions(string.Empty);
+                return;
+            }
+
+            ResetSuggestions("טוען הצעות…");
+            _suggestionRange = wordRange;
+            _suggestionWord = word;
+            var cts = new CancellationTokenSource();
+            _suggestionsCts = cts;
+            string genre = (_selectedGenre?.Genre ?? DictaGenre.Modern).ToString().ToLowerInvariant();
+
+            try
+            {
+                List<string> options = await _suggestionsApi.GetWordOptionsAsync(context, offset, genre, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                foreach (string o in options) WordOptions.Add(o);
+                SuggestionsStatus = options.Count == 0 ? "אין הצעות למילה זו" : string.Empty;
+            }
+            catch
+            {
+                if (cts.IsCancellationRequested) return;
+                SuggestionsStatus = "לא ניתן לטעון הצעות (בדוק חיבור לאינטרנט)";
+            }
+        }
+
+        private void ApplyWordOption(string option)
+        {
+            if (string.IsNullOrEmpty(option) || _suggestionRange == null) return;
+            Word.Range range = _suggestionRange;
+            Word.UndoRecord undo = null;
+            bool started = false;
+            Word.Range next = null;
+            try
+            {
+                if (range.Text != _suggestionWord)
+                {
+                    ResetSuggestions("המילה השתנתה — בחר אותה שוב");
+                    return;
+                }
+                undo = VstoHelper.Application.UndoRecord;
+                undo.StartCustomRecord("הצעת ניקוד");
+                started = true;
+                range.Text = option;
+                _suggestionWord = option;
+                next = FindNextWord(range);
+            }
+            catch
+            {
+                SuggestionsStatus = "ההחלפה נכשלה";
+            }
+            finally
+            {
+                if (started)
+                    try { undo.EndCustomRecord(); } catch { }
+            }
+            // Advance: select the next word and show its options right away.
+            if (next != null)
+            {
+                try { next.Select(); } catch { return; }
+                UpdateSuggestionsAsync(true);
+            }
+        }
+
+
+        /// <summary>The next word after <paramref name="range"/> that holds a letter, trailing spaces trimmed; null at the end.</summary>
+        private static Word.Range FindNextWord(Word.Range range) => FindAdjacentWord(range, true);
+
+        /// <summary>The previous word before <paramref name="range"/> that holds a letter, trailing spaces trimmed; null at the start.</summary>
+        private static Word.Range FindPreviousWord(Word.Range range) => FindAdjacentWord(range, false);
+
+        /// <summary>
+        /// Ctrl+Right / Ctrl+Left from the pane: select the next / previous word in
+        /// Word. Visual like Word — in an RTL paragraph Left is forward. Then shows
+        /// the new word's suggestions.
+        /// </summary>
+        public bool MoveToAdjacentWord(bool rightArrow)
+        {
+            try
+            {
+                Word.Selection sel = VstoHelper.Application?.Selection;
+                if (sel == null) return false;
+                bool rtl = false;
+                try { rtl = sel.ParagraphFormat.ReadingOrder == Word.WdReadingOrder.wdReadingOrderRtl; } catch { }
+                if (!rtl)
+                    try { rtl = sel.Paragraphs[1].ReadingOrder == Word.WdReadingOrder.wdReadingOrderRtl; } catch { }
+                bool forward = rtl ? !rightArrow : rightArrow;
+                Word.Range target = FindAdjacentWord(sel.Range, forward);
+                if (target == null) return true;
+                target.Select();
+            }
+            catch
+            {
+                return false;
+            }
+            UpdateSuggestionsAsync(true);
+            return true;
+        }
+
+        private static Word.Range FindAdjacentWord(Word.Range range, bool forward)
+        {
+            Word.Range r = range.Duplicate;
+            for (int i = 0; i < 20; i++)
+            {
+                Word.Range w = forward
+                    ? r.Next(Word.WdUnits.wdWord, 1)
+                    : r.Previous(Word.WdUnits.wdWord, 1);
+                if (w == null) return null;
+                string t = w.Text ?? string.Empty;
+                foreach (char c in t)
+                {
+                    if (char.IsLetter(c))
+                    {
+                        w.MoveEndWhile("  ", Word.WdConstants.wdBackward);
+                        return w;
+                    }
+                }
+                r = w;
+            }
+            return null;
         }
 
         // ── Helpers ───────────────────────────────────────────

@@ -122,16 +122,6 @@ public sealed class OpenInDefaultAppResult
     public string? Error { get; set; }
 }
 
-/// <summary>Result of <c>getFonts</c>: system font families that can render Hebrew, sorted
-/// alphabetically. Same contract as the hosted <c>getFonts</c> bridge action, so the settings
-/// font picker is identical in dev and hosted. Empty when DirectWrite is unavailable — the
-/// frontend then falls back to its canvas probe.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FontsResult
-{
-    public string[] Fonts { get; set; } = [];
-}
-
 /// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
 /// for the temp file name.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -209,7 +199,20 @@ public sealed class DbPathResult
     /// half-way (its hot -journal or .applying marker is still beside the file), so every
     /// read-only query fails until Otzaria is opened and finishes it.</summary>
     public bool UpdateInterrupted { get; set; }
+    /// <summary><c>getSeforimDbPath</c> only: the database answers a query. False with
+    /// <see cref="Exists"/> true means the file is there but cannot be read (not a seforim
+    /// database, corrupt, locked).</summary>
+    public bool Readable { get; set; }
+    /// <summary><c>getSeforimDbPath</c> only: with <see cref="Readable"/> false, the read
+    /// failed TRANSIENTLY (SQLITE_BUSY/LOCKED, I/O error) — it will clear by itself, so the
+    /// page shows no "unreadable" banner.</summary>
+    public bool ReadBusy { get; set; }
     public bool Restarting { get; set; }
+    /// <summary>Identifies the service instance that answered. A path change restarts the
+    /// service, but the old instance keeps answering (with the OLD database) for a few seconds
+    /// after it said <see cref="Restarting"/>; the page compares this against later
+    /// <c>getSeforimDbPath</c> replies to know the fresh instance is up before it reloads.</summary>
+    public string InstanceId { get; set; } = "";
     /// <summary><c>pickSeforimDbPath</c> only: the user dismissed the native dialog, so
     /// nothing was persisted and the caller must leave the current path as-is.</summary>
     public bool Cancelled { get; set; }
@@ -310,6 +313,24 @@ public sealed class HbDownloadResult
     /// no error banner.</summary>
     public bool Cancelled { get; set; }
     public string? Error { get; set; }
+    /// <summary>Full failure detail (exception ToString, HTTP status/content-type/final URL) for
+    /// the webview console — never shown in the UI.</summary>
+    public string? Detail { get; set; }
+}
+
+/// <summary>Args for <c>getHebrewBooksEditions</c>: a seforim.db book id.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HebrewBooksEditionsArgs
+{
+    public int BookId { get; set; }
+}
+
+/// <summary>Result of <c>getHebrewBooksEditions</c>: the book's HebrewBooks scans, best first;
+/// empty when it has none or the library in use has no Otzaria map.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HebrewBooksEditionsResult
+{
+    public List<HebrewBooksEdition> Editions { get; set; } = new();
 }
 
 /// <summary>Args for <c>checkHbLocalFiles</c>.</summary>
@@ -333,6 +354,9 @@ public sealed class HbDeleteLocalArgs
 {
     public string? BookId { get; set; }
     public string? LocalFolder { get; set; }
+    /// <summary>Move to the Recycle Bin instead of deleting permanently. Dev only: the installed
+    /// service runs as LocalSystem, so the hosted page recycles through its user-side host.</summary>
+    public bool ToRecycleBin { get; set; }
 }
 
 /// <summary>Result of <c>deleteHbLocalFile</c>.</summary>
@@ -341,6 +365,8 @@ public sealed class HbDeleteLocalResult
 {
     public bool Ok { get; set; }
     public bool NotFound { get; set; }
+    /// <summary>The file's drive has no Recycle Bin; nothing was deleted.</summary>
+    public bool NoRecycleBin { get; set; }
     public string? Error { get; set; }
 }
 
@@ -387,6 +413,17 @@ public sealed class UpdateStatusResult
     public string InstalledVersion { get; set; } = "";
     /// <summary><c>checkForUpdateNow</c> only: why the check could not run or failed; "" when it ran.</summary>
     public string CheckError { get; set; } = "";
+}
+
+/// <summary>One frame of <c>updateProgressStream</c>: the release being downloaded now ("" when
+/// none) with its bytes so far, and the downloaded update ready to install ("" when none).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UpdateProgressFrame
+{
+    public string DownloadingVersion { get; set; } = "";
+    public long Received { get; set; }
+    public long Total { get; set; }
+    public string ReadyVersion { get; set; } = "";
 }
 
 /// <summary>Args for <c>registerOwner</c> / <c>releaseOwner</c>: a host process using this console
@@ -501,7 +538,16 @@ internal static class RpcResponse
 {
     public static byte[] Ok(byte[]? resultBytes) => MsgPack.Ser(new RpcEnvelope { Ok = true, Result = resultBytes });
 
-    public static byte[] Err(string message) => MsgPack.Ser(new RpcEnvelope { Ok = false, Error = message });
+    /// <summary>A reply that carries an op-level failure in its result (e.g. Error = ex.Message):
+    /// the whole exception rides on the envelope so the client console still shows it.</summary>
+    public static byte[] OkWithFailure(byte[]? resultBytes, string op, Exception ex) =>
+        MsgPack.Ser(new RpcEnvelope { Ok = true, Result = resultBytes, Detail = $"op '{op}' failed:\n{ex}" });
+
+    public static byte[] Err(string message, string? detail = null) =>
+        MsgPack.Ser(new RpcEnvelope { Ok = false, Error = message, Detail = detail });
+
+    /// <summary>An op threw: short message for callers, the whole exception for the console.</summary>
+    public static byte[] Err(string op, Exception ex) => Err(ex.Message, $"op '{op}' threw:\n{ex}");
 }
 
 /// <summary>AOT-safe source-generated (de)serialization for every RPC type.
@@ -593,8 +639,9 @@ internal static class RpcResponse
 [JsonSerializable(typeof(LinkTargetArgs))]
 [JsonSerializable(typeof(LinkTargetRow))]
 [JsonSerializable(typeof(LinkTargetResult))]
-[JsonSerializable(typeof(TocPathRow))]
-[JsonSerializable(typeof(TocPathsResult))]
+[JsonSerializable(typeof(LineTocEntryRow))]
+[JsonSerializable(typeof(TocEntryPathRow))]
+[JsonSerializable(typeof(TocPathsForLinesResult))]
 [JsonSerializable(typeof(EnclosingTocPathArgs))]
 [JsonSerializable(typeof(EnclosingTocPathRow))]
 [JsonSerializable(typeof(EnclosingTocPathResult))]
@@ -610,9 +657,5 @@ internal static class RpcResponse
 [JsonSerializable(typeof(LineByIndexArgs))]
 [JsonSerializable(typeof(RawLineRow))]
 [JsonSerializable(typeof(RawLinesResult))]
-[JsonSerializable(typeof(FtsSearchArgs))]
-[JsonSerializable(typeof(FtsHit))]
-[JsonSerializable(typeof(FtsSearchResult))]
-[JsonSerializable(typeof(FtsIndexStatus))]
 [JsonSerializable(typeof(string))]
 internal partial class RpcJsonContext : JsonSerializerContext;

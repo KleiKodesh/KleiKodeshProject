@@ -59,13 +59,14 @@ const hasChildren = computed(
 )
 
 function firstNavigableBookId(cat: CategoryNode): number | null {
-  // Prefer a book that has results (when search has run), otherwise first book
-  for (const book of cat.books) {
-    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
-  }
+  // Prefer a book that has results (when search has run), otherwise first book.
+  // Subcategories before own books — the catalog's order.
   for (const child of cat.children) {
     const found = firstNavigableBookId(child)
     if (found != null) return found
+  }
+  for (const book of cat.books) {
+    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
   }
   return null
 }
@@ -92,7 +93,7 @@ function navigateToCategory() {
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
       <span v-else class="expander-placeholder" />
-      <button class="row-title" title="גלול לתוצאה הראשונה" @click.stop="navigateToCategory">
+      <button class="row-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="navigateToCategory">
         {{ category.title }}
         <span v-if="totalResults > 0" class="count">({{ totalResults }})</span>
       </button>
@@ -123,7 +124,7 @@ function navigateToCategory() {
           <button
             class="row-title"
             :class="{ dimmed: !checkedBookIds.has(book.id) }"
-            title="גלול לתוצאה הראשונה"
+            :title="$t('fullTextSearch.filter.scrollToFirst')"
             @click.stop="emit('navigateToBook', book.id)"
           >
             {{ book.title }}
@@ -225,7 +226,7 @@ function navigateToCategory() {
 .row-title {
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: start;
   padding-inline-end: 8px;
   padding-inline-start: 8px;
   color: inherit;

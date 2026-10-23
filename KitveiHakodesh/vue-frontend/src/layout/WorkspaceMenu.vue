@@ -361,28 +361,28 @@ function onFieldKeydown(e: KeyboardEvent) {
             @keydown.escape.stop="cancelEdit"
             autofocus
           />
-          <button class="icon-btn" title="שמור" @click="commitEdit">
+          <button class="icon-btn" :title="$t('layout.ws.save')" @click="commitEdit">
             <IconCheckmark20Regular />
           </button>
-          <button class="icon-btn" title="ביטול" @click="cancelEdit">
+          <button class="icon-btn" :title="$t('layout.ws.cancel')" @click="cancelEdit">
             <IconDismiss20Regular />
           </button>
         </template>
         <template v-else-if="confirmDeleteId === ws.id">
-          <span class="ws-name confirm-text">{{ ws.name }} — למחוק?</span>
-          <button class="icon-btn danger" @click="confirmDelete(ws.id)">מחק</button>
-          <button class="icon-btn" @click="confirmDeleteId = null">ביטול</button>
+          <span class="ws-name confirm-text">{{ $t('layout.ws.confirmDelete', { name: ws.name }) }}</span>
+          <button class="icon-btn danger" @click="confirmDelete(ws.id)">{{ $t('layout.ws.delete') }}</button>
+          <button class="icon-btn" @click="confirmDeleteId = null">{{ $t('layout.ws.cancel') }}</button>
         </template>
         <template v-else>
           <span class="ws-name" @click="switchTo(ws.id)">{{ ws.name }}</span>
-          <span v-if="ws.id === wsStore.activeId" class="active-badge">פעיל</span>
+          <span v-if="ws.id === wsStore.activeId" class="active-badge">{{ $t('layout.ws.active') }}</span>
           <div class="ws-actions">
-            <button class="icon-btn" title="שנה שם" @click.stop="startEdit(ws)">
+            <button class="icon-btn" :title="$t('layout.ws.rename')" @click.stop="startEdit(ws)">
               <IconEdit20Regular />
             </button>
             <button
               class="icon-btn danger"
-              title="מחק"
+              :title="$t('layout.ws.delete')"
               :disabled="wsStore.workspaces.length <= 1"
               @click.stop="startConfirmDelete(ws.id)"
             >
@@ -400,11 +400,11 @@ function onFieldKeydown(e: KeyboardEvent) {
         name="workspace-name-new"
         class="ws-input"
         :class="{ 'is-focused': isCreateBoxFocused() }"
-        placeholder="סביבת עבודה חדשה"
+        :placeholder="$t('layout.ws.newPlaceholder')"
         @keydown="onFieldKeydown"
         @focus="focusedIndex = createBoxIndex()"
       />
-      <button class="create-btn" :disabled="!newName.trim()" title="צור" @click="create">
+      <button class="create-btn" :disabled="!newName.trim()" :title="$t('layout.ws.create')" @click="create">
         <IconAdd20Regular />
       </button>
     </div>
@@ -421,7 +421,6 @@ function onFieldKeydown(e: KeyboardEvent) {
   flex-direction: column;
   min-width: 200px;
   min-height: 0;
-  direction: rtl;
 }
 
 .ws-list {

@@ -17,6 +17,13 @@ namespace KitveiHakodesh.Core.SeforimDb
     {
         // ── Categories ──────────────────────────────────────────────────────────────
 
+        /// <summary>Sibling order within a level: orderIndex, except that a NEGATIVE orderIndex
+        /// sorts AFTER every non-negative one. The library marks its "mefarshim" subfolders with
+        /// -5 — a commentaries folder belongs below the text it comments on, not above it (the
+        /// Otzaria app reads the sign the same way). Shared by the browse query and the
+        /// tree-order query so the catalog view and every ranking agree.</summary>
+        private const string CategorySiblingOrder = "CASE WHEN orderIndex < 0 THEN 1 ELSE 0 END, orderIndex";
+
         /// <summary>All categories flat — the frontend builds the tree in memory once.</summary>
         public static string GetAllCategories(bool hasOrderIndex) => GetAllCategories(hasOrderIndex, "main");
 
@@ -24,7 +31,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// <see cref="SeforimDbAttachedLibraries"/>. <paramref name="schema"/> is "main" or one
         /// of the "lib{N}" aliases.</summary>
         public static string GetAllCategories(bool hasOrderIndex, string schema) => hasOrderIndex
-            ? $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level, orderIndex"
+            ? $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level, " + CategorySiblingOrder
             : $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level";
 
         // ── Books ────────────────────────────────────────────────────────────────────
@@ -245,41 +252,6 @@ namespace KitveiHakodesh.Core.SeforimDb
               AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
             ORDER BY l.targetBookId";
 
-        // ── Inline commentator markers (DBs without link_anchor) ─────────────────────
-        // See SeforimDbInlineCommentatorMarkers for why these exist.
-
-        /// <summary>Book id and content of a batch of lines.</summary>
-        public static string GetLineBookIdsAndContents(SeforimDbSchema schema, int count) =>
-            $"SELECT l.id, l.bookId, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
-            $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
-            $" WHERE l.id IN ({InPlaceholders("p", count)})";
-
-        /// <summary>Every line of one book, with its content.</summary>
-        public static string GetBookLineContents(SeforimDbSchema schema) =>
-            $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
-            $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
-            " WHERE l.bookId = @bookId";
-
-        /// <summary>For every line of one book, the OTHER books it is linked with — in either
-        /// direction, since a commentary link may be stored from either end.</summary>
-        public const string GetLinkedBooksForBookLines = @"
-            SELECT sourceLineId, targetBookId FROM link
-            WHERE sourceBookId = @bookId AND targetBookId <> @bookId
-            UNION ALL
-            SELECT targetLineId, sourceBookId FROM link
-            WHERE targetBookId = @bookId AND sourceBookId <> @bookId";
-
-        /// <summary>The lines linked with each of a batch of lines, in either direction, with
-        /// the linked line's book and index.</summary>
-        public static string GetLinkedLinesForLines(int count) => $@"
-            SELECT l.sourceLineId, l.targetBookId, l.targetLineId, t.lineIndex
-            FROM link l JOIN line t ON t.id = l.targetLineId
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
-            UNION ALL
-            SELECT l.targetLineId, l.sourceBookId, l.sourceLineId, s.lineIndex
-            FROM link l JOIN line s ON s.id = l.sourceLineId
-            WHERE l.targetLineId IN ({InPlaceholders("p", count)})";
-
         /// <summary>All connection type ids and names.</summary>
         public const string GetAllConnectionTypes = "SELECT id, name FROM connection_type";
 
@@ -408,46 +380,59 @@ namespace KitveiHakodesh.Core.SeforimDb
             LIMIT 1";
         }
 
-        /// <summary>Target line id + lineIndex for the first link from a source line to a target book.</summary>
+        /// <summary>Target line id + lineIndex for the first link from a source line to a target book.
+        /// A line can link to the same book both as its commentary and by a lateral REFERENCE/OTHER
+        /// link to some other place (Berachot 45a links Rashi on 45a AND Rashi on 20b), so the
+        /// commentary-shaped links win, then the earliest target line - never the raw row order.</summary>
         public const string GetLinkTargetForSourceLineAndBook = @"
             SELECT lk.targetLineId, ln.lineIndex
             FROM link lk
             JOIN line ln ON ln.id = lk.targetLineId
+            LEFT JOIN connection_type ct ON ct.id = lk.connectionTypeId
             WHERE lk.sourceLineId = @sourceLineId
               AND lk.targetBookId = @targetBookId
+            ORDER BY CASE WHEN ct.name IN ('COMMENTARY', 'SUPER_COMMENTARY', 'TARGUM') THEN 0 ELSE 1 END,
+                     ln.lineIndex
             LIMIT 1";
 
         // ── TOC paths & line→book/index helpers (search + commentary labels) ─────────
 
-        /// <summary>Full TOC path (root→leaf, ' '-joined, book-title root stripped) per line id.</summary>
-        public static string GetTocPathsForLines(int count) => $@"
-            WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
-              SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
-              FROM line_toc lt
-              JOIN tocEntry te ON te.id = lt.tocEntryId
+        /// <summary>The TOC entry (and book) each line id sits under.</summary>
+        public static string GetTocEntryForLines(int count) => $@"
+            SELECT lt.lineId, te.bookId, lt.tocEntryId
+            FROM line_toc lt
+            JOIN tocEntry te ON te.id = lt.tocEntryId
+            WHERE lt.lineId IN ({InPlaceholders("p", count)})
+            ORDER BY lt.lineId, lt.tocEntryId";
+
+        /// <summary>Full TOC path (root→leaf, ' '-joined, book-title root stripped) per TOC entry id.</summary>
+        public static string GetTocPathsForTocEntries(int count) => $@"
+            WITH RECURSIVE ancestors(entryId, bookId, id, parentId, text, depth) AS (
+              SELECT te.id, te.bookId, te.id, te.parentId, tt.text, 0
+              FROM tocEntry te
               JOIN tocText tt ON tt.id = te.textId
-              WHERE lt.lineId IN ({InPlaceholders("p", count)})
+              WHERE te.id IN ({InPlaceholders("e", count)})
               UNION ALL
-              SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+              SELECT a.entryId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
               FROM ancestors a
               JOIN tocEntry te ON te.id = a.parentId
               JOIN tocText tt ON tt.id = te.textId
             ),
             ordered AS (
-              SELECT a.lineId, a.bookId, a.text, a.depth,
-                     MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+              SELECT a.entryId, a.text, a.depth,
+                     MAX(a.depth) OVER (PARTITION BY a.entryId) AS maxDepth,
                      b.title AS bookTitle
               FROM ancestors a
               JOIN book b ON b.id = a.bookId
             )
-            SELECT lineId, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
+            SELECT entryId, group_concat(text, ' ') AS path
             FROM (
-              SELECT lineId, bookId, text
+              SELECT entryId, text
               FROM ordered
               WHERE NOT (depth = maxDepth AND text = bookTitle)
-              ORDER BY lineId, depth DESC
+              ORDER BY entryId, depth DESC
             )
-            GROUP BY lineId";
+            GROUP BY entryId";
 
         /// <summary>Deepest common-ancestor TOC path covering both endpoints of each (groupKey, first, last)
         /// range. Bind interleaved triples: (@g0,@f0,@l0),(@g1,@f1,@l1)…</summary>
@@ -506,42 +491,48 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY groupKey";
         }
 
-        /// <summary>bookId for a batch of line ids (fallback when line_toc has no entry).</summary>
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
-        /// <summary>Same as <see cref="GetTocPathsForLines"/>, against an ATTACHed library's
-        /// schema (see <see cref="SeforimDbAttachedLibraries"/>) — bind LOCAL line ids, not
-        /// global ones; the caller translates <c>lineId</c>/<c>bookId</c> back to global ids on
-        /// the way out.</summary>
-        public static string GetTocPathsForLinesIn(string schema, int count) => $@"
-            WITH RECURSIVE ancestors(lineId, bookId, entryId, parentId, text, depth) AS (
-              SELECT lt.lineId, te.bookId, te.id, te.parentId, tt.text, 0
-              FROM {schema}.line_toc lt
-              JOIN {schema}.tocEntry te ON te.id = lt.tocEntryId
+        /// <summary>Same as <see cref="GetTocEntryForLines"/>, against an ATTACHed library's
+        /// schema (see <see cref="SeforimDbAttachedLibraries"/>) - bind LOCAL line ids; the caller
+        /// translates lineId/bookId/tocEntryId back to global ids on the way out.</summary>
+        public static string GetTocEntryForLinesIn(string schema, int count) => $@"
+            SELECT lt.lineId, te.bookId, lt.tocEntryId
+            FROM {schema}.line_toc lt
+            JOIN {schema}.tocEntry te ON te.id = lt.tocEntryId
+            WHERE lt.lineId IN ({InPlaceholders("p", count)})
+            ORDER BY lt.lineId, lt.tocEntryId";
+
+        /// <summary>Same as <see cref="GetTocPathsForTocEntries"/>, against an ATTACHed library's
+        /// schema - bind LOCAL toc entry ids.</summary>
+        public static string GetTocPathsForTocEntriesIn(string schema, int count) => $@"
+            WITH RECURSIVE ancestors(entryId, bookId, id, parentId, text, depth) AS (
+              SELECT te.id, te.bookId, te.id, te.parentId, tt.text, 0
+              FROM {schema}.tocEntry te
               JOIN {schema}.tocText tt ON tt.id = te.textId
-              WHERE lt.lineId IN ({InPlaceholders("p", count)})
+              WHERE te.id IN ({InPlaceholders("e", count)})
               UNION ALL
-              SELECT a.lineId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+              SELECT a.entryId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
               FROM ancestors a
               JOIN {schema}.tocEntry te ON te.id = a.parentId
               JOIN {schema}.tocText tt ON tt.id = te.textId
             ),
             ordered AS (
-              SELECT a.lineId, a.bookId, a.text, a.depth,
-                     MAX(a.depth) OVER (PARTITION BY a.lineId) AS maxDepth,
+              SELECT a.entryId, a.text, a.depth,
+                     MAX(a.depth) OVER (PARTITION BY a.entryId) AS maxDepth,
                      b.title AS bookTitle
               FROM ancestors a
               JOIN {schema}.book b ON b.id = a.bookId
             )
-            SELECT lineId, MAX(bookId) AS bookId, group_concat(text, ' ') AS tocPath
+            SELECT entryId, group_concat(text, ' ') AS path
             FROM (
-              SELECT lineId, bookId, text
+              SELECT entryId, text
               FROM ordered
               WHERE NOT (depth = maxDepth AND text = bookTitle)
-              ORDER BY lineId, depth DESC
+              ORDER BY entryId, depth DESC
             )
-            GROUP BY lineId";
+            GROUP BY entryId";
 
         /// <summary>Same as <see cref="GetBookIdsForLines"/>, against an ATTACHed library's
         /// schema — bind LOCAL line ids; the caller translates both columns back to global ids.</summary>
@@ -750,24 +741,52 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id LIMIT -1 OFFSET @skip";
 
-        /// <summary>One chunk of search-result rows: content + book title in a single JOIN, so
-        /// titles never need a second query. IN-list sized to the chunk.</summary>
-        internal static string FtsFetchLinesWithTitles(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", b.title" +
+        /// <summary>One chunk of search-result rows: id, content, and the line's PLACEMENT -
+        /// bookId, lineIndex and its own TOC entry (0 when it has none) - read off the same
+        /// `line` row the content fetch visits anyway, so hits leave the searcher complete
+        /// without a second query per batch. No book title: the page resolves titles from the
+        /// book id. The TOC entry comes from `line_toc` when the database has it (the
+        /// authoritative source; `line.tocEntryId` is NULL for most lines), else from that
+        /// column, else 0. IN-list sized to the chunk.</summary>
+        internal static string FtsFetchPlacedLines(SeforimDbSchema schema, int count) =>
+            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex, " +
+            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
+             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
+             : "0") +
             " FROM line l" + C_ContentJoin(schema, "l") +
-            " LEFT JOIN book b ON b.id = l.bookId" +
+            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
+
+        /// <summary>
+        /// The lines at a set of (bookId, lineIndex) positions — one row-value IN over the
+        /// (bookId, lineIndex) index, so a whole batch's neighbour lines cost one round-trip.
+        /// Parameters go in pairs: @p0,@p1 = first position, @p2,@p3 = second, and so on.
+        /// A position with no line is simply absent.
+        /// </summary>
+        internal static string FtsFetchLinesAtBookPositions(SeforimDbSchema schema, int positionCount)
+        {
+            var values = new System.Text.StringBuilder(positionCount * 12);
+            for (int i = 0; i < positionCount; i++)
+            {
+                if (i > 0) values.Append(',');
+                values.Append("(@p").Append(2 * i).Append(",@p").Append(2 * i + 1).Append(')');
+            }
+            return "SELECT l.id, l.bookId, l.lineIndex, " + C_ContentColumn(schema, "l") +
+                   " FROM line l" + C_ContentJoin(schema, "l") +
+                   " WHERE (l.bookId, l.lineIndex) IN (VALUES " + values + ")";
+        }
 
         /// <summary>
         /// Neighbour lines for one chunk of matched ids: m is the matched line, n every line in
         /// the SAME BOOK within ±@radius rows by lineIndex, excluding m itself. Returns the
-        /// matched id, the signed delta, and the neighbour's content — the caller buckets by the
+        /// matched id, the signed delta, the neighbour's content and (last, so readers of the
+        /// first three columns are unaffected) the neighbour's own id — the caller buckets by the
         /// delta's sign and joins each side in document order. One self-join per chunk, so a
         /// whole batch of short matches costs one round-trip, and the bookId bound keeps a
         /// snippet from ever bleeding across a book boundary.
         /// </summary>
         internal static string FtsFetchNeighborLines(SeforimDbSchema schema, int count) =>
-            "SELECT m.id, n.lineIndex - m.lineIndex AS delta, " + C_ContentColumn(schema, "n") +
+            "SELECT m.id, n.lineIndex - m.lineIndex AS delta, " + C_ContentColumn(schema, "n") + ", n.id" +
             // The sidecar join must come AFTER this JOIN's own ON clause: putting it between
             // `JOIN line n` and its ON is a syntax error, because the ON would then bind to
             // the sidecar rather than to `n`.
@@ -797,20 +816,24 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE te.bookId = @b
             ORDER BY te.id";
 
-        /// <summary>Same order the frontend loads categories in (level, then orderIndex when
-        /// the column exists) — the catalog tree-order computation depends on it. Distinct
-        /// from GetAllCategories above: different SELECT list, different reader.</summary>
-        internal static string CatalogIndexCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title FROM category ORDER BY level, orderIndex"
-            : "SELECT id, parentId, title FROM category ORDER BY level";
+        /// <summary>Same order the frontend loads categories in (level, then the sibling order
+        /// above when the column exists) — the catalog tree-order computation depends on it.
+        /// Distinct from GetAllCategories above: different SELECT list, different reader.</summary>
+        internal static string CatalogIndexCategories(bool hasOrderIndex, string schema = "main") => hasOrderIndex
+            ? $"SELECT id, parentId, title FROM {schema}.category ORDER BY level, " + CategorySiblingOrder
+            : $"SELECT id, parentId, title FROM {schema}.category ORDER BY level";
 
         /// <summary>Distinct from GetAllBooks above: no hasTeamim, and the index consumes the
-        /// columns positionally in this order.</summary>
-        internal const string CatalogIndexBooks = @"
-            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors
-            FROM book b
-            LEFT JOIN book_author ba ON ba.bookId = b.id
-            LEFT JOIN author a ON a.id = ba.authorId
+        /// columns positionally in this order. The last two columns feed the tree order
+        /// (<see cref="SeforimDb.SeforimDbBookTreeOrder"/>): a library whose schema lacks them
+        /// gets 0 / NULL, i.e. no base-text promotion.</summary>
+        internal static string CatalogIndexBooks(bool hasIsBaseBook, bool hasDependenceType, string schema = "main") => $@"
+            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors,
+                   {(hasIsBaseBook ? "b.isBaseBook" : "0")} AS isBaseBook,
+                   {(hasDependenceType ? "b.dependenceType" : "NULL")} AS dependenceType
+            FROM {schema}.book b
+            LEFT JOIN {schema}.book_author ba ON ba.bookId = b.id
+            LEFT JOIN {schema}.author a ON a.id = ba.authorId
             GROUP BY b.id
             ORDER BY b.orderIndex";
 
@@ -831,10 +854,20 @@ namespace KitveiHakodesh.Core.SeforimDb
             LEFT JOIN line l ON l.id = te.lineId
             ORDER BY te.bookId, te.id";
 
-        /// <summary>All alt-TOC entries ordered by structure — one group per structure.</summary>
+        /// <summary>All alt-TOC entries ordered by structure — one group per structure. The last
+        /// column flags an entry that repeats a REGULAR TOC entry of the same book: same text and
+        /// same line, or same text when the alt entry has no line of its own (a section heading
+        /// such as an alt root "Orach Chaim" over the regular one). The "Chapters" structures are
+        /// 96% such repeats, and indexing them put the same address in the results twice. ~4s on
+        /// the shipped library (idx_toc_line / idx_toc_book).</summary>
         internal const string CatalogIndexAltTocRowsAllStructures = @"
-            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex
+            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex,
+                   EXISTS (SELECT 1 FROM tocEntry te
+                           WHERE te.bookId = s.bookId AND te.textId = ae.textId
+                             AND (te.lineId = ae.lineId OR ae.lineId IS NULL))
+                   AS dupOfRegular
             FROM alt_toc_entry ae
+            JOIN alt_toc_structure s ON s.id = ae.structureId
             JOIN tocText tt ON tt.id = ae.textId
             LEFT JOIN line l ON l.id = ae.lineId
             ORDER BY ae.structureId, ae.id";

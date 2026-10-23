@@ -20,11 +20,16 @@ namespace KitveiHakodesh.Core.Settings
     /// </summary>
     public static class UserProfile
     {
-        private static RegistryKey _hive = Registry.CurrentUser;
+        // Null off Windows (portable build): there is no registry; callers guard with
+        // OperatingSystem.IsWindows() before touching Hive.
+        private static RegistryKey _hive = OperatingSystem.IsWindows() ? Registry.CurrentUser : null!;
         private static string _roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private static string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
         /// <summary>The user's HKEY_CURRENT_USER.</summary>
+#if NET
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
         public static RegistryKey Hive => _hive;
 
         /// <summary>The user's %AppData% (roaming).</summary>
@@ -42,6 +47,9 @@ namespace KitveiHakodesh.Core.Settings
         /// folders (SHGetKnownFolderPath with the token). The token must be an impersonation
         /// token of a logged-on user - the pipe client's, obtained under RunAsClient.
         /// </summary>
+#if NET
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
         public static void BindToUser(SafeAccessTokenHandle userToken)
         {
             SafeRegistryHandle hiveHandle = System.Security.Principal.WindowsIdentity.RunImpersonated(userToken, () =>

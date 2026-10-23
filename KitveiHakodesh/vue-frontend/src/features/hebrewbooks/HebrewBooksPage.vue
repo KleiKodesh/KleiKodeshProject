@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import MessageBanner from '@/components/MessageBanner.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
+import type { HebrewBook } from './hebrewBooksCatalog'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -26,6 +29,7 @@ const {
   error,
   searchTerm,
   localFileBookIds,
+  downloadingBookIds,
   load,
   search,
   openBook,
@@ -33,6 +37,16 @@ const {
   deleteLocalFile,
   revealInFolder,
 } = useHebrewBooks()
+
+// The book whose delete button was clicked, awaiting the user's choice in the confirm
+// dialog: delete permanently, move to the Recycle Bin, or cancel.
+const pendingDeleteBook = ref<HebrewBook | null>(null)
+
+function resolveDelete(toRecycleBin: boolean | null) {
+  const book = pendingDeleteBook.value
+  pendingDeleteBook.value = null
+  if (book && toRecycleBin !== null) deleteLocalFile(book, toRecycleBin)
+}
 
 const searchInputRef = ref<HTMLInputElement>()
 const scrollEl = ref<HTMLElement | null>(null)
@@ -100,9 +114,8 @@ function onBookClicked(
         ref="searchInputRef"
         :value="searchTerm"
         type="search"
-        placeholder="חפש ספרים, מחברים או נושאים..."
+        :placeholder="$t('hebrewBooks.searchPlaceholder')"
         class="search-input"
-        dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
         @keydown="onSearchInputKeydown"
       />
@@ -133,8 +146,9 @@ function onBookClicked(
               :focused="activeIndex === vRow.index"
               :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
+              :downloading="downloadingBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @download-clicked="downloadBook"
-              @delete-clicked="deleteLocalFile"
+              @delete-clicked="pendingDeleteBook = $event"
               @reveal-clicked="revealInFolder"
             />
           </div>
@@ -143,17 +157,28 @@ function onBookClicked(
 
       <div v-else class="state">
         <span class="state-icon">📚</span>
-        <span v-if="searchTerm">לא נמצאו ספרים</span>
-        <span v-else>אין היסטוריה — חפש ספר להתחיל</span>
+        <span v-if="searchTerm">{{ $t('hebrewBooks.noBooksFound') }}</span>
+        <span v-else>{{ $t('hebrewBooks.noHistory') }}</span>
       </div>
     </div>
 
-    <div v-if="downloadErrorMessage" class="hb-error-banner">
-      <span>{{ downloadErrorMessage }}</span>
-      <button class="hb-error-dismiss" @click="downloadErrorMessage = null">
-        <IconDismiss20Regular />
-      </button>
-    </div>
+    <MessageBanner
+      v-if="downloadErrorMessage"
+      class="hb-error-banner"
+      :message="downloadErrorMessage"
+      @dismiss="downloadErrorMessage = null"
+    />
+
+    <ConfirmDialog
+      v-if="pendingDeleteBook"
+      :title="$t('hebrewBooks.deleteConfirm.title', { title: pendingDeleteBook.title })"
+      :desc="$t('hebrewBooks.deleteConfirm.warning')"
+      :confirm-label="$t('hebrewBooks.deleteConfirm.moveToRecycleBin')"
+      :extra-label="$t('hebrewBooks.deleteConfirm.deletePermanently')"
+      @confirm="resolveDelete(true)"
+      @extra="resolveDelete(false)"
+      @cancel="resolveDelete(null)"
+    />
   </div>
 </template>
 
@@ -196,30 +221,12 @@ function onBookClicked(
    from the global `.search-inner input` rule; the type size comes from TopSearchBar. */
 .search-input {
   flex: 1;
-  direction: rtl;
 }
 
+/* Docked under the list: squared top corners so it reads as part of the page edge. */
 .hb-error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--status-danger) 12%, var(--bg-secondary));
-  border-top: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
-  flex-shrink: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.hb-error-dismiss {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  color: var(--text-secondary);
-  flex-shrink: 0;
+  border-radius: 0;
+  border-inline: none;
+  border-bottom: none;
 }
 </style>

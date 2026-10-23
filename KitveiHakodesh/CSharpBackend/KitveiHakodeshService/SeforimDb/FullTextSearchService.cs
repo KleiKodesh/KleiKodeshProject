@@ -51,6 +51,12 @@ public sealed class FullTextSearchService
     /// sessions) — the idle memory trimmer must not run then.</summary>
     public bool IsBusy => _coordinator.IsBusy;
 
+    public string DescribeResidentState() => _coordinator.DescribeResidentState();
+
+    /// <summary>Idle memory trim: drop the engine handle and cached catalog (see Core).
+    /// Returns false (and releases nothing) while a build or search is running.</summary>
+    public bool ReleaseIdleResources() => _coordinator.ReleaseIdleResources();
+
     public void EnsureIndexing() => _coordinator.EnsureIndexing();
 
     public bool RebuildIfDbChanged() => _coordinator.RebuildIfDbChanged();
@@ -62,15 +68,13 @@ public sealed class FullTextSearchService
     public FtsIndexStatus Status() => _coordinator.Status();
 
     public FtsSearchResult Search(
-        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        bool expandRelated = false) =>
-        _coordinator.Search(query, cap, maxWordDistance, requireOrdered, contextWords, expandKetiv, expandRelated);
+        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords) =>
+        _coordinator.Search(query, cap, maxWordDistance, requireOrdered, contextWords);
 
     public Task StreamSearch(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false) =>
-        _coordinator.StreamSearch(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-            emit, clientCt, expandRelated);
+        string query, int maxWordDistance, bool requireOrdered, int contextWords,
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt) =>
+        _coordinator.StreamSearch(query, maxWordDistance, requireOrdered, contextWords, emit, clientCt);
 
     public Task StreamIndexingProgress(Func<FtsIndexStatus, Task> emit, CancellationToken ct) =>
         _coordinator.StreamIndexingProgress(emit, ct);

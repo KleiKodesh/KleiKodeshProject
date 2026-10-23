@@ -1,0 +1,9 @@
+fts:
+ai search with api?
+symantic search
+aramaic to Hebrew?
+
+bookview suggestions:
+adjust text files to open in teh bookview and parse them as html content
+also maybe msword files
+
