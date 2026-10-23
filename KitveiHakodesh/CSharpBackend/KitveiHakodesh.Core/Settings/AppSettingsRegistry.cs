@@ -42,7 +42,9 @@ namespace KitveiHakodesh.Core.Settings
         public static string Get(string app, string section, string key, string fallback)
         {
             // No registry off Windows (portable build): every setting reads as its fallback.
+#if NET
             if (!OperatingSystem.IsWindows()) return fallback;
+#endif
             try
             {
                 using var registryKey = UserProfile.Hive.OpenSubKey(SubKey(app, section));
@@ -57,7 +59,9 @@ namespace KitveiHakodesh.Core.Settings
         /// <summary>Writes a value, creating the key path if needed.</summary>
         public static void Set(string app, string section, string key, string value)
         {
+#if NET
             if (!OperatingSystem.IsWindows()) return; // no registry off Windows: not persisted
+#endif
             using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
             registryKey?.SetValue(key, value ?? "");
         }
