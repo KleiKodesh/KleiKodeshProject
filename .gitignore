@@ -405,3 +405,7 @@ kleikodesh-website
 
 # HebrewBooks download fallbacks (R2 keys): shipped in builds, never committed
 KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json
+
+# Separate repo (KleiKodesh/SearchExpansion); its built DB is shipped via KitveiHakodesh/CSharpBackend/FtsLib-Csharp/SearchExpansion/expansion-routed.db
+/SearchExpansion/
+/SearchExpansion-models/
