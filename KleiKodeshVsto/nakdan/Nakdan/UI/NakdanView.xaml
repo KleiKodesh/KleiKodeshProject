@@ -72,6 +72,7 @@
                 <ToggleButton x:Name="CleanOptionsToggle"
                               Grid.Column="1"
                               Style="{StaticResource CheckedToggle}"
+                              Background="#0F808080"
                               Width="28"
                               Padding="7"
                               Margin="4,0,0,0"
