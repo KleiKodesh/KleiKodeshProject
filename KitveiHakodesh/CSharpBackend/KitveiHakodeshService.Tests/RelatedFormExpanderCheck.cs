@@ -69,6 +69,19 @@ public static class RelatedFormExpanderCheck
             Expect(RewriteMarked(channelDb, ab), ab, "channels: no marker -> unchanged");
             Expect(SeforimDbFtsRelatedFormExpander.HasRelatedMarker(ab + "=") ? "y" : "n", "y", "channels: HasRelatedMarker sees '='");
 
+            // WORD-THESAURUS AFFIX links: exact 'word-thesaurus' always with '='; affix-derived
+            // 'word-thesaurus-affix' only when the word also has '+' or a grammar '%' side.
+            string affixDb = Path.Combine(dir, "affix.db");
+            Build(affixDb, weighted: true,
+                fold: [("ab", "ga", 1.0)],
+                exp: [("ga", "na", "syn-wt"), ("ga", "ma", "syn-affix"), ("ga", "ka", "infl")]);
+            Expect(RewriteMarked(affixDb, ab + "="), ab + "= | " + H("na"), "affix: '=' alone excludes affix links");
+            Expect(RewriteMarked(affixDb, ab + "+="), ab + "+= | " + string.Join(" | ", new[] { "na", "ma", "ka" }.Select(H)), "affix: '+=' includes affix links");
+            Expect(RewriteMarked(affixDb, "%" + ab + "="), "%" + ab + "= | %" + H("na") + " | %" + H("ma"), "affix: '%word=' includes affix links");
+            Expect(RewriteMarked(affixDb, ab + "%="), ab + "%= | " + H("na") + "% | " + H("ma") + "%", "affix: 'word%=' includes affix links");
+            Expect(RewriteMarked(affixDb, "%" + ab + "%="), "%" + ab + "%= | %" + H("na") + "% | %" + H("ma") + "%", "affix: '%word%=' includes affix links");
+            Expect(RewriteMarked(affixDb, ab + "+"), ab + "+ | " + H("ka"), "affix: '+' alone takes no synonyms");
+
             // NEW schema.
             string newDb = Path.Combine(dir, "new.db");
             Build(newDb, weighted: true,
@@ -124,14 +137,17 @@ public static class RelatedFormExpanderCheck
         foreach (var (lemma, form, channel) in exp)
         {
             // "syn" rows are trusted (tanach); "syn-bavli" is a syn row from the untrusted side.
+            // "syn-wt" / "syn-affix" are Word-thesaurus exact / affix-derived links.
             bool untrusted = channel == "syn-bavli";
+            string source = untrusted ? "bavli" : channel == "syn-wt" ? "word-thesaurus"
+                : channel == "syn-affix" ? "word-thesaurus-affix" : "tanach";
             using var insert = connection.CreateCommand();
             insert.CommandText = "INSERT INTO exp VALUES(@l, @r, @f, @c, @src)";
             insert.Parameters.AddWithValue("@l", H(lemma));
             insert.Parameters.AddWithValue("@r", rank++);
             insert.Parameters.AddWithValue("@f", H(form));
-            insert.Parameters.AddWithValue("@c", untrusted ? "syn" : channel);
-            insert.Parameters.AddWithValue("@src", untrusted ? "bavli" : "tanach");
+            insert.Parameters.AddWithValue("@c", channel.StartsWith("syn") ? "syn" : channel);
+            insert.Parameters.AddWithValue("@src", source);
             insert.ExecuteNonQuery();
         }
     }
