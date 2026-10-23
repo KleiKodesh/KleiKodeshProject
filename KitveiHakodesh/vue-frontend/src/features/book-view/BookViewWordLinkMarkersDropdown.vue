@@ -245,7 +245,7 @@ button.active {
 .wl-markers-dropdown {
   position: absolute;
   min-width: 180px;
-  max-width: 280px;
+  max-width: 300px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--bg-secondary);
@@ -253,7 +253,7 @@ button.active {
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   z-index: 100;
-  padding: 4px 0;
+  padding: 2px 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
@@ -276,7 +276,7 @@ button.active {
 }
 
 .state-message {
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -286,8 +286,8 @@ button.active {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 10px;
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;

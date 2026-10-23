@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, useId } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
@@ -98,8 +98,47 @@ const bookInfoExpandedInOverflow = ref(false)
 /** The HebrewBooks editions control's name - its row text in the flyout. */
 const HEBREWBOOKS_EDITIONS_LABEL = t('bookView.hebrewBooks.title')
 
-/** Whether the editions row in the flyout has its list expanded beneath it. */
+/** Whether the editions row in the flyout has its submenu open beside it. */
 const hebrewBooksEditionsExpandedInOverflow = ref(false)
+
+/**
+ * The editions submenu: a panel beside its flyout row, like a context-menu submenu. Fixed-
+ * positioned (the flyout scrolls, so an absolute child would be clipped by it) but still a
+ * DOM child of the flyout, so a click in it is not an outside click that closes the flyout.
+ * Opens toward the inline start (left, RTL); flips right when that side has no room, and is
+ * clamped into the viewport either way.
+ */
+const EDITIONS_SUBMENU_MARGIN = 8
+const editionsRowEl = ref<HTMLElement | null>(null)
+const editionsSubmenuEl = ref<HTMLElement | null>(null)
+const editionsSubmenuPos = ref({ top: 0, left: 0, placed: false })
+
+async function openEditionsSubmenu() {
+  hebrewBooksEditionsExpandedInOverflow.value = true
+  editionsSubmenuPos.value.placed = false
+  await nextTick()
+  const row = editionsRowEl.value
+  const panel = editionsSubmenuEl.value
+  if (!row || !panel) return
+  const m = EDITIONS_SUBMENU_MARGIN
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  panel.style.maxHeight = `${vh - 2 * m}px`
+  const rowRect = row.getBoundingClientRect()
+  const menuRect = (row.closest('.toolbar-overflow-menu') ?? row).getBoundingClientRect()
+  const width = panel.offsetWidth
+  const height = panel.offsetHeight
+  let left = menuRect.left - width
+  if (left < m && menuRect.right + width <= vw - m) left = menuRect.right
+  left = Math.max(m, Math.min(left, vw - width - m))
+  const top = Math.max(m, Math.min(rowRect.top - 4, vh - height - m))
+  editionsSubmenuPos.value = { top, left, placed: true }
+}
+
+function toggleEditionsSubmenu() {
+  if (hebrewBooksEditionsExpandedInOverflow.value) hebrewBooksEditionsExpandedInOverflow.value = false
+  else void openEditionsSubmenu()
+}
 
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
@@ -531,23 +570,30 @@ defineExpose({ tocBtnRef })
           :book-id="bookId"
         />
       </template>
-      <!-- Same inline-expand as book-info: the editions list opens beneath its row. -->
+      <!-- A side submenu, like a context menu's: the editions open beside the row. -->
       <template v-if="isOverflowed('hebrewbooks-editions')">
         <button
+          ref="editionsRowEl"
           role="menuitem"
           class="overflow-row"
           :class="{ active: hebrewBooksEditionsExpandedInOverflow }"
           aria-haspopup="menu"
           :aria-expanded="hebrewBooksEditionsExpandedInOverflow"
-          @click="hebrewBooksEditionsExpandedInOverflow = !hebrewBooksEditionsExpandedInOverflow"
+          @click="toggleEditionsSubmenu()"
         >
           <IconDocumentPdf20Regular />
           <span>{{ HEBREWBOOKS_EDITIONS_LABEL }}</span>
         </button>
         <div
           v-if="hebrewBooksEditionsExpandedInOverflow"
+          ref="editionsSubmenuEl"
           role="menu"
-          class="overflow-editions-list"
+          class="overflow-editions-submenu"
+          :style="{
+            top: `${editionsSubmenuPos.top}px`,
+            left: `${editionsSubmenuPos.left}px`,
+            visibility: editionsSubmenuPos.placed ? 'visible' : 'hidden',
+          }"
         >
           <BookViewHebrewBooksEditionsList
             :editions="hebrewBooksEditions"
@@ -860,23 +906,29 @@ button:disabled {
 .collapsible.hebrewbooks-editions-toolbar-item:not(.collapsed) {
   overflow: visible;
 }
-/* Indented under its row so it reads as that row's sub-list; scrolls within the flyout,
-   which itself clamps to the viewport. */
-.overflow-editions-list {
+/* The editions submenu: a floating sheet of its own beside the flyout, same surface as it. */
+.overflow-editions-submenu {
+  position: fixed;
+  z-index: 10000;
   display: flex;
   flex-direction: column;
-  max-width: 340px;
+  min-width: 180px;
+  max-width: 300px;
   max-height: 320px;
+  padding: 2px 0;
   overflow-y: auto;
-  padding-inline-start: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
 .overflow-book-info-panel {
-  max-width: 320px;
+  max-width: 300px;
   max-height: 320px;
   overflow-y: auto;
-  padding: 4px 12px 8px;
+  padding: 4px 10px 8px;
 }
 
 .export-spinner {
