@@ -57,29 +57,60 @@
                 <TextBlock Text="נקד טקסט מסומן" VerticalAlignment="Center"/>
             </Button>
 
-            <!-- Remove nikkud from selection -->
-            <Button Style="{StaticResource ActionButton}"
-                    Command="{Binding RemoveNikkudCommand}"
-                    Margin="0,0,0,12"
-                    ToolTip="הסר ניקוד מהטקסט המסומן">
-                <TextBlock Text="הסר ניקוד מטקסט" VerticalAlignment="Center"/>
-            </Button>
-
-            <!-- Remove cantillations from selection -->
-            <Button Style="{StaticResource ActionButton}"
-                    Command="{Binding RemoveCantillationsCommand}"
-                    Margin="0,0,0,12"
-                    ToolTip="הסר טעמים מהטקסט המסומן">
-                <TextBlock Text="הסר טעמים מטקסט" VerticalAlignment="Center"/>
-            </Button>
-
-            <!-- Remove nikkud and cantillations from selection -->
-            <Button Style="{StaticResource ActionButton}"
-                    Command="{Binding RemoveNikkudAndCantillationsCommand}"
-                    Margin="0,0,0,12"
-                    ToolTip="הסר ניקוד וטעמים מהטקסט המסומן">
-                <TextBlock Text="הסר ניקוד וטעמים" VerticalAlignment="Center"/>
-            </Button>
+            <!-- Clean selection: one button + dropdown of what to remove -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Style="{StaticResource ActionButton}"
+                        Command="{Binding CleanTextCommand}"
+                        ToolTip="הסר מהטקסט המסומן את הסימנים שנבחרו">
+                    <TextBlock Text="ניקוי טקסט" VerticalAlignment="Center"/>
+                </Button>
+                <ToggleButton x:Name="CleanOptionsToggle"
+                              Grid.Column="1"
+                              Style="{StaticResource CheckedToggle}"
+                              Content="▾"
+                              Width="28"
+                              Margin="4,0,0,0"
+                              ToolTip="בחר מה להסיר"/>
+            </Grid>
+            <Popup x:Name="CleanOptionsPopup"
+                   StaysOpen="False"
+                   PlacementTarget="{Binding ElementName=CleanOptionsToggle}"
+                   IsOpen="{Binding IsChecked, ElementName=CleanOptionsToggle}"
+                   AllowsTransparency="True"
+                   VerticalOffset="4"
+                   MaxHeight="220">
+                <Border Style="{StaticResource PopupSurface}" MinWidth="160">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="200">
+                        <StackPanel>
+                            <Border Style="{StaticResource HoverRow}">
+                                <CheckBox Content="הכל"
+                                          IsChecked="{Binding AllCleanOptionsChecked, Mode=TwoWay}"
+                                          Padding="4,0"
+                                          Margin="8,4"/>
+                            </Border>
+                            <ItemsControl ItemsSource="{Binding CleanOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HoverRow}">
+                                            <CheckBox Content="{Binding DisplayName}"
+                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      Padding="4,0"
+                                                      Margin="8,4"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Popup>
 
             <!-- ─────────────────────────────────────────────────
                  GENRE SELECTOR
