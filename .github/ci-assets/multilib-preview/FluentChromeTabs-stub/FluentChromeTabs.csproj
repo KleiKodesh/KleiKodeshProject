@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- CI-ONLY compile stand-in for the real FluentChromeTabs component (which lives in a
+       separate repository and is not redistributable from here). It has NO tab strip,
+       NO behaviour. It exists only so KitveiHakodeshLib / the demo app can compile.
+       It is NEVER put into the update installer; the portable zip carries it with a notice. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <AssemblyName>FluentChromeTabs</AssemblyName>
+    <RootNamespace>FluentChromeTabs</RootNamespace>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <AssemblyTitle>FluentChromeTabs CI STUB (no tabs)</AssemblyTitle>
+    <Description>CI-STUB: not the real FluentChromeTabs. No tab strip.</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>
