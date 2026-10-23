@@ -251,16 +251,16 @@ jobs:
           W "KitveiHakodeshLib.dll" "old-lib"; W "KitveiHakodeshService\KitveiHakodeshService.exe" "old-service"
           W "KitveiHakodeshService\FtsIndex\idx.bin" "index-data"; W "KitveiHakodesh\index.html" "old-ui"
           W "KitveiHakodesh\webcache-standalone\cache.bin" "webcache-data"
-          function H($rel) { (Get-FileHash (Join-Path $fake $rel) -Algorithm SHA256).Hash }
+          function FileSha($rel) { (Get-FileHash (Join-Path $fake $rel) -Algorithm SHA256).Hash }
           $keep = "KleiKodesh.vsto","KleiKodesh.dll.manifest","FluentChromeTabs.dll","KitveiHakodeshService\FtsIndex\idx.bin","KitveiHakodesh\webcache-standalone\cache.bin"
-          $before = @{}; $keep | ForEach-Object { $before[$_] = H $_ }
+          $before = @{}; $keep | ForEach-Object { $before[$_] = FileSha $_ }
 
           $a = @("/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$fake","/LOG=$env:RUNNER_TEMP\smoke1.log")
           $p = Start-Process -FilePath $env:MLP_EXE -ArgumentList $a -Wait -PassThru
           Write-Host "run 1 exit code: $($p.ExitCode)"
           Get-Content "$env:TEMP\KleiKodesh-multilib-update.log" -ErrorAction SilentlyContinue | Write-Host
           if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\smoke1.log" | Select-Object -Last 40 | Write-Host; throw "smoke run 1 failed" }
-          foreach ($k in $keep) { if ((H $k) -ne $before[$k]) { throw "PROTECTED file changed: $k" } }
+          foreach ($k in $keep) { if ((FileSha $k) -ne $before[$k]) { throw "PROTECTED file changed: $k" } }
           if ((Get-Item (Join-Path $fake "KitveiHakodeshService\KitveiHakodeshService.exe")).Length -lt 1MB) { throw "service exe not replaced" }
           if ((Get-Content (Join-Path $fake "KitveiHakodeshLib.dll") -Raw) -like "old-lib*") { throw "lib not replaced" }
           $bk = @(Get-ChildItem "$env:RUNNER_TEMP" -Directory -Filter "fake_official.multilib-backup-*")
