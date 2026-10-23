@@ -194,8 +194,8 @@ watch(
    the toolbar's own scoped rules no longer reach it. `:deep` from the panel, which IS in
    this component's scope, does.
 
-   One shape for every row, whether the control that wears it is a button (export, sync,
-   diacritics) or a strip of its own (the zoom pair): full width, one height, and the icon
+   One shape for every row, whether the control that wears it is a button (export, sync)
+   or a strip of its own (the zoom pair): full width, one height, and the icon
    leading the label. */
 .toolbar-overflow-menu :deep(.overflow-row) {
   display: flex;

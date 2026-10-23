@@ -32,12 +32,14 @@ export function applyDiacriticsFilter(html: string, state: number): string {
 
   // stripNikkudFromHtml decodes on its own, so state 2 is correct whether callers
   // arrive through here or call it directly.
-  if (state >= 2) return stripNikkudFromHtml(decoded)
+  if (state === 2) return stripNikkudFromHtml(decoded)
 
-  // state === 1: remove cantillation only
+  // state 1: remove cantillation only; state 3: remove vowel points only (teamim,
+  // maqaf, paseq and sof pasuq stay)
+  const marks = state === 3 ? /[\u05B0-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g : /[\u0591-\u05AF\u05C0]/g
   return decoded.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
     if (tag) return tag
-    return text.replace(/[\u0591-\u05AF\u05C0]/g, '')
+    return text.replace(marks, '')
   })
 }
 

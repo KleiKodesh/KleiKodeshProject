@@ -57,6 +57,8 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  * collapsed the toolbar. They stay on the toolbar at every width; the zoom pair, which is
  * two plain buttons and has keyboard equivalents (Ctrl+/Ctrl-), collapses in their place.
  *
+ * The clean-text combo is NOT here either: it is always visible, by product decision.
+ *
  * Keys are internal names rather than labels, because none of these are destinations - the
  * flyout renders each one's face and the toolbar dispatches its action.
  */
@@ -65,7 +67,6 @@ export const TOOLBAR_OVERFLOW_ORDER = [
   'hebrewbooks-editions',
   'export-to-word',
   'sync-commentaries',
-  'diacritics',
   'zoom',
 ] as const
 

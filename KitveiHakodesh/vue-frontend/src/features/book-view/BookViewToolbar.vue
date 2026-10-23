@@ -26,7 +26,7 @@ import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.v
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
-import BookViewDiacriticsGlyph from './BookViewDiacriticsGlyph.vue'
+import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
 import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
 import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
@@ -56,7 +56,6 @@ const props = defineProps<{
   // scoped to it, so pane 2's toolbar never reads or writes pane 1's zoom.
   tabId?: string
   bookId: number | undefined
-  bookHasTeamim: boolean
   // Set for books whose publisher forbids an editable export; the button is not rendered.
   exportRestricted?: boolean
   // True while an export to Word runs; the button shows a spinner.
@@ -84,24 +83,6 @@ const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
 const { zoom, commentaryZoom, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
-const diacriticsState = computed(() => settingsStore.diacriticsState)
-
-// When the book has no teamim the cycle is 0→2→0, so the title reflects only two stages.
-const diacriticsTitle = computed(() => {
-  if (!props.bookHasTeamim) {
-    return diacriticsState.value === 0 ? t('bookView.toolbar.removeNikud') : t('bookView.toolbar.restoreNikud')
-  }
-  return [t('bookView.toolbar.removeTeamim'), t('bookView.toolbar.removeAlsoNikud'), t('bookView.toolbar.restoreAll')][diacriticsState.value]!
-})
-
-function onDiacriticsClick() {
-  if (props.bookHasTeamim) {
-    settingsStore.cycleDiacritics()
-  } else {
-    settingsStore.cycleDiacriticsNoTeamim()
-  }
-}
-
 /** The export control's name - its tooltip on the toolbar, its text in the flyout. */
 const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
 
@@ -126,11 +107,6 @@ const hebrewBooksEditionsExpandedInOverflow = ref(false)
  * the name.
  */
 const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
-
-// The diacritics control has no fixed name: its tooltip names the NEXT stage of the cycle,
-// which is what a row should say too, so the row reads the same text the button's tooltip
-// does.
-const diacriticsRowLabel = computed(() => diacriticsTitle.value)
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 
@@ -254,7 +230,7 @@ const wordLinkMarkersPresent = ref(false)
 
 /** The collapsible controls this book renders, in collapse order. */
 const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
-  // The diacritics cycle and the zoom pair are on every book; the commentary sync depends
+  // The zoom pair is on every book; the commentary sync depends
   // on the book having commentaries at all, and export to Word on it not being restricted.
   TOOLBAR_OVERFLOW_ORDER.filter((key) => {
     if (key === 'sync-commentaries') return props.hasCommentaries
@@ -283,10 +259,12 @@ const pinnedButtonCount = computed(() => {
     ? 1 + (props.canUseSidePanel ? 2 : 0) // bottom panel, plus both side panels when they fit
     : 0
   const search = 1
+  // The clean-text combo: its eraser button plus the narrow chevron beside it.
+  const cleanText = 1.5
   // Reported by the control itself rather than predicted here: it renders out of a list it
   // fetches, so nothing on this side can know in advance whether it is there.
   const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers
+  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers + cleanText
 })
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
@@ -474,19 +452,7 @@ defineExpose({ tocBtnRef })
       <IconZoomIn20Regular />
     </button>
 
-    <button
-      class="collapsible"
-      :inert="!toolbarButtonVisible('diacritics')"
-      :class="[
-        'diacritics-btn',
-        { collapsed: !toolbarButtonVisible('diacritics') },
-        { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
-      ]"
-      :title="`${diacriticsTitle} (Ctrl+D)`"
-      @click="onDiacriticsClick()"
-    >
-      <BookViewDiacriticsGlyph :state="diacriticsState" />
-    </button>
+    <BookViewCleanTextCombo />
     <BookViewWordLinkMarkersDropdown
       :book-id="bookId"
       @presence-change="wordLinkMarkersPresent = $event"
@@ -612,20 +578,6 @@ defineExpose({ tocBtnRef })
         <IconTimeline20Filled v-if="autoSelectTopLine" />
         <IconTimeline20Regular v-else />
         <span>{{ SYNC_COMMENTARIES_LABEL }}</span>
-      </button>
-      <button
-        v-if="isOverflowed('diacritics')"
-        role="menuitem"
-        class="overflow-row"
-        :class="[
-          'diacritics-btn',
-          { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
-        ]"
-        :title="`${diacriticsTitle} (Ctrl+D)`"
-        @click="onDiacriticsClick()"
-      >
-        <BookViewDiacriticsGlyph :state="diacriticsState" />
-        <span>{{ diacriticsRowLabel }}</span>
       </button>
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width
@@ -927,13 +879,6 @@ button:disabled {
   padding: 4px 12px 8px;
 }
 
-/* ── Diacritics ── */
-.diacritics-btn.state-1 {
-  color: var(--diacritics-1);
-}
-.diacritics-btn.state-2 {
-  color: var(--diacritics-2);
-}
 .export-spinner {
   display: inline-block;
   width: 16px;
