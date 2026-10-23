@@ -34,6 +34,7 @@ RestartApplications=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ShowLanguageDialog=no
+DisableWelcomePage=no
 WizardStyle=modern
 SolidCompression=yes
 Compression=lzma2/ultra64
