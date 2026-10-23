@@ -139,7 +139,7 @@ export function useBookViewLinesNavigation(
     }
 
     function adjustToMark(scroller: HTMLElement): boolean {
-      const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
+      const mark = scroller.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`) as HTMLElement | null
       if (!mark) return false
       const markRect = mark.getBoundingClientRect()
       const scrollerRect = scroller.getBoundingClientRect()
@@ -157,6 +157,56 @@ export function useBookViewLinesNavigation(
             : relativeTop - reserved - SCROLL_LANDING_GAP_PX
       }
       return true
+    }
+
+    function isMarkInView(scroller: HTMLElement): boolean {
+      const mark = scroller.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`)
+      if (!mark) return false
+      const markRect = mark.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      return markRect.top >= scrollerRect.top + reserved && markRect.bottom <= scrollerRect.bottom
+    }
+
+    // Verifies the landing after every match jump: the selected match must end up
+    // both marked `.current` AND on screen. Late chunk loads re-measure rows and
+    // slide content, and a row re-render drops the class — so keep re-checking,
+    // re-marking and re-scrolling until it has held for STILL_FRAMES frames.
+    // Reader input cancels — correcting under their hands would fight them.
+    function verifyMarkLanding() {
+      const el = scrollerEl.value
+      if (!el) return
+      const STILL_FRAMES = 20
+      const MAX_FRAMES = 240
+      let stillFrames = 0
+      let frames = 0
+      let cancelled = false
+      const events = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
+      function teardown() { events.forEach((e) => el!.removeEventListener(e, cancel)) }
+      function cancel() { cancelled = true; teardown() }
+      events.forEach((e) => el.addEventListener(e, cancel, { passive: true }))
+      function frame() {
+        if (cancelled) return
+        if (isStale() || !scrollerEl.value) { teardown(); return }
+        const scrollerNow = scrollerEl.value
+        if (applyCurrentMark() && isMarkInView(scrollerNow)) {
+          stillFrames++
+        } else {
+          stillFrames = 0
+          keepSuppressed()
+          if (!adjustToMark(scrollerNow)) {
+            // Row/mark not in the DOM — bring the line back first.
+            virtualizer().scrollToIndex(lineIndex, { align: 'start' })
+          }
+        }
+        if (stillFrames >= STILL_FRAMES || ++frames > MAX_FRAMES) { teardown(); return }
+        requestAnimationFrame(frame)
+      }
+      requestAnimationFrame(frame)
+    }
+
+    function keepSuppressed() {
+      if (isStale()) return
+      suppressPositionSave()
     }
 
     // Fast path — only when the target row is actually in the DOM, so its
@@ -182,7 +232,7 @@ export function useBookViewLinesNavigation(
       // section navigation is about the line's position, not a match's visibility.
       if (wantsMark && !force) {
         applyCurrentMark()
-        if (adjustToMark(scroller)) return
+        if (adjustToMark(scroller)) { verifyMarkLanding(); return }
         // The mark was not in the DOM after all (content still loading) — fall
         // through to the line scroll and the rAF retry below.
       }
@@ -195,7 +245,11 @@ export function useBookViewLinesNavigation(
       requestAnimationFrame(() => {
         if (isStale()) return
         applyCurrentMark()
-        requestAnimationFrame(() => { if (!isStale()) adjustToMark(scroller) })
+        requestAnimationFrame(() => {
+          if (isStale()) return
+          adjustToMark(scroller)
+          verifyMarkLanding()
+        })
       })
       return
     }
@@ -213,10 +267,6 @@ export function useBookViewLinesNavigation(
     // moving the view — persisting a mid-flight position, and (since the search
     // panel re-anchors on reader scrolls) making the next Enter jump to where the
     // previous one landed instead of stepping on.
-    function keepSuppressed() {
-      if (isStale()) return
-      suppressPositionSave()
-    }
 
     // Holds the landing in place while late content shifts it.
     //
@@ -302,10 +352,12 @@ export function useBookViewLinesNavigation(
             if (isStale()) return
             keepSuppressed()
             adjustToMark(el)
+            verifyMarkLanding()
           })
           return
         }
         if (++markAttempts < 30) requestAnimationFrame(tryApplyMark)
+        else verifyMarkLanding()
       }
       tryApplyMark()
     }, isStale)
