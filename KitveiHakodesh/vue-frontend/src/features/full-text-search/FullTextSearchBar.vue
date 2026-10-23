@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed, nextTick, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -15,7 +15,6 @@ import RecentSearchesDropdown from '@/components/common/RecentSearchesDropdown.v
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useRecentSearches } from '@/composables/useRecentSearches'
 import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
-import { syntaxSegments } from './queryWordSyntax'
 
 const props = defineProps<{
   searchQuery: string
@@ -83,18 +82,6 @@ watch(
   (v) => { localQuery.value = v },
 )
 watch(localQuery, (v) => emit('update:searchQuery', v))
-
-// ── Syntax coloring ───────────────────────────────────────────────────────────
-// An input can't color part of its text, so a mirror under it paints the query with the
-// syntax signs greyed, and the input's own text is transparent (its caret and selection
-// stay). The mirror follows the input's horizontal scroll.
-const querySegments = computed(() => syntaxSegments(localQuery.value))
-const mirrorRef = ref<HTMLElement | null>(null)
-function syncMirrorScroll() {
-  const input = recents.inputEl.value
-  if (input && mirrorRef.value) mirrorRef.value.scrollLeft = input.scrollLeft
-}
-watch(localQuery, () => nextTick(syncMirrorScroll))
 
 // ── Animated placeholder ──────────────────────────────────────────────────────
 
@@ -178,9 +165,6 @@ defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
       </button>
     </template>
     <div class="query-field">
-      <div ref="mirrorRef" class="query-mirror" aria-hidden="true">
-        <span v-for="(segment, i) in querySegments" :key="i" :class="{ 'query-sign': segment.sign }">{{ segment.text }}</span>
-      </div>
       <input
         :ref="recents.setInput"
         v-model="localQuery"
@@ -194,9 +178,6 @@ defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
         @input="recents.onInput"
         @blur="recents.onBlur"
         @keydown="onInputKeydown"
-        @scroll="syncMirrorScroll"
-        @select="syncMirrorScroll"
-        @keyup="syncMirrorScroll"
         @search="onNativeSearch"
       />
     </div>
@@ -258,27 +239,11 @@ defineExpose({ focus: recents.focus, filterBtnRef, optionsBtnRef })
   /* TopSearchBar's type size reaches only a directly slotted input. */
   font-size: 13px;
 }
-/* The input and its mirror must lay text out identically: same font, no padding. */
 .search-input {
   flex: 1;
   min-width: 0;
   padding: 0;
   font-size: inherit;
-  color: transparent;
-  caret-color: var(--text-primary);
-}
-.query-mirror {
-  position: absolute;
-  inset-inline: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  overflow: hidden;
-  white-space: pre;
-  pointer-events: none;
-  color: var(--text-primary);
-}
-.query-sign {
-  color: var(--accent-color);
 }
 /* Box, hover, press, disabled and the .active state come from the global .bar-btn
    rule (main.css). Only the size differs: these sit inside the search pill, which

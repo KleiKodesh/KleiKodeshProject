@@ -187,19 +187,14 @@ useDropdownClose(
   { toggleButton: computed(() => searchBarRef.value?.optionsBtnRef ?? null) },
 )
 
-// A search on screen re-runs when an option changes (its results are stale), once per user
-// action: one panel click can change both a setting and the query's syntax.
-let rerunTerm: string | null = null
+// A search on screen re-runs when an option changes (its results are stale), once per user action.
 let rerunScheduled = false
-function scheduleRerun(term?: string) {
-  if (term !== undefined) rerunTerm = term
+function scheduleRerun() {
   if (rerunScheduled) return
   rerunScheduled = true
   void nextTick(() => {
     rerunScheduled = false
-    const next = rerunTerm ?? executedQuery.value
-    rerunTerm = null
-    if (hasSearched.value && executedQuery.value && next) handleSearch(next)
+    if (hasSearched.value && executedQuery.value) handleSearch(executedQuery.value)
   })
 }
 
@@ -212,12 +207,6 @@ watch(
   ],
   () => scheduleRerun(),
 )
-
-// The per-word toggles rewrite the query's syntax; a search on screen re-runs with its term.
-function onPerWordQuery(query: string) {
-  searchQuery.value = query
-  scheduleRerun(parseSearchQuery(query).term)
-}
 
 // The index builds in the background; a search issued before the first segments
 // flush returns 'indexNotReady' and the results area shows that error until the
@@ -499,12 +488,10 @@ onBeforeUnmount(() => {
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
         :all-words="allWords"
-        :query="searchQuery"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
         @set-all-words="setAllWords"
-        @update:query="onPerWordQuery"
         @close="isOptionsOpen = false"
       />
     </div>
@@ -519,12 +506,10 @@ onBeforeUnmount(() => {
           :require-ordered="requireOrdered"
           :context-words="settings.searchContextMarginWords"
           :all-words="allWords"
-          :query="searchQuery"
-            @update:max-word-distance="maxWordDistance = $event"
+          @update:max-word-distance="maxWordDistance = $event"
           @update:require-ordered="requireOrdered = $event"
           @update:context-words="settings.searchContextMarginWords = $event"
           @set-all-words="setAllWords"
-          @update:query="onPerWordQuery"
         />
       </PageCard>
       <div v-if="!showOptionsCard" class="results-list-wrap">

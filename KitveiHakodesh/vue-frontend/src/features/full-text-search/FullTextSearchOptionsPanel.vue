@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref } from 'vue'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
-import {
-  WORD_OPTIONS, WRAP_OPTIONS, isWrapOption, optionsConflict, parseQueryWord, hasOption, withOption,
-  splitQuery, rewriteQuery,
-} from './queryWordSyntax'
-import type { AllWords, QueryWord, WordOption } from './queryWordSyntax'
+import { WORD_OPTIONS, WRAP_OPTIONS, optionsConflict } from './queryWordSyntax'
+import type { AllWords, WordOption } from './queryWordSyntax'
 
 const props = defineProps<{
   maxWordDistance: number
@@ -13,8 +10,6 @@ const props = defineProps<{
   contextWords: number
   /** Each option's persisted "all words" setting. */
   allWords: AllWords
-  /** Live search-bar text. It holds the per-word options as syntax (see queryWordSyntax). */
-  query: string
   /** Rendered inline as a centered card on the empty search page, not as a popup. */
   asCard?: boolean
 }>()
@@ -24,20 +19,15 @@ const emit = defineEmits<{
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
   setAllWords: [WordOption, boolean]
-  'update:query': [string]
   close: []
 }>()
 
 type ActiveTab = 'options' | 'syntax'
 const activeTab = ref<ActiveTab>('options')
 
-// Each option row: [all words | per word], a pair where at most one is on.
-//   - "All words" is the persisted setting and never shows in the search text: turning it
-//     on drops that option's now-redundant syntax from the words.
-//   - "Per word" is the option as syntax on the words, so it is saved with the search.
-// Wrap kinds ('*', '%', '~') exclude each other per word. When a word takes a kind that
-// conflicts with an "all words" row, that row becomes "per word": every other word gets its
-// syntax back.
+// Each option row is a persisted on/off setting applied to every word at search time; it
+// never reads or writes the search text. Turning on a wrap kind turns off the ones it
+// conflicts with.
 const LABEL_KEYS: Record<WordOption, string> = {
   wildcardPrefix: 'wildcardPrefix', wildcardSuffix: 'wildcardSuffix',
   grammarPrefix: 'grammarPrefix', grammarSuffix: 'grammarSuffix',
@@ -45,113 +35,13 @@ const LABEL_KEYS: Record<WordOption, string> = {
 }
 
 const isAllWords = (option: WordOption) => props.allWords[option]
-const setAllWords = (option: WordOption, on: boolean) => emit('setAllWords', option, on)
 
-// The search term's words (the '@' book filter is not words); words whose syntax the
-// toggles can't express stay as typed and get no toggles.
-const parsedWords = computed(() =>
-  splitQuery(props.query).tokens.map(parseQueryWord).filter((w): w is QueryWord => w !== null))
-const queryWords = computed(() => [...new Set(parsedWords.value.map((w) => w.core))])
-
-// Rows switched to "per word" before any word is checked; one with a checked word shows by
-// that alone. Not persisted: the query's syntax is the per-search state.
-const perWordRows = ref(new Set<WordOption>())
-function markPerWord(option: WordOption, on: boolean) {
-  const rows = new Set(perWordRows.value)
-  if (on) rows.add(option)
-  else rows.delete(option)
-  perWordRows.value = rows
-}
-// A row that shows as "per word" because a word has its syntax (typed, or restored with the
-// search) stays open once its last word is unchecked, like one opened by click.
-watch(parsedWords, (words) => {
-  for (const option of WORD_OPTIONS)
-    if (!isAllWords(option) && !perWordRows.value.has(option) && words.some((w) => hasOption(w, option)))
-      markPerWord(option, true)
-}, { immediate: true })
-
-function isPerWord(option: WordOption): boolean {
-  if (isAllWords(option)) return false
-  return perWordRows.value.has(option) || parsedWords.value.some((w) => hasOption(w, option))
-}
-
-function wordHas(core: string, option: WordOption): boolean {
-  return parsedWords.value.some((w) => w.core === core && hasOption(w, option))
-}
-const conflictsWith = (word: QueryWord, option: WordOption) =>
-  WRAP_OPTIONS.some((other) => optionsConflict(other, option) && hasOption(word, other))
-
-function rewrite(map: (word: QueryWord) => QueryWord) {
-  const text = rewriteQuery(props.query, map)
-  if (text !== props.query) emit('update:query', text)
-}
-
-/** Turn an "all words" row into "per word": every word gets its syntax, except the one word
- *  `except` and words holding a conflicting kind. Returns the word map to apply. */
-function splitAllWordsRow(option: WordOption, except: string | null): (w: QueryWord) => QueryWord {
-  setAllWords(option, false)
-  markPerWord(option, true)
-  return (w) => (w.core === except || conflictsWith(w, option) ? w : withOption(w, option, true))
-}
-
-function toggleAllWords(option: WordOption) {
-  const on = !isAllWords(option)
-  setAllWords(option, on)
-  markPerWord(option, false)
-  if (!on) return
-  const conflicting = WRAP_OPTIONS.filter((other) => optionsConflict(other, option))
-  for (const other of conflicting) { setAllWords(other, false); markPerWord(other, false) }
-  // Every word now has the option: its syntax, and any conflicting kind, is redundant.
-  rewrite((w) => [option, ...conflicting].reduce((next, o) => withOption(next, o, false), w))
-}
-
-function togglePerWord(option: WordOption) {
-  if (isPerWord(option)) {
-    markPerWord(option, false)
-    rewrite((w) => withOption(w, option, false))
-    return
-  }
-  // From "all words": keep every word checked, now as syntax.
-  if (isAllWords(option)) rewrite(splitAllWordsRow(option, null))
-  else markPerWord(option, true)
-}
-
-function toggleWord(core: string, option: WordOption) {
-  const on = !wordHas(core, option)
-  const maps: ((w: QueryWord) => QueryWord)[] = []
-  if (on && isWrapOption(option))
+function setOption(option: WordOption, on: boolean) {
+  emit('setAllWords', option, on)
+  if (on)
     for (const other of WRAP_OPTIONS)
-      if (optionsConflict(other, option) && isAllWords(other)) maps.push(splitAllWordsRow(other, core))
-  rewrite((w) => {
-    const next = maps.reduce((acc, map) => map(acc), w)
-    return next.core === core ? withOption(next, option, on) : next
-  })
+      if (optionsConflict(other, option) && isAllWords(other)) emit('setAllWords', other, false)
 }
-
-// Unchecks every word; the row stays "per word".
-function clearRow(option: WordOption) {
-  markPerWord(option, true)
-  rewrite((w) => withOption(w, option, false))
-}
-
-// Text -> toggles, for an "all words" row:
-//   - typing its own syntax on a word means "only this word": the row becomes "per word"
-//     with just the typed words (the panel itself never writes it while the row is all words);
-//   - typing a conflicting kind on a word splits the row, as clicking would.
-watch(parsedWords, (words) => {
-  const maps: ((w: QueryWord) => QueryWord)[] = []
-  for (const option of WORD_OPTIONS) {
-    if (!isAllWords(option) || !words.some((w) => hasOption(w, option))) continue
-    setAllWords(option, false)
-    markPerWord(option, true)
-  }
-  for (const option of WRAP_OPTIONS) {
-    if (!isAllWords(option) || words.some((w) => hasOption(w, option))) continue
-    const typed = words.find((w) => conflictsWith(w, option))
-    if (typed) maps.push(splitAllWordsRow(option, typed.core))
-  }
-  if (maps.length) rewrite((w) => maps.reduce((acc, map) => map(acc), w))
-})
 
 function onDistanceInput(event: Event) {
   const value = parseInt((event.target as HTMLInputElement).value, 10)
@@ -236,37 +126,19 @@ function onContextWordsInput(event: Event) {
 
       <div class="option-separator" />
 
-      <!-- Per-word options: [all words | per word]; per word lists the query's words. -->
-      <div v-for="option in WORD_OPTIONS" :key="option" class="wrap-row">
-        <div class="option-row">
-          <span class="option-label">{{ $t(`fullTextSearch.options.${LABEL_KEYS[option]}`) }}</span>
-          <div class="toggle-group">
-            <button
-              v-if="isPerWord(option) && queryWords.some((w) => wordHas(w, option))"
-              class="toggle-btn"
-              @click="clearRow(option)"
-            >{{ $t('fullTextSearch.options.clear') }}</button>
-            <button
-              class="toggle-btn"
-              :class="{ active: isAllWords(option) }"
-              @click="toggleAllWords(option)"
-            >{{ $t('fullTextSearch.options.allWords') }}</button>
-            <button
-              class="toggle-btn"
-              :class="{ active: isPerWord(option) }"
-              @click="togglePerWord(option)"
-            >{{ $t('fullTextSearch.options.perWord') }}</button>
-          </div>
-        </div>
-        <div v-if="isPerWord(option)" class="word-toggles">
-          <span v-if="!queryWords.length" class="option-hint">{{ $t('fullTextSearch.options.perWordEmpty') }}</span>
+      <div v-for="option in WORD_OPTIONS" :key="option" class="option-row">
+        <span class="option-label">{{ $t(`fullTextSearch.options.${LABEL_KEYS[option]}`) }}</span>
+        <div class="toggle-group">
           <button
-            v-for="word in queryWords"
-            :key="word"
-            class="toggle-btn word-toggle"
-            :class="{ active: wordHas(word, option) }"
-            @click="toggleWord(word, option)"
-          >{{ word }}</button>
+            class="toggle-btn"
+            :class="{ active: !isAllWords(option) }"
+            @click="setOption(option, false)"
+          >{{ $t('fullTextSearch.options.no') }}</button>
+          <button
+            class="toggle-btn"
+            :class="{ active: isAllWords(option) }"
+            @click="setOption(option, true)"
+          >{{ $t('fullTextSearch.options.yes') }}</button>
         </div>
       </div>
     </div>
@@ -433,11 +305,6 @@ function onContextWordsInput(event: Event) {
   color: var(--text-primary);
   flex-shrink: 0;
 }
-.option-hint {
-  color: var(--text-secondary);
-  font-size: 11px;
-  margin-inline-start: 4px;
-}
 .distance-input {
   width: 56px;
   height: 24px;
@@ -488,13 +355,12 @@ function onContextWordsInput(event: Event) {
 .intent {
   font-size: 13px;
 }
-.option-hint,
 .tab-btn,
 .example {
   font-size: 11.5px;
 }
 .options-panel {
-  /* One width for every control (inputs, yes/no, all words / per word, clear), so the
+  /* One width for every control (inputs, yes/no), so the
      columns line up; fits the longest label in both locales. */
   --control-width: 76px;
 }
@@ -557,24 +423,5 @@ function onContextWordsInput(event: Event) {
   padding: 2px 4px;
   border-radius: 3px;
   white-space: nowrap;
-}
-
-.wrap-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.word-toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-/* Word toggles size to their word and may shrink below it on a narrow panel. */
-.toggle-btn.word-toggle {
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 </style>

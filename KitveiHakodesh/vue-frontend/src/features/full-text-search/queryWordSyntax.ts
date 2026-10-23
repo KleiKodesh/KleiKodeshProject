@@ -1,8 +1,6 @@
 /**
- * Per-word search options, read from and written to the query text itself.
- *
- * The search bar's query IS the option state: each word carries its own syntax, so the
- * options are saved with the search (tab, history, cache key) and need no store of their own.
+ * Per-word search syntax. The options panel's persisted settings are written onto every word
+ * at search time (applyAllWords); the panel never reads or edits the typed text.
  *   - prefixes / suffixes: `*word`, `word*` (both: `*word*`)
  *   - grammatical prefixes / suffixes: `%word`, `word%` (both: `%word%`)
  *   - fuzzy: `word~1` (or `~N` as typed)
@@ -152,27 +150,4 @@ export function applyAllWords(query: string, allWords: AllWords): string {
     }
     return next
   })
-}
-
-/** The query cut into runs of syntax signs and plain text, for the search input's coloring:
- *  a word's leading `* % + = ^`, trailing `* % + =` or `~N`, and every `|`. The `@` filter is plain. */
-export function syntaxSegments(query: string): { text: string; sign: boolean }[] {
-  const out: { text: string; sign: boolean }[] = []
-  const push = (text: string, sign: boolean) => {
-    if (!text) return
-    const last = out[out.length - 1]
-    if (last && last.sign === sign) last.text += text
-    else out.push({ text, sign })
-  }
-  const at = query.indexOf('@')
-  const term = at < 0 ? query : query.slice(0, at)
-  for (const part of term.split(/(\s+)/)) {
-    const m = part.match(/^([*%+=^]*)(.*?)((?:[*%+=]|~[1-9]?)*)$/)
-    if (!part.trim() || !m) { push(part, false); continue }
-    push(m[1] ?? '', true)
-    for (const piece of (m[2] ?? '').split(/(\|)/)) push(piece, piece === '|')
-    push(m[3] ?? '', true)
-  }
-  if (at >= 0) push(query.slice(at), false)
-  return out
 }
