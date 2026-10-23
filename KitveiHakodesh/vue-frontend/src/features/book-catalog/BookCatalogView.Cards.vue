@@ -7,6 +7,7 @@ import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggest
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
+import { getCatalogCardLines, hasLibraryBadges } from './catalogCardLines'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
@@ -28,32 +29,32 @@ function activateIndex(index: number, openInNewTab = false) {
 }
 
 /**
- * Secondary line: book count for a folder, authors for a book — with the
- * source library appended when the item came from an additional (attached)
- * library, not the main one. Without this, a same-named folder/book from an
- * attached library is visually identical to the main library's, and a user
- * who clicks the wrong one finds none of their content and gives up.
+ * Cards carry the source library as a separate badge line, not as a suffix of the
+ * secondary line: without it a same-named folder/book from an attached library is
+ * visually identical to the main library's, and a user who clicks the wrong one
+ * finds none of their content and gives up. See catalogCardLines for why it must
+ * not share a line with the count/authors.
  */
-function getSecondaryLine(item: FsItem): string {
-  if (item.kind === 'book') {
-    return [item.book.authors, item.book.libraryLabel].filter(Boolean).join(' · ')
-  }
-  const count = item.node.subtreeBookIds?.length ?? 0
-  return [count ? `${count} ספרים` : '', item.node.libraryLabel].filter(Boolean).join(' · ')
-}
+const reserveBadge = computed(() => hasLibraryBadges(props.items))
 
 const cards = computed((): CardData[] =>
-  props.items.map((item, i) => ({
-    key: item.uid,
-    title: item.kind === 'folder' ? item.node.title : item.book.title,
-    path: getSecondaryLine(item),
-    icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
-    color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
-    open: (openInNewTab) => {
-      focusedIndex.value = i
-      activateIndex(i, openInNewTab)
-    },
-  })),
+  props.items.map((item, i) => {
+    const { path, badge } = getCatalogCardLines(item)
+    return {
+      key: item.uid,
+      title: item.kind === 'folder' ? item.node.title : item.book.title,
+      path,
+      badge,
+      reserveBadge: reserveBadge.value,
+      singleLine: true,
+      icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
+      color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
+      open: (openInNewTab) => {
+        focusedIndex.value = i
+        activateIndex(i, openInNewTab)
+      },
+    }
+  }),
 )
 
 // Combobox model (see useInputListNavigation): DOM focus stays in the page's

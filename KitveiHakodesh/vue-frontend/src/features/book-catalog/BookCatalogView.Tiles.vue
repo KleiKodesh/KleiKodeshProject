@@ -7,6 +7,7 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { libraryBadgeText } from './catalogCardLines'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -40,7 +41,9 @@ function getLibraryLabel(item: FsItem): string | null | undefined {
 function getTooltip(item: FsItem) {
   const label = getLibraryLabel(item)
   const title = getTitle(item)
-  const titledTooltip = label ? `${title} · ${label}` : title
+  const badge = libraryBadgeText(label)
+  const titledTooltip = badge ? `${title}
+ספרייה נוספת: ${badge}` : title
   return item.kind === 'folder' ? titledTooltip : withNewTabHint(titledTooltip)
 }
 

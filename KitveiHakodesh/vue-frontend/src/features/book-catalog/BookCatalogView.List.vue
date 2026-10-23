@@ -7,6 +7,7 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { libraryBadgeText, libraryTooltipText } from './catalogCardLines'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -27,7 +28,10 @@ function getTitle(item: FsItem) {
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
+  const library = libraryTooltipText(getLibraryLabel(item))
+  const titled = library ? `${getTitle(item)}
+${library}` : getTitle(item)
+  return item.kind === 'folder' ? titled : withNewTabHint(titled)
 }
 
 /**
@@ -94,7 +98,9 @@ function selectItem(index: number, event?: MouseEvent) {
         </span>
         <span class="title">{{ getTitle(item) }}</span>
         <span v-if="item.kind === 'book' && item.book.authors" class="author-tag">{{ item.book.authors }}</span>
-        <span v-if="getLibraryLabel(item)" class="author-tag library-tag">{{ getLibraryLabel(item) }}</span>
+        <span v-if="libraryBadgeText(getLibraryLabel(item))" class="author-tag library-tag" dir="auto">{{
+          libraryBadgeText(getLibraryLabel(item))
+        }}</span>
       </div>
     </div>
   </div>
@@ -163,6 +169,7 @@ function selectItem(index: number, event?: MouseEvent) {
   text-overflow: ellipsis;
   max-width: 40%;
   flex-shrink: 0;
+  unicode-bidi: isolate;
 }
 /* Same pill, tinted with the warning color (already used for folder icons /
    additional-library affordances elsewhere) so it reads as "other source"
