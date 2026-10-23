@@ -29,6 +29,14 @@ on:
         description: "Version label used in file names (e.g. multilib-preview-20261023)"
         required: true
         default: "multilib-preview-dev"
+      ui_scope:
+        description: "UI files the updater replaces: index-only (just index.html - the Vue build is a single file; leaves the official pdfjs/fonts/tesseract untouched) or full (whole KitveiHakodesh folder)"
+        required: true
+        type: choice
+        options:
+          - index-only
+          - full
+        default: index-only
   push:
     branches:
       - ci/multilib-preview
@@ -43,6 +51,7 @@ jobs:
     env:
       SOURCE_REF: ${{ inputs.source_ref || 'feature/multi-library-badge-toggle' }}
       VERSION_LABEL: ${{ inputs.version || 'multilib-preview-dev' }}
+      UI_SCOPE: ${{ inputs.ui_scope || 'index-only' }}
     steps:
       - name: Keep LF line endings on checkout (the official build is LF; CRLF would make every text file differ)
         shell: pwsh
@@ -156,6 +165,7 @@ jobs:
               if ($_.Name -eq '.build-stamp') { return }
               if ($rel -ieq 'appsettings.Development.json') { return }
               if ($top -eq 'KitveiHakodesh' -and $first -like 'webcache*') { return }
+              if ($top -eq 'KitveiHakodesh' -and $env:UI_SCOPE -eq 'index-only' -and $rel -ne 'index.html') { return }
               if ($top -eq 'KitveiHakodeshService' -and $skipDirs -contains $first) { return }
               $dest = Join-Path (Join-Path $payload $top) $rel
               New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
