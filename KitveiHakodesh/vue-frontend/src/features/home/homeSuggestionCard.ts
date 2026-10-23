@@ -17,6 +17,11 @@ export interface HomeSuggestionCard {
    * cannot change the card's height or bleed into the lines around it.
    */
   badge?: string
+  /**
+   * Source library of the item even when the badge itself is hidden (a user
+   * preference): the tooltip still names it, so it is never lost.
+   */
+  sourceLibrary?: string
   /** Keep the badge line even when this card has none, so mixed cards stay one height. */
   reserveBadge?: boolean
   /**

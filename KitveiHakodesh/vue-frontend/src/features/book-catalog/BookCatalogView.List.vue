@@ -7,10 +7,14 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { libraryBadgeText, libraryTooltipText } from './catalogCardLines'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+
+const { showLibraryBadge } = storeToRefs(useSettingsStore())
 
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -98,7 +102,7 @@ function selectItem(index: number, event?: MouseEvent) {
         </span>
         <span class="title">{{ getTitle(item) }}</span>
         <span v-if="item.kind === 'book' && item.book.authors" class="author-tag">{{ item.book.authors }}</span>
-        <span v-if="libraryBadgeText(getLibraryLabel(item))" class="author-tag library-tag" dir="auto">{{
+        <span v-if="showLibraryBadge && libraryBadgeText(getLibraryLabel(item))" class="author-tag library-tag" dir="auto">{{
           libraryBadgeText(getLibraryLabel(item))
         }}</span>
       </div>

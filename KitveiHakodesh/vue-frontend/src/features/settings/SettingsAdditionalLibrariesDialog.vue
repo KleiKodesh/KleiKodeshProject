@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@/stores/settingsStore'
+import SettingRow from './SettingRow.vue'
+import ToggleGroup from './ToggleGroup.vue'
 import { IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import {
   getAdditionalSeforimLibraries,
@@ -28,6 +32,10 @@ import {
 const emit = defineEmits<{
   close: []
 }>()
+
+// A display preference, not a library change: saved on the spot, no restart, and the catalog
+// cards update live (they read the same store ref).
+const { showLibraryBadge } = storeToRefs(useSettingsStore())
 
 const libraries = ref<AdditionalLibraryInfo[]>([])
 const selectedPath = ref<string | null>(null)
@@ -198,6 +206,20 @@ function statusText(library: AdditionalLibraryInfo): string | null {
           </div>
         </div>
 
+        <SettingRow
+          class="additional-badge-row"
+          label="הצג תווית ספרייה בכרטיסים"
+          hint="מציג על כל ספר או תיקייה מספרייה נוספת תווית קטנה עם שם הספרייה. כשהתווית מוסתרת, שם הספרייה עדיין מופיע בחלונית המידע בעת מעבר עם העכבר"
+        >
+          <ToggleGroup
+            v-model="showLibraryBadge"
+            :options="[
+              { label: 'כן', value: true },
+              { label: 'לא', value: false },
+            ]"
+          />
+        </SettingRow>
+
         <p v-if="errorMessage" class="additional-error">{{ errorMessage }}</p>
         <p v-if="isRestarting" class="additional-restarting">{{ restartStatusText }}</p>
         <button v-if="restartFailed && !isRestarting" class="additional-add-button" @click="retryStartService">
@@ -249,6 +271,10 @@ function statusText(library: AdditionalLibraryInfo): string | null {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.additional-badge-row {
+  margin-bottom: 0;
 }
 
 .additional-title {

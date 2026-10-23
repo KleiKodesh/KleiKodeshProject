@@ -7,7 +7,9 @@ import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggest
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
-import { getCatalogCardLines, hasLibraryBadges } from './catalogCardLines'
+import { getCatalogCardLines, getLibraryName, hasLibraryBadges } from './catalogCardLines'
+import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
@@ -35,16 +37,20 @@ function activateIndex(index: number, openInNewTab = false) {
  * finds none of their content and gives up. See catalogCardLines for why it must
  * not share a line with the count/authors.
  */
-const reserveBadge = computed(() => hasLibraryBadges(props.items))
+const { showLibraryBadge } = storeToRefs(useSettingsStore())
+// With the badge hidden by preference no card has the line at all, so there is nothing to
+// reserve and the cards stay one uniform height (shorter), rather than keeping an empty row.
+const reserveBadge = computed(() => hasLibraryBadges(props.items, showLibraryBadge.value))
 
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => {
-    const { path, badge } = getCatalogCardLines(item)
+    const { path, badge } = getCatalogCardLines(item, showLibraryBadge.value)
     return {
       key: item.uid,
       title: item.kind === 'folder' ? item.node.title : item.book.title,
       path,
       badge,
+      sourceLibrary: getLibraryName(item),
       reserveBadge: reserveBadge.value,
       singleLine: true,
       icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,

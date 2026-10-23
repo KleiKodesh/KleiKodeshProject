@@ -14,16 +14,18 @@ const isPinPopping = ref(false)
 
 // Tooltip: title + full path, plus the open-in-new-tab hint (every card honours
 // Ctrl+click / Ctrl+Enter).
-const cardTooltip = computed(() =>
-  [
+const cardTooltip = computed(() => {
+  // Named even when the badge is hidden by preference, so the origin is never lost.
+  const library = props.card.sourceLibrary ?? props.card.badge
+  return [
     props.card.title,
     props.card.path,
-    props.card.badge ? `ספרייה נוספת: ${props.card.badge}` : '',
+    library ? `ספרייה נוספת: ${library}` : '',
     OPEN_IN_NEW_TAB_HINT,
   ]
     .filter(Boolean)
-    .join('\n'),
-)
+    .join('\n')
+})
 const showBadgeLine = computed(() => !!props.card.badge || !!props.card.reserveBadge)
 
 // ── Touch: long-press reveals the actions (touch has no hover) ──────────────────

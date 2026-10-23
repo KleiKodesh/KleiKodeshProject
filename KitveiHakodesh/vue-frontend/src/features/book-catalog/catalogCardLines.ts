@@ -41,21 +41,26 @@ export function libraryTooltipText(label: string | null | undefined): string {
   return text ? `ספרייה נוספת: ${text}` : ''
 }
 
-export function getCatalogCardLines(item: FsItem): CatalogCardLines {
-  if (item.kind === 'book') {
-    return {
-      path: (item.book.authors ?? '').trim(),
-      badge: libraryBadgeText(item.book.libraryLabel),
-    }
-  }
-  const count = item.node.subtreeBookIds?.length ?? 0
-  return {
-    path: count ? `${count} ספרים` : '',
-    badge: libraryBadgeText(item.node.libraryLabel),
-  }
+/** Library an item came from, as the badge would read it; empty for the main library. Ignores the show/hide preference. */
+export function getLibraryName(item: FsItem): string {
+  return libraryBadgeText(item.kind === 'book' ? item.book.libraryLabel : item.node.libraryLabel)
 }
 
-/** True when any item came from an additional library (every card then reserves the badge line). */
-export function hasLibraryBadges(items: readonly FsItem[]): boolean {
-  return items.some((item) => getCatalogCardLines(item).badge !== '')
+/**
+ * `showBadge` is the user's "show library label" preference. Hiding only empties
+ * the visible badge: the library stays available through getLibraryName for the
+ * tooltip, so the origin of an item is never lost.
+ */
+export function getCatalogCardLines(item: FsItem, showBadge = true): CatalogCardLines {
+  const badge = showBadge ? getLibraryName(item) : ''
+  if (item.kind === 'book') {
+    return { path: (item.book.authors ?? '').trim(), badge }
+  }
+  const count = item.node.subtreeBookIds?.length ?? 0
+  return { path: count ? `${count} ספרים` : '', badge }
+}
+
+/** True when any item shows a badge (every card then reserves the badge line). Never true while badges are hidden. */
+export function hasLibraryBadges(items: readonly FsItem[], showBadge = true): boolean {
+  return showBadge && items.some((item) => getLibraryName(item) !== '')
 }
