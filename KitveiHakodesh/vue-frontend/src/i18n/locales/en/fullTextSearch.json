@@ -57,10 +57,6 @@
   "options": {
     "title": "Search options",
     "syntax": "Search syntax",
-    "allWords": "All words",
-    "perWord": "Per word",
-    "perWordEmpty": "Type words in the search box",
-    "clear": "Clear",
     "wordDistance": "Maximum distance between words",
     "contextWords": "Context before and after (in words)",
     "wordOrder": "Keep query word order",
