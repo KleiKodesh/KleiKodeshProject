@@ -136,7 +136,7 @@ button.active {
 .versions-dropdown {
   position: absolute;
   min-width: 180px;
-  max-width: 320px;
+  max-width: 300px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--bg-secondary);
@@ -173,8 +173,8 @@ button.active {
 .version-row {
   display: block;
   width: 100%;
-  min-height: 32px;
-  padding: 6px 12px;
+  min-height: 28px;
+  padding: 3px 10px;
   text-align: start;
   font-size: 12px;
   color: var(--text-primary);

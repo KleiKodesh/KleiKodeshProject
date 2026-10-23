@@ -178,7 +178,7 @@ watch(
   display: flex;
   flex-direction: column;
   min-width: 180px;
-  padding: 4px 0;
+  padding: 2px 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -203,7 +203,7 @@ watch(
   justify-content: flex-start;
   gap: 10px;
   width: 100%;
-  height: 32px;
+  height: 28px;
   padding: 0 10px;
   border-radius: 0;
   font-size: 13px;
