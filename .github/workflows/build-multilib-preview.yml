@@ -46,7 +46,9 @@ jobs:
     steps:
       - name: Keep LF line endings on checkout (the official build is LF; CRLF would make every text file differ)
         shell: pwsh
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
 
       - name: Checkout CI assets (this workflow's own ref)
         uses: actions/checkout@v4
