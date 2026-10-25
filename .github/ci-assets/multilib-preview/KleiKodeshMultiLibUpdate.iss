@@ -47,6 +47,7 @@ Name: "he"; MessagesFile: "{#ScriptDir}\Hebrew.isl"
 
 [Files]
 Source: "{#ScriptDir}\apply-update.ps1"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall
+Source: "{#ScriptDir}\compat-check.ps1"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall
 Source: "{#PayloadDir}\*"; DestDir: "{tmp}\kkpayload"; Flags: ignoreversion recursesubdirs createallsubdirs deleteafterinstall
 
 [Code]
@@ -107,6 +108,7 @@ begin
     Log('apply-update.ps1 exit code: ' + IntToStr(Rc));
     if Rc <> 0 then
     begin
+      if Rc = 7 then RaiseException(CustomMessage('Incompatible'));
       RaiseException(FmtMessage(CustomMessage('Failed'), [IntToStr(Rc), LogPath]));
     end;
   end;

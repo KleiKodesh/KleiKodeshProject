@@ -15,7 +15,7 @@
     -NoRestart   לא להפעיל את השירות בסיום
 
   קודי יציאה: 0 הצלחה | 2 ההתקנה הרשמית לא נמצאה | 3 לא ניתן היה לעצור את השירות
-              4 החבילה פגומה | 5 העתקה נכשלה (בוצע שחזור אוטומטי)
+              4 החבילה פגומה | 5 העתקה נכשלה (בוצע שחזור אוטומטי) | 7 התוסף המותקן אינו תואם לחבילה
 #>
 [CmdletBinding()]
 param(
@@ -152,6 +152,39 @@ foreach ($f in $manifest.files) {
     $items += [pscustomobject]@{ Rel = $rel; Src = $src; Sha = ([string]$f.sha256).ToUpperInvariant(); Size = [int64]$f.size }
 }
 Log "קבצים בחבילה: $($items.Count)"
+
+# ---- 2ב. תאימות: האם התוסף המותקן עדיין מוצא כל פעולה של KitveiHakodeshLib שהוא קורא לה? ----
+# התוסף (KleiKodesh.dll) נבנה מול גרסה מסוימת של הספרייה. אם נחליף אותה בגרסה שבה חסרה פעולה שהתוסף קורא לה,
+# Word יציג MissingMethodException כבר בפתיחה. הבדיקה במצב קריאה בלבד (שום קוד לא מורץ), ומשווה מול
+# הספרייה המותקנת כבסיס: רק קריאה שנשברת בגלל העדכון נחשבת. נכשלה הבדיקה עצמה - ממשיכים, והגיבוי מגן.
+$compatScript = Join-Path $PSScriptRoot 'compat-check.ps1'
+$addinDll     = Join-Path $TargetDir 'KleiKodesh.dll'
+$installedLib = Join-Path $TargetDir 'KitveiHakodeshLib.dll'
+$newLibItem   = $items | Where-Object { $_.Rel -ieq 'KitveiHakodeshLib.dll' } | Select-Object -First 1
+if ($newLibItem -and (Test-Path -LiteralPath $compatScript) -and (Test-Path -LiteralPath $addinDll) -and (Test-Path -LiteralPath $installedLib)) {
+    $psExe = Join-Path $PSHOME 'powershell.exe'
+    function Invoke-Compat([string]$lib, [string]$listFile) {
+        $o = & $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $compatScript -Addin $addinDll -Lib $lib -InstallDir $TargetDir -ListFile $listFile 2>&1
+        $rc = $LASTEXITCODE; $n = $null
+        foreach ($l in @($o)) { if ("$l" -match '^UNRESOLVED=(\d+)') { $n = [int]$Matches[1] } }
+        return [pscustomobject]@{ Rc = $rc; N = $n; Text = (($o | Out-String).Trim()) }
+    }
+    $listBase = Join-Path ([IO.Path]::GetTempPath()) 'kk-compat-base.txt'
+    $listNew  = Join-Path ([IO.Path]::GetTempPath()) 'kk-compat-new.txt'
+    $base = Invoke-Compat $installedLib $listBase
+    $new  = Invoke-Compat $newLibItem.Src $listNew
+    if ($base.Rc -ne 0 -or $null -eq $base.N -or $new.Rc -ne 0 -or $null -eq $new.N) {
+        Log ('לא ניתן היה לבדוק תאימות (ממשיכים; גיבוי יישמר): ' + $base.Text + ' | ' + $new.Text)
+    }
+    elseif ($new.N -gt $base.N) {
+        Log 'התוסף המותקן אינו תואם לגרסה שבחבילה: הוא קורא לפעולות של KitveiHakodeshLib שאינן קיימות בגרסה החדשה. לא שונה דבר.'
+        try { Get-Content -LiteralPath $listNew -Encoding UTF8 | Select-Object -First 5 | ForEach-Object { Log ('  חסר: ' + $_) } } catch { }
+        Log 'התקן קודם את כתבי הקודש הרשמי בגרסה האחרונה, ואז הרץ שוב את העדכון.'
+        exit 7
+    }
+    else { Log "בדיקת תאימות עברה (קריאות חסרות לפני: $($base.N), אחרי: $($new.N))." }
+}
+else { Log 'בדיקת תאימות דולגה (חסר קובץ לבדיקה).' }
 
 # ---- 3. מה באמת צריך להשתנות ----
 $changed = @(); $created = @()
