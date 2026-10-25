@@ -562,6 +562,101 @@ namespace KitveiHakodeshService.Tests
                     Check(honest.Wait(10_000) && honest.Result == "4,2", "a normal request after the silent one is answered as before", "honest client: " + (honest.IsCompleted ? honest.Result : "STILL WAITING"));
                     cts.Cancel();
                 }
+
+                // ── K. GetLineContents reads additional libraries ────────────────────────────
+                Console.WriteLine("K. GetLineContents across the primary and additional libraries");
+                {
+                    string kc1 = Path.Combine(dir, "k-compressed1.db");
+                    string kc2 = Path.Combine(dir, "k-compressed2.db");
+                    string ksp = Path.Combine(dir, "k-splitplain.db");
+                    BuildLibrary(kc1, "דחוס א", "ספר דחוס א", "אלפא דחוס ראשון", "פרק", Shape.SplitCompressed, altToc: false, regularToc: true, dictSeed: 1);
+                    BuildLibrary(kc2, "דחוס ב", "ספר דחוס ב", "בטא דחוס שני", "פרק", Shape.SplitCompressed, altToc: false, regularToc: true, dictSeed: 2);
+                    BuildLibrary(ksp, "מפוצל", "ספר מפוצל", "גמא מפוצל פשוט", "פרק", Shape.SplitPlain, altToc: false, regularToc: true);
+                    var kEntries = new[]
+                    {
+                        new SeforimDbAdditionalLibraries.Entry(1, kc1),
+                        new SeforimDbAdditionalLibraries.Entry(2, kc2),
+                        new SeforimDbAdditionalLibraries.Entry(3, ksp),
+                    };
+                    var kq = new SeforimDbQueries(primary, kEntries);
+                    var kBooks = kq.GetAllBooks();
+                    var expected = new Dictionary<int, string>();
+                    foreach (var (label, text) in new[] { ((string?)null, "טקסט ראשי"), ("k-compressed1", "אלפא דחוס ראשון"), ("k-compressed2", "בטא דחוס שני"), ("k-splitplain", "גמא מפוצל פשוט") })
+                    {
+                        var book = kBooks.Single(b => b.LibraryLabel == label || (label is null && b.LibraryLabel is null));
+                        var line = kq.GetLinesPaged(book.Id, 10, 0).Single();
+                        expected[line.Id] = text;
+                    }
+                    Check(expected.Count == 4 && expected.Keys.Count(id => id >= SeforimDbLibraryId.OffsetUnit) == 3,
+                        "fixture: one primary line id and three GLOBAL additional-library line ids", "fixture line ids: " + string.Join(",", expected.Keys));
+
+                    var asked = expected.Keys.Concat(new[] { SeforimDbLibraryId.ToGlobal(9, 1) /* a library that is not attached */ }).ToList();
+                    List<LineContentRow> contents;
+                    try { contents = kq.GetLineContents(asked); }
+                    catch (Exception ex) { contents = new(); Fail("GetLineContents threw on a mixed primary + additional batch: " + ex.Message); }
+                    Check(expected.All(kv => contents.Any(c => c.Id == kv.Key && c.Content == kv.Value)),
+                        "GetLineContents returns the text of EVERY line, additional libraries included, under their GLOBAL ids (compressed with own dictionary, split plain, primary)",
+                        "contents: " + string.Join(" | ", contents.Select(c => c.Id + "=" + c.Content)));
+                    Check(contents.Count == expected.Count,
+                        "a line id of a library that is not attached contributes no row (and does not throw)", "unexpected extra rows: " + contents.Count);
+                    Check(kq.GetLineContents(new List<int>()).Count == 0, "an empty batch returns an empty list", "empty batch not empty");
+                }
+
+                // ── L. a library locked at first load does not fail the primary's catalog ───
+                Console.WriteLine("L. additional library locked while the catalog loads");
+                {
+                    string lGood = Path.Combine(dir, "l-good.db");
+                    string lLocked = Path.Combine(dir, "l-locked.db");
+                    BuildLibrary(lGood, "טוב", "ספר טוב", "טקסט טוב", "פרק", Shape.Plain, altToc: false, regularToc: true);
+                    BuildLibrary(lLocked, "נעול", "ספר נעול", "טקסט נעול", "פרק", Shape.Plain, altToc: false, regularToc: true);
+                    var lEntries = new[] { new SeforimDbAdditionalLibraries.Entry(1, lGood), new SeforimDbAdditionalLibraries.Entry(2, lLocked) };
+                    SqliteConnection.ClearAllPools();
+                    // Exclusive lock, exactly what a writer copying/rewriting the file looks like.
+                    using (var hold = new FileStream(lLocked, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        var lq = new SeforimDbQueries(primary, lEntries);
+                        List<BookRow> lBooks = new(); List<CategoryRow> lCats = new();
+                        Exception? thrown = null;
+                        try { lBooks = lq.GetAllBooks(); lCats = lq.GetAllCategories(); }
+                        catch (Exception ex) { thrown = ex; }
+                        Check(thrown is null,
+                            "GetAllBooks/GetAllCategories do not throw when one additional library cannot be opened",
+                            "catalog load threw: " + thrown?.GetType().Name + ": " + thrown?.Message);
+                        Check(lBooks.Any(b => b.LibraryLabel is null) && lBooks.Any(b => b.LibraryLabel == "l-good"),
+                            "the primary's books and the readable library's books are both present", "books: " + string.Join(",", lBooks.Select(b => b.LibraryLabel ?? "primary")));
+                        Check(!lBooks.Any(b => b.LibraryLabel == "l-locked") && !lCats.Any(c => c.LibraryLabel == "l-locked"),
+                            "the locked library contributes no rows (no half-read set)", "locked library leaked rows");
+                        Check(lCats.Any(c => c.LibraryLabel is null) && lCats.Any(c => c.LibraryLabel == "l-good"),
+                            "the primary's categories and the readable library's categories are both present", "categories: " + string.Join(",", lCats.Select(c => c.LibraryLabel ?? "primary")));
+                    }
+                    SqliteConnection.ClearAllPools();
+                }
+
+                // ── M. index stamp: a temporarily unreadable library is "unknown", not "changed" ─
+                Console.WriteLine("M. index stamp reconciliation for unreadable additional libraries");
+                {
+                    const string P = "fts4|c1|c:\\x\\seforim.db|schema=94|line=1:7|book=1:8|tail=39|dbv=1|release=1";
+                    string Lib(int n, string v) => "||lib" + n + "=" + v;
+                    const string Unreadable = "unreadable|len=5";
+                    string recorded = P + Lib(1, "c1|a.db|dbv=1") + Lib(2, "c1|b.db|dbv=2");
+
+                    Check(SeforimDbContentFingerprint.Matches(recorded, recorded), "identical stamps match", "identical stamps do not match");
+                    Check(SeforimDbContentFingerprint.Matches(recorded, P + Lib(1, "c1|a.db|dbv=1") + Lib(2, Unreadable)),
+                        "a library that is unreadable NOW (but was recorded healthy) matches: a temporary lock does not wipe a good index",
+                        "locked library read as a change");
+                    Check(SeforimDbContentFingerprint.DescribeChange(recorded, P + Lib(1, "c1|a.db|dbv=1") + Lib(2, Unreadable)) is null,
+                        "DescribeChange agrees (no rebuild reason for a temporary lock)", "DescribeChange reported a reason for a lock");
+                    Check(!SeforimDbContentFingerprint.Matches(recorded, P + Lib(1, "c1|a.db|dbv=1") + Lib(2, "c1|b.db|dbv=3")),
+                        "a library whose content really changed still does NOT match", "a real change was hidden");
+                    Check(!SeforimDbContentFingerprint.Matches(recorded, P.Replace("tail=39", "tail=40") + Lib(1, "c1|a.db|dbv=1") + Lib(2, Unreadable)),
+                        "a changed PRIMARY is never masked by an unreadable library", "primary change masked");
+                    string builtWithout = P + Lib(1, "c1|a.db|dbv=1") + Lib(2, Unreadable);
+                    Check(!SeforimDbContentFingerprint.Matches(builtWithout, P + Lib(1, "c1|a.db|dbv=1") + Lib(2, "c1|b.db|dbv=2")),
+                        "an index recorded as built WITHOUT a library (unreadable then) is rebuilt once the library is readable", "library never picked up after the lock lifted");
+                    Check(SeforimDbContentFingerprint.Matches(P + Lib(1, "c1|a.db|dbv=1"), P + Lib(1, "c1|a.db|dbv=1") + Lib(2, Unreadable)),
+                        "a library the index never claimed, and that is unreadable now, does not force a rebuild", "unclaimed unreadable library forced a rebuild");
+                    Check(!SeforimDbContentFingerprint.Matches(null, recorded), "no recorded stamp never matches", "null recorded matched");
+                }
             }
             catch (Exception ex)
             {

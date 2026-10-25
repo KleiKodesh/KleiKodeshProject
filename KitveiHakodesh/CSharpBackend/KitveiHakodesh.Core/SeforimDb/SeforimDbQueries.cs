@@ -36,6 +36,37 @@ namespace KitveiHakodesh.Core.SeforimDb
         private List<BookRow>? _booksCache;
         private readonly object _catalogCacheLock = new();
 
+        // A catalog built while an additional library was unreadable (typically a file lock held
+        // by whatever is writing it) is missing that library's rows. It is served, but only for
+        // this long, so the library appears on its own once it can be read again, while a library
+        // that stays locked costs one retry per interval rather than one per call.
+        private const long PartialCatalogRetryMs = 15_000;
+        private long _categoriesPartialUntilTick;   // 0 = the cached list is complete
+        private long _booksPartialUntilTick;
+
+        // Monotonic milliseconds (Environment.TickCount64 does not exist on the net48 leg).
+        private static long NowMs() =>
+            System.Diagnostics.Stopwatch.GetTimestamp() * 1000 / System.Diagnostics.Stopwatch.Frequency;
+
+        private static bool Fresh(long partialUntilTick) =>
+            partialUntilTick == 0 || NowMs() < partialUntilTick;
+
+        /// <summary>Appends one additional library's rows through <paramref name="append"/>. A
+        /// <see cref="SqliteException"/> (locked, mid-rewrite, unreadable) drops THAT library's
+        /// rows only - the primary library's catalog must not fail with it - and reports it
+        /// through the return value so the caller does not cache the gap as permanent.</summary>
+        private static bool TryAppendLibrary(SeforimDbAttachedLibraries.Library library, string what, Action append)
+        {
+            try { append(); return true; }
+            catch (SqliteException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "SeforimDb: additional library '" + library.Label + "' (" + library.Alias + ") skipped while reading " +
+                    what + ": " + ex.Message);
+                return false;
+            }
+        }
+
         /// <summary>
         /// Idle memory release: drops the cached catalog (every book + category row). The next
         /// <see cref="GetAllBooks"/>/<see cref="GetAllCategories"/> reloads it from the database
@@ -48,22 +79,42 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 _categoriesCache = null;
                 _booksCache = null;
+                _categoriesPartialUntilTick = 0;
+                _booksPartialUntilTick = 0;
             }
         }
 
         public List<CategoryRow> GetAllCategories()
         {
             lock (_catalogCacheLock)
-                if (_categoriesCache is { } cached) return cached;
+                if (_categoriesCache is { } cached && Fresh(_categoriesPartialUntilTick)) return cached;
 
             var list = new List<CategoryRow>();
             using var conn = Open();
             AppendCategories(conn, "main", null, 0, list);
+            bool complete = true;
             foreach (var library in _attachedLibraries)
-                AppendCategories(conn, library.Alias, library.Label, library.Index, list);
+            {
+                var lib = library;
+                // Rows are appended to a scratch list and added only on success, so a library that
+                // fails halfway never leaves a partial category set behind.
+                var rows = new List<CategoryRow>();
+                if (TryAppendLibrary(lib, "categories", () => AppendCategories(conn, lib.Alias, lib.Label, lib.Index, rows)))
+                    list.AddRange(rows);
+                else
+                    complete = false;
+            }
 
             if (list.Count > 0)
-                lock (_catalogCacheLock) _categoriesCache ??= list;
+                lock (_catalogCacheLock)
+                {
+                    // Never replace a COMPLETE cache with a racing partial load.
+                    if (_categoriesCache is null || _categoriesPartialUntilTick != 0)
+                    {
+                        _categoriesCache = list;
+                        _categoriesPartialUntilTick = complete ? 0 : NowMs() + PartialCatalogRetryMs;
+                    }
+                }
             return list;
         }
 
@@ -94,14 +145,25 @@ namespace KitveiHakodesh.Core.SeforimDb
         public List<BookRow> GetAllBooks()
         {
             lock (_catalogCacheLock)
-                if (_booksCache is { } cached) return cached;
+                if (_booksCache is { } cached && Fresh(_booksPartialUntilTick)) return cached;
 
             var list = new List<BookRow>();
             using var conn = Open();
             AppendBooks(conn, SeforimDbSqlStrings.GetAllBooks, null, 0, list);
+            bool complete = true;
+            var readableLibraries = new List<SeforimDbAttachedLibraries.Library>();
             foreach (var library in _attachedLibraries)
-                AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(library.Alias,
-                    SeforimDbSchema.ColumnExists(conn, "book", "hasTeamim", library.Alias)), library.Label, library.Index, list);
+            {
+                var lib = library;
+                var rows = new List<BookRow>();
+                if (TryAppendLibrary(lib, "books", () => AppendBooks(conn, SeforimDbSqlStrings.GetAllBooksIn(lib.Alias,
+                        SeforimDbSchema.ColumnExists(conn, "book", "hasTeamim", lib.Alias)), lib.Label, lib.Index, rows)))
+                {
+                    list.AddRange(rows);
+                    readableLibraries.Add(lib);
+                }
+                else complete = false;
+            }
 
             // The precedence every consumer ranks by, computed ONCE here (not in the frontend,
             // not per index) and shipped on the row; rows go out in that order. Each attached
@@ -113,7 +175,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 [0] = (primaryOrder, 0),
             };
             int nextOffset = primaryOrder.Count == 0 ? 0 : primaryOrder.Values.Max() + 1;
-            foreach (var library in _attachedLibraries)
+            foreach (var library in readableLibraries)
             {
                 Dictionary<int, int> libraryOrder;
                 try { libraryOrder = SeforimDbBookTreeOrder.Load(conn, library.Alias); }
@@ -132,7 +194,14 @@ namespace KitveiHakodesh.Core.SeforimDb
             list = list.OrderBy(b => b.TreeOrder).ToList();
 
             if (list.Count > 0)
-                lock (_catalogCacheLock) _booksCache ??= list;
+                lock (_catalogCacheLock)
+                {
+                    if (_booksCache is null || _booksPartialUntilTick != 0)
+                    {
+                        _booksCache = list;
+                        _booksPartialUntilTick = complete ? 0 : NowMs() + PartialCatalogRetryMs;
+                    }
+                }
             return list;
         }
 
@@ -534,18 +603,45 @@ namespace KitveiHakodesh.Core.SeforimDb
             return result;
         }
 
+        /// <summary>Text of a batch of lines. Ids are GLOBAL (see <see cref="SeforimDbLibraryId"/>):
+        /// a full-text hit of an additional library is a descriptor the UI re-reads through here,
+        /// so each library's ids are read from ITS OWN schema (own sidecar, own zstd dictionary)
+        /// and returned as global ids again. A library no longer attached contributes no rows.</summary>
         public List<LineContentRow> GetLineContents(List<int> lineIds)
         {
             var list = new List<LineContentRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
-            using var codec = CodecFor(conn);
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLineContents(SchemaOf(conn), lineIds.Count);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new LineContentRow { Id = r.GetInt32(0), Content = codec.DecodeColumnOrEmpty(r, 1) });
+
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(lineIds))
+            {
+                using var cmd = conn.CreateCommand();
+                SeforimDbLineContentCodec codec;
+                if (libraryIndex == 0)
+                {
+                    codec = CodecFor(conn);
+                    cmd.CommandText = SeforimDbSqlStrings.GetLineContents(SchemaOf(conn), localIds.Count);
+                }
+                else
+                {
+                    var library = FindAttached(libraryIndex);
+                    if (library is not { } found) continue;
+                    var schema = SeforimDbSchema.ForDatabase(conn, found.Path, found.Alias);
+                    codec = SeforimDbLineContentCodec.Create(conn, found.Alias, found.Path);
+                    cmd.CommandText = SeforimDbSqlStrings.GetLineContentsIn(found.Alias, schema, localIds.Count);
+                }
+                using (codec)
+                {
+                    BindList(cmd, "p", localIds);
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                        list.Add(new LineContentRow
+                        {
+                            Id = SeforimDbLibraryId.ToGlobal(libraryIndex, r.GetInt32(0)),
+                            Content = codec.DecodeColumnOrEmpty(r, 1),
+                        });
+                }
+            }
             return list;
         }
 

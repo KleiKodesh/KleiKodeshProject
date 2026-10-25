@@ -214,6 +214,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
             $" WHERE l.id IN ({InPlaceholders("p", count)})";
 
+        /// <summary>Same as <see cref="GetLineContents(SeforimDbSchema, int)"/>, against an ATTACHed
+        /// library's schema (its own sidecar, schema-qualified) - bind LOCAL line ids.</summary>
+        public static string GetLineContentsIn(string librarySchema, SeforimDbSchema schema, int count) =>
+            $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
+            $" FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(schema, "l", librarySchema)}" +
+            $" WHERE l.id IN ({InPlaceholders("p", count)})";
+
         /// <summary>Word-level link anchors (link_anchor, SeforimLibrary schema v2+) for a batch of
         /// source lines. side 0 = the anchor sits in the source line's text. Offsets are visible-char
         /// (HTML tags = 0 chars, each entity = 1 char, everything else — including nikud/te'amim — = 1;

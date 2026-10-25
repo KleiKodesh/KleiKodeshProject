@@ -217,7 +217,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 recordedStamp = currentStamp;   // unverifiable — but not evidence of a different DB
             }
 
-            if (hasIndexState && !string.Equals(recordedStamp, currentStamp, StringComparison.OrdinalIgnoreCase))
+            if (hasIndexState && !SeforimDbContentFingerprint.Matches(recordedStamp, currentStamp))
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
@@ -394,7 +394,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             string? recorded = ReadStamp(Path.Combine(_indexPath, CompletedStampFileName))
                             ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
             return recorded != null
-                && string.Equals(recorded, ComputeStamp(), StringComparison.OrdinalIgnoreCase);
+                && SeforimDbContentFingerprint.Matches(recorded, ComputeStamp());
         }
 
         /// <summary>

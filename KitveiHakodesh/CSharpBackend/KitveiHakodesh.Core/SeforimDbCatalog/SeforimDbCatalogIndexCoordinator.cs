@@ -299,7 +299,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 var index = GetIndex(databasePath);
                 bool opened = index.TryOpenActive();
                 if (opened) _isReady = true;
-                if (opened && string.Equals(index.ActiveHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                if (opened && SeforimDb.SeforimDbContentFingerprint.Matches(index.ActiveHash, currentHash))
                 {
                     _buildStarted = true;
                     return;
@@ -457,7 +457,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 // Already rebuilding for a change → don't stack another.
                 if (_isIndexing) return false;
                 string? active = GetIndex(databasePath).ActiveHash;
-                if (string.Equals(active, current, StringComparison.OrdinalIgnoreCase))
+                if (SeforimDb.SeforimDbContentFingerprint.Matches(active, current))
                     return false; // unchanged — nothing to do
 
                 // Re-arm EnsureIndex (it is latched to once-per-process), then let it do the
