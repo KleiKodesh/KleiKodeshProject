@@ -296,6 +296,11 @@ namespace KleiKodesh.Helpers
                     }
                 }
 
+                // window.open popups (e.g. Hameshiv) become owned windows of Word.
+                var setPopupOwnerMethod = userControl.GetType().GetMethod("SetPopupOwnerAction");
+                if (setPopupOwnerMethod != null)
+                    setPopupOwnerMethod.Invoke(userControl, new object[] { new Action<IntPtr>(TaskPanePopOut.SetOwner) });
+
                 if (matchOfficeTheme)
                     OfficeThemeWatcher.Attach(userControl);
 

@@ -513,7 +513,8 @@ namespace KleiKodesh.Helpers
         : null
         };
 
-        void SetOwner(IntPtr formHandle)
+        /// <summary>Makes a top-level window a child (owned window) of the active Word window.</summary>
+        public static void SetOwner(IntPtr formHandle)
         {
             var word = new IntPtr(Globals.ThisAddIn.Application.ActiveWindow.Hwnd);
             SetWindowLong(formHandle, GWL_HWNDPARENT, word.ToInt32());

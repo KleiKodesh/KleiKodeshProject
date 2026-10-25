@@ -30,7 +30,7 @@ function widthsOf(keys: readonly ToolbarOverflowKey[]) {
 
 describe('collapse order', () => {
   it('is the order the product fixed, worst-first', () => {
-    expect(ALL).toEqual(['book-info', 'export-to-word', 'sync-commentaries', 'diacritics', 'zoom'])
+    expect(ALL).toEqual(['book-info', 'hebrewbooks-editions', 'export-to-word', 'sync-commentaries', 'zoom'])
   })
 })
 
@@ -77,28 +77,28 @@ describe('keysToCollapse', () => {
 
   it('takes the next control only when one is no longer enough', () => {
     const room = roomForEverything(PINNED) - 2 * BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info', 'export-to-word'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info', 'hebrewbooks-editions'])
   })
 
   it('adds one control per button of deficit', () => {
     const full = roomForEverything(PINNED)
     expect(keysToCollapse(full - 3 * BUTTON, PINNED, ALL)).toEqual([
       'book-info',
+      'hebrewbooks-editions',
       'export-to-word',
-      'sync-commentaries',
     ])
   })
 
   it('counts zoom as the two buttons it is', () => {
-    // Short by six buttons: book info, export, sync and diacritics free one each, and zoom's
+    // Short by six buttons: book info, editions, export and sync free one each, and zoom's
     // two clear the rest. Were zoom counted as one, the toolbar would still be a button over
     // with nothing left to collapse.
     const room = roomForEverything(PINNED) - 6 * BUTTON
     expect(keysToCollapse(room, PINNED, ALL)).toEqual([
       'book-info',
+      'hebrewbooks-editions',
       'export-to-word',
       'sync-commentaries',
-      'diacritics',
       'zoom',
     ])
   })
@@ -126,15 +126,15 @@ describe('keysToCollapse', () => {
   })
 
   it('never collapses more than what is present', () => {
-    const present: ToolbarOverflowKey[] = ['export-to-word', 'diacritics']
+    const present: ToolbarOverflowKey[] = ['export-to-word', 'sync-commentaries']
     expect(keysToCollapse(1, PINNED, present)).toEqual(present)
   })
 
   it('leaves a book without the sync control unaffected by its absence', () => {
     // A book with no commentaries renders no sync button, so the control after it in the
     // order is the second concession rather than the third.
-    const present: ToolbarOverflowKey[] = ['export-to-word', 'diacritics', 'zoom']
+    const present: ToolbarOverflowKey[] = ['book-info', 'export-to-word', 'zoom']
     const room = (PINNED + widthsOf(present)) * BUTTON - 2 * BUTTON
-    expect(keysToCollapse(room, PINNED, present)).toEqual(['export-to-word', 'diacritics'])
+    expect(keysToCollapse(room, PINNED, present)).toEqual(['book-info', 'export-to-word'])
   })
 })

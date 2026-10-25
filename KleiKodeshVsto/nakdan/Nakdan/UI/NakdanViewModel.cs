@@ -25,6 +25,36 @@ namespace Nakdan.UI
     }
 
     // ═══════════════════════════════════════════════════════════
+    //  CLEAN OPTION ITEM — one checkbox in the "clean text" dropdown
+    // ═══════════════════════════════════════════════════════════
+    public class CleanOptionItem : INotifyPropertyChanged
+    {
+        private bool _isChecked;
+
+        public CleanOptionItem(TextCleanOptions option, string displayName)
+        {
+            Option      = option;
+            DisplayName = displayName;
+        }
+
+        public TextCleanOptions Option      { get; }
+        public string           DisplayName { get; }
+
+        public bool IsChecked
+        {
+            get => _isChecked;
+            set
+            {
+                if (_isChecked == value) return;
+                _isChecked = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsChecked)));
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     //  NAKDAN VIEW-MODEL
     // ═══════════════════════════════════════════════════════════
     public class NakdanViewModel : ViewModelBase
@@ -62,6 +92,23 @@ namespace Nakdan.UI
             DictaGenre savedGenre = SettingsManager.GetEnum("Nakdan", "SelectedGenre", DictaGenre.Modern);
             _selectedGenre = FindGenreItem(savedGenre) ?? Genres[0];
 
+            // ── Clean-text options (persisted as one flags value) ─
+            var savedClean = SettingsManager.GetEnum("Nakdan", "CleanTextOptions", DefaultCleanOptions);
+            CleanOptions = new ObservableCollection<CleanOptionItem>
+            {
+                new CleanOptionItem(TextCleanOptions.Nikkud,                 "ניקוד"),
+                new CleanOptionItem(TextCleanOptions.Cantillations,          "טעמים"),
+                new CleanOptionItem(TextCleanOptions.PeriodsAndCommas,       "נקודות ופסיקים"),
+                new CleanOptionItem(TextCleanOptions.Dashes,                 "מקפים"),
+                new CleanOptionItem(TextCleanOptions.QuestionAndExclamation, "סימני שאלה וקריאה"),
+                new CleanOptionItem(TextCleanOptions.Colons,                 "נקודותיים"),
+            };
+            foreach (var o in CleanOptions)
+            {
+                o.IsChecked = (savedClean & o.Option) != 0;
+                o.PropertyChanged += OnCleanOptionChanged;
+            }
+
             // ── Styles list (loaded dynamically from Word) ─
             Styles = new ObservableCollection<StyleItem>();
 
@@ -71,9 +118,7 @@ namespace Nakdan.UI
 
             // ── Commands ──────────────────────────────────────────
             VowelizeSelectionCommand = new RelayCommand(VowelizeSelection,  () => !IsBusy);
-            RemoveNikkudCommand      = new RelayCommand(RemoveNikkud,       () => !IsBusy);
-            RemoveCantillationsCommand = new RelayCommand(RemoveCantillations, () => !IsBusy);
-            RemoveNikkudAndCantillationsCommand = new RelayCommand(RemoveNikkudAndCantillations, () => !IsBusy);
+            CleanTextCommand         = new RelayCommand(CleanText,          () => !IsBusy);
             CancelCommand            = new RelayCommand(Cancel,            () => IsBusy);
             ClearStatusCommand       = new RelayCommand(() => { StatusMessage = string.Empty; HasError = false; });
 
@@ -152,11 +197,49 @@ namespace Nakdan.UI
             }
         }
 
+        // ── Clean-text options ────────────────────────────────
+        private const TextCleanOptions DefaultCleanOptions =
+            TextCleanOptions.Nikkud | TextCleanOptions.Cantillations;
+
+        public ObservableCollection<CleanOptionItem> CleanOptions { get; }
+
+        private TextCleanOptions SelectedCleanOptions
+        {
+            get
+            {
+                var flags = TextCleanOptions.None;
+                foreach (var o in CleanOptions)
+                    if (o.IsChecked) flags |= o.Option;
+                return flags;
+            }
+        }
+
+        /// <summary>"All" checkbox: true = all, false = none, null = mixed.</summary>
+        public bool? AllCleanOptionsChecked
+        {
+            get
+            {
+                int count = 0;
+                foreach (var o in CleanOptions) if (o.IsChecked) count++;
+                return count == 0 ? false : count == CleanOptions.Count ? true : (bool?)null;
+            }
+            set
+            {
+                // A click on a mixed box cycles to null; treat it as "check all".
+                bool check = value != false;
+                foreach (var o in CleanOptions) o.IsChecked = check;
+            }
+        }
+
+        private void OnCleanOptionChanged(object sender, PropertyChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(AllCleanOptionsChecked));
+            SettingsManager.Save("Nakdan", "CleanTextOptions", SelectedCleanOptions);
+        }
+
         // ── Commands ──────────────────────────────────────────
         public ICommand VowelizeSelectionCommand { get; }
-        public ICommand RemoveNikkudCommand      { get; }
-        public ICommand RemoveCantillationsCommand { get; }
-        public ICommand RemoveNikkudAndCantillationsCommand { get; }
+        public ICommand CleanTextCommand         { get; }
         public ICommand CancelCommand            { get; }
         public ICommand ClearStatusCommand       { get; }
         public ICommand ApplyWordOptionCommand   { get; }
@@ -197,57 +280,15 @@ namespace Nakdan.UI
             });
         }
 
-        private async void RemoveNikkud()
+        private async void CleanText()
         {
             SetStatus(string.Empty, false);
             IsBusy = true;
 
             try
             {
-                _nakdanWrapper.RemoveNikkud();
-                SetStatus("הניקוד הוסר ✓", false);
-            }
-            catch( Exception ex)
-            {
-                MessageBox.Show(ex.Message);
-            }
-            finally
-            {
-                IsBusy = false;
-                await AutoHideStatusAsync();
-            }
-        }
-
-        private async void RemoveCantillations()
-        {
-            SetStatus(string.Empty, false);
-            IsBusy = true;
-
-            try
-            {
-                _nakdanWrapper.RemoveCantillations();
-                SetStatus("הטעמים הוסרו ✓", false);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message);
-            }
-            finally
-            {
-                IsBusy = false;
-                await AutoHideStatusAsync();
-            }
-        }
-
-        private async void RemoveNikkudAndCantillations()
-        {
-            SetStatus(string.Empty, false);
-            IsBusy = true;
-
-            try
-            {
-                _nakdanWrapper.RemoveNikkudAndCantillations();
-                SetStatus("הניקוד והטעמים הוסרו ✓", false);
+                _nakdanWrapper.CleanSelection(SelectedCleanOptions);
+                SetStatus("הטקסט נוקה ✓", false);
             }
             catch (Exception ex)
             {

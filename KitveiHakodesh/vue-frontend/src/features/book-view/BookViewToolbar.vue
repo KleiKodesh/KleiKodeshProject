@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, useId } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
@@ -26,12 +26,13 @@ import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.v
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
-import BookViewDiacriticsGlyph from './BookViewDiacriticsGlyph.vue'
+import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
 import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
 import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
   TOOLBAR_OVERFLOW_ORDER,
+  CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
 import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
@@ -56,7 +57,6 @@ const props = defineProps<{
   // scoped to it, so pane 2's toolbar never reads or writes pane 1's zoom.
   tabId?: string
   bookId: number | undefined
-  bookHasTeamim: boolean
   // Set for books whose publisher forbids an editable export; the button is not rendered.
   exportRestricted?: boolean
   // True while an export to Word runs; the button shows a spinner.
@@ -84,24 +84,6 @@ const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
 const { zoom, commentaryZoom, toolbarPosition, autoSelectTopLine } = storeToRefs(bookViewStore)
 
-const diacriticsState = computed(() => settingsStore.diacriticsState)
-
-// When the book has no teamim the cycle is 0→2→0, so the title reflects only two stages.
-const diacriticsTitle = computed(() => {
-  if (!props.bookHasTeamim) {
-    return diacriticsState.value === 0 ? t('bookView.toolbar.removeNikud') : t('bookView.toolbar.restoreNikud')
-  }
-  return [t('bookView.toolbar.removeTeamim'), t('bookView.toolbar.removeAlsoNikud'), t('bookView.toolbar.restoreAll')][diacriticsState.value]!
-})
-
-function onDiacriticsClick() {
-  if (props.bookHasTeamim) {
-    settingsStore.cycleDiacritics()
-  } else {
-    settingsStore.cycleDiacriticsNoTeamim()
-  }
-}
-
 /** The export control's name - its tooltip on the toolbar, its text in the flyout. */
 const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
 
@@ -117,8 +99,47 @@ const bookInfoExpandedInOverflow = ref(false)
 /** The HebrewBooks editions control's name - its row text in the flyout. */
 const HEBREWBOOKS_EDITIONS_LABEL = t('bookView.hebrewBooks.title')
 
-/** Whether the editions row in the flyout has its list expanded beneath it. */
+/** Whether the editions row in the flyout has its submenu open beside it. */
 const hebrewBooksEditionsExpandedInOverflow = ref(false)
+
+/**
+ * The editions submenu: a panel beside its flyout row, like a context-menu submenu. Fixed-
+ * positioned (the flyout scrolls, so an absolute child would be clipped by it) but still a
+ * DOM child of the flyout, so a click in it is not an outside click that closes the flyout.
+ * Opens toward the inline start (left, RTL); flips right when that side has no room, and is
+ * clamped into the viewport either way.
+ */
+const EDITIONS_SUBMENU_MARGIN = 8
+const editionsRowEl = ref<HTMLElement | null>(null)
+const editionsSubmenuEl = ref<HTMLElement | null>(null)
+const editionsSubmenuPos = ref({ top: 0, left: 0, placed: false })
+
+async function openEditionsSubmenu() {
+  hebrewBooksEditionsExpandedInOverflow.value = true
+  editionsSubmenuPos.value.placed = false
+  await nextTick()
+  const row = editionsRowEl.value
+  const panel = editionsSubmenuEl.value
+  if (!row || !panel) return
+  const m = EDITIONS_SUBMENU_MARGIN
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  panel.style.maxHeight = `${vh - 2 * m}px`
+  const rowRect = row.getBoundingClientRect()
+  const menuRect = (row.closest('.toolbar-overflow-menu') ?? row).getBoundingClientRect()
+  const width = panel.offsetWidth
+  const height = panel.offsetHeight
+  let left = menuRect.left - width
+  if (left < m && menuRect.right + width <= vw - m) left = menuRect.right
+  left = Math.max(m, Math.min(left, vw - width - m))
+  const top = Math.max(m, Math.min(rowRect.top - 4, vh - height - m))
+  editionsSubmenuPos.value = { top, left, placed: true }
+}
+
+function toggleEditionsSubmenu() {
+  if (hebrewBooksEditionsExpandedInOverflow.value) hebrewBooksEditionsExpandedInOverflow.value = false
+  else void openEditionsSubmenu()
+}
 
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
@@ -126,11 +147,6 @@ const hebrewBooksEditionsExpandedInOverflow = ref(false)
  * the name.
  */
 const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
-
-// The diacritics control has no fixed name: its tooltip names the NEXT stage of the cycle,
-// which is what a row should say too, so the row reads the same text the button's tooltip
-// does.
-const diacriticsRowLabel = computed(() => diacriticsTitle.value)
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 
@@ -254,7 +270,7 @@ const wordLinkMarkersPresent = ref(false)
 
 /** The collapsible controls this book renders, in collapse order. */
 const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
-  // The diacritics cycle and the zoom pair are on every book; the commentary sync depends
+  // The zoom pair is on every book; the commentary sync depends
   // on the book having commentaries at all, and export to Word on it not being restricted.
   TOOLBAR_OVERFLOW_ORDER.filter((key) => {
     if (key === 'sync-commentaries') return props.hasCommentaries
@@ -283,10 +299,12 @@ const pinnedButtonCount = computed(() => {
     ? 1 + (props.canUseSidePanel ? 2 : 0) // bottom panel, plus both side panels when they fit
     : 0
   const search = 1
+  // The clean-text combo: eraser + chevron as one pinned pair.
+  const cleanText = CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS
   // Reported by the control itself rather than predicted here: it renders out of a list it
   // fetches, so nothing on this side can know in advance whether it is there.
   const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers
+  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers + cleanText
 })
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
@@ -474,19 +492,7 @@ defineExpose({ tocBtnRef })
       <IconZoomIn20Regular />
     </button>
 
-    <button
-      class="collapsible"
-      :inert="!toolbarButtonVisible('diacritics')"
-      :class="[
-        'diacritics-btn',
-        { collapsed: !toolbarButtonVisible('diacritics') },
-        { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
-      ]"
-      :title="`${diacriticsTitle} (Ctrl+D)`"
-      @click="onDiacriticsClick()"
-    >
-      <BookViewDiacriticsGlyph :state="diacriticsState" />
-    </button>
+    <BookViewCleanTextCombo />
     <BookViewWordLinkMarkersDropdown
       :book-id="bookId"
       @presence-change="wordLinkMarkersPresent = $event"
@@ -565,23 +571,30 @@ defineExpose({ tocBtnRef })
           :book-id="bookId"
         />
       </template>
-      <!-- Same inline-expand as book-info: the editions list opens beneath its row. -->
+      <!-- A side submenu, like a context menu's: the editions open beside the row. -->
       <template v-if="isOverflowed('hebrewbooks-editions')">
         <button
+          ref="editionsRowEl"
           role="menuitem"
           class="overflow-row"
           :class="{ active: hebrewBooksEditionsExpandedInOverflow }"
           aria-haspopup="menu"
           :aria-expanded="hebrewBooksEditionsExpandedInOverflow"
-          @click="hebrewBooksEditionsExpandedInOverflow = !hebrewBooksEditionsExpandedInOverflow"
+          @click="toggleEditionsSubmenu()"
         >
           <IconDocumentPdf20Regular />
           <span>{{ HEBREWBOOKS_EDITIONS_LABEL }}</span>
         </button>
         <div
           v-if="hebrewBooksEditionsExpandedInOverflow"
+          ref="editionsSubmenuEl"
           role="menu"
-          class="overflow-editions-list"
+          class="overflow-editions-submenu"
+          :style="{
+            top: `${editionsSubmenuPos.top}px`,
+            left: `${editionsSubmenuPos.left}px`,
+            visibility: editionsSubmenuPos.placed ? 'visible' : 'hidden',
+          }"
         >
           <BookViewHebrewBooksEditionsList
             :editions="hebrewBooksEditions"
@@ -612,20 +625,6 @@ defineExpose({ tocBtnRef })
         <IconTimeline20Filled v-if="autoSelectTopLine" />
         <IconTimeline20Regular v-else />
         <span>{{ SYNC_COMMENTARIES_LABEL }}</span>
-      </button>
-      <button
-        v-if="isOverflowed('diacritics')"
-        role="menuitem"
-        class="overflow-row"
-        :class="[
-          'diacritics-btn',
-          { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
-        ]"
-        :title="`${diacriticsTitle} (Ctrl+D)`"
-        @click="onDiacriticsClick()"
-      >
-        <BookViewDiacriticsGlyph :state="diacriticsState" />
-        <span>{{ diacriticsRowLabel }}</span>
       </button>
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width
@@ -908,32 +907,31 @@ button:disabled {
 .collapsible.hebrewbooks-editions-toolbar-item:not(.collapsed) {
   overflow: visible;
 }
-/* Indented under its row so it reads as that row's sub-list; scrolls within the flyout,
-   which itself clamps to the viewport. */
-.overflow-editions-list {
+/* The editions submenu: a floating sheet of its own beside the flyout, same surface as it. */
+.overflow-editions-submenu {
+  position: fixed;
+  z-index: 10000;
   display: flex;
   flex-direction: column;
-  max-width: 340px;
+  min-width: 180px;
+  max-width: 300px;
   max-height: 320px;
+  padding: 2px 0;
   overflow-y: auto;
-  padding-inline-start: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
 .overflow-book-info-panel {
-  max-width: 320px;
+  max-width: 300px;
   max-height: 320px;
   overflow-y: auto;
-  padding: 4px 12px 8px;
+  padding: 4px 10px 8px;
 }
 
-/* ── Diacritics ── */
-.diacritics-btn.state-1 {
-  color: var(--diacritics-1);
-}
-.diacritics-btn.state-2 {
-  color: var(--diacritics-2);
-}
 .export-spinner {
   display: inline-block;
   width: 16px;

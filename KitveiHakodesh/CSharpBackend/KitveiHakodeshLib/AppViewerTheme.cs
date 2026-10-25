@@ -185,6 +185,7 @@ namespace KitveiHakodeshLib
                 catch { }
             }
 
+            ApplyThemeToPopups(isDark);
             ApplySplashTheme(isDark);
 
             // Let a native chrome-tabs host (ChromeTabsMirror) re-derive its strip palette.

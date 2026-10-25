@@ -1,4 +1,4 @@
-import { stripNikkudFromHtml } from './hebrewTextProcessing'
+import { stripNikkudFromHtml, CLEAN_TEXT, CLEAN_TEXT_LEGACY } from './hebrewTextProcessing'
 
 const CODE_HEBREW_START = 0x05D0
 const CODE_HEBREW_END = 0x05EA
@@ -58,6 +58,13 @@ function isAbbreviationQuote(source: string, quoteIndex: number, length: number)
   return !isHebrewLetter(after + 1 < length ? source[after + 1] : undefined)
 }
 
+/** Whether only spaces lie between `from` and a tag or the end of the string. */
+function isAtEndOfLine(source: string, from: number, length: number): boolean {
+  let lookahead = from
+  while (lookahead < length && source[lookahead] === ' ') lookahead++
+  return lookahead >= length || source[lookahead] === '<'
+}
+
 // charCode -> 1 lookup table for characters that trigger special handling:
 // tag delimiters, colon, both quote forms, the entity-quote opener '&',
 // period, and space. A single typed-array read replaces the chain of
@@ -68,7 +75,7 @@ function isAbbreviationQuote(source: string, quoteIndex: number, length: number)
 // for engine call + match-object overhead.
 const MAX_SPECIAL_CODE = 0x05F4
 const SPECIAL_TABLE = new Uint8Array(MAX_SPECIAL_CODE + 1)
-for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
+for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '(', ')', '\u05F4']) {
   SPECIAL_TABLE[ch.charCodeAt(0)] = 1
 }
 
@@ -87,7 +94,10 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  * on every render cycle. Tags are passed through unchanged; only text nodes
  * are transformed.
  *
- * Transformations (on top of stripNikkudFromHtml):
+ * `flags` picks the options (CLEAN_TEXT); copy-clean-text uses the default. With neither
+ * punctuation option the scan below is skipped.
+ *
+ * NORMALIZE_PUNCTUATION transformations (on top of stripNikkudFromHtml):
  *   - Colons kept when at end-of-line (followed by a tag or end of string) or when
  *     they separate two letters/digits with no surrounding space (chapter:verse
  *     citations); other mid-sentence colons (vowel-pointing artifacts) are dropped
@@ -98,9 +108,17 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  *   - Multiple consecutive spaces collapsed to one
  *   - A space inserted after a period when the immediately following character
  *     is a Hebrew letter and the period does not follow a single-letter word
+ *
+ * REMOVE_PUNCTUATION keeps the quote, space and period-space rules and, instead of the
+ * colon rule, keeps a period or colon only at the end of a line or inside parentheses.
  */
-export function cleanHebrewText(html: string): string {
-  const source = stripNikkudFromHtml(html)
+export function cleanHebrewText(html: string, flags: number = CLEAN_TEXT_LEGACY): string {
+  if (!flags || !html || html === ' ') return html
+  const source = stripNikkudFromHtml(html, flags)
+  if (!(flags & (CLEAN_TEXT.NORMALIZE_PUNCTUATION | CLEAN_TEXT.REMOVE_PUNCTUATION))) return source
+  const removePunctuation = (flags & CLEAN_TEXT.REMOVE_PUNCTUATION) !== 0
+  // How many parentheses are open here - REMOVE_PUNCTUATION keeps . and : inside them.
+  let parenDepth = 0
   const length = source.length
   const output: string[] = []
 
@@ -160,20 +178,28 @@ export function cleanHebrewText(html: string): string {
       continue
     }
 
+    // ── Parentheses - verbatim, only counted ─────────────────────────────────
+    if (character === '(' || character === ')') {
+      parenDepth = character === '(' ? parenDepth + 1 : Math.max(0, parenDepth - 1)
+      output.push(character)
+      lastOutputChar = character
+      pos = specialIndex + 1
+      runStart = pos
+      continue
+    }
+
     // ── Colon ─────────────────────────────────────────────────────────────
     if (character === ':') {
-      let lookahead = specialIndex + 1
-      while (lookahead < length && source[lookahead] === ' ') lookahead++
       // Keep the colon when it is followed by a tag (end-of-sentence before markup)
       // or when it is at the very end of the string (last character of the line).
-      const atEndOfLine = lookahead >= length || source[lookahead] === '<'
+      const atEndOfLine = isAtEndOfLine(source, specialIndex + 1, length)
       // Keep it when it separates two letters/digits with no space on either side —
       // a citation (ט:יג, ח:טו). Uses the immediate neighbours, not the
       // space-skipping lookahead, so "הוא : שני" is still treated as an artifact.
       const isCitation =
         isCitationChar(specialIndex > 0 ? source[specialIndex - 1] : undefined) &&
         isCitationChar(specialIndex + 1 < length ? source[specialIndex + 1] : undefined)
-      if (atEndOfLine || isCitation) {
+      if (atEndOfLine || isCitation || (removePunctuation && parenDepth > 0)) {
         output.push(':')
         lastOutputChar = ':'
       }
@@ -250,6 +276,11 @@ export function cleanHebrewText(html: string): string {
 
     // ── Period — insert trailing space when needed ──────────────────────────
     if (character === '.') {
+      if (removePunctuation && parenDepth === 0 && !isAtEndOfLine(source, specialIndex + 1, length)) {
+        pos = specialIndex + 1
+        runStart = pos
+        continue
+      }
       output.push('.')
       lastOutputChar = '.'
 

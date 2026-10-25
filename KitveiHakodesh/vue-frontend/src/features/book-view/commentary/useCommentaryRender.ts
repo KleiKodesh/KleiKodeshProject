@@ -1,6 +1,6 @@
 import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
+import { removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, annotationOffsetLength, contentInAnnotationOffsetSpace } from '../lines/useBookViewLineRenderer'
@@ -27,7 +27,7 @@ export function useCommentaryRender(
 ) {
   const settingsStore = useSettingsStore()
 
-  const diacriticsState = computed(() => settingsStore.diacriticsState)
+  const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
   const commentaryFontPx = computed(
     () => (getCommentaryZoom() / 100) * (settingsStore.commentaryFontSize / 100) * 15,
   )
@@ -44,7 +44,7 @@ export function useCommentaryRender(
   let globalCacheKey = ''
 
   function getGlobalKey(searchQuery: string | undefined): string {
-    return `${diacriticsState.value}|${settingsStore.censorCacheKey}|${searchQuery ?? ''}`
+    return `${cleanTextFlags.value}|${settingsStore.censorCacheKey}|${searchQuery ?? ''}`
   }
 
   function getAnnotationKey(lineId: number): string {
@@ -168,7 +168,7 @@ export function useCommentaryRender(
     const anchors = lineId != null ? (getWordLinkAnchorsForLine?.(lineId) ?? []) : []
     let result = anchors.length ? applyWordLinkAnchors(content, anchors) : content
     result =
-      diacriticsState.value === 0 ? result : diacriticsState.value === 2 ? cleanHebrewText(result) : applyDiacriticsFilter(result, diacriticsState.value)
+      cleanHebrewText(result, cleanTextFlags.value)
     result = censorDivineNames(result, settingsStore.censorOptions)
 
     // Apply user highlights before search marks so search marks render on top
@@ -211,12 +211,12 @@ export function useCommentaryRender(
    */
   function annotationOffsetLengthOf(content: string): number {
     return annotationOffsetLength(
-      contentInAnnotationOffsetSpace(content, diacriticsState.value, settingsStore.censorOptions),
+      contentInAnnotationOffsetSpace(content, cleanTextFlags.value, settingsStore.censorOptions),
     )
   }
 
   return {
-    diacriticsState,
+    cleanTextFlags,
     commentaryFontPx,
     renderContent,
     setCurrentMark,

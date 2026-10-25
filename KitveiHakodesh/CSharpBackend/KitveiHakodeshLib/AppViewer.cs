@@ -165,6 +165,17 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
+        /// Called by TaskPaneManager via reflection: makes a window.open popup an owned
+        /// window of Word. Null in standalone hosts, which own it by the app's root window.
+        /// </summary>
+        public Action<IntPtr> SetPopupOwner { get; private set; }
+
+        public void SetPopupOwnerAction(Action<IntPtr> action)
+        {
+            SetPopupOwner = action;
+        }
+
+        /// <summary>
         /// Opens a file by path, as if the user had picked it via the file picker.
         /// Safe to call immediately after construction — if the Vue app is not yet
         /// ready the path is queued and opened as soon as 'appReady' is received.
@@ -672,6 +683,7 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
             _webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            _webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
 
             _webView.Source = new Uri("http://KitveiHakodesh-vue-app/index.html");
 
@@ -709,6 +721,7 @@ namespace KitveiHakodeshLib
                     // Unsubscribing _hb's was a silent no-op that left the handler attached.
                     _webView.CoreWebView2.DownloadStarting -= OnDownloadStarting;
                     _webView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                    _webView.CoreWebView2.NewWindowRequested -= OnNewWindowRequested;
                     // OnNavigationCompleted stays subscribed for the WebView2's whole lifetime —
                     // it is what restores the app shell when a navigation off it fails — so this
                     // is the only place it comes off.

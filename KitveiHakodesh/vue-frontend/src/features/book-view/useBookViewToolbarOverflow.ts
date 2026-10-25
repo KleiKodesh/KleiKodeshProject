@@ -8,6 +8,12 @@ import { useElementSize } from '@vueuse/core'
  */
 const TOOLBAR_BUTTON_SIZE = 28
 /**
+ * The clean-text combo (BookViewCleanTextCombo) is pinned - never collapses - and takes
+ * its eraser button plus the chevron (14px), its two separator borders (1px each) and
+ * their padding (2px each). It is one pair: both halves always stay together.
+ */
+export const CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS = 1 + (14 + 2 * 1 + 2 * 2) / TOOLBAR_BUTTON_SIZE
+/**
  * How far the anchored more button sits from the edge it is pinned to. Mirrors
  * `--toolbar-edge-inset` in BookViewToolbar.
  */
@@ -57,6 +63,8 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  * collapsed the toolbar. They stay on the toolbar at every width; the zoom pair, which is
  * two plain buttons and has keyboard equivalents (Ctrl+/Ctrl-), collapses in their place.
  *
+ * The clean-text combo is NOT here either: it is always visible, by product decision.
+ *
  * Keys are internal names rather than labels, because none of these are destinations - the
  * flyout renders each one's face and the toolbar dispatches its action.
  */
@@ -65,7 +73,6 @@ export const TOOLBAR_OVERFLOW_ORDER = [
   'hebrewbooks-editions',
   'export-to-word',
   'sync-commentaries',
-  'diacritics',
   'zoom',
 ] as const
 

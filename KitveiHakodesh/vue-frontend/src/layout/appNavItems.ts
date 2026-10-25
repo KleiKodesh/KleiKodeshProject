@@ -1,6 +1,7 @@
-import type { Component } from 'vue'
+import { computed, type Component } from 'vue'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
+import { useHameshivReachable } from '@/composables/useHameshivReachable'
 
 /**
  * The one list of app destinations, in menu order.
@@ -34,7 +35,7 @@ function navItem(label: string, iconKey: DocumentIconKey, shortcut: string): App
   return { label, text, icon: icon.icon24, color: icon.color || undefined, shortcut, description }
 }
 
-export const APP_NAV_ITEMS: AppNavItem[] = [
+const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('קטלוג הספרים', 'library', 'Ctrl+1'),
   navItem('חיפוש', 'search', 'Ctrl+2'),
   navItem('היברו-בוקס', 'hbooks', 'Ctrl+3'),
@@ -43,7 +44,18 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
+  navItem('המשיב', 'hameshiv', 'Ctrl+9'),
 ]
+
+/** Label of the external hameshiv.com item - listed only while the site is reachable. */
+export const HAMESHIV_LABEL = 'המשיב'
+
+const hameshivReachable = useHameshivReachable()
+
+/** The destinations to show: ALL_NAV_ITEMS minus hameshiv while it is unreachable. Reactive. */
+export const APP_NAV_ITEMS = computed<AppNavItem[]>(() =>
+  hameshivReachable.value ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => item.label !== HAMESHIV_LABEL),
+)
 
 /**
  * Workspaces is deliberately NOT in the list above, and has no route at all: it is not a

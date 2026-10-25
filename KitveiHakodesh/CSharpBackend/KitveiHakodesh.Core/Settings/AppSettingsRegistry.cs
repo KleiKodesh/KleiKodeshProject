@@ -51,7 +51,9 @@ namespace KitveiHakodesh.Core.Settings
             if (InMemoryStore is { } store)
                 return store.TryGetValue(app + "\\" + section + "\\" + key, out var v) ? v : fallback;
             // No registry off Windows (portable build): every setting reads as its fallback.
+#if NET
             if (!OperatingSystem.IsWindows()) return fallback;
+#endif
             try
             {
                 using var registryKey = UserProfile.Hive.OpenSubKey(SubKey(app, section));
@@ -91,7 +93,9 @@ namespace KitveiHakodesh.Core.Settings
                     store[app + "\\" + section + "\\" + key] = value ?? "";
                     return true;
                 }
+#if NET
                 if (!OperatingSystem.IsWindows()) return true; // no registry off Windows: not persisted
+#endif
                 using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
                 registryKey?.SetValue(key, value ?? "");
                 return true;
@@ -183,6 +187,25 @@ namespace KitveiHakodesh.Core.Settings
             WriteInt("Popout", "Y", y);
             WriteInt("Popout", "W", width);
             WriteInt("Popout", "H", height);
+        }
+
+        /// <summary>
+        /// Last bounds of a window.open popup, keyed by its window name (e.g. "hameshiv").
+        /// The size falls back to what the page requested; X/Y -1 means "not positioned
+        /// yet" (the host centres it), same convention as the pop-out bounds.
+        /// </summary>
+        public static (int X, int Y, int Width, int Height) GetPopupBounds(string name, int width, int height) => (
+            ReadInt("Popup_" + name, "X", -1),
+            ReadInt("Popup_" + name, "Y", -1),
+            ReadInt("Popup_" + name, "W", width),
+            ReadInt("Popup_" + name, "H", height));
+
+        public static void SetPopupBounds(string name, int x, int y, int width, int height)
+        {
+            WriteInt("Popup_" + name, "X", x);
+            WriteInt("Popup_" + name, "Y", y);
+            WriteInt("Popup_" + name, "W", width);
+            WriteInt("Popup_" + name, "H", height);
         }
 
         // ── Appearance ────────────────────────────────────────────────────────────────

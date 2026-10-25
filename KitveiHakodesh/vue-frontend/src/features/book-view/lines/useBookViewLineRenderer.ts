@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
+import { removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
@@ -267,15 +267,10 @@ export function highlightFromSnippet(
  */
 export function contentInAnnotationOffsetSpace(
   content: string,
-  diacriticsState: number,
+  cleanTextFlags: number,
   censorOptions: Parameters<typeof censorDivineNames>[1],
 ): string {
-  const withDiacritics =
-    diacriticsState === 0
-      ? content
-      : diacriticsState === 2
-        ? cleanHebrewText(content)
-        : applyDiacriticsFilter(content, diacriticsState)
+  const withDiacritics = cleanHebrewText(content, cleanTextFlags)
   return censorDivineNames(withDiacritics, censorOptions)
 }
 
@@ -496,7 +491,7 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
 
 export function useBookViewLineRenderer(
   settings: SettingsStore,
-  diacriticsState: import('vue').ComputedRef<number>,
+  cleanTextFlags: import('vue').ComputedRef<number>,
   getProps: () => LineRenderProps,
 ) {
   // Two-tier cache:
@@ -517,7 +512,7 @@ export function useBookViewLineRenderer(
     // and a version swap changes a line's TEXT while keeping its index and its id.
     // Without it every visible line returns the previous version's cached HTML and the
     // reader sees no change at all — the swap looks like it silently did nothing.
-    return `${p.activeVersionId ?? 0}|${diacriticsState.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+    return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
   function getAnnotationKey(lineId: number): string {
@@ -554,7 +549,7 @@ export function useBookViewLineRenderer(
     // (which all skip tags) is unaffected.
     const anchors = p.getWordLinkAnchorsForLine?.(lineId) ?? []
     let content = anchors.length ? applyWordLinkAnchors(raw, anchors) : raw
-    content = diacriticsState.value === 0 ? content : diacriticsState.value === 2 ? cleanHebrewText(content) : applyDiacriticsFilter(content, diacriticsState.value)
+    content = cleanHebrewText(content, cleanTextFlags.value)
     content = censorDivineNames(content, settings.censorOptions)
 
     // Apply user highlights first (underneath search marks and note markers)
