@@ -77,7 +77,7 @@ namespace Nakdan.Core
                 throw new InvalidOperationException(
                     "אין טקסט מסומן.\nיש לסמן טקסט לפני ניקוי הטקסט.");
 
-            if (options == TextCleanOptions.None)
+            if ((options & ~TextCleanOptions.KeepPunctuationAtParagraphEnd) == TextCleanOptions.None)
                 throw new InvalidOperationException(
                     "לא נבחר מה להסיר.\nיש לסמן לפחות אפשרות אחת בתיבה הנפתחת.");
 
@@ -107,10 +107,16 @@ namespace Nakdan.Core
             if (marks.Length > 0)
                 ReplaceAll(find, "[" + marks + "]", "");
 
+            bool keepAtParagraphEnd = (options & TextCleanOptions.KeepPunctuationAtParagraphEnd) != 0;
+            if (keepAtParagraphEnd)
+                ProtectParagraphEndPunctuation(selection.Range);
+
             // Punctuation: Word wildcards treat ? ! as operators, so match literally.
             find.MatchWildcards = false;
-            if ((options & TextCleanOptions.PeriodsAndCommas) != 0)
-                foreach (string c in new[] { ".", ",", ";" })
+            if ((options & TextCleanOptions.Periods) != 0)
+                ReplaceAll(find, ".", "");
+            if ((options & TextCleanOptions.Commas) != 0)
+                foreach (string c in new[] { ",", ";" })
                     ReplaceAll(find, c, "");
             if ((options & TextCleanOptions.QuestionAndExclamation) != 0)
                 foreach (string c in new[] { "?", "!" })
@@ -118,6 +124,37 @@ namespace Nakdan.Core
             if ((options & TextCleanOptions.Colons) != 0)
                 foreach (string c in new[] { ":", "\u05C3" })   // colon + sof pasuq
                     ReplaceAll(find, c, "");
+
+            if (keepAtParagraphEnd)
+                for (int i = 0; i < ParagraphEndMarks.Length; i++)
+                    ReplaceAll(find, ParagraphEndPlaceholders[i], ParagraphEndMarks[i]);
+        }
+
+        // The marks "keep at paragraph end" spares, and the private-use stand-ins they
+        // wear while the removal passes run (none of those passes matches them).
+        private static readonly string[] ParagraphEndMarks        = { ".", ":", "\u05C3", "?", "!" };
+        private static readonly string[] ParagraphEndPlaceholders = { "\uE000", "\uE001", "\uE002", "\uE003", "\uE004" };
+
+        /// <summary>
+        /// Swap the mark that ends each paragraph in <paramref name="range"/> (trailing
+        /// spaces allowed) for its placeholder, so the removal passes skip it. The last
+        /// paragraph of a selection may stop before its paragraph mark; its end counts too.
+        /// </summary>
+        private static void ProtectParagraphEndPunctuation(Word.Range range)
+        {
+            foreach (Word.Paragraph paragraph in range.Paragraphs)
+            {
+                Word.Range p = paragraph.Range;
+                int start = Math.Max(p.Start, range.Start);
+                int end = Math.Min(p.End, range.End);
+                string text = range.Document.Range(start, end).Text ?? string.Empty;
+                int i = text.Length - 1;
+                while (i >= 0 && (text[i] == '\r' || text[i] == ' ' || text[i] == '\u2009')) i--;
+                if (i < 0) continue;
+                int mark = Array.IndexOf(ParagraphEndMarks, text[i].ToString());
+                if (mark < 0) continue;
+                range.Document.Range(start + i, start + i + 1).Text = ParagraphEndPlaceholders[mark];
+            }
         }
 
         private static void ReplaceAll(Word.Find find, string text, string replacement)

@@ -98,11 +98,13 @@ namespace Nakdan.UI
             {
                 new CleanOptionItem(TextCleanOptions.Nikkud,                 "ניקוד"),
                 new CleanOptionItem(TextCleanOptions.Cantillations,          "טעמים"),
-                new CleanOptionItem(TextCleanOptions.PeriodsAndCommas,       "נקודות ופסיקים"),
+                new CleanOptionItem(TextCleanOptions.Periods,                "נקודות"),
+                new CleanOptionItem(TextCleanOptions.Commas,                 "פסיקים"),
                 new CleanOptionItem(TextCleanOptions.Dashes,                 "מקפים"),
                 new CleanOptionItem(TextCleanOptions.QuestionAndExclamation, "סימני שאלה וקריאה"),
                 new CleanOptionItem(TextCleanOptions.Colons,                 "נקודותיים"),
             };
+            _keepPunctuationAtParagraphEnd = (savedClean & TextCleanOptions.KeepPunctuationAtParagraphEnd) != 0;
             foreach (var o in CleanOptions)
             {
                 o.IsChecked = (savedClean & o.Option) != 0;
@@ -210,7 +212,25 @@ namespace Nakdan.UI
                 var flags = TextCleanOptions.None;
                 foreach (var o in CleanOptions)
                     if (o.IsChecked) flags |= o.Option;
+                if (_keepPunctuationAtParagraphEnd) flags |= TextCleanOptions.KeepPunctuationAtParagraphEnd;
                 return flags;
+            }
+        }
+
+        /// <summary>
+        /// Spare the punctuation that ends a paragraph. Its own checkbox, outside "All":
+        /// it modifies the removals rather than naming a mark kind to remove.
+        /// </summary>
+        private bool _keepPunctuationAtParagraphEnd;
+        public bool KeepPunctuationAtParagraphEnd
+        {
+            get => _keepPunctuationAtParagraphEnd;
+            set
+            {
+                if (_keepPunctuationAtParagraphEnd == value) return;
+                _keepPunctuationAtParagraphEnd = value;
+                OnPropertyChanged(nameof(KeepPunctuationAtParagraphEnd));
+                SettingsManager.Save("Nakdan", "CleanTextOptions", SelectedCleanOptions);
             }
         }
 
