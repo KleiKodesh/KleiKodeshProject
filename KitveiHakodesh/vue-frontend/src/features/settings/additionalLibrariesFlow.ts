@@ -152,7 +152,13 @@ export function additionalLibraryReasonText(reason: string | undefined): string 
     return 'חסרות בקובץ טבלאות חובה של סכמת seforim.db'
   if (reason.startsWith('required tables have unexpected columns'))
     return 'מבנה העמודות בקובץ אינו תואם לסכמת seforim.db'
-  if (reason.startsWith('ids in table')) return 'ה־id-ים בקובץ חורגים מהטווח המותר לספרייה נוספת'
+  if (reason.startsWith('ids in table')) {
+    // The service names the table: "ids in table 'line' exceed the per-library id range".
+    const table = /ids in table '([^']+)'/.exec(reason)?.[1]
+    const what = table === 'line' ? 'שורות' : table === 'book' ? 'ספרים' : table === 'category' ? 'קטגוריות' : 'פריטים'
+    // Hebrew only: a Latin word in the middle of an RTL sentence is reordered by the bidi algorithm.
+    return `מספרי ה${what} בקובץ גדולים מהטווח שמותר לספרייה נוספת (מספרים גבוהים מדי). אם קיימת גרסה דחוסה או קטנה יותר של אותה ספרייה, השתמשו בה`
+  }
   if (reason.startsWith('cannot be opened')) return 'הקובץ אינו מסד SQLite תקין'
   if (reason.startsWith('no line text') || reason.startsWith('line text unreadable'))
     return 'לא ניתן לקרוא את טקסט השורות של הספרייה'

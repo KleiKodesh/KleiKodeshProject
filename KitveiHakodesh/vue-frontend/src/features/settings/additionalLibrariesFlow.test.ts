@@ -55,6 +55,14 @@ describe('texts', () => {
     expect(additionalLibraryErrorText('weird')).toContain('weird')
   })
 
+  it('names the table whose numbers are out of range, in Hebrew only (no Latin word inside the RTL sentence)', () => {
+    const line = additionalLibraryReasonText("ids in table 'line' exceed the per-library id range")!
+    expect(line).toContain('השורות')
+    expect(additionalLibraryReasonText("ids in table 'book' exceed the per-library id range")).toContain('הספרים')
+    expect(additionalLibraryReasonText("ids in table 'category' exceed the per-library id range")).toContain('הקטגוריות')
+    expect(line).not.toMatch(/[A-Za-z]/)
+  })
+
   it('describes thrown failures', () => {
     const timeout = new Error('t'); timeout.name = 'ServiceCallTimeoutError'
     expect(describeFailure(timeout)).toContain('לא ענה')
