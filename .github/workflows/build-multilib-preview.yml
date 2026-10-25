@@ -90,6 +90,16 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Stub hb-mirror.json (the maintainer's private mirror config; not in git)
+        shell: pwsh
+        working-directory: src
+        run: |
+          # Newer upstream master refuses to build without this git-ignored file. A '{}' stub lets the
+          # build run; the resulting service has NO HebrewBooks mirror configured (disclosed in the
+          # release notes). It is the only way a fork build can compile.
+          $p = 'KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json'
+          if (-not (Test-Path $p)) { New-Item -ItemType Directory -Force -Path (Split-Path $p) | Out-Null; Set-Content -Path $p -Value '{}' -Encoding ascii }
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
