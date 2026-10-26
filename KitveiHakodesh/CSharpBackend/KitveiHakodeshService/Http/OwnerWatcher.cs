@@ -33,6 +33,7 @@ public sealed class OwnerRegistry(
     LocalFileIndexService localFiles,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
     KitveiHakodeshService.HebrewBooks.HebrewBooksCatalogUpdateService hebrewBooksCatalog,
+    KitveiHakodeshService.SeforimDb.SeforimLibraryDownloadService libraryDownload,
     ILogger<OwnerRegistry> logger)
 {
     private static readonly TimeSpan OwnerlessIdleLimit = TimeSpan.FromMinutes(5);
@@ -96,6 +97,7 @@ public sealed class OwnerRegistry(
         : localFiles.IsBusy ? "local-file index"
         : updater.IsBusy ? "update check"
         : hebrewBooksCatalog.IsBusy ? "HebrewBooks catalog walk"
+        : libraryDownload.IsBusy ? "library download"
         : null;
 
     /// <summary>The last deferral logged, so a long job is reported once, not every poll.</summary>

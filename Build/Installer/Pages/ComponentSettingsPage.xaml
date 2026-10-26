@@ -186,6 +186,15 @@
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"/>
 
+                    <!-- Shown only when no library was found. Checked = the service downloads
+                         Otzaria's library into the app folder (Database\DownloadPending). -->
+                    <CheckBox x:Name="DbDownloadCheckBox"
+                              Content="{x:Static p:Strings.Db_DownloadLibrary}"
+                              FontSize="11"
+                              Foreground="#5A5A5A"
+                              Margin="0,8,0,0"
+                              Visibility="Collapsed"/>
+
                 </StackPanel>
                 <!-- /KitveiHakodeshSection -->
 

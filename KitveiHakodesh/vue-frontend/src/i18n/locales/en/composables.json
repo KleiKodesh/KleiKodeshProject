@@ -14,5 +14,21 @@
     "serviceError": "The service is unavailable",
     "building": "Please wait while the index is built{progress}",
     "unavailable": "{name} is unavailable: {reason}"
+  },
+  "libraryDownload": {
+    "findingRelease": "Looking for the latest library...",
+    "downloading": "Downloading the library... {percent}% ({received} of {total} GB)",
+    "verifying": "Verifying the download... {percent}%",
+    "extracting": "Unpacking the library... {percent}%",
+    "patching": "Updating the library... {percent}%",
+    "completed": "The library is ready. Restarting...",
+    "failedNetwork": "The download stopped: no internet connection. Click again to continue from where it stopped.",
+    "failedNoRelease": "No library compatible with this version was found to download.",
+    "failedDiskSpace": "Not enough free disk space. About 7 GB are needed.",
+    "failedChecksum": "The downloaded file was damaged and was deleted. Click again to download it again.",
+    "failedCorrupt": "The downloaded library could not be unpacked. Click again to try again.",
+    "failedDisk": "Saving the library failed. Check that the disk is accessible and click again.",
+    "cancelled": "The download was cancelled. Click again to continue from where it stopped.",
+    "failedUnexpected": "The download failed unexpectedly. Click again to try again."
   }
 }

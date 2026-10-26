@@ -57,6 +57,11 @@ internal static partial class Program
     /// service mode). Built once per process - or, in service mode, once the user is known.</summary>
     public static IHost BuildDataHost(string[] args)
     {
+        // A full library update downloaded last session waits beside the live file; swap it in
+        // now, before anything opens the database. Here, not in Main: the library lives in the
+        // user's profile, which a service only knows once it is bound to a user.
+        KitveiHakodesh.Core.SeforimLibraryDownload.SeforimLibraryStagedDatabase.PromoteIfStaged();
+
         var builder = Host.CreateApplicationBuilder(args);
 
         // One shared HttpClient for outbound fetches (HebrewBooks PDF download). A single long-lived
@@ -104,6 +109,10 @@ internal static partial class Program
         // Singleton too, so the owner watcher can see a walk in progress (Http/OwnerWatcher).
         builder.Services.AddSingleton<HebrewBooksCatalogUpdateService>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<HebrewBooksCatalogUpdateService>());
+        // Downloads Otzaria's library when none is installed, and resumes a pending download on
+        // start. Singleton too, so the owner watcher can see a download in progress.
+        builder.Services.AddSingleton<SeforimLibraryDownloadService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<SeforimLibraryDownloadService>());
         // Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
         // in-place DB change (startup uses the one-shot stamp check; this covers live updates).
         builder.Services.AddHostedService<DbChangeWatcher>();

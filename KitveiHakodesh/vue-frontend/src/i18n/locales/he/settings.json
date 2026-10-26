@@ -299,8 +299,7 @@
   "db": {
     "notFound": "הקובץ לא נמצא בנתיב שצוין",
     "saveFailed": "שמירת הנתיב נכשלה",
-    "downloadOtzaria": "הורד את אוצריא",
-    "downloadZayit": "הורד את זית",
+    "downloadLibrary": "הורד את מאגר הספרים (כ-1.9 GB)",
     "pick": "בחר קובץ מסד נתונים",
     "devPlaceholder": "נתיב מלא לקובץ seforim.db"
   },

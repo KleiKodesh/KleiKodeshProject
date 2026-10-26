@@ -27,7 +27,7 @@
     "dbInterruptedTitle": "The Otzaria library update did not finish",
     "dbInterruptedBody": "The Otzaria book library update was interrupted, so books cannot load right now. Please open Otzaria and let it finish the update - the library will reload here automatically. Do not delete files in the library folder.",
     "dbMissingTitle": "Library not found",
-    "dbMissingBody": "No book library (Otzaria library) was found on this computer, so books and search are unavailable. Click \"Choose library\" to point to the seforim.db file, or install Otzaria.",
+    "dbMissingBody": "No book library was found on this computer, so books and search are unavailable. Download the library from the home page, or click \"Choose library\" to point to an existing seforim.db file.",
     "dbUnreadableTitle": "The library cannot be read",
     "dbUnreadableBody": "The book library file exists but cannot be opened (not a valid database, corrupted, or locked by another program). Click \"Choose library\" to pick another file.",
     "pickLibrary": "Choose library"

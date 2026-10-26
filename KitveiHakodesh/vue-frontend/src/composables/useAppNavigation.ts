@@ -5,6 +5,7 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { openHameshivPopup } from '@/composables/hameshivPopup'
 import type { TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
+import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
 
 /**
  * Central navigation handler for all app destinations.
@@ -18,6 +19,7 @@ import { t } from '@/i18n'
  */
 export function useAppNavigation() {
   const pane = usePaneNavigation()
+  const libraryDownload = useSeforimLibraryDownload()
 
   const DESTINATION_ROUTES: Partial<Record<string, TabRoute>> = {
     'קטלוג הספרים': '/books',
@@ -82,7 +84,7 @@ export function useAppNavigation() {
     }
     if (label === 'פתח קובץ') { await handleFilePicker(false); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
-    if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'הורד מסד ספרים') { void libraryDownload.start(); return }
     if (label === 'המשיב') { handleHameshiv(); return }
     if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
@@ -101,7 +103,7 @@ export function useAppNavigation() {
     }
     if (label === 'פתח קובץ') { await handleFilePicker(true); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
-    if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'הורד מסד ספרים') { void libraryDownload.start(); return }
     if (label === 'המשיב') { handleHameshiv(); return }
     if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }

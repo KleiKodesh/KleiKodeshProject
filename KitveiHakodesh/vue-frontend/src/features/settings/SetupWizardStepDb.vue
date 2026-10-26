@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
 import MessageBanner from '@/components/MessageBanner.vue'
+import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -59,26 +60,17 @@ async function applyDevPath() {
   }
 }
 
-// NOTE: "זית" (Zayit) here refers to the external Zayit app (zayitapp.com) — a separate
-// Torah study program whose database this app can use. This is NOT this app's old name.
-// Do not rename or remove this function or URL.
-function downloadZayit() {
-  window.open('https://zayitapp.com/#/download', '_blank')
-}
-
-function downloadOtzaria() {
-  window.open('https://www.otzaria.org/#download', '_blank')
-}
+// Downloads Otzaria's library into the app's own folder (service + Core); the page reloads
+// once the database is in place.
+const libraryDownload = useSeforimLibraryDownload()
 </script>
 
 <template>
-  <button class="db-pick-card" @click="downloadOtzaria">
+  <button class="db-pick-card" :disabled="libraryDownload.isRunning.value" @click="libraryDownload.start()">
     <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">{{ $t('settings.db.downloadOtzaria') }}</span>
-  </button>
-  <button class="db-pick-card" @click="downloadZayit">
-    <IconArrowDownload20Regular class="db-card-icon" />
-    <span class="db-card-path placeholder">{{ $t('settings.db.downloadZayit') }}</span>
+    <span class="db-card-path placeholder">
+      {{ libraryDownload.statusText.value || $t('settings.db.downloadLibrary') }}
+    </span>
   </button>
   <button class="db-pick-card" @click="pickDbPath">
     <IconFolderOpen20Regular class="db-card-icon" />

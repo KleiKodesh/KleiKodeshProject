@@ -31,6 +31,7 @@ public sealed class Dispatcher(
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
+    SeforimLibraryDownloadService libraryDownload,
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
@@ -44,7 +45,7 @@ public sealed class Dispatcher(
         "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
         or "getSeforimDbPath" or "getUpdateStatus"
         or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress"
-        or "indexBuildReasons";
+        or "indexBuildReasons" or "seforimLibraryDownloadStatus";
 
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
@@ -465,6 +466,24 @@ public sealed class Dispatcher(
                     if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true, Detail = r.Detail }));
                     return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed", Detail = r.Detail }));
                 }
+
+                // Download Otzaria's library into the app's own folder (no DB installed). Returns at
+                // once; progress arrives on seforimLibraryDownloadStream. Resumes from bytes on disk.
+                case "startSeforimLibraryDownload":
+                {
+                    libraryDownload.Start();
+                    return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+                }
+
+                // Stop it and drop the request; downloaded bytes stay for a later resume.
+                case "cancelSeforimLibraryDownload":
+                {
+                    bool cancelled = libraryDownload.Cancel();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = cancelled }));
+                }
+
+                case "seforimLibraryDownloadStatus":
+                    return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
 
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
                 // The frontend calls this every ~300ms while a book tab is in the downloading state
@@ -924,6 +943,14 @@ public sealed class Dispatcher(
             {
                 await updater.StreamProgressAsync(
                     f => writeFrame(RpcResponse.Ok(MsgPack.Ser(f))), ct);
+                return true;
+            }
+
+            // Library download: a snapshot per change, open for the app's session.
+            case "seforimLibraryDownloadStream":
+            {
+                await libraryDownload.StreamProgressAsync(
+                    p => writeFrame(RpcResponse.Ok(MsgPack.Ser(p))), ct);
                 return true;
             }
 
