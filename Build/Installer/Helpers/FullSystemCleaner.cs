@@ -1,4 +1,5 @@
-﻿using KleiKodeshVstoInstallerWpf.Properties;
+﻿using KleiKodesh.Helpers;
+using KleiKodeshVstoInstallerWpf.Properties;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -160,10 +161,13 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 foreach (string folder in foldersToDelete)
                     DeleteFolder(folder, result, log);
 
-                // VBA macros template the installer put in Word's STARTUP folder
-                string macros = Path.Combine(AddinInstaller.WordStartupFolder, AddinInstaller.MacrosTemplateFileName);
-                if (File.Exists(macros))
-                    DeleteFile(macros, result, log);
+                // VBA macros template the user may have installed into Word's STARTUP folder
+                foreach (string name in VbaMacrosTemplate.AllFileNames)
+                {
+                    string macros = Path.Combine(VbaMacrosTemplate.StartupFolder, name);
+                    if (File.Exists(macros))
+                        DeleteFile(macros, result, log);
+                }
 
                 // ClickOnce cache — scan %LocalAppData%\Apps\2.0\ for KleiKodesh content
                 CleanClickOnceFolders(result, log);

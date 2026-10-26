@@ -15,6 +15,9 @@ namespace KleiKodesh.Ribbon
     /// Hebrew names mirror AddinText - keep them in step when a label changes. They
     /// need Windows' "language for non-Unicode programs" set to Hebrew, as the VBA
     /// editor itself does to type them.
+    /// Deliberately NOT exposed: Settings and DuplicatePane. Both act on the add-in's
+    /// own panes rather than on the document, so they make no sense in a macro.
+    /// Do not add them back when adding new commands here.
     /// </summary>
     [ComVisible(true)]
     [InterfaceType(ComInterfaceType.InterfaceIsDual)]
@@ -37,12 +40,6 @@ namespace KleiKodesh.Ribbon
 
         void RegexFind();
         void חיפוש_רגקס();
-
-        void DuplicatePane();
-        void שכפל_חלונית_צד();
-
-        void Settings();
-        void הגדרות();
 
         void About();
         void אודות();
@@ -81,12 +78,6 @@ namespace KleiKodesh.Ribbon
 
         public void RegexFind() => AddinCommands.Run("RegexFind");
         public void חיפוש_רגקס() => RegexFind();
-
-        public void DuplicatePane() => AddinCommands.Run("DuplicatePane");
-        public void שכפל_חלונית_צד() => DuplicatePane();
-
-        public void Settings() => AddinCommands.Run("Settings");
-        public void הגדרות() => Settings();
 
         public void About() => AddinCommands.Run("About");
         public void אודות() => About();

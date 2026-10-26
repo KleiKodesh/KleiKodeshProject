@@ -110,6 +110,18 @@
                 </StackPanel>
             </Border>
 
+            <!-- Optional VBA macros template (Helpers/VbaMacrosTemplate.cs) -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock x:Name="MacrosHeader" Style="{StaticResource GroupHeader}"/>
+                    <Separator/>
+                    <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
+                    <RadioButton x:Name="MacrosHebrewRadio"  GroupName="VbaMacros"/>
+                    <RadioButton x:Name="MacrosEnglishRadio" GroupName="VbaMacros"/>
+                    <TextBlock x:Name="MacrosHint" TextWrapping="Wrap" Opacity="0.7" FontSize="12"/>
+                </StackPanel>
+            </Border>
+
             <Button x:Name="BtnReset"/>
 
         </StackPanel>

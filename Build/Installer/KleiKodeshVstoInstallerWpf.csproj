@@ -44,6 +44,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Shared with the Word add-in: install/remove the optional VBA macros template -->
+    <Compile Include="..\..\KleiKodeshVsto\Helpers\VbaMacrosTemplate.cs" Link="Helpers\VbaMacrosTemplate.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="Microsoft.VisualBasic" />
