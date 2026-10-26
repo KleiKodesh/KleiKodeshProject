@@ -105,11 +105,22 @@ function Get-ServiceState {
 function Stop-HostedService {
     # 1. בקשת shutdown דרך הצינור (ללא הרשאות מנהל)  2. המתנה  3. סגירת עותק קונסולה שרץ מתיקיית ההתקנה
     Send-ServiceOp 'shutdown'
-    $deadline = (Get-Date).AddSeconds(30)
+    $deadline = (Get-Date).AddSeconds(10)
     while ((Get-Date) -lt $deadline) {
         $st = Get-ServiceState
         if (-not (Test-PipeListening) -and ($null -eq $st -or $st -eq 'Stopped')) { break }
         Start-Sleep -Milliseconds 300
+    }
+    # 2b. המתקין הרשמי (גרסה ללא פקודת shutdown) לא נענה לצינור, והשירות רץ כ-LocalSystem: עצירה דורשת מנהל.
+    #     מבקשים אישור UAC (בהתקנה שקטה גם זה מוצג); אם נדחה, ממשיכים להודעת הכשל הרגילה.
+    if ((Get-ServiceState) -notin @($null, 'Stopped')) {
+        Log 'השירות לא נענה לבקשת העצירה בצינור. מבקש הרשאת מנהל כדי לעצור אותו (חלון UAC)...'
+        try {
+            Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -WindowStyle Hidden `
+                -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',"Stop-Service -Name '$ServiceName' -Force -ErrorAction SilentlyContinue"
+        } catch { Log ('לא התקבלה הרשאת מנהל: ' + $_.Exception.Message) }
+        $deadline = (Get-Date).AddSeconds(20)
+        while ((Get-Date) -lt $deadline -and ((Get-ServiceState) -notin @($null, 'Stopped'))) { Start-Sleep -Milliseconds 300 }
     }
     $svcFolder = Join-Path $TargetDir $ServiceDir
     foreach ($p in @(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($ServiceExe)) -ErrorAction SilentlyContinue)) {
