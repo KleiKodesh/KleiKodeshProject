@@ -56,6 +56,11 @@ export function useBookViewScrollbarTocTooltip(
      * lookups.
      */
     getLabelAt?: (index: number) => { bookTitle: string; path: string }
+    /**
+     * While true the label is not shown: the list is growing under the bar (search
+     * results streaming in), so the thumb moves without the reader moving it.
+     */
+    isSuspended?: () => boolean
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -118,6 +123,10 @@ export function useBookViewScrollbarTocTooltip(
 
     lastPointerY = event.clientY
     const show = () => {
+      if (options.isSuspended?.()) {
+        scrollbarTocTooltip.value = null
+        return
+      }
       const index = lineIndexForPointer(event.clientY)
       const bookTitle = titleAt(index)
       const path = index == null ? '' : pathAtLine(index)
@@ -156,6 +165,10 @@ export function useBookViewScrollbarTocTooltip(
    */
   function refreshScrollbarTocTooltip() {
     if (!scrollbarTocTooltip.value) return
+    if (options.isSuspended?.()) {
+      scrollbarTocTooltip.value = null
+      return
+    }
     // The path moves with the scroll; the book too, where each row has its own.
     const index = lineIndexForPointer(lastPointerY)
     scrollbarTocTooltip.value = {
