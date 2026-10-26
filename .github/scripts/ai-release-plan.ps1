@@ -100,7 +100,14 @@ $($plan.notes_he.Trim())
 
 $($plan.notes_en.Trim())
 "@
-[IO.File]::WriteAllText($OutFile, $notes, (New-Object Text.UTF8Encoding($false)))
+$utf8 = New-Object Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($OutFile, $notes, $utf8)
 Write-Host $notes
+
+# Each language on its own for the installer's "What's new" page (embedded when present).
+$dir = Join-Path $PSScriptRoot '..\..\Build\Installer\ReleaseNotes'
+New-Item -ItemType Directory -Force $dir | Out-Null
+[IO.File]::WriteAllText((Join-Path $dir 'notes.he.md'), $plan.notes_he.Trim(), $utf8)
+[IO.File]::WriteAllText((Join-Path $dir 'notes.en.md'), $plan.notes_en.Trim(), $utf8)
 
 if ($env:GITHUB_OUTPUT) { "bump=$($plan.bump)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8 }
