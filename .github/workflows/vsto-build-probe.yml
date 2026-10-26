@@ -43,5 +43,9 @@ jobs:
             nuget restore $_ -PackagesDirectory (Join-Path $dir '..\packages') -NonInteractive
           }
 
+      - name: Dummy hb-mirror.json (real one comes from a secret)
+        shell: pwsh
+        run: Set-Content KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json '{}'
+
       - name: Build KleiKodeshVsto (unsigned)
         run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
