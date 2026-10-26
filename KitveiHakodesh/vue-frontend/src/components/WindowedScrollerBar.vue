@@ -23,13 +23,13 @@ const props = defineProps<{
    * Total height and position as REFS, read here and nowhere else: the scroller's
    * row list must not depend on them, or every scroll tick re-renders every row.
    */
-  state: WindowedScrollerBarState
+  barState: WindowedScrollerBarState
   /** The viewport this bar drives: wheeled over the bar, revealed on hover, paged by the track. */
   viewport: HTMLElement | null
 }>()
 
-const totalHeight = computed(() => props.state.totalHeight.value)
-const position = computed(() => props.state.position.value)
+const totalHeight = computed(() => props.barState.totalHeight.value)
+const position = computed(() => props.barState.position.value)
 
 const emit = defineEmits<{
   seek: [position: number]
@@ -70,11 +70,11 @@ const { height: trackHeight } = useElementSize(trackElement)
 // scrollable, the thumb's length, the drag mapping — must follow.
 const { height: observedViewportHeight } = useElementSize(() => props.viewport)
 const viewportHeight = computed(() => observedViewportHeight.value || trackHeight.value)
-const scrollable = computed(() => totalHeight.value > viewportHeight.value + 1)
+const isScrollable = computed(() => totalHeight.value > viewportHeight.value + 1)
 const maxPosition = computed(() => Math.max(1, totalHeight.value - viewportHeight.value))
 
 const thumbHeight = computed(() => {
-  if (!scrollable.value || trackHeight.value <= 0) return 0
+  if (!isScrollable.value || trackHeight.value <= 0) return 0
   const proportional = (trackHeight.value * viewportHeight.value) / totalHeight.value
   return Math.min(trackHeight.value, Math.max(barWidth.value, proportional))
 })
@@ -180,7 +180,7 @@ defineExpose({ barElement })
   <div
     ref="barElement"
     class="windowed-scroller-bar"
-    :class="{ 'is-disabled': !scrollable }"
+    :class="{ 'is-disabled': !isScrollable }"
     :style="{ width: `${barWidth}px` }"
   >
     <div
@@ -190,7 +190,7 @@ defineExpose({ barElement })
     />
     <div ref="trackElement" class="windowed-scroller-bar-track" @pointerdown="onTrackPointerDown">
       <div
-        v-if="scrollable"
+        v-if="isScrollable"
         class="windowed-scroller-thumb"
         :style="{ top: `${thumbTop}px`, height: `${thumbHeight}px` }"
         @pointerdown="onThumbPointerDown"

@@ -679,8 +679,8 @@ export function useBookView(
     // right away when no commentary panel is reopening.
     backfillGate.onSessionRestoreSettled()
 
-    // After session restore, the virtualizer has scrolled to the saved line index
-    // but onLinesScrolled has not fired yet, so tocPath is empty and the breadcrumb
+    // After session restore the lines scroller opens on the saved line index, but
+    // onLinesScrolled has not fired yet, so tocPath is empty and the breadcrumb
     // shows nothing. Sync it now using the restored scroll index.
     // If TOC entries are already loaded (common case), this is synchronous.
     // If not, watch for them to arrive (they load in parallel with session restore).

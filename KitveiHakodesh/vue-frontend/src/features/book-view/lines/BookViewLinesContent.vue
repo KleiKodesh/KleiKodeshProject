@@ -107,7 +107,7 @@ const scroller = (): WindowedScrollerApi | null => windowedScroller.value
 // below go on this element. Filled once the child has mounted.
 const scrollerEl = ref<HTMLElement | null>(null)
 onMounted(() => { scrollerEl.value = windowedScroller.value?.scrollerElement ?? null })
-const scrollbarTrackEl = computed(() => windowedScroller.value?.scrollbarTrackElement ?? null)
+const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
 /** Ids of the lines mounted in the window — the viewport-driven loaders' input. */
 const renderedLineIds = (): number[] => {
   const range = windowedScroller.value?.renderedRange
@@ -273,7 +273,7 @@ const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.
-const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarTrackEl, {
+const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,

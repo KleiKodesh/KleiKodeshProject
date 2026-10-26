@@ -48,7 +48,7 @@ function mountScroll(tabId: string) {
   const scrollerElement = document.createElement('div')
   const scroller = {
     scrollerElement,
-    scrollbarTrackElement: null,
+    scrollbarElement: null,
     renderedRange: { start: 0, end: 10 },
     scrollToIndex: vi.fn(async () => undefined),
     readFirstVisible: () => ({ index: 3, offsetWithinRow: 0 }),
