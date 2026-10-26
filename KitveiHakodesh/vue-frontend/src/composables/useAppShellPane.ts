@@ -6,7 +6,6 @@ import {
   historyCursor as tabHistoryCursor,
 } from '@/stores/navHistory'
 import { navigatesDestinationsInPlace } from '@/webview-host/bridge'
-import { isWindowFullscreen } from '@/utils/isWindowFullscreen'
 import type { Tab, TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
 
@@ -149,7 +148,7 @@ export function useAppShellPane(paneId: 1 | 2) {
    * POSITION_FIELDS in tabStore).
    */
   function openBookTarget(patch: Omit<Tab, 'id'>) {
-    if (navigatesDestinationsInPlace || isWindowFullscreen())
+    if (navigatesDestinationsInPlace)
       updateActiveTab({ ...patch, navNonce: tabStore.nextNavNonce() })
     else openTab(patch)
   }
