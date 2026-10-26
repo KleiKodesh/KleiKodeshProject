@@ -35,6 +35,7 @@ on:
 
 permissions:
   contents: write
+  actions: write          # start release-issue-check.yml
 
 concurrency:
   group: release
@@ -127,3 +128,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         run: gh api repos/KleiKodesh/kleikodesh.github.io/dispatches -f event_type=release-changed
+
+      # Same reason: release-issue-check.yml would not see this release, so start it here.
+      - name: Tell open issues about this release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --repo ${{ github.repository }} --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName')
+          gh workflow run release-issue-check.yml --repo ${{ github.repository }} -f tag=$tag
