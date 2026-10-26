@@ -73,9 +73,13 @@ export function wrapRtlHtml(innerHtml: string): string {
  * (observed live with the PDF viewer's per-row divs).
  */
 export function htmlToPlainText(html: string): string {
+  // The newline goes BEFORE each block's closing tag, which stays. Replacing the tag
+  // left every block unclosed, so each line nested inside the one before it, and past
+  // Chromium's 512-deep parser limit the content was re-parented out of order — a copy
+  // of more than ~500 lines came out with every heading glued to the next line's body.
   const withBreaks = html
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(?:div|p|h[1-6]|li)>/gi, '\n')
+    .replace(/<\/(div|p|h[1-6]|li)>/gi, '\n</$1>')
   const tempDiv = document.createElement('div')
   tempDiv.innerHTML = withBreaks
   return (tempDiv.textContent ?? '').trim()
