@@ -1,4 +1,4 @@
-# Asks Gemini to read the commits since the last release and decide
+﻿# Asks Gemini to read the commits since the last release and decide
 #   1. the version bump (major / minor / patch)
 #   2. user-facing release notes, in English and Hebrew
 # Writes the notes to RELEASE_NOTES.txt (build-installer.ps1 -ReleaseNotesSource file
@@ -13,6 +13,8 @@
 param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag, [switch]$Auto)
 
 $ErrorActionPreference = 'Stop'
+# Hebrew commit messages: read git's output as UTF-8 (Windows PowerShell 5.1 locally).
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
 # still leaves the second (Pro has a zero free-tier quota - don't use it).
 # No AI notes = no release (the step fails, nothing is built).

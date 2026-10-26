@@ -106,23 +106,13 @@ function Set-Version {
 # -- Add-in signing certificate ---------------------------------------------
 # The VSTO manifests must be signed, but any key will do: the installer registers the
 # manifest's own public key as trusted on every install. The key is a self-signed
-# temporary one (VS "Create Test Certificate"), so when it is missing or about to
-# expire, make a fresh one - same as deleting it in VS and creating a new one.
+# temporary one (VS "Create Test Certificate"), made fresh on EVERY build, locally and
+# in CI: a release's certificate then always expires 5 years after the release, which
+# the release workflow's gate relies on to publish a renewal release in time.
 # Updates the pfx (gitignored) and the thumbprint in KleiKodeshVsto.csproj.
 function Update-SigningCertificate {
     $pfx  = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx"
     $proj = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodeshVsto.csproj"
-
-    if (Test-Path $pfx) {
-        $current = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfx, "")
-        if ($current.NotAfter -gt (Get-Date).AddDays(30)) {
-            Write-Host "Signing certificate valid until $($current.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor Gray
-            return
-        }
-        Write-Host "Signing certificate expires $($current.NotAfter.ToString('yyyy-MM-dd')) - creating a new one" -ForegroundColor Yellow
-    } else {
-        Write-Host "No signing certificate - creating one" -ForegroundColor Yellow
-    }
 
     $cert = New-SelfSignedCertificate -Subject "CN=KleiKodesh" -Type CodeSigningCert `
         -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)

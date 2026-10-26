@@ -27,9 +27,11 @@ function Read-VersionArgs {
     Write-Host "  2. Minor  (new features)     e.g. 1.2.3 -> 1.3.0"
     Write-Host "  3. Major  (breaking changes) e.g. 1.2.3 -> 2.0.0"
     Write-Host "  4. Manual (exact version)    e.g. v3.5.0"
+    Write-Host "  5. Auto   (Gemini decides, like the GitHub Actions release)"
     Write-Host ""
-    $c = Read-Choice "Choice (1-4)" @("1","2","3","4")
+    $c = Read-Choice "Choice (1-5)" @("1","2","3","4","5")
     switch ($c) {
+        "5" { return @{ VersionIncrement = "auto" } }
         "1" { return @{ VersionIncrement = "patch" } }
         "2" { return @{ VersionIncrement = "minor" } }
         "3" { return @{ VersionIncrement = "major" } }
@@ -50,9 +52,38 @@ function Read-NotesSource {
     Write-Host "  1. Git commits only"
     Write-Host "  2. RELEASE_NOTES.txt only"
     Write-Host "  3. Both"
+    Write-Host "  4. AI - Gemini writes Hebrew + English notes (like the GitHub Actions release)"
     Write-Host ""
-    $c = Read-Choice "Choice (1-3)" @("1","2","3")
-    return @("commits","file","both")[$c - 1]
+    $c = Read-Choice "Choice (1-4)" @("1","2","3","4")
+    return @("commits","file","both","ai")[$c - 1]
+}
+
+# Same as the release workflow's plan job: Gemini picks the bump and/or writes
+# RELEASE_NOTES.txt + Build/Installer/ReleaseNotes. Resolves "auto" / "ai" in $params
+# to what build-installer.ps1 takes. Returns $false when Gemini failed.
+function Resolve-AiPlan([hashtable]$params) {
+    $wantBump  = $params.VersionIncrement -eq "auto"
+    $wantNotes = $params.ReleaseNotesSource -eq "ai"
+    if (-not ($wantBump -or $wantNotes)) { return $true }
+    if (-not $env:GEMINI_API_KEY) {
+        Write-Host "ERROR: GEMINI_API_KEY is not set." -ForegroundColor Red
+        return $false
+    }
+    $out = [System.IO.Path]::GetTempFileName()
+    $env:GITHUB_OUTPUT = $out
+    Push-Location $ProjectRoot
+    try { & powershell -NoLogo -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot ".github\scripts\ai-release-plan.ps1") }
+    finally { Pop-Location; Remove-Item Env:GITHUB_OUTPUT }
+    $ok = $LASTEXITCODE -eq 0
+    $bump = (Get-Content $out -ErrorAction SilentlyContinue | Where-Object { $_ -match '^bump=' }) -replace '^bump=', ''
+    Remove-Item $out -ErrorAction SilentlyContinue
+    if (-not $ok -or ($wantBump -and -not $bump)) {
+        Write-Host "ERROR: Gemini release plan failed." -ForegroundColor Red
+        return $false
+    }
+    if ($wantBump)  { $params.VersionIncrement   = $bump }
+    if ($wantNotes) { $params.ReleaseNotesSource = "file" }
+    return $true
 }
 
 function Read-DeleteFtsIndex {
@@ -87,6 +118,7 @@ function Confirm-Action([string]$summary) {
 }
 
 function Invoke-Installer([hashtable]$params) {
+    if (-not (Resolve-AiPlan $params)) { Read-Host "Press Enter to return to menu"; return }
     # Build an explicit argument list so that switch parameters (NoRelease,
     # NoClean) are passed as flags rather than string values.  Splatting a
     # hashtable with -File serialises booleans as "True"/"False" strings,
@@ -133,7 +165,7 @@ while ($true) {
             $summary += "`n  Clean     : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
             $summary += "`n  FTS idx   : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
-                $params = $verArgs + @{ ReleaseNotesSource = $notes }
+                $params = $verArgs + @{ ReleaseNotesSource = $notes; NoClean = $true }
                 if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
                 if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
@@ -150,7 +182,7 @@ while ($true) {
             $summary += "`n  Clean     : $(if ($forceClean) { 'yes (wipe + reinstall)' } else { 'no' })"
             $summary += "`n  FTS idx   : $(if ($forceClean) { 'n/a (wiped by clean install)' } elseif ($deleteFts) { 'DELETE (force reindex)' } else { 'preserve' })"
             if (Confirm-Action $summary) {
-                $params = $verArgs + @{ NoRelease = $true }
+                $params = $verArgs + @{ NoRelease = $true; NoClean = $true }
                 if ($deleteFts)   { $params += @{ DeleteFtsIndex    = $true } }
                 if ($forceClean)  { $params += @{ ForceCleanInstall = $true } }
                 Invoke-Installer $params
