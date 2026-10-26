@@ -8,7 +8,9 @@
 #
 # -Tag vX.Y.Z: write notes for that existing release instead (commits since the
 # release before it) - used by rewrite-release-notes.yml.
-param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag)
+#
+# -Auto: this is the weekly automatic release - say so at the end of both languages.
+param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag, [switch]$Auto)
 
 $ErrorActionPreference = 'Stop'
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
@@ -44,6 +46,8 @@ Task 2 - write polished release notes, like a professional app's "What's new":
 - notes_en in English. notes_he is the same content in natural Hebrew (not a word-for-word
   translation), with the section headings in Hebrew too.
 - No title line and no version number - those are added separately.
+$(if ($Auto) { '- End BOTH notes_en and notes_he with a final italic line (own paragraph) saying this
+  version was published automatically by the weekly automatic release.' })
 
 Commits:
 $commits
@@ -88,6 +92,9 @@ $plan = $null
 if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
+if ($Auto -and $plan.notes_en -notmatch 'automatic') {
+    $plan.notes_en = $plan.notes_en.Trim() + "`n`n*This version was published automatically by the weekly automatic release.*"
+}
 
 $notes = @"
 <div dir="rtl">
