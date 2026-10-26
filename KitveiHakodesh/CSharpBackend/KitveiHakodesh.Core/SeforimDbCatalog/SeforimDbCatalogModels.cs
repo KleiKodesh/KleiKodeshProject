@@ -140,6 +140,26 @@ public sealed class CatalogTocSearchResult
     public bool Waiting { get; set; }
 }
 
+/// <summary>Result of a book-title search (catalogTitleSearch wire shape). The not-ready
+/// fields mean what they mean on <see cref="CatalogTocSearchResult"/>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CatalogTitleSearchResult
+{
+    /// <summary>False while no index is available yet (first build) — retry later.</summary>
+    public bool Ready { get; set; }
+    /// <summary>Matching book ids, best first. Uncapped.</summary>
+    public int[] BookIds { get; set; } = [];
+    /// <summary>The index was reset under this search — discard and retry.</summary>
+    public bool Superseded { get; set; }
+    public string? Error { get; set; }
+    public bool DbMissing { get; set; }
+    public int BuiltBooks { get; set; }
+    public int TotalBooks { get; set; }
+    public string? BuildFailure { get; set; }
+    public bool RetryingAfterBuildFailure { get; set; }
+    public bool Waiting { get; set; }
+}
+
 /// <summary>Where the catalog index stands (catalogTocStatus wire shape).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CatalogTocStatus

@@ -4,20 +4,24 @@ using Lucene.Net.Search;
 namespace KitveiHakodesh.Core.SeforimDbCatalog;
 
 /// <summary>
-/// PROTOTYPE (test only): book-title search over the catalog index - the Lucene port of the
-/// frontend's filterBooksByWords. Level-0 docs only (one per book), every word must match
-/// (exact or spelling variant) in title/catalog path/authors, the LAST word may match as a
-/// prefix, and the ranking is the frontend's: exact-tier filter, then title-hit words, then
-/// fewer title tokens, then tree order.
+/// Book-title search over the catalog index — the Lucene port of the former frontend in-memory
+/// title matcher (book-catalog filter, full-text-search book filter, daily-learning
+/// lookups). Level-0 docs only (one per book); every word must match (exact or spelling
+/// variant) in title, catalog path or authors; the LAST word may also match as a prefix. The
+/// ranking is the old frontend's: starts-with promotion for a one-word prefix, then title-hit
+/// words, then fewer title tokens, then tree order.
 /// </summary>
 public sealed partial class SeforimDbCatalogIndex
 {
     private (IndexReader Reader, Dictionary<long, (int BookId, List<string> TitleTokens)> Map)? _bookTitlesByRank;
 
-    /// <summary>Book ids in rank order. <paramref name="lastWordPrefix"/>: the last typed word
-    /// also matches as a prefix. <paramref name="fuzzy"/>: append the sparse-fuzzy tail like
-    /// <see cref="Search"/> does.</summary>
-    public List<int> SearchTitles(string query, bool lastWordPrefix = true, bool fuzzy = false, CancellationToken ct = default)
+    /// <summary>Cap on the partly typed multi-word abbreviation keys the last word is
+    /// completed to (see <see cref="SeforimDbCatalogTextNormalizer.CompleteTrailingAbbreviationKeys"/>).</summary>
+    private const int MaxKeyCompletions = 16;
+
+    /// <summary>Book ids in rank order; empty when nothing matched or no reader is open.
+    /// Uncapped.</summary>
+    public List<int> SearchTitles(string query, CancellationToken ct = default)
     {
         var tokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
@@ -28,27 +32,44 @@ public sealed partial class SeforimDbCatalogIndex
         try
         {
             var books = GetBookTitles(searcher.IndexReader);
-            var exact = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, prefix: false, fuzzy: false), ct);
-            List<(int Doc, long Order)> matched = exact;
+            var exact = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, lastPrefix: null), ct);
+            var matched = exact;
             bool lastIsPrefixOnly = false;
-            if (exact.Count == 0 && lastWordPrefix && tokens[^1].IsPlain)
+
+            // The last typed word as a plain normalized word, for the prefix match.
+            var chunks = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var plain = SeforimDbCatalogTextNormalizer.Tokenize(chunks[^1]);
+            string? lastPrefix = plain.Count > 0 ? plain[^1] : null;
+
+            // A partial last word that is also an abbreviation key "matches exactly" through its
+            // expansion; that must not hide the books the word is the start of ("vayikr").
+            bool lastIsKey = !tokens[^1].IsPlain && tokens[^1].PreferLiteral;
+            if (lastPrefix != null && (exact.Count == 0 || lastIsKey))
             {
-                matched = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, prefix: true, fuzzy: false), ct);
+                matched = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, lastPrefix), ct);
                 lastIsPrefixOnly = true;
+            }
+
+            // A partly typed MULTI-WORD key ("pnei yehos"): the index holds such a title under
+            // the key's canonical expansion, not its own words, so neither pass above can see it.
+            // Complete the key and search the completed query exactly, like the index tokenized it.
+            var completions = SeforimDbCatalogTextNormalizer.CompleteTrailingAbbreviationKeys(query, MaxKeyCompletions);
+            if (completions.Count > 0)
+            {
+                var seenDocs = new HashSet<int>();
+                foreach (var (doc, _) in matched) seenDocs.Add(doc);
+                matched = new List<(int Doc, long Order)>(matched);
+                foreach (var completed in completions)
+                {
+                    var completedTokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(completed);
+                    foreach (var hit in CollectTitleDocs(searcher, BuildTitleQuery(completedTokens, variants, lastPrefix: null), ct))
+                        if (seenDocs.Add(hit.Doc)) matched.Add(hit);
+                }
             }
 
             var words = new List<string>();
             foreach (var t in tokens) words.AddRange(t.RankingWords);
-            var ranked = RankTitleMatches(matched, books, words, lastIsPrefixOnly && tokens.Count == 1 ? query.Trim() : null);
-
-            if (fuzzy && ranked.Count < SparseFuzzyThreshold && tokens.Any(HasFuzzyableWord))
-            {
-                var seen = new HashSet<int>(ranked);
-                var fuzzyDocs = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, prefix: lastWordPrefix && tokens[^1].IsPlain, fuzzy: true), ct);
-                foreach (var id in RankTitleMatches(fuzzyDocs, books, words, null))
-                    if (seen.Add(id)) ranked.Add(id);
-            }
-            return ranked;
+            return RankTitleMatches(matched, books, words, lastIsPrefixOnly && tokens.Count == 1 ? query.Trim() : null);
         }
         finally
         {
@@ -85,16 +106,20 @@ public sealed partial class SeforimDbCatalogIndex
         return ids;
     }
 
-    private static BooleanQuery BuildTitleQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants, bool prefix, bool fuzzy)
+    /// <summary>The catalog query (<see cref="BuildQuery"/>, never fuzzy) restricted to level 0.
+    /// With <paramref name="lastPrefix"/>, the last clause also accepts that word as a prefix on
+    /// any field, he-prefixed both ways like the old frontend ("kuz" finds "ha-kuzari").</summary>
+    private static BooleanQuery BuildTitleQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants, string? lastPrefix)
     {
-        var bq = BuildQuery(tokens, fuzzy, variants);
-        if (prefix)
+        var bq = BuildQuery(tokens, fuzzy: false, variants);
+        if (lastPrefix != null)
         {
-            // Replace the last clause with (exact/variants OR prefix on any field).
-            var last = bq.Clauses[^1];
-            var either = new BooleanQuery { { last.Query, Occur.SHOULD } };
+            var either = new BooleanQuery { { bq.Clauses[^1].Query, Occur.SHOULD } };
+            var stems = new List<string> { lastPrefix, "ה" + lastPrefix };
+            if (SeforimDbCatalogTextNormalizer.StripHePrefix(lastPrefix) is { } stripped) stems.Add(stripped);
             foreach (var field in IndexedFields)
-                either.Add(new PrefixQuery(new Term(field, tokens[^1].Word)), Occur.SHOULD);
+                foreach (var stem in stems)
+                    either.Add(new PrefixQuery(new Term(field, stem)), Occur.SHOULD);
             bq.Clauses[^1].Query = either;
         }
         bq.Add(NumericRangeQuery.NewInt32Range(FieldLevel, 0, 0, true, true), Occur.MUST);

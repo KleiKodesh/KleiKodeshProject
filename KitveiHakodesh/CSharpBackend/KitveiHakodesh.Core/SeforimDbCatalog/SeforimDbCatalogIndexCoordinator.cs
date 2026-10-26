@@ -711,6 +711,46 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             }
             return result;
         }
+
+        /// <summary>Run a book-title search (<see cref="SeforimDbCatalogIndex.SearchTitles"/>).
+        /// Not-ready reporting matches <see cref="Search"/>. No latest-wins supersession: title
+        /// searches are a few milliseconds and independent callers run them side by side (each
+        /// daily-learning row resolves its own book), so one must not cancel another.</summary>
+        public CatalogTitleSearchResult SearchTitles(string query)
+        {
+            EnsureIndex();
+            var result = new CatalogTitleSearchResult();
+            if (!TryGetSearchableIndex(out var index))
+            {
+                result.Ready = false;
+                result.DbMissing = DatabasePath == null;
+                result.BuiltBooks = BuiltBooks;
+                result.TotalBooks = TotalBooks;
+                result.BuildFailure = IsIndexing || !_gaveUp ? null : LastBuildFailure;
+                result.RetryingAfterBuildFailure = !_gaveUp && LastBuildFailure != null;
+                result.Waiting = !IsIndexing && _waiting;
+                return result;
+            }
+            result.Ready = true;
+            if (string.IsNullOrWhiteSpace(query)) return result;
+            try
+            {
+                result.BookIds = index.SearchTitles(query).ToArray();
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException
+                                          or DirectoryNotFoundException
+                                          or FileNotFoundException)
+            {
+                // ResetIndex ran under us — same contract as in Search.
+                result.Superseded = true;
+            }
+            catch (Exception ex)
+            {
+                _log(CatalogIndexLogLevel.Error, "catalog title search failed", ex);
+                result.Error = ex.Message;
+            }
+            return result;
+        }
     }
 
     /// <summary>How serious a coordinator message is. Core does not know what a logger looks

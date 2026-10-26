@@ -121,14 +121,11 @@ Composables, stores and other feature modules (hard limit 300):
 | `stores/settingsStore.ts` | 425 |
 | `features/home/useHomeSearch.ts` | 404 |
 | `features/book-view/commentary/commentaryGroupBuilder.ts` | 394 |
-| `features/book-catalog/bookCatalogSearchTocHeuristics.ts` | 386 |
 | `stores/bookViewStore.ts` | 378 |
 | `features/html-view/useOtzariaAddinBridge.ts` | 372 |
 | `webview-host/seforimApi.ts` | 369 |
 | `webview-host/dictionarySeforimDb.ts` | 339 |
 | `features/pdf-viewer/usePdfViewPageTracking.ts` | 322 |
-| `features/book-catalog/useBookCatalogSearch.ts` | 311 |
-| `features/book-catalog/bookCatalogSearch.ts` | 303 |
 
 Utilities (hard limit 250):
 
@@ -275,20 +272,19 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. It lives entirely in `src/features/book-catalog/`, not in `src/utils/`.
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. It lives entirely in Core, not in the frontend.
 
-**`src/features/book-catalog/SEARCH.md` is the authoritative design document** — read it before changing anything about catalog search. The stack is four layers:
+Catalog search runs in the Lucene catalog index owned by Core (`CSharpBackend/KitveiHakodesh.Core/SeforimDbCatalog/`), reached from the frontend via `serviceCall` in both modes:
 
-- `bookCatalogSearchNormalizer.ts` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), Hebrew word decomposition into consonantal skeleton + vowel-letter set for חסר/מלא matching, and definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed tokens at build time and query words at search time.
-- `bookCatalogSearchMatcher.ts` — the score tiers (`SCORE_EXACT` 3, `SCORE_PREFIX` 2, `SCORE_NONE` 0) and per-token scoring. Knows nothing about the index or catalog.
-- `bookCatalogSearch.ts` — the inverted index and query execution: `buildSearchIndex` and `filterBooksByWords`.
-- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`).
+- `SeforimDbCatalogTextNormalizer.cs` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), חסר/מלא matching, definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed and query text.
+- `SeforimDbCatalogSearcher.cs` — the catalog TOC search (op `catalogTocSearch`): book titles and full TOC paths in one ranked query; consumed by `useBookCatalogSearch.ts`.
+- `SeforimDbCatalogTitleSearch.cs` — book-title-only search (op `catalogTitleSearch`); consumed by `bookTitleSearch.ts` (FTS @ filter, daf yomi, daily learning).
 
 `bookCatalogTree.ts` owns tree building and category metadata (`buildTree`, `assignSubtreeBookIds`, `assignFullPaths`, `findCategoryMeta`) — it is not part of the search stack.
 
 חסר/מלא behaviour: נידה matches נדה and ליקוטי matches לקוטי, but שבועות does NOT match שביעית (incompatible vowel-letter sets at the same skeleton positions).
 
-When adding a new normalization rule — a new abbreviation, spelling variant, or title alias — add it only to `bookCatalogSearchNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+When adding a new normalization rule — a new abbreviation, spelling variant, or title alias — add it only to `SeforimDbCatalogTextNormalizer.cs` (bump the catalog index version if indexed text changes). Never add book-search-specific normalization to `normalizeText.ts` or to the frontend.
 
 ## Tests
 

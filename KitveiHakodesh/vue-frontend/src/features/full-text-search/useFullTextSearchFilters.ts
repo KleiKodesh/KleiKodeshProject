@@ -1,12 +1,10 @@
 import { t } from '@/i18n'
 import { ref, shallowRef, watch } from 'vue'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
-import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
+import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf } from './fullTextSearchReferences'
@@ -76,32 +74,27 @@ export function useFullTextSearchFilters(
 
   // ── Core filter logic ────────────────────────────────────────────────────────
 
-  /**
-   * Returns the subset of `checked` whose books match the query `q`.
-   * If q is too short to be meaningful, returns `checked` unchanged.
-   */
-  function matchBookIds(q: string, checked: Set<number>): Set<number> {
+  // The union of books matching any @ token, searched against the full catalog by the
+  // catalog index's title search (async). null = no tokens, no restriction. Resolved in the
+  // atFilters watch below; until a new set resolves, the previous one keeps filtering.
+  let atFilterBookIds: Set<number> | null = null
+  // Bumped on every atFilters change, BEFORE any early return, so a slower earlier
+  // resolution can never overwrite a newer one.
+  let atFilterGeneration = 0
+
+  /** Book ids matching one @ token, or null when stale / the index cannot answer. */
+  async function matchBookIds(q: string, isStale: () => boolean): Promise<number[] | null> {
     const trimmed = q.trim()
-    if (trimmed.length < 2) return checked
-    const words = normalizeBookPath(normalize(trimmed)).split(/\s+/).filter((w) => w.length > 0)
-    if (!words.length) return checked
-    const matching = new Set(filterBooksByWords(booksStore.allBooks, words).map((b) => b.id))
-    const result = new Set<number>()
-    for (const id of checked) if (matching.has(id)) result.add(id)
-    return result
+    if (trimmed.length < 2) return booksStore.allBooks.map((b) => b.id)
+    return searchBookTitleIds(trimmed, isStale)
   }
 
-  /**
-   * Computes the union of books matching any of the @ tokens, searched against
-   * the full book catalog. Returns null when there are no tokens (no restriction).
-   */
-  function atFilterIds(tokens: string[]): Set<number> | null {
-    if (!tokens.length) return null
-    const allIds = new Set(booksStore.allBooks.map((b) => b.id))
+  /** Union of the books matching any of the @ tokens; null when stale. */
+  async function resolveAtFilterIds(tokens: string[], isStale: () => boolean): Promise<Set<number> | null> {
+    const perToken = await Promise.all(tokens.map((token) => matchBookIds(token, isStale)))
+    if (isStale()) return null
     const union = new Set<number>()
-    for (const token of tokens) {
-      for (const id of matchBookIds(token, allIds)) union.add(id)
-    }
+    for (const ids of perToken) for (const id of ids ?? []) union.add(id)
     return union
   }
 
@@ -110,8 +103,8 @@ export function useFullTextSearchFilters(
    * 1. Start with checkedBookIds (user's manual checkbox selection)
    * 2. Intersect with the union of all @ token matches (if any tokens present)
    */
-  function computeEffectiveIds(checked: Set<number>, tokens: string[]): Set<number> {
-    const atIds = atFilterIds(tokens)
+  function computeEffectiveIds(checked: Set<number>): Set<number> {
+    const atIds = atFilterBookIds
     if (!atIds) return checked
     const result = new Set<number>()
     for (const id of checked) if (atIds.has(id)) result.add(id)
@@ -156,18 +149,30 @@ export function useFullTextSearchFilters(
     if (isFilterOpen.value) rebuildResultCounts(raw)
   }
 
-  function updateFilter(checked: Set<number>, tokens: string[]) {
-    const ids = computeEffectiveIds(checked, tokens)
+  function updateFilter(checked: Set<number>) {
+    const ids = computeEffectiveIds(checked)
     effectiveBookIds.value = ids
     filteredThrough = 0 // criteria changed → full rebuild
     applyFilter(ids, 'rebuild')
   }
 
   // Checkbox change → immediate
-  watch(checkedBookIds, (checked) => updateFilter(checked, atFilters.value))
+  watch(checkedBookIds, (checked) => updateFilter(checked))
 
-  // @ tokens change → immediate
-  watch(atFilters, (tokens) => updateFilter(checkedBookIds.value, tokens))
+  // @ tokens change → resolve their books in the catalog index, then refilter.
+  watch(atFilters, async (tokens) => {
+    const generation = ++atFilterGeneration
+    const isStale = () => generation !== atFilterGeneration
+    if (!tokens.length) {
+      atFilterBookIds = null
+      updateFilter(checkedBookIds.value)
+      return
+    }
+    const ids = await resolveAtFilterIds(tokens, isStale)
+    if (!ids) return
+    atFilterBookIds = ids
+    updateFilter(checkedBookIds.value)
+  })
 
   // Results changed. During streaming this is a pure append (results only grows by a
   // batch), so we fold just the new tail. A shrink or a same-length replacement means the
@@ -198,7 +203,7 @@ export function useFullTextSearchFilters(
 
   function setCheckedBookIds(ids: Set<number>) {
     checkedBookIds.value = ids
-    effectiveBookIds.value = computeEffectiveIds(ids, atFilters.value)
+    effectiveBookIds.value = computeEffectiveIds(ids)
     initialized.value = true
   }
 

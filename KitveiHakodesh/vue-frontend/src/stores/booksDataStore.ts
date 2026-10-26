@@ -8,7 +8,6 @@ import {
   assignSubtreeBookIds,
   findCategoryMeta,
 } from '../features/book-catalog/bookCatalogTree'
-import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
 import type { CategoryNode } from '../features/book-catalog/bookCatalogTree'
 import type { CategoryRow, BookRow } from '@/webview-host/queries.types'
 import { t } from '@/i18n'
@@ -58,10 +57,6 @@ export const useBooksDataStore = defineStore('booksData', () => {
         allBooks.value = markRaw(orderedBooks)
         allBooksMap.value = markRaw(new Map(orderedBooks.map((book) => [book.id, book])))
         loaded.value = true
-
-        // Build the search index asynchronously in the background — yields between
-        // chunks so it doesn't block the first render after catalog load
-        buildSearchIndex(orderedBooks)
       } catch (e) {
         const msg = e instanceof Error ? e.message : ''
         if (msg.toLowerCase().includes('failed to fetch')) {

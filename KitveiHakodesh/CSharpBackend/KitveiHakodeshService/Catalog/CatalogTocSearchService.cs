@@ -85,6 +85,8 @@ public sealed class CatalogTocSearchService
     public CatalogTocStatus Status() => _coordinator.Status();
 
     public CatalogTocSearchResult Search(string query) => _coordinator.Search(query);
+
+    public CatalogTitleSearchResult SearchTitles(string query) => _coordinator.SearchTitles(query);
 }
 
 /// <summary>Kicks off the catalog TOC index check/build at service start (hash compare
@@ -106,10 +108,16 @@ public sealed class CatalogTocIndexingStarter(CatalogTocSearchService catalogToc
 }
 
 // ── RPC DTOs ─────────────────────────────────────────────────────────────────────
-// CatalogTocSearchResult and CatalogTocStatus are Core's (SeforimDbCatalogModels).
+// CatalogTocSearchResult, CatalogTitleSearchResult and CatalogTocStatus are Core's (SeforimDbCatalogModels).
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CatalogTocSearchArgs
+{
+    public string? Query { get; set; }
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CatalogTitleSearchArgs
 {
     public string? Query { get; set; }
 }

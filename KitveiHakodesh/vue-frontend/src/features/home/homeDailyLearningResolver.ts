@@ -1,7 +1,5 @@
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
+import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import {
   getAllAltTocEntries,
   getAltTocStructures,
@@ -36,11 +34,9 @@ async function findBookByQuery(bookQuery: string, matchTitleExactly: boolean): P
     return book ? { id: book.id, title: book.title } : null
   }
 
-  const words = normalizeBookPath(normalize(bookQuery.trim()))
-    .split(/\s+/)
-    .filter((word) => word.length > 0)
-  if (!words.length) return null
-  const book = filterBooksByWords(store.allBooks, words)[0]
+  if (!bookQuery.trim()) return null
+  const bookIds = await searchBookTitleIds(bookQuery.trim())
+  const book = bookIds?.length ? store.allBooksMap.get(bookIds[0]!) : undefined
   return book ? { id: book.id, title: book.title } : null
 }
 
