@@ -163,13 +163,71 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
-        /// <summary>Search-result content without placement - the plain corpus seam. The
-        /// Title slot is left empty on purpose: Core enriches hits with their book ID instead
-        /// and never reads the engine's title. The engine's own diagnostics run over the test
-        /// corpus, which does fill it.</summary>
+        /// <summary>Search-result content without placement - the plain corpus seam, and the
+        /// searcher's verification fetch: id and text only, by primary key from the table that
+        /// holds the text (<see cref="SeforimDbSqlStrings.FtsFetchLines"/>). The Title slot is
+        /// left empty on purpose: Core enriches hits with their book ID instead and never reads
+        /// the engine's title. The engine's own diagnostics run over the test corpus, which
+        /// does fill it.</summary>
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
         {
-            foreach (var (id, text, _) in FetchPlacedDocuments(ids)) yield return (id, text, "");
+            var chunk = new List<int>(SqliteInListChunkSize);
+            using var command = _connection.CreateCommand();
+            string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
+
+            foreach (int id in ids)
+            {
+                chunk.Add(id);
+                if (chunk.Count == SqliteInListChunkSize)
+                {
+                    foreach (var row in FetchTextChunk(command, parameterNames, chunk)) yield return row;
+                    chunk.Clear();
+                }
+            }
+
+            if (chunk.Count > 0)
+                foreach (var row in FetchTextChunk(command, parameterNames, chunk)) yield return row;
+        }
+
+        private IEnumerable<(int Id, string Text, string Title)> FetchTextChunk(
+            SqliteCommand command, string[] parameterNames, List<int> ids)
+        {
+            command.CommandText = SeforimDbSqlStrings.FtsFetchLines(_schema, ids.Count);
+            for (int i = 0; i < ids.Count; i++)
+                command.Parameters[parameterNames[i]].Value = ids[i];
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), "");
+        }
+
+        /// <summary>
+        /// The placement (book id, lineIndex, own TOC entry) of each line, no text - what the
+        /// searcher reads AFTER verification, for the hits that passed
+        /// (<see cref="SeforimDbSqlStrings.FtsFetchPlacements"/>). An id with no line is absent.
+        /// </summary>
+        public Dictionary<int, FtsDocumentPlacement> FetchPlacements(IReadOnlyList<int> ids)
+        {
+            var placements = new Dictionary<int, FtsDocumentPlacement>(ids?.Count ?? 0);
+            if (ids == null || ids.Count == 0) return placements;
+
+            using var command = _connection.CreateCommand();
+            string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
+            for (int start = 0; start < ids.Count; start += SqliteInListChunkSize)
+            {
+                int count = Math.Min(SqliteInListChunkSize, ids.Count - start);
+                command.CommandText = SeforimDbSqlStrings.FtsFetchPlacements(_schema, count);
+                for (int i = 0; i < count; i++)
+                    command.Parameters[parameterNames[i]].Value = ids[start + i];
+
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                    placements[reader.GetInt32(0)] = new FtsDocumentPlacement(
+                        bookId: reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                        lineIndex: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+                        tocEntryId: reader.GetInt32(3));
+            }
+            return placements;
         }
 
         /// <summary>Search-result content plus each line's placement (book id, lineIndex, own

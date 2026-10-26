@@ -130,9 +130,14 @@ namespace FtsLib.Fts5
         /// batch number n (0-based) — so a caller that processes results in batches of its
         /// own gets them cut at the same places. Null: <see cref="DefaultContentBatchSize"/>
         /// throughout.</param>
+        /// <param name="withPlacement">True (default): an <see cref="IFtsPlacedCorpus"/> fills
+        /// each result's <see cref="SearchResult.Placement"/> in the content read. False: the
+        /// content read fetches the text only (what verification and snippets read), and the
+        /// caller reads placement itself later, for the results it keeps.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0,
                                                 IEnumerable<int> filterIds = null, CancellationToken ct = default,
-                                                Action<string> onStage = null, Func<int, int> batchSizeAt = null)
+                                                Action<string> onStage = null, Func<int, int> batchSizeAt = null,
+                                                bool withPlacement = true)
         {
             var plan = Plan(query, filterIds, ct, onStage);
             if (plan == null) yield break;
@@ -153,7 +158,7 @@ namespace FtsLib.Fts5
                     if (batch.Count < batchSize && !capReached) continue;
                     if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
-                    foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
+                    foreach (var result in Fetch(corpus, batch, plan, prepared, withPlacement, ct)) yield return result;
                     batch.Clear();
                     if (capReached) yield break;
                     batchSize = Math.Max(1, batchSizeAt?.Invoke(++batchIndex) ?? DefaultContentBatchSize);
@@ -162,7 +167,7 @@ namespace FtsLib.Fts5
                 {
                     if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
-                    foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
+                    foreach (var result in Fetch(corpus, batch, plan, prepared, withPlacement, ct)) yield return result;
                 }
             }
             finally { corpus?.Dispose(); }
@@ -246,14 +251,15 @@ namespace FtsLib.Fts5
         }
 
         static IEnumerable<SearchResult> Fetch(IFtsCorpus corpus, List<int> ids, QueryPlan plan,
-                                               PreparedQueryGroups prepared, CancellationToken ct)
+                                               PreparedQueryGroups prepared, bool withPlacement, CancellationToken ct)
         {
             if (ids.Count == 0) yield break;
             // A corpus may return a batch in its own order (by id); results go out in the
             // index's order, which is the order of ids.
-            // A placed corpus gives each line's book / position / TOC entry in the same read.
+            // A placed corpus gives each line's book / position / TOC entry in the same read,
+            // unless the caller reads placement itself (withPlacement: false).
             var byId = new Dictionary<int, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
-            if (corpus is IFtsPlacedCorpus placed)
+            if (withPlacement && corpus is IFtsPlacedCorpus placed)
                 foreach (var (lineId, content, placement) in placed.FetchPlacedDocuments(ids))
                     byId[lineId] = (content, "", placement);
             else

@@ -636,6 +636,27 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id LIMIT -1 OFFSET @skip";
 
+        /// <summary>One chunk of search-result TEXT for verification (locate, filters, snippets):
+        /// id and content only, read by primary key from the table that holds the text -
+        /// `line_content` on a split database (no `line` row, no join), else `line`. A line
+        /// with no text row is absent (it cannot match anyway). Placement is a separate,
+        /// later read (<see cref="FtsFetchPlacements"/>) for the hits that pass.</summary>
+        internal static string FtsFetchLines(SeforimDbSchema schema, int count) =>
+            (schema.HasSplitLineContent ? "SELECT id, content FROM line_content" : "SELECT id, content FROM line") +
+            " WHERE id IN (" + InPlaceholders("p", count) + ")";
+
+        /// <summary>One chunk of PLACEMENTS: id, bookId, lineIndex and the line's own TOC entry
+        /// (0 when none; `line_toc` when the database has it, else `line.tocEntryId`). No text.
+        /// Read after verification, for the hits that passed.</summary>
+        internal static string FtsFetchPlacements(SeforimDbSchema schema, int count) =>
+            "SELECT l.id, l.bookId, l.lineIndex, " +
+            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
+             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
+             : "0") +
+            " FROM line l" +
+            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
+            " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
+
         /// <summary>One chunk of search-result rows: id, content, and the line's PLACEMENT -
         /// bookId, lineIndex and its own TOC entry (0 when it has none) - read off the same
         /// `line` row the content fetch visits anyway, so hits leave the searcher complete
