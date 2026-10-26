@@ -164,7 +164,48 @@ const bar = useWindowedScrollerBarMapping({
   rowWeights: () => props.rowWeights,
 })
 
+// ── Track hold: page to the destination named at the press ─────────────────────
+//
+// The hover label names the row under the pointer; pressing there and holding must
+// end on THAT row. Paging toward the pointer's pixel does not: the thumb reaching
+// the pointer is not that row, and each landing re-estimates the heights so the
+// pixel names another row anyway. So the row is locked at the press, paged toward,
+// landed on exactly once in reach — and reported as the bar's target meanwhile, so
+// the label keeps naming it.
+
+const PAGE_FRACTION = 0.875
+let heldTargetIndex: number | null = null
+let heldTargetReached = false
+
+function onTrackHold(position: number) {
+  heldTargetIndex = Math.min(props.count - 1, Math.max(0, bar.indexForPosition(position)))
+  heldTargetReached = false
+}
+
+function onTrackStep() {
+  const target = heldTargetIndex
+  const viewport = viewportElement.value
+  if (target == null || heldTargetReached || !viewport) return
+  const page = viewport.clientHeight * PAGE_FRACTION
+  const row = isRowRendered(target) ? rowElement(target) : null
+  if (row && Math.abs(row.offsetTop - viewport.scrollTop) <= page) {
+    heldTargetReached = true
+    void scrollToIndex(target)
+    return
+  }
+  const current = readFirstVisible()?.index ?? bar.indexForPosition(bar.position.value)
+  if (current === target) { heldTargetReached = true; return }
+  const maxPosition = Math.max(0, bar.totalHeight.value - viewport.clientHeight)
+  const direction = target > current ? 1 : -1
+  bar.seek(Math.min(maxPosition, Math.max(0, bar.position.value + direction * page)))
+}
+
+function onTrackRelease() {
+  heldTargetIndex = null
+}
+
 function barTargetAt(clientY: number): WindowedScrollerBarTarget | null {
+  if (heldTargetIndex != null) return { index: heldTargetIndex, onThumb: false }
   const target = barReference.value?.targetAt(clientY)
   if (!target) return null
   return { index: bar.indexForPosition(target.position), onThumb: target.onThumb }
@@ -298,6 +339,9 @@ defineExpose({
       :bar-state="bar"
       :viewport="viewportElement"
       @seek="bar.seek"
+      @track-hold="onTrackHold"
+      @track-step="onTrackStep"
+      @track-release="onTrackRelease"
     />
   </div>
 </template>
