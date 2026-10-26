@@ -42,7 +42,7 @@ export function useBookViewCommentaryAnnotations(
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
     useCommentaryHighlights(groupsForDisplay)
 
-  const { getNotesForLine, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
+  const { getNotesForLine, getNoteById, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
   // Word-level link anchors for commentary lines (they are source lines of their own
@@ -77,7 +77,7 @@ export function useBookViewCommentaryAnnotations(
   )
 
   function buildExportHtml(): string {
-    return buildBookExportHtml(lines(), bookTitle ?? '', renderLineForExport, getNotesForLine)
+    return buildBookExportHtml(lines(), bookTitle ?? '', renderLineForExport, getNoteById)
   }
 
   return {

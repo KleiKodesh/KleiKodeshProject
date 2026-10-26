@@ -48,7 +48,8 @@ interface CopyMenuOptions {
   paneNavigation?: PaneNavigation
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
-  getNotesForLine?: (lineId: number) => Note[]
+  /** A note by its id, for the endnotes of a copy with notes. */
+  getNoteById?: (noteId: number) => Note | undefined
   getRenderedLineContent?: (raw: string, lineIndex: number, lineId: number) => string
   onHighlight?: (colorArgb: number) => void
   onClearHighlight?: () => void
@@ -282,14 +283,11 @@ export function buildBookExportHtml(
   lines: LineItem[],
   bookTitle: string,
   renderLine: (raw: string, lineIndex: number, lineId: number) => string,
-  getNotesForLine: (lineId: number) => Note[],
+  getNoteById: (noteId: number) => Note | undefined,
 ): string {
   function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-    for (const lineItem of lines) {
-      const found = getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-      if (found) return { noteText: found.note, quote: found.quote }
-    }
-    return undefined
+    const found = getNoteById(noteId)
+    return found ? { noteText: found.note, quote: found.quote } : undefined
   }
 
   const renderedLines = lines
@@ -475,17 +473,11 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     let html: string
     let endnotesHtml = ''
     if (settingsStore.copyWithNotes) {
-      // Resolve a note by its (globally-unique) id by scanning the lines model, not
-      // the DOM. Note markers in `joined` only ever come from rendered lines, but the
-      // note *data* lives in the model — so scanning lines() works identically whether
-      // the owning row is currently virtualized in or out, and needs no DOM round-trip.
+      // Resolve a note by its (globally-unique) id from the notes model, not the
+      // DOM: it works identically whether the owning row is mounted or not.
       function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-        if (!options.getNotesForLine) return undefined
-        for (const lineItem of lines()) {
-          const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-          if (found) return { noteText: found.note, quote: found.quote }
-        }
-        return undefined
+        const found = options.getNoteById?.(noteId)
+        return found ? { noteText: found.note, quote: found.quote } : undefined
       }
       const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
       // The DB's own citations travel with the user's notes: a range citation
