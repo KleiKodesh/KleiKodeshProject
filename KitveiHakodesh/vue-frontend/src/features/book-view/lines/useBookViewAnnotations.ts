@@ -67,7 +67,7 @@ export function useBookViewAnnotations(
 
   // ── Notes ───────────────────────────────────────────────────────────────────
 
-  const { notesByLine, getNotesForLine, loadNotesForLines, createNote, updateNote, deleteNote } =
+  const { notesByLine, getNotesForLine, getNoteById, loadNotesForLines, createNote, updateNote, deleteNote } =
     useBookViewNotes(bookId, renderedLineIds)
 
   // ── Note bubble state ───────────────────────────────────────────────────────
@@ -237,13 +237,8 @@ export function useBookViewAnnotations(
     const noteId = parseInt(markerElement.dataset['noteId'] ?? '', 10)
     if (isNaN(noteId)) return
     event.stopPropagation()
-    for (const notes of notesByLine.value.values()) {
-      const found = notes.find((note) => note.id === noteId)
-      if (found) {
-        openNoteBubble(found, markerElement)
-        return
-      }
-    }
+    const found = getNoteById(noteId)
+    if (found) openNoteBubble(found, markerElement)
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -261,6 +256,7 @@ export function useBookViewAnnotations(
     // Notes
     notesByLine,
     getNotesForLine,
+    getNoteById,
     loadNotesForLines,
     createNote,
     updateNote,

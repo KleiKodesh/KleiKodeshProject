@@ -163,6 +163,15 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
     return notesByLine.value.get(lineId) ?? []
   }
 
+  /** A note by its (globally unique) id — over the loaded notes, never the book's lines. */
+  function getNoteById(noteId: number): Note | undefined {
+    for (const notes of notesByLine.value.values()) {
+      const found = notes.find((note) => note.id === noteId)
+      if (found) return found
+    }
+    return undefined
+  }
+
   // ── Internal map helpers ───────────────────────────────────────────────────
 
   function _addToMap(note: Note) {
@@ -243,6 +252,7 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
   return {
     notesByLine,
     getNotesForLine,
+    getNoteById,
     loadNotesForLines: loadForLines,
     createNote,
     updateNote,

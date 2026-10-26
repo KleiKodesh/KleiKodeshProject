@@ -179,6 +179,7 @@ watch(
 const {
   getHighlightsForLine,
   getNotesForLine,
+  getNoteById,
   loadNotesForLines,
   updateNote,
   deleteNote,
@@ -278,7 +279,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   paneNavigation,
   getActiveTocEntry: props.getActiveTocEntry,
   getTocPath: props.getTocPath,
-  getNotesForLine,
+  getNoteById,
   getRenderedLineContent: lineContent,
   onHighlight,
   onClearHighlight,
