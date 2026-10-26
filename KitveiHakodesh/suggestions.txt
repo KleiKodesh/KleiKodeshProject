@@ -10,6 +10,7 @@ pin homepage bottom bar?
 catlog:
 now that the search is lucene we need to stop loading teh whole catlog rther load it lziy
 in cases where the alt toc aprleles the same line ids as teh main toc its just diffent labeling
+can teh bookview toc tree use this too?
 
 linesview:
 tr windowed loadeing 
