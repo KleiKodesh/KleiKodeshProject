@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, inject } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -14,7 +15,6 @@ import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/u
 import { useScopedKeys } from '../useTextSelectionKeys'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
 import {
   useBookViewLineRenderer,
@@ -98,7 +98,26 @@ const zoom = computed({
 const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
+// The windowed scroller mounts the rows around any target before it scrolls, so
+// every position read here is a real DOM measurement — see WindowedScroller.vue.
+const windowedScroller = ref<InstanceType<typeof WindowedScroller> | null>(null)
+const scroller = (): WindowedScrollerApi | null => windowedScroller.value
+// The native scroll container inside it: focus, keys and every pointer listener
+// below go on this element. Filled once the child has mounted.
 const scrollerEl = ref<HTMLElement | null>(null)
+onMounted(() => { scrollerEl.value = windowedScroller.value?.scrollerElement ?? null })
+const scrollbarTrackEl = computed(() => windowedScroller.value?.scrollbarTrackElement ?? null)
+/** Ids of the lines mounted in the window — the viewport-driven loaders' input. */
+const renderedLineIds = (): number[] => {
+  const range = windowedScroller.value?.renderedRange
+  if (!range) return []
+  const ids: number[] = []
+  for (let index = range.start; index < range.end; index++) {
+    const id = props.lines[index]?.id ?? 0
+    if (id > 0) ids.push(id)
+  }
+  return ids
+}
 useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
@@ -112,7 +131,7 @@ const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
 // Keeps the rows holding a selection's two ends mounted however far they scroll
 // away, so a drag past the viewport edge cannot break the selection.
 const {
-  rangeExtractor: selectionRangeExtractor,
+  pinnedRowIndexes,
   selectedRowIndexRange,
   restoreSelectionFromPinnedRows,
 } = useVirtualizedTextSelection(
@@ -120,29 +139,6 @@ const {
   // The version overlay keeps the line ids and the count but replaces every line's
   // text, so the count alone would not notice it.
   () => `${props.activeVersionId ?? 0}:${props.lines.length}`,
-)
-
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.lines.length,
-    getScrollElement: () => scrollerEl.value,
-    estimateSize: () => 32,
-    overscan: 10,
-    rangeExtractor: selectionRangeExtractor.value,
-  })),
-)
-const virtualItems = computed(() => virtualizer.value.getVirtualItems())
-const totalSize = computed(() => virtualizer.value.getTotalSize())
-
-// Type alias for the concrete Virtualizer type — avoids repeating the double-cast
-// every time a composable that expects the concrete type receives virtualizer.value.
-type ConcreteVirtualizer = import('@tanstack/vue-virtual').Virtualizer<Element, Element>
-const getVirtualizer = () => virtualizer.value as unknown as ConcreteVirtualizer
-
-useVirtualScrollerKeys(
-  scrollerEl,
-  getVirtualizer,
-  () => props.lines.length,
 )
 
 const {
@@ -162,7 +158,7 @@ const {
   bookId,
   scrollerEl,
   () => props.lines,
-  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
+  renderedLineIds,
   restoreSelectionFromPinnedRows,
   selectedRowIndexRange,
   // Measured in the annotation offset space — after the diacritics and censor
@@ -175,9 +171,7 @@ const {
 
 const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, cancelRestoreCorrection } =
   useBookViewLinesScroll(
-  scrollerEl,
-  getVirtualizer,
-  () => virtualItems.value,
+  scroller,
   () => props.lines,
   props,
   { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
@@ -188,9 +182,7 @@ const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, c
 
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
 // a no-op on DBs without the table.
-const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAnchors(
-  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
-)
+const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds)
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
@@ -270,15 +262,6 @@ useScopedCopy(
   buildFormattedHtml,
 )
 useContextMenuLongPress(scrollerEl, (event) => {
-  if (!scrollerEl.value) return
-  // In RTL layout the scrollbar is on the physical LEFT side of the container.
-  // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
-  // between the element's left edge and (left + offsetWidth - clientWidth).
-  // Any pointer position to the left of (rect.left + scrollbarWidth) hit the scrollbar.
-  const el = scrollerEl.value
-  const rect = el.getBoundingClientRect()
-  const scrollbarWidth = el.offsetWidth - el.clientWidth
-  if (event.clientX <= rect.left + scrollbarWidth) return
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
 })
 
@@ -290,7 +273,7 @@ const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.
-const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollerEl, {
+const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarTrackEl, {
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
@@ -316,9 +299,7 @@ const {
 })
 
 const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
-  scrollerEl,
-  getVirtualizer,
-  () => virtualItems.value,
+  scroller,
   () => props.lines,
   () => props.searchBarVisible ?? false,
   suppressPositionSave,
@@ -448,9 +429,13 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       @close="closeNoteTooltip"
     />
     <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
-    <div
-      ref="scrollerEl"
+    <WindowedScroller
+      ref="windowedScroller"
       class="scroller"
+      :count="lines.length"
+      :initial-index="initialLineIndex ?? initialScrollIndex"
+      :initial-offset-px="initialLineIndex == null ? initialScrollOffset : 0"
+      :pinned-indexes="pinnedRowIndexes"
       tabindex="0"
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
@@ -459,36 +444,22 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >
-      <div :style="{ height: `${totalSize}px`, position: 'relative' }">
+      <template #row="{ index }">
         <div
-          v-for="vItem in virtualItems"
-          :key="String(vItem.key)"
-          :ref="(el) => el && virtualizer.measureElement(el as Element)"
-          :data-index="vItem.index"
-          :style="{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            left: 0,
-            transform: `translateY(${vItem.start}px)`,
+          v-if="lines[index]?.content != null"
+          class="line"
+          :class="{
+            selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines[index]?.id,
+            'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(index),
+            'multi-selected': props.commentaryVisible && isMultiSelected(index),
           }"
-        >
-          <div
-            v-if="lines[vItem.index]?.content != null"
-            class="line"
-            :class="{
-              selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines[vItem.index]?.id,
-              'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(vItem.index),
-              'multi-selected': props.commentaryVisible && isMultiSelected(vItem.index),
-            }"
-            :data-alt-toc="props.altTocLabelMap?.get(vItem.index)"
-            v-html="lineContent(lines[vItem.index]!.content!, vItem.index, lines[vItem.index]!.id)"
-            @click="onLineClick(vItem.index, $event)"
-          />
-          <div v-else class="line placeholder" />
-        </div>
-      </div>
-    </div>
+          :data-alt-toc="props.altTocLabelMap?.get(index)"
+          v-html="lineContent(lines[index]!.content!, index, lines[index]!.id)"
+          @click="onLineClick(index, $event)"
+        />
+        <div v-else class="line placeholder" />
+      </template>
+    </WindowedScroller>
   </div>
 </template>
 
@@ -497,9 +468,8 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
   height: 100%;
   position: relative;
 }
-.scroller {
-  height: 100%;
-  overflow-y: auto;
+/* `.scroller` lands on the WindowedScroller's viewport (attributes fall through). */
+.scroller :deep(.windowed-scroller-content) {
   padding-block-end: 24px;
 }
 .line {

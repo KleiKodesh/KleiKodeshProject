@@ -538,6 +538,13 @@ h1::after {
 :root.scrollbars-hidden :not(.scrollbars-scrolling) {
   scrollbar-color: transparent transparent !important;
 }
+/* The WindowedScroller draws its own bar beside its viewport; it follows the same
+   rule, keyed on the viewport that `scrollbars-scrolling` lands on. */
+:root.scrollbars-hidden
+  .windowed-scroller:not(:has(> .windowed-scroller-viewport.scrollbars-scrolling))
+  .windowed-scroller-thumb {
+  background: transparent;
+}
 
 /* Thin scrollbars — opt-in via the .toc-thin-scroll class. Named for the TOC, which
    was the first caller; the setup-wizard step cards use it too. Standard properties
