@@ -110,10 +110,21 @@ export function useBookViewLinesScroll(
   // ── Position-save suppression ───────────────────────────────────────────────
 
   let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
-  // Held from the start when the scroller opens on a saved or requested line: its
-  // landing's scroll event must not be taken for the reader moving, nor persisted.
-  const openingTarget = props.initialLineIndex ?? props.initialScrollIndex
-  let saveSuppressed = openingTarget != null
+  // Held while the scroller opens on a saved or requested line: its landing's
+  // scroll event must not be taken for the reader moving, nor persisted. A
+  // requested line (TOC, deep link) is known at setup; a SAVED one arrives from
+  // IndexedDB after it — read through a getter, and the hold starts when it lands.
+  const openingTarget = () => props.initialLineIndex ?? props.initialScrollIndex
+  // Also held until IndexedDB has answered: a flush in that gap would persist the
+  // rows filled at the top as the reader's place, ahead of the saved one.
+  let saveSuppressed = openingTarget() != null || props.idbResolved === false
+  // A hold started for a late-arriving target lapses on its own: the scroller
+  // declines an opening once the reader has moved, so `opened` may never come.
+  const OPENING_HOLD_SAFETY_MS = 5000
+  let openingSafetyTimer: ReturnType<typeof setTimeout> | null = null
+  function clearOpeningSafety() {
+    if (openingSafetyTimer != null) { clearTimeout(openingSafetyTimer); openingSafetyTimer = null }
+  }
 
   function suppressPositionSave() {
     saveSuppressed = true
@@ -130,14 +141,25 @@ export function useBookViewLinesScroll(
   function cancelRestore() {
     restoreCancelled = true
     saveSuppressed = false
+    clearOpeningSafety()
     if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
   }
 
+  watch(openingTarget, (target) => {
+    if (target == null || restoreCancelled) return
+    saveSuppressed = true
+    clearOpeningSafety()
+    openingSafetyTimer = setTimeout(() => { openingSafetyTimer = null; saveSuppressed = false }, OPENING_HOLD_SAFETY_MS)
+  })
+
   /** The scroller's opening landing is on screen — wired to its `opened` event. */
   function onScrollerOpened() {
-    if (restoreCancelled || openingTarget == null) return
+    const target = openingTarget()
+    if (restoreCancelled || target == null) return
+    clearOpeningSafety()
     // The landing's scroll event is dispatched at the next frame's start, ahead of
-    // its animation callbacks — so this releases the hold just after it.
+    // its animation callbacks — so the hold covers it and is released just after.
+    saveSuppressed = true
     requestAnimationFrame(() => { if (!restoreCancelled) saveSuppressed = false })
     const element = scroller()?.scrollerElement
     element?.focus({ preventScroll: true })
@@ -149,7 +171,7 @@ export function useBookViewLinesScroll(
     // background so the user sees where the link landed. One-shot; the class is
     // removed imperatively after the animation.
     if (props.flashLineOnOpen) {
-      const row = scroller()?.rowElement(openingTarget)?.querySelector('.line')
+      const row = scroller()?.rowElement(target)?.querySelector('.line')
       if (row) {
         row.classList.add('flash-open')
         flashTimer = window.setTimeout(() => {
@@ -160,13 +182,16 @@ export function useBookViewLinesScroll(
     }
   }
 
-  // Opening at the top (nothing saved): focus once the book is in.
-  if (openingTarget == null) {
+  // Opening at the top (nothing saved): focus once the book is in. Decided only
+  // once IndexedDB has answered — before that "nothing saved" is not known yet.
+  {
     const stop = watch(
-      () => [lines().length, props.idbResolved] as const,
-      ([count, resolved]) => {
+      () => [lines().length, props.idbResolved, openingTarget()] as const,
+      ([count, resolved, target]) => {
         if (!count || !resolved) return
         stop()
+        if (target != null) return // the scroller's `opened` focuses after its landing
+        saveSuppressed = false // nothing saved: the top is the reader's place
         nextTick(() => scroller()?.scrollerElement?.focus({ preventScroll: true }))
       },
       { flush: 'post' },

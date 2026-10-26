@@ -28,7 +28,7 @@
  * listeners), so the caller treats it as the scroll element it is.
  */
 import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
+import { useEventListener, useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
 import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
@@ -72,6 +72,14 @@ const props = withDefaults(
      * windowedScrollerTrackMap.ts.
      */
     landmarkTiers?: number[][]
+    /**
+     * A size weight per row — a text line's character count — when the list has
+     * them. Gives the scrollbar a STATIC per-row height estimate (weight over the
+     * measured weight-per-visual-line) instead of one moving average, so the thumb
+     * and a drag's landing reflect where a row really is. Must be `count` long to
+     * be used; otherwise, or when omitted, the bar estimates from measured rows.
+     */
+    rowWeights?: readonly number[]
   }>(),
   { pinnedIndexes: () => [] },
 )
@@ -153,6 +161,7 @@ const bar = useWindowedScrollerBarMapping({
   findRowIndexAt,
   landAt: (index) => scrollToIndex(index),
   landmarkTiers: () => props.landmarkTiers ?? [],
+  rowWeights: () => props.rowWeights,
 })
 
 function barTargetAt(clientY: number): WindowedScrollerBarTarget | null {
@@ -182,20 +191,28 @@ useResizeObserver(contentElement, () => {
 })
 useResizeObserver(viewportElement, () => fill())
 
+// The opening waits for BOTH the rows and the line to open on. The two arrive
+// from different places (the book's line count from the service, a saved position
+// from IndexedDB) in either order — watching the count alone lost the saved
+// position whenever the count came first.
 let hasOpened = false
 watch(
-  () => props.count,
-  (count) => {
+  () => [props.count, props.initialIndex] as const,
+  ([count, initialIndex]) => {
     clampToCount()
-    if (!hasOpened && count > 0 && props.initialIndex != null) {
+    if (!hasOpened && count > 0 && initialIndex != null) {
       hasOpened = true
-      void scrollToIndex(props.initialIndex, { offsetPx: props.initialOffsetPx }).then(() => emit('opened'))
+      void scrollToIndex(initialIndex, { offsetPx: props.initialOffsetPx }).then(() => emit('opened'))
       return
     }
     nextTick(fill)
   },
   { immediate: true },
 )
+// The opening is only taken while nothing has moved yet. A saved index that
+// arrives after the reader has already scrolled or jumped must not pull them back
+// to it; any landing (a TOC click, a bar seek) or reader input ends the opening.
+useEventListener(viewportElement, ['wheel', 'touchstart', 'pointerdown', 'keydown'], () => { hasOpened = true }, { passive: true })
 
 watch(() => props.rowSourceVersion, () => { void refreshRows() })
 
@@ -222,6 +239,7 @@ function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibl
 }
 
 async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
+  hasOpened = true
   await landAt(index, options)
   bar.syncFromViewport()
 }
