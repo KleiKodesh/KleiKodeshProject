@@ -91,6 +91,12 @@ export function applyTheme(preset: ThemePreset, backgroundTint = BACKGROUND_TINT
   const { ui, reading, isDark } = theme
   const s = document.documentElement.style
 
+  // Hover fades must not replay as a lag when every colour changes at once:
+  // suppress transitions for the frame the new variables land in.
+  const root = document.documentElement
+  root.classList.add('theme-switching')
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')))
+
   document.documentElement.setAttribute('data-theme-preset', preset)
   document.documentElement.classList.toggle('dark', isDark)
 
