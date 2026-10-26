@@ -1,0 +1,33 @@
+# TEMPORARY probe: can a GitHub Windows runner build the VSTO add-in?
+# Delete once answered.
+name: VSTO build probe
+
+on:
+  push:
+    paths: [.github/workflows/vsto-build-probe.yml]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Is the Office/VSTO tooling installed?
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          "VS: $vs"
+          Get-ChildItem "$vs\MSBuild\Microsoft\VisualStudio" -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets | % FullName
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Workload.Office -property installationPath
+
+      - name: npm ci (vue-frontend)
+        working-directory: KitveiHakodesh/vue-frontend
+        run: npm ci
+
+      - name: Build KleiKodeshVsto (unsigned)
+        run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -restore -p:RestorePackagesConfig=true -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
