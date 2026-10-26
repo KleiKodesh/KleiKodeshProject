@@ -19,7 +19,7 @@ namespace KitveiHakodeshLib.LocalFile
     ///
     /// The RULES are Core's, shared with the service as linked source (see the csproj): which
     /// types open (LocalFileOpenRules), text decoding (TextEncodingDetector), served content
-    /// types (LocalFileContentTypes), the pickers (NativeFilePicker / NativeFolderPicker). They
+    /// types (LocalFileContentTypes), the folder picker (NativeFolderPicker). They
     /// run HERE, in the host's process, because the production service is LocalSystem and
     /// refuses desktop-only ops. The WebView2 virtual-host mapping is this host's alone.
     /// </summary>
@@ -65,24 +65,26 @@ namespace KitveiHakodeshLib.LocalFile
         public void HandlePickFolder(string id, Control owner)
         {
             IntPtr ownerHandle = owner.Handle;
-            _ = PickFolderAsync(id, ownerHandle);
+            _ = PickFolderAsync(id, ownerHandle, owner);
         }
 
-        private async Task PickFolderAsync(string id, IntPtr ownerHandle)
+        // Core's picker runs on its own STA thread and, in VSTO (no WinForms sync context), the
+        // await can resume off the UI thread - every reply hops back via owner.BeginInvoke.
+        private async Task PickFolderAsync(string id, IntPtr ownerHandle, Control owner)
         {
+            object reply;
             try
             {
                 string folder = await NativeFolderPicker.PickAsync("בחר תיקיית ספרים מקומית", ownerHandle);
-                if (folder == null) { _bridge.Reply(id, new { cancelled = true }); return; }
-                _bridge.Reply(id, new { folderPath = folder });
+                reply = folder == null ? (object)new { cancelled = true } : new { folderPath = folder };
             }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+            catch (Exception ex) { reply = new { error = ex.Message }; }
+            owner.BeginInvoke(new Action(() => _bridge.Reply(id, reply)));
         }
 
         /// <summary>Show the open-file dialog. <paramref name="root"/> may carry an optional
-        /// <c>initialDir</c> (the home page's frequent-folder tiles send one). Call on the UI
-        /// thread: the open that follows the pick touches CoreWebView2, and the await returns to
-        /// this thread's context.</summary>
+        /// <c>initialDir</c> (the home page's frequent-folder tiles send one). The dialog and
+        /// the open that follows run on the UI thread (BeginInvoke): the open touches CoreWebView2.</summary>
         public void HandlePickFile(JsonElement root, string id, Control owner)
         {
             // Read out of `root` HERE, before any await: the JsonDocument it belongs to is
@@ -94,24 +96,29 @@ namespace KitveiHakodeshLib.LocalFile
                 && initialDirProp.ValueKind == JsonValueKind.String
                     ? initialDirProp.GetString()
                     : null;
-            IntPtr ownerHandle = owner.Handle;
-            _ = PickFileAsync(id, initialDir, ownerHandle);
-        }
-
-        private async Task PickFileAsync(string id, string initialDir, IntPtr ownerHandle)
-        {
-            string filePath;
-            try
+            // Lib's own WinForms dialog, not Core's NativeFilePicker: that one runs on its own STA
+            // thread, and in VSTO (no WinForms sync context) the await resumed off the UI thread,
+            // so RegisterFolder threw "CoreWebView2 can only be accessed from the UI thread".
+            owner.BeginInvoke(new Action(async () =>
             {
-                // A folder that has since been deleted must not sink the pick: the dialog falls
-                // back to its default when the initial directory does not exist.
-                filePath = await NativeFilePicker.PickAsync(
-                    NativeFilePicker.DocumentFilter, initialDir: initialDir ?? "", owner: ownerHandle);
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
+                string filePath;
+                try
+                {
+                    using (var dlg = new OpenFileDialog())
+                    {
+                        dlg.Title  = "פתח קובץ";
+                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
+                        // A folder that has since been deleted must not sink the pick: the dialog
+                        // silently falls back to its default when InitialDirectory does not exist.
+                        if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
+                        if (dlg.ShowDialog(owner) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
+                        filePath = dlg.FileName;
+                    }
+                }
+                catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
 
-            if (filePath == null) { _bridge.Reply(id, new { cancelled = true }); return; }
-            await OpenAsync(filePath, openInNewTab: false, replyId: id);
+                await OpenAsync(filePath, openInNewTab: false, replyId: id);
+            }));
         }
 
         /// <summary>

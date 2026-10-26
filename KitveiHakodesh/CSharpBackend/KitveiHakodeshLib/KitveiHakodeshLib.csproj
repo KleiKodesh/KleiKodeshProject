@@ -175,9 +175,6 @@
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileContentTypes.cs">
       <Link>Core\LocalFiles\LocalFileContentTypes.cs</Link>
     </Compile>
-    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\NativeFilePicker.cs">
-      <Link>Core\LocalFiles\NativeFilePicker.cs</Link>
-    </Compile>
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\NativeFolderPicker.cs">
       <Link>Core\LocalFiles\NativeFolderPicker.cs</Link>
     </Compile>
