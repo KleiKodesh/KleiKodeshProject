@@ -13,7 +13,7 @@ Adds a custom ribbon tab to Word and opens task panes for each tool:
 | דרך האתרים (WebSites)    | Curated website browser   | `WebSitesLib.WebSitesView` in WPF task pane    |
 | חיפוש רגקס (RegexFind)   | Regex find & replace      | `RegexFindLib.UI.RegexFindView` in WPF task pane       |
 | הגדרות (Settings)        | Add-in settings           | WPF task pane                                  |
-| About                    | About document            | Opens a Word template                          |
+| About                    | About page                | Opens the About page in the browser            |
 
 ## Folder Structure
 

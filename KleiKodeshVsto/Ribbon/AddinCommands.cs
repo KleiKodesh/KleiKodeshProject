@@ -248,32 +248,31 @@ namespace KleiKodesh.Ribbon
         }
 
         /// <summary>
-        /// Open the About document template
+        /// Open the About page (HTML, in the add-in language) in the default browser
         /// </summary>
         private static void OpenAboutDocument()
         {
             try
             {
-                string templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "About.dotx");
+                string lang = AddinUiLanguage.IsEnglish ? "en" : "he";
+                string pagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", $"About.{lang}.html");
 
-                if (!File.Exists(templatePath))
+                if (!File.Exists(pagePath))
                 {
                     MessageBox.Show(
-                        AddinUiLanguage.T($"קובץ אודות לא נמצא:\n{templatePath}", $"About file not found:\n{templatePath}"),
+                        AddinUiLanguage.T($"קובץ אודות לא נמצא:\n{pagePath}", $"About file not found:\n{pagePath}"),
                         ErrorTitle,
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error);
                     return;
                 }
 
-                // Open the template as a new document (not the template itself)
-                var doc = Globals.ThisAddIn.Application.Documents.Add(templatePath);
-                doc.Activate();
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(pagePath) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    AddinUiLanguage.T($"שגיאה בפתיחת מסמך אודות:\n{ex.Message}", $"Error opening the About document:\n{ex.Message}"),
+                    AddinUiLanguage.T($"שגיאה בפתיחת דף אודות:\n{ex.Message}", $"Error opening the About page:\n{ex.Message}"),
                     ErrorTitle,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אודות כלי קודש</title>
+<style>
+:root {
+  --bg: #f6f4ef;
+  --card: #ffffff;
+  --text: #25221d;
+  --muted: #6a645a;
+  --accent: #1f5f8b;
+  --accent-soft: #e3eef6;
+  --line: #e2ddd2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --card: #222427;
+    --text: #ebe8e1;
+    --muted: #a39d92;
+    --accent: #7db8e0;
+    --accent-soft: #263543;
+    --line: #34373b;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Arial", sans-serif;
+  font-size: 17px;
+  line-height: 1.75;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 32px 16px 56px; }
+header { text-align: center; padding: 24px 0 8px; }
+h1 { font-size: 2.1rem; margin: 0 0 6px; color: var(--accent); }
+.tagline { color: var(--muted); font-size: 1.1rem; margin: 0; }
+h2 { font-size: 1.4rem; margin: 0 0 10px; color: var(--accent); }
+h3 { font-size: 1.1rem; margin: 18px 0 4px; }
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-top: 20px;
+}
+p { margin: 8px 0; }
+ul { margin: 8px 0; padding-inline-start: 22px; }
+li { margin: 4px 0; }
+.name { font-weight: 700; }
+.chip {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+kbd {
+  font-family: Consolas, monospace;
+  font-size: .85em;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.ltr { direction: ltr; unicode-bidi: isolate; }
+a { color: var(--accent); }
+.note { color: var(--muted); font-size: .95rem; }
+footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .95rem; }
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  section { padding: 16px; }
+  h1 { font-size: 1.7rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>כלי קודש</h1>
+  <p class="tagline">ארגז כלים לעורך התורני, בתוך וורד</p>
+</header>
+
+<section>
+  <h2>מה זה?</h2>
+  <p>כלי קודש הוא תוסף חינמי ל-Word. הוא מוסיף ללשונית חדשה בשם <span class="chip">כלי קודש</span> כמה כלים שעוזרים לכתוב ולערוך ספרים ומסמכים תורניים.</p>
+  <p>כל כלי נפתח בחלונית צד, ליד המסמך. אפשר להמשיך לכתוב תוך כדי.</p>
+  <p>התוסף בקוד פתוח, ונבנה על ידי מתנדבים.</p>
+</section>
+
+<section>
+  <h2>הכפתורים בלשונית</h2>
+  <ul>
+    <li><span class="name">כתבי הקודש</span> - ספריית הספרים. פירוט בהמשך.</li>
+    <li><span class="name">ספריית קיוויקס</span> - ספרים ואנציקלופדיות בלי חיבור לאינטרנט, דרך קיוויקס.</li>
+    <li><span class="name">דרך האתרים</span> - אתרים תורניים שימושיים, בתוך וורד.</li>
+    <li><span class="name">עיצוב תורני</span> - כלים לעיצוב ספרי קודש.</li>
+    <li><span class="name">נקדן דיקטה</span> - ניקוד אוטומטי של הטקסט.</li>
+    <li><span class="name">חיפוש רגקס</span> - חיפוש והחלפה מתקדמים.</li>
+    <li><span class="name">שכפל חלונית צד</span> - פותח עוד חלונית זהה לזו שפתוחה.</li>
+    <li><span class="name">הגדרות</span> - התאמת התוסף.</li>
+    <li><span class="name">אודות</span> - הדף הזה.</li>
+  </ul>
+  <p class="note">לחיצה על הכפתור הגדול של <span class="name">כלי קודש</span> פותחת את הכלי שבחרתם כברירת מחדל. את החצים שלידו פותחים כדי לבחור כלי אחר.</p>
+</section>
+
+<section>
+  <h2>כתבי הקודש</h2>
+  <p>ספרייה לקריאה ולחיפוש בספרים. היא עובדת על מאגר הספרים של זית, והיא נמצאת בתוך וורד. אם אין עדיין מאגר במחשב, התוכנה מורידה אותו.</p>
+
+  <h3>מה יש בה</h3>
+  <ul>
+    <li><span class="name">קטלוג הספרים</span> - עיון בספרים לפי קטגוריות. אפשר להחליף בין תצוגת רשימה לתצוגת אריחים.</li>
+    <li><span class="name">חיפוש</span> - חיפוש טקסט מלא בכל הספרים. אפשר לסנן לפי ספר או קטגוריה: מוסיפים <kbd>@</kbd> בשורת החיפוש.</li>
+    <li><span class="name">היברו-בוקס</span> - ספרים סרוקים מאתר היברו-בוקס.</li>
+    <li><span class="name">פתח קובץ</span> - פתיחת קובץ או תיקייה מהמחשב.</li>
+    <li><span class="name">חיפוש קבצים</span> - חיפוש מסמכים במחשב.</li>
+    <li><span class="name">מילון</span> - פירושי מילים בעברית ובארמית.</li>
+    <li><span class="name">לוח שנה</span> - תאריך עברי וזמני היום, לפי העיר שבחרתם.</li>
+    <li><span class="name">המשיב</span> - כלי עזר ללימוד ולאיתור מקורות.</li>
+    <li><span class="name">מידות ושיעורים</span> - המרת מידות ושיעורים הלכתיים.</li>
+    <li><span class="name">הגדרות</span> - התאמת הספרייה להעדפות שלכם.</li>
+  </ul>
+
+  <h3>בזמן קריאה בספר</h3>
+  <ul>
+    <li>לוחצים על שורה כדי לראות את המפרשים שלה. <kbd>Ctrl</kbd> ולחיצה מסמנים טווח שורות.</li>
+    <li><span class="name">סנכרן מפרשים</span> - המפרשים מתעדכנים לפי השורה העליונה, אוטומטית.</li>
+    <li><span class="name">ספרים קרובים</span>, <span class="name">נוסחים</span>, ו<span class="name">מהדורות סרוקות בהיברו בוקס</span>.</li>
+    <li><span class="name">תצוגה מפוצלת</span> וכרטיסיות, וגם <span class="name">סביבות עבודה</span> שנשמרות (<kbd>F8</kbd>).</li>
+    <li>הדגשה והערות אישיות על הטקסט.</li>
+    <li>העתקה בכמה צורות: עם מקור, עם ציטוט, בלי ניקוד, וגם <span class="name">העתק לוורד</span>. יש גם <span class="name">ייצוא לוורד</span>.</li>
+    <li>מצב כהה, גופנים וגודל אותיות, וכיסוי שמות קודש - הכול ב<span class="name">הגדרות</span>.</li>
+    <li><span class="name">דיווח על טעות בספר</span> - אפשר לשלוח תיקון ישר מהספר.</li>
+  </ul>
+  <p class="note">ספרים מסוימים לא ניתנים לייצוא לוורד, לפי בקשת המו"ל. קריאה והדפסה ממשיכות לעבוד.</p>
+</section>
+
+<section>
+  <h2>בתפריט הלחיצה הימנית בוורד</h2>
+  <p>סמנו טקסט במסמך ולחצו קליק ימני. יש שם פקודות לכתבי הקודש:</p>
+  <ul>
+    <li><span class="name">העתק לחיפוש בכתבי הקודש</span> - מחפש את הטקסט שסימנתם בכל הספרים.</li>
+    <li><span class="name">חיפוש ספר בכתבי הקודש</span> - מחפש את הטקסט בקטלוג, כדי למצוא ספר לפי שמו.</li>
+    <li><span class="name">השווה עם כתבי הקודש</span> - מסמנים פסקה במסמך, ומסמנים את המקור בחלונית כתבי הקודש. ההבדלים נכתבים במסמך כשינויים עם עקוב אחר שינויים. כך אפשר לאשר או לדחות כל שינוי בנפרד.</li>
+    <li><span class="name">פתח קישור בכתבי הקודש</span> - על קישור לספר, פותח אותו בחלונית.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>נקדן דיקטה</h2>
+  <p>מנקד את הטקסט המסומן, בעזרת שירות הניקוד של דיקטה. <strong>צריך חיבור לאינטרנט.</strong></p>
+  <ul>
+    <li>בוחרים <span class="name">סוג הטקסט</span>: טקסט רבני, טקסט מקראי, עברית מודרנית או שירה.</li>
+    <li>אפשר לסמן סגנונות שהניקוד ידלג עליהם.</li>
+    <li><span class="name">הצעות ניקוד</span> - בוחרים מילה, לוחצים הצג, ובוחרים ניקוד אחר. לחיצה על הצעה מחליפה את המילה ועוברת לבאה.</li>
+    <li><span class="name">ניקוי טקסט</span> - מסיר ניקוד, טעמים או סימני פיסוק, לפי מה שתבחרו.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>עיצוב תורני</h2>
+  <ul>
+    <li><span class="name">עיצוב פסקה</span> - סגנון למילה הראשונה, <span class="name">עיצוב חלון</span> (רגיל וכפול) ו<span class="name">מירכוז שורה אחרונה</span>. אפשר לבחור על אילו פסקאות להחיל.</li>
+    <li><span class="name">איזון טורים</span> - יישור הטורים, וחיפוש טורים שאינם מאוזנים.</li>
+    <li><span class="name">מרווחים</span> - לפני ואחרי פסקה, בין שורות, בין מילים, ו<span class="name">מתיחת אותיות</span>.</li>
+  </ul>
+  <p class="note">כל פעולה נרשמת כפעולה אחת בוורד, אז <kbd>Ctrl+Z</kbd> מחזיר אותה.</p>
+</section>
+
+<section>
+  <h2>חיפוש רגקס</h2>
+  <p>חיפוש והחלפה בוורד עם ביטויים רגולריים (רגקס). זה מאפשר לחפש דפוסים, כמו "כל מספר" או "מילה שמתחילה באות מסוימת".</p>
+  <ul>
+    <li><span class="name">לוח תווי רג'קס</span> - לחצנים מוכנים לתווים ולסימנים. מעבירים עליהם את העכבר וקוראים מה הם עושים.</li>
+    <li>אפשר לעבור לשימוש ב<span class="name">תווים כלליים של Word</span>, או לחזור ל<span class="name">חיפוש מובנה של Word</span>.</li>
+    <li><span class="name">כיוון החיפוש</span>: הכל, כלפי מטה, כלפי מעלה, או לפי בחירה.</li>
+    <li>בהחלפה אפשר גם לשנות עיצוב: גופן, סגנון, צבע, מודגש, נטוי ועוד. אפשר <span class="name">לשאוב הגדרות עיצוב</span> מהטקסט המסומן.</li>
+    <li>יש <span class="name">היסטוריית חיפוש</span> ו<span class="name">היסטוריית החלפה</span>. <kbd>Enter</kbd> עובר לתוצאה הבאה, <kbd>Shift+Enter</kbd> לקודמת.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>ספריית קיוויקס ודרך האתרים</h2>
+  <p><span class="name">ספריית קיוויקס</span> קוראת קבצי ZIM. אלה ספרים, ויקיפדיה ואתרים אחרים שנשמרו במחשב, כדי לקרוא בלי אינטרנט.</p>
+  <p><span class="name">דרך האתרים</span> פותחת אתרים תורניים בלשוניות, בתוך וורד. הרשימה כוללת למשל את אתר כלי קודש, דיקטה, המשיב, אוצר החכמה והיברו-בוקס. אפשר לערוך את הרשימה בהתקנה.</p>
+</section>
+
+<section>
+  <h2>הגדרות</h2>
+  <p>בכפתור <span class="name">הגדרות</span> אפשר:</p>
+  <ul>
+    <li>להסתיר כפתורים שאתם לא צריכים.</li>
+    <li>לבחור איזה כלי יפתח בלחיצה על הכפתור הגדול.</li>
+    <li>לבחור את שפת התוסף: עברית או English.</li>
+    <li>לכבות בדיקת עדכונים אוטומטית.</li>
+    <li>להתקין פקודות מאקרו (ראו בהמשך).</li>
+    <li>לאפס את ההגדרות.</li>
+  </ul>
+  <p class="note">חלק מההגדרות נכנסות לתוקף רק אחרי שסוגרים את וורד ופותחים אותו מחדש.</p>
+</section>
+
+<section>
+  <h2>פקודות מאקרו (לא חובה)</h2>
+  <p>אפשר להתקין את פקודות התוסף גם כמאקרו. כך אפשר להוסיף אותן לסרגל הגישה המהירה, או לתת להן קיצור מקשים.</p>
+  <ul>
+    <li>ב<span class="name">הגדרות</span>, תחת "פקודות מאקרו (VBA)", בוחרים: <span class="name">ללא</span>, <span class="name">שמות בעברית</span> או <span class="name">שמות באנגלית</span>.</li>
+    <li>צריך לסגור את וורד ולפתוח אותו מחדש.</li>
+    <li>אם התוסף כבוי או לא מותקן, המאקרו מציג הודעה ברורה ולא שגיאה.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>עדכונים</h2>
+  <p>התוסף בודק מדי פעם אם יש גרסה חדשה, ומוריד אותה ברקע. אפשר לבדוק גם ידנית ב<span class="name">הגדרות</span> של כתבי הקודש. אם אתם לא רוצים עדכונים, כבו את הבדיקה האוטומטית.</p>
+  <p>ההתקנה היא רק עבורכם, בלי הרשאות מנהל.</p>
+</section>
+
+<section>
+  <h2>יצירת קשר</h2>
+  <p>מצאתם תקלה, או יש לכם רעיון?</p>
+  <ul>
+    <li>דיווח או הצעה בגיטהאב: <a class="ltr" href="https://github.com/KleiKodesh/KleiKodeshProject/issues/new/choose">github.com/KleiKodesh/KleiKodeshProject</a></li>
+    <li>אתר כלי קודש: <a class="ltr" href="https://kleikodesh.github.io/">kleikodesh.github.io</a></li>
+    <li>כל הפרויקטים: <a class="ltr" href="https://github.com/KleiKodesh">github.com/KleiKodesh</a></li>
+    <li>מייל: <a class="ltr" href="mailto:kleikodeshproject@gmail.com">kleikodeshproject@gmail.com</a></li>
+  </ul>
+</section>
+
+<footer>תודה שאתם משתמשים בכלי קודש.</footer>
+
+</div>
+</body>
+</html>

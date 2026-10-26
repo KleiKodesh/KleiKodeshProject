@@ -382,7 +382,10 @@
     <Content Include="Resources\Kiwix.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\About.dotx">
+    <Content Include="Resources\About.he.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\About.en.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- Optional VBA macros (Hebrew / English names), built by Ribbon\build_macros_template.py.
