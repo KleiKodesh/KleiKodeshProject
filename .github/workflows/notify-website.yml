@@ -1,0 +1,16 @@
+# Tells the website repo that the set of releases changed, so it re-points its
+# download button at whatever is "latest" now (also after deleting a bad release).
+name: Notify website of release change
+
+on:
+  release:
+    types: [published, unpublished, edited, deleted, released, prereleased]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch to kleikodesh.github.io
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+        run: gh api repos/KleiKodesh/kleikodesh.github.io/dispatches -f event_type=release-changed
