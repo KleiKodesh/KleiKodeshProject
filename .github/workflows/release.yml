@@ -7,19 +7,19 @@ on:
   workflow_dispatch:
     inputs:
       version_increment:
-        description: Version bump (ignored when an exact version is given)
+        description: Version bump - auto lets Gemini decide (ignored when an exact version is given)
         type: choice
-        options: [patch, minor, major]
-        default: patch
+        options: [auto, patch, minor, major]
+        default: auto
       manual_version:
         description: Exact version, e.g. v10.3.0 (optional)
         type: string
         required: false
       release_notes:
-        description: Release notes from
+        description: Release notes - ai = Gemini writes English + Hebrew notes from the commits
         type: choice
-        options: [commits, file, both]
-        default: commits
+        options: [ai, commits, file, both]
+        default: ai
       delete_fts_index:
         description: Delete the FTS index on install (forces reindex)
         type: boolean
@@ -86,14 +86,27 @@ jobs:
           [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
+      - name: Gemini - version bump + release notes
+        id: ai
+        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/ai-release-plan.ps1
+
       - name: Build (and release)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $a = @{ ReleaseNotesSource = '${{ inputs.release_notes }}'; NoClean = $true }
+          $notes = '${{ inputs.release_notes }}'
+          $bump  = '${{ inputs.version_increment }}'
+          if ($notes -eq 'ai') { $notes = 'file' }               # Gemini wrote RELEASE_NOTES.txt
+          if ($bump -eq 'auto') { $bump = '${{ steps.ai.outputs.bump }}' }
+          $a = @{ ReleaseNotesSource = $notes; NoClean = $true }
           if ('${{ inputs.manual_version }}') { $a.ManualVersion = '${{ inputs.manual_version }}' }
-          else { $a.VersionIncrement = '${{ inputs.version_increment }}' }
+          else { $a.VersionIncrement = $bump }
           if ('${{ inputs.delete_fts_index }}' -eq 'true')    { $a.DeleteFtsIndex = $true }
           if ('${{ inputs.force_clean_install }}' -eq 'true') { $a.ForceCleanInstall = $true }
           if ('${{ inputs.dry_run }}' -eq 'true')             { $a.NoRelease = $true }
