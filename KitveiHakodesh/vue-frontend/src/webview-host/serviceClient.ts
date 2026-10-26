@@ -133,9 +133,8 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
 const lowerFirst = (k: string) => (k ? k.charAt(0).toLowerCase() + k.slice(1) : k)
 const upperFirst = (k: string) => (k ? k.charAt(0).toUpperCase() + k.slice(1) : k)
 
-// A few wire fields aren't plain PascalCase<->camelCase. SenseRow.SourceId is snake_case
-// (source_id) in the hosted JSON path via [JsonPropertyName], so the dev path must deliver
-// the same name to keep dictionary consumers identical across hosted/dev.
+// A few wire fields aren't plain PascalCase<->camelCase. SenseRow.SourceId reaches the
+// app as source_id - the name the dictionary consumers were written against.
 const decodeKey = (k: string) => (k === 'SourceId' ? 'source_id' : lowerFirst(k))
 
 /** Wire key -> app key, memoised: the same few dozen DTO keys recur across every row of
@@ -247,12 +246,25 @@ export function serviceCallVoid(op: string, args: object = {}): void {
 /**
  * The hosted leg of serviceStream. WebView2 cannot deliver a response body progressively, so
  * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes them
- * to the page as `serviceStreamFrames` messages — an array of base64 pipe-frame envelopes, every
- * frame that arrived since the previous message — and finishes with `serviceStreamEnd`. The
- * stream id is chosen HERE and sent with the POST,
+ * as SHARED BUFFERS (`sharedbufferreceived`) holding the raw MessagePack frames — every frame
+ * that arrived since the previous push, laid out [u32 count] then per frame [u32 len][bytes],
+ * little-endian — tagged `{ streamId, ended, error }`. A plain `serviceStreamEnd` message is
+ * only the relay's fallback when a buffer could not be posted. The stream id is chosen HERE
+ * and sent with the POST,
  * so the listener below is registered before the first frame can possibly arrive. Aborting
  * posts `/rpc-stream-cancel`, which closes the pipe — the service's cancel signal.
  */
+/** WebView2's `sharedbufferreceived` event: the buffer must be released once read. */
+interface SharedBufferReceivedEvent {
+  additionalData: unknown
+  getBuffer(): ArrayBuffer
+}
+interface HostedWebview {
+  addEventListener(type: 'sharedbufferreceived', fn: (e: SharedBufferReceivedEvent) => void): void
+  removeEventListener(type: 'sharedbufferreceived', fn: (e: SharedBufferReceivedEvent) => void): void
+  releaseBuffer(buffer: ArrayBuffer): void
+}
+
 /** Frames consumed between `/rpc-stream-ack` credits; below the relay's StreamFrameWindow. */
 const STREAM_ACK_EVERY = 8
 
@@ -268,24 +280,41 @@ async function* hostedRelayStream<T>(
   let wake: (() => void) | null = null
   const notify = () => { wake?.(); wake = null }
 
-  const decodeBase64Frame = (b64: unknown): Uint8Array => {
-    const bin = atob(String(b64 ?? ''))
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-    return bytes
+  const endStream = (error: unknown) => {
+    ended = true
+    endError = error ? String(error) : null
+    notify()
   }
-  const unregister = onWebviewEvent((msg) => {
-    if (msg.streamId !== streamId) return
-    if (msg.event === 'serviceStreamFrames') {
-      const frames = Array.isArray(msg.frames) ? (msg.frames as unknown[]) : []
-      for (const b64 of frames) queue.push(decodeBase64Frame(b64))
-      notify()
-    } else if (msg.event === 'serviceStreamEnd') {
-      ended = true
-      endError = msg.error ? String(msg.error) : null
-      notify()
+  const webview = (window as unknown as { chrome?: { webview?: HostedWebview } }).chrome?.webview
+  const onSharedBuffer = (e: SharedBufferReceivedEvent) => {
+    const tag = e.additionalData as { streamId?: string; ended?: boolean; error?: string } | null
+    if (tag?.streamId !== streamId) return
+    const shared = e.getBuffer()
+    try {
+      // Copied out, because the shared memory is released below and frames are decoded later.
+      const bytes = new Uint8Array(shared.slice(0))
+      const view = new DataView(bytes.buffer)
+      const count = view.getUint32(0, true)
+      let at = 4
+      for (let i = 0; i < count; i++) {
+        const len = view.getUint32(at, true)
+        queue.push(bytes.subarray(at + 4, at + 4 + len))
+        at += 4 + len
+      }
+    } finally {
+      webview?.releaseBuffer(shared)
     }
+    if (tag.ended) endStream(tag.error)
+    else notify()
+  }
+  webview?.addEventListener('sharedbufferreceived', onSharedBuffer)
+  const unregisterFallbackEnd = onWebviewEvent((msg) => {
+    if (msg.streamId === streamId && msg.event === 'serviceStreamEnd') endStream(msg.error)
   })
+  const unregister = () => {
+    webview?.removeEventListener('sharedbufferreceived', onSharedBuffer)
+    unregisterFallbackEnd()
+  }
   // The relay pushes only while it holds credits, which the page returns as it CONSUMES
   // frames (after each yield resumes). That carries the pipe's backpressure through the
   // fire-and-forget push, so a slow consumer holds back the service instead of piling
