@@ -29,6 +29,9 @@ jobs:
           Get-ChildItem "$vs\MSBuild\Microsoft\VisualStudio" -Recurse -Filter Microsoft.VisualStudio.Tools.Office.targets | % FullName
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Workload.Office -property installationPath
 
+      - name: Install VSTO runtime (runner lacks Tools.Applications.Hosting)
+        run: choco install vstor2010 -y --no-progress
+
       - name: npm ci (vue-frontend)
         working-directory: KitveiHakodesh/vue-frontend
         run: npm ci
