@@ -1,9 +1,14 @@
-# Builds the installer + portable zip and publishes the GitHub release —
+# Builds the installer + portable zip and publishes the GitHub release -
 # the same Build/scripts/build-installer.ps1 the local build menu runs.
 # Start it from the Actions tab ("Run workflow") or: gh workflow run release.yml
+#
+# Also checks daily and releases by itself when the last release is a week old and
+# there are new commits - never on Shabbat / Yom Tov, the day before, or the night after.
 name: Release
 
 on:
+  schedule:
+    - cron: "0 9 * * *"     # ~11:00-12:00 Israel; the gate job decides
   workflow_dispatch:
     inputs:
       version_increment:
@@ -16,7 +21,7 @@ on:
         type: string
         required: false
       release_notes:
-        description: Release notes - ai = Gemini writes English + Hebrew notes from the commits
+        description: Release notes - ai = Gemini writes Hebrew + English notes from the commits
         type: choice
         options: [ai, commits, file, both]
         default: ai
@@ -39,29 +44,71 @@ on:
 
 permissions:
   contents: write
-  actions: write          # start release-issue-check.yml
+  actions: write          # retry-later + release-issue-check dispatches
 
 concurrency:
   group: release
   cancel-in-progress: false
 
+# Scheduled runs have no inputs: these are the defaults for them.
+env:
+  NOTES: ${{ inputs.release_notes || 'ai' }}
+  BUMP: ${{ inputs.version_increment || 'auto' }}
+  ATTEMPT: ${{ inputs.attempt || '1' }}
+
 jobs:
+  # Manual first attempt: always go. Scheduled runs and automatic retries: only on a
+  # permitted day, and only when there is something new to release.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          set -euo pipefail
+          go() { echo "go=$1" >> "$GITHUB_OUTPUT"; echo "$2"; exit 0; }
+          if [ "$SCHEDULED" != true ] && [ "$ATTEMPT" = 1 ]; then go true "manual run"; fi
+
+          # Israel date. Friday = erev Shabbat, Saturday = Shabbat + motzaei Shabbat.
+          export TZ=Asia/Jerusalem
+          dow=$(date +%u); today=$(date +%F); tomorrow=$(date -d tomorrow +%F)
+          if [ "$dow" -ge 5 ] && [ "$dow" -le 6 ]; then go false "Friday/Shabbat - not releasing"; fi
+          # Yom Tov today (incl. its night) or tomorrow (erev Yom Tov). Diaspora calendar:
+          # it covers Israel's days plus the second days. Calendar down = don't release.
+          yt=$(curl -sf --retry 3 "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&ss=off&mf=off&c=off&start=$today&end=$tomorrow" \
+                 | jq -r '[.items[] | select(.yomtov == true) | .date[0:10]] | unique | join(" ")') \
+            || go false "hebcal unreachable - not releasing"
+          if [ -n "$yt" ]; then go false "Yom Tov / erev Yom Tov ($yt) - not releasing"; fi
+
+          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --exclude-drafts --json tagName,publishedAt --jq '.[0]')
+          tag=$(jq -r .tagName <<<"$last")
+          age=$(( ( $(date +%s) - $(date -d "$(jq -r .publishedAt <<<"$last")" +%s) ) / 86400 ))
+          new=$(gh api "repos/$GITHUB_REPOSITORY/compare/$tag...${{ github.sha }}" --jq .ahead_by)
+          if [ "$new" -eq 0 ]; then go false "no commits since $tag"; fi
+          if [ "$SCHEDULED" = true ] && [ "$age" -lt 7 ]; then go false "$tag is only $age day(s) old"; fi
+          go true "$new new commit(s) since $tag ($age days)"
+
   # Gemini first, on a cheap Linux runner. No AI notes = no build; retry-later
-  # below starts the whole workflow again in an hour.
+  # starts the whole workflow again in an hour.
   plan:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       bump: ${{ steps.ai.outputs.bump }}
     steps:
       - uses: actions/checkout@v7
-        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
         with:
           fetch-depth: 0          # release notes read the log since the last tag
 
       - name: Gemini - version bump + release notes
         id: ai
-        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
+        if: env.NOTES == 'ai' || (env.BUMP == 'auto' && !inputs.manual_version)
         shell: pwsh
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -72,11 +119,13 @@ jobs:
         if: steps.ai.outcome == 'success'
         with:
           name: release-notes
-          path: RELEASE_NOTES.txt
+          path: |
+            RELEASE_NOTES.txt
+            Build/Installer/ReleaseNotes/
 
   retry-later:
     needs: plan
-    if: failure() && fromJSON(inputs.attempt) < 24
+    if: failure() && needs.plan.result == 'failure' && fromJSON(inputs.attempt || '1') < 24
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -85,7 +134,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sleep 3600
-          gh workflow run release.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }}             -f version_increment='${{ inputs.version_increment }}'             -f manual_version='${{ inputs.manual_version }}'             -f release_notes='${{ inputs.release_notes }}'             -f delete_fts_index=${{ inputs.delete_fts_index }}             -f force_clean_install=${{ inputs.force_clean_install }}             -f dry_run=${{ inputs.dry_run }}             -f attempt=$(( ${{ inputs.attempt }} + 1 ))
+          gh workflow run release.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }} \
+            -f version_increment="$BUMP" \
+            -f manual_version='${{ inputs.manual_version }}' \
+            -f release_notes="$NOTES" \
+            -f delete_fts_index=${{ inputs.delete_fts_index || false }} \
+            -f force_clean_install=${{ inputs.force_clean_install || false }} \
+            -f dry_run=${{ inputs.dry_run || false }} \
+            -f attempt=$(( ATTEMPT + 1 ))
 
   release:
     needs: plan
@@ -134,7 +190,7 @@ jobs:
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
       - uses: actions/download-artifact@v8
-        if: inputs.release_notes == 'ai'
+        if: needs.plan.outputs.bump != '' || env.NOTES == 'ai'
         with:
           name: release-notes
 
@@ -143,8 +199,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $notes = '${{ inputs.release_notes }}'
-          $bump  = '${{ inputs.version_increment }}'
+          $notes = $env:NOTES
+          $bump  = $env:BUMP
           if ($notes -eq 'ai') { $notes = 'file' }               # Gemini wrote RELEASE_NOTES.txt
           if ($bump -eq 'auto') { $bump = '${{ needs.plan.outputs.bump }}' }
           $a = @{ ReleaseNotesSource = $notes; NoClean = $true }
