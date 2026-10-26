@@ -87,17 +87,17 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // Field names. THREE indexed fields: the full TOC path (also stored — it is the
     // display path AND the text the query-token-order rule runs against), the catalog
     // (category) path, and the author names — both matchable but order-exempt.
-    private const string FieldFullTocPath = "p";  // indexed + stored
-    private const string FieldCatalog = "c";      // indexed + stored
-    private const string FieldAuthor = "a";       // indexed + stored
-    private const string FieldBookId = "b";
-    private const string FieldLineIndex = "l";
-    private const string FieldLevel = "v";
-    private const string FieldTreeOrder = "o";
-    private const string FieldTitleLength = "t";   // chars of the book title at the head of "p"
-    private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
-    private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
-    private const string FieldStructureDv = "sdv"; // numeric doc-values (truncation group)
+    private const string FieldFullTocPath = "fullTocPath";  // indexed + stored
+    private const string FieldCatalog = "catalogPath";      // indexed + stored
+    private const string FieldAuthor = "authors";           // indexed + stored
+    private const string FieldBookId = "bookId";
+    private const string FieldLineIndex = "lineIndex";
+    private const string FieldLevel = "level";
+    private const string FieldTreeOrder = "treeOrder";
+    private const string FieldTitleLength = "titleLength";   // chars of the book title at the head of "fullTocPath"
+    private const string FieldLevelDv = "levelSortKey";          // numeric doc-values (sort key)
+    private const string FieldTreeOrderDv = "treeOrderSortKey";  // numeric doc-values (sort key)
+    private const string FieldStructureDv = "tocStructureId";    // numeric doc-values (truncation group)
 
     /// <summary>Structure id of the regular TOC (and of book-title docs) — the alt
     /// structures carry their own positive ids from the DB, so 0 never collides.</summary>
@@ -214,14 +214,15 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// child's line; a numeral after a counter word (perek mb) is no longer expanded as an
     /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
     /// v23: root TOC entries are stripped only when they add no word beyond the title.
-    /// v24: no index-format change; forces ONE rebuild of every index built before the
+    /// v24: Lucene field names spelled out (were single letters). Full rebuild.
+    /// v25: no index-format change; forces ONE rebuild of every index built before the
     /// additional-library hardening. Those builds dropped a library they could not read
     /// whole (a schema-6+ library without alt_toc_structure was one) yet stamped the index
     /// with the fingerprint of the FULL library set, and that stamp is the same string a
     /// current build computes for the same files - so the current build trusted the old
     /// index and never rebuilt it, leaving the library's book titles out of book-name
     /// search for as long as its file did not change.</summary>
-    public const string IndexFormatVersion = "v24";
+    public const string IndexFormatVersion = "v25";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -758,7 +759,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             new TextField(FieldFullTocPath, fullTocPath, Field.Store.YES),
             new StoredField(FieldBookId, bookId),
             new StoredField(FieldLineIndex, lineIndex),
-            new StoredField(FieldLevel, level),
+            new Int32Field(FieldLevel, level, Field.Store.YES), // PROTOTYPE: indexed so title search can filter level 0
             new StoredField(FieldTreeOrder, treeOrder),
             new StoredField(FieldTitleLength, titleLength),
             // Level + TreeOrder ALSO as numeric doc-values: column-stored, so the sort

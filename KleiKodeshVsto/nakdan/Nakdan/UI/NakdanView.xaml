@@ -112,6 +112,13 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <Separator Margin="8,2"/>
+                            <Border Style="{StaticResource HoverRow}">
+                                <CheckBox Content="השאר פיסוק בסוף פסקה"
+                                          IsChecked="{Binding KeepPunctuationAtParagraphEnd, Mode=TwoWay}"
+                                          Padding="4,0"
+                                          Margin="8,4"/>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Border>

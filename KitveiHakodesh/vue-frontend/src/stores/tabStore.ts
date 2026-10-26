@@ -47,6 +47,7 @@ import {
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
 import { parentFolder } from '@/utils/filePath'
+import { isWindowFullscreen } from '@/utils/isWindowFullscreen'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
   dropUncheckedCommentaryForTab,
@@ -850,7 +851,7 @@ export const useTabStore = defineStore('tabs', () => {
    * ensurePane2HasTab opening the pane, not the reader opening a second document.
    */
   function openPane2Tab(partial: Omit<Tab, 'id' | 'pane'>): Tab {
-    if (!hasNativeChromeTabs && pane2Tabs.value.length > 0) {
+    if ((!hasNativeChromeTabs || isWindowFullscreen()) && pane2Tabs.value.length > 0) {
       updatePane2ActiveTab({ ...partial, navNonce: nextNavNonce() })
       return activeTabForPane(2)
     }
@@ -1027,7 +1028,8 @@ export const useTabStore = defineStore('tabs', () => {
    *
    * Hosts without a native tab strip (VSTO task pane, dev browser) are single-tab by
    * construction: they paint no tab list, so a second tab would be a document with no
-   * way back to it. There, this navigates the current tab instead of adding one. The
+   * way back to it. Full screen hides the native strip too, so it behaves the same.
+   * There, this navigates the current tab instead of adding one. The
    * nonce mirrors openBookTarget's in-place path — AppPageView keys on tabId:bookId,
    * so re-opening the same book would otherwise not remount.
    *
@@ -1036,7 +1038,7 @@ export const useTabStore = defineStore('tabs', () => {
    * restore both land in one tab as a result.
    */
   function openTab(partial: Omit<Tab, 'id'>) {
-    if (!hasNativeChromeTabs) {
+    if (!hasNativeChromeTabs || isWindowFullscreen()) {
       updateActiveTab({ ...partial, navNonce: nextNavNonce() })
       return activeTab.value
     }

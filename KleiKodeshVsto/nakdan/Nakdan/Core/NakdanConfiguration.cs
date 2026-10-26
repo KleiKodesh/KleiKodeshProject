@@ -28,10 +28,13 @@ namespace Nakdan.Core
         None                   = 0,
         Nikkud                 = 1,
         Cantillations          = 2,
-        PeriodsAndCommas       = 4,
+        Periods                = 4,
         Dashes                 = 8,
         QuestionAndExclamation = 16,
         Colons                 = 32,
+        Commas                 = 64,    // , and ;
+        // Not a mark kind: a period, colon, sof pasuq, ? or ! ending a paragraph stays.
+        KeepPunctuationAtParagraphEnd = 128,
     }
 
     // ═══════════════════════════════════════════════════════════

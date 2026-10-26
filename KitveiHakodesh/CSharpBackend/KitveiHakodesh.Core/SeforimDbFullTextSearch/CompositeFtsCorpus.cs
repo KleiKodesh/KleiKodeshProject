@@ -274,6 +274,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
+        /// <summary>Placements for GLOBAL line ids: each library answers for its own lines, and the book id and
+        /// TOC entry id come back lifted into the global id space like in <see cref="FetchPlacedDocuments"/>.</summary>
+        public Dictionary<int, FtsDocumentPlacement> FetchPlacements(IReadOnlyList<int> ids)
+        {
+            var result = new Dictionary<int, FtsDocumentPlacement>(ids?.Count ?? 0);
+            if (ids == null || ids.Count == 0) return result;
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(ids))
+            {
+                if (Find(libraryIndex) is not { } source) continue; // no longer attached
+                foreach (var (localId, placement) in source.Corpus.FetchPlacements(localIds))
+                    result[SeforimDbLibraryId.ToGlobal(libraryIndex, localId)] = new FtsDocumentPlacement(
+                        placement.BookId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.BookId),
+                        placement.LineIndex,
+                        placement.TocEntryId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.TocEntryId));
+            }
+            return result;
+        }
+
         /// <summary>Lines at (GLOBAL book id, lineIndex) positions: each library answers for its
         /// own books, ids and book ids come back global.</summary>
         public List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(IReadOnlyList<(int BookId, int LineIndex)> positions)

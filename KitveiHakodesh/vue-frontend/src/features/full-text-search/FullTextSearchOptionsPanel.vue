@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
-import {
-  WORD_OPTIONS, WRAP_OPTIONS, isWrapOption, optionsConflict, parseQueryWord, hasOption, withOption,
-  splitQuery, rewriteQuery,
-} from './queryWordSyntax'
-import type { AllWords, QueryWord, WordOption } from './queryWordSyntax'
+import { WORD_OPTIONS, WRAP_OPTIONS, isWrapOption, optionsConflict, parseQueryWord, splitQuery } from './queryWordSyntax'
+import type { AllWords, PerWord, QueryWord, WordOption } from './queryWordSyntax'
 
 const props = defineProps<{
   maxWordDistance: number
@@ -13,7 +10,9 @@ const props = defineProps<{
   contextWords: number
   /** Each option's persisted "all words" setting. */
   allWords: AllWords
-  /** Live search-bar text. It holds the per-word options as syntax (see queryWordSyntax). */
+  /** The per-word choices (see PerWord). */
+  perWord: PerWord
+  /** Live search-bar text; only read for its words, never written. */
   query: string
   /** Rendered inline as a centered card on the empty search page, not as a popup. */
   asCard?: boolean
@@ -24,134 +23,69 @@ const emit = defineEmits<{
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
   setAllWords: [WordOption, boolean]
-  'update:query': [string]
+  'update:perWord': [PerWord]
   close: []
 }>()
 
 type ActiveTab = 'options' | 'syntax'
 const activeTab = ref<ActiveTab>('options')
 
-// Each option row: [all words | per word], a pair where at most one is on.
-//   - "All words" is the persisted setting and never shows in the search text: turning it
-//     on drops that option's now-redundant syntax from the words.
-//   - "Per word" is the option as syntax on the words, so it is saved with the search.
-// Wrap kinds ('*', '%', '~') exclude each other per word. When a word takes a kind that
-// conflicts with an "all words" row, that row becomes "per word": every other word gets its
-// syntax back.
+// Each option row: [all words | per word], at most one on.
+//   - "All words" is the persisted setting.
+//   - "Per word" picks words of the query; the choice is kept per tab.
+// Neither reads nor writes the typed signs: the toggles are added to the words at search
+// time, and a word's typed signs win over them (see applyWordOptions). Wrap kinds that
+// conflict exclude each other: in "all words" across rows, and per word on the same word.
 const LABEL_KEYS: Record<WordOption, string> = {
   wildcardPrefix: 'wildcardPrefix', wildcardSuffix: 'wildcardSuffix',
   grammarPrefix: 'grammarPrefix', grammarSuffix: 'grammarSuffix',
   fuzzy: 'fuzzy', ketiv: 'spellingVariants', inflections: 'inflections', synonyms: 'synonyms',
 }
 
+// The search term's words, by their bare text (the '@' book filter is not words); words
+// with syntax beyond the toggles get no toggle.
+const queryWords = computed(() => [...new Set(splitQuery(props.query).tokens
+  .map(parseQueryWord).filter((w): w is QueryWord => w !== null).map((w) => w.core))])
+
 const isAllWords = (option: WordOption) => props.allWords[option]
-const setAllWords = (option: WordOption, on: boolean) => emit('setAllWords', option, on)
+const isPerWord = (option: WordOption) => !isAllWords(option) && props.perWord[option] !== undefined
+const wordHas = (core: string, option: WordOption) => !!props.perWord[option]?.includes(core)
 
-// The search term's words (the '@' book filter is not words); words whose syntax the
-// toggles can't express stay as typed and get no toggles.
-const parsedWords = computed(() =>
-  splitQuery(props.query).tokens.map(parseQueryWord).filter((w): w is QueryWord => w !== null))
-const queryWords = computed(() => [...new Set(parsedWords.value.map((w) => w.core))])
-
-// Rows switched to "per word" before any word is checked; one with a checked word shows by
-// that alone. Not persisted: the query's syntax is the per-search state.
-const perWordRows = ref(new Set<WordOption>())
-function markPerWord(option: WordOption, on: boolean) {
-  const rows = new Set(perWordRows.value)
-  if (on) rows.add(option)
-  else rows.delete(option)
-  perWordRows.value = rows
-}
-// A row that shows as "per word" because a word has its syntax (typed, or restored with the
-// search) stays open once its last word is unchecked, like one opened by click.
-watch(parsedWords, (words) => {
-  for (const option of WORD_OPTIONS)
-    if (!isAllWords(option) && !perWordRows.value.has(option) && words.some((w) => hasOption(w, option)))
-      markPerWord(option, true)
-}, { immediate: true })
-
-function isPerWord(option: WordOption): boolean {
-  if (isAllWords(option)) return false
-  return perWordRows.value.has(option) || parsedWords.value.some((w) => hasOption(w, option))
-}
-
-function wordHas(core: string, option: WordOption): boolean {
-  return parsedWords.value.some((w) => w.core === core && hasOption(w, option))
-}
-const conflictsWith = (word: QueryWord, option: WordOption) =>
-  WRAP_OPTIONS.some((other) => optionsConflict(other, option) && hasOption(word, other))
-
-function rewrite(map: (word: QueryWord) => QueryWord) {
-  const text = rewriteQuery(props.query, map)
-  if (text !== props.query) emit('update:query', text)
-}
-
-/** Turn an "all words" row into "per word": every word gets its syntax, except the one word
- *  `except` and words holding a conflicting kind. Returns the word map to apply. */
-function splitAllWordsRow(option: WordOption, except: string | null): (w: QueryWord) => QueryWord {
-  setAllWords(option, false)
-  markPerWord(option, true)
-  return (w) => (w.core === except || conflictsWith(w, option) ? w : withOption(w, option, true))
+function setPerWord(option: WordOption, words: string[] | undefined) {
+  const next = { ...props.perWord }
+  if (words) next[option] = words
+  else delete next[option]
+  emit('update:perWord', next)
 }
 
 function toggleAllWords(option: WordOption) {
   const on = !isAllWords(option)
-  setAllWords(option, on)
-  markPerWord(option, false)
+  emit('setAllWords', option, on)
   if (!on) return
-  const conflicting = WRAP_OPTIONS.filter((other) => optionsConflict(other, option))
-  for (const other of conflicting) { setAllWords(other, false); markPerWord(other, false) }
-  // Every word now has the option: its syntax, and any conflicting kind, is redundant.
-  rewrite((w) => [option, ...conflicting].reduce((next, o) => withOption(next, o, false), w))
+  setPerWord(option, undefined)
+  for (const other of WRAP_OPTIONS)
+    if (optionsConflict(other, option) && isAllWords(other)) emit('setAllWords', other, false)
 }
 
 function togglePerWord(option: WordOption) {
-  if (isPerWord(option)) {
-    markPerWord(option, false)
-    rewrite((w) => withOption(w, option, false))
-    return
-  }
-  // From "all words": keep every word checked, now as syntax.
-  if (isAllWords(option)) rewrite(splitAllWordsRow(option, null))
-  else markPerWord(option, true)
+  if (isPerWord(option)) { setPerWord(option, undefined); return }
+  // From "all words": keep every word checked.
+  const fromAll = isAllWords(option)
+  if (fromAll) emit('setAllWords', option, false)
+  setPerWord(option, fromAll ? [...queryWords.value] : [])
 }
 
 function toggleWord(core: string, option: WordOption) {
   const on = !wordHas(core, option)
-  const maps: ((w: QueryWord) => QueryWord)[] = []
+  const next = { ...props.perWord }
+  const words = next[option] ?? []
+  next[option] = on ? [...words, core] : words.filter((w) => w !== core)
   if (on && isWrapOption(option))
     for (const other of WRAP_OPTIONS)
-      if (optionsConflict(other, option) && isAllWords(other)) maps.push(splitAllWordsRow(other, core))
-  rewrite((w) => {
-    const next = maps.reduce((acc, map) => map(acc), w)
-    return next.core === core ? withOption(next, option, on) : next
-  })
+      if (optionsConflict(other, option) && next[other]?.includes(core))
+        next[other] = next[other]!.filter((w) => w !== core)
+  emit('update:perWord', next)
 }
-
-// Unchecks every word; the row stays "per word".
-function clearRow(option: WordOption) {
-  markPerWord(option, true)
-  rewrite((w) => withOption(w, option, false))
-}
-
-// Text -> toggles, for an "all words" row:
-//   - typing its own syntax on a word means "only this word": the row becomes "per word"
-//     with just the typed words (the panel itself never writes it while the row is all words);
-//   - typing a conflicting kind on a word splits the row, as clicking would.
-watch(parsedWords, (words) => {
-  const maps: ((w: QueryWord) => QueryWord)[] = []
-  for (const option of WORD_OPTIONS) {
-    if (!isAllWords(option) || !words.some((w) => hasOption(w, option))) continue
-    setAllWords(option, false)
-    markPerWord(option, true)
-  }
-  for (const option of WRAP_OPTIONS) {
-    if (!isAllWords(option) || words.some((w) => hasOption(w, option))) continue
-    const typed = words.find((w) => conflictsWith(w, option))
-    if (typed) maps.push(splitAllWordsRow(option, typed.core))
-  }
-  if (maps.length) rewrite((w) => maps.reduce((acc, map) => map(acc), w))
-})
 
 function onDistanceInput(event: Event) {
   const value = parseInt((event.target as HTMLInputElement).value, 10)
@@ -244,7 +178,7 @@ function onContextWordsInput(event: Event) {
             <button
               v-if="isPerWord(option) && queryWords.some((w) => wordHas(w, option))"
               class="toggle-btn"
-              @click="clearRow(option)"
+              @click="setPerWord(option, [])"
             >{{ $t('fullTextSearch.options.clear') }}</button>
             <button
               class="toggle-btn"

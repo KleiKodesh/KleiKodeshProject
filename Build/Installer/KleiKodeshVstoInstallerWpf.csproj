@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>10.2.2</Version>
+    <Version>10.2.4</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -105,6 +105,8 @@
 
     <PropertyGroup>
       <MSBuildPath Condition="Exists('C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+      <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
+      <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
       <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
       <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
       <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
@@ -193,7 +195,20 @@
     <PackageReference Update="System.Text.Encoding.CodePages" ExcludeAssets="all" />
   </ItemGroup>
 
+  <!--
+    Release notes for the "What's new" page (WhatsNewPage). CI writes these files
+    before the build; they are not in git. Local builds without them still work:
+    the page is then skipped and the install goes straight to SettingsPage.
+  -->
   <ItemGroup>
+    <EmbeddedResource Include="ReleaseNotes\notes.he.md" Condition="Exists('ReleaseNotes\notes.he.md')">
+      <WithCulture>false</WithCulture>
+      <LogicalName>ReleaseNotes.he.md</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ReleaseNotes\notes.en.md" Condition="Exists('ReleaseNotes\notes.en.md')">
+      <WithCulture>false</WithCulture>
+      <LogicalName>ReleaseNotes.en.md</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- Embed all dependency DLLs into the exe as resources -->
