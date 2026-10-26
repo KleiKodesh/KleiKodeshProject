@@ -15,7 +15,7 @@ namespace KitveiHakodeshLib
         // Any navigation to a URL that doesn't match one of these prefixes is cancelled.
         //
         // Allowed origins:
-        //   http://KitveiHakodesh-vue-app/   — the main Vue app, the HebrewBooks PDF cache
+        //   http://kitveihakodesh-app/   — the main Vue app, the HebrewBooks PDF cache
         //                                       (/hebrewbooks-cache/), and converted Word files
         //                                       (/word-cache/) — all served from KitveiHakodesh\
         //   http://kitvei-localfile-          — per-folder virtual hosts registered by LocalFileHandler
@@ -31,7 +31,7 @@ namespace KitveiHakodeshLib
         //                                       navigation, not the server, that forced the old design.
         private static readonly string[] _allowedNavigationPrefixes = new[]
         {
-            "http://KitveiHakodesh-vue-app/",
+            "http://kitveihakodesh-app/",
             "http://kitvei-localfile-",
             "http://kitvei-hb-local-",
             "https://download.hebrewbooks.org/",
@@ -73,7 +73,7 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>The Vue app's own URL — the one navigation must always be able to fall back to.</summary>
-        internal const string AppShellUrl = "http://KitveiHakodesh-vue-app/index.html";
+        internal const string AppShellUrl = "http://kitveihakodesh-app/index.html";
 
         /// <summary>
         /// True while the WebView2 is showing the Vue app rather than an outside page (the
@@ -82,7 +82,7 @@ namespace KitveiHakodeshLib
         /// </summary>
         private static bool IsAppShellUrl(Uri source) =>
             source != null &&
-            source.ToString().StartsWith("http://KitveiHakodesh-vue-app/", StringComparison.OrdinalIgnoreCase);
+            source.ToString().StartsWith("http://kitveihakodesh-app/", StringComparison.OrdinalIgnoreCase);
 
         // Set once the first navigation settles, so the one-time splash/focus/input setup in
         // OnNavigationCompleted does not re-run on later navigations. The handler itself must

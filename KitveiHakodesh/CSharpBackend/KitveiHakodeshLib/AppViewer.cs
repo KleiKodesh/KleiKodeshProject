@@ -618,7 +618,7 @@ namespace KitveiHakodeshLib
             //settings.IsBuiltInErrorPageEnabled = false;
 
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                "KitveiHakodesh-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+                "kitveihakodesh-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
             // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
             // each call is a browser-process round-trip, so one call is faster than two.
@@ -685,7 +685,7 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             _webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
 
-            _webView.Source = new Uri("http://KitveiHakodesh-vue-app/index.html");
+            _webView.Source = new Uri("http://kitveihakodesh-app/index.html");
 
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.

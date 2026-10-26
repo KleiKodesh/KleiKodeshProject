@@ -268,7 +268,7 @@ export function usePdfContextMenu(
     }
 
     // Hosted MUST go through C#: the host serves the app from
-    // http://KitveiHakodesh-vue-app/ — plain http on a non-localhost hostname, which Chromium
+    // http://kitveihakodesh-app/ — plain http on a non-localhost hostname, which Chromium
     // treats as an INSECURE context, so navigator.clipboard isn't exposed there at all.
     // Dev is served from http://localhost, which IS a secure context, so the browser API below
     // works and there is nothing for C# to do — skip the call rather than issue one that can

@@ -1,7 +1,7 @@
 /**
  * Text-to-clipboard that also works in the hosted app.
  *
- * The host serves the app from http://KitveiHakodesh-vue-app/ — plain http on a
+ * The host serves the app from http://kitveihakodesh-app/ — plain http on a
  * non-localhost hostname, which Chromium treats as an INSECURE context, so
  * `navigator.clipboard` is not exposed there at all and reaching for `.writeText`
  * throws outright. Dev is served from http://localhost, a secure context where the

@@ -130,7 +130,7 @@ async function retry() {
 }
 
 // ── Scroll persistence via postMessage ────────────────────────────────────────
-// The local file iframe is cross-origin (kitvei-localfile-N vs kitvei-vue-app)
+// The local file iframe is cross-origin (kitvei-localfile-N vs kitveihakodesh-app)
 // so contentWindow.scrollY is inaccessible from Vue. Instead, a script injected
 // by C# via AddScriptToExecuteOnDocumentCreatedAsync (JsBridge.IframeScrollScript)
 // runs inside the iframe and posts { type: 'htmlViewScroll', scrollTop } messages
