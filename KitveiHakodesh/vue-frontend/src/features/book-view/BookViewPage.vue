@@ -564,6 +564,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     ref="linesContentRef"
                     :lines="lines"
                     :ensure-lines="ensureLines"
+                    :line-character-counts="lineCharacterCounts"
                     :alt-toc-label-map="altTocLabelMap"
                     :selected-line-id="selectedLineId"
                     :commentary-visible="anyCommentaryVisible"

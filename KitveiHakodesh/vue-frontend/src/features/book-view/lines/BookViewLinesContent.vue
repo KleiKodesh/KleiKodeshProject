@@ -80,6 +80,12 @@ const props = defineProps<
      * a teamim book beside a plain one renders each in its own font.
      */
     bookHasTeamim?: boolean
+    /**
+     * Every line's character count by lineIndex, from the library — the scrollbar's
+     * static per-row height estimate. null while loading, or for a library without
+     * the column; the bar then estimates from the rows it measures.
+     */
+    lineCharacterCounts?: number[] | null
   }
 >()
 
@@ -457,6 +463,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       :row-source-version="activeVersionId"
       :pinned-indexes="pinnedRowIndexes"
       :landmark-tiers="tocLandmarkTiers"
+      :row-weights="lineCharacterCounts ?? undefined"
       tabindex="0"
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"

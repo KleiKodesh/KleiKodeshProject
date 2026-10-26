@@ -51,6 +51,17 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── Lines ─────────────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Every line's character count for one book, by lineIndex — the reader's
+        /// scrollbar estimates row heights from these without loading any text.
+        /// Only valid on libraries whose <c>line</c> table has the column.
+        /// </summary>
+        public const string GetLineCharCounts = @"
+            SELECT lineIndex, charCount
+            FROM line
+            WHERE bookId = @bookId
+            ORDER BY lineIndex";
+
         /// <summary>A page of lines for streaming load.</summary>
         public static string GetLinesPaged(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
