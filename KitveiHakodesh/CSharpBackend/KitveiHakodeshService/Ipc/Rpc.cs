@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using KitveiHakodeshService.SeforimDb;
 
 
@@ -13,8 +11,7 @@ namespace KitveiHakodeshService.Ipc;
 // the frontend asks for *what it needs* by op name and never learns the backend.
 
 /// <summary>Inbound request envelope. <see cref="Args"/> is the raw MessagePack bytes of
-/// the args map, deserialized into the op's typed DTO by the dispatcher (mirrors how the
-/// JSON path kept Args as a deferred JsonElement).</summary>
+/// the args map, deserialized into the op's typed DTO by the dispatcher.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class RpcRequest
 {
@@ -153,23 +150,22 @@ public sealed class PasteIntoWordResult
 }
 
 /// <summary>Parameterized SQL (positional '?') for the generic user-settings read/write ops.
-/// The bind values are inherently dynamic (string | number | null) and the rows come back in
-/// arbitrary shapes, so this path stays JSON — there is no point re-encoding already-JSON,
-/// schema-less data as MessagePack. <see cref="ParamsJson"/> is a JSON array string carried
-/// verbatim inside the msgpack envelope; the query result likewise rides as a JSON string
-/// (see <see cref="RawRowsResult"/>).</summary>
+/// The bind values are plain MessagePack values (string | number | bool | null) — no JSON
+/// string riding inside the envelope.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class RawSqlArgs
 {
     public string? Sql { get; set; }
-    public string? ParamsJson { get; set; }
+    public List<object?>? Params { get; set; }
 }
 
-/// <summary>User-settings query result: the rows as a JSON array string (dynamic shape).</summary>
+/// <summary>User-settings query result: one map per row, column name -> value. The client
+/// lower-cases each key's first letter (serviceClient decodeKey), so queries must name their
+/// columns in camelCase — every user_settings column already is.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class RawRowsResult
 {
-    public string RowsJson { get; set; } = "[]";
+    public List<Dictionary<string, object?>> Rows { get; set; } = [];
 }
 
 /// <summary>User-settings execute result.</summary>
@@ -428,7 +424,7 @@ public sealed class SenseRow
     public string? Nikud { get; set; }
     public string Text { get; set; } = "";
     public string? Source { get; set; }
-    [JsonPropertyName("source_id")]
+    /// <summary>Reaches the app as <c>source_id</c>: serviceClient's decodeKey renames it.</summary>
     public int? SourceId { get; set; }
 }
 
@@ -507,112 +503,3 @@ internal static class RpcResponse
     public static byte[] Err(string op, Exception ex) => Err(ex.Message, $"op '{op}' threw:\n{ex}");
 }
 
-/// <summary>AOT-safe source-generated (de)serialization for every RPC type.
-/// CamelCase policy maps C# PascalCase properties to the camelCase JSON the
-/// frontend and DocumentLocator both use.</summary>
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
-[JsonSerializable(typeof(RpcRequest))]
-[JsonSerializable(typeof(LocateDocumentsArgs))]
-[JsonSerializable(typeof(RawSqlArgs))]
-[JsonSerializable(typeof(JsonElement))]
-[JsonSerializable(typeof(LocateDocumentsResult))]
-[JsonSerializable(typeof(FileHit))]
-[JsonSerializable(typeof(HbSearchArgs))]
-[JsonSerializable(typeof(HebrewBook))]
-[JsonSerializable(typeof(HbSearchResult))]
-[JsonSerializable(typeof(HbDownloadArgs))]
-[JsonSerializable(typeof(HbDownloadResult))]
-[JsonSerializable(typeof(HbCheckLocalArgs))]
-[JsonSerializable(typeof(HbCheckLocalResult))]
-[JsonSerializable(typeof(HbDeleteLocalArgs))]
-[JsonSerializable(typeof(HbDeleteLocalResult))]
-[JsonSerializable(typeof(HbProgressArgs))]
-[JsonSerializable(typeof(HbProgressResult))]
-[JsonSerializable(typeof(PickLocalFileResult))]
-[JsonSerializable(typeof(StringArg))]
-[JsonSerializable(typeof(StringResult))]
-[JsonSerializable(typeof(DictTermArgs))]
-[JsonSerializable(typeof(DictCandidatesArgs))]
-[JsonSerializable(typeof(SenseRow))]
-[JsonSerializable(typeof(DictLink))]
-[JsonSerializable(typeof(DictSensesResult))]
-[JsonSerializable(typeof(DictExactResult))]
-[JsonSerializable(typeof(DictAbbrevResult))]
-[JsonSerializable(typeof(DictWordsResult))]
-[JsonSerializable(typeof(DictLinksResult))]
-[JsonSerializable(typeof(DictSeforimHeadwordArgs))]
-[JsonSerializable(typeof(DictSeforimHeadwordsResult))]
-[JsonSerializable(typeof(CategoryRow))]
-[JsonSerializable(typeof(BookRow))]
-[JsonSerializable(typeof(CategoriesResult))]
-[JsonSerializable(typeof(BooksResult))]
-[JsonSerializable(typeof(BookByIdArgs))]
-[JsonSerializable(typeof(BookInfo))]
-[JsonSerializable(typeof(BookByIdResult))]
-[JsonSerializable(typeof(LinesPagedArgs))]
-[JsonSerializable(typeof(LineRow))]
-[JsonSerializable(typeof(LinesResult))]
-[JsonSerializable(typeof(TocByBookArgs))]
-[JsonSerializable(typeof(TocByStructureArgs))]
-[JsonSerializable(typeof(TocEntryRow))]
-[JsonSerializable(typeof(TocEntriesResult))]
-[JsonSerializable(typeof(AltTocStructureRow))]
-[JsonSerializable(typeof(AltTocStructuresResult))]
-[JsonSerializable(typeof(TocTitleRow))]
-[JsonSerializable(typeof(TocTitlesArgs))]
-[JsonSerializable(typeof(TocTitlesResult))]
-[JsonSerializable(typeof(TocPrefixArgs))]
-[JsonSerializable(typeof(TocPrefixRow))]
-[JsonSerializable(typeof(TocPrefixResult))]
-[JsonSerializable(typeof(LineIdsArgs))]
-[JsonSerializable(typeof(BookIdArgs))]
-[JsonSerializable(typeof(CommentaryLinkRow))]
-[JsonSerializable(typeof(CommentaryLinksResult))]
-[JsonSerializable(typeof(LineContentRow))]
-[JsonSerializable(typeof(LineContentsResult))]
-[JsonSerializable(typeof(WordLinkAnchorRow))]
-[JsonSerializable(typeof(WordLinkAnchorsResult))]
-[JsonSerializable(typeof(WordLinkTargetRow))]
-[JsonSerializable(typeof(WordLinkTargetsResult))]
-[JsonSerializable(typeof(ConnectionTypeRow))]
-[JsonSerializable(typeof(ConnectionTypesResult))]
-[JsonSerializable(typeof(DefaultCommentatorRow))]
-[JsonSerializable(typeof(DefaultCommentatorsResult))]
-[JsonSerializable(typeof(ReverseLineDataArgs))]
-[JsonSerializable(typeof(ReverseLineRow))]
-[JsonSerializable(typeof(ReverseLineDataResult))]
-[JsonSerializable(typeof(ReverseBooksArgs))]
-[JsonSerializable(typeof(ReverseBookRow))]
-[JsonSerializable(typeof(ReverseBooksResult))]
-[JsonSerializable(typeof(StaticFilterArgs))]
-[JsonSerializable(typeof(StaticFilterRow))]
-[JsonSerializable(typeof(StaticFilterResult))]
-[JsonSerializable(typeof(SectionNavArgs))]
-[JsonSerializable(typeof(SectionNavRow))]
-[JsonSerializable(typeof(SectionNavResult))]
-[JsonSerializable(typeof(TocSectionArgs))]
-[JsonSerializable(typeof(TocSectionRow))]
-[JsonSerializable(typeof(TocSectionResult))]
-[JsonSerializable(typeof(LinkTargetArgs))]
-[JsonSerializable(typeof(LinkTargetRow))]
-[JsonSerializable(typeof(LinkTargetResult))]
-[JsonSerializable(typeof(LineTocEntryRow))]
-[JsonSerializable(typeof(TocEntryPathRow))]
-[JsonSerializable(typeof(TocPathsForLinesResult))]
-[JsonSerializable(typeof(EnclosingTocPathArgs))]
-[JsonSerializable(typeof(EnclosingTocPathRow))]
-[JsonSerializable(typeof(EnclosingTocPathResult))]
-[JsonSerializable(typeof(LineBookRow))]
-[JsonSerializable(typeof(LineBooksResult))]
-[JsonSerializable(typeof(LineIdArgs))]
-[JsonSerializable(typeof(LineIndexRow))]
-[JsonSerializable(typeof(LineIndexResult))]
-[JsonSerializable(typeof(TitlePatternArgs))]
-[JsonSerializable(typeof(ExactTitleArgs))]
-[JsonSerializable(typeof(BookIdRow))]
-[JsonSerializable(typeof(BookIdsResult))]
-[JsonSerializable(typeof(LineByIndexArgs))]
-[JsonSerializable(typeof(RawLineRow))]
-[JsonSerializable(typeof(RawLinesResult))]
-[JsonSerializable(typeof(string))]
-internal partial class RpcJsonContext : JsonSerializerContext;

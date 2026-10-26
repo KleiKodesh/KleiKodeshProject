@@ -7,7 +7,7 @@
 namespace KitveiHakodeshService.SeforimDb;
 
 // Result-row DTOs for the seforim DB, matching the Vue row shapes exactly
-// (camelCase on the wire). Registered in RpcJsonContext for AOT-safe serialization.
+// (camelCase on the wire), serialized by the source-generated MessagePack resolver.
 //
 // The frontend counterpart is vue-frontend/src/webview-host/queries.types.ts — the row
 // types live beside the SQL that produces them, so both sides of the wire point at the

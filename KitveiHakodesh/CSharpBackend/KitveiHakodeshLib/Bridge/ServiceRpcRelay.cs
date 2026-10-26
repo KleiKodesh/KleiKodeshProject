@@ -26,9 +26,10 @@ namespace KitveiHakodeshLib.Bridge
     ///   <c>POST /rpc-stream?id=X</c> the streaming ops. WebView2 cannot stream a response body
     ///                               progressively (the body must be complete when the deferral
     ///                               ends), so the frames are instead PUSHED to the page as
-    ///                               <c>serviceStreamFrames</c> messages carrying the stream id X
-    ///                               and an array of base64 frames, followed by
-    ///                               <c>serviceStreamEnd</c>. One message per UI-thread turn,
+    ///                               shared buffers (PostSharedBufferToScript) — the MessagePack
+    ///                               frames as raw bytes, no base64, no JSON — tagged with the
+    ///                               stream id X; the last one also says the stream ended.
+    ///                               One buffer per UI-thread turn,
     ///                               not per frame: every frame that arrived while the previous
     ///                               message was still crossing rides in the next one (see
     ///                               <see cref="StreamFramesToPage"/>). The page chooses X before
@@ -226,7 +227,7 @@ namespace KitveiHakodeshLib.Bridge
                     byte[] frame = await KitveiHakodeshServiceFrameProtocol
                         .ReadFrameAsync(frames, CancellationToken.None).ConfigureAwait(false);
                     if (frame == null) break; // the service closed: the stream is complete
-                    toPage.Add(Convert.ToBase64String(frame));
+                    toPage.Add(frame);
                 }
             }
             catch (Exception ex)
@@ -257,7 +258,7 @@ namespace KitveiHakodeshLib.Bridge
             private readonly ServiceRpcRelay _relay;
             private readonly string _streamId;
             private readonly object _gate = new object();
-            private List<string> _frames = new List<string>();
+            private List<byte[]> _frames = new List<byte[]>();
             private bool _flushScheduled;
             private bool _ended;
             private string _endError;
@@ -268,11 +269,11 @@ namespace KitveiHakodeshLib.Bridge
                 _streamId = streamId;
             }
 
-            public void Add(string base64Frame)
+            public void Add(byte[] frame)
             {
                 lock (_gate)
                 {
-                    _frames.Add(base64Frame);
+                    _frames.Add(frame);
                     ScheduleFlush();
                 }
             }
@@ -300,21 +301,62 @@ namespace KitveiHakodeshLib.Bridge
             // schedules the next flush itself.
             private void Flush()
             {
-                List<string> frames;
+                List<byte[]> frames;
                 bool ended;
                 string endError;
                 lock (_gate)
                 {
                     frames = _frames;
-                    _frames = new List<string>();
+                    _frames = new List<byte[]>();
                     ended = _ended;
                     endError = _endError;
                     _flushScheduled = false;
                 }
-                if (frames.Count > 0)
-                    _relay._bridge.PushEvent(new { @event = "serviceStreamFrames", streamId = _streamId, frames });
-                if (ended)
-                    _relay._bridge.PushEvent(new { @event = "serviceStreamEnd", streamId = _streamId, error = endError });
+                // The end rides in the same buffer as the last frames, so it can never overtake them.
+                if (frames.Count > 0 || ended)
+                    _relay.PostFramesToPage(_streamId, frames, ended, endError);
+            }
+        }
+
+        /// <summary>
+        /// Hands frames to the page as ONE shared buffer: the bytes exactly as the pipe gave
+        /// them, laid out as [u32 count] then per frame [u32 length][bytes], little-endian.
+        /// The stream id and end marker travel as the buffer's small JSON tag. UI thread only.
+        ///
+        /// Closing our handle right after posting is safe: the page holds its own mapping until
+        /// it calls chrome.webview.releaseBuffer (serviceClient.ts does, after copying out).
+        /// </summary>
+        private void PostFramesToPage(string streamId, List<byte[]> frames, bool ended, string endError)
+        {
+            long size = 4;
+            foreach (byte[] frame in frames) size += 4 + frame.Length;
+
+            string tag = System.Text.Json.JsonSerializer.Serialize(new { @event = "serviceStreamFrames", streamId, ended, error = endError });
+            try
+            {
+                using (CoreWebView2SharedBuffer buffer = _core.Environment.CreateSharedBuffer((ulong)size))
+                {
+                    using (Stream stream = buffer.OpenStream())
+                    using (var writer = new BinaryWriter(stream))
+                    {
+                        writer.Write(frames.Count);              // BinaryWriter is little-endian
+                        foreach (byte[] frame in frames)
+                        {
+                            writer.Write(frame.Length);
+                            writer.Write(frame);
+                        }
+                    }
+                    _core.PostSharedBufferToScript(buffer, CoreWebView2SharedBufferAccess.ReadOnly, tag);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Out of shared memory, or the WebView is going away. Close the pipe so the
+                // service stops producing, and end the stream with a plain message so the page's
+                // consumer throws instead of waiting forever.
+                CloseStream(streamId);
+                try { _bridge.PushEvent(new { @event = "serviceStreamEnd", streamId, error = "stream delivery failed: " + ex.Message }); }
+                catch { /* the WebView is gone: nobody is waiting */ }
             }
         }
 

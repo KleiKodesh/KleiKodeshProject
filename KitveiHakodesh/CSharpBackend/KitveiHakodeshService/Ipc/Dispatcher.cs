@@ -1,4 +1,3 @@
-using System.Text.Json;
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.HebrewBooks;
@@ -814,16 +813,13 @@ public sealed class Dispatcher(
                 case "userSettingsQuery":
                 {
                     var a = MsgPack.De<RawSqlArgs>(req.Args);
-                    using var pd = ParseParams(a.ParamsJson);
-                    string rowsJson = userSettings.QueryRowsJson(a.Sql ?? "", pd.Elements);
-                    return RpcResponse.Ok(MsgPack.Ser(new RawRowsResult { RowsJson = rowsJson }));
+                    return RpcResponse.Ok(MsgPack.Ser(new RawRowsResult { Rows = userSettings.QueryRows(a.Sql ?? "", a.Params ?? []) }));
                 }
 
                 case "userSettingsExecute":
                 {
                     var a = MsgPack.De<RawSqlArgs>(req.Args);
-                    using var pd = ParseParams(a.ParamsJson);
-                    long id = userSettings.Execute(a.Sql ?? "", pd.Elements);
+                    long id = userSettings.Execute(a.Sql ?? "", a.Params ?? []);
                     return RpcResponse.Ok(MsgPack.Ser(new ExecuteResult { LastInsertId = id }));
                 }
 
@@ -998,23 +994,4 @@ public sealed class Dispatcher(
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 
     private static List<string> Candidates(byte[]? args) => MsgPack.De<DictCandidatesArgs>(args).Candidates ?? [];
-
-    /// <summary>Parse the user-settings <c>paramsJson</c> (a JSON array string carried inside
-    /// the msgpack envelope) into JsonElement bind values. The values reference the returned
-    /// document's memory, so the caller must keep it alive (a <c>using</c>) until the SQL runs.</summary>
-    private static ParsedParams ParseParams(string? json)
-    {
-        if (string.IsNullOrEmpty(json)) return new ParsedParams(null, []);
-        var doc = JsonDocument.Parse(json);
-        var arr = doc.RootElement.ValueKind == JsonValueKind.Array
-            ? doc.RootElement.EnumerateArray().ToArray()
-            : [];
-        return new ParsedParams(doc, arr);
-    }
-
-    private sealed class ParsedParams(JsonDocument? doc, JsonElement[] elements) : IDisposable
-    {
-        public JsonElement[] Elements { get; } = elements;
-        public void Dispose() => doc?.Dispose();
-    }
 }
