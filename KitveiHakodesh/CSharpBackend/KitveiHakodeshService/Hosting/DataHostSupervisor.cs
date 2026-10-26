@@ -139,7 +139,9 @@ internal sealed class DataHostSupervisor
             // with no pipe - the SCM still said "Running", so nothing could start it again and
             // every client waited on a dead service. Past the limit the host is abandoned (a
             // reload rebuilds beside it; a real stop ends the process in UserSessionBinding).
-            Task stopping = current.StopAsync(CancellationToken.None);
+            // On the thread pool: a hosted service's StopAsync can block in its SYNCHRONOUS part, which
+            // would hold this method and with it the timeout below.
+            Task stopping = Task.Run(() => current.StopAsync(CancellationToken.None));
             bool stoppedInTime = false;
             try { stoppedInTime = await Task.WhenAny(stopping, Task.Delay(StopTimeout)) == stopping; }
             catch { stoppedInTime = true; }

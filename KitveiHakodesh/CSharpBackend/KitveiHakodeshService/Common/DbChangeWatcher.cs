@@ -56,7 +56,9 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        Dispose();
+        // Disposing the file / registry watchers can block (a watcher callback still running, a key
+        // handle that does not release); a stop must not wait for that forever.
+        Task.Run(Dispose).Wait(TimeSpan.FromSeconds(5));
         return Task.CompletedTask;
     }
 
