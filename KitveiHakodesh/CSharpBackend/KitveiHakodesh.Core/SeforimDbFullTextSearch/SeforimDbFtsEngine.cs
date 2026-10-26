@@ -87,6 +87,56 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public bool IsOpen { get { lock (_lock) return _index != null; } }
 
         /// <summary>
+        /// A fragment contained in more dictionary terms than this is too common for the
+        /// index to be the cheap answer: the caller reads the book instead.
+        /// </summary>
+        public const int MaxTermsPerSubstringFragment = 4000;
+
+        // Each book's block of index positions — read once per engine (one index build), as
+        // it takes a pass over the whole line table. Dropped with the engine on Invalidate.
+        private Dictionary<int, (long First, long Count)>? _bookPositions;
+
+        /// <summary>
+        /// The lines inside the given (book, first lineIndex, last lineIndex) ranges whose
+        /// text may hold <paramref name="query"/> as a substring (a superset — the caller
+        /// confirms on the text): as (book, lineIndex, line id), in range order then reading
+        /// order. Null when the index cannot answer exactly (still building, or a fragment
+        /// too common): the caller reads the lines itself. A book the index does not hold
+        /// contributes nothing.
+        /// </summary>
+        public List<(int BookId, int LineIndex, int LineId)>? SubstringCandidates(
+            string query, IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> lineRanges, CancellationToken ct = default)
+        {
+            Dictionary<int, (long First, long Count)> books;
+            lock (_lock)
+            {
+                if (_bookPositions == null)
+                {
+                    using var corpus = OpenCorpus();
+                    _bookPositions = corpus.BookPositionRanges();
+                }
+                books = _bookPositions;
+            }
+            var ranges = new List<(long First, long Last)>(lineRanges.Count);
+            var owners = new List<(int BookId, long First)>(lineRanges.Count);
+            foreach (var (bookId, firstLine, lastLine) in lineRanges)
+            {
+                if (!books.TryGetValue(bookId, out var book) || book.Count == 0) continue;
+                long from = Math.Max(0, firstLine), to = Math.Min(book.Count - 1, lastLine);
+                if (to < from) continue;
+                ranges.Add((book.First + from, book.First + to));
+                owners.Add((bookId, book.First));
+            }
+            if (ranges.Count == 0) return new List<(int, int, int)>();
+            var found = Index.FindSubstringCandidates(query, ranges, MaxTermsPerSubstringFragment, ct);
+            if (found == null) return null;
+            var result = new List<(int, int, int)>(found.Count);
+            foreach (var (range, position, lineId) in found)
+                result.Add((owners[range].BookId, (int)(position - owners[range].First), lineId));
+            return result;
+        }
+
+        /// <summary>
         /// Where an interrupted build left off, read from the index's own progress file.
         ///
         /// <paramref name="totalLines"/> is the corpus size cached by the previous session, so
@@ -137,7 +187,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public void Invalidate()
         {
-            lock (_lock) _index = null;
+            lock (_lock) { _index = null; _bookPositions = null; }
         }
 
         public void Dispose()

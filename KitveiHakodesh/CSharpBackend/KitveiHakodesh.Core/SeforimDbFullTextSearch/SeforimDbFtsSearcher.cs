@@ -78,6 +78,16 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public const int DefaultContextWords = Fts5SeforimIndex.DefaultContextWords;
 
         /// <summary>
+        /// How many leading hits of a search are streamed WITH their snippet — descriptor and
+        /// line texts — so the first screen renders without a round-trip. Every later hit
+        /// streams as numbers only (line, book, TOC entry, score, word distance): its snippet
+        /// is built when the page shows it (<see cref="SnippetsFor"/>), so neither its
+        /// descriptor nor a neighbour-line read for a short window is paid for hits that are
+        /// never seen. Same count as the line texts seeded below.
+        /// </summary>
+        public const int StreamedSnippetHitCount = SeedLineTextHitCount;
+
+        /// <summary>
         /// How many leading hits of a search get their snippet line texts sent along
         /// (<see cref="SeforimDbFtsHitBatch.LineTexts"/>, then <see cref="FtsStreamChunk.LineTexts"/>
         /// / <see cref="FtsSearchResult.LineTexts"/>) so the first screen renders without a
@@ -125,6 +135,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             int batchIndex = 0;
             int seedLeft = SeedLineTextHitCount;
+            int snippetLeft = StreamedSnippetHitCount;
             var batch = new List<SearchResult>(FirstBatchSize);
 
             // The verification fetch reads the matched lines' text only (withPlacement: false):
@@ -141,17 +152,18 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     batch.Add(hit);
                     if (batch.Count < BatchSizeAt(batchIndex)) continue;
 
-                    var built = BuildBatch(engine, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
+                    var built = BuildBatch(engine, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, snippetLeft, cancellationToken, stage);
                     batch.Clear();
                     batchIndex++;
                     seedLeft = Math.Max(0, seedLeft - built.Hits.Count);
+                    snippetLeft = Math.Max(0, snippetLeft - built.Hits.Count);
                     if (built.Hits.Count > 0) yield return built;
                     stage?.Invoke("fetch");   // engine only reports its first fetch
                 }
 
                 if (batch.Count > 0)
                 {
-                    var built = BuildBatch(engine, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
+                    var built = BuildBatch(engine, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, snippetLeft, cancellationToken, stage);
                     if (built.Hits.Count > 0) yield return built;
                 }
             }
@@ -178,6 +190,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             int maxWordDistance,
             FtsTermTable terms,
             int seedLineTextHitCount,
+            int snippetHitCount,
             CancellationToken cancellationToken,
             Action<string>? onStage = null)
         {
@@ -196,6 +209,22 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
             });
 
+            // Only the first snippetHitCount passing hits keep their snippet; the rest stream
+            // as numbers only (their snippet is built on demand — SnippetsFor) and are left out
+            // of the neighbour-line extension, which reads lines from the database.
+            int passed = 0;
+            for (int i = 0; i < built.Length; i++)
+            {
+                if (built[i] is not { } hit) continue;
+                if (passed++ < snippetHitCount) continue;
+                hit.SnippetLineIds = Array.Empty<int>();
+                hit.SnippetStart = 0;
+                hit.SnippetEnd = 0;
+                hit.SnippetMarks = Array.Empty<int>();
+                hit.SnippetFlags = 0;
+                windowWords[i] = int.MaxValue;   // never "short": no extension
+            }
+
             onStage?.Invoke("enrich");
             var placements = FetchPassingPlacements(corpus, results, built);
             var neighbourTextsById = ExtendShortWindowsWithNeighbourLines(
@@ -211,6 +240,36 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     CollectSnippetLineTexts(hit, results[i].Content, neighbourTextsById, lineTexts);
             }
             return new SeforimDbFtsHitBatch(passing, lineTexts);
+        }
+
+        /// <summary>
+        /// Snippets for lines a search already returned — the rows a page is about to show:
+        /// each line's window located and, when short, extended over its neighbour lines,
+        /// exactly as the stream builds the first hits' snippets; with the snippet lines'
+        /// texts, so the page renders them without another round-trip. In
+        /// <paramref name="lineIds"/>' order; a line that no longer matches (the library
+        /// changed) is absent. No full-text MATCH runs: the query is only parsed and
+        /// expanded, and only these lines are read.
+        /// </summary>
+        public SeforimDbFtsHitBatch SnippetsFor(
+            SeforimDbFtsEngine engine,
+            string query,
+            IReadOnlyList<int> lineIds,
+            bool requireOrdered,
+            int contextWords,
+            FtsTermTable terms,
+            CancellationToken cancellationToken = default)
+        {
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            var matches = engine.Index.MatchesForLines(query, lineIds, cancellationToken);
+            if (matches.Count == 0) return new SeforimDbFtsHitBatch(new List<FtsHit>(), new Dictionary<int, string>());
+            SeforimDbFtsCorpus? corpus = null;
+            try
+            {
+                return BuildBatch(engine, () => corpus ??= engine.OpenCorpus(), matches, requireOrdered, contextWords,
+                                  int.MaxValue, terms, matches.Count, matches.Count, cancellationToken);
+            }
+            finally { corpus?.Dispose(); }
         }
 
         /// <summary>

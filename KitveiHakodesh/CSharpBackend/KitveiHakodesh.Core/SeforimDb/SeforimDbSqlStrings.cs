@@ -62,6 +62,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE bookId = @bookId
             ORDER BY lineIndex";
 
+        /// <summary>The ids of a book's lines in [from, to) by lineIndex — no text.</summary>
+        public const string GetLineIds = @"
+            SELECT lineIndex, id
+            FROM line
+            WHERE bookId = @bookId AND lineIndex >= @fromIndex AND lineIndex < @toIndex
+            ORDER BY lineIndex";
+
         /// <summary>A page of lines for streaming load.</summary>
         public static string GetLinesPaged(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}

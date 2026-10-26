@@ -631,6 +631,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset, a.VersionId) }));
                 }
 
+                case "getLineIds":
+                {
+                    var a = MsgPack.De<LineIdsByRangeArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineIdsByRangeResult { Ids = seforim.GetLineIds(a.BookId, a.FromIndex, a.ToIndex) }));
+                }
+
                 case "getLineCharCounts":
                 {
                     var a = MsgPack.De<LineCharCountsArgs>(req.Args);
@@ -829,6 +835,20 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FtsSearchArgs>(req.Args);
                     var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords);
                     return RpcResponse.Ok(MsgPack.Ser(res));
+                }
+
+                // Snippets for the rows a page shows (the stream sends them for the first hits only).
+                case "ftsSnippets":
+                {
+                    var a = MsgPack.De<FtsSnippetsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fts.Snippets(a.Query ?? "", a.LineIds ?? new(), a.RequireOrdered, a.ContextWords)));
+                }
+
+                // Scoped substring search (in-book, commentary panel): candidate lines from the index (Core).
+                case "ftsLinesSearch":
+                {
+                    var a = MsgPack.De<FtsLinesSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fts.LinesSearch(a.Query ?? "", a.Ranges ?? new())));
                 }
 
                 case "ftsIndexingStatus":
