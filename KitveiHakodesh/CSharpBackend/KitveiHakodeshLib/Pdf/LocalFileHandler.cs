@@ -28,7 +28,7 @@ namespace KitveiHakodeshLib.LocalFile
         private static readonly string WordCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "word-cache");
 
-        private const string WordCacheUrl = "http://KitveiHakodesh-vue-app/word-cache/";
+        private const string WordCacheUrl = "http://kitveihakodesh-app/word-cache/";
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
@@ -261,7 +261,7 @@ namespace KitveiHakodeshLib.LocalFile
                 string cached = GetCachePath(filePath);
                 if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
                 if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
-                _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached) });
+                _bridge.Reply(id, new { url = "http://kitveihakodesh-app/word-cache/" + Path.GetFileName(cached) });
             }
             catch (Exception ex)
             {

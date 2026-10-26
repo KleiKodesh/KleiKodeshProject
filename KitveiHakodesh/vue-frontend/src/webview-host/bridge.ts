@@ -825,7 +825,7 @@ async function runPasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
 /**
  * Place a PNG image on the Windows clipboard via the C# host (hosted only).
  *
- * Needed because the host serves the app from http://KitveiHakodesh-vue-app/ — plain http on a
+ * Needed because the host serves the app from http://kitveihakodesh-app/ — plain http on a
  * non-localhost hostname, which Chromium treats as an INSECURE context, so navigator.clipboard
  * is not exposed there and C# must do it with System.Windows.Forms.Clipboard instead.
  *
