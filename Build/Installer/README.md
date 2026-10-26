@@ -239,3 +239,7 @@ name, and it re-runs on every update, so a moved install folder is corrected the
 | `HKCU\SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\{base64}` | `Path` | Trusted folder |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh` | `DisplayVersion` etc. | Windows Installed Apps (written by NSIS wrapper) |
 | `HKCU\Software\Classes\kitveihakodeshapp` | `URL Protocol`, `shell\open\command` | Opens `kitveihakodeshapp://` deep links in the app (see above) |
+
+## VBA macros template
+
+`RegisterAddInAsync` copies `Resources\KleiKodeshMacros.dotm` from the install folder into Word's STARTUP folder (`WordStartupFolder`: the user's custom STARTUP-PATH if set, else `%AppData%\Microsoft\Word\STARTUP`). Skipped silently if the payload has no .dotm. `FullSystemCleaner` deletes it. The template is built by `KleiKodeshVsto\Ribbon\Build-MacrosTemplate.ps1`.

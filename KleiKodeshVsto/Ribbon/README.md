@@ -51,3 +51,12 @@ Ribbon buttons respect user settings stored in registry:
 - Each component (except Settings) can be hidden via `SettingsManager`
 - Settings button is always visible
 - Visibility is checked in `GetVisible(IRibbonControl control)` callback in `KeliKodeshRibbon.cs`
+
+## Commands, text and VBA
+
+- `AddinCommands.cs` — every command the add-in runs (ribbon buttons, context-menu items). The ribbon callbacks and the VBA object both call in here.
+- `AddinText.cs` — every label/tip in Hebrew and English, keyed by control id. Ribbon (`getLabel`/`getSupertip`), context menus and pane titles read from it. `AddinText.English` follows `AddinUiLanguage` (General/UiLanguage).
+- `VbaCommands.cs` — the object VBA gets from `Application.COMAddIns("KleiKodesh").Object` (exposed by `ThisAddIn.RequestComAddInAutomationService`). One method per command, under its English id and its Hebrew label with `_` for spaces: `kk.Nakdan` or the Hebrew equivalent. Hebrew names need the Windows non-Unicode language set to Hebrew.
+- `Build-MacrosTemplate.ps1` — builds `Resources\KleiKodeshMacros.dotm` (one macro per command, names read from `VbaCommands.cs`) via Word COM. Needs "Trust access to the VBA project object model". The installer copies the .dotm into Word's STARTUP folder; full cleanup removes it.
+
+Adding a command: add the case to `AddinCommands.Run`, the row to `AddinText`, the two methods to `VbaCommands`, then rebuild the .dotm.
