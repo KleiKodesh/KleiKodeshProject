@@ -34,7 +34,25 @@ Everything in the app must feel instant. Speed is a top-priority requirement, no
 
 ## Virtual Scroller Rules
 
-`@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management.
+Two long-list scrollers exist. `WindowedScroller.vue` (`src/components`) is the one for new work and for the book-view lines pane; `@tanstack/vue-virtual` remains in the commentary panels and the search-result lists until they are moved.
+
+### WindowedScroller (`src/components/WindowedScroller.vue`)
+
+Mounts a sliding window of REAL rows in normal flow — no estimated positions, no placeholders, no retries. Rules:
+
+- Rows are fetched before they are mounted: give it `ensureRows(start, end)` that resolves when the range has its content and REJECTS when it cannot be had. Never render a placeholder row in the slot; a row is either absent or complete.
+- Open where the reader was: pass `initialIndex`/`initialOffsetPx` so the FIRST render is the saved window. Do not land afterwards from a composable — the scroller is the one owner of the opening landing; do follow-ups on its `opened` event.
+- Navigate only through `scrollToIndex(index, { offsetPx, align })`. It is exact and resolves when the scroll is set. Never set `scrollTop` to a computed offset, never poll for the row — after the await, the row and its content are in the DOM.
+- Never write a settle loop, a correction window or a retry around it. A landing that is wrong is a bug in the scroller; fix it there.
+- The scroller owns scroll anchoring (`overflow-anchor: none` on its viewport). After a patch the hold is ABSOLUTE (row offset + remembered distance), because the browser may clamp `scrollTop` while the content is shorter mid-patch; through a reader's scroll event it is relative. Keep that split.
+- The drawn scrollbar (`WindowedScrollerBar.vue`) reads its state through refs (`WindowedScrollerBarState`). Never unwrap those refs in the scroller's template — every row would re-render on every scroll tick and resize frame.
+- Keep the window small: it is what every reflow (resize, zoom) lays out. Extend by small steps, trim with a margin that EXCEEDS the extension edge (or the two sides extend and trim each other forever).
+- When the row CONTENT changes under the same indexes (a text version swap), keep the old content in place and bump `rowSourceVersion`; the scroller re-asks its window and each row re-renders held in place. Blanking content collapses the rows and loses the position. Any per-row render cache must key on the content, not only on the index and version.
+- Rows outside the window that must stay mounted (text-selection ends) go in `pinnedIndexes`; they render out of flow.
+
+### TanStack (`@tanstack/vue-virtual`, remaining lists)
+
+`@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management. Do not add new TanStack lists; use `WindowedScroller`.
 
 ## Code Philosophy
 
