@@ -684,7 +684,6 @@ defineExpose({ tocBtnRef })
   padding: var(--toolbar-horizontal-padding);
   background: var(--bg-toolbar);
   flex-shrink: 0;
-  transition: background 120ms;
   cursor: grab;
   touch-action: none;
 }

@@ -377,6 +377,10 @@ input:focus { background: none !important; }
 .search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); cursor: pointer; }
 .search-inner input::-webkit-search-cancel-button:hover { filter: grayscale(1) opacity(0.8); }
 .hover-bg { transition: background 120ms, color 120ms; }
+/* Set by applyTheme for one frame so a theme switch repaints at once instead of fading. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after { transition: none !important; }
 .hover-bg:hover { background: var(--hover-bg); }
 
 /* ── Static separators ───────────────────────────────────────────────────────
