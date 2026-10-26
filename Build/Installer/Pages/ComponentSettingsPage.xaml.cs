@@ -216,7 +216,7 @@ namespace KleiKodeshVstoInstallerWpf
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
             Commit();
-            _host.NavigateToSettings();
+            _host.NavigateToGeneralSettings();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)

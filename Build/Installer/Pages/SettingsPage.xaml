@@ -227,61 +227,6 @@
                     <RadioButton x:Name="Settings_Option"   Content="{x:Static p:Strings.Settings}"/>
                 </StackPanel>
 
-                <!-- Divider -->
-                <Border Height="1" Background="#E5E5E5" Margin="0,8,0,12"/>
-
-                <!-- Section: UI language (General/UiLanguage, shared with the Word add-in) -->
-                <TextBlock Text="{x:Static p:Strings.Settings_Language}"
-                           FontSize="11"
-                           Foreground="#5A5A5A"
-                           Margin="0,0,0,6"/>
-                <StackPanel Orientation="Horizontal">
-                    <StackPanel.Resources>
-                        <Style TargetType="RadioButton">
-                            <Setter Property="Margin"                  Value="0,0,16,0"/>
-                            <Setter Property="FontSize"                Value="13"/>
-                            <Setter Property="Foreground"              Value="#1F1F1F"/>
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                            <Setter Property="Cursor"                  Value="Hand"/>
-                        </Style>
-                    </StackPanel.Resources>
-                    <RadioButton x:Name="HebrewLanguageRadio"  GroupName="UiLanguage" Content="&#x05E2;&#x05D1;&#x05E8;&#x05D9;&#x05EA;"/>
-                    <RadioButton x:Name="EnglishLanguageRadio" GroupName="UiLanguage" Content="English"/>
-                </StackPanel>
-                <TextBlock Text="{x:Static p:Strings.Settings_LanguageHint}"
-                           FontSize="11"
-                           Foreground="#888888"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap"/>
-
-                <!-- Divider -->
-                <Border Height="1" Background="#E5E5E5" Margin="0,12,0,12"/>
-
-                <!-- Section: optional VBA macros template (KleiKodeshVsto/Helpers/VbaMacrosTemplate.cs).
-                     Texts come from that shared class, set in code. -->
-                <TextBlock x:Name="MacrosHeader"
-                           FontSize="11"
-                           Foreground="#5A5A5A"
-                           Margin="0,0,0,6"/>
-                <StackPanel>
-                    <StackPanel.Resources>
-                        <Style TargetType="RadioButton">
-                            <Setter Property="Margin"                  Value="0,0,0,6"/>
-                            <Setter Property="FontSize"                Value="13"/>
-                            <Setter Property="Foreground"              Value="#1F1F1F"/>
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                            <Setter Property="Cursor"                  Value="Hand"/>
-                        </Style>
-                    </StackPanel.Resources>
-                    <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
-                    <RadioButton x:Name="MacrosHebrewRadio"  GroupName="VbaMacros"/>
-                    <RadioButton x:Name="MacrosEnglishRadio" GroupName="VbaMacros"/>
-                </StackPanel>
-                <TextBlock x:Name="MacrosHint"
-                           FontSize="11"
-                           Foreground="#888888"
-                           TextWrapping="Wrap"/>
-
             </StackPanel>
         </ScrollViewer>
 
@@ -297,11 +242,18 @@
                     <ColumnDefinition Width="auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button x:Name="CloseButton"
-                        Grid.Column="0"
-                        Content="{x:Static p:Strings.Close}"
-                        Style="{StaticResource GhostButton}"
-                        Click="CloseButton_Click"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button x:Name="BackButton"
+                            Content="{x:Static p:Strings.Back}"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="0,0,4,0"
+                            Visibility="Collapsed"
+                            Click="BackButton_Click"/>
+                    <Button x:Name="CloseButton"
+                            Content="{x:Static p:Strings.Close}"
+                            Style="{StaticResource GhostButton}"
+                            Click="CloseButton_Click"/>
+                </StackPanel>
 
                 <Button x:Name="NextButton"
                         Grid.Column="2"

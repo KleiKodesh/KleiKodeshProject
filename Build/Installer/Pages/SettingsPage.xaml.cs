@@ -18,9 +18,9 @@ namespace KleiKodeshVstoInstallerWpf
     ///   - Which component is the default/primary ribbon button
     ///
     /// Navigation:
-    ///   "הבא"  → ComponentSettingsPage (only if KitveiHakodesh or WebSites is enabled — those have
-    ///            component-specific settings like DB path and website whitelist)
-    ///   "סגור" → exit (if neither KitveiHakodesh nor WebSites is enabled, "הבא" also exits)
+    ///   "next"  → GeneralSettingsPage (language, macros), then ComponentSettingsPage / exit
+    ///   "back"  → LandingPage (only when opened straight from the landing page)
+    ///   "close" → exit
     ///
     /// NOTE: control x:Names in the XAML (e.g. "KitveiHakodesh_Visible", "WebSites_Option") are
     /// used directly as registry setting keys — do not rename them to follow UI conventions.
@@ -31,11 +31,15 @@ namespace KleiKodeshVstoInstallerWpf
 
         private readonly Dictionary<string, bool> _visibleFlags = new Dictionary<string, bool>();
         private string _defaultButton;
+        private readonly bool _fromLanding;
 
-        public SettingsPage(MainWindow host)
+        // fromLanding: opened straight from the landing page, so Back returns there.
+        public SettingsPage(MainWindow host, bool fromLanding = false)
         {
             InitializeComponent();
             _host = host;
+            _fromLanding = fromLanding;
+            BackButton.Visibility = fromLanding ? Visibility.Visible : Visibility.Collapsed;
             LoadSettings();
         }
 
@@ -62,65 +66,6 @@ namespace KleiKodeshVstoInstallerWpf
                     _defaultButton = rb.Name.Replace("_Option", "");
             }
 
-            bool english = UiLanguage.Current == UiLanguage.English;
-            EnglishLanguageRadio.IsChecked = english;
-            HebrewLanguageRadio.IsChecked  = !english;
-            EnglishLanguageRadio.Checked += (s, e) => SwitchLanguage(UiLanguage.English);
-            HebrewLanguageRadio.Checked  += (s, e) => SwitchLanguage(UiLanguage.Hebrew);
-
-            LoadMacros();
-        }
-
-        // ── VBA macros template (opt-in; shared logic in VbaMacrosTemplate) ─────
-
-        private void LoadMacros()
-        {
-            bool english = UiLanguage.Current == UiLanguage.English;
-            MacrosHeader.Text          = VbaMacrosTemplate.HeaderText(english);
-            MacrosNoneRadio.Content    = VbaMacrosTemplate.NoneText(english);
-            MacrosHebrewRadio.Content  = VbaMacrosTemplate.HebrewNamesText(english);
-            MacrosEnglishRadio.Content = VbaMacrosTemplate.EnglishNamesText(english);
-            MacrosHint.Text            = VbaMacrosTemplate.HintText(english);
-
-            string installed = VbaMacrosTemplate.Installed;
-            MacrosNoneRadio.IsChecked    = installed == null;
-            MacrosHebrewRadio.IsChecked  = installed == VbaMacrosTemplate.Hebrew;
-            MacrosEnglishRadio.IsChecked = installed == VbaMacrosTemplate.English;
-            MacrosNoneRadio.Checked    += (s, e) => InstallMacros(null);
-            MacrosHebrewRadio.Checked  += (s, e) => InstallMacros(VbaMacrosTemplate.Hebrew);
-            MacrosEnglishRadio.Checked += (s, e) => InstallMacros(VbaMacrosTemplate.English);
-        }
-
-        // Word loads the template from STARTUP on its next start; a running Word has to
-        // be reopened (and may hold the old one open, which makes the copy fail).
-        private void InstallMacros(string lang)
-        {
-            bool english = UiLanguage.Current == UiLanguage.English;
-            try
-            {
-                VbaMacrosTemplate.Install(lang, AddinInstaller.MacrosResourcesFolder);
-                if (WordHelper.IsWordRunning())
-                    MessageBox.Show(VbaMacrosTemplate.ReopenWordText(english), Properties.Strings.Settings,
-                        MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(VbaMacrosTemplate.FailedText(english) + "\n" + ex.Message, Properties.Strings.Settings,
-                    MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);
-            }
-        }
-
-        // Saves the language (General/UiLanguage, shared with the add-in), tells the user
-        // to restart Word if it is running, and reloads this page in the new language.
-        private void SwitchLanguage(string lang)
-        {
-            if (UiLanguage.Current == lang) return;
-            CommitSettings();
-            UiLanguage.Set(lang);
-            if (WordHelper.IsWordRunning())
-                MessageBox.Show(Properties.Strings.Settings_RestartWordNotice, Properties.Strings.Settings,
-                    MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);
-            _host.NavigateToSettings();
         }
 
         private void CommitSettings()
@@ -134,15 +79,13 @@ namespace KleiKodeshVstoInstallerWpf
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
             CommitSettings();
-            bool KitveiHakodesh  = _visibleFlags.TryGetValue("KitveiHakodesh_Visible",  out bool k) && k;
-            bool webSites = _visibleFlags.TryGetValue("WebSites_Visible", out bool w) && w;
+            _host.NavigateToGeneralSettings(_fromLanding);
+        }
 
-            // Only KitveiHakodesh and WebSites have component-specific settings (DB path, whitelist).
-            // If neither is enabled there's nothing more to configure — exit immediately.
-            if (KitveiHakodesh || webSites)
-                _host.NavigateToComponentSettings(KitveiHakodesh, webSites);
-            else
-                WordHelper.ExitAfterInstall();
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            CommitSettings();
+            _host.NavigateToLanding();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
