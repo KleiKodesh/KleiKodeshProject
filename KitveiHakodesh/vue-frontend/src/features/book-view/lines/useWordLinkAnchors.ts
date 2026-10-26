@@ -33,10 +33,8 @@ const LOAD_CHUNK = 400
  *     virtualizer watcher (commentary view, like useCommentaryNotes.scheduleNotesLoad)
  */
 export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
-  // Retains anchors for every line scrolled past, deliberately un-evicted: the rows
-  // are a handful of small ints per anchor, so the footprint is negligible next to the
-  // line content itself. If the lines are ever evicted from their own store, evict
-  // these (and `requested`) alongside them — not before.
+  // Anchors for the lines whose text is in memory: the lines view evicts them with
+  // the text (evictForLines), so they load again with it.
   const anchorsByLine = ref<Map<number, WordLinkAnchor[]>>(new Map())
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
@@ -185,8 +183,23 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     return anchorsByLine.value.get(lineId) ?? EMPTY
   }
 
+  /**
+   * Drops the anchors of lines whose text was evicted, so they are queried again when
+   * the text comes back. A line still in flight keeps its request: its rows land as
+   * usual and go with the next eviction.
+   */
+  function evictForLines(lineIds: number[]) {
+    const map = anchorsByLine.value
+    for (const id of lineIds) {
+      if (inFlight.has(id)) continue
+      requested.delete(id)
+      map.delete(id)
+    }
+  }
+
   return {
     getWordLinkAnchorsForLine,
+    evictWordLinkAnchorsForLines: evictForLines,
     scheduleWordLinkAnchorsLoad: scheduleLoad,
     loadWordLinkAnchorsForLines: loadForLines,
   }

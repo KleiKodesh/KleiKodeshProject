@@ -26,9 +26,29 @@ const MAX_FETCH_LINES = 2000
 // without flooding it ahead of the reader's own window requests.
 const CONCURRENT_WHOLE_BOOK_FETCHES = 3
 
+// Text kept in memory, in lines: the slots nearest the reader's window stay, the rest
+// go back to unfetched (content null, ids kept) and are fetched again when the reader
+// returns. A slot that is mounted, pinned, selected or being fetched for is never
+// evicted, so the budget is a target, not a cap.
+const TEXT_BUDGET_LINES = 15000
+
 // Slot states for 200-line-aligned windows (CHUNK_SIZE granularity).
 const SLOT_UNFETCHED = 0
+// In flight.
 const SLOT_PENDING = 1
+// Text is in `lines`: the only state eviction releases.
+const SLOT_FETCHED = 2
+
+export interface UseLinesOptions {
+  /**
+   * [start, end) line ranges whose text must stay in memory whatever the budget: the
+   * scroller's mounted window, its pinned rows and the text selection. Read on every
+   * eviction pass.
+   */
+  retainedRanges?: () => ReadonlyArray<readonly [number, number]>
+  /** The ids of lines whose text was just released — for per-line stores keyed by line id. */
+  onTextEvicted?: (lineIds: number[]) => void
+}
 
 /** Uint16 when every count fits (the usual case), Int32 for a line longer than 65535 characters. */
 function packCounts(counts: number[]): Uint16Array | Int32Array {
@@ -37,7 +57,7 @@ function packCounts(counts: number[]): Uint16Array | Int32Array {
   return max <= 0xffff ? Uint16Array.from(counts) : Int32Array.from(counts)
 }
 
-export function useLines(bookId: () => number | undefined) {
+export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
   const lines = ref<LineItem[]>([])
   // Start OPEN: the toolbar hides these controls when false, and metadata only
   // arrives after an await. Starting false would render the toolbar without them
@@ -73,12 +93,20 @@ export function useLines(bookId: () => number | undefined) {
   const hebrewBooksEditions = ref<HebrewBooksEdition[]>([])
 
   let currentBookId: number | undefined
-  // Per-CHUNK_SIZE-slot state — SLOT_PENDING means fetched or in flight.
+  // Per-CHUNK_SIZE-slot state — SLOT_PENDING while in flight, SLOT_FETCHED with text.
   // Prevents duplicate fetches between ensureLines(), prefetch() and ensureAllLines().
   let slotState: Uint8Array = new Uint8Array(0)
   // The fetch each in-flight slot is riding on, so ensureLines can await a range
   // that someone else (a prefetch, another window) is already loading.
   let slotFetches = new Map<number, Promise<boolean>>()
+  // Where the reader is: the middle of the latest range the scroller asked for.
+  // Eviction keeps the fetched slots nearest to it.
+  let focusLineIndex = 0
+  // Ranges an ensureLines is working on right now — never evicted mid-ensure, or the
+  // check at its end would find the text it just fetched gone.
+  const activeEnsures = new Set<{ start: number; end: number }>()
+  // Whole-book fetches in progress: nothing is evicted until they are done.
+  let wholeBookFetches = 0
 
   function slotOf(lineIndex: number): number {
     return Math.floor(lineIndex / CHUNK_SIZE)
@@ -162,6 +190,8 @@ export function useLines(bookId: () => number | undefined) {
         return false
       }
       writeRows(rows)
+      markRange(offset, limit, SLOT_FETCHED)
+      evictFarText()
       return true
     } catch {
       // DB error — release the slots so a later request can retry.
@@ -178,6 +208,56 @@ export function useLines(bookId: () => number | undefined) {
     currentBookId = undefined
   })
 
+  // ── Eviction ────────────────────────────────────────────────────────────────
+
+  function slotRetained(slot: number): boolean {
+    const start = slot * CHUNK_SIZE
+    const end = start + CHUNK_SIZE
+    for (const range of activeEnsures) if (range.start < end && range.end > start) return true
+    const retained = options.retainedRanges?.()
+    if (retained) for (const [s, e] of retained) if (s < end && e > start) return true
+    return false
+  }
+
+  /** Releases one slot's text: content back to null, ids kept, slot back to unfetched. */
+  function releaseSlot(slot: number) {
+    slotState[slot] = SLOT_UNFETCHED
+    const all = lines.value
+    const end = Math.min(all.length, (slot + 1) * CHUNK_SIZE)
+    const ids: number[] = []
+    for (let index = slot * CHUNK_SIZE; index < end; index++) {
+      const line = all[index]
+      if (line && line.content !== null) {
+        line.content = null
+        ids.push(line.id)
+      }
+    }
+    if (ids.length) options.onTextEvicted?.(ids)
+  }
+
+  /**
+   * Brings the fetched text back under TEXT_BUDGET_LINES, releasing the slots farthest
+   * from the reader first. Runs when a fetch lands and when the scroller asks for a
+   * range, so text left behind by a jump or a whole-book action goes once the reader
+   * moves on.
+   */
+  function evictFarText() {
+    if (wholeBookFetches > 0) return
+    const budgetSlots = TEXT_BUDGET_LINES / CHUNK_SIZE
+    const fetched: number[] = []
+    for (let slot = 0; slot < slotState.length; slot++) if (slotState[slot] === SLOT_FETCHED) fetched.push(slot)
+    let excess = fetched.length - budgetSlots
+    if (excess <= 0) return
+    const focusSlot = slotOf(focusLineIndex)
+    fetched.sort((a, b) => Math.abs(b - focusSlot) - Math.abs(a - focusSlot))
+    for (const slot of fetched) {
+      if (excess <= 0) break
+      if (slotRetained(slot)) continue
+      releaseSlot(slot)
+      excess--
+    }
+  }
+
   // Fast path for a known scroll target (the restored position): fires the query for
   // the slot containing lineIndex the moment the target is known, before the view has
   // mounted and asked. Slot tracking makes the view's own request ride on it.
@@ -185,6 +265,7 @@ export function useLines(bookId: () => number | undefined) {
     const id = currentBookId
     if (id == null) return
     const offset = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE
+    focusLineIndex = lineIndex
 
     const slot = slotOf(offset)
     ensureSlotCapacity(slot + 1)
@@ -202,8 +283,26 @@ export function useLines(bookId: () => number | undefined) {
    * retry), so the scroller mounts nothing rather than empty rows.
    */
   async function ensureLines(start: number, end: number): Promise<void> {
+    if (end <= start) return
+    focusLineIndex = (start + end) >> 1
+    evictFarText()
+    await ensureRange(start, end)
+  }
+
+  /** ensureLines without moving the reader's focus — whole-book fetches use it. */
+  async function ensureRange(start: number, end: number): Promise<void> {
     const id = currentBookId
     if (id == null || end <= start) return
+    const active = { start, end }
+    activeEnsures.add(active)
+    try {
+      await fetchMissing(id, start, end)
+    } finally {
+      activeEnsures.delete(active)
+    }
+  }
+
+  async function fetchMissing(id: number, start: number, end: number): Promise<void> {
     const waits: Promise<boolean>[] = []
     const lastSlot = slotOf(Math.max(start, end - 1))
     ensureSlotCapacity(lastSlot + 1)
@@ -267,7 +366,9 @@ export function useLines(bookId: () => number | undefined) {
   /**
    * Resolves once EVERY line of the book has its text — for the actions that work on
    * the whole book (select-all copy, export to Word), and only when one is used.
-   * Fetched in MAX_FETCH_LINES requests, a few at a time.
+   * Fetched in MAX_FETCH_LINES requests, a few at a time. Nothing is evicted while it
+   * runs; afterwards the text stays as long as the caller's selection retains it
+   * (select-all covers the whole book) and goes once the reader moves on.
    */
   async function ensureAllLines(): Promise<void> {
     const id = currentBookId
@@ -278,10 +379,15 @@ export function useLines(bookId: () => number | undefined) {
       while (next < total && currentBookId === id) {
         const start = next
         next = Math.min(total, next + MAX_FETCH_LINES)
-        await ensureLines(start, next).catch(() => {})
+        await ensureRange(start, next).catch(() => {})
       }
     }
-    await Promise.all(Array.from({ length: CONCURRENT_WHOLE_BOOK_FETCHES }, worker))
+    wholeBookFetches++
+    try {
+      await Promise.all(Array.from({ length: CONCURRENT_WHOLE_BOOK_FETCHES }, worker))
+    } finally {
+      wholeBookFetches--
+    }
   }
 
   /**

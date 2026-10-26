@@ -217,7 +217,7 @@ const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, read
 
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
 // a no-op on DBs without the table.
-const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds)
+const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds)
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
@@ -419,7 +419,27 @@ async function pasteAllIntoWord(): Promise<void> {
   if (!copied) showToast(t('bookView.exportReady'))
 }
 
-defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
+/**
+ * The line ranges whose text the lines store must keep whatever its budget: the
+ * mounted window, the pinned selection ends and the selected rows (a select-all
+ * is the whole book, so a copy never reads an evicted line).
+ */
+function retainedLineRanges(): ReadonlyArray<readonly [number, number]> {
+  const ranges: (readonly [number, number])[] = []
+  const window = windowedScroller.value?.renderedRange
+  if (window) ranges.push([window.start, window.end])
+  for (const index of pinnedRowIndexes.value) ranges.push([index, index + 1])
+  const selection = selectedRowIndexRange()
+  if (selection) ranges.push([selection.firstRowIndex, selection.lastRowIndex + 1])
+  return ranges
+}
+
+/** Lines whose text the store just released: their per-line annotation caches go with it. */
+function onLinesTextEvicted(lineIds: number[]) {
+  evictWordLinkAnchorsForLines(lineIds)
+}
+
+defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
 </script>
 
 <template>
