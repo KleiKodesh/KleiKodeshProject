@@ -3,15 +3,27 @@
  * and the scrollbar drawn beside it (WindowedScrollerBar.vue), which represents the
  * ESTIMATED whole list.
  *
- * The bar's scroll range is: the rows above the window at the estimated row height,
+ * The bar's scroll range is: the rows above the window at their estimated heights,
  * then the window at its REAL height (the viewport's own scroll range), then the
- * rows below at the estimate. Inside the window the two positions differ by a
+ * rows below at their estimates. Inside the window the two positions differ by a
  * constant, so a drag, a wheel or an arrow click on the bar moves the viewport
  * live, pixel for pixel. Outside it, the bar position names a row, and the
  * scroller lands there.
  *
- * The estimate is the average height of the mounted rows, smoothed, so the bar's
- * thumb does not twitch as rows of different heights pass through the window.
+ * Two estimates, the first when the list provides it:
+ *
+ * - Per-row, from `rowWeights` (a text line's character count): a row's height is
+ *   `lineHeight × max(1, ceil(weight / capacity)) + padding`, where capacity is the
+ *   weight that fits on one visual line. The three parameters are FITTED to the
+ *   mounted rows — their real heights against their weights — and re-fitted as the
+ *   reader scrolls, smoothed so a window of odd rows cannot swing them. The weights
+ *   themselves never change, so once the fit settles the estimate is static: the
+ *   thumb stops creeping and a drag lands where the row really is. Prefix sums make
+ *   both directions O(log n); they are rebuilt only when the fit has drifted.
+ *
+ * - One average, from the mounted rows, smoothed: the fallback while the weights
+ *   have not arrived, when the list has none, or until a fit is possible (a window
+ *   of equal-height rows cannot tell line height from padding).
  *
  * The same position space carries the scroller's landmarks (section starts, as row
  * indexes) to the bar, which gives each a minimum span of track.
@@ -29,10 +41,26 @@ export interface WindowedScrollerBarMappingOptions {
   landAt: (index: number) => Promise<void>
   /** Row indexes of the list's section starts, coarse tier first. */
   landmarkTiers: () => readonly (readonly number[])[]
+  /** A size weight per row, `count` long, or nothing — see the file comment. */
+  rowWeights: () => readonly number[] | null | undefined
 }
 
-/** How much of each fresh window average flows into the estimate. */
+/** How much of each fresh window average flows into the average estimate. */
 const ESTIMATE_SMOOTHING = 0.1
+/** How much of each fresh fit flows into the weight calibration. */
+const CALIBRATION_SMOOTHING = 0.2
+/** A calibration parameter must move this much (relative) before the prefix sums are rebuilt. */
+const CALIBRATION_REBUILD_DRIFT = 0.01
+/** Fewer mounted rows than this cannot be fitted. */
+const MIN_ROWS_TO_FIT = 4
+
+/** The weight-estimate's parameters, in viewport pixels and weight units. */
+interface WeightCalibration {
+  /** Weight that fits on one visual line. */
+  capacity: number
+  lineHeight: number
+  padding: number
+}
 
 export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappingOptions) {
   /** The estimated height of the whole list. */
@@ -46,7 +74,143 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   /** The seek target while a landing is in flight — reported as the position until it lands. */
   let pendingPosition: number | null = null
 
-  function updateEstimate() {
+  // ── Weight estimate ────────────────────────────────────────────────────────────
+
+  let calibration: WeightCalibration | null = null
+  /** The calibration the prefix sums were built with. */
+  let appliedCalibration: WeightCalibration | null = null
+  /** `prefixSums[i]` = estimated height of rows [0, i); `count + 1` long. */
+  let prefixSums: Float64Array | null = null
+  let prefixSumsWeights: readonly number[] | null = null
+  /** The window the last fit was taken from — a fit per window, not per scroll tick. */
+  let fittedWindowStart = -1
+  let fittedWindowEnd = -1
+
+  function usableWeights(): readonly number[] | null {
+    const weights = options.rowWeights()
+    return weights && weights.length === options.count() ? weights : null
+  }
+
+  function visualLines(weight: number, capacity: number) {
+    return Math.max(1, Math.ceil(weight / capacity))
+  }
+
+  /**
+   * Least squares of the mounted rows' real extents against their weights, over a
+   * geometric grid of capacities (the one non-linear parameter). Null when the rows
+   * cannot tell the parameters apart.
+   */
+  function fitCalibration(weights: readonly number[]): WeightCalibration | null {
+    const start = options.windowStart.value
+    const end = options.windowEnd.value
+    const rowWeights: number[] = []
+    const rowExtents: number[] = []
+    for (let index = start; index < end - 1; index++) {
+      const row = options.rowElement(index)
+      const next = options.rowElement(index + 1)
+      if (!row || !next) continue
+      // Top to next top, so the gap between rows is in the extent.
+      rowWeights.push(weights[index]!)
+      rowExtents.push(next.offsetTop - row.offsetTop)
+    }
+    const n = rowWeights.length
+    if (n < MIN_ROWS_TO_FIT) return null
+    let best: WeightCalibration | null = null
+    let bestError = Infinity
+    for (let capacity = 10; capacity <= 400; capacity = Math.ceil(capacity * 1.06)) {
+      let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0
+      for (let k = 0; k < n; k++) {
+        const x = visualLines(rowWeights[k]!, capacity)
+        const y = rowExtents[k]!
+        sumX += x; sumY += y; sumXX += x * x; sumXY += x * y
+      }
+      const determinant = n * sumXX - sumX * sumX
+      if (determinant === 0) continue
+      const lineHeight = (n * sumXY - sumX * sumY) / determinant
+      const padding = (sumY - lineHeight * sumX) / n
+      if (!(lineHeight > 0)) continue
+      let error = 0
+      for (let k = 0; k < n; k++) {
+        const residual = lineHeight * visualLines(rowWeights[k]!, capacity) + padding - rowExtents[k]!
+        error += residual * residual
+      }
+      if (error < bestError) {
+        bestError = error
+        best = { capacity, lineHeight, padding }
+      }
+    }
+    return best
+  }
+
+  function driftExceeds(previous: WeightCalibration, next: WeightCalibration) {
+    const relative = (before: number, after: number) => Math.abs(after - before) / Math.max(1, Math.abs(before))
+    return (
+      relative(previous.capacity, next.capacity) > CALIBRATION_REBUILD_DRIFT ||
+      relative(previous.lineHeight, next.lineHeight) > CALIBRATION_REBUILD_DRIFT ||
+      relative(previous.padding, next.padding) > CALIBRATION_REBUILD_DRIFT
+    )
+  }
+
+  function rebuildPrefixSums(weights: readonly number[], applied: WeightCalibration) {
+    const count = weights.length
+    const sums = new Float64Array(count + 1)
+    let total = 0
+    for (let index = 0; index < count; index++) {
+      sums[index] = total
+      total += visualLines(weights[index]!, applied.capacity) * applied.lineHeight + applied.padding
+    }
+    sums[count] = total
+    prefixSums = sums
+    prefixSumsWeights = weights
+    appliedCalibration = applied
+  }
+
+  /** Fits on a new window, smooths, and rebuilds the sums once the fit has drifted enough. */
+  function updateWeightEstimate() {
+    const weights = usableWeights()
+    if (!weights) {
+      prefixSums = null
+      prefixSumsWeights = null
+      appliedCalibration = null
+      return
+    }
+    const start = options.windowStart.value
+    const end = options.windowEnd.value
+    if (start !== fittedWindowStart || end !== fittedWindowEnd) {
+      fittedWindowStart = start
+      fittedWindowEnd = end
+      const fitted = fitCalibration(weights)
+      if (fitted) {
+        calibration = calibration
+          ? {
+              capacity: calibration.capacity + (fitted.capacity - calibration.capacity) * CALIBRATION_SMOOTHING,
+              lineHeight: calibration.lineHeight + (fitted.lineHeight - calibration.lineHeight) * CALIBRATION_SMOOTHING,
+              padding: calibration.padding + (fitted.padding - calibration.padding) * CALIBRATION_SMOOTHING,
+            }
+          : fitted
+      }
+    }
+    if (!calibration) return
+    if (!prefixSums || prefixSumsWeights !== weights || !appliedCalibration || driftExceeds(appliedCalibration, calibration)) {
+      rebuildPrefixSums(weights, calibration)
+    }
+  }
+
+  /** Largest row index whose estimated top is at or above `estimatedTop`. */
+  function rowAtEstimatedTop(sums: Float64Array, estimatedTop: number): number {
+    let low = 0
+    let high = options.count() - 1
+    while (low < high) {
+      const middle = (low + high + 1) >> 1
+      if (sums[middle]! <= estimatedTop) low = middle
+      else high = middle - 1
+    }
+    return low
+  }
+
+  // ── Average estimate (fallback) ────────────────────────────────────────────────
+
+  function updateAverageEstimate() {
     const rows = options.windowEnd.value - options.windowStart.value
     if (rows <= 0) return
     const first = options.rowElement(options.windowStart.value)
@@ -59,20 +223,37 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
       : average
   }
 
+  // ── Positions, in the bar's space ──────────────────────────────────────────────
+
+  /** Estimated height of the rows [0, index). */
+  function estimatedHeightBefore(index: number): number {
+    return prefixSums ? prefixSums[index]! : index * estimatedRowHeight
+  }
+
+  /** Estimated height of the rows [from, to). */
+  function estimatedHeightBetween(from: number, to: number): number {
+    return prefixSums ? prefixSums[to]! - prefixSums[from]! : (to - from) * estimatedRowHeight
+  }
+
   function pixelsAboveWindow() {
-    return options.windowStart.value * estimatedRowHeight
+    return estimatedHeightBefore(options.windowStart.value)
   }
 
   /** A row's position: real inside the window, estimated outside it. */
   function positionForIndex(index: number): number {
     const viewport = options.viewport()
     const above = pixelsAboveWindow()
-    if (index < options.windowStart.value || !viewport) return index * estimatedRowHeight
+    if (index < options.windowStart.value || !viewport) return estimatedHeightBefore(index)
     if (index < options.windowEnd.value) {
       const row = options.rowElement(index)
       if (row) return above + row.offsetTop
     }
-    return above + viewport.scrollHeight + (index - options.windowEnd.value) * estimatedRowHeight
+    return above + viewport.scrollHeight + estimatedHeightBetween(options.windowEnd.value, index)
+  }
+
+  /** The row whose estimated top is at `estimatedTop`, above or below the window. */
+  function indexAtEstimatedTop(estimatedTop: number): number {
+    return prefixSums ? rowAtEstimatedTop(prefixSums, estimatedTop) : Math.round(estimatedTop / estimatedRowHeight)
   }
 
   /**
@@ -87,11 +268,15 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     const above = pixelsAboveWindow()
     let index: number
     if (!viewport || target < above) {
-      index = Math.round(target / estimatedRowHeight)
+      index = indexAtEstimatedTop(target)
     } else if (target < above + viewport.scrollHeight) {
       index = options.findRowIndexAt(target - above, false) ?? options.windowStart.value
     } else {
-      index = options.windowEnd.value + Math.round((target - above - viewport.scrollHeight) / estimatedRowHeight)
+      const end = options.windowEnd.value
+      const belowWindow = target - above - viewport.scrollHeight
+      index = prefixSums
+        ? rowAtEstimatedTop(prefixSums, prefixSums[end]! + belowWindow)
+        : end + Math.round(belowWindow / estimatedRowHeight)
     }
     return Math.max(0, Math.min(count - 1, index))
   }
@@ -100,10 +285,11 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   function syncFromViewport() {
     const viewport = options.viewport()
     if (!viewport) return
-    updateEstimate()
-    if (!estimatedRowHeight) return
+    updateAverageEstimate()
+    updateWeightEstimate()
+    if (!estimatedRowHeight && !prefixSums) return
     const above = pixelsAboveWindow()
-    const below = (options.count() - options.windowEnd.value) * estimatedRowHeight
+    const below = estimatedHeightBetween(options.windowEnd.value, options.count())
     totalHeight.value = Math.round(above + viewport.scrollHeight + below)
     position.value = pendingPosition ?? Math.round(above + viewport.scrollTop)
     landmarkTiers.value = options.landmarkTiers().map((tier) => tier.map(positionForIndex))
@@ -137,10 +323,13 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   /** The user scrolled the bar to `barTop`. */
   function seek(barTop: number) {
     const viewport = options.viewport()
-    if (!viewport || !estimatedRowHeight) return
+    if (!viewport || (!estimatedRowHeight && !prefixSums)) return
     const above = pixelsAboveWindow()
     const liveMax = above + viewport.scrollHeight - viewport.clientHeight
     if (barTop >= above && barTop <= liveMax) {
+      // A landing queued by an earlier seek outside the window is stale now: the
+      // drag came back inside, and landing it afterwards would yank the view away.
+      pendingIndex = null
       pendingPosition = null
       viewport.scrollTop = barTop - above
       return

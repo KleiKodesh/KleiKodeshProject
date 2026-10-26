@@ -48,7 +48,7 @@ export interface ScrollToLineOptions {
   /**
    * Which search occurrence within the line to mark `.current` and centre.
    * Omit for a plain jump to the line — a TOC click or section navigation has no
-   * match to refine toward, and the mark polling is skipped entirely.
+   * match to refine toward, and no mark is applied.
    */
   occurrence?: number
   /**
@@ -86,8 +86,8 @@ export function useBookViewLinesNavigation(
   /** Ends the opening's follow-ups — a jump supersedes them. */
   cancelRestore: () => void,
 ) {
-  // Bumped at the start of every navigation so the mark poll of a previous call
-  // cancels instead of stomping the newer call's mark and scroll.
+  // Bumped at the start of every navigation so a previous call's work after its
+  // await (its mark and adjustment) is dropped instead of stomping the newer one.
   let scrollGeneration = 0
 
   /** Resolve a line id to its index, falling back when the line is not loaded yet. */
