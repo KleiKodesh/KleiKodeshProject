@@ -38,7 +38,7 @@ export interface WindowedScrollerApi {
   /** The native scroll container holding the rows — focus, keys and pointer listeners go here. */
   scrollerElement: HTMLElement | null
   /** The drawn scrollbar beside the viewport, arrows included — what a hover label listens on. */
-  scrollbarTrackElement: HTMLElement | null
+  scrollbarElement: HTMLElement | null
   /** Rows currently mounted in flow: [start, end). Pinned rows outside it are mounted too, out of flow. */
   renderedRange: { start: number; end: number }
   /**

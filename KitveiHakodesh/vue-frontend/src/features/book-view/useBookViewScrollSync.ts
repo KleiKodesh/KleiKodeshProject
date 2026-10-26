@@ -3,9 +3,9 @@
  * auto-select to the book's scroll position.
  *
  * Reader scrolls sync immediately. Programmatic jumps (TOC click, search match,
- * restore) sync once their event burst settles — the virtualizer reaches a far
- * target by hopping on estimated offsets and correcting, and only the settled
- * position is anywhere the reader actually is. See onLinesScrolled.
+ * restore) sync once their scroll events go quiet — a jump is a landing and, for a
+ * search match, the nudge that brings the mark into view, and only where it comes
+ * to rest is the reader's position. See onLinesScrolled.
  */
 import { onScopeDispose, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -30,9 +30,8 @@ export function useBookViewScrollSync(
   /**
    * Fresh read of which line is at the top of the book view RIGHT NOW, straight
    * from the scroller — null while it has no rendered rows. The settle pass below
-   * must use this rather than the indices recorded from scroll events: a long
-   * jump's event fires before the virtualizer re-renders, so the event-time index
-   * describes the OLD position (see readCurrentPosition in useBookViewLinesScroll).
+   * reads it rather than the indices recorded from the last event, so it syncs
+   * where the jump came to rest (see readCurrentPosition in useBookViewLinesScroll).
    */
   readLivePosition: () => { lineIndex: number; fullLineIndex: number } | null,
 ) {
@@ -54,8 +53,8 @@ export function useBookViewScrollSync(
   /**
    * How long programmatic scroll events must go quiet before the position they
    * ended on is treated as THE position and synced (TOC entry, breadcrumb,
-   * auto-select). Longer than a frame gap between correction hops, far shorter
-   * than anything a reader would notice on top of a jump they just made.
+   * auto-select). Longer than the frame between a landing and its mark nudge, far
+   * shorter than anything a reader would notice on top of a jump they just made.
    */
   const PROGRAMMATIC_SETTLE_MS = 200
 
@@ -129,25 +128,15 @@ export function useBookViewScrollSync(
     }
 
     // A programmatic scroll is only a real position once it stops moving. A jump
-    // is not one scroll event but a burst — the virtualizer hops on ESTIMATED
-    // offsets, overshoots, and corrects itself as measured heights replace the
-    // estimates — and every event in that burst is somewhere the reader never
-    // was. Syncing them live is what flickered the TOC panel through arbitrary
-    // sections on some clicks and not others (whichever hops the estimates
-    // happened to produce).
-    //
-    // The previous design tried to recognise the burst's LAST event by comparing
-    // line indexes against the jump's target and direction, and lost every time
-    // an estimate overshot: the hop past the target read as "arrived", the latch
-    // released, and the corrections leaked through. Waiting for the burst to go
-    // quiet needs no knowledge of target, direction, or who initiated the jump —
-    // it syncs the settled position, which is the only one that matters.
+    // can be more than one scroll event — the landing, then the nudge that brings
+    // a search mark to the edge a frame later — and syncing each would flick the
+    // TOC panel through the intermediate one. Waiting for the events to go quiet
+    // needs no knowledge of target, direction, or who initiated the jump: it syncs
+    // where the jump came to rest, which is the only position that matters.
     cancelPendingSettle()
     settleTimer = setTimeout(() => {
       settleTimer = null
-      // Read the position FRESH — the virtualizer has re-rendered by now, so this
-      // is where the book actually is. The event-time indices above can be stale
-      // by an entire jump (they were derived from the pre-jump window).
+      // Read the position FRESH rather than trusting the last event's indices.
       const live = readLivePosition()
       if (!live) return
       applyPositionSync(live.lineIndex, live.fullLineIndex)

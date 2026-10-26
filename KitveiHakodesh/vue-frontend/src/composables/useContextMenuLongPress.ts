@@ -32,7 +32,7 @@ const LONG_PRESS_DELAY = 600
  *     or handle-driven selection that leaves the pointer stationary.
  *
  * onTrigger receives the originating pointer event; the caller decides where/whether
- * to show the menu (e.g. the lines pane also rejects presses on the RTL scrollbar).
+ * to show the menu.
  */
 export function useContextMenuLongPress(
   target: MaybeElementRef,

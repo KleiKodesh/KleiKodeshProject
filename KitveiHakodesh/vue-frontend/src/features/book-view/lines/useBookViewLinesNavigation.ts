@@ -14,7 +14,6 @@
  *      nudge it into view.
  */
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
-import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
 import { setCurrentMark } from './useBookViewLineRenderer'
 import type { LineItem } from './useBookViewLinesTable'
 

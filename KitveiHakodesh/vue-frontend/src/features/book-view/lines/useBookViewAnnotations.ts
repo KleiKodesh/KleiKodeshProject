@@ -40,7 +40,8 @@ export function useBookViewAnnotations(
   bookId: number,
   scrollerEl: Ref<HTMLElement | null>,
   lines: () => LineItem[],
-  virtualItemsViewportIds: () => number[],
+  /** Ids of the lines mounted in the scroller's window — what the lazy note loader watches. */
+  renderedLineIds: () => number[],
   /**
    * Re-creates the selection after an annotation re-renders the lines it landed on.
    * Applying a highlight or a note replaces those lines' markup, which destroys the
@@ -50,7 +51,7 @@ export function useBookViewAnnotations(
   restoreSelectionFromPinnedRows: () => void,
   /**
    * The row index span of the current selection, from the pinned-row tracker. Lets an
-   * annotation reach the selected lines the virtualizer never mounted.
+   * annotation reach the selected lines the scroller never mounted.
    */
   selectedRowIndexRange: () => { firstRowIndex: number; lastRowIndex: number } | null,
   /**
@@ -67,7 +68,7 @@ export function useBookViewAnnotations(
   // ── Notes ───────────────────────────────────────────────────────────────────
 
   const { notesByLine, getNotesForLine, loadNotesForLines, createNote, updateNote, deleteNote } =
-    useBookViewNotes(bookId, virtualItemsViewportIds)
+    useBookViewNotes(bookId, renderedLineIds)
 
   // ── Note bubble state ───────────────────────────────────────────────────────
 

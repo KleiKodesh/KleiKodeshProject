@@ -24,6 +24,4 @@ Key names are **not** centralised. Every localStorage key is defined by its owni
 
 **appDeepLink.ts** — this app's own deep-link format, `kitveihakodeshapp://book/<bookId>?index=<lineIndex>`. `APP_LINK_SCHEME` and `buildLineLink(bookId, lineIndex)` are the only place it is written down — never hand-write the scheme. The C# parser has the matching single definition in `KitveiHakodeshLib/HostLink.cs` (`HostLink.AppScheme`, plus `LegacyAppScheme` for links copied under the old `seforimapp` spelling).
 
-**scrollToIndexWithRetry.ts** — scroll-to-index for `@tanstack/vue-virtual` that retries until the target item has rendered. Use this instead of calling `scrollToIndex` directly when the list may not have rendered the target yet.
-
 Font detection is **not** here — it asks the C# host or the service which fonts the OS has, which is host I/O, so it lives in `src/webview-host/fontsApi.ts`.

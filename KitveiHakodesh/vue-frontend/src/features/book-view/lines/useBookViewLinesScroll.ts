@@ -14,8 +14,7 @@ import type { Ref } from 'vue'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import type { LineItem } from './useBookViewLinesTable'
-import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
-import { SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
+import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,

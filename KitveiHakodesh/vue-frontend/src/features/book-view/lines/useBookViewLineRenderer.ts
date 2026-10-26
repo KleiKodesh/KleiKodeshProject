@@ -286,7 +286,7 @@ export function contentInAnnotationOffsetSpace(
  * through contentInAnnotationOffsetSpace first, or the censor's rewriting of the
  * divine names will throw the count off. This is the model-side counterpart of
  * measuring a RENDERED line's stripped textContent, and is what lets a selection
- * annotate lines the virtualizer never mounted (see appendUnmountedSelectedLines).
+ * annotate lines the scroller never mounted (see appendUnmountedSelectedLines).
  */
 export function annotationOffsetLength(content: string): number {
   let length = 0
@@ -501,17 +501,21 @@ export function useBookViewLineRenderer(
   //                    signature last used to render that line. When only one line's
   //                    annotations change, only that entry is evicted rather than
   //                    clearing every rendered line.
+  //   raw            — each entry remembers the text it rendered. A version swap
+  //                    replaces a line's text under the same index and id, and the
+  //                    old text stays on screen until the new arrives (the windowed
+  //                    scroller never blanks a row) — so the entry made under the new
+  //                    version id can hold the OLD text, and only the text itself can
+  //                    say when the line must be rendered again.
   // currentMatchOccurrence is intentionally excluded — handled by setCurrentMark().
-  const renderCache = new Map<number, string>()
+  const renderCache = new Map<number, { raw: string; html: string }>()
   const perLineAnnotationKey = new Map<number, string>()
   let globalCacheKey = ''
 
   function getGlobalKey(): string {
     const p = getProps()
-    // activeVersionId is in the key because renderCache is keyed by lineIndex alone,
-    // and a version swap changes a line's TEXT while keeping its index and its id.
-    // Without it every visible line returns the previous version's cached HTML and the
-    // reader sees no change at all — the swap looks like it silently did nothing.
+    // activeVersionId wipes the whole cache on a swap; the per-entry raw text (above)
+    // then catches each line whose new text arrives later.
     return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
@@ -540,7 +544,7 @@ export function useBookViewLineRenderer(
     }
 
     const cached = renderCache.get(lineIndex)
-    if (cached !== undefined) return cached
+    if (cached !== undefined && cached.raw === raw) return cached.html
 
     const p = getProps()
     // Word-link splicing runs FIRST, on the raw content — the anchors' offsets are in
@@ -574,7 +578,7 @@ export function useBookViewLineRenderer(
       }
     }
 
-    renderCache.set(lineIndex, content)
+    renderCache.set(lineIndex, { raw, html: content })
     return content
   }
 
@@ -584,13 +588,13 @@ export function useBookViewLineRenderer(
 /**
  * Move the `.current` class to the nth `<mark class="search-match">` inside
  * the rendered line at `lineIndex` within `container`. Scopes the query to
- * the virtualizer row element with `data-index` so `occurrence` is per-line,
+ * the scroller's row element with `data-index` so `occurrence` is per-line,
  * matching `occurrenceInLine` from the search scan.
  *
  * Pass `lineIndex = -1` to clear all `.current` marks across the container.
  *
  * @param container  The scroller element
- * @param lineIndex  The virtualizer data-index of the target line, or -1 to clear all
+ * @param lineIndex  The row's data-index (its line index), or -1 to clear all
  * @param occurrence 0-based per-line occurrence index
  */
 export function setCurrentMark(container: HTMLElement, lineIndex: number, occurrence: number): void {

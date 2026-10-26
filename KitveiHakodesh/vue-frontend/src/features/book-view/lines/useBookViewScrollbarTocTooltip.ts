@@ -38,7 +38,7 @@ export interface ScrollbarTocTooltipData {
 const HOVER_DELAY_MS = 120
 
 export function useBookViewScrollbarTocTooltip(
-  scrollbarTrackElement: Ref<HTMLElement | null>,
+  scrollbarElement: Ref<HTMLElement | null>,
   options: {
     /** The first visible row index — the reader's current position in the book. */
     getCurrentLineIndex: () => number | null
@@ -76,12 +76,12 @@ export function useBookViewScrollbarTocTooltip(
     return getPath(entry) || entry.text || ''
   }
 
-  useEventListener(scrollbarTrackElement, 'mousemove', (event: MouseEvent) => {
-    const track = scrollbarTrackElement.value
-    if (!track) return
+  useEventListener(scrollbarElement, 'mousemove', (event: MouseEvent) => {
+    const bar = scrollbarElement.value
+    if (!bar) return
     // In RTL the bar sits on the physical left; the label hangs off its inner edge.
-    const onLeft = getComputedStyle(track).direction === 'rtl'
-    const rect = track.getBoundingClientRect()
+    const onLeft = getComputedStyle(bar).direction === 'rtl'
+    const rect = bar.getBoundingClientRect()
     const side: 'left' | 'right' = onLeft ? 'left' : 'right'
     const edgeX = onLeft ? rect.right : rect.left
 
@@ -109,7 +109,7 @@ export function useBookViewScrollbarTocTooltip(
     }, HOVER_DELAY_MS)
   })
 
-  useEventListener(scrollbarTrackElement, 'mouseleave', closeScrollbarTocTooltip)
+  useEventListener(scrollbarElement, 'mouseleave', closeScrollbarTocTooltip)
 
   // A tab switch or book change is a real unmount, and it can land while the pointer
   // is on the track — the pending hover timer would read position off a detached

@@ -203,7 +203,7 @@ function onViewportKeydown(event: KeyboardEvent) {
 
 defineExpose({
   scrollerElement: viewportElement,
-  scrollbarTrackElement: computed(() => barReference.value?.barElement ?? null),
+  scrollbarElement: computed(() => barReference.value?.barElement ?? null),
   renderedRange,
   scrollToIndex,
   readFirstVisible,
@@ -239,7 +239,7 @@ defineExpose({
          this whole row list re-render on every scroll tick and resize frame. -->
     <WindowedScrollerBar
       ref="barReference"
-      :state="bar"
+      :bar-state="bar"
       :viewport="viewportElement"
       @seek="bar.seek"
     />
