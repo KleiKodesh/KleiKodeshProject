@@ -59,7 +59,7 @@ export function useBookViewErrorReport(options: ErrorReportOptions): {
 
   function openErrorReport(): void {
     const lineIndex = options.pressedLineIndex()
-    const line = lineIndex == null ? undefined : options.lines().find((l) => l.lineIndex === lineIndex)
+    const line = lineIndex == null ? undefined : options.lines()[lineIndex]
     // The line's stored content is HTML; a report is about the text a reader sees, and
     // a server matching it against its own copy would choke on our render markup.
     const originalLine = htmlToText(line?.content ?? '').trim()

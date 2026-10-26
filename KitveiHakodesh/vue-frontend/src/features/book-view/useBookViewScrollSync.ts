@@ -98,7 +98,7 @@ export function useBookViewScrollSync(
     }
 
     if (!autoSelectTopLine.value) return
-    const line = lines().find((l) => l.lineIndex === fullLineIndex)
+    const line = lines()[fullLineIndex]
     if (line && line.content !== null) {
       selectedLineId.value = line.id
       // Capture the active pinned group synchronously now — groups are still loaded
