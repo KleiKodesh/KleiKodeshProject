@@ -158,6 +158,8 @@ namespace KitveiHakodeshLib.LocalFile
                     return;
                 }
 
+                WindowsRecentDocuments.Add(filePath);
+
                 string fileName = Path.GetFileName(filePath);
 
                 if (LocalFileOpenRules.IsText(filePath))

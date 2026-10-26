@@ -211,6 +211,7 @@
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
+    <Compile Include="Pdf\WindowsRecentDocuments.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />
