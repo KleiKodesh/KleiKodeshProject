@@ -222,22 +222,26 @@ namespace KitveiHakodeshLib
         /// </summary>
         private void HandlePickDbPathDialog(string id)
         {
-            IntPtr ownerHandle = Handle;
-            _ = PickDbPathAsync(id, ownerHandle);
-        }
-
-        private async Task PickDbPathAsync(string id, IntPtr ownerHandle)
-        {
-            try
+            // WinForms dialog on the UI thread, not Core's NativeFilePicker: its await can resume
+            // off the UI thread in VSTO, and _bridge.Reply must run on it.
+            BeginInvoke(new Action(() =>
             {
-                string path = await NativeFilePicker.PickAsync(
-                    NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle, owner: ownerHandle);
-                _bridge.Reply(id, path == null ? (object)new { cancelled = true } : new { path });
-            }
-            catch (Exception ex)
-            {
-                _bridge.Reply(id, new { error = ex.ToString() });
-            }
+                try
+                {
+                    using (var dlg = new OpenFileDialog())
+                    {
+                        dlg.Title  = "בחר קובץ מסד נתונים";
+                        dlg.Filter = "מסד נתונים (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|כל הקבצים (*.*)|*.*";
+                        dlg.CheckFileExists = true;
+                        if (dlg.ShowDialog(this) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
+                        _bridge.Reply(id, new { path = dlg.FileName });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _bridge.Reply(id, new { error = ex.ToString() });
+                }
+            }));
         }
 
         /// <summary>
