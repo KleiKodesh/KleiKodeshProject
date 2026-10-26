@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About Klei Kodesh</title>
+<style>
+:root {
+  --bg: #f6f4ef;
+  --card: #ffffff;
+  --text: #25221d;
+  --muted: #6a645a;
+  --accent: #1f5f8b;
+  --accent-soft: #e3eef6;
+  --line: #e2ddd2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --card: #222427;
+    --text: #ebe8e1;
+    --muted: #a39d92;
+    --accent: #7db8e0;
+    --accent-soft: #263543;
+    --line: #34373b;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Arial", sans-serif;
+  font-size: 17px;
+  line-height: 1.7;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 32px 16px 56px; }
+header { text-align: center; padding: 24px 0 8px; }
+h1 { font-size: 2.1rem; margin: 0 0 6px; color: var(--accent); }
+.tagline { color: var(--muted); font-size: 1.1rem; margin: 0; }
+h2 { font-size: 1.4rem; margin: 0 0 10px; color: var(--accent); }
+h3 { font-size: 1.1rem; margin: 18px 0 4px; }
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-top: 20px;
+}
+p { margin: 8px 0; }
+ul { margin: 8px 0; padding-inline-start: 22px; }
+li { margin: 4px 0; }
+.name { font-weight: 700; }
+.chip {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+kbd {
+  font-family: Consolas, monospace;
+  font-size: .85em;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+a { color: var(--accent); }
+.note { color: var(--muted); font-size: .95rem; }
+footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .95rem; }
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  section { padding: 16px; }
+  h1 { font-size: 1.7rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Klei Kodesh</h1>
+  <p class="tagline">Tools for Torah writing, inside Word</p>
+</header>
+
+<section>
+  <h2>What is this?</h2>
+  <p>Klei Kodesh is a free add-in for Word. It adds a new tab called <span class="chip">Klei Kodesh</span> with tools that help you write and edit Torah books and documents.</p>
+  <p>Each tool opens in a side pane next to your document. You can keep typing while it is open.</p>
+  <p>The add-in is open source and built by volunteers.</p>
+</section>
+
+<section>
+  <h2>The buttons on the tab</h2>
+  <ul>
+    <li><span class="name">Kitvei Hakodesh</span> - the book library. More below.</li>
+    <li><span class="name">Kiwix Library</span> - books and encyclopedias with no internet, through Kiwix.</li>
+    <li><span class="name">Websites</span> - useful Torah websites, inside Word.</li>
+    <li><span class="name">Torah Design</span> - tools for laying out seforim.</li>
+    <li><span class="name">Dicta Nakdan</span> - adds nikkud to your text automatically.</li>
+    <li><span class="name">Regex Find</span> - advanced find and replace.</li>
+    <li><span class="name">Duplicate Side Pane</span> - opens another pane just like the one that is open.</li>
+    <li><span class="name">Settings</span> - adjust the add-in.</li>
+    <li><span class="name">About</span> - this page.</li>
+  </ul>
+  <p class="note">The big <span class="name">Klei Kodesh</span> button opens the tool you chose as the default. Open the small arrow next to it to pick another tool.</p>
+</section>
+
+<section>
+  <h2>Kitvei Hakodesh</h2>
+  <p>A library for reading and searching books. It works on the Zayit book library and runs right inside Word. If there is no library on your computer yet, the app downloads one.</p>
+
+  <h3>What is in it</h3>
+  <ul>
+    <li><span class="name">Book catalog</span> - browse books by category. Switch between a list view and a tiles view.</li>
+    <li><span class="name">Search</span> - full-text search across all books. To filter by book or category, add <kbd>@</kbd> in the search bar.</li>
+    <li><span class="name">HebrewBooks</span> - scanned books from HebrewBooks.org.</li>
+    <li><span class="name">Open file</span> - open a file or folder from this computer.</li>
+    <li><span class="name">File search</span> - search documents on this computer.</li>
+    <li><span class="name">Dictionary</span> - Hebrew and Aramaic word meanings.</li>
+    <li><span class="name">Calendar</span> - the Hebrew date and daily zmanim, for the city you choose.</li>
+    <li><span class="name">Hameshiv</span> - a study aid and source finder.</li>
+    <li><span class="name">Measurements</span> - convert halachic measures.</li>
+    <li><span class="name">Settings</span> - adjust the program to your preferences.</li>
+  </ul>
+
+  <h3>While you read a book</h3>
+  <ul>
+    <li>Click a line to see its commentaries. <kbd>Ctrl</kbd>+click starts a range of lines.</li>
+    <li><span class="name">Sync commentaries</span> - the commentaries follow the top line automatically.</li>
+    <li><span class="name">Related books</span>, <span class="name">Versions</span>, and <span class="name">Scanned editions on HebrewBooks</span>.</li>
+    <li><span class="name">Split view</span> and tabs, plus <span class="name">Workspaces</span> you can save (<kbd>F8</kbd>).</li>
+    <li>Highlights and personal notes on the text.</li>
+    <li>Several ways to copy: with the source, with a quotation, without nikkud, and <span class="name">Copy into Word</span>. There is also <span class="name">Export to Word</span>.</li>
+    <li>Dark mode, fonts and text size, and divine name covering - all in <span class="name">Settings</span>.</li>
+    <li><span class="name">Report a mistake in the book</span> - send a correction straight from the book.</li>
+  </ul>
+  <p class="note">Some books cannot be exported to Word, at the publisher's request. Reading and printing still work.</p>
+</section>
+
+<section>
+  <h2>In Word's right-click menu</h2>
+  <p>Select text in your document and right-click. You will find these Kitvei Hakodesh commands:</p>
+  <ul>
+    <li><span class="name">Search in Kitvei Hakodesh</span> - searches your selected text across all books.</li>
+    <li><span class="name">Find Book in Kitvei Hakodesh</span> - searches your text in the catalog, to find a book by its name.</li>
+    <li><span class="name">Compare with Kitvei Hakodesh</span> - select a paragraph in your document, then select the source in the Kitvei Hakodesh pane. The differences are written into your document as tracked changes. You can accept or reject them one by one.</li>
+    <li><span class="name">Open Link in Kitvei Hakodesh</span> - on a link to a book, opens that book in the pane.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Dicta Nakdan</h2>
+  <p>Adds nikkud to the selected text, using Dicta's online service. <strong>It needs an internet connection.</strong></p>
+  <ul>
+    <li>Pick the <span class="name">text type</span>: rabbinic, biblical, modern Hebrew or poetry.</li>
+    <li>You can mark styles for it to skip.</li>
+    <li><span class="name">Vowelization suggestions</span> - select a word, click Show, and pick another nikkud. Clicking a suggestion replaces the word and moves on to the next one.</li>
+    <li><span class="name">Clean text</span> - removes nikkud, cantillation marks or punctuation, whichever you choose.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Torah Design</h2>
+  <ul>
+    <li><span class="name">Paragraph design</span> - a style for the first word, <span class="name">window design</span> (single and double), and <span class="name">center last line</span>. You choose which paragraphs it applies to.</li>
+    <li><span class="name">Column balancing</span> - align the columns, and find columns that are not balanced.</li>
+    <li><span class="name">Spacing</span> - before and after a paragraph, between lines, between words, and <span class="name">letter stretch</span>.</li>
+  </ul>
+  <p class="note">Each action counts as one step in Word, so <kbd>Ctrl+Z</kbd> undoes it.</p>
+</section>
+
+<section>
+  <h2>Regex Find</h2>
+  <p>Find and replace in Word with regular expressions (regex). It lets you search for patterns, like "any number" or "a word that starts with a certain letter".</p>
+  <ul>
+    <li><span class="name">Regex character palette</span> - ready-made buttons for characters and symbols. Hover over one to read what it does.</li>
+    <li>You can switch to <span class="name">Word wildcards</span>, or back to <span class="name">Word built-in search</span>.</li>
+    <li><span class="name">Search direction</span>: all, down, up, or in selection.</li>
+    <li>When you replace, you can also change formatting: font, style, color, bold, italic and more. You can <span class="name">copy formatting from the selection</span>.</li>
+    <li>There is a <span class="name">search history</span> and a <span class="name">replace history</span>. <kbd>Enter</kbd> goes to the next result, <kbd>Shift+Enter</kbd> to the previous one.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Kiwix Library and Websites</h2>
+  <p><span class="name">Kiwix Library</span> reads ZIM files. These are books, Wikipedia and other sites saved on your computer, so you can read with no internet.</p>
+  <p><span class="name">Websites</span> opens Torah websites in tabs, inside Word. The list includes, for example, the Klei Kodesh site, Dicta, Hameshiv, Otzar HaChochma and HebrewBooks. You can edit the list during installation.</p>
+</section>
+
+<section>
+  <h2>Settings</h2>
+  <p>In <span class="name">Settings</span> you can:</p>
+  <ul>
+    <li>Hide buttons you do not need.</li>
+    <li>Choose which tool opens when you click the big button.</li>
+    <li>Choose the add-in language: Hebrew or English.</li>
+    <li>Turn off automatic update checks.</li>
+    <li>Install macros (see below).</li>
+    <li>Reset the settings.</li>
+  </ul>
+  <p class="note">Some settings only take effect after you close Word and open it again.</p>
+</section>
+
+<section>
+  <h2>Macros (optional)</h2>
+  <p>You can also install the add-in's commands as macros. Then you can put them on the Quick Access Toolbar, or give them a keyboard shortcut.</p>
+  <ul>
+    <li>In <span class="name">Settings</span>, under "VBA macros", choose: <span class="name">None</span>, <span class="name">Hebrew macro names</span> or <span class="name">English macro names</span>.</li>
+    <li>Close Word and open it again.</li>
+    <li>If the add-in is turned off or missing, a macro shows a clear message, not an error.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Updates</h2>
+  <p>The add-in checks from time to time for a new version and downloads it in the background. You can also check by hand in the Kitvei Hakodesh <span class="name">Settings</span>. If you do not want updates, turn off the automatic check.</p>
+  <p>It installs only for you, with no administrator rights.</p>
+</section>
+
+<section>
+  <h2>Contact</h2>
+  <p>Found a problem, or have an idea?</p>
+  <ul>
+    <li>Report or suggest on GitHub: <a href="https://github.com/KleiKodesh/KleiKodeshProject/issues/new/choose">github.com/KleiKodesh/KleiKodeshProject</a></li>
+    <li>The Klei Kodesh website: <a href="https://kleikodesh.github.io/">kleikodesh.github.io</a></li>
+    <li>All the projects: <a href="https://github.com/KleiKodesh">github.com/KleiKodesh</a></li>
+    <li>Email: <a href="mailto:kleikodeshproject@gmail.com">kleikodeshproject@gmail.com</a></li>
+  </ul>
+</section>
+
+<footer>Thank you for using Klei Kodesh.</footer>
+
+</div>
+</body>
+</html>
