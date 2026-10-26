@@ -9,7 +9,7 @@
  */
 import { ref, computed, watch } from 'vue'
 import { getBookMetadata } from '@/webview-host/seforimApi'
-import { openUrlInSystemBrowser } from '@/webview-host/bridge'
+import { openUrlInSystemBrowser, getDbPathInfo } from '@/webview-host/bridge'
 import type { BookMetadataRow } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -55,6 +55,12 @@ watch(
   },
   { immediate: true },
 )
+
+/** On Zayit's DB (under its `io.github.kdroidfilter.seforimapp` folder) the description row is hidden. */
+const isZayitDb = ref(false)
+void getDbPathInfo().then((info) => {
+  isZayitDb.value = /seforimapp/i.test(info?.path ?? '')
+})
 
 // ── Rows ──────────────────────────────────────────────────────────────────────
 
@@ -108,7 +114,7 @@ const infoRows = computed<BookInfoRow[]>(() => {
     [t('bookView.bookInfo.category'), [book.categoryTitle]],
     [t('bookView.bookInfo.printPlace'), book.publicationPlaces],
     [t('bookView.bookInfo.topics'), book.topics],
-    [t('bookView.bookInfo.description'), [book.description ?? book.shortDescription]],
+    [t('bookView.bookInfo.description'), isZayitDb.value ? [] : [book.description ?? book.shortDescription]],
     [t('bookView.bookInfo.copyright'), book.licenses],
     [t('bookView.bookInfo.editionSource'), book.editionSources, true],
     [t('bookView.bookInfo.digitalSource'), [book.sourceName]],
