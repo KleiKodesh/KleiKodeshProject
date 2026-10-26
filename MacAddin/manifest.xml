@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  מניפסט ציבורי לתוסף "כלי קודש למק".
+  הכתובות מצביעות ל-GitHub Pages של הפרויקט (kleikodesh.github.io).
+  כדי שזה יעבוד: יש להעלות את taskpane.html (ואייקונים אופציונליים) לתיקיית
+  mac/ באתר kleikodesh.github.io, כך שהכתובת תהיה:
+    https://kleikodesh.github.io/mac/taskpane.html
+  אם מארחים במקום אחר (למשל Netlify) — יש לעדכן בהתאם את כל ה-https שכאן.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <Id>d3a8f1c2-5b6e-4a7d-9c0f-1e2b3c4d5e6f</Id>
+  <Version>1.0.0.1</Version>
+  <ProviderName>Klei Kodesh</ProviderName>
+  <DefaultLocale>he-IL</DefaultLocale>
+  <DisplayName DefaultValue="כלי קודש למק" />
+  <Description DefaultValue="ארגז כלים לעורך התורני ב-Word למק: חיפוש והחלפה רגקס, חיבור לדיקטא ואתרים תורניים."/>
+  <IconUrl DefaultValue="https://kleikodesh.github.io/mac/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://kleikodesh.github.io/mac/icon-80.png"/>
+  <SupportUrl DefaultValue="https://kleikodesh.github.io/"/>
+
+  <AppDomains>
+    <AppDomain>https://nakdanpro.dicta.org.il</AppDomain>
+    <AppDomain>https://dicta.org.il</AppDomain>
+    <AppDomain>https://www.nakdan.com</AppDomain>
+    <AppDomain>https://nakdanit.morfix.co.il</AppDomain>
+    <AppDomain>https://www.sefaria.org.il</AppDomain>
+    <AppDomain>https://hebrewbooks.org</AppDomain>
+    <AppDomain>https://tablet.otzar.org</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://kleikodesh.github.io/mac/taskpane.html"/>
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="KleiKodeshGroup">
+                <Label resid="CommandsGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="KleiKodeshTaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>KleiKodeshTaskpaneId</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://kleikodesh.github.io/mac/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://kleikodesh.github.io/mac/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://kleikodesh.github.io/mac/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://kleikodesh.github.io/mac/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://kleikodesh.github.io/"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="כלי קודש למק"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="כלי קודש"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="כלי קודש"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="ארגז כלים לעורך התורני ב-Word למק"/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="פתח את חלונית כלי קודש"/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
