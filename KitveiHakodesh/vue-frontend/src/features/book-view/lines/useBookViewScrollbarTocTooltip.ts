@@ -50,6 +50,12 @@ export function useBookViewScrollbarTocTooltip(
     getActiveTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getActiveAltTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getTocPath?: () => ((entry: TocEntry) => string) | undefined
+    /**
+     * Title and path for a row, for a list whose rows each belong to their own book
+     * (the commentary panel's groups). Given, it replaces getBookTitle and the TOC
+     * lookups.
+     */
+    getLabelAt?: (index: number) => { bookTitle: string; path: string }
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -69,6 +75,7 @@ export function useBookViewScrollbarTocTooltip(
 
   /** The path at a line, or '' when the book has no TOC or none covers it. */
   function pathAtLine(index: number): string {
+    if (options.getLabelAt) return options.getLabelAt(index).path
     const getEntry = options.getActiveTocEntry?.()
     const getPath = options.getTocPath?.()
     const entry = getEntry && getPath ? getEntry(index) : null
@@ -78,6 +85,11 @@ export function useBookViewScrollbarTocTooltip(
     const altLabel = options.getActiveAltTocEntry?.()?.(index)?.text ?? ''
     if (!altLabel || path.includes(altLabel)) return path
     return path ? `${path} · ${altLabel}` : altLabel
+  }
+
+  function titleAt(index: number | null): string {
+    if (!options.getLabelAt) return options.getBookTitle()
+    return index == null ? '' : options.getLabelAt(index).bookTitle
   }
 
   /** The line the label describes for a pointer at `clientY`. */
@@ -106,8 +118,8 @@ export function useBookViewScrollbarTocTooltip(
 
     lastPointerY = event.clientY
     const show = () => {
-      const bookTitle = options.getBookTitle()
       const index = lineIndexForPointer(event.clientY)
+      const bookTitle = titleAt(index)
       const path = index == null ? '' : pathAtLine(index)
       // Nothing to say at all — no title and no path.
       if (!bookTitle && !path) {
@@ -144,9 +156,13 @@ export function useBookViewScrollbarTocTooltip(
    */
   function refreshScrollbarTocTooltip() {
     if (!scrollbarTocTooltip.value) return
-    // Only the path moves with the scroll — the book does not change under it.
+    // The path moves with the scroll; the book too, where each row has its own.
     const index = lineIndexForPointer(lastPointerY)
-    scrollbarTocTooltip.value = { ...scrollbarTocTooltip.value, path: index == null ? '' : pathAtLine(index) }
+    scrollbarTocTooltip.value = {
+      ...scrollbarTocTooltip.value,
+      bookTitle: titleAt(index),
+      path: index == null ? '' : pathAtLine(index),
+    }
   }
 
   return { scrollbarTocTooltip, closeScrollbarTocTooltip, refreshScrollbarTocTooltip }

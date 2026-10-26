@@ -70,12 +70,14 @@ const style = computed(() => {
   /* Never intercepts the pointer: the scrollbar it sits beside is being dragged. */
   pointer-events: none;
   max-width: min(420px, 50vw);
-  padding: 5px 10px;
-  border-radius: 4px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  color: var(--text-primary);
+  /* DMScrollBar's info label: a dark rounded bubble with light text that fades and
+     grows in beside the bar, inverted against the page in every theme. */
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-primary) 82%, transparent);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+  color: var(--bg-primary);
+  animation: scrollbar-toc-tooltip-in 160ms ease-out;
   font-family: var(--ui-font, inherit);
   font-size: 12px;
   line-height: 1.5;
@@ -92,7 +94,13 @@ const style = computed(() => {
   font-weight: 600;
 }
 .toc-path {
-  color: var(--text-secondary);
+  opacity: 0.75;
+}
+@keyframes scrollbar-toc-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
 }
 /* Only when both are present — a lone title must not carry a hanging gap. */
 .book-title + .toc-path {
