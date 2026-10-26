@@ -1227,7 +1227,13 @@ class PDFLinkService {
     const ac = new AbortController();
     this.eventBus._on("textlayerrendered", evt => {
       if (evt.pageNumber === pageNumber) {
-        evt.source.textLayer.div.focus();
+        // [KleiKodesh] PATCH: never steal focus from an element being edited -
+        // this late focus blurred (and so cancelled) an outline rename started
+        // by a double-click whose first click navigated to another page.
+        const active = document.activeElement;
+        if (!active?.isContentEditable && active?.tagName !== "INPUT" && active?.tagName !== "TEXTAREA") {
+          evt.source.textLayer.div.focus();
+        }
         ac.abort();
       }
     }, {
@@ -15705,8 +15711,16 @@ class PDFViewer {
       // it does not touch renderingState, so the spinner stays forever.
       const wasRunning = pageView.renderingState === RenderingStates.RUNNING ||
                          pageView.renderingState === RenderingStates.PAUSED;
-      pageView.cancelRendering();
-      if (wasRunning) {
+      // [KleiKodesh] PATCH: keep a text layer that is already built (its div was
+      // appended by onAppend only after render() finished). Cancelling it threw
+      // away selectable text of pages whose canvas stays FINISHED, so nothing
+      // ever rebuilt it. A text layer still pending is cancelled as before, and
+      // its page goes back to INITIAL so the queue redraws it (and re-requests
+      // the text layer) once the page is visible again.
+      const textBuilt = !!pageView.textLayer?.div?.parentNode;
+      const textPending = !!pageView.textLayer && !textBuilt;
+      pageView.cancelRendering({ keepTextLayer: textBuilt });
+      if (wasRunning || (textPending && pageView.renderingState === RenderingStates.FINISHED)) {
         pageView.renderingState = RenderingStates.INITIAL;
       }
     }
