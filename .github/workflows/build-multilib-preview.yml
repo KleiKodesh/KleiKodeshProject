@@ -37,12 +37,16 @@ on:
           - index-only
           - full
         default: index-only
+      release_tag:
+        description: "Optional: tag of an EXISTING (draft) release of this repository to attach the built files to (downloads of Actions artifacts can be blocked by a network filter; release assets are not)"
+        required: false
+        default: ""
   push:
     branches:
       - ci/multilib-preview
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -329,3 +333,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+      - name: Attach the built files to a release (optional)
+        if: ${{ inputs.release_tag != '' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = Get-ChildItem $env:DIST -File | ForEach-Object { $_.FullName }
+          gh release upload $env:RELEASE_TAG @files --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed ($LASTEXITCODE)" }
