@@ -32,6 +32,10 @@ on:
         description: Dry run - build only, no release (files kept as a run artifact)
         type: boolean
         default: false
+      attempt:
+        description: Leave as is (counts automatic retries when Gemini is down)
+        type: string
+        default: "1"
 
 permissions:
   contents: write
@@ -42,7 +46,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gemini first, on a cheap Linux runner. No AI notes = no build; retry-later
+  # below starts the whole workflow again in an hour.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      bump: ${{ steps.ai.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v7
+        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
+        with:
+          fetch-depth: 0          # release notes read the log since the last tag
+
+      - name: Gemini - version bump + release notes
+        id: ai
+        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/ai-release-plan.ps1
+
+      - uses: actions/upload-artifact@v7
+        if: steps.ai.outcome == 'success'
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.txt
+
+  retry-later:
+    needs: plan
+    if: failure() && fromJSON(inputs.attempt) < 24
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Wait an hour, then run Release again with the same inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 3600
+          gh workflow run release.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }}             -f version_increment='${{ inputs.version_increment }}'             -f manual_version='${{ inputs.manual_version }}'             -f release_notes='${{ inputs.release_notes }}'             -f delete_fts_index=${{ inputs.delete_fts_index }}             -f force_clean_install=${{ inputs.force_clean_install }}             -f dry_run=${{ inputs.dry_run }}             -f attempt=$(( ${{ inputs.attempt }} + 1 ))
+
   release:
+    needs: plan
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -87,14 +133,10 @@ jobs:
           [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
-      - name: Gemini - version bump + release notes
-        id: ai
-        if: inputs.release_notes == 'ai' || (inputs.version_increment == 'auto' && !inputs.manual_version)
-        shell: pwsh
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/ai-release-plan.ps1
+      - uses: actions/download-artifact@v8
+        if: inputs.release_notes == 'ai'
+        with:
+          name: release-notes
 
       - name: Build (and release)
         shell: pwsh
@@ -104,7 +146,7 @@ jobs:
           $notes = '${{ inputs.release_notes }}'
           $bump  = '${{ inputs.version_increment }}'
           if ($notes -eq 'ai') { $notes = 'file' }               # Gemini wrote RELEASE_NOTES.txt
-          if ($bump -eq 'auto') { $bump = '${{ steps.ai.outputs.bump }}' }
+          if ($bump -eq 'auto') { $bump = '${{ needs.plan.outputs.bump }}' }
           $a = @{ ReleaseNotesSource = $notes; NoClean = $true }
           if ('${{ inputs.manual_version }}') { $a.ManualVersion = '${{ inputs.manual_version }}' }
           else { $a.VersionIncrement = $bump }
