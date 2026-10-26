@@ -51,6 +51,15 @@ export async function getLinesPaged(
   return (await seforimOp<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset, versionId })).rows
 }
 
+/**
+ * Every line's character count, by lineIndex, with no text — the reader's scrollbar
+ * estimates row heights from them. null when the library has no `line.charCount`
+ * column (older schemas), in which case the bar falls back to measured averages.
+ */
+export async function getLineCharCounts(bookId: number): Promise<number[] | null> {
+  return (await seforimOp<{ counts: number[] | null }>('getLineCharCounts', { bookId })).counts ?? null
+}
+
 // ── Versions (book_version / version_line, later schemas only) ────────────────
 
 // No "does this DB have versions" flag here any more. C# probes for the version tables ONCE

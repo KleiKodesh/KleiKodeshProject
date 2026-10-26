@@ -117,6 +117,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0) =>
         Run(() => _queries.GetLinesPaged(bookId, limit, offset, versionId), new List<LineRow>(), "getLinesPaged");
 
+    public int[]? GetLineCharCounts(int bookId) =>
+        Run(() => _queries.GetLineCharCounts(bookId), null, "getLineCharCounts");
+
     public List<TocEntryRow> GetAllTocEntries(int bookId) =>
         Run(() => _queries.GetAllTocEntries(bookId), new List<TocEntryRow>(), "getAllTocEntries");
 

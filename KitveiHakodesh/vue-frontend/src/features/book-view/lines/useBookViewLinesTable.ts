@@ -1,5 +1,5 @@
 import { onScopeDispose, ref, watch } from 'vue'
-import { getBookById, getBookVersions, getHebrewBooksEditions, getLinesPaged } from '@/webview-host/seforimApi'
+import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLinesPaged } from '@/webview-host/seforimApi'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 
 export interface LineItem {
@@ -38,6 +38,11 @@ export function useLines(bookId: () => number | undefined) {
   // row. False is set once metadata says the book genuinely has no connections.
   const hasCommentaries = ref(true)
   const hasRelatedBooks = ref(true)
+  // Every line's character count, by lineIndex: the scrollbar's static per-row height
+  // estimate, fetched once per book with no text. null until it arrives, and stays
+  // null on a library whose line table has no charCount column — the bar then
+  // estimates from the heights it measures.
+  const lineCharacterCounts = ref<number[] | null>(null)
   const hasTeamim = ref(false)
 
   // ── Alternate versions ──────────────────────────────────────────────────────
@@ -360,6 +365,12 @@ export function useLines(bookId: () => number | undefined) {
     versions.value = []
     activeVersionId.value = null
     hebrewBooksEditions.value = []
+    // Alongside the metadata, never gating it: the bar estimates from measured rows
+    // until the counts land, and keeps doing so if the library has none.
+    lineCharacterCounts.value = null
+    void getLineCharCounts(id)
+      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? counts : null })
+      .catch(() => { /* the bar's measured fallback stands */ })
 
     let metadataFailed = false
     const metadataPromise = getBookById(id).catch(() => {
@@ -430,7 +441,7 @@ export function useLines(bookId: () => number | undefined) {
 
   return {
     lines, prefetch, ensureLines, holdBackfill, releaseBackfill,
-    hasCommentaries, hasRelatedBooks, hasTeamim,
+    hasCommentaries, hasRelatedBooks, hasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
   }

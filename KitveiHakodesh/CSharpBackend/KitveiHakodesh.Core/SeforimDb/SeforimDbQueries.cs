@@ -141,6 +141,34 @@ namespace KitveiHakodesh.Core.SeforimDb
             return book;
         }
 
+        private bool? _lineHasCharCount;
+
+        /// <summary>
+        /// Every line's character count for one book, indexed by lineIndex, or null when
+        /// this library predates the <c>line.charCount</c> column. Feeds the reader's
+        /// scrollbar with a static per-line height estimate; no text is read.
+        /// </summary>
+        public int[]? GetLineCharCounts(int bookId)
+        {
+            using var conn = Open();
+            _lineHasCharCount ??= ColumnExists(conn, "line", "charCount");
+            if (!_lineHasCharCount.Value) return null;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLineCharCounts;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            var counts = new List<int>();
+            while (r.Read())
+            {
+                // Placed by lineIndex, so a gap in the numbering leaves zero-weight rows
+                // rather than shifting every count after it onto the wrong line.
+                int lineIndex = r.IsDBNull(0) ? counts.Count : r.GetInt32(0);
+                while (counts.Count < lineIndex) counts.Add(0);
+                counts.Add(r.IsDBNull(1) ? 0 : r.GetInt32(1));
+            }
+            return counts.ToArray();
+        }
+
         /// <param name="versionId">0 for the book's own text; a book_version id to read the
         /// page through that version's overlay instead. See
         /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and

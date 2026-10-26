@@ -62,6 +62,13 @@ public sealed class BookVersionsResult { public List<BookVersionRow> Rows { get;
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinesResult { public List<LineRow> Rows { get; set; } = new(); }
 
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineCharCountsArgs { public int BookId { get; set; } }
+
+/// <summary>Counts by lineIndex; null when the library has no <c>line.charCount</c> column.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineCharCountsResult { public int[]? Counts { get; set; } }
+
 // ── TOC ─────────────────────────────────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
