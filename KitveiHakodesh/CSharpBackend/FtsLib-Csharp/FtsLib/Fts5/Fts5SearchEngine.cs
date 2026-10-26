@@ -110,6 +110,88 @@ namespace FtsLib.Fts5
         /// <summary>Content batch size when the caller passes no plan of its own.</summary>
         const int DefaultContentBatchSize = 256;
 
+        /// <summary>
+        /// SUBSTRING candidates inside blocks of positions (a book's lines, or a run of them,
+        /// are contiguous in the index's order). Every query word is cut into terms by the
+        /// indexer's own tokenizer, and each term becomes the group of EVERY dictionary term
+        /// that contains it, at any place and of any length — read off the FM-index, with
+        /// none of the wildcard expanders' affix budgets or caps, so no line holding the
+        /// substring can be missed. Lines holding all groups are returned as (range, position, line id),
+        /// ascending. A superset: the caller confirms the exact substring on the text.
+        ///
+        /// Null when the index cannot answer exactly: a word with no indexable term, a
+        /// dictionary without its FM-index, or a term contained in more than
+        /// <paramref name="maxTermsPerFragment"/> dictionary terms (a fragment that common
+        /// matches most of the book anyway — reading the book is the cheaper answer).
+        /// </summary>
+        public List<(int Range, long Position, int LineId)> FindSubstringCandidates(
+            string query, IReadOnlyList<(long First, long Last)> ranges, int maxTermsPerFragment, CancellationToken ct)
+        {
+            var tokenizer = new Tokenization.Tokenizer();
+            var groups = new List<IReadOnlyCollection<string>>();
+            foreach (string word in query.Split((char[])null, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var fragments = tokenizer.Extract(word);
+                if (fragments.Count == 0) return null;
+                foreach (string fragment in fragments)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var terms = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var d in _dictionaries)
+                    {
+                        if (d.Fm == null) return null;
+                        foreach (var t in TermsByRowId(d, d.Fm.FindRowIds(fragment, false)))
+                        {
+                            terms.Add(t.Term);
+                            if (terms.Count > maxTermsPerFragment) return null;
+                        }
+                    }
+                    if (terms.Count == 0) return new List<(int, long, int)>();   // no line holds it
+                    groups.Add(terms);
+                }
+            }
+            if (groups.Count == 0) return null;
+
+            // One MATCH per range: a rowid range is a seek FTS5 does natively, where an OR of
+            // ranges in one statement would make it read the whole doclist.
+            var found = new List<(int, long, int)>();
+            using var cmd = _lines.CreateCommand();
+            cmd.CommandText = "SELECT line_fts.rowid, p.line_id FROM line_fts JOIN line_position p ON p.position = line_fts.rowid " +
+                              "WHERE line_fts MATCH $q AND line_fts.rowid BETWEEN $first AND $last ORDER BY line_fts.rowid";
+            cmd.Parameters.AddWithValue("$q", BuildMatchExpression(groups));
+            var pFirst = cmd.Parameters.Add("$first", SqliteType.Integer);
+            var pLast = cmd.Parameters.Add("$last", SqliteType.Integer);
+            for (int range = 0; range < ranges.Count; range++)
+            {
+                pFirst.Value = ranges[range].First;
+                pLast.Value = ranges[range].Last;
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    found.Add((range, r.GetInt64(0), (int)r.GetInt64(1)));
+                }
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// The given lines as matches of <paramref name="query"/> — the query parsed and
+        /// expanded, each line's text read, NO full-text MATCH run — for building snippets of
+        /// lines a search already returned (only the rows a page shows). Lines the query no
+        /// longer expands for are simply absent from the result.
+        /// </summary>
+        public List<SearchResult> MatchesForLines(string query, IReadOnlyList<int> lineIds, CancellationToken ct)
+        {
+            var results = new List<SearchResult>(lineIds.Count);
+            var plan = Plan(query, null, ct);
+            if (plan == null || lineIds.Count == 0) return results;
+            var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
+            using var corpus = _openCorpus();
+            results.AddRange(Fetch(corpus, new List<int>(lineIds), plan, prepared, withPlacement: false, ct));
+            return results;
+        }
+
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
         public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)

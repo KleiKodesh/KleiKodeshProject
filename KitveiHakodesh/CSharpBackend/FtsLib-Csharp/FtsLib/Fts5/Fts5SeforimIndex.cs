@@ -64,6 +64,33 @@ namespace FtsLib.Fts5
                 yield return id;
         }
 
+        /// <summary>
+        /// Substring candidates inside blocks of positions — see
+        /// <see cref="Fts5SearchEngine.FindSubstringCandidates"/>. Null whenever the index
+        /// cannot answer exactly, including while it is still being built: only a complete
+        /// index has every committed line's terms in its dictionary.
+        /// </summary>
+        public List<(int Range, long Position, int LineId)> FindSubstringCandidates(
+            string query, IReadOnlyList<(long First, long Last)> ranges, int maxTermsPerFragment, CancellationToken ct = default)
+        {
+            if (!IsBuilt) return null;
+            var state = Fts5Index.ReadBuildState(_indexPath);
+            if (state == null || !state.Value.Complete) return null;
+            using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
+            return engine.FindSubstringCandidates(query, ranges, maxTermsPerFragment, ct);
+        }
+
+        /// <summary>
+        /// The given lines as matches of <paramref name="query"/>, read without running the
+        /// full-text MATCH — see <see cref="Fts5SearchEngine.MatchesForLines"/>.
+        /// </summary>
+        public List<SearchResult> MatchesForLines(string query, IReadOnlyList<int> lineIds, CancellationToken ct = default)
+        {
+            if (!IsBuilt) return new List<SearchResult>();
+            using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
+            return engine.MatchesForLines(query, lineIds, ct);
+        }
+
         // ── Snippet windows (FtsLib's own, unchanged) ────────────────
 
         public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,

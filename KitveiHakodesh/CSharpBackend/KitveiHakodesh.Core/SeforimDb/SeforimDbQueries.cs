@@ -169,6 +169,31 @@ namespace KitveiHakodesh.Core.SeforimDb
             return counts.ToArray();
         }
 
+        /// <summary>
+        /// The ids of the lines in [fromIndex, toIndex), placed by lineIndex (0 where a
+        /// lineIndex has no row), with no text. A TOC section's commentary needs its line
+        /// ids only; reading the section's text for them cost a whole section per click.
+        /// </summary>
+        public int[] GetLineIds(int bookId, int fromIndex, int toIndex)
+        {
+            if (toIndex <= fromIndex) return Array.Empty<int>();
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLineIds;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@fromIndex", fromIndex);
+            cmd.Parameters.AddWithValue("@toIndex", toIndex);
+            using var r = cmd.ExecuteReader();
+            var ids = new int[toIndex - fromIndex];
+            while (r.Read())
+            {
+                if (r.IsDBNull(0)) continue;
+                int slot = r.GetInt32(0) - fromIndex;
+                if (slot >= 0 && slot < ids.Length) ids[slot] = r.GetInt32(1);
+            }
+            return ids;
+        }
+
         /// <param name="versionId">0 for the book's own text; a book_version id to read the
         /// page through that version's overlay instead. See
         /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and

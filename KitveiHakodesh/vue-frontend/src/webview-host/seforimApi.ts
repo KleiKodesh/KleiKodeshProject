@@ -52,6 +52,57 @@ export async function getLinesPaged(
 }
 
 /**
+ * The ids of a book's lines in [fromIndex, toIndex), by lineIndex, with no text (0
+ * where a lineIndex has no row). A TOC section's commentary and a shift-click range
+ * need ids only; this is what lets them skip downloading the section's text.
+ */
+export async function getLineIds(bookId: number, fromIndex: number, toIndex: number): Promise<number[]> {
+  return (await seforimOp<{ ids: number[] }>('getLineIds', { bookId, fromIndex, toIndex })).ids
+}
+
+/**
+ * Snippets for rows the search page shows: the stream carries a snippet for a search's
+ * first hits only, and every later hit is numbers alone until the page asks here, with
+ * the same query (as sent) and options. Each hit comes back with its snippet descriptor;
+ * the snippet lines' texts ride along, and `terms` is the matched-term table the marks'
+ * term ids index into — numbered for THIS response, so the caller maps them onto the
+ * search's own table. A line that no longer matches is absent.
+ */
+export async function ftsSnippets(
+  query: string, lineIds: number[], requireOrdered: boolean, contextWords: number,
+): Promise<{ hits: FullTextSearchHitRow[]; lineTexts: Record<string, string>; terms: string[] }> {
+  return serviceCall('ftsSnippets', { query, lineIds, requireOrdered, contextWords })
+}
+
+/** One full-text hit as the service sends it (mirror of FtsHit in SeforimDbFtsModels.cs). */
+export interface FullTextSearchHitRow {
+  lineId: number
+  bookId: number
+  tocEntryId: number
+  score: number
+  wordDistance: number
+  snippetLineIds: number[]
+  snippetStart: number
+  snippetEnd: number
+  snippetMarks: number[]
+  snippetFlags: number
+}
+
+/**
+ * Scoped substring search from the full-text index: every line inside the given
+ * (book, first lineIndex, last lineIndex) ranges that MAY hold `query` as a substring
+ * (a superset — confirm on the text), as parallel arrays. `answered` false while the
+ * index is building, or when it cannot answer exactly (a fragment too common): the
+ * caller reads the lines itself. Used by the in-book search and the commentary search.
+ */
+export async function ftsLinesSearch(
+  query: string,
+  ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
+): Promise<{ answered: boolean; bookIds: number[]; lineIndexes: number[]; lineIds: number[] }> {
+  return serviceCall('ftsLinesSearch', { query, ranges })
+}
+
+/**
  * Every line's character count, by lineIndex, with no text — the reader's scrollbar
  * estimates row heights from them. null when the library has no `line.charCount`
  * column (older schemas), in which case the bar falls back to measured averages.

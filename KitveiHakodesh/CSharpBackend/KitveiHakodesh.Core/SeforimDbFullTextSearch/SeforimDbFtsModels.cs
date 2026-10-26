@@ -151,6 +151,45 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public KitveiHakodesh.Core.Common.IndexBuildReason? BuildReason { get; set; }
     }
 
+    /// <summary>
+    /// Substring search candidates inside given line ranges (ftsLinesSearch: the book
+    /// view's in-book search, the commentary panel's search). <c>Answered</c> false: the
+    /// index cannot answer exactly right now, and the caller reads the lines itself.
+    /// Otherwise the three parallel arrays name every line that MAY contain the query —
+    /// the caller confirms the exact substring on the text.
+    /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class FtsLinesSearchResult
+    {
+        public bool Answered { get; set; }
+        public int[] BookIds { get; set; } = System.Array.Empty<int>();
+        public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
+        /// <summary>The same lines' ids — to fetch their text by.</summary>
+        public int[] LineIds { get; set; } = System.Array.Empty<int>();
+    }
+
+    /// <summary>One (book, first lineIndex, last lineIndex) range of an ftsLinesSearch, inclusive.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class FtsLineRange
+    {
+        public int BookId { get; set; }
+        public int FirstLineIndex { get; set; }
+        public int LastLineIndex { get; set; }
+    }
+
+    /// <summary>
+    /// Snippets for rows a page shows (ftsSnippets): one hit per line that still matches,
+    /// with its snippet descriptor, the snippet lines' texts, and the matched-term strings
+    /// its marks' term ids index into (numbered for THIS response, not the search's table).
+    /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class FtsSnippetsResult
+    {
+        public List<FtsHit> Hits { get; set; } = new List<FtsHit>();
+        public Dictionary<int, string> LineTexts { get; set; } = new Dictionary<int, string>();
+        public List<string> Terms { get; set; } = new List<string>();
+    }
+
     /// <summary>FTS result set. <c>Ready</c> is false while the index is still building.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class FtsSearchResult

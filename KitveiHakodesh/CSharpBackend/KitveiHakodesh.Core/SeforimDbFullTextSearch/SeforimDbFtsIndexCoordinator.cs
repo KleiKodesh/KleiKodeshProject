@@ -749,6 +749,74 @@ public sealed class SeforimDbFtsIndexCoordinator
         return result;
     }
 
+    /// <summary>
+    /// Scoped substring search (ftsLinesSearch): the lines inside <paramref name="ranges"/>
+    /// that may hold <paramref name="query"/> as a substring, from the index — the book
+    /// view's in-book search (one range: the book) and the commentary panel's (one range
+    /// per commentator group). Not answered while the index is building or cannot answer
+    /// exactly — the caller then reads the lines itself.
+    /// </summary>
+    public FtsLinesSearchResult LinesSearch(string query, IReadOnlyList<FtsLineRange> ranges)
+    {
+        EnsureIndexing();
+        var result = new FtsLinesSearchResult();
+        if (!HasDb || !_isReady || string.IsNullOrWhiteSpace(query)) return result;
+        lock (_lock) _activeOneShotSearches++;
+        try
+        {
+            var lineRanges = new List<(int, int, int)>(ranges.Count);
+            foreach (var range in ranges) lineRanges.Add((range.BookId, range.FirstLineIndex, range.LastLineIndex));
+            var candidates = GetEngine().SubstringCandidates(query, lineRanges);
+            if (candidates == null) return result;
+            result.Answered = true;
+            result.BookIds = new int[candidates.Count];
+            result.LineIndexes = new int[candidates.Count];
+            result.LineIds = new int[candidates.Count];
+            for (int i = 0; i < candidates.Count; i++)
+                (result.BookIds[i], result.LineIndexes[i], result.LineIds[i]) = candidates[i];
+        }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS scoped search failed", ex);
+        }
+        finally
+        {
+            lock (_lock) _activeOneShotSearches--;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Snippets on demand (ftsSnippets): the stream sends snippets only for a search's
+    /// first hits; the page asks for the rows it shows, with the same query and options.
+    /// </summary>
+    public FtsSnippetsResult Snippets(string query, IReadOnlyList<int> lineIds, bool requireOrdered, int contextWords)
+    {
+        // A tab restored from the result cache asks for snippets before any search has run.
+        EnsureIndexing();
+        var result = new FtsSnippetsResult();
+        if (!HasDb || !_isReady || string.IsNullOrWhiteSpace(query) || lineIds.Count == 0) return result;
+        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query)) query = RewriteRelated(query);
+        lock (_lock) _activeOneShotSearches++;
+        try
+        {
+            var terms = new FtsTermTable();
+            var batch = Searcher.SnippetsFor(GetEngine(), query, lineIds, requireOrdered, contextWords, terms);
+            result.Hits = batch.Hits;
+            result.LineTexts = batch.LineTexts;
+            result.Terms = terms.All();
+        }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS snippets failed", ex);
+        }
+        finally
+        {
+            lock (_lock) _activeOneShotSearches--;
+        }
+        return result;
+    }
+
     private string RewriteRelated(string query) =>
         _expander is null ? query : _expander.RewriteQuery(query, SeforimDbFtsRelatedFormExpander.PerTermLimit);
 
