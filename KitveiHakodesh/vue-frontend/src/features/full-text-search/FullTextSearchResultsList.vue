@@ -27,8 +27,11 @@ import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTyp
 import { teamimFontStyle } from '@/utils/teamimFont'
 
 const props = defineProps<{
+  /** Grown IN PLACE while a search streams (its identity only changes on a rebuild):
+   *  anything reading its length must depend on `resultsVersion`. */
   results: FullTextSearchResult[]
-  totalResults: number
+  /** Bumped on every change to `results`, in-place appends included. */
+  resultsVersion: number
   /**
    * Bumped whenever the results array is REBUILT rather than appended to — a new
    * search, a sort change, or a book/@-token filter change. Row indexes address
@@ -128,6 +131,9 @@ const { pinnedRowIndexes, selectedRowIndexRange } = useVirtualizedTextSelection(
  */
 const shownResults = shallowRef<FullTextSearchResult[]>(props.results)
 const shownGeneration = ref(props.resultsGeneration)
+// The shown array grows in place during a stream; this is its live length. While a
+// rebuild is held back it is the OLD array's length, which no longer changes.
+const shownCount = computed(() => { props.resultsVersion; return shownResults.value.length })
 let swapToken = 0
 watch(
   () => [props.results, props.resultsGeneration] as const,
@@ -361,8 +367,11 @@ let restored = false
 // navigation (see the searchQuery watcher) and spends it.
 let armedForNextQuery = false
 
+/** How many results are loaded — live through the in-place streaming appends. */
+const loadedCount = computed(() => { props.resultsVersion; return props.results.length })
+
 function restoreDecision() {
-  return decideRestore({ target: props.initialScrollIndex, loaded: props.results.length, isSearching: props.isSearching })
+  return decideRestore({ target: props.initialScrollIndex, loaded: loadedCount.value, isSearching: props.isSearching })
 }
 
 const openingIndex = computed(() => {
@@ -391,7 +400,7 @@ function onScrollerOpened() {
 watch(
   // initialScrollIndex is a watched source too: on reload it arrives asynchronously
   // (parent onMounted IDB read), and the restore must run when it lands.
-  [() => props.results.length, () => props.isSearching, () => props.initialScrollIndex],
+  [loadedCount, () => props.isSearching, () => props.initialScrollIndex],
   tryRestore,
   { flush: 'post' },
 )
@@ -449,7 +458,7 @@ defineExpose({
 
 <template>
   <div dir="rtl" class="results-wrap">
-    <div v-if="dbNotFound || indexBuildFailed || !hasSearched || (!results.length && !isSearching)" class="empty-state">
+    <div v-if="dbNotFound || indexBuildFailed || !hasSearched || (!loadedCount && !isSearching)" class="empty-state">
       <IconSearchSparkle24Regular class="empty-icon" />
       <MessageBanner v-if="dbNotFound" class="empty-error" :message="DB_NOT_FOUND_MESSAGE" :dismissible="false" />
       <MessageBanner
@@ -464,7 +473,7 @@ defineExpose({
         :message="SEARCH_ERROR_MESSAGES[searchError]"
         :dismissible="false"
       />
-      <span v-else-if="hasSearched && !results.length" class="empty-msg ui-chrome">{{ $t('fullTextSearch.noResults') }}</span>
+      <span v-else-if="hasSearched && !loadedCount" class="empty-msg ui-chrome">{{ $t('fullTextSearch.noResults') }}</span>
     </div>
     <template v-else>
       <BookViewAbbrevTooltip
@@ -476,7 +485,7 @@ defineExpose({
       <WindowedScroller
         ref="windowedScroller"
         class="scroller"
-        :count="shownResults.length"
+        :count="shownCount"
         :initial-index="openingIndex"
         :initial-offset-px="initialScrollOffset ?? 0"
         :ensure-rows="ensureRows"

@@ -64,6 +64,8 @@ watch(
 
 const {
   results,
+  resultsVersion,
+  resultCount,
   matchedTermsOf,
   isSearching,
   stageLabel,
@@ -89,6 +91,8 @@ const {
   checkedBookIds,
   atFilters,
   filteredResults,
+  filteredVersion,
+  filteredCount,
   filteredGeneration,
   resultCounts,
   initCheckedBooks,
@@ -104,6 +108,7 @@ const {
   handleResultClick,
 } = useFullTextSearchFilters(
   () => results.value,
+  () => resultsVersion.value,
   () => executedQuery.value,
   matchedTermsOf,
   executeSearch,
@@ -397,8 +402,8 @@ onMounted(async () => {
     setAtFilters(saved.searchAtFilters)
   }
 
-  // Restore zoom BEFORE restoring scroll — zoom affects item height estimates in the
-  // virtualizer, so if zoom is applied after results populate the scroll lands in the wrong place.
+  // Restore zoom BEFORE restoring scroll — zoom changes the rows' heights, so a scroll
+  // restored before the zoom applies lands the list in the wrong place.
   if (saved?.searchZoom != null) {
     zoom.value = saved.searchZoom
   }
@@ -474,8 +479,8 @@ onBeforeUnmount(() => {
         ref="searchBarRef"
         v-model:search-query="searchQuery"
         :is-searching="isSearching"
-        :result-count="filteredResults.length"
-        :total-result-count="results.length"
+        :result-count="filteredCount"
+        :total-result-count="resultCount"
         :filter-count="checkedBookIds.size"
         :at-filter-count="atFilters.length"
         :is-options-open="isOptionsOpen"
@@ -533,18 +538,18 @@ onBeforeUnmount(() => {
         <div class="search-stage-row" aria-live="polite">
           <template v-if="isSearching">
             {{ stageLabel }}
-            <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
+            <span v-if="filteredCount" class="search-stage-count">{{ filteredCount.toLocaleString() }}</span>
           </template>
-          <span v-else-if="results.length" dir="auto">
-            <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
+          <span v-else-if="resultCount" dir="auto">
+            <span class="search-stage-count">{{ filteredCount.toLocaleString() }}<template v-if="filteredCount < resultCount"> / {{ resultCount.toLocaleString() }}</template></span>
             {{ $t('fullTextSearch.results') }}
           </span>
         </div>
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
+          :results-version="filteredVersion"
           :results-generation="filteredGeneration"
-          :total-results="results.length"
           :search-query="executedQuery"
           :is-searching="isSearching"
           :has-searched="hasSearched"

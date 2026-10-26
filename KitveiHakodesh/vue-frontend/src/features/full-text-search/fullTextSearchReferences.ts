@@ -4,7 +4,7 @@
  * Hits carry only numbers (see FullTextSearchResult): the title comes from the catalog the
  * books store already holds, keyed by bookId; the TOC path comes from the hit's tocEntryId
  * walked up the book's TOC, which is fetched once per book (getAllTocEntries) for the books
- * the virtualizer actually renders and kept in a small LRU — the same shape as the on-demand
+ * the windowed scroller actually renders and kept in a small LRU — the same shape as the on-demand
  * snippets in fullTextSearchSnippets.ts.
  *
  * The path is built exactly as the service's GetTocPathsForLines SQL used to: ancestors
@@ -76,7 +76,7 @@ export function tocPathOf(hit: FullTextSearchResult): string | undefined {
 /**
  * Fetches the TOCs the given hits' references need and are missing — one request per
  * book, deduplicated against requests still in flight. The caller passes the rows the
- * virtualizer renders, on every range change.
+ * windowed scroller is about to mount, on every range change.
  */
 export function requestReferences(hits: readonly FullTextSearchResult[]): void {
   for (const hit of hits) {

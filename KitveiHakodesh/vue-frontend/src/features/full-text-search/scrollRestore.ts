@@ -1,6 +1,6 @@
 /**
  * Pure decision logic for FTS results scroll restore, extracted from
- * FullTextSearchResultsList.vue so it can be unit-tested without a real DOM/virtualizer
+ * FullTextSearchResultsList.vue so it can be unit-tested without a real DOM/scroller
  * (jsdom has no layout, so measurement/scrollTop can't be exercised faithfully there).
  *
  * The component wires this to Vue reactivity and the WindowedScroller; the race-prone
