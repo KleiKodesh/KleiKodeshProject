@@ -55,4 +55,5 @@ global using FileHit = KitveiHakodesh.Core.LocalFiles.FileHit;
 global using LocateDocumentsResult = KitveiHakodesh.Core.LocalFiles.LocateDocumentsResult;
 global using LocalFileIndexStatusResult = KitveiHakodesh.Core.LocalFiles.LocalFileIndexStatusResult;
 global using CatalogTocSearchResult = KitveiHakodesh.Core.SeforimDbCatalog.CatalogTocSearchResult;
+global using CatalogTitleSearchResult = KitveiHakodesh.Core.SeforimDbCatalog.CatalogTitleSearchResult;
 global using CatalogTocStatus = KitveiHakodesh.Core.SeforimDbCatalog.CatalogTocStatus;

@@ -1,7 +1,5 @@
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
+import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import { getTocEntryByTextPrefix } from '@/webview-host/seforimApi'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 
@@ -36,7 +34,7 @@ export function parseDafYomiString(dafYomi: string): { tractate: string; dafPref
 /**
  * Navigate to the daf yomi entry in book-view.
  *
- * Finds the Bavli tractate book using the in-memory catalog index, then queries
+ * Finds the Bavli tractate book through the catalog title search, then queries
  * the TOC directly with a LIKE prefix — no full TOC load or tree scoring needed
  * because the daf structure is always "דף X עמוד Y".
  */
@@ -51,16 +49,9 @@ export async function navigateToDafYomi(dafYomi: string, paneNavigation: PaneNav
   const { tractate, dafPrefix } = parsed
 
   // Find the Bavli tractate — prepend בבלי to avoid matching Mishna tractates
-  const fullQuery = `בבלי ${tractate}`
-  const words = normalizeBookPath(normalize(fullQuery.trim()))
-    .split(/\s+/)
-    .filter((word) => word.length > 0)
-  if (!words.length) return
-
-  const candidates = filterBooksByWords(store.allBooks, words)
-  if (!candidates.length) return
-
-  const book = candidates[0]!
+  const bookIds = await searchBookTitleIds(`בבלי ${tractate}`)
+  const book = bookIds?.length ? store.allBooksMap.get(bookIds[0]!) : undefined
+  if (!book) return
 
   // Query the TOC directly — no need to load all entries and run the tree scorer
   const rows = await getTocEntryByTextPrefix(book.id, `${dafPrefix}%`)

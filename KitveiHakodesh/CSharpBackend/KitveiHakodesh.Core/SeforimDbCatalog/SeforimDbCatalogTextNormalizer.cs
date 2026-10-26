@@ -422,6 +422,41 @@ public static class SeforimDbCatalogTextNormalizer
         public QueryToken(string[][] alternatives, bool preferLiteral = false) { Alternatives = alternatives; PreferLiteral = preferLiteral; }
     }
 
+    /// <summary>
+    /// The query with its trailing words completed to each multi-word abbreviation key they
+    /// begin, the LAST word read as a prefix ("pnei yehos" -> "pnei yehoshua"). Needed by
+    /// a search that matches the last word as a prefix: the INDEX expands a multi-word key
+    /// to its canonical reading even unquoted (see <see cref="Tokenize"/>), so a book titled
+    /// by such a key does not carry the key's own words, and a partly typed key matches
+    /// nothing until it is completed. Each returned string is a whole query, to be searched
+    /// exactly through <see cref="TokenizeQuery"/>. Keys typed in full are not returned —
+    /// the exact query already expands them. At most <paramref name="max"/> completions.
+    /// </summary>
+    public static List<string> CompleteTrailingAbbreviationKeys(string query, int max)
+    {
+        var completions = new List<string>();
+        var raws = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (int w = Math.Min(MaxKeyWords, raws.Length); w >= 2 && completions.Count < max; w--)
+        {
+            int start = raws.Length - w;
+            var words = new string[w];
+            for (int i = 0; i < w; i++) words[i] = StripQuoteGlyphs(TrimEdgeNonWord(raws[start + i]));
+            if (Array.IndexOf(words, "") >= 0 || Array.IndexOf(words, PathSeparator) >= 0) continue;
+            string typed = string.Join(" ", words);
+            int lastWordStart = typed.Length - words[^1].Length;
+            string head = start == 0 ? "" : string.Join(" ", raws, 0, start) + " ";
+            foreach (var key in Abbrev.Keys)
+            {
+                // Same word count: the typed last word is a prefix of the key's last word.
+                if (key.Length <= typed.Length || !key.StartsWith(typed, StringComparison.Ordinal)
+                    || key.IndexOf(' ', lastWordStart) >= 0) continue;
+                completions.Add(head + key);
+                if (completions.Count == max) break;
+            }
+        }
+        return completions;
+    }
+
     private static string TrimEdgeNonWord(string s)
     {
         int start = 0, end = s.Length - 1;
@@ -453,7 +488,7 @@ public static class SeforimDbCatalogTextNormalizer
         return true;
     }
 
-    // ── ה-prefix stripping (ported from the Vue frontend's bookCatalogSearchNormalizer) ──
+    // ── ה-prefix stripping (ported from the former frontend normalizer) ──
     // Symmetric definite-article folding so הרמבן and רמבן resolve to the same match:
     // the index adds the stripped form as an extra token at the same position, and the
     // query side probes both the typed word and its stripped form (see WordClause).

@@ -128,8 +128,8 @@ public sealed partial class SeforimDbCatalogIndex
     /// <summary>
     /// ה-prefix and חסר/מלא skeleton variant lookup tables, built once per reader
     /// generation from the actual indexed vocabulary (TOC path + catalog + author
-    /// fields) — the query-time-only port of the Vue frontend's book-catalog search
-    /// (bookCatalogSearchNormalizer.ts): no index-time changes, no fuzzy/edit-distance
+    /// fields) — the query-time-only port of the former Vue frontend book-catalog
+    /// normalizer: no index-time changes, no fuzzy/edit-distance
     /// matching, just the two symmetric normalization rules. Rebuilding is a single
     /// term-dictionary scan (cheap relative to a full build) and is skipped entirely
     /// while a build is in flight — the NRT reader refreshes too often mid-build for
@@ -1053,7 +1053,7 @@ public sealed partial class SeforimDbCatalogIndex
 
     /// <summary>
     /// Query-time-only port of the Vue frontend's book-catalog search normalization
-    /// (bookCatalogSearchNormalizer.ts) — NOT fuzzy/edit-distance matching. Built once per
+    /// (ported from the former frontend normalizer) — NOT fuzzy/edit-distance matching. Built once per
     /// reader generation from the actual indexed vocabulary of <see cref="IndexedFields"/>:
     ///
     ///   - ה-prefix: a query word starting with ה also probes its stripped form, and a

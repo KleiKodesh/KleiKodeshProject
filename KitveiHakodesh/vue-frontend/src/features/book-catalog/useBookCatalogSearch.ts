@@ -3,9 +3,8 @@
  *
  * One path, both modes: a single call to the Lucene catalog TOC index (`catalogTocSearch`)
  * answers the whole query — book-title docs and full-TOC-path docs are searched together and
- * come back ranked. Dev reaches the index through the KitveiHakodesh service; the hosted app
- * reaches it through the C# host, which runs the same engine from shared source (see
- * KitveiHakodeshLib\Catalog\CatalogTocHandler).
+ * come back ranked. Both modes reach it the same way: `serviceCall` to the KitveiHakodesh
+ * service, which owns the index (Core SeforimDbCatalogIndex).
  *
  * Ordering is the index's own and is preserved as-is: literal matches first, then TOC level,
  * then catalog tree order. Book hits are simply the level-0 docs, so they lead. Results are
@@ -13,8 +12,8 @@
  *
  * Hosted formerly ran a separate two-phase pipeline (in-memory book match + TOC keyword
  * heuristics) because it had no index to query, which meant the same query ranked differently
- * in the two modes. That pipeline is gone; its pieces remain exported from
- * bookCatalogSearchTocHeuristics / bookCatalogSearch if a fallback is ever needed again.
+ * in the two modes. That pipeline and its in-memory book index are deleted; book-title-only
+ * lookups use the same index's title search (bookTitleSearch.ts).
  */
 
 import { ref, watch } from 'vue'
@@ -165,15 +164,13 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
 // ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
-  // Both modes run the SAME Lucene index: dev reaches it through the service, hosted through
-  // the C# host over the bridge (KitveiHakodeshLib\Catalog\CatalogTocHandler, compiled from
-  // the service's own engine source).
+  // Both modes run the SAME Lucene index, reached the same way: `serviceCall` to the
+  // KitveiHakodesh service, which owns it.
   //
   // Hosted used to fall through to a manual two-phase pipeline here — an in-memory book match
   // plus TOC keyword heuristics — because it had no index to query. That made the same query
   // rank differently depending on which mode the app ran in. It is deleted rather than kept
-  // behind a flag: there is no longer a code path that can reach it, and the heuristics it
-  // depended on (runTocHeuristics, splitQueryAtTocKeyword, the TOC result cache) are still
-  // exported from their own modules if a fallback is ever wanted again.
+  // behind a flag: there is no longer a code path that can reach it. The heuristics modules
+  // it depended on are deleted too.
   return useLuceneCatalogSearch(searchQuery)
 }

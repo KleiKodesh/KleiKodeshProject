@@ -200,7 +200,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
     // v23: root TOC entries are stripped only when they add no word beyond the title.
     // v24: Lucene field names spelled out (were single letters). Full rebuild.
-    public const string IndexFormatVersion = "v24";
+    // v25: level indexed (Int32Field) so the book-title search can filter to level 0.
+    public const string IndexFormatVersion = "v25";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -573,7 +574,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             new TextField(FieldFullTocPath, fullTocPath, Field.Store.YES),
             new StoredField(FieldBookId, bookId),
             new StoredField(FieldLineIndex, lineIndex),
-            new Int32Field(FieldLevel, level, Field.Store.YES), // PROTOTYPE: indexed so title search can filter level 0
+            new Int32Field(FieldLevel, level, Field.Store.YES), // indexed: the book-title search filters level 0
             new StoredField(FieldTreeOrder, treeOrder),
             new StoredField(FieldTitleLength, titleLength),
             // Level + TreeOrder ALSO as numeric doc-values: column-stored, so the sort

@@ -44,8 +44,6 @@ One trap worth knowing: `TocEntry`'s first five fields are identical to `TreeNod
 
 All three hold as of 2026-07-28. The last one was fixed by pointing `components/TreeView.vue` at `utils/segmentSearchTree` directly instead of at `features/book-view/toc/tocSearchUtils`, which merely re-exports that same class under the alias `SearchableTree`. Note the shape of that bug: nothing needed to move, because the generic code was already in the right place — the component was reaching it through a feature-folder alias. Check for that before relocating anything.
 
-**Still open (weaker, same family):** `features/book-catalog/bookCatalogSearchTocHeuristics.ts` imports `stripTocTitleRoots` from `../book-view/toc/tocSearchUtils` — a feature reaching into another feature's subfolder. Per the Feature-First rule above, a helper used by two features must move out. It can be shrunk first: that file also imports `SearchableTree`, which it should take from `utils/segmentSearchTree` like `TreeView` now does, leaving exactly one shared function to place.
-
 **Name a file after its contract, not its category.** A category name invites everything adjacent to accumulate: `persistence.ts` reached six jobs and 452 lines before anyone noticed, and the reset workflow inside it forced `utils/` to import two Pinia stores. "Storage driver" is a contract; "persistence" is a topic. The same applies to identifiers — do not name a function `idb*` if it also writes localStorage, and do not prefix a constant `SETTINGS_` if it is not a setting.
 
 **When refactoring a file that has drifted:** name its single job before deciding where anything goes ("where should this live?" is unanswerable while a file has several jobs), park everything undecided in one staging file with a manifest of candidate homes, land the direction fix separately from the ownership decisions, then delete the staging file. Treat an existing workaround comment as evidence of where the design is broken — but verify the claim, since the one reading "imported lazily to avoid a circular dependency" turned out to be guarding a type-only cycle that could not occur at runtime.
@@ -218,10 +216,10 @@ Book catalog browser. Supports list, tiles, and full tree views with search.
 - `BookCatalogBreadcrumb.vue`, `BookCatalogBreadcrumbChevronDropdown.vue` — navigation breadcrumb
 - `BookCatalogTitleBar.vue` — catalog-specific title bar row
 - `useBookCatalog.ts` — navigation and folder traversal
-- `useBookCatalogSearch.ts` — two-phase search orchestration
+- `useBookCatalogSearch.ts` — catalog search: one `catalogTocSearch` call to the service's Lucene catalog index (Core `SeforimDbCatalogIndex`)
+- `bookTitleSearch.ts` — book-title-only lookups (`catalogTitleSearch`, same index) for the FTS @ filter, daf yomi, daily learning
 - `bookCatalogTree.ts` — tree building and category metadata
-- Search stack: `bookCatalogSearch.ts`, `bookCatalogSearchNormalizer.ts`, `bookCatalogSearchMatcher.ts`, `bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`
-- `SEARCH.md` — authoritative design doc for the search stack; read before changing search behaviour
+- Normalization, abbreviations and ranking live in Core (`SeforimDbCatalog/`), not in the frontend
 
 ### book-view/
 

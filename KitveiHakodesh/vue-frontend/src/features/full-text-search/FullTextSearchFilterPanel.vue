@@ -8,9 +8,7 @@ import {
   IconChevronDoubleUp20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
-import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
+import { searchBookTitleIds } from '@/features/book-catalog/bookTitleSearch'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import FullTextSearchFilterNode from './FullTextSearchFilterNode.vue'
 import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
@@ -150,20 +148,28 @@ const isIndet = computed(
 const activeQuery = computed(() => inputText.value.trim())
 const isSearching = computed(() => props.atFilters.length > 0 || activeQuery.value.length >= 2)
 
-// Union of all committed tokens + current input text (if long enough)
-function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[] {
+// Books matching any committed token or the current input (if long enough), in the title
+// search's rank order, token by token. Resolved async in the catalog index; the result-count
+// filter below is applied separately so streaming result counts never re-query the index.
+const matchedBooks = shallowRef<BookRow[]>(markRaw([]))
+// Bumped on every new resolution, BEFORE any early return, so a slower earlier one is dropped.
+let matchGeneration = 0
+
+async function computeFilteredBooks(tokens: string[], currentInput: string, isStale: () => boolean): Promise<BookRow[] | null> {
   const allTokens = [
     ...tokens,
     ...(currentInput.trim().length >= 2 ? [currentInput.trim()] : []),
   ]
   if (!allTokens.length) return []
+  const perToken = await Promise.all(allTokens.map((token) => searchBookTitleIds(token.trim(), isStale)))
+  if (isStale()) return null
   const seen = new Set<number>()
   const result: BookRow[] = []
-  for (const token of allTokens) {
-    const words = normalizeBookPath(normalize(token.trim())).split(/\s+/).filter((w) => w.length > 0)
-    for (const book of filterBooksByWords(booksStore.allBooks, words)) {
-      if (!seen.has(book.id)) {
-        seen.add(book.id)
+  for (const ids of perToken) {
+    for (const id of ids ?? []) {
+      const book = booksStore.allBooksMap.get(id)
+      if (book && !seen.has(id)) {
+        seen.add(id)
         result.push(book)
       }
     }
@@ -171,18 +177,23 @@ function computeFilteredBooks(tokens: string[], currentInput: string): BookRow[]
   return result
 }
 
-const runSearch = useDebounceFn(() => {
-  const books = computeFilteredBooks(props.atFilters, inputText.value)
+function applyResultCountFilter() {
+  const books = matchedBooks.value
   filteredBooks.value = markRaw(props.hasSearched
     ? books.filter((b) => (props.resultCounts.get(b.id) ?? 0) > 0)
     : books)
+}
+
+const runSearch = useDebounceFn(async () => {
+  const generation = ++matchGeneration
+  const books = await computeFilteredBooks(props.atFilters, inputText.value, () => generation !== matchGeneration)
+  if (!books) return
+  matchedBooks.value = markRaw(books)
+  applyResultCountFilter()
 }, 150)
 
-watch(
-  [() => props.atFilters, inputText, () => props.hasSearched, () => props.resultCounts],
-  () => runSearch(),
-  { immediate: true },
-)
+watch([() => props.atFilters, inputText], () => runSearch(), { immediate: true })
+watch([() => props.hasSearched, () => props.resultCounts], applyResultCountFilter)
 
 // ── Token management ──────────────────────────────────────────────────────────
 

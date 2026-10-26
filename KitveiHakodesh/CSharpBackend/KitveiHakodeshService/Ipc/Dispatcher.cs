@@ -824,6 +824,13 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Search(a.Query ?? "")));
                 }
 
+                // Book-title search over the same index (level-0 docs only), book ids in rank order.
+                case "catalogTitleSearch":
+                {
+                    var a = MsgPack.De<CatalogTitleSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.SearchTitles(a.Query ?? "")));
+                }
+
                 case "catalogTocStatus":
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
 
