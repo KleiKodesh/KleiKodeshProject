@@ -100,6 +100,7 @@ namespace KitveiHakodeshDemoApp
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            KitveiHakodeshLib.LocalFile.WindowsRecentDocuments.Enabled = true;
             // Before the form: the receiver must exist the moment the mutex is ours, so
             // launches that race our startup (a multi-file Explorer open) find it.
             _receiver = new OpenRequestReceiver();
