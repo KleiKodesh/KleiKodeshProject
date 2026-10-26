@@ -1,4 +1,4 @@
-import { onScopeDispose, ref, watch } from 'vue'
+import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
 import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 
@@ -58,7 +58,17 @@ function packCounts(counts: number[]): Uint16Array | Int32Array {
 }
 
 export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
-  const lines = ref<LineItem[]>([])
+  // Shallow: 190k reactive proxies for a big book cost memory and every read; the
+  // lines are written here only, in chunks, and each write triggers once (triggerRef).
+  const lines = shallowRef<LineItem[]>([])
+  // Bumped with every write to `lines`. The lines view reads it in its row slot, so
+  // the mounted rows re-render when their text changes under the same index (a
+  // version swap) — a shallow ref cannot tell them, and the scroller only re-fetches.
+  const linesRevision = shallowRef(0)
+  function linesWritten() {
+    linesRevision.value++
+    triggerRef(lines)
+  }
   // Start OPEN: the toolbar hides these controls when false, and metadata only
   // arrives after an await. Starting false would render the toolbar without them
   // for the first frames, then pop them in and shift every icon in the centred
@@ -146,6 +156,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     for (const row of rows) {
       lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content ?? '' }
     }
+    linesWritten()
   }
 
   /** Extend `lines` with unfetched entries up to `count`. No-op if already that long. */
@@ -250,12 +261,15 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     if (excess <= 0) return
     const focusSlot = slotOf(focusLineIndex)
     fetched.sort((a, b) => Math.abs(b - focusSlot) - Math.abs(a - focusSlot))
+    let released = false
     for (const slot of fetched) {
       if (excess <= 0) break
       if (slotRetained(slot)) continue
       releaseSlot(slot)
+      released = true
       excess--
     }
+    if (released) linesWritten()
   }
 
   // Fast path for a known scroll target (the restored position): fires the query for
@@ -358,6 +372,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
       const line = lines.value[first + i]
       if (line && line.id <= 0 && ids[i]! > 0) line.id = ids[i]!
     }
+    linesWritten()
     for (let index = start; index < end; index++) {
       if (lines.value[index]!.id <= 0) throw new Error(`line ids ${start}-${end} unavailable`)
     }
@@ -494,7 +509,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   )
 
   return {
-    lines, prefetch, ensureLines, ensureLineIds, ensureAllLines,
+    lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
     hasCommentaries, hasRelatedBooks, hasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
