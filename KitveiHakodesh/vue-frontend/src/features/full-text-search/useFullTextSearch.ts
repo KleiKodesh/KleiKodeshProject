@@ -22,8 +22,8 @@ import { chronologicalKey } from './chronology'
 import { bookTitleOf } from './fullTextSearchReferences'
 import { seedLineTexts } from './fullTextSearchSnippets'
 import { matchedTermIdsOf } from './fullTextSearchTypes'
-import { WORD_OPTIONS, applyAllWords } from './queryWordSyntax'
-import type { AllWords, WordOption } from './queryWordSyntax'
+import { WORD_OPTIONS, applyWordOptions } from './queryWordSyntax'
+import type { AllWords, PerWord, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -90,6 +90,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   function setAllWords(option: WordOption, on: boolean) {
     settings[ALL_WORDS_SETTINGS[option]] = on
   }
+  // Per-word choices: per tab, saved with the tab's view state (the page restores them).
+  const perWord = ref<PerWord>({})
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
@@ -97,11 +99,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
   const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
-  // Every option reaches the service as query syntax: the "all words" settings are written
-  // onto each word that lacks them (per-word choices are already in the query). Pipes are
-  // padded first, so "a|b" gets them on both words.
+  // Every option reaches the service as query syntax: the toggles are written onto the typed
+  // words (see applyWordOptions). Pipes are padded first, so "a|b" gets them on both words.
   function _buildQueryToSend(normalizedQuery: string): string {
-    return applyAllWords(normalizedQuery.replace(/\|/g, ' | '), allWords.value)
+    return applyWordOptions(normalizedQuery.replace(/\|/g, ' | '), allWords.value, perWord.value)
   }
 
   function _buildCacheKey(normalizedQuery: string): string {
@@ -450,6 +451,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     requireOrdered: searchRequireOrdered,
     allWords,
     setAllWords,
+    perWord,
     sortOrder,
     executeSearch,
     cancelSearch,
