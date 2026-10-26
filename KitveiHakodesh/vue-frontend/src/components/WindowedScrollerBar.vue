@@ -12,10 +12,16 @@
  * (useWindowedScrollerBarMapping), and it reports where the user took it (`seek`).
  * While the pointer is down on the thumb the parent's position is not applied, so a
  * landing's small correction cannot tug the thumb from under the reader's hand.
+ *
+ * The track is not plain proportion: the list's landmarks (section starts) each get
+ * a minimum span, so a section can be pointed at — windowedScrollerTrackMap.ts.
+ * `targetAt` tells a hover label what is under the pointer: the thumb (the current
+ * position) or the position a drag of the thumb to there would land on.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useElementSize, useEventListener, useIntervalFn } from '@vueuse/core'
 import { revealScrollbarOnHover } from '@/composables/useUiChromeVisibility'
+import { buildTrackMap, positionForTrackOffset, trackOffsetForPosition, type TrackMap } from './windowedScrollerTrackMap'
 import type { WindowedScrollerBarState } from './windowedScrollerTypes'
 
 const props = defineProps<{
@@ -41,6 +47,14 @@ const ARROW_STEP_PX = 40
 const PAGE_FRACTION = 0.875
 const REPEAT_DELAY_MS = 300
 const REPEAT_INTERVAL_MS = 50
+/** The least track a landmark's section gets — enough to put the pointer on. */
+const MIN_LANDMARK_SPAN_PX = 14
+/**
+ * In hidden-scrollbars mode the reveal lingers about a second from its last call and
+ * `mousemove` stops the moment the pointer rests — so while the pointer is on the
+ * bar the reveal is re-armed on this interval, as the native bars' hover does.
+ */
+const REVEAL_KEEPALIVE_MS = 400
 
 // ── Native width ───────────────────────────────────────────────────────────────
 
@@ -73,53 +87,91 @@ const viewportHeight = computed(() => observedViewportHeight.value || trackHeigh
 const isScrollable = computed(() => totalHeight.value > viewportHeight.value + 1)
 const maxPosition = computed(() => Math.max(1, totalHeight.value - viewportHeight.value))
 
-const thumbHeight = computed(() => {
+const liveThumbHeight = computed(() => {
   if (!isScrollable.value || trackHeight.value <= 0) return 0
   const proportional = (trackHeight.value * viewportHeight.value) / totalHeight.value
   return Math.min(trackHeight.value, Math.max(barWidth.value, proportional))
 })
+// Frozen while dragged — see the drag section.
+const thumbHeight = computed(() => drag.value?.thumbHeight ?? liveThumbHeight.value)
 const thumbTravel = computed(() => Math.max(0, trackHeight.value - thumbHeight.value))
+
+const trackMap = computed(() =>
+  buildTrackMap(props.barState.landmarkTiers.value, maxPosition.value, thumbTravel.value, MIN_LANDMARK_SPAN_PX),
+)
 
 /** The thumb's offset for a position, and the position for a thumb offset. */
 function thumbTopFor(position: number) {
-  return Math.min(1, Math.max(0, position / maxPosition.value)) * thumbTravel.value
+  return trackOffsetForPosition(trackMap.value, Math.min(maxPosition.value, Math.max(0, position)))
 }
 function positionForThumbTop(top: number) {
   if (thumbTravel.value <= 0) return 0
-  return Math.min(1, Math.max(0, top / thumbTravel.value)) * maxPosition.value
+  return positionForTrackOffset(trackMap.value, Math.min(thumbTravel.value, Math.max(0, top)))
 }
+
+// ── Thumb drag ─────────────────────────────────────────────────────────────────
+//
+// A drag runs on a SNAPSHOT of the bar's geometry taken at the press. Every landing
+// the drag causes re-estimates the list's height and moves the landmark positions,
+// and a thumb mapped through that live geometry jumps under the hand holding it.
+// So while dragging, the thumb's offset is the pointer's own travel, and positions
+// are read off the snapshot; on release the thumb takes the parent's position
+// through the live map — which a seek outside the window has already set to the
+// drag's target (useWindowedScrollerBarMapping), so the thumb stays where the hand
+// left it while the rows are fetched, a small correction at most once they land.
+
+interface ThumbDrag {
+  startY: number
+  startThumbTop: number
+  thumbTop: number
+  thumbHeight: number
+  travel: number
+  map: TrackMap
+  maxPosition: number
+}
+// Declared ahead of the immediate watch below, which reads it at setup.
+const drag = ref<ThumbDrag | null>(null)
+const isDragging = computed(() => drag.value != null)
 
 // The thumb follows the parent's position, except while being dragged.
 const shownPosition = ref(0)
-let dragging = false
-watch(position, (next) => { if (!dragging) shownPosition.value = next }, { immediate: true })
-const thumbTop = computed(() => thumbTopFor(shownPosition.value))
-
-// ── Thumb drag ─────────────────────────────────────────────────────────────────
-
-let dragStartY = 0
-let dragStartThumbTop = 0
+watch(position, (next) => { if (!drag.value) shownPosition.value = next }, { immediate: true })
+const thumbTop = computed(() => (drag.value ? drag.value.thumbTop : thumbTopFor(shownPosition.value)))
 
 function onThumbPointerDown(event: PointerEvent) {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
-  dragging = true
-  dragStartY = event.clientY
-  dragStartThumbTop = thumbTop.value
+  drag.value = {
+    startY: event.clientY,
+    startThumbTop: thumbTop.value,
+    thumbTop: thumbTop.value,
+    thumbHeight: liveThumbHeight.value,
+    travel: thumbTravel.value,
+    map: trackMap.value,
+    maxPosition: maxPosition.value,
+  }
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 
 function onThumbPointerMove(event: PointerEvent) {
-  if (!dragging) return
-  const position = positionForThumbTop(dragStartThumbTop + event.clientY - dragStartY)
-  shownPosition.value = position
-  emit('seek', position)
+  const current = drag.value
+  if (!current) return
+  current.thumbTop = Math.min(current.travel, Math.max(0, current.startThumbTop + event.clientY - current.startY))
+  // The snapshot names a position in ITS pixel space. The row-height estimate
+  // behind that space moves with every landing the drag causes, so the same pixel
+  // would name a different row by the end of a long drag (live-verified: 85% of the
+  // track released at 49% of the book). The fraction of the list survives the
+  // estimate changing, so that is what is seeked, in the live space.
+  const fraction = positionForTrackOffset(current.map, current.thumbTop) / current.maxPosition
+  const livePosition = fraction * maxPosition.value
+  shownPosition.value = livePosition
+  emit('seek', livePosition)
 }
 
 function onThumbPointerUp() {
-  if (!dragging) return
-  dragging = false
+  if (!drag.value) return
+  drag.value = null
   shownPosition.value = position.value
 }
 
@@ -179,8 +231,28 @@ useEventListener(barElement, 'mouseenter', () => {
 })
 useEventListener(barElement, 'mouseleave', () => revealKeepalive.pause())
 
+/**
+ * What is under a viewport Y: the thumb or an arrow (the current position), or a
+ * point on the track — the position the thumb would have if dragged there. A thumb
+ * being dragged is reported as a target too: it is ahead of the parent's position,
+ * and where it is going is what the hand holding it wants to know.
+ */
+function targetAt(clientY: number): { position: number; onThumb: boolean } | null {
+  const bar = barElement.value
+  const track = trackElement.value
+  if (!bar || !track) return null
+  if (isDragging.value) return { position: shownPosition.value, onThumb: false }
+  const barRect = bar.getBoundingClientRect()
+  if (clientY < barRect.top || clientY > barRect.bottom) return null
+  const trackRect = track.getBoundingClientRect()
+  const offset = clientY - trackRect.top
+  const onTrack = offset >= 0 && offset <= trackRect.height
+  const onThumb = offset >= thumbTop.value && offset <= thumbTop.value + thumbHeight.value
+  if (!isScrollable.value || !onTrack || onThumb) return { position: position.value, onThumb: true }
+  return { position: positionForThumbTop(offset - thumbHeight.value / 2), onThumb: false }
+}
 
-defineExpose({ barElement })
+defineExpose({ barElement, targetAt })
 </script>
 
 <template>

@@ -12,6 +12,9 @@
  *
  * The estimate is the average height of the mounted rows, smoothed, so the bar's
  * thumb does not twitch as rows of different heights pass through the window.
+ *
+ * The same position space carries the scroller's landmarks (section starts, as row
+ * indexes) to the bar, which gives each a minimum span of track.
  */
 import { ref, type Ref } from 'vue'
 
@@ -24,6 +27,8 @@ export interface WindowedScrollerBarMappingOptions {
   /** The mounted row at a viewport-content offset — the window's own lookup. */
   findRowIndexAt: (top: number, fully: boolean) => number | null
   landAt: (index: number) => Promise<void>
+  /** Row indexes of the list's section starts, coarse tier first. */
+  landmarkTiers: () => readonly (readonly number[])[]
 }
 
 /** How much of each fresh window average flows into the estimate. */
@@ -34,8 +39,12 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   const totalHeight = ref(0)
   /** Where the bar should be scrolled to for the viewport's current position. */
   const position = ref(0)
+  /** The landmark tiers as positions, for the bar's track map. */
+  const landmarkTiers = ref<number[][]>([])
 
   let estimatedRowHeight = 0
+  /** The seek target while a landing is in flight — reported as the position until it lands. */
+  let pendingPosition: number | null = null
 
   function updateEstimate() {
     const rows = options.windowEnd.value - options.windowStart.value
@@ -52,6 +61,18 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
 
   function pixelsAboveWindow() {
     return options.windowStart.value * estimatedRowHeight
+  }
+
+  /** A row's position: real inside the window, estimated outside it. */
+  function positionForIndex(index: number): number {
+    const viewport = options.viewport()
+    const above = pixelsAboveWindow()
+    if (index < options.windowStart.value || !viewport) return index * estimatedRowHeight
+    if (index < options.windowEnd.value) {
+      const row = options.rowElement(index)
+      if (row) return above + row.offsetTop
+    }
+    return above + viewport.scrollHeight + (index - options.windowEnd.value) * estimatedRowHeight
   }
 
   /**
@@ -120,12 +141,15 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     const above = pixelsAboveWindow()
     const liveMax = above + viewport.scrollHeight - viewport.clientHeight
     if (barTop >= above && barTop <= liveMax) {
+      pendingPosition = null
       viewport.scrollTop = barTop - above
       return
     }
     pendingIndex = indexForPosition(barTop)
+    pendingPosition = Math.round(barTop)
+    position.value = pendingPosition
     void landPending()
   }
 
-  return { totalHeight, position, syncFromViewport, seek, indexForPosition }
+  return { totalHeight, position, landmarkTiers, syncFromViewport, seek, indexForPosition }
 }

@@ -68,7 +68,10 @@ const props = defineProps<
     searchHighlightSnippet?: string
     searchHighlightTerms?: string[]
     getActiveTocEntry?: (lineIndex: number) => TocEntry | null
+    getActiveAltTocEntry?: (lineIndex: number) => TocEntry | null
     getTocPath?: (entry: TocEntry) => string
+    /** The book's TOC — the scrollbar's landmarks, one tier per level. */
+    tocEntries?: TocEntry[]
     selectedSectionLineIds?: number[] | null
     multiSelectLineIds?: number[] | null
     /**
@@ -108,6 +111,20 @@ const scroller = (): WindowedScrollerApi | null => windowedScroller.value
 const scrollerEl = ref<HTMLElement | null>(null)
 onMounted(() => { scrollerEl.value = windowedScroller.value?.scrollerElement ?? null })
 const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
+// The TOC's section starts by level, coarse first: the scrollbar gives each a
+// minimum span of track, taking as many levels as fit.
+const tocLandmarkTiers = computed<number[][]>(() => {
+  const byLevel = new Map<number, number[]>()
+  for (const entry of props.tocEntries ?? []) {
+    if (entry.lineIndex == null) continue
+    let tier = byLevel.get(entry.level)
+    if (!tier) byLevel.set(entry.level, (tier = []))
+    tier.push(entry.lineIndex)
+  }
+  return [...byLevel.entries()]
+    .sort(([first], [second]) => first - second)
+    .map(([, tier]) => tier.sort((first, second) => first - second))
+})
 /** Ids of the lines mounted in the window — the viewport-driven loaders' input. */
 const renderedLineIds = (): number[] => {
   const range = windowedScroller.value?.renderedRange
@@ -275,8 +292,10 @@ const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 // for the scrollbar is when "where am I?" gets asked.
 const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
+  getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
+  getActiveAltTocEntry: () => props.getActiveAltTocEntry,
   getTocPath: () => props.getTocPath,
 })
 
@@ -435,12 +454,15 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       :initial-index="initialLineIndex ?? initialScrollIndex"
       :initial-offset-px="initialLineIndex == null ? initialScrollOffset : 0"
       :ensure-rows="ensureLines"
+      :row-source-version="activeVersionId"
       :pinned-indexes="pinnedRowIndexes"
+      :landmark-tiers="tocLandmarkTiers"
       tabindex="0"
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
       :data-teamim="bookHasTeamim ? 'true' : 'false'"
       @scroll="onScroll(); refreshScrollbarTocTooltip()"
+      @opened="onScrollerOpened"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >

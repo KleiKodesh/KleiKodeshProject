@@ -32,6 +32,14 @@ export interface WindowedScrollerBarState {
   totalHeight: Ref<number>
   /** The viewport's position within the whole list, in the same pixels. */
   position: Ref<number>
+  /** The scroller's landmark tiers as list positions — see WindowedScroller's `landmarkTiers`. */
+  landmarkTiers: Ref<number[][]>
+}
+
+/** What the scrollbar has under a pointer: the thumb, or the row a seek there would land on. */
+export interface WindowedScrollerBarTarget {
+  index: number
+  onThumb: boolean
 }
 
 export interface WindowedScrollerApi {
@@ -55,4 +63,6 @@ export interface WindowedScrollerApi {
   isRowRendered(index: number): boolean
   isRowFullyVisible(index: number): boolean
   rowElement(index: number): HTMLElement | null
+  /** What the scrollbar has at a viewport Y, or null when the pointer is off the bar. */
+  barTargetAt(clientY: number): WindowedScrollerBarTarget | null
 }

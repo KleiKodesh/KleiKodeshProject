@@ -1,16 +1,18 @@
 /**
- * Shows the book title and the CURRENT TOC path — where the reader is right now —
- * while the pointer hovers the lines scroller's scrollbar track. Reaching for the
- * scrollbar is the moment "where am I?" gets asked, and the answer is the same
- * wherever on the track the pointer happens to sit: this deliberately does NOT read
- * the position under the pointer.
+ * Shows the book title and a TOC path while the pointer hovers the lines scroller's
+ * scrollbar. On the thumb (or an arrow) it is the CURRENT path — where the reader is
+ * right now, "where am I?". Anywhere else on the track it is the path of the line a
+ * drag of the thumb to that point would land on — "where would this take me?" — so
+ * the bar can be read like an index before committing to a jump. The bar itself
+ * says which it is (`getTargetLineIndex`).
  *
- * The position comes from the first visible row, and `getActiveTocEntry` +
- * `getTocPath` turn that index into the displayed path — the same pair the
- * copy-with-source menu and the breadcrumb use. Title and path are kept as separate
- * fields rather than one joined string so the label can weight them differently;
- * with no path resolved the title alone still answers the question, which is how
- * the commentary header and the copy-with-source line both degrade.
+ * `getActiveTocEntry` + `getTocPath` turn a line index into the displayed path — the
+ * same pair the copy-with-source menu and the breadcrumb use. When the selected
+ * alternate TOC (daf, parasha…) has an entry covering that line, its label joins the
+ * same path line rather than standing as a separate line. Title and path are kept as
+ * separate fields so the label can weight them differently; with no path resolved
+ * the title alone still answers the question, which is how the commentary header
+ * and the copy-with-source line both degrade.
  *
  * The track is the WindowedScroller's own bar element, so hovering it is a plain
  * mouse event — no hit-testing against a native gutter. The bar reveals itself in
@@ -42,8 +44,11 @@ export function useBookViewScrollbarTocTooltip(
   options: {
     /** The first visible row index — the reader's current position in the book. */
     getCurrentLineIndex: () => number | null
+    /** What the bar has under a viewport Y: the thumb, or the line a seek there lands on. */
+    getTargetLineIndex: (clientY: number) => { index: number; onThumb: boolean } | null
     getBookTitle: () => string
     getActiveTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
+    getActiveAltTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getTocPath?: () => ((entry: TocEntry) => string) | undefined
   },
 ) {
@@ -62,21 +67,35 @@ export function useBookViewScrollbarTocTooltip(
     scrollbarTocTooltip.value = null
   }
 
-  /** The current path, or '' when the book has no TOC or none covers this line. */
-  function currentPath(): string {
+  /** The path at a line, or '' when the book has no TOC or none covers it. */
+  function pathAtLine(index: number): string {
     const getEntry = options.getActiveTocEntry?.()
     const getPath = options.getTocPath?.()
-    if (!getEntry || !getPath) return ''
-
-    const index = options.getCurrentLineIndex()
-    if (index == null) return ''
-
-    const entry = getEntry(index)
-    if (!entry) return ''
-    return getPath(entry) || entry.text || ''
+    const entry = getEntry && getPath ? getEntry(index) : null
+    const path = entry ? getPath!(entry) || entry.text || '' : ''
+    // The alternate TOC's label for the same line joins the path (not a line of its
+    // own), unless the path already says it.
+    const altLabel = options.getActiveAltTocEntry?.()?.(index)?.text ?? ''
+    if (!altLabel || path.includes(altLabel)) return path
+    return path ? `${path} · ${altLabel}` : altLabel
   }
 
-  useEventListener(scrollbarElement, 'mousemove', (event: MouseEvent) => {
+  /** The line the label describes for a pointer at `clientY`. */
+  function lineIndexForPointer(clientY: number): number | null {
+    const target = options.getTargetLineIndex(clientY)
+    if (target && !target.onThumb) return target.index
+    // On the resting thumb the exact current line wins (a drag is a target above).
+    return options.getCurrentLineIndex() ?? target?.index ?? null
+  }
+
+  // Where the pointer last was on the bar, so a refresh during a drag re-reads the
+  // same spot.
+  let lastPointerY = 0
+
+  // pointermove, not mousemove: while the thumb is dragged it holds pointer capture,
+  // and Chromium then stops delivering the compat mouse events to the bar — the
+  // label would freeze at the drag's first position.
+  useEventListener(scrollbarElement, 'pointermove', (event: PointerEvent) => {
     const bar = scrollbarElement.value
     if (!bar) return
     // In RTL the bar sits on the physical left; the label hangs off its inner edge.
@@ -85,9 +104,11 @@ export function useBookViewScrollbarTocTooltip(
     const side: 'left' | 'right' = onLeft ? 'left' : 'right'
     const edgeX = onLeft ? rect.right : rect.left
 
+    lastPointerY = event.clientY
     const show = () => {
       const bookTitle = options.getBookTitle()
-      const path = currentPath()
+      const index = lineIndexForPointer(event.clientY)
+      const path = index == null ? '' : pathAtLine(index)
       // Nothing to say at all — no title and no path.
       if (!bookTitle && !path) {
         scrollbarTocTooltip.value = null
@@ -124,7 +145,8 @@ export function useBookViewScrollbarTocTooltip(
   function refreshScrollbarTocTooltip() {
     if (!scrollbarTocTooltip.value) return
     // Only the path moves with the scroll — the book does not change under it.
-    scrollbarTocTooltip.value = { ...scrollbarTocTooltip.value, path: currentPath() }
+    const index = lineIndexForPointer(lastPointerY)
+    scrollbarTocTooltip.value = { ...scrollbarTocTooltip.value, path: index == null ? '' : pathAtLine(index) }
   }
 
   return { scrollbarTocTooltip, closeScrollbarTocTooltip, refreshScrollbarTocTooltip }

@@ -55,6 +55,7 @@ function mountScroll(tabId: string) {
     isRowRendered: () => true,
     isRowFullyVisible: () => true,
     rowElement: () => null,
+    barTargetAt: () => null,
   }
   let scroll!: ReturnType<typeof useBookViewLinesScroll>
   const app = createApp({
