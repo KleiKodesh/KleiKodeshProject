@@ -34,7 +34,14 @@ jobs:
         run: npm ci
 
       - name: Restore (solution, packages.config too)
-        run: msbuild KleiKodeshProject.slnx -t:restore -p:RestorePackagesConfig=true -v:minimal -nologo
+        shell: pwsh
+        run: |
+          msbuild KleiKodeshProject.slnx -t:restore -v:minimal -nologo
+          # packages.config projects each use their own ..\packages folder.
+          git ls-files '*packages.config' | % {
+            $dir = Split-Path $_
+            nuget restore $_ -PackagesDirectory (Join-Path $dir '..\packages') -NonInteractive
+          }
 
       - name: Build KleiKodeshVsto (unsigned)
         run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
