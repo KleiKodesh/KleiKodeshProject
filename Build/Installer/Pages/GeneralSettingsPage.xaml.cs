@@ -38,6 +38,22 @@ namespace KleiKodeshVstoInstallerWpf
             HebrewLanguageRadio.Checked  += (s, e) => SwitchLanguage(UiLanguage.Hebrew);
 
             LoadMacros();
+            LoadShellPreference();
+        }
+
+        private void LoadShellPreference()
+        {
+            // Suppress the Changed handler while we set the initial value.
+            ShellRegisterCheckBox.Checked   -= ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.Unchecked -= ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.IsChecked  = ShellRegistrationHelper.LoadPreference();
+            ShellRegisterCheckBox.Checked   += ShellRegisterCheckBox_Changed;
+            ShellRegisterCheckBox.Unchecked += ShellRegisterCheckBox_Changed;
+        }
+
+        private void ShellRegisterCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            ShellRegistrationHelper.Apply(ShellRegisterCheckBox.IsChecked == true);
         }
 
         // ── VBA macros template (opt-in; shared logic in VbaMacrosTemplate) ─────
