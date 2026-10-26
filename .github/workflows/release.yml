@@ -182,15 +182,21 @@ jobs:
         working-directory: KitveiHakodesh/vue-frontend
         run: npm ci
 
-      - name: Secrets -> files (signing cert, hb-mirror.json)
+      # The add-in manifests must be signed, but by any key: the installer registers the
+      # manifest's own public key as trusted on every install. So each build makes a
+      # fresh temporary certificate (like VS "Create Test Certificate") - nothing to expire.
+      - name: Temporary signing certificate + hb-mirror.json
         shell: pwsh
         env:
-          VSTO_PFX_BASE64: ${{ secrets.VSTO_PFX_BASE64 }}
           HB_MIRROR_JSON: ${{ secrets.HB_MIRROR_JSON }}
         run: |
-          $pfx = 'KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:VSTO_PFX_BASE64))
-          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My | Out-Null
+          $cert = New-SelfSignedCertificate -Subject 'CN=KleiKodesh' -Type CodeSigningCert `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)
+          Export-PfxCertificate -Cert $cert -FilePath 'KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx' `
+            -Password (New-Object Security.SecureString) | Out-Null
+          $proj = 'KleiKodeshVsto\KleiKodeshVsto.csproj'
+          (Get-Content -Raw $proj) -replace '<ManifestCertificateThumbprint>[^<]*<',
+            "<ManifestCertificateThumbprint>$($cert.Thumbprint)<" | Set-Content -NoNewline -Encoding utf8 $proj
           [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
