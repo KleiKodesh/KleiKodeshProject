@@ -72,11 +72,12 @@ close/reopen restore at shallow and ~80% depth, section-mode loads, repeated
 same-line determinism, and rapid unthrottled click bursts - all green at every
 latency, where the pre-rewrite code failed restore beyond ~8k px drift at 700ms.
 
-All of this is delicate because both the lines pane and the commentary pane are
-TanStack virtual lists with **dynamic item measurement** (`measureElement`): item
-heights start as estimates and change when items render — and, since the two-phase
-commentary loader (2026-07), also change when line *content* backfills into
-already-rendered items.
+Since 2026-10 both the lines pane and the commentary pane are `WindowedScroller`
+lists (`src/components/WindowedScroller.vue`): a window of REAL rows in normal flow,
+fetched before they mount, with no estimated heights, no placeholders and no
+backfill. The two-stage restore below is therefore history — `scrollToIndex` is
+exact and resolves when the row is in the DOM. The contract (what must be
+preserved) is unchanged; only the mechanism moved into the scroller.
 
 ## A. Exact scroll-position persistence (lines pane AND commentary pane)
 
@@ -106,22 +107,22 @@ plus the pixel offset *within* that item.
   v-if toggle, tab return). Each panel's position is stored under its own slot, so
   no panel can overwrite another's.
 
-**How restore must work (the two-stage pattern):**
+**How restore works now (WindowedScroller):**
 
-1. Use TanStack's built-in API first: `virtualizer.scrollToIndex(index)` brings the
-   item into the render window using estimated sizes — instantly, no waiting.
-2. Then correct: once the target item is actually measured (and, since two-phase
-   loading, once its *content* is present so its height is real), set
-   `scrollTop = item.start + offset`. Corrections are driven by MutationObserver /
-   rAF retries, NOT polling loops — virtualization means measurements land
-   asynchronously as DOM mutates.
-3. TanStack's built-in resize anchoring (`shouldAdjustScrollPositionOnItemSizeChange`
-   default: adjust when a resized item is above the scroll offset) keeps the
-   viewport anchored while items above it grow — do not fight it; re-read
-   `item.start` fresh on every correction rather than caching a target scrollTop.
+1. The FIRST render is the saved window: `initialIndex`/`initialOffsetPx` are
+   known before anything mounts, so there is no landing afterwards and nothing to
+   correct. The scroller's `opened` event is where follow-ups go.
+2. Later navigation is `await scrollToIndex(index, { offsetPx })` — exact, resolves
+   when the row and its content are in the DOM. No MutationObserver, no rAF retry,
+   no settle window; a wrong landing is a scroller bug, fixed in the scroller.
+3. The scroller owns anchoring across its own patches (absolute hold after a
+   window change, relative through a reader's scroll). Nothing outside it may set
+   `scrollTop` to a computed offset.
 
-**Two-phase loading rule:** commentary line items may render with `content === ''`
-and grow later when the backfill batch arrives. Therefore:
+**Two-phase loading rule (HISTORICAL — gone with the WindowedScroller, 2026-10;
+a commentary line now has its text before its row mounts, see `ensureLineContents`):**
+commentary line items used to render with `content === ''` and grow later when the
+backfill batch arrived. Therefore:
 
 - The restore correction must NOT apply the saved `scrollOffset` while the target
   item's content is still pending — a 300px offset into a 20px-tall empty item

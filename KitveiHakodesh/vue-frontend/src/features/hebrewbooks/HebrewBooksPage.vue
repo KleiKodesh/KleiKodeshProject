@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import MessageBanner from '@/components/MessageBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -51,22 +50,12 @@ function resolveDelete(toRecycleBin: boolean | null) {
 const searchInputRef = ref<HTMLInputElement>()
 const scrollEl = ref<HTMLElement | null>(null)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: displayedBooks.value.length,
-    getScrollElement: () => scrollEl.value,
-    estimateSize: () => 48,
-    overscan: 8,
-  })),
-)
-
 // Combobox model: focus stays in the search input; its keydown moves the list
 // highlight, Enter opens the highlighted book (Ctrl+Enter in a new tab).
 const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
   getCount: () => displayedBooks.value.length,
   onActivate: (i, openInNewTab) => openBook(displayedBooks.value[i]!, openInNewTab),
-  getVirtualizer: () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  containerElement: scrollEl,
 })
 
 // New results make the old highlight point at a different book — drop it.
@@ -127,31 +116,18 @@ function onBookClicked(
       <div v-else-if="error" class="state">{{ error }}</div>
 
       <template v-else-if="displayedBooks.length">
-        <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-          <div
-            v-for="vRow in virtualizer.getVirtualItems()"
-            :key="String(vRow.key)"
-            :ref="(el) => el && virtualizer.measureElement(el as Element)"
-            :data-index="vRow.index"
-            :style="{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              transform: `translateY(${vRow.start}px)`,
-            }"
-          >
-            <HebrewBooksListItem
-              :book="displayedBooks[vRow.index]!"
-              :focused="activeIndex === vRow.index"
-              :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
-              @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
-              :downloading="downloadingBookIds.has(String(displayedBooks[vRow.index]!.id))"
-              @download-clicked="downloadBook"
-              @delete-clicked="pendingDeleteBook = $event"
-              @reveal-clicked="revealInFolder"
-            />
-          </div>
+        <!-- A plain list: rows off screen are neither laid out nor painted (.hb-row). -->
+        <div v-for="(book, index) in displayedBooks" :key="book.id" class="hb-row">
+          <HebrewBooksListItem
+            :book="book"
+            :focused="activeIndex === index"
+            :has-local-file="localFileBookIds.has(String(book.id))"
+            @book-clicked="(clicked, openInNewTab) => onBookClicked(index, clicked, openInNewTab)"
+            :downloading="downloadingBookIds.has(String(book.id))"
+            @download-clicked="downloadBook"
+            @delete-clicked="pendingDeleteBook = $event"
+            @reveal-clicked="revealInFolder"
+          />
         </div>
       </template>
 
@@ -195,6 +171,10 @@ function onBookClicked(
   overflow-y: auto;
   overflow-x: hidden;
   outline: none;
+}
+.hb-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
 }
 
 .state {
