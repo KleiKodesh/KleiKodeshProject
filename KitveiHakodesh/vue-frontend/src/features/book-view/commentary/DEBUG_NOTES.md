@@ -1,5 +1,7 @@
 # Commentary Pinned Book Scroll — Debug Investigation Notes
 
+> **HISTORICAL (TanStack era, before 2026-10).** The commentary pane is now a `WindowedScroller`; every cause below that names the virtualizer, `measurementsCache` or `estimateSize` no longer exists. Kept for the symptom catalogue only.
+
 This file records the diagnostic logging that was used to trace and fix the pinned commentary scroll bugs. Keep for future reference if similar issues resurface.
 
 > **2026-08-11 — the mechanics below are superseded.** `useCommentaryScroll` was

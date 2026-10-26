@@ -501,8 +501,6 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton()`, handles file picker, external links, and search navigation.
 
-**useVirtualScrollerKeys.ts** — keyboard nav for virtual scrollers (`Ctrl+Home`, `Ctrl+End`). Required on every component that uses `@tanstack/vue-virtual`. The scroll container must have `tabindex="0"`.
-
 **useZoom.ts** — zoom handler for keyboard (`Ctrl+±/0`), wheel (`Ctrl+scroll`), and pinch (2-finger touch). Config: MIN=50, MAX=200, DEFAULT=100, STEP=10.
 
 **useListKeyNav.ts** — arrow-key + Home/End navigation for plain DOM lists that own keyboard focus themselves (roving-focus model); tracks `focusedIndex` and scrolls the focused item into view. For standalone lists only — input-paired lists use `useInputListNavigation.ts`.
@@ -511,7 +509,7 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useTileGridKeys.ts** — 2D arrow-key navigation for tile grids; computes column count from container width to handle Up/Down correctly.
 
-**useInputListNavigation.ts** — combobox keyboard model (W3C APG): DOM focus stays in a text input while its keydown events move a highlight through the paired list. Handles arrows, PageUp/PageDown, `Ctrl+Home`/`Ctrl+End`, Enter (Ctrl+Enter = new tab); plain Home/End and Left/Right stay caret keys. Supports plain containers (`scrollIntoView` over `[data-nav-item]`), virtual lists (`getVirtualizer` → `scrollToIndex`), and tile grids (`getColumnsPerRow`). Used by every input-paired list: home search dropdown, address bar, book catalog search, HebrewBooks, local file search, full-text-search filter panel.
+**useInputListNavigation.ts** — combobox keyboard model (W3C APG): DOM focus stays in a text input while its keydown events move a highlight through the paired list. Handles arrows, PageUp/PageDown, `Ctrl+Home`/`Ctrl+End`, Enter (Ctrl+Enter = new tab); plain Home/End and Left/Right stay caret keys. Supports plain containers (`scrollIntoView` over `[data-nav-item]`) and tile grids (`getColumnsPerRow`). Used by every input-paired list: home search dropdown, address bar, book catalog search, HebrewBooks, local file search, full-text-search filter panel.
 
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller element; when the user has selected all, writes each line as a `<div>` in `text/html` and strips HTML tags for `text/plain`, so copied text has no inline line breaks.
 

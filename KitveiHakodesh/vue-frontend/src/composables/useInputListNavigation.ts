@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type { Ref } from 'vue'
-import type { Virtualizer } from '@tanstack/vue-virtual'
 
 // The combobox keyboard model (W3C APG "Combobox Pattern"): DOM focus stays in
 // the text input the whole time, and the arrow keys move a HIGHLIGHT through the
@@ -50,8 +49,6 @@ export interface UseInputListNavigationOptions {
   containerElement?: Ref<HTMLElement | null>
   /** Item selector inside containerElement (default '[data-nav-item]'). */
   itemSelector?: string
-  /** For @tanstack/vue-virtual lists — used instead of containerElement. */
-  getVirtualizer?: () => Virtualizer<Element, Element>
   /**
    * For tile grids: how many items one ArrowDown/ArrowUp step skips (one visual
    * row). Lists omit it (defaults to 1).
@@ -107,10 +104,6 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
   const activeIndex = ref(-1)
 
   function scrollItemIntoView(index: number) {
-    if (options.getVirtualizer) {
-      options.getVirtualizer().scrollToIndex(index, { align: 'auto' })
-      return
-    }
     const items = options.containerElement?.value?.querySelectorAll<HTMLElement>(itemSelector)
     items?.[index]?.scrollIntoView({ block: 'nearest' })
   }
@@ -123,22 +116,6 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     scrollItemIntoView(clamped)
   }
 
-  // scrollToIndex on the extremes can land short when measured item heights
-  // drift from the estimate — snap the viewport edge afterwards, same as
-  // useVirtualScrollerKeys does.
-  function jumpToEdge(index: number, edge: 'start' | 'end') {
-    if (!options.getVirtualizer) {
-      moveTo(index)
-      return
-    }
-    const virtualizer = options.getVirtualizer()
-    activeIndex.value = index
-    virtualizer.scrollToIndex(index, { align: edge })
-    requestAnimationFrame(() => {
-      const element = virtualizer.scrollElement as HTMLElement | null
-      if (element) element.scrollTop = edge === 'start' ? 0 : element.scrollHeight
-    })
-  }
 
   /**
    * Handle a keydown from the paired input. Returns true when the event was
@@ -205,12 +182,12 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     }
     if (ctrl && event.code === 'Home') {
       event.preventDefault()
-      jumpToEdge(0, 'start')
+      moveTo(0)
       return true
     }
     if (ctrl && event.code === 'End') {
       event.preventDefault()
-      jumpToEdge(count - 1, 'end')
+      moveTo(count - 1)
       return true
     }
     if (event.code === 'Enter' && activeIndex.value >= 0 && activeIndex.value < count) {

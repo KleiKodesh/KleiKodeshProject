@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import type { BookRow } from '@/webview-host/queries.types'
@@ -13,17 +12,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{ toggleBook: [number]; navigateToBook: [number] }>()
 
+// A plain list: every book is a row, and the browser skips the layout and paint of the
+// rows off screen (`content-visibility: auto` below) — no virtualizer, nothing to
+// measure or position. A few thousand rows at most.
 const scrollEl = ref<HTMLElement | null>(null)
-
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.books.length,
-    getScrollElement: () => scrollEl.value,
-    estimateSize: () => 44,
-    overscan: 8,
-    measureElement: (el: Element) => el.getBoundingClientRect().height,
-  })),
-)
 
 // Combobox model: focus stays in the panel's filter input; the panel forwards
 // its keydown events here (onSearchInputKeydown). Enter with a highlight
@@ -34,8 +26,7 @@ const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation(
     const book = props.books[i]
     if (book) emit('toggleBook', book.id)
   },
-  getVirtualizer: () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  containerElement: scrollEl,
 })
 
 // Reset the highlight when the book list changes (new search query)
@@ -59,45 +50,27 @@ defineExpose({ onSearchInputKeydown })
 <template>
   <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
   <div v-else ref="scrollEl" class="scroller" dir="rtl">
-    <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-      <div
-        v-for="vRow in virtualizer.getVirtualItems()"
-        :key="String(vRow.key)"
-        :ref="(el) => el && virtualizer.measureElement(el as Element)"
-        :data-index="vRow.index"
-        :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          transform: `translateY(${vRow.start}px)`,
-        }"
-      >
-        <div
-          class="book-row"
-          :class="{
-            checked: checkedBookIds.has(books[vRow.index]!.id),
-            focused: activeIndex === vRow.index,
-          }"
-        >
-          <button class="checkbox-col" @click.stop="onBookRowCheckClick(vRow.index)">
-            <span v-if="checkedBookIds.has(books[vRow.index]!.id)" class="check-mark">✓</span>
-            <IconBookRtl20 v-else class="book-icon" />
-          </button>
-          <button class="book-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="onBookRowTitleClick(vRow.index)">
-            <span class="title-line">
-              <span class="title-text">{{ books[vRow.index]!.title }}</span>
-              <span
-                v-if="hasSearched && resultCounts.get(books[vRow.index]!.id)"
-                class="count"
-              >({{ resultCounts.get(books[vRow.index]!.id) }})</span>
-            </span>
-            <span v-if="books[vRow.index]!.parentPath" class="path-text">
-              {{ books[vRow.index]!.parentPath }}
-            </span>
-          </button>
-        </div>
-      </div>
+    <div
+      v-for="(book, index) in books"
+      :key="book.id"
+      class="book-row"
+      data-nav-item
+      :class="{
+        checked: checkedBookIds.has(book.id),
+        focused: activeIndex === index,
+      }"
+    >
+      <button class="checkbox-col" @click.stop="onBookRowCheckClick(index)">
+        <span v-if="checkedBookIds.has(book.id)" class="check-mark">✓</span>
+        <IconBookRtl20 v-else class="book-icon" />
+      </button>
+      <button class="book-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="onBookRowTitleClick(index)">
+        <span class="title-line">
+          <span class="title-text">{{ book.title }}</span>
+          <span v-if="hasSearched && resultCounts.get(book.id)" class="count">({{ resultCounts.get(book.id) }})</span>
+        </span>
+        <span v-if="book.parentPath" class="path-text">{{ book.parentPath }}</span>
+      </button>
     </div>
   </div>
 </template>
@@ -116,6 +89,10 @@ defineExpose({ onSearchInputKeydown })
   align-items: stretch;
   min-height: 40px;
   user-select: none;
+  /* Rows off screen are neither laid out nor painted; the placeholder size keeps
+     the scrollbar honest until a row is reached. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
 }
 .book-row.focused {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
