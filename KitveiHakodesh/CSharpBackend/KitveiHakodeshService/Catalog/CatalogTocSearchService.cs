@@ -97,8 +97,8 @@ public sealed class CatalogTocIndexingStarter(CatalogTocSearchService catalogToc
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        catalogToc.EnsureIndex();
-        return Task.CompletedTask;
+        // Off the host's start, like the FTS starter: a synchronous check here delays every request.
+        return Task.Run(catalogToc.EnsureIndex, CancellationToken.None);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
