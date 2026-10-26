@@ -90,15 +90,15 @@ if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
 
 $notes = @"
-$($plan.notes_en.Trim())
-
----
-
 <div dir="rtl">
 
 $($plan.notes_he.Trim())
 
 </div>
+
+---
+
+$($plan.notes_en.Trim())
 "@
 [IO.File]::WriteAllText($OutFile, $notes, (New-Object Text.UTF8Encoding($false)))
 Write-Host $notes
