@@ -14,8 +14,9 @@ param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag, [switch]$Auto)
 
 $ErrorActionPreference = 'Stop'
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
-# still leaves the second. No AI notes = no release (the step fails, nothing is built).
-$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-pro-latest') }
+# still leaves the second (Pro has a zero free-tier quota - don't use it).
+# No AI notes = no release (the step fails, nothing is built).
+$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-flash-lite-latest') }
 
 $tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
 $previousTag = if ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
@@ -75,9 +76,9 @@ $body = @{
 
 $plan = $null
 :models foreach ($model in $models) {
-    foreach ($attempt in 1..6) {
+    foreach ($attempt in 1..3) {
         try {
-            $resp = Invoke-RestMethod -Method Post -TimeoutSec 300 `
+            $resp = Invoke-RestMethod -Method Post -TimeoutSec 120 `
                 -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
                 -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
                 -ContentType 'application/json; charset=utf-8' `
@@ -88,7 +89,7 @@ $plan = $null
         } catch {
             Write-Host "$model attempt $attempt failed: $($_.Exception.Message)"
             $plan = $null
-            if ($attempt -lt 6) { Start-Sleep -Seconds (30 * $attempt) }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
         }
     }
 }

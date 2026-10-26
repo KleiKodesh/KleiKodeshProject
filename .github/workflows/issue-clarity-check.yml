@@ -84,11 +84,14 @@ jobs:
 
           Existing issues:
           $OTHERS" '{system_instruction:{parts:[{text:$sys}]},contents:[{role:"user",parts:[{text:$user}]}],generationConfig:{responseMimeType:"application/json"}}')
-          # free tier often answers 503 (busy): retry
-          reply=$(curl -sS --fail-with-body --retry 6 --retry-all-errors --retry-delay 20 \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
-            -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json" \
-            -d "$payload" | jq -r '.candidates[0].content.parts[0].text // empty')
+          # free tier often answers 503 (busy) or hangs: 3 tries per model, 120 s cap per call,
+          # then the next model (each has its own quota; Pro has a zero free-tier quota - don't use it)
+          reply=""
+          for model in gemini-flash-latest gemini-flash-lite-latest; do
+            reply=$(curl -sS --fail-with-body --max-time 120 --retry 2 --retry-all-errors --retry-delay 20               "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"               -H "x-goog-api-key: $GEMINI_API_KEY" -H "Content-Type: application/json"               -d "$payload" | jq -r '.candidates[0].content.parts[0].text // empty') || reply=""
+            if [ -n "$reply" ]; then echo "model: $model"; break; fi
+            echo "$model failed"
+          done
           # Safety: anything malformed -> post nothing, change nothing.
           if ! printf '%s' "$reply" | jq -e 'type == "object"' >/dev/null 2>&1; then
             echo "model output is not a JSON object - nothing posted"; exit 1
