@@ -388,6 +388,10 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
 
         /// <summary>Next</summary>
         public static string Next => ResourceManager.GetString("Next", resourceCulture);
+        /// <summary>What's new</summary>
+        public static string WhatsNew_Title => ResourceManager.GetString("WhatsNew_Title", resourceCulture);
+        /// <summary>Continue</summary>
+        public static string WhatsNew_Continue => ResourceManager.GetString("WhatsNew_Continue", resourceCulture);
         /// <summary>Label of the language switch: the name of the other language.</summary>
         public static string SwitchLanguage => ResourceManager.GetString("SwitchLanguage", resourceCulture);
     }

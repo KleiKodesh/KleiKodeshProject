@@ -374,4 +374,10 @@
   <data name="SwitchLanguage" xml:space="preserve">
     <value>English</value>
   </data>
+  <data name="WhatsNew_Title" xml:space="preserve">
+    <value>מה חדש</value>
+  </data>
+  <data name="WhatsNew_Continue" xml:space="preserve">
+    <value>המשך</value>
+  </data>
 </root>

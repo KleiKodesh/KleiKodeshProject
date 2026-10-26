@@ -61,10 +61,11 @@ namespace KleiKodeshVstoInstallerWpf
         // ── Navigation ───────────────────────────────────────────────────────────
         //
         // Normal install flow (interactive):
-        //   LandingPage → InstallPage → SettingsPage → ComponentSettingsPage → exit
+        //   LandingPage → InstallPage → WhatsNewPage → SettingsPage → ComponentSettingsPage → exit
+        //   (WhatsNewPage is skipped when no release notes are embedded, e.g. local builds)
         //
         // Auto-update (--silent / --install arg) takes the SAME path as a manual install:
-        //   LandingPage → InstallPage → SettingsPage → ...
+        //   LandingPage → InstallPage → WhatsNewPage → SettingsPage → ...
         // The flag is ignored — see App.xaml.cs for why there is no headless flow.
         //
         // Repair flow:
@@ -73,6 +74,14 @@ namespace KleiKodeshVstoInstallerWpf
 
         public void NavigateToLanding()  => MainFrame.Navigate(new LandingPage(this));
         public void NavigateToSettings() => MainFrame.Navigate(new SettingsPage(this));
+
+        /// <summary>Shows the release notes, or goes straight to SettingsPage when none are embedded.</summary>
+        public void NavigateToWhatsNew()
+        {
+            var notes = ReleaseNotes.Load();
+            if (notes == null) NavigateToSettings();
+            else MainFrame.Navigate(new WhatsNewPage(this, notes));
+        }
         public void NavigateToRepair()   => MainFrame.Navigate(new RepairPage(this));
         public void NavigateToComponentSettings(bool showKitveiHakodesh, bool showWebsites)
             => MainFrame.Navigate(new ComponentSettingsPage(this, showKitveiHakodesh, showWebsites));
