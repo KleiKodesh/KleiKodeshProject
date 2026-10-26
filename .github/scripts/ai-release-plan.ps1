@@ -59,11 +59,20 @@ $body = @{
     }
 } | ConvertTo-Json -Depth 20
 
-$resp = Invoke-RestMethod -Method Post `
-    -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
-    -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
-    -ContentType 'application/json; charset=utf-8' `
-    -Body ([Text.Encoding]::UTF8.GetBytes($body))
+foreach ($attempt in 1..4) {
+    try {
+        $resp = Invoke-RestMethod -Method Post -TimeoutSec 300 `
+            -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
+            -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
+            -ContentType 'application/json; charset=utf-8' `
+            -Body ([Text.Encoding]::UTF8.GetBytes($body))
+        break
+    } catch {
+        if ($attempt -eq 4) { throw }
+        Write-Host "Gemini attempt $attempt failed: $($_.Exception.Message) - retrying"
+        Start-Sleep -Seconds (15 * $attempt)
+    }
+}
 
 $plan = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
