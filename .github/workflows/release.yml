@@ -45,17 +45,17 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # release notes read the log since the last tag
 
       # Not in this repo: its own repository, gitignored here.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: KleiKodesh/EasyTabs
           path: ChromeTabs
 
-      - uses: microsoft/setup-msbuild@v2
+      - uses: microsoft/setup-msbuild@v3
 
       # The runner has the Office build targets but not the VSTO runtime they load.
       - name: Install VSTO runtime + NSIS
@@ -115,7 +115,7 @@ jobs:
 
       - name: Keep the built files
         if: inputs.dry_run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-files
           path: Build/releases/*
