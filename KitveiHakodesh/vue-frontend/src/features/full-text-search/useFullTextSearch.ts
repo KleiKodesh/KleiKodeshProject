@@ -19,25 +19,17 @@ import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
-import { bookTitleOf } from './fullTextSearchReferences'
 import { seedLineTexts, setSnippetSource } from './fullTextSearchSnippets'
 import { matchedTermIdsOf } from './fullTextSearchTypes'
 import { WORD_OPTIONS, applyWordOptions } from './queryWordSyntax'
 import type { AllWords, PerWord, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
-// Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
-// O(n) for the array copy plus the count-dependent work downstream (the scrollbar's
-// track map, the result counts). Flushing every 150ms while the set grows into the
-// hundreds-of-thousands (a high-frequency word) makes that O(n²) and freezes the page.
-// So: flush fast while the list is small (snappy first paint), then back
-// off sharply so the expensive rebuilds happen only a handful of times.
-// Results are never capped — everything still streams in; only the paint cadence changes.
-function _flushDelayFor(count: number): number {
-  if (count < 5_000) return 150
-  if (count < 50_000) return 600
-  return 2000
-}
+// Flush cadence. A flush publishes the hits appended since the last one: the result
+// array is ONE array grown in place for the whole stream, and `resultsVersion` is what
+// consumers react to — so a flush costs O(batch), not O(n), and the cadence can stay
+// constant however large the set grows. Results are never capped.
+const FLUSH_INTERVAL_MS = 150
 
 /** One frame of the `ftsSearchStream` op. */
 interface SearchStreamChunk {
@@ -127,7 +119,17 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       .join('|')
   }
 
+  /**
+   * The result set. While a search streams, this is ONE array appended to in place —
+   * its identity does not change per flush, only `resultsVersion` does. A rebuild (new
+   * search, sort, cache restore) assigns a NEW array and bumps the version too, so the
+   * identity tells an append from a rebuild and the version tells that anything changed.
+   */
   const results = shallowRef<FullTextSearchResult[]>([])
+  /** Bumped on every change to `results` — in-place appends included. Consumers that
+   *  read `results.value.length` or iterate it must depend on this, not on the ref. */
+  const resultsVersion = ref(0)
+  const resultCount = computed(() => { resultsVersion.value; return results.value.length })
   /** The current result set's matched-term table (the hits' mark term ids index into it). */
   let searchTerms: string[] = []
   /** The search's id for a matched term — appended when a snippet fetched later brings a new one. */
@@ -206,14 +208,30 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // breaks ties by it. Kept apart from `results`, which a re-sort reorders.
   let streamedOrder: FullTextSearchResult[] = []
 
+  /**
+   * A rank per DISTINCT book of the result set under `compare` (a book-level order:
+   * title collation, author, chronology). The distinct books — a few thousand at most —
+   * are sorted once with the string comparator; the hits then compare integer ranks,
+   * so the O(n log n) hit sort never calls localeCompare.
+   */
+  function bookRanks(compare: (a: number, b: number) => number): Map<number, number> {
+    const distinct = new Set<number>()
+    for (const r of streamedOrder) distinct.add(r.bookId)
+    const ids = [...distinct].sort(compare)
+    const ranks = new Map<number, number>()
+    ids.forEach((id, rank) => ranks.set(id, rank))
+    return ranks
+  }
+
   // Apply the current relevancy sort to the fully-collected result set. Called only
   // once the search has completed — sorting mid-stream would fight the incremental
-  // append (results paint in catalog order as they arrive). 'catalogOrder' is the streamed
-  // order itself; 'relevance' orders by word-distance score (smaller = closer) with the
-  // streamed order as a stable tiebreaker. results is a shallowRef, so we always assign a
-  // fresh array to trigger reactivity.
+  // append (results paint in catalog order as they arrive). Every order sorts a COPY of
+  // the streamed order with a stable sort (Array.prototype.sort is stable since ES2019),
+  // so ties keep the streamed (catalog) order with no tiebreak lookup per comparison.
+  // 'catalogOrder' is the streamed order itself. The result is always a NEW array (a
+  // rebuild — consumers re-index), with the version bumped.
   async function finalizeSort() {
-    if (results.value.length < 2) return
+    if (streamedOrder.length < 2) return
 
     // chronological/authorName need per-book metadata (period / authors) that
     // booksDataStore derives from the catalog lazily. Load it before sorting; guard
@@ -224,10 +242,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       if (sortOrder.value !== picked) return
     }
 
-    const sorted = [...results.value]
-    const streamedPosition = new Map(streamedOrder.map((r, i) => [r, i]))
-    const byStream = (a: FullTextSearchResult, b: FullTextSearchResult) =>
-      (streamedPosition.get(a) ?? 0) - (streamedPosition.get(b) ?? 0)
+    const sorted = streamedOrder.slice()
+    const bookMap = booksStore.allBooksMap
+    const titleOf = (id: number) => bookMap.get(id)?.title ?? ''
+    const byTitle = (a: number, b: number) => titleOf(a).localeCompare(titleOf(b), 'he')
+    const byRank = (ranks: Map<number, number>) =>
+      (a: FullTextSearchResult, b: FullTextSearchResult) => ranks.get(a.bookId)! - ranks.get(b.bookId)!
     if (sortOrder.value === 'relevance') {
       // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
       // Ties keep their original streamed (catalog) order. We deliberately do NOT tiebreak on
@@ -236,24 +256,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // `?? 0` guards results restored from a cache written before wordDistance existed on
       // the wire — treat a missing distance as "closest" rather than sorting to NaN.
       const wd = (r: FullTextSearchResult) => r.wordDistance ?? 0
-      sorted.sort((a, b) => wd(a) - wd(b) || byStream(a, b))
+      sorted.sort((a, b) => wd(a) - wd(b))
     } else if (sortOrder.value === 'bookName') {
       // Alphabetical by book title (Hebrew collation), then streamed order so lines within the
       // same book stay in document order.
-      sorted.sort((a, b) => bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') || byStream(a, b))
+      sorted.sort(byRank(bookRanks(byTitle)))
     } else if (sortOrder.value === 'authorName') {
       // Alphabetical by author name (Hebrew collation), then book name, then streamed order.
       // Authorless books (empty author string) sort last. book.authors is the comma-joined
       // author list; we collate on it as-is (its natural first author leads the string).
-      const bookMap = booksStore.allBooksMap
-      const authorOf = (r: FullTextSearchResult) => bookMap.get(r.bookId)?.authors || ''
-      sorted.sort((a, b) => {
+      const authorOf = (id: number) => bookMap.get(id)?.authors || ''
+      sorted.sort(byRank(bookRanks((a, b) => {
         const aa = authorOf(a), ab = authorOf(b)
         if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
-        return aa.localeCompare(ab, 'he') ||
-          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
-          byStream(a, b)
-      })
+        return aa.localeCompare(ab, 'he') || byTitle(a, b)
+      })))
     } else if (sortOrder.value === 'chronological') {
       // Author death-year (primary) → precision tier (an exact author year leads an era
       // estimate landing on the same year) → catalog tree order → book name → streamed order.
@@ -261,39 +278,36 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // year = Infinity and sort LAST — an honest "unknown" at the end rather than a
       // fabricated position mid-list. Tree order keeps same-key books in their curated
       // catalog sequence (Tanach in canonical book order, Mishna in seder order) instead of
-      // alphabetical. Keys are cached per bookId because the comparator runs O(n log n)
-      // times and the author-year lookup normalizes name strings.
-      const bookMap = booksStore.allBooksMap
+      // alphabetical. Keys are cached per book because the author-year lookup normalizes
+      // name strings.
       const keyCache = new Map<number, { year: number; precision: number; treeOrder: number }>()
-      const keyOf = (r: FullTextSearchResult) => {
-        let key = keyCache.get(r.bookId)
+      const keyOf = (id: number) => {
+        let key = keyCache.get(id)
         if (!key) {
-          const book = bookMap.get(r.bookId)
+          const book = bookMap.get(id)
           const { year, precision } = chronologicalKey(book ?? { title: '' })
           // Finite fallback, not Infinity — the comparator subtracts these and
           // Infinity-Infinity is NaN (see YEAR_UNKNOWN in chronology/index.ts).
           key = { year, precision, treeOrder: book?.treeOrder ?? Number.MAX_SAFE_INTEGER }
-          keyCache.set(r.bookId, key)
+          keyCache.set(id, key)
         }
         return key
       }
-      sorted.sort((a, b) => {
+      sorted.sort(byRank(bookRanks((a, b) => {
         const keyA = keyOf(a)
         const keyB = keyOf(b)
         return (
           keyA.year - keyB.year ||
           keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
-          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
-          byStream(a, b)
+          byTitle(a, b)
         )
-      })
-    } else {
-      // 'catalogOrder' — restore the streamed order. A no-op right after streaming, but
-      // matters when the user switches back from another order on an already-sorted set.
-      sorted.sort(byStream)
+      })))
     }
+    // else 'catalogOrder': the streamed order itself. A no-op right after streaming, but
+    // matters when the user switches back from another order on an already-sorted set.
     results.value = sorted
+    resultsVersion.value++
   }
 
   // Re-sort an already-completed result set when the user changes the sort order.
@@ -321,8 +335,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     isSearching.value = true
     hasSearched.value = true
-    results.value = []
-    streamedOrder = []
+    // The stream's accumulator IS the published array: hits are pushed into it in place
+    // and each flush only bumps the version. Published now, empty, so the first flush is
+    // already an append (same identity) and not a rebuild.
+    const acc: FullTextSearchResult[] = []
+    results.value = acc
+    resultsVersion.value++
+    streamedOrder = acc
     searchTerms = []
     sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
@@ -340,7 +359,6 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     const abort = new AbortController()
     _streamAbort = abort
     try {
-      const acc: FullTextSearchResult[] = []
       const terms = searchTerms
       const stream = serviceStream<SearchStreamChunk>('ftsSearchStream', {
         query: _buildQueryToSend(normalizedQuery),
@@ -349,17 +367,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         contextWords: settings.searchContextMarginWords,
       }, abort.signal)
 
-      // Flush the accumulator into the reactive ref on the adaptive cadence
-      // (_flushDelayFor). Each flush copies the whole accumulator (a new array is
-      // required to trigger reactivity) and forces a full virtualizer measurement
-      // rebuild, so flushing on every pushed frame is O(n²) over the stream and
-      // freezes the page for high-frequency words. Backing off as the set grows bounds
-      // those rebuilds; `dirty` tracks pending hits so the last isn't lost.
+      // Publish the pushed hits every FLUSH_INTERVAL_MS: the array is already the one
+      // consumers hold, so a flush is a version bump and they fold in only the new tail.
+      // `dirty` tracks pending hits so the last ones are not lost.
       let lastFlushAt = 0
       let dirty = false
       const flush = () => {
-        results.value = acc.slice()
-        streamedOrder = acc
+        resultsVersion.value++
         dirty = false
         lastFlushAt = performance.now()
       }
@@ -378,7 +392,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           enterResultsStage()
           for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
           dirty = true
-          if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
+          if (performance.now() - lastFlushAt >= FLUSH_INTERVAL_MS) flush()
           if (cacheable) cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
         }
         if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
@@ -421,6 +435,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   function clearSearch() {
     results.value = []
+    resultsVersion.value++
     streamedOrder = []
     searchTerms = []
     hasSearched.value = false
@@ -449,6 +464,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       return true
     }
     results.value = cached.results
+    resultsVersion.value++
     streamedOrder = cached.results   // cached in the order it streamed
     searchTerms = cached.terms
     publishSnippetSource(_buildQueryToSend(normalizedQuery))
@@ -459,6 +475,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   return {
     results,
+    resultsVersion,
+    resultCount,
     matchedTermsOf,
     isSearching,
     currentStage,

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  *
  * The copy builder is what makes a selection spanning many search results paste as
- * every one of those results — including the ones the virtualizer never mounted, which
+ * every one of those results — including the ones the windowed scroller never mounted, which
  * is the whole reason it reads the model instead of the DOM selection.
  *
  * These tests pin the two rules that a live probe cannot pin cheaply: that the row

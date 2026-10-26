@@ -48,7 +48,7 @@ const SEED_BELOW = 28
 const CHUNK = 10
 // Cap on loaded lines: each edge-load past it trims the opposite edge, so a preview
 // can never accumulate a whole book. Far enough above the seed that trimming only
-// kicks in after sustained scrolling, small enough to bound the un-virtualized DOM.
+// kicks in after sustained scrolling, small enough to bound the un-windowed DOM.
 const MAX_LINES = 120
 
 export function useFullTextSearchPreview() {
