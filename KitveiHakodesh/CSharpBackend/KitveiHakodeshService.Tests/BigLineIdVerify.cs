@@ -110,6 +110,20 @@ namespace KitveiHakodeshService.Tests
                     var idx = q.GetLineIndexFromLineId(linesFar[3].Id);
                     Check(idx.Count == 1 && idx[0].LineIndex == 3 && idx[0].BookId == far.Id,
                         "GetLineIndexFromLineId finds line 3 of the far book", "line index: " + string.Join(",", idx.Select(i => i.LineIndex + "@" + i.BookId)));
+                    // Navigation inside a book of the additional library: its TOC tree, jump to a chapter by title,
+                    // and a line by its index - all answered from THAT library, with global ids.
+                    var tocAll = q.GetAllTocEntries(far.Id);
+                    Check(tocAll.Count == 2 && tocAll.Any(t => t.Text.Contains("תת פרק מרוחק") && t.LineId == linesFar[3].Id && t.LineIndex == 3 && t.ParentId is int)
+                          && tocAll.All(t => t.Id > SeforimDbLibraryId.OffsetUnit && t.Id < 2 * SeforimDbLibraryId.OffsetUnit)
+                          && tocAll.Any(t => t.ParentId is null && t.LineId == linesFar[2].Id),
+                        "GetAllTocEntries returns the far book's TOC tree with global entry and line ids",
+                        "toc entries: " + string.Join("|", tocAll.Select(t => t.Id + ":" + t.Text + "@" + t.LineId + "<" + t.ParentId)));
+                    var byPrefix = q.GetTocEntryByTextPrefix(far.Id, "תת פרק%");
+                    Check(byPrefix.Count == 1 && byPrefix[0].LineIndex == 3 && byPrefix[0].Id == tocAll.First(t => t.Text.Contains("תת פרק מרוחק")).Id,
+                        "GetTocEntryByTextPrefix finds a chapter of the far book by its title", "by prefix: " + string.Join("|", byPrefix.Select(t => t.Id + "@" + t.LineIndex)));
+                    var byIndex = q.GetLineByBookAndLineIndex(far.Id, 2);
+                    Check(byIndex.Count == 1 && byIndex[0].Id == linesFar[2].Id && byIndex[0].Content == "מדבר שומם",
+                        "GetLineByBookAndLineIndex returns line 2 of the far book with its global id", "by index: " + string.Join("|", byIndex.Select(l => l.Id + "=" + l.Content)));
                     var linesSecond = q.GetLinesPaged(second.Id, 10, 0);
                     Check(linesSecond.Count == 2 && linesSecond[0].Content == "נהר גדול",
                         "another book of the same library reads correctly", "second book: " + string.Join("|", linesSecond.Select(l => l.Content)));

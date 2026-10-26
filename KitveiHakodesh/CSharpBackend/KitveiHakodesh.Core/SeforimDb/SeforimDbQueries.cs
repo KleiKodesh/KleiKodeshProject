@@ -390,8 +390,37 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC ──────────────────────────────────────────────────────────────────
 
-        public List<TocEntryRow> GetAllTocEntries(int bookId) =>
-            ReadTocEntries(SeforimDbSqlStrings.GetAllTocEntries, ("@bookId", bookId));
+        public List<TocEntryRow> GetAllTocEntries(int bookId)
+        {
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex == 0)
+                return ReadTocEntries(SeforimDbSqlStrings.GetAllTocEntries, ("@bookId", bookId));
+
+            // A book of an additional library: its TOC lives in THAT library, and its entry / line ids
+            // (which may be translated, see SeforimDbIdMap) are handed out as global ids like every
+            // other id of that library.
+            var list = new List<TocEntryRow>();
+            if (FindAttached(libraryIndex) is not { } library) return list;
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetAllTocEntriesIn(library.Alias);
+            cmd.Parameters.AddWithValue("@bookId", localBookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new TocEntryRow
+                {
+                    Id = SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalTocId(r.GetInt64(0))),
+                    ParentId = r.IsDBNull(1) ? null : SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalTocId(r.GetInt64(1))),
+                    Level = r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                    LineId = r.IsDBNull(3) ? null : SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalLineId(r.GetInt64(3))),
+                    HasChildren = r.IsDBNull(4) ? 0 : r.GetInt32(4),
+                    Text = r.IsDBNull(5) ? "" : r.GetString(5),
+                    LineIndex = r.IsDBNull(6) ? null : r.GetInt32(6),
+                });
+            }
+            return list;
+        }
 
         public List<TocEntryRow> GetAllAltTocEntries(int structureId) =>
             ReadTocEntries(SeforimDbSqlStrings.GetAllAltTocEntries, ("@structureId", structureId));
@@ -444,14 +473,27 @@ namespace KitveiHakodesh.Core.SeforimDb
         public List<TocPrefixRow> GetTocEntryByTextPrefix(int bookId, string pattern)
         {
             var list = new List<TocPrefixRow>();
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            SeforimDbAttachedLibraries.Library? library = null;
+            if (libraryIndex != 0)
+            {
+                library = FindAttached(libraryIndex);
+                if (library is null) return list;
+            }
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetTocEntryByTextPrefix;
-            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.CommandText = library is { } lib
+                ? SeforimDbSqlStrings.GetTocEntryByTextPrefixIn(lib.Alias)
+                : SeforimDbSqlStrings.GetTocEntryByTextPrefix;
+            cmd.Parameters.AddWithValue("@bookId", library is null ? bookId : localBookId);
             cmd.Parameters.AddWithValue("@pattern", pattern);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new TocPrefixRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? null : r.GetInt32(1) });
+                list.Add(new TocPrefixRow
+                {
+                    Id = library is { } l2 ? SeforimDbLibraryId.ToGlobal(libraryIndex, l2.ToLocalTocId(r.GetInt64(0))) : r.GetInt32(0),
+                    LineIndex = r.IsDBNull(1) ? null : r.GetInt32(1),
+                });
             return list;
         }
 
@@ -989,6 +1031,30 @@ namespace KitveiHakodesh.Core.SeforimDb
         public List<RawLineRow> GetLineByBookAndLineIndex(int bookId, int lineIndex)
         {
             var list = new List<RawLineRow>();
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex != 0)
+            {
+                // A book of an additional library: read it through THAT library's tables, content shape
+                // and dictionary (see GetLinesPagedFromAttachedLibrary), and hand the line id out as a global id.
+                if (FindAttached(libraryIndex) is not { } library) return list;
+                using var aconn = Open();
+                var shape = SeforimDbSchema.ForDatabase(aconn, library.Path, library.Alias);
+                using var acodec = SeforimDbLineContentCodec.Create(aconn, library.Alias, library.Path);
+                using var acmd = aconn.CreateCommand();
+                acmd.CommandText = SeforimDbSqlStrings.GetLineByBookAndLineIndexIn(library.Alias, shape);
+                acmd.Parameters.AddWithValue("@bookId", localBookId);
+                acmd.Parameters.AddWithValue("@lineIndex", lineIndex);
+                using var ar = acmd.ExecuteReader();
+                while (ar.Read())
+                    list.Add(new RawLineRow
+                    {
+                        Id = SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalLineId(ar.GetInt64(0))),
+                        LineIndex = ar.IsDBNull(1) ? 0 : ar.GetInt32(1),
+                        Content = acodec.DecodeColumnOrEmpty(ar, 2),
+                    });
+                return list;
+            }
+
             using var conn = Open();
             using var cmd = conn.CreateCommand();
             using var codec = CodecFor(conn);

@@ -126,6 +126,16 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE te.bookId = @bookId
             ORDER BY te.id";
 
+        /// <summary><see cref="GetAllTocEntries"/> on an attached library's own tables.</summary>
+        public static string GetAllTocEntriesIn(string librarySchema) => $@"
+            SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
+                   tt.text, l.lineIndex
+            FROM {librarySchema}.tocEntry te
+            JOIN {librarySchema}.tocText tt ON tt.id = te.textId
+            LEFT JOIN {librarySchema}.line l ON l.id = te.lineId
+            WHERE te.bookId = @bookId
+            ORDER BY te.id";
+
         /// <summary>All alt_toc structures for a book.</summary>
         public const string GetAltTocStructures = @"
             SELECT id, key, title, heTitle
@@ -149,6 +159,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             FROM tocEntry te
             JOIN tocText tt ON tt.id = te.textId
             LEFT JOIN line l ON l.id = te.lineId
+            WHERE te.bookId = @bookId
+              AND tt.text LIKE @pattern
+            ORDER BY te.id ASC
+            LIMIT 1";
+
+        /// <summary><see cref="GetTocEntryByTextPrefix"/> on an attached library's own tables.</summary>
+        public static string GetTocEntryByTextPrefixIn(string librarySchema) => $@"
+            SELECT te.id, l.lineIndex
+            FROM {librarySchema}.tocEntry te
+            JOIN {librarySchema}.tocText tt ON tt.id = te.textId
+            LEFT JOIN {librarySchema}.line l ON l.id = te.lineId
             WHERE te.bookId = @bookId
               AND tt.text LIKE @pattern
             ORDER BY te.id ASC
@@ -565,6 +586,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetLineByBookAndLineIndex(SeforimDbSchema schema) =>
             "SELECT l.id, l.lineIndex, " + C_ContentColumn(schema, "l")
             + " FROM line l" + C_ContentJoin(schema, "l")
+            + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
+
+        /// <summary><see cref="GetLineByBookAndLineIndex(SeforimDbSchema)"/> on an attached library, with ITS
+        /// OWN content shape (plain, split sidecar, compressed).</summary>
+        public static string GetLineByBookAndLineIndexIn(string librarySchema, SeforimDbSchema shape) =>
+            $"SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}"
+            + $" FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}"
             + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
 
         /// <summary>
