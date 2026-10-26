@@ -347,6 +347,12 @@ Continue?</value>
   <data name="Settings_Subtitle" xml:space="preserve">
     <value>Choose which components appear in the toolbar and which is the main button</value>
   </data>
+  <data name="Settings_General_Title" xml:space="preserve">
+    <value>General Settings</value>
+  </data>
+  <data name="Settings_General_Subtitle" xml:space="preserve">
+    <value>Interface language and optional Word macros</value>
+  </data>
   <data name="Settings_Available" xml:space="preserve">
     <value>Available Components</value>
   </data>

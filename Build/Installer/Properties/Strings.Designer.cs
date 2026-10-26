@@ -365,6 +365,12 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
         /// <summary>Choose which components appear in the toolbar and which is the main button</summary>
         public static string Settings_Subtitle => ResourceManager.GetString("Settings_Subtitle", resourceCulture);
 
+        /// <summary>General Settings</summary>
+        public static string Settings_General_Title => ResourceManager.GetString("Settings_General_Title", resourceCulture);
+
+        /// <summary>Interface language and optional Word macros</summary>
+        public static string Settings_General_Subtitle => ResourceManager.GetString("Settings_General_Subtitle", resourceCulture);
+
         /// <summary>Available Components</summary>
         public static string Settings_Available => ResourceManager.GetString("Settings_Available", resourceCulture);
 
