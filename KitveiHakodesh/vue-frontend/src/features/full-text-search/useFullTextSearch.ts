@@ -20,18 +20,17 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
 import { bookTitleOf } from './fullTextSearchReferences'
-import { seedLineTexts } from './fullTextSearchSnippets'
+import { seedLineTexts, setSnippetSource } from './fullTextSearchSnippets'
 import { matchedTermIdsOf } from './fullTextSearchTypes'
 import { WORD_OPTIONS, applyWordOptions } from './queryWordSyntax'
 import type { AllWords, PerWord, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
-// O(n) for the array copy AND makes @tanstack/vue-virtual rebuild its ENTIRE measurements
-// array (memoized on `count`; when the viewport is at the top `min` is 0, so it recomputes
-// every row 0..count — see virtual-core getMeasurements). Flushing every 150ms while the
-// set grows into the hundreds-of-thousands (a high-frequency word) makes that O(n²) and
-// freezes the page. So: flush fast while the list is small (snappy first paint), then back
+// O(n) for the array copy plus the count-dependent work downstream (the scrollbar's
+// track map, the result counts). Flushing every 150ms while the set grows into the
+// hundreds-of-thousands (a high-frequency word) makes that O(n²) and freezes the page.
+// So: flush fast while the list is small (snappy first paint), then back
 // off sharply so the expensive rebuilds happen only a handful of times.
 // Results are never capped — everything still streams in; only the paint cadence changes.
 function _flushDelayFor(count: number): number {
@@ -131,6 +130,24 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const results = shallowRef<FullTextSearchResult[]>([])
   /** The current result set's matched-term table (the hits' mark term ids index into it). */
   let searchTerms: string[] = []
+  /** The search's id for a matched term — appended when a snippet fetched later brings a new one. */
+  function termIdOf(term: string): number {
+    const known = searchTerms.indexOf(term)
+    if (known >= 0) return known
+    searchTerms.push(term)
+    return searchTerms.length - 1
+  }
+
+  /** Tells the snippet loader which search (query as sent, options) later rows' snippets belong to. */
+  function publishSnippetSource(queryToSend: string) {
+    setSnippetSource({
+      query: queryToSend,
+      requireOrdered: settings.searchRequireOrdered,
+      contextWords: settings.searchContextMarginWords,
+      termIdOf,
+    })
+  }
+
   /** The concrete index terms that matched a hit — what the book view highlights. */
   function matchedTermsOf(hit: FullTextSearchResult): string[] {
     const out: string[] = []
@@ -313,6 +330,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
+    publishSnippetSource(_buildQueryToSend(normalizedQuery))
     // The IndexedDB cache serves session restore and tab switching (see loadCachedResults),
     // never a user-initiated search. Only a search run against a fully built index is
     // cached — partial results from a mid-build search would be served as complete and stale.
@@ -433,6 +451,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     results.value = cached.results
     streamedOrder = cached.results   // cached in the order it streamed
     searchTerms = cached.terms
+    publishSnippetSource(_buildQueryToSend(normalizedQuery))
     executedQuery.value = q
     hasSearched.value = true
     return true
