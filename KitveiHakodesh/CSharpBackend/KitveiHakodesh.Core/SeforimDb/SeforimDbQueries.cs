@@ -407,6 +407,46 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
+        /// <summary>The same links as GetCommentaryLinksForSourceLineRange, de-duplicated and
+        /// grouped per (target book, connection type) — see CommentaryLinkGroupRow.</summary>
+        public List<CommentaryLinkGroupRow> GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds)
+        {
+            var list = new List<CommentaryLinkGroupRow>();
+            if (lineIds is null || lineIds.Count == 0) return list;
+            using var conn = Open();
+            _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
+            BindList(cmd, "p", lineIds);
+            using var r = cmd.ExecuteReader();
+            int curBook = int.MinValue, curType = int.MinValue;
+            var ids = new List<int>();
+            var indexes = new List<int>();
+            void Flush()
+            {
+                if (ids.Count == 0) return;
+                list.Add(new CommentaryLinkGroupRow
+                {
+                    TargetBookId = curBook,
+                    ConnectionTypeId = curType,
+                    LineIds = ids.ToArray(),
+                    LineIndexes = indexes.ToArray(),
+                });
+                ids.Clear();
+                indexes.Clear();
+            }
+            while (r.Read())
+            {
+                int book = r.IsDBNull(0) ? 0 : r.GetInt32(0);
+                int type = r.IsDBNull(1) ? 0 : r.GetInt32(1);
+                if (book != curBook || type != curType) { Flush(); curBook = book; curType = type; }
+                ids.Add(r.IsDBNull(2) ? 0 : r.GetInt32(2));
+                indexes.Add(r.IsDBNull(3) ? 0 : r.GetInt32(3));
+            }
+            Flush();
+            return list;
+        }
+
         // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
         // Zayit nor Otzaria v1 DB has it). Detected once — the seforim DB is static for the
         // life of the process (see _linkHasTargetLineIndex).

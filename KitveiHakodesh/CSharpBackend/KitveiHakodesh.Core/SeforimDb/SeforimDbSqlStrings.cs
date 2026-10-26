@@ -171,6 +171,24 @@ namespace KitveiHakodesh.Core.SeforimDb
             JOIN line ln ON ln.id = l.targetLineId
             WHERE l.sourceLineId IN ({InPlaceholders("p", count)})";
 
+        /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange: ordered so
+        /// the reader can cut groups on a (book, type) change; DISTINCT because a range of source
+        /// lines links the same target line many times over.</summary>
+        public static string GetCommentaryLinkGroupsForSourceLineRange(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+            ? $@"
+            SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
+                   l.targetLineIndex AS lineIndex
+            FROM link l
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            ORDER BY l.targetBookId, l.connectionTypeId, lineIndex, l.targetLineId"
+            : $@"
+            SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
+                   ln.lineIndex
+            FROM link l
+            JOIN line ln ON ln.id = l.targetLineId
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            ORDER BY l.targetBookId, l.connectionTypeId, ln.lineIndex, l.targetLineId";
+
         /// <summary>Content backfill for a batch of line ids.</summary>
         public static string GetLineContents(SeforimDbSchema schema, int count) =>
             $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +

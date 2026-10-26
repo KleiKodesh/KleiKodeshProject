@@ -170,6 +170,19 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int LineIndex { get; set; }
     }
 
+    /// <summary>Forward commentary links for a range of source lines, grouped by target book and
+    /// connection type: one entry per (book, type) with its DISTINCT target line ids and their
+    /// line indexes as parallel arrays. Ids and numbers only — a whole-book range (~55k links)
+    /// is a few hundred KB instead of the ~4 MB the per-row shape cost.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryLinkGroupRow
+    {
+        public int TargetBookId { get; set; }
+        public int ConnectionTypeId { get; set; }
+        public int[] LineIds { get; set; } = System.Array.Empty<int>();
+        public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
+    }
+
     /// <summary>Word-level link anchor (link_anchor ⋈ link) for a source line. CharStart/CharEnd
     /// are visible-char offsets into the line's raw content (upstream countVisibleChars convention:
     /// tags = 0, entity = 1, everything else — including diacritics — = 1). CharEnd null = point

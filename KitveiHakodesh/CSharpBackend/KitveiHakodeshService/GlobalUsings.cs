@@ -19,6 +19,7 @@ global using BookSourceNameRow = KitveiHakodesh.Core.SeforimDb.BookSourceNameRow
 global using BookVersionRow = KitveiHakodesh.Core.SeforimDb.BookVersionRow;
 global using CategoryRow = KitveiHakodesh.Core.SeforimDb.CategoryRow;
 global using CommentaryLinkRow = KitveiHakodesh.Core.SeforimDb.CommentaryLinkRow;
+global using CommentaryLinkGroupRow = KitveiHakodesh.Core.SeforimDb.CommentaryLinkGroupRow;
 global using ConnectionTypeRow = KitveiHakodesh.Core.SeforimDb.ConnectionTypeRow;
 global using DefaultCommentatorRow = KitveiHakodesh.Core.SeforimDb.DefaultCommentatorRow;
 global using EnclosingTocPathRow = KitveiHakodesh.Core.SeforimDb.EnclosingTocPathRow;
