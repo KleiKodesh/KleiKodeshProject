@@ -692,6 +692,11 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinksResult { Rows = seforim.GetCommentaryLinksForSourceLineRange(a.LineIds) }));
                 }
+                case "getCommentaryLinkGroupsForSourceLineRange":
+                {
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinkGroupsResult { Rows = seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds) }));
+                }
 
                 case "getLineContents":
                 {

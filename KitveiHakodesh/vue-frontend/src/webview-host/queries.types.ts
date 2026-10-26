@@ -172,6 +172,17 @@ export interface CommentaryLinkRow {
   content?: string
 }
 
+/**
+ * Forward commentary links grouped per (target book, connection type): DISTINCT
+ * target line ids with their line indexes as parallel arrays. Ids and numbers only.
+ */
+export interface CommentaryLinkGroupRow {
+  targetBookId: number
+  connectionTypeId: number
+  lineIds: number[]
+  lineIndexes: number[]
+}
+
 /** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */
 export interface WordLinkAnchor {
   lineId: number

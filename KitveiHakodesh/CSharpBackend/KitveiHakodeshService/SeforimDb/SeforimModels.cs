@@ -116,6 +116,9 @@ public sealed class BookIdArgs { public int BookId { get; set; } }
 public sealed class CommentaryLinksResult { public List<CommentaryLinkRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CommentaryLinkGroupsResult { public List<CommentaryLinkGroupRow> Rows { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentsResult { public List<LineContentRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

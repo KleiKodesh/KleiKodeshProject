@@ -140,6 +140,8 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds) =>
         Run(() => _queries.GetCommentaryLinksForSourceLineRange(lineIds), new List<CommentaryLinkRow>(), "getCommentaryLinksForSourceLineRange");
+    public List<CommentaryLinkGroupRow> GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds) =>
+        Run(() => _queries.GetCommentaryLinkGroupsForSourceLineRange(lineIds), new List<CommentaryLinkGroupRow>(), "getCommentaryLinkGroupsForSourceLineRange");
 
     // A failed or DB-less call answers Supported = true with no rows. Supported = false means
     // "this schema has no link_anchor", which the page caches until it reloads — a transient

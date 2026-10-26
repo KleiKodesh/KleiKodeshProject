@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroupRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -428,4 +428,13 @@ export async function getLineRefAndContent(
   if (bookId <= 0 || lineIndex < 0) return undefined
   type Row = { id: number; lineIndex: number; heRef: string | null; content: string }
   return (await seforimOp<{ rows: Row[] }>('getLineRefAndContent', { bookId, lineIndex })).rows[0]
+}
+
+/**
+ * Forward commentary links for a range of source lines, de-duplicated and grouped per
+ * (target book, connection type) in Core. Numbers only: a whole-book range is a few
+ * hundred KB where the per-row shape above was ~4 MB.
+ */
+export async function getCommentaryLinkGroupsForSourceLineRange(lineIds: number[]): Promise<CommentaryLinkGroupRow[]> {
+  return (await seforimOp<{ rows: CommentaryLinkGroupRow[] }>('getCommentaryLinkGroupsForSourceLineRange', { lineIds })).rows
 }
