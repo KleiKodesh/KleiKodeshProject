@@ -799,6 +799,6 @@ export function useBookView(
     toggleTocPanel: sidePanel.toggleTocPanel,
     closeSidePanel: sidePanel.closeSidePanel,
     ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
-    getActiveTocEntry, getTocPath,
+    getActiveTocEntry, getActiveAltTocEntry, getTocPath,
   }
 }

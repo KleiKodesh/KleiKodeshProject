@@ -32,7 +32,11 @@ import { useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
 import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
-import type { WindowedScrollerScrollToOptions, WindowedScrollerVisibleRow } from './windowedScrollerTypes'
+import type {
+  WindowedScrollerBarTarget,
+  WindowedScrollerScrollToOptions,
+  WindowedScrollerVisibleRow,
+} from './windowedScrollerTypes'
 
 defineOptions({ inheritAttrs: false })
 
@@ -55,9 +59,27 @@ const props = withDefaults(
      * are always available.
      */
     ensureRows?: (start: number, end: number) => Promise<void>
+    /**
+     * Changes when the rows' CONTENT changes under the same indexes (a text
+     * version swap). The mounted window is asked for again, and each row
+     * re-renders as its new content arrives, held in place.
+     */
+    rowSourceVersion?: unknown
+    /**
+     * Row indexes where the list's sections start, in tiers from coarse to fine (a
+     * book's TOC levels). The scrollbar gives each section start a minimum span of
+     * track so it can be pointed at, taking as many tiers as fit — see
+     * windowedScrollerTrackMap.ts.
+     */
+    landmarkTiers?: number[][]
   }>(),
   { pinnedIndexes: () => [] },
 )
+
+const emit = defineEmits<{
+  /** The landing on `initialIndex` is on screen — the opening render. Not emitted without one. */
+  opened: []
+}>()
 
 const viewportElement = ref<HTMLElement | null>(null)
 const contentElement = ref<HTMLElement | null>(null)
@@ -82,6 +104,7 @@ const {
   holdAnchor,
   holdAnchorThroughScroll,
   landAt,
+  refreshRows,
   fill,
 } = useWindowedScrollerWindow({
   count: () => props.count,
@@ -125,7 +148,14 @@ const bar = useWindowedScrollerBarMapping({
   rowElement,
   findRowIndexAt,
   landAt: (index) => scrollToIndex(index),
+  landmarkTiers: () => props.landmarkTiers ?? [],
 })
+
+function barTargetAt(clientY: number): WindowedScrollerBarTarget | null {
+  const target = barReference.value?.targetAt(clientY)
+  if (!target) return null
+  return { index: bar.indexForPosition(target.position), onThumb: target.onThumb }
+}
 
 // Hold BEFORE remembering: a layout change the scroller did not make (a font
 // swap re-wrapping rows above) can land between a scroll and the resize observer
@@ -162,6 +192,8 @@ watch(
   },
   { immediate: true },
 )
+
+watch(() => props.rowSourceVersion, () => { void refreshRows() })
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -211,6 +243,7 @@ defineExpose({
   isRowRendered,
   isRowFullyVisible,
   rowElement,
+  barTargetAt,
 })
 </script>
 
