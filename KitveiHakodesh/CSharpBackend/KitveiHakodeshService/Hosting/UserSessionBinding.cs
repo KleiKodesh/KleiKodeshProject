@@ -87,7 +87,8 @@ public sealed class UserSessionBinding(
             () => Program.BuildDataHost(Array.Empty<string>()),
             (host, pipe, request, ct) => AnswerAsync(host.Services.GetRequiredService<Dispatcher>(), pipe, request, ct),
             DataHostReload.Consume,
-            logger);
+            logger,
+            endProcess: () => Environment.Exit(0));
         try { await supervisor.RunAsync(firstConnection, firstRequest!, stoppingToken); }
         finally
         {

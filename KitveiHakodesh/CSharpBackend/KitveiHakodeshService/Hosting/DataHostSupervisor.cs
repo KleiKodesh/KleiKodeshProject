@@ -23,6 +23,12 @@ internal sealed class DataHostSupervisor
     private readonly Func<bool> _consumeReload;
     private readonly ILogger _logger;
 
+    /// <summary>Ends the process; called from a plain thread when a final stop takes too long.</summary>
+    private readonly Action? _endProcess;
+
+    /// <summary>The longest a final stop may keep the pipe closed while the SCM still says "running".</summary>
+    private static readonly TimeSpan FinalStopLimit = TimeSpan.FromSeconds(45);
+
     /// <summary>How long a data host gets to stop before it is abandoned.</summary>
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(40);
 
@@ -34,8 +40,10 @@ internal sealed class DataHostSupervisor
         Func<IHost> buildHost,
         Func<IHost, NamedPipeServerStream, byte[], CancellationToken, Task> answer,
         Func<bool> consumeReload,
-        ILogger logger)
+        ILogger logger,
+        Action? endProcess = null)
     {
+        _endProcess = endProcess;
         _createPipe = createPipe;
         _buildHost = buildHost;
         _answer = answer;
@@ -132,6 +140,21 @@ internal sealed class DataHostSupervisor
 
             bool reload = !stoppingToken.IsCancellationRequested && _consumeReload();
             _logger.LogWarning("data host: stopping (reload: {Reload})", reload);
+            if (!reload && _endProcess is not null)
+            {
+                // The index builders take their time to wind down (each waits for its build to react to
+                // the cancel), and meanwhile the pipe is closed but the service still looks "running":
+                // a program opened in that window finds nobody and cannot start it. A plain thread, not
+                // the pool, which can itself be tied up by those waits.
+                var end = _endProcess;
+                var watchdog = new Thread(() =>
+                {
+                    Thread.Sleep(FinalStopLimit);
+                    _logger.LogError("The data host took over {Seconds:N0}s to stop; ending the process", FinalStopLimit.TotalSeconds);
+                    end();
+                }) { IsBackground = true, Name = "final-stop-watchdog" };
+                watchdog.Start();
+            }
             // Listening again BEFORE the old host finishes stopping: no moment without a pipe.
             if (reload) holder = StartHolder(stoppingToken);
 
