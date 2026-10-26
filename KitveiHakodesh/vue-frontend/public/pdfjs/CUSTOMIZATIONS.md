@@ -398,11 +398,11 @@ Inside the existing `<span id="scaleSelectContainer" class="dropdownToolbarButto
 The input is positioned absolutely over the text area of the select (covering the select's own rendered text), leaving the right 38px free so the select's native `::after` dropdown arrow remains fully visible and clickable. The select continues to work normally — clicking the arrow opens the dropdown as before.
 
 Behavior:
-- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `scalechanging` and `change` events.
+- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `change` and `PDFViewerApplication.eventBus` `scalechanging` (hooked once the app exists — eventBus events are not DOM events, so a `window` listener never fires). Without the eventBus hook, Ctrl+0 or a wheel/key zoom landing on an already-listed preset left a stale label.
 - **On focus:** switches to `type="number"`, shows the current scale as a plain integer percentage, selects all text.
 - **On Enter:** applies `PDFViewerApplication.pdfViewer.currentScaleValue = (value / 100).toString()`, blurs.
 - **On Escape or invalid input:** discards, reverts to resting state.
-- **On blur:** applies zoom, reverts to resting state.
+- **On blur:** applies zoom only if the user typed (an `input` event since focus), then reverts to resting state. Focusing at "אוטומטי" and leaving must not pin the zoom to the rounded % (e.g. 118%).
 - Polls `waitForApp` until `PDFViewerApplication.pdfViewer` is ready and Fluent has translated the options before showing the first label.
 
 The init script is added as a `<script>` block immediately before `</body>`.
@@ -1737,6 +1737,13 @@ nearest previous row's page rather than being dropped.
    transforms included.
    **Placement is critical: the block must run BEFORE the `changes.size === 0` early
    return**, or an outline-only save returns the original bytes unchanged.
+
+   **`src` follows item identity.** `outline-search.js` stamps `data-toc-src` by walking
+   the outline tree and the rendered rows together (PDF.js renders them 1:1), not by
+   destination: `flat` is BFS while the DOM is depth-first, so a per-href queue gave
+   items sharing a destination at different depths each other's `src`, and saving moved
+   bold/italic/color/closed state onto the other item. The href queue remains only as a
+   fallback when the DOM shape does not match the outline.
 
    **Attribute preservation (`src`).** Entries carry `src` — their index into the
    ORIGINAL outline flattened in the same BFS order the viewer uses — and the worker
