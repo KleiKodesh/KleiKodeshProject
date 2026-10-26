@@ -8,7 +8,9 @@
 param([string]$OutFile = "RELEASE_NOTES.txt")
 
 $ErrorActionPreference = 'Stop'
-$model = if ($env:GEMINI_MODEL) { $env:GEMINI_MODEL } else { 'gemini-flash-latest' }
+# Tried in order; each model has its own free-tier quota, so a maxed-out first one
+# still leaves the second. No AI notes = no release (the step fails, nothing is built).
+$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-pro-latest') }
 
 $previousTag = gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName'
 $range   = if ($previousTag) { "$previousTag..HEAD" } else { "-30" }
@@ -59,22 +61,26 @@ $body = @{
     }
 } | ConvertTo-Json -Depth 20
 
-foreach ($attempt in 1..4) {
-    try {
-        $resp = Invoke-RestMethod -Method Post -TimeoutSec 300 `
-            -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
-            -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
-            -ContentType 'application/json; charset=utf-8' `
-            -Body ([Text.Encoding]::UTF8.GetBytes($body))
-        break
-    } catch {
-        if ($attempt -eq 4) { throw }
-        Write-Host "Gemini attempt $attempt failed: $($_.Exception.Message) - retrying"
-        Start-Sleep -Seconds (15 * $attempt)
+$plan = $null
+:models foreach ($model in $models) {
+    foreach ($attempt in 1..6) {
+        try {
+            $resp = Invoke-RestMethod -Method Post -TimeoutSec 300 `
+                -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
+                -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
+                -ContentType 'application/json; charset=utf-8' `
+                -Body ([Text.Encoding]::UTF8.GetBytes($body))
+            $plan = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
+            if ($plan.notes_en -and $plan.notes_he) { Write-Host "Model: $model"; break models }
+            throw "incomplete answer"
+        } catch {
+            Write-Host "$model attempt $attempt failed: $($_.Exception.Message)"
+            $plan = $null
+            if ($attempt -lt 6) { Start-Sleep -Seconds (30 * $attempt) }
+        }
     }
 }
-
-$plan = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
+if (-not $plan) { throw "Gemini failed on every model - no release. Run the workflow again later." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
 
