@@ -5,14 +5,14 @@
  * thousands of hits, and their HTML was most of the payload, the IndexedDB cache and the
  * page's memory). Each hit carries a DESCRIPTOR instead — which lines, which raw window,
  * which highlight ranges (see FtsHit in SeforimDbFtsModels.cs). Only the rows the
- * virtualizer actually renders fetch their line texts (getLineContents, batched) and have
+ * results list mounts fetch their line texts (getLineContents, batched) and have
  * their HTML rebuilt here, and both are kept in small LRUs.
  *
  * buildSnippetHtml is a PORT of FtsLib's SnippetBuilder.RenderFromRaw + AppendRawStripped
  * and must produce the very same string the service used to send — keep the two in step.
  */
 import { shallowRef } from 'vue'
-import { getLineContents } from '@/webview-host/seforimApi'
+import { ftsSnippets, getLineContents } from '@/webview-host/seforimApi'
 import { SNIPPET_FLAG_LEADING_ELLIPSIS, SNIPPET_FLAG_TRAILING_ELLIPSIS, SNIPPET_MARK_STRIDE } from './fullTextSearchTypes'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 
@@ -63,6 +63,60 @@ export function buildSnippetHtml(source: string, hit: FullTextSearchResult): str
   return out
 }
 
+// ── The search the snippets belong to ─────────────────────────────────────────────────
+
+/**
+ * What asking the service for a hit's snippet takes: the query as it was SENT (word
+ * options applied) and the options the stream ran with, plus the search's term table —
+ * the service numbers a response's matched terms on its own, and each mark's term id is
+ * mapped onto the search's table so matchedTermsOf keeps reading the hits uniformly.
+ * Set by useFullTextSearch for every search it starts or restores.
+ */
+export interface SnippetSource {
+  query: string
+  requireOrdered: boolean
+  contextWords: number
+  /** The search's id for a matched term, appending it when first seen. */
+  termIdOf: (term: string) => number
+}
+
+let snippetSource: SnippetSource | null = null
+
+export function setSnippetSource(source: SnippetSource | null): void {
+  snippetSource = source
+}
+
+/** Whether the hit carries its snippet descriptor yet (the stream sends it for the first hits only). */
+function hasDescriptor(hit: FullTextSearchResult): boolean {
+  return hit.snippetLineIds.length > 0
+}
+
+/**
+ * Asks the service for these hits' snippet descriptors and writes them onto the hits
+ * (the one place a hit changes after it streamed), seeding their line texts too. Hits
+ * the service no longer matches keep an empty descriptor and render as an empty
+ * snippet. Rejects on a failed request, so the rows are not mounted empty.
+ */
+async function fetchDescriptors(hits: FullTextSearchResult[]): Promise<void> {
+  const source = snippetSource
+  if (!source) return
+  const byLineId = new Map(hits.map((hit) => [hit.lineId, hit]))
+  const response = await ftsSnippets(source.query, [...byLineId.keys()], source.requireOrdered, source.contextWords)
+  const termIds = response.terms.map(source.termIdOf)
+  for (const row of response.hits) {
+    const hit = byLineId.get(row.lineId)
+    if (!hit) continue
+    const marks = row.snippetMarks.slice()
+    for (let i = SNIPPET_MARK_STRIDE - 1; i < marks.length; i += SNIPPET_MARK_STRIDE) marks[i] = termIds[marks[i]!] ?? marks[i]!
+    hit.snippetLineIds = row.snippetLineIds
+    hit.snippetStart = row.snippetStart
+    hit.snippetEnd = row.snippetEnd
+    hit.snippetMarks = marks
+    hit.snippetFlags = row.snippetFlags
+  }
+  seedLineTexts(response.lineTexts)
+}
+
 // ── On-demand cache ──────────────────────────────────────────────────────────────────
 
 /** Line texts by line id. Small: a screenful of rows is at most a few hundred lines. */
@@ -74,7 +128,8 @@ const FETCH_BATCH = 200
 
 const lineTexts = new Map<number, string>()
 const snippetHtml = new Map<FullTextSearchResult, string>()
-const inFlight = new Set<number>()
+/** The fetch each in-flight line id rides on, so a second caller awaits it instead of asking again. */
+const inFlight = new Map<number, Promise<void>>()
 
 /** Bumped whenever fetched texts land — the reactive dependency of snippetHtmlOf. */
 const snippetsVersion = shallowRef(0)
@@ -133,34 +188,44 @@ export function seedLineTexts(texts: Record<string | number, string> | undefined
 }
 
 /**
- * Fetches the line texts the given hits' snippets need and are missing — one batched
- * request per call (split only at FETCH_BATCH ids), deduplicated against requests still
- * in flight. The caller passes the rows the virtualizer renders, on every range change.
+ * Resolves once every given hit's snippet can be built — fetching the line texts that
+ * are missing in one batched request (split only at FETCH_BATCH ids) and awaiting those
+ * another call already has in flight. The windowed results list calls this BEFORE it
+ * mounts a range of rows, so a row is never on screen without its snippet. Rejects when
+ * a fetch fails, so the list mounts nothing rather than empty rows.
  */
-export function requestSnippets(hits: readonly FullTextSearchResult[]): void {
+export async function ensureSnippets(hits: readonly FullTextSearchResult[]): Promise<void> {
+  // Descriptors first: a hit past the stream's first ones has none until asked for, and
+  // which lines its snippet spans is only known once it does.
+  const withoutDescriptor = hits.filter((hit) => !snippetHtml.has(hit) && !hasDescriptor(hit))
+  if (withoutDescriptor.length) await fetchDescriptors(withoutDescriptor)
   const missing: number[] = []
+  const waits = new Set<Promise<void>>()
   for (const hit of hits) {
     if (snippetHtml.has(hit)) continue
     const ids = hit.snippetLineIds?.length ? hit.snippetLineIds : [hit.lineId]
     for (const id of ids) {
-      if (lineTexts.has(id) || inFlight.has(id)) continue
-      inFlight.add(id)
+      if (lineTexts.has(id)) continue
+      const pending = inFlight.get(id)
+      if (pending) { waits.add(pending); continue }
       missing.push(id)
     }
   }
   for (let i = 0; i < missing.length; i += FETCH_BATCH) {
     const batch = missing.slice(i, i + FETCH_BATCH)
-    getLineContents(batch)
+    const fetching = getLineContents(batch)
       .then((rows) => {
         for (const row of rows) touch(lineTexts, row.id, row.content ?? '', LINE_TEXT_CAP)
         // An id the service did not return has no line (any more): remember it as empty so
         // the row renders what it can instead of asking forever.
         for (const id of batch) if (!lineTexts.has(id)) touch(lineTexts, id, '', LINE_TEXT_CAP)
       })
-      .catch((err) => console.error('[fullTextSearchSnippets] line text fetch failed:', err))
       .finally(() => {
-        for (const id of batch) inFlight.delete(id)
+        for (const id of batch) if (inFlight.get(id) === fetching) inFlight.delete(id)
         snippetsVersion.value++
       })
+    for (const id of batch) inFlight.set(id, fetching)
+    waits.add(fetching)
   }
+  if (waits.size) await Promise.all(waits)
 }

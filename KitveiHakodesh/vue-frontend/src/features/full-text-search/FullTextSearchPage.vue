@@ -314,7 +314,9 @@ watch(
     // Consume it, like openTocLineIndex: the field describes ONE navigation, and leaving it
     // set would make an unrelated later patch (a title refresh) re-trigger this restore.
     paneNavigation.updateActiveTab({ searchRestore: undefined })
-    resultsListRef.value?.armRestore()
+    // The query this navigation shows — the term the list's `searchQuery` will carry.
+    const tabQuery = paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery ?? ''
+    resultsListRef.value?.armRestore(parseSearchQuery(tabQuery).term || tabQuery)
   },
 )
 

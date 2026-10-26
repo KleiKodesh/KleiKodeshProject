@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { ref, computed, watch, onBeforeUnmount, onUpdated, onScopeDispose, nextTick } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import { ref, shallowRef, computed, watch, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useEventListener, useElementSize } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
@@ -15,11 +15,14 @@ import MessageBanner from '@/components/MessageBanner.vue'
 import { INDEX_REBUILD_BUTTON_LABELS } from '@/composables/useSearchIndexStatus'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
+import BookViewScrollbarTocTooltip from '@/features/book-view/lines/BookViewScrollbarTocTooltip.vue'
+import { useBookViewScrollbarTocTooltip } from '@/features/book-view/lines/useBookViewScrollbarTocTooltip'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
-import { requestSnippets, snippetHtmlOf } from './fullTextSearchSnippets'
+import { ensureSnippets, snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf, requestReferences, tocPathOf } from './fullTextSearchReferences'
+import { decideRestore } from './scrollRestore'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 import { teamimFontStyle } from '@/utils/teamimFont'
 
@@ -29,8 +32,8 @@ const props = defineProps<{
   /**
    * Bumped whenever the results array is REBUILT rather than appended to — a new
    * search, a sort change, or a book/@-token filter change. Row indexes address
-   * different results after any of those, which the selection pins must know about;
-   * see useFullTextSearchFilters.filteredGeneration.
+   * different results after any of those, which the selection pins and the mounted
+   * rows must know about; see useFullTextSearchFilters.filteredGeneration.
    */
   resultsGeneration: number
   searchQuery: string
@@ -59,13 +62,39 @@ const SEARCH_ERROR_MESSAGES: Record<SearchFailReason, string> = {
   searchFailed:  t('fullTextSearch.error.searchFailed'),
 }
 const settingsStore = useSettingsStore()
-const scrollEl = ref<HTMLElement | null>(null)
+
+// The windowed scroller mounts only the rows around the viewport, and fetches their
+// snippets BEFORE mounting them — no placeholder rows, no estimated heights, and a
+// jump (restore, book link) lands exactly, once. Its viewport is the scroll element
+// every listener below uses; it exists only while results are shown (v-if below).
+const windowedScroller = ref<InstanceType<typeof WindowedScroller> | null>(null)
+const scroller = (): WindowedScrollerApi | null => windowedScroller.value
+const scrollEl = computed<HTMLElement | null>(() => windowedScroller.value?.scrollerElement ?? null)
 
 // The preview pane is nested inside this scroller and mounts its own instance,
 // so selections in there are left to it.
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollEl, {
   ignoreWithin: '.preview-box',
 })
+
+// Hovering the scrollbar names the result there — its number, book and TOC path —
+// the same label the book view's lines and commentary bars show.
+const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
+const { scrollbarTocTooltip, refreshScrollbarTocTooltip, closeScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
+  getCurrentLineIndex: () => null,
+  getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
+  viewportElement: scrollEl,
+  getBookTitle: () => '',
+  getLabelAt: (index) => {
+    const result = shownResults.value[index]
+    if (!result) return { bookTitle: '', path: '' }
+    return { bookTitle: `${(index + 1).toLocaleString()}. ${bookTitleOf(result)}`, path: tocPathOf(result) ?? '' }
+  },
+  // Streaming results resize the thumb under a resting pointer; the label waits for them.
+  isSuspended: () => props.isSearching,
+})
+useEventListener(scrollEl, 'scroll', refreshScrollbarTocTooltip, { passive: true })
+watch(() => props.isSearching, (searching) => { if (searching) closeScrollbarTocTooltip() })
 
 // Right-click copy and the clean-text toggle are served by the app-wide fallback
 // menu (GlobalContextMenu). The PAYLOAD, though, is built here: see
@@ -75,157 +104,49 @@ const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
   return zoomFactor * (settingsStore.fontSize / 100) * 15
 })
+// True while the app is moving the list (a restore, a book jump): its position is
+// transient and must not be persisted.
 let programmaticScrolling = false
-
-// ── Snippet placeholders: one bar per text line ───────────────────────────────────
-// A not-yet-loaded snippet shows one placeholder bar per line the snippet will take once
-// its text lands, so the row's height — and the scroll geometry — barely move. The line
-// count is estimated from the descriptor's raw window length (snippetEnd - snippetStart
-// chars, roughly) and the chars a line of this width holds at this font size. The width
-// comes from a zero-height measuring element styled like a result row (same padding and
-// max-width), observed by ResizeObserver via useElementSize — measured on resize only.
-const measureEl = ref<HTMLElement | null>(null)
-const { width: contentWidth } = useElementSize(measureEl)
-/** Average advance of a Hebrew text glyph (letters + spaces), in em. */
-const AVG_CHAR_EM = 0.5
-const MAX_PLACEHOLDER_LINES = 4 // the .snippet clamp
-/**
- * Raw descriptor chars per rendered line, measured from filled snippets at the
- * current width and font. The raw window counts tags and markers the rendered text
- * drops, so the em estimate alone over-counts lines on most rows; this ratio
- * absorbs both. Rolling: every filled, unclamped row the virtualizer renders adds
- * one sample (deduped by row index), so the first screen does not freeze a skewed
- * ratio. Running sums keep each sample O(1). Reset on width / font change and on a
- * new search.
- */
-const calibratedCharsPerLine = ref<number | null>(null)
-const MIN_CALIBRATION_SAMPLES = 3
-/** Dedupe set is cleared at this size; the running sums are kept. */
-const MAX_SAMPLED_INDICES = 4096
-const sampledRowIndices = new Set<number>()
-let sampledRawChars = 0
-let sampledLines = 0
-let sampleCount = 0
-function resetCharsPerLineCalibration() {
-  sampledRowIndices.clear()
-  sampledRawChars = 0
-  sampledLines = 0
-  sampleCount = 0
-  calibratedCharsPerLine.value = null
-}
-watch([contentWidth, fontPx, () => props.searchQuery], resetCharsPerLineCalibration)
-function calibrateCharsPerLine() {
-  if (!scrollEl.value) return
-  let added = false
-  for (const el of scrollEl.value.querySelectorAll<HTMLElement>('.snippet[data-raw-chars]')) {
-    const rowIndex = Number(el.dataset.rowIndex)
-    if (sampledRowIndices.has(rowIndex)) continue
-    const lineHeight = parseFloat(getComputedStyle(el).lineHeight)
-    if (!lineHeight) continue
-    const lines = Math.round(el.scrollHeight / lineHeight)
-    if (lines < 1 || lines > MAX_PLACEHOLDER_LINES) continue // clamped rows hide their real length
-    if (sampledRowIndices.size >= MAX_SAMPLED_INDICES) sampledRowIndices.clear()
-    sampledRowIndices.add(rowIndex)
-    // A row of n lines holds between n-1 and n lines' worth of chars: count it as n - 0.5.
-    sampledRawChars += Number(el.dataset.rawChars)
-    sampledLines += lines - 0.5
-    sampleCount++
-    added = true
-  }
-  if (added && sampleCount >= MIN_CALIBRATION_SAMPLES && sampledRawChars > 0) {
-    calibratedCharsPerLine.value = sampledRawChars / sampledLines
-  }
-}
-onUpdated(calibrateCharsPerLine)
-const charsPerLine = computed(() => {
-  if (calibratedCharsPerLine.value != null) return Math.max(10, calibratedCharsPerLine.value)
-  const width = contentWidth.value
-  if (!width) return 60
-  return Math.max(10, Math.floor(width / (fontPx.value * AVG_CHAR_EM)))
-})
-function rawSnippetChars(hit: FullTextSearchResult): number {
-  return Math.max(1, (hit.snippetEnd ?? 0) - (hit.snippetStart ?? 0))
-}
-/**
- * Widths (as CSS percentages) of the placeholder bars for a hit: full bars for the whole
- * lines, and a shorter last bar sized by the remainder — never narrower than a fifth
- * of the row, never a hairline. A one-line snippet gets its own short bar.
- */
-function placeholderBars(hit: FullTextSearchResult): string[] {
-  const chars = rawSnippetChars(hit)
-  const perLine = charsPerLine.value
-  const lines = Math.min(MAX_PLACEHOLDER_LINES, Math.max(1, Math.ceil(chars / perLine)))
-  const bars: string[] = []
-  for (let i = 1; i < lines; i++) bars.push('100%')
-  const remainder = chars - (lines - 1) * perLine
-  const fraction = lines === MAX_PLACEHOLDER_LINES && chars > lines * perLine
-    ? 1
-    : Math.min(1, Math.max(0.2, remainder / perLine))
-  bars.push(`${Math.round(fraction * 100)}%`)
-  return bars
-}
-
-// Progressive render window. All results stream into props.results (never capped), but we
-// only ever hand the virtualizer a slice of them — grown as the user scrolls toward its end.
-// This keeps the virtualizer's per-count measurement rebuild cheap no matter how many
-// hundreds of thousands of results exist, and stops the list from churning while results
-// stream in: the window stays put, only the result-count badge climbs. (No fetch on grow —
-// the data is already in memory; we're just revealing more of it.)
-const RENDER_PAGE = 200
-const renderCount = ref(RENDER_PAGE)
-const renderLimit = computed(() => Math.min(props.results.length, renderCount.value))
 
 // Keeps the rows holding a selection's two ends mounted however far they scroll
 // away. Without it, dragging a selection down the results list unmounts the row it
 // started in, and the browser re-homes the anchor onto whatever row now occupies
 // that position — so the selection silently comes to mean something else.
-const { rangeExtractor: selectionRangeExtractor, selectedRowIndexRange } = useVirtualizedTextSelection(
+const { pinnedRowIndexes, selectedRowIndexRange } = useVirtualizedTextSelection(
   scrollEl,
-  // The rebuild generation, which is the only thing that tracks this exactly.
-  //
-  // Deliberately NOT the result count or the render window: both grow WHILE the user
-  // drags — results stream in, and renderCount widens as the viewport nears the end of
-  // the render window (see the watch on getVirtualItems below) — so either one changed
-  // the identity mid-drag and cleared the pins, putting the bug straight back.
-  // Verified live: the anchor row was dropped from the rendered range and Chromium
-  // re-homed the anchor onto a different row.
-  //
-  // Also not the leading result's id, which was the first fix attempted here and is
-  // NOT sufficient: a filter change rebuilds the whole list, and unchecking a book
-  // that owns no early row leaves results[0] untouched while re-indexing everything
-  // behind it. The generation counter is bumped by exactly the rebuilds that
-  // re-address the rows, and by nothing else.
+  // The rebuild generation, which is the only thing that tracks this exactly: the
+  // result count grows WHILE the user drags (results stream in), and the leading
+  // result's id survives a filter change that re-indexes everything behind it.
   () => props.resultsGeneration,
 )
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: renderLimit.value,
-    getScrollElement: () => scrollEl.value,
-    estimateSize: () => 80,
-    overscan: 8,
-    getItemKey: (index) => props.results[index]?.lineId ?? index,
-    rangeExtractor: selectionRangeExtractor.value,
-  })),
-)
-
-// Keep the render window large enough to cover the current viewport. Growing only in
-// small steps as the viewport reaches the window's END (the old behaviour) lags behind a
-// fast/far scroll: getTotalSize() — hence the scrollbar extent — is derived from renderLimit,
-// so the track only ever represents the revealed rows. A fast drag then saturates at the
-// window's end, captureScrollPos records an index capped to that partial window, and the
-// saved position is wrong (this is the "scroll far outside the current range → restore lands
-// wrong" bug). Instead, grow the window so it always reaches a full RENDER_PAGE beyond the
-// furthest visible row: the window tracks the scroll position rather than trailing it, so the
-// captured index is always a real index into the full result set. Still windowed (we never
-// hand the virtualizer all N rows at once), just position-driven instead of end-triggered.
+/**
+ * The results the list SHOWS. Streamed appends pass straight through; a rebuild (new
+ * sort, filter change: `resultsGeneration` bumps) is held back until the snippets of the
+ * rows that will be on screen have arrived, then swaps in with one render — never a frame
+ * of the new order's rows with their snippets still missing.
+ */
+const shownResults = shallowRef<FullTextSearchResult[]>(props.results)
+const shownGeneration = ref(props.resultsGeneration)
+let swapToken = 0
 watch(
-  () => virtualizer.value.getVirtualItems(),
-  (items) => {
-    const last = items[items.length - 1]
-    if (!last) return
-    const needed = Math.min(props.results.length, last.index + 1 + RENDER_PAGE)
-    if (needed > renderCount.value) renderCount.value = needed
+  () => [props.results, props.resultsGeneration] as const,
+  async ([results, generation]) => {
+    const token = ++swapToken
+    if (generation === shownGeneration.value) { shownResults.value = results; return }
+    // The scroller keeps its window at the same INDEXES through a rebuild (it re-asks
+    // its rows on `rowSourceVersion`), so those are the rows to warm — clamped to the
+    // end when the new list is shorter than where the reader was.
+    const range = scroller()?.renderedRange
+    const visible = range ? Math.max(range.end - range.start, 1) : 0
+    if (visible && results.length) {
+      const end = Math.min(range!.end, results.length)
+      const start = Math.max(0, Math.min(range!.start, end - visible))
+      try { await ensureSnippets(results.slice(start, end)) } catch { /* show what there is */ }
+    }
+    if (token !== swapToken) return
+    shownGeneration.value = generation
+    shownResults.value = results
   },
 )
 
@@ -234,43 +155,43 @@ function renderSnippet(snippet: string): string {
   return censorDivineNames(snippet, settingsStore.censorOptions)
 }
 
-// Snippets are built on demand (fullTextSearchSnippets.ts): every hit has its row at once,
-// but only the rows the virtualizer renders fetch their line texts. Until they land the row
-// shows a placeholder the height of a full clamped snippet. Re-asked on every range change
-// and on every results rebuild (same range, different hits) — no timers.
-watch(
-  [() => virtualizer.value.getVirtualItems(), () => props.results],
-  ([items, results]) => {
-    const hits: FullTextSearchResult[] = []
-    for (const item of items) {
-      const hit = results[item.index]
-      if (hit) hits.push(hit)
-    }
-    requestSnippets(hits)
-    requestReferences(hits)
-  },
-  { immediate: true },
-)
+/**
+ * The scroller's row source: a range's snippets are fetched before the range mounts,
+ * so every row arrives complete. Its reference (book title, TOC path) is asked for at
+ * the same time but not awaited — the header is one line either way, so the path
+ * filling in a moment later changes no row's height.
+ */
+function ensureRows(start: number, end: number): Promise<void> {
+  const hits = shownResults.value.slice(start, end)
+  requestReferences(hits)
+  return ensureSnippets(hits)
+}
 
 // "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
 const { previewOf, togglePreview, loadAbove, loadBelow, reseedPreview, clearPreviews } = useFullTextSearchPreview()
 watch(
   () => props.searchQuery,
-  () => {
+  (query, previousQuery) => {
     clearPreviews()
-    renderCount.value = RENDER_PAGE // new search → collapse the window to the first page
-    // A new query means a new result list: kill any pending/armed restore so the previous
-    // search's saved index can't be applied to it, and start at the top. The parent clears
-    // its saved position too, but this watcher is what catches an in-flight retry loop.
-    // ...unless the parent explicitly armed a target for THIS navigation (Back/Forward onto
-    // a search row). That is a restore, not a fresh search, and the two watchers can fire in
-    // either order -- so an arm in the same tick wins over this blanket cancel.
-    const armedAt = lastArmTick
-    nextTick(() => {
-      if (lastArmTick !== armedAt) return // parent armed a target -- leave it alone
-      cancelRestore()
-      scrollEl.value?.scrollTo({ top: 0 })
-    })
+    // The FIRST query this list sees is the tab's own search coming back (a reload, a
+    // tab switch): its saved position is exactly what must be restored, not cancelled.
+    if (!previousQuery) return
+    // A navigation that armed a restore (Back/Forward or a recents pick onto a search)
+    // changes the query too — and the query arrives LATER than the arm (the search has to
+    // cancel the running one first). That query change is the restore's own, not a new
+    // search: it spends the arm, and only NOW may the restore run — against this query's
+    // results. Running it at the arm would land on the OUTGOING search's rows, still
+    // present at that instant, and spend the restore on them.
+    if (armedForNextQuery) {
+      armedForNextQuery = false
+      restored = false
+      nextTick(tryRestore)
+      return
+    }
+    // A new query means a new result list: kill any pending restore so the previous
+    // search's saved index can't be applied to it, and start at the top.
+    cancelRestore()
+    void scroller()?.scrollToIndex(0)
   },
 )
 
@@ -279,8 +200,8 @@ watch(
  * rather than the DOM.
  *
  * A selection dragged over many results has only a screenful of them in the DOM, so
- * serializing the live Range would silently drop the rest — the same virtualization
- * gap the pinned rows fix for the selection itself. Copying a range of results is a
+ * serializing the live Range would silently drop the rest — the same windowing gap
+ * the pinned rows fix for the selection itself. Copying a range of results is a
  * normal thing to want (collecting every hit for a phrase), so the payload spans
  * every selected result and gives each one its reference.
  *
@@ -296,20 +217,16 @@ function buildSelectedResultsCopyHtml(): string | null {
   // An open preview replaces the row's snippet with up to 120 lines of the real book
   // text, nested INSIDE the row — so a selection in there resolves to the row like any
   // other, and rebuilding from the model would hand back the short clamped snippet
-  // instead of the paragraphs the user highlighted. That text is not even in the
-  // snippet. Leave the preview's own selection to the native copy, the same way the
-  // abbreviation tooltip is set up to ignore it.
+  // instead of the paragraphs the user highlighted. Leave the preview's own selection
+  // to the native copy, the same way the abbreviation tooltip ignores it.
   const container =
     range.commonAncestorContainer instanceof Element
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement
   if (container?.closest('.preview-box')) return null
 
-  // Likewise when the selection merely CROSSES an open preview: any result whose
-  // preview is open is showing text the snippet does not contain, so a model rebuild
-  // would quietly substitute different content for it. Rare enough (a preview has to
-  // be open inside the selected span) that falling back to the native copy — which at
-  // least reflects the DOM — beats substituting text the user never saw.
+  // Likewise when the selection merely CROSSES an open preview: that result shows text
+  // its snippet does not contain, so a model rebuild would substitute different content.
   const rowIndexRange = selectedRowIndexRange()
   if (rowIndexRange) {
     for (let rowIndex = rowIndexRange.firstRowIndex; rowIndex <= rowIndexRange.lastRowIndex; rowIndex++) {
@@ -328,14 +245,9 @@ function buildSelectedResultsCopyHtml(): string | null {
 }
 
 // Serves Ctrl+C and the context menu's copy — both fire a native copy event on the
-// scroller — plus a drag of the selection into Word. An element listener rather than
-// useScopedCopy because that composable also takes a select-all flag and a lines
-// getter this list has no equivalent of; the two event handlers are the whole of
-// what it would give us here.
-//
-// Writing a payload preventDefaults the event, which is also what stands
-// GlobalContextMenu's document-level fallback down (it returns early on
-// event.defaultPrevented) so the two cannot both write to the clipboard.
+// scroller — plus a drag of the selection into Word. Writing a payload preventDefaults
+// the event, which is also what stands GlobalContextMenu's document-level fallback down
+// (it returns early on event.defaultPrevented) so the two cannot both write.
 useEventListener(scrollEl, 'copy', (event: ClipboardEvent) => {
   const html = buildSelectedResultsCopyHtml()
   if (html === null) return
@@ -375,177 +287,100 @@ function resultTitle(result: FullTextSearchResult): string {
 }
 
 function captureScrollPos() {
-  if (!scrollEl.value) return null
-  const top = scrollEl.value.scrollTop
-  const items = virtualizer.value.getVirtualItems()
-  if (!items.length) return null
-  // First VISIBLE row — NOT items[0], which is an overscan row ~8 rows above the viewport.
-  // With items[0] the saved offset spanned all the overscan rows in pixels (observed: 924px
-  // ≈ 11 rows), and restoring `item.start + offset` then depended on the ESTIMATED heights
-  // of those rows — landing rows off and jumping when real measurements arrived. Anchoring
-  // to the row that actually contains scrollTop keeps the offset intra-row (< one row
-  // height), and `scrollTop = item.start + offset` is then row-exact regardless of how far
-  // the estimates are off, because the row's rendered position and item.start come from the
-  // same measurement table.
-  const first = items.find((it) => it.end > top) ?? items[0]!
-  return {
-    scrollIndex: first.index,
-    scrollOffset: Math.max(0, top - first.start),
-  }
+  const first = scroller()?.readFirstVisible(0)
+  if (!first) return null
+  return { scrollIndex: first.index, scrollOffset: Math.max(0, first.offsetWithinRow) }
 }
 
-// Generation of the restore currently in charge. Bumped by armRestore when a new target
-// supersedes an older one; any attempt whose captured generation no longer matches gives up
-// instead of scrolling to a place the user has already navigated away from. Assigned by the
-// restore block below — before then no restore can be in flight, so 0 is a safe stand-in.
-let currentGeneration = () => 0
-
-function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  // Pre-paint restore: the first applyOffset attempt runs synchronously (see call at the
-  // bottom) so the scroll lands before the browser paints — no flash of the list top.
-  // One rAF later the position is re-asserted to absorb TanStack's dynamic-measurement
-  // shift from the target rows' first real measurement. If the item isn't in
-  // measurementsCache yet (e.g. filtered set still building), retry up to 10 times at
-  // 100ms intervals before giving up.
-  const myGeneration = currentGeneration()
-  const superseded = () => currentGeneration() !== myGeneration
+/**
+ * Lands the list on a row, exactly: the scroller fetches the rows' snippets, mounts
+ * them around the target and sets the scroll from the row's real position. The
+ * position is not persisted while the landing is in flight.
+ */
+async function landOn(index: number, offsetPx = 0) {
+  const api = scroller()
+  if (!api) return
   programmaticScrolling = true
-  virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-  let attempts = 0
-  function applyOffset() {
-    // A newer restore has taken over (the retry loop can span seconds while results stream,
-    // and a recents pick lands mid-flight) — stop touching scrollTop and let it own the view.
-    if (superseded()) return
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-    if (item && scrollEl.value) {
-      scrollEl.value.scrollTop = item.start + scrollOffset
-      requestAnimationFrame(() => {
-        if (superseded()) return
-        // Re-assert once after TanStack's dynamic-measurement pass: the rows rendered at
-        // the target measure their real heights on this first frame, which can shift
-        // item.start under us. Same coordinates re-read → at most a sub-row settle,
-        // instead of the old visible jump.
-        const settled = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
-        if (settled && scrollEl.value) scrollEl.value.scrollTop = settled.start + scrollOffset
-        requestAnimationFrame(() => { programmaticScrolling = false })
-      })
-    } else if (++attempts < 10) {
-      virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
-      setTimeout(() => requestAnimationFrame(applyOffset), 100)
-    } else {
-      programmaticScrolling = false
-    }
+  try {
+    await api.scrollToIndex(index, { offsetPx })
+  } finally {
+    // The landing's scroll event is dispatched at the next frame's start.
+    requestAnimationFrame(() => { programmaticScrolling = false })
   }
-  // First attempt runs SYNCHRONOUSLY — we're called from nextTick right after the render
-  // window widened, so the DOM is up to date but nothing has painted yet. Landing the
-  // scroll here means the first painted frame is already at the target (no top-flash).
-  // The rAF path above and the 100ms retries remain as fallback when the target row
-  // isn't measurable yet.
-  applyOffset()
 }
 
-// Re-arms the restore watcher below for a NEW target. The watcher is one-shot by design —
-// it stops itself the moment it restores — which is right for the mount-time restore but
-// leaves nothing armed for a SECOND navigation into this same (never remounted) page:
-// picking a search row from the address bar patches the tab in place, so the page stays
-// mounted and only initialScrollIndex changes. armRestore resets the latch and re-runs the
-// watch; the parent calls it after updating the target.
-let armRestore = () => {}
+// ── Restore ───────────────────────────────────────────────────────────────────
+//
+// Results stream in over time (a fresh re-search, or a cached prefix that resumes
+// streaming), and on reload the parent sets initialScrollIndex asynchronously after its
+// IDB read — so the target row may not exist yet when the list mounts. decideRestore
+// (scrollRestore.ts, unit-tested) says on each change whether to wait, land, or stop.
+//
+// When the target is already reachable as the list first mounts, the scroller OPENS
+// on it (`openingIndex`): the first render is the saved place, never the top.
 
-// The inverse of armRestore: spends the latch so no restore can fire for the results that
-// are about to arrive. A NEW search must start at the top of its own list, but the restore
-// watcher lives for the component's lifetime and stays armed whenever nothing has been
-// restored yet in this session -- so without this it would happily apply the PREVIOUS
-// search's saved index to the new result set as it streams in.
-let cancelRestore = () => {}
-// Bumped every time the parent arms a restore target, so the new-search cancel above can tell
-// whether an explicit arm landed in the same tick and step aside for it.
-let lastArmTick = 0
+let restored = false
+// Set when the parent arms a restore target; the next query change belongs to that
+// navigation (see the searchQuery watcher) and spends it.
+let armedForNextQuery = false
 
-{
-  // Restore scroll once the target row is actually reachable. This is the tricky case on
-  // reload: results stream in over time (fresh re-search) or arrive as a partial cache
-  // prefix that then resumes streaming (loadCachedResults sets isSearching=true while
-  // populating). The saved index can therefore be far beyond what has arrived so far.
-  //
-  // A one-shot restore against the first batch fails: restoreScrollPos would exhaust its
-  // fixed retry budget long before index N streams in, then give up near the top and never
-  // re-run. So instead we re-attempt on every results growth until the target index exists
-  // in props.results — only THEN do we widen the render window to include it and scroll.
-  // We stop when we've either restored, run out of a target, or the stream finished and the
-  // saved index is past the (now final) result count — in which case we clamp to the last row.
-  let restored = false
-  const tryRestore = () => {
-    if (restored) return true
-    const target = props.initialScrollIndex
-    // No target YET is not "nothing to restore" — on reload the parent sets
-    // initialScrollIndex asynchronously in onMounted (after the IDB read), which can land
-    // AFTER results already started streaming. Returning true here would stop the watcher
-    // for good and the restore would silently never run (the sometimes-works reload bug:
-    // it only worked when the IDB read happened to win the race against the first batch).
-    // Keep waiting instead — if there is genuinely no saved position, the watcher just
-    // stays armed and inert, which is harmless: initialScrollIndex is set at most once.
-    if (target == null) return false
-    const len = props.results.length
-    if (!len) return false // no results yet — wait for more
-    // If the target hasn't streamed in yet, keep waiting — UNLESS the stream is done, in
-    // which case the target is unreachable (fewer results than when it was saved, e.g. the
-    // filter/sort produced a shorter set); clamp to the last available row rather than
-    // waiting forever.
-    if (target >= len) {
-      if (props.isSearching) return false // more may still arrive — keep waiting
-    }
-    const index = Math.min(target, len - 1)
-    restored = true
-    // Widen the render window NOW (synchronously) so the re-render it triggers — which
-    // grows the scroller's inner height enough to contain the target — flushes in this
-    // same task. Widening inside the nextTick callback (the old order) meant scrollTop was
-    // set against the still-short scroller and clamped, deferring the real scroll by a
-    // frame or more: the user saw the list paint at the TOP first, then jump to the target.
-    renderCount.value = Math.max(renderCount.value, index + RENDER_PAGE)
-    // After that render flush (nextTick), apply the scroll SYNCHRONOUSLY — still before the
-    // browser paints this task's updates, so the first visible frame is already at the target.
-    nextTick(() => restoreScrollPos(index, props.initialScrollOffset ?? 0))
-    return true
-  }
-  // `generation` is what makes re-arming safe. Stopping and re-creating the watcher would
-  // race: an in-flight restoreScrollPos retry loop from the PREVIOUS target keeps running
-  // and would fight the new one for scrollTop. Instead the watcher lives for the component's
-  // lifetime and every attempt captures the generation it started in — a stale attempt sees
-  // the bump and bails rather than scrolling somewhere the user has already left.
-  let generation = 0
-  // Read by restoreScrollPos to abandon a superseded attempt.
-  currentGeneration = () => generation
-  watch(
-    // initialScrollIndex is a watched source too: on reload it arrives asynchronously
-    // (parent onMounted IDB read), and the watcher must re-fire when it lands.
-    [() => props.results.length, () => props.isSearching, () => props.initialScrollIndex],
-    () => { tryRestore() },
-    { flush: 'post', immediate: true },
-  )
-  armRestore = () => {
-    lastArmTick++
-    generation++   // abandon any retry loop still running for the previous target
+function restoreDecision() {
+  return decideRestore({ target: props.initialScrollIndex, loaded: props.results.length, isSearching: props.isSearching })
+}
+
+const openingIndex = computed(() => {
+  if (restored) return undefined
+  const decision = restoreDecision()
+  return decision.action === 'restore' ? decision.index : undefined
+})
+
+function tryRestore() {
+  if (restored) return
+  const decision = restoreDecision()
+  if (decision.action === 'wait') return
+  if (decision.action === 'done') return
+  const api = scroller()
+  // Not mounted yet: the scroller will open on `openingIndex` itself.
+  if (!api) return
+  restored = true
+  void landOn(decision.index, props.initialScrollOffset ?? 0)
+}
+
+/** Wired to the scroller's `opened` event: it opened on the restore target. */
+function onScrollerOpened() {
+  restored = true
+}
+
+watch(
+  // initialScrollIndex is a watched source too: on reload it arrives asynchronously
+  // (parent onMounted IDB read), and the restore must run when it lands.
+  [() => props.results.length, () => props.isSearching, () => props.initialScrollIndex],
+  tryRestore,
+  { flush: 'post' },
+)
+
+/**
+ * Re-arms the restore for a NEW target. A second navigation into this same (never
+ * remounted) page — Back/Forward, or picking a search row from the address bar — patches
+ * the tab in place; the parent calls this after seeding initialScrollIndex, with the
+ * query that navigation shows. The restore runs once THAT query's results are the ones
+ * in the list (see the searchQuery watcher); when it is the query already shown, the
+ * rows are already the right ones.
+ */
+function armRestore(targetQuery: string) {
+  if (targetQuery === props.searchQuery) {
+    armedForNextQuery = false
     restored = false
-    // Do NOT attempt the restore synchronously here. The navigation that re-armed us also
-    // kicked off handleSearch → executeSearch, which is async and `await`s cancelSearch()
-    // BEFORE it does `results.value = []`. So at this instant props.results may still hold
-    // the OUTGOING search's rows: restoring against them would scroll into a list that is
-    // about to be wiped, and the real results would then stream in with the latch already
-    // spent. Leaving it to the watcher is both simpler and correct — it re-fires on every
-    // results-length change and on isSearching, which is exactly the streaming case its
-    // wait/clamp logic was written for.
-    //
-    // The one case the watcher would miss is a re-arm where NOTHING it watches ever changes
-    // (the same query re-selected from recents, results already settled). nextTick catches
-    // that: by then executeSearch has either emptied the list (watcher takes over) or the
-    // navigation didn't re-search at all and the settled rows are the right ones.
-    nextTick(() => { if (!restored) tryRestore() })
+    nextTick(tryRestore)
+  } else {
+    armedForNextQuery = true
   }
-  cancelRestore = () => {
-    generation++   // abandon any retry loop still running for the previous target
-    restored = true // spend the latch: the streaming results below belong to a NEW search
-  }
+}
+
+/** Spends the restore: the results about to arrive belong to a NEW search, which starts at the top. */
+function cancelRestore() {
+  restored = true
+  armedForNextQuery = false
 }
 
 function savePos() {
@@ -562,45 +397,16 @@ onBeforeUnmount(() => {
   savePos()
 })
 
-useVirtualScrollerKeys(
-  scrollEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  // Keyboard nav (PageDown/End) stays within the revealed window; scrolling to its end
-  // triggers the grow watcher above, so holding PageDown progressively loads more.
-  () => renderLimit.value,
-)
-
 function scrollToBook(bookId: number) {
   const index = props.results.findIndex((r) => r.bookId === bookId)
-  if (index < 0) return
-  // Make sure the target is inside the render window before scrolling to it.
-  if (index >= renderCount.value) renderCount.value = index + RENDER_PAGE
-  programmaticScrolling = true
-  virtualizer.value.scrollToIndex(index, { align: 'start' })
-  let attempts = 0
-  function applyOffset() {
-    const item = virtualizer.value.measurementsCache.find((m) => m.index === index)
-    if (item && scrollEl.value) {
-      scrollEl.value.scrollTop = item.start
-      requestAnimationFrame(() => { programmaticScrolling = false })
-    } else if (++attempts < 10) {
-      virtualizer.value.scrollToIndex(index, { align: 'start' })
-      setTimeout(() => requestAnimationFrame(applyOffset), 100)
-    } else {
-      programmaticScrolling = false
-    }
-  }
-  requestAnimationFrame(applyOffset)
+  if (index >= 0) void landOn(index)
 }
-
-function onScroll() {}
 
 defineExpose({
   captureScrollPos,
   scrollToBook,
-  armRestore: () => armRestore(),
-  cancelRestore: () => cancelRestore(),
+  armRestore,
+  cancelRestore,
 })
 </script>
 
@@ -629,80 +435,65 @@ defineExpose({
         :key="abbrevTooltip.id"
         :data="abbrevTooltip"
       />
-      <div
-        ref="scrollEl"
+      <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
+      <WindowedScroller
+        ref="windowedScroller"
         class="scroller"
+        :count="shownResults.length"
+        :initial-index="openingIndex"
+        :initial-offset-px="initialScrollOffset ?? 0"
+        :ensure-rows="ensureRows"
+        :row-source-version="shownGeneration"
+        :pinned-indexes="pinnedRowIndexes"
         tabindex="0"
         :style="{ fontSize: `${fontPx}px` }"
-        @scroll="onScroll"
+        @opened="onScrollerOpened"
       >
-        <div ref="measureEl" class="result-item placeholder-measure" aria-hidden="true" />
-        <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-          <div
-            v-for="vRow in virtualizer.getVirtualItems()"
-            :key="String(vRow.key)"
-            :ref="(el) => el && virtualizer.measureElement(el as Element)"
-            :data-index="vRow.index"
-            :style="{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              transform: `translateY(${vRow.start}px)`,
-            }"
-          >
-            <div class="result-item">
-              <div
-                class="result-header"
-                :title="resultTitle(results[vRow.index]!)"
-                @click="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
-                @auxclick.middle="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
+        <template #row="{ index }">
+          <div v-if="shownResults[index]" class="result-item">
+            <div
+              class="result-header"
+              :title="resultTitle(shownResults[index]!)"
+              @click="emit('resultClick', shownResults[index]!, wantsNewTab($event))"
+              @auxclick.middle="emit('resultClick', shownResults[index]!, wantsNewTab($event))"
+            >
+              <span class="book-title">{{ bookTitleOf(shownResults[index]!) }}</span>
+              <span v-if="tocPathOf(shownResults[index]!)" class="sep">›</span>
+              <span v-if="tocPathOf(shownResults[index]!)" class="toc-text">{{
+                tocPathOf(shownResults[index]!)
+              }}</span>
+              <button
+                v-if="previewOf(shownResults[index]!)"
+                class="preview-recenter-btn"
+                :title="$t('fullTextSearch.list.backToResultLine')"
+                @click.stop="recenterPreview(shownResults[index]!)"
               >
-                <span class="book-title">{{ bookTitleOf(results[vRow.index]!) }}</span>
-                <span v-if="tocPathOf(results[vRow.index]!)" class="sep">›</span>
-                <span v-if="tocPathOf(results[vRow.index]!)" class="toc-text">{{
-                  tocPathOf(results[vRow.index]!)
-                }}</span>
-                <button
-                  v-if="previewOf(results[vRow.index]!)"
-                  class="preview-recenter-btn"
-                  :title="$t('fullTextSearch.list.backToResultLine')"
-                  @click.stop="recenterPreview(results[vRow.index]!)"
-                >
-                  <IconArrowReset24Regular />
-                </button>
-                <button
-                  class="preview-toggle-btn"
-                  :title="previewOf(results[vRow.index]!) ? $t('fullTextSearch.list.closePreview') : $t('fullTextSearch.list.showMore')"
-                  @click.stop="togglePreview(results[vRow.index]!)"
-                >
-                  <IconDismiss24Regular v-if="previewOf(results[vRow.index]!)" />
-                  <IconEye24Regular v-else />
-                </button>
-              </div>
-              <FullTextSearchResultPreview
-                v-if="previewOf(results[vRow.index]!)"
-                :ref="(el) => setPreviewRef(results[vRow.index]!.lineId, el)"
-                :state="previewOf(results[vRow.index]!)!"
-                :render-html="renderSnippet"
-                :load-above="() => loadAbove(results[vRow.index]!)"
-                :load-below="() => loadBelow(results[vRow.index]!)"
-                :reseed="() => reseedPreview(results[vRow.index]!)"
-              />
-              <!-- eslint-disable-next-line vue/no-v-html -->
-              <div v-else-if="snippetHtmlOf(results[vRow.index]!) !== undefined" class="snippet" :data-raw-chars="rawSnippetChars(results[vRow.index]!)" :data-row-index="vRow.index" :style="teamimFontStyle(snippetHtmlOf(results[vRow.index]!)!)" v-html="renderSnippet(snippetHtmlOf(results[vRow.index]!)!)" />
-              <div v-else class="snippet-placeholder">
-                <div
-                  v-for="(barWidth, barIndex) in placeholderBars(results[vRow.index]!)"
-                  :key="barIndex"
-                  class="snippet-placeholder-line"
-                  :style="{ width: barWidth }"
-                />
-              </div>
+                <IconArrowReset24Regular />
+              </button>
+              <button
+                class="preview-toggle-btn"
+                :title="previewOf(shownResults[index]!) ? $t('fullTextSearch.list.closePreview') : $t('fullTextSearch.list.showMore')"
+                @click.stop="togglePreview(shownResults[index]!)"
+              >
+                <IconDismiss24Regular v-if="previewOf(shownResults[index]!)" />
+                <IconEye24Regular v-else />
+              </button>
             </div>
+            <FullTextSearchResultPreview
+              v-if="previewOf(shownResults[index]!)"
+              :ref="(el) => setPreviewRef(shownResults[index]!.lineId, el)"
+              :state="previewOf(shownResults[index]!)!"
+              :render-html="renderSnippet"
+              :load-above="() => loadAbove(shownResults[index]!)"
+              :load-below="() => loadBelow(shownResults[index]!)"
+              :reseed="() => reseedPreview(shownResults[index]!)"
+            />
+            <!-- Never a placeholder: the scroller fetched this row's snippet before mounting it. -->
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div v-else class="snippet" :style="teamimFontStyle(snippetHtmlOf(shownResults[index]!) ?? '')" v-html="renderSnippet(snippetHtmlOf(shownResults[index]!) ?? '')" />
           </div>
-        </div>
-      </div>
+        </template>
+      </WindowedScroller>
     </template>
   </div>
 </template>
@@ -735,9 +526,13 @@ defineExpose({
 .empty-error {
   width: min(100% - 32px, 480px);
 }
-.scroller {
+/* `.scroller` lands on the WindowedScroller's viewport (attributes fall through);
+   the scroller's root fills the column beside its drawn bar. */
+.results-wrap > :deep(.windowed-scroller) {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+}
+.scroller {
   overflow-x: hidden;
   outline: none;
 }
@@ -854,33 +649,6 @@ defineExpose({
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-/* Not-yet-loaded snippet: one bar per estimated text line (placeholderBars), each the
-   height of a .snippet line box so the stack matches the filled row; the bar itself is
-   the book view's line placeholder look (.line.placeholder in BookViewLinesContent.vue),
-   inset from the line box (the ::after bar). Bars hug the inline start
-   (right, in RTL) like the text they stand in for. */
-.snippet-placeholder {
-  direction: rtl;
-}
-.snippet-placeholder-line {
-  display: flex;
-  align-items: center;
-  height: calc(1em * var(--line-height, 1.5));
-}
-.snippet-placeholder-line::after {
-  content: '';
-  width: 100%;
-  height: calc(100% - 0.4em);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-}
-/* Zero-height twin of a result row, measured for the placeholder line estimate: it gets
-   the row's padding and max-width, so its content width IS a snippet's line width. */
-.placeholder-measure {
-  height: 0;
-  padding-block: 0;
   overflow: hidden;
 }
 .snippet :deep(.match) {
