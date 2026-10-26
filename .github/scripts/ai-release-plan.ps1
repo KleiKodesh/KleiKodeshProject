@@ -34,9 +34,12 @@ Users are Torah scholars and students, not programmers.
 Below are the developer commit messages since the last release ($previousTag).
 
 Task 1 - pick the semantic version bump:
-- "major": a big user-visible overhaul or a breaking change in how users work.
-- "minor": at least one new user-facing feature or capability.
-- "patch": only fixes, polish, performance or internal work.
+- "major": any breaking change, in the code OR the UI - something that no longer works
+  the way it did, was removed or redesigned, or makes old settings/data/integrations
+  incompatible.
+- "minor": feature updates - a new feature, or a new option/capability in an existing one.
+- "patch": only bug fixes or minor tinkering (small tweaks, polish, performance, internal work).
+Pick the highest level that any single commit reaches.
 
 Task 2 - write polished release notes, like a professional app's "What's new":
 - Only what a user would notice. Drop CI, build, refactors, tests, code moves, docs.
