@@ -1,5 +1,5 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { getCommentaryLinksForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import { getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
@@ -269,14 +269,15 @@ export function useCommentary(
       // - the forward commentary query (needs no ID table — pure SQL with a fixed line param)
       // The reverse queries depend on connection type IDs so they start after that resolves,
       // but they run concurrently with each other and with the catalog awaits.
-      // Two-phase load for both single-line and section clicks: the links-only,
-      // JOIN-free query returns in milliseconds even for thousands of hits (the old
-      // content-joining query cost 150ms-1.4s and up to 10MB per click), so group
-      // structure renders immediately. Line text is fetched for the rows shown.
+      // Two-phase load for both single-line and section clicks: the links-only
+      // query returns ids and line indexes grouped per (book, type) — a whole-book
+      // range is a few hundred KB (the per-row shape was ~4 MB, the old
+      // content-joining query up to 10 MB per click) — so the group structure
+      // renders at once. Line text is fetched for the rows shown.
       const queryLineIds = isMulti ? multiIds : [lineId]
       const lineIdsForReverse = queryLineIds
 
-      const forwardQueryPromise = getCommentaryLinksForSourceLineRange(queryLineIds)
+      const forwardQueryPromise = getCommentaryLinkGroupsForSourceLineRange(queryLineIds)
 
       const [rows, sourceEntries] = await Promise.all([
         forwardQueryPromise,
