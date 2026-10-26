@@ -58,6 +58,11 @@ const emit = defineEmits<{
 const props = defineProps<
   BookViewLinesScrollProps & {
     lines: LineItem[]
+    /**
+     * Bumped on every write to `lines`, which is a shallow store: the row slot reads it
+     * so the mounted rows re-render when their text changes in place (a version swap).
+     */
+    linesRevision?: number
     /** Resolves once the lines of [start, end) have their text — the scroller's row source. */
     ensureLines: (start: number, end: number) => Promise<void>
     /** Resolves once every line of the book has its text — whole-book actions only. */
@@ -345,6 +350,12 @@ const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
   cancelRestore,
 )
 
+/** Whether the row at `index` has its text — read in the row slot, with the lines revision so a text change under the same index re-renders the row. */
+function rowHasText(index: number): boolean {
+  void props.linesRevision
+  return props.lines[index]?.content != null
+}
+
 function onLineClick(index: number, event: MouseEvent) {
   // A drag to select text ends with a `click` event too. Don't hijack it to change
   // the commentary line — the user only wants to select text. A plain click leaves
@@ -512,7 +523,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       <template #row="{ index }">
         <!-- Never a placeholder: the scroller asked for these lines before mounting them. -->
         <div
-          v-if="lines[index]?.content != null"
+          v-if="rowHasText(index)"
           class="line"
           :class="{
             selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines[index]?.id,

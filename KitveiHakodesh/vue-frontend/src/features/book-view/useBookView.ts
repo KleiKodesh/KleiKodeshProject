@@ -147,7 +147,7 @@ export function useBookView(
   } = useToc(() => bookId, () => bookTitle)
 
   const {
-    lines, prefetch, ensureLines, ensureLineIds, ensureAllLines,
+    lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
@@ -762,7 +762,7 @@ export function useBookView(
     tocPersistState,
     // data
     tabId, bookId,
-    lines, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
+    lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
