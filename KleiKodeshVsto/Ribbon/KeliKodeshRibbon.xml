@@ -1,34 +1,34 @@
-<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
+﻿<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="Ribbon_Load">
 	<ribbon>
 		<tabs>
 			<tab idMso="TabHome">
 				<group id="Klei_Kodesh3"
-					   label="כלי קודש"
-					   insertAfterMso="GroupEditing"
-					   screentip="כלי קודש לוורד"
-					   supertip="ארגז כלים לעורך התורני">
+					   getLabel="getLabel"
+					   getScreentip="getLabel"
+					   getSupertip="getSupertip"
+					   insertAfterMso="GroupEditing">
 
 					<splitButton id="mySplitButton" size="large">
 
 						<button id="KleiKodesh_Main"
-								label="כלי קודש"
+								getLabel="getLabel"
 								getImage="getImage"
 								onAction="button_Click"/>
 
 						<menu itemSize="large">
 
 							<button id="KitveiHakodesh"
-									label="כתבי הקודש"
-									screentip="כתבי הקודש"
-									supertip="תוסף לוורד עבור מאגר הספרים - זית"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
 							<button id="Kiwix"
-									label="ספריית קיוויקס"
-									screentip="ספריית קיוויקס"
-									supertip="גישה לספרים ואנציקלופדיות במצב לא מקוון דרך קיוויקס"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
@@ -45,41 +45,41 @@
 
 
 							<button id="WebSites"
-									label="דרך האתרים"
-									screentip="דרך האתרים"
-									supertip="פתיחת אתרים ייעודיים לעורך התורני - בתוך וורד"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
 							<button id="DocDesign"
-									label="עיצוב תורני"
-									screentip="עיצוב תורני"
-									supertip="כלים לעיצוב ספרי קודש"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
 							<button id="Nakdan"
-								label="נקדן דיקטה"
-								screentip="נקדן דיקטה"
-								supertip="נקדן דיקטה עם אפשרויות משודרגות (דרוש חיבור לאינטרנט)"
+								getLabel="getLabel"
+								getScreentip="getLabel"
+								getSupertip="getSupertip"
 								getImage="getImage"
 								onAction="button_Click"
 								getVisible="getVisible"/>
 							
 							<button id="RegexFind"
-									label="חיפוש רגקס"
-									screentip="חיפוש רגקס"
-									supertip="חיפוש רגקס בוורד עם אפשרויות עיצוב קלות לשימוש"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
 							<button id="DuplicatePane"
-								label="שכפל חלונית צד"
-								screentip="שכפל חלונית צד"
-								supertip="מאפשר פתיחה של חלונית צד נוספת המשכפלת את חלונית הצד הנוכחית"
+								getLabel="getLabel"
+								getScreentip="getLabel"
+								getSupertip="getSupertip"
 								getImage="getImage"
 								onAction="button_Click"/>
 
@@ -91,12 +91,12 @@
 							onAction="button_Click"/>-->
 
 							<button id="Settings"
-									label="הגדרות"
+									getLabel="getLabel"
 									getImage="getImage"
 									onAction="button_Click"/>
 
 							<button id="About"
-									label="אודות"
+									getLabel="getLabel"
 									getImage="getImage"
 									onAction="button_Click"/>
 

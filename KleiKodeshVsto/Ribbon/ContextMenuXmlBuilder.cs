@@ -63,14 +63,14 @@ namespace KleiKodesh.Ribbon
 
         private const string Icon = "getKitveiHakodeshIcon";
 
-        private const string FtsLabel = @"העתק לחיפוש בכתבי הקודש";
-        private const string FtsTip = @"מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש.";
-        private const string CatalogLabel = @"חיפוש ספר בכתבי הקודש";
-        private const string CatalogTip = @"מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו.";
-        private const string CompareLabel = @"השווה עם כתבי הקודש";
-        private const string CompareTip = @"משווה את הפסקה המסומנת במסמך אל הטקסט המסומן בחלונית כתבי הקודש: ההבדלים נרשמים במסמך כשינויים עם עקוב, לאישור או דחייה אחד-אחד. יש לסמן תחילה קטע בכתבי הקודש.";
-        private const string OpenLinkLabel = @"פתח קישור בכתבי הקודש";
-        private const string OpenLinkTip = @"פותח בחלונית כתבי הקודש את הספר שאליו מצביע הקישור שבבחירה.";
+        private static string FtsLabel => AddinText.Label("SearchText");
+        private static string FtsTip => AddinText.Tip("SearchText");
+        private static string CatalogLabel => AddinText.Label("SearchBook");
+        private static string CatalogTip => AddinText.Tip("SearchBook");
+        private static string CompareLabel => AddinText.Label("CompareText");
+        private static string CompareTip => AddinText.Tip("CompareText");
+        private static string OpenLinkLabel => AddinText.Label("OpenLink");
+        private static string OpenLinkTip => AddinText.Tip("OpenLink");
 
         /// <summary>
         /// The complete &lt;contextMenus&gt; element, indented to sit directly inside
