@@ -76,6 +76,8 @@ Common/               reusable, knows nothing about this app. FLAT — no subfol
                       which is how Core finds its own files (see below)
 Settings/             registry-backed app settings + seforim DB path resolution
 SeforimDb/            SQL strings, queries, models — the ONE reader for seforim.db
+SeforimLibraryDownload/  downloads Otzaria's library when none is installed, resumably, and
+                      keeps that copy current with update patches (the ONE writer of seforim.db)
 SeforimDbFullTextSearch/   feeds and searches the FTS index (engine logic is FtsLib's)
 SeforimDbCatalog/     Lucene TOC index over the same corpus
 Dictionary/  HebrewBooks/

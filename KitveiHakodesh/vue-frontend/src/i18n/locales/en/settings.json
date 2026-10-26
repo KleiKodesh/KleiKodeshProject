@@ -299,8 +299,7 @@
   "db": {
     "notFound": "The file was not found at that path",
     "saveFailed": "Saving the path failed",
-    "downloadOtzaria": "Download Otzaria",
-    "downloadZayit": "Download Zayit",
+    "downloadLibrary": "Download the book library (about 1.9 GB)",
     "pick": "Choose a database file",
     "devPlaceholder": "Full path to seforim.db"
   },

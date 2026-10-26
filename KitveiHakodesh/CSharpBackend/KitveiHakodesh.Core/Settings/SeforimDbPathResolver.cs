@@ -9,7 +9,8 @@ namespace KitveiHakodesh.Core.Settings
     /// Order, and every step VERIFIES THE FILE IS ACTUALLY THERE:
     ///
     ///   1. the registry value the user picked — if that file still exists
-    ///   2. the known install locations, Otzaria then Zayit — first one that exists
+    ///   2. the known install locations, Otzaria, then Zayit, then the library this app
+    ///      downloads itself — first one that exists
     ///   3. nothing found; say so
     ///
     /// Both checks in steps 1 and 2 are the point. The old code returned the registry value
@@ -114,6 +115,9 @@ namespace KitveiHakodesh.Core.Settings
         /// <summary>
         /// The install locations worth probing, in order. Otzaria first, then Zayit —
         /// Otzaria is the primary supported source, so it wins when both are installed.
+        /// Last, the copy this app downloads when neither is installed
+        /// (<see cref="SeforimLibraryDownload.SeforimLibraryDownloadLocations"/>) — last because
+        /// it exists only for a machine that had neither app.
         /// This is the order the hosted app (AppSettings.ResolveDefaultDbPath) and the
         /// service (SeforimDbLocator.ResolveDefaultDbPath) already probe in; Core had it
         /// reversed, which made a settings reset settle on Zayit when both were present.
@@ -125,6 +129,7 @@ namespace KitveiHakodesh.Core.Settings
             {
                 Path.Combine(appData, "otzaria", "books", "seforim.db"),
                 Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db"),
+                SeforimLibraryDownload.SeforimLibraryDownloadLocations.DatabasePath,
             };
         }
 

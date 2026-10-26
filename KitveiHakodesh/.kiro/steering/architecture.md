@@ -101,7 +101,7 @@ Keying (the `pageKey` computed) decides what remounts on tab switch:
 The step list is computed, so it varies by environment. Each step past `welcome` is its own `SetupWizardStep*.vue` component, mapped via a `stepComponents` record:
 
 1. `welcome` — always shown; app logo, intro text
-2. `db` — shown only when a database still needs to be chosen (in dev, when the service reports none); lets the user download Zayit/Otzaria or pick an existing `.db` file
+2. `db` — shown only when a database still needs to be chosen (in dev, when the service reports none); lets the user download the library (Otzaria's SeforimLibrary release, via the service — Core `SeforimLibraryDownload/`) or pick an existing `.db` file. The DB is probed in three default locations, in order: Otzaria (`%AppData%\otzaria\books`), Zayit (`%AppData%\io.github.kdroidfilter.seforimapp\databases`), then the app's own download (`%LocalAppData%\KleiKodesh\books`) — `SeforimDbPathResolver.DefaultLocations`, mirrored in the installer
 3. `theme` — theme picker + app zoom slider
 4. `general` — divine name censoring, resume-last-read, new-tab destination
 5. `book-display` — header/text fonts, font size, line padding; optional separate commentary settings
