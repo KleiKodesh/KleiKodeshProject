@@ -387,9 +387,9 @@ Continue?</value>
     <value>Interface language</value>
   </data>
   <data name="Settings_LanguageHint" xml:space="preserve">
-    <value>Takes full effect after restarting Word.</value>
+    <value>Some settings may only take effect after Word is restarted.</value>
   </data>
   <data name="Settings_RestartWordNotice" xml:space="preserve">
-    <value>The interface language was changed. Restart Word for the change to take full effect.</value>
+    <value>Some settings may only take effect after Word is restarted.</value>
   </data>
 </root>

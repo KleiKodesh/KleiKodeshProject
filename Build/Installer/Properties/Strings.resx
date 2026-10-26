@@ -387,9 +387,9 @@
     <value>שפת ממשק</value>
   </data>
   <data name="Settings_LanguageHint" xml:space="preserve">
-    <value>השינוי יחול במלואו לאחר הפעלה מחדש של Word.</value>
+    <value>ייתכן שחלק מההגדרות יחולו רק לאחר הפעלה מחדש של Word.</value>
   </data>
   <data name="Settings_RestartWordNotice" xml:space="preserve">
-    <value>שפת הממשק שונתה. יש להפעיל מחדש את Word כדי שהשינוי יחול במלואו.</value>
+    <value>ייתכן שחלק מההגדרות יחולו רק לאחר הפעלה מחדש של Word.</value>
   </data>
 </root>
