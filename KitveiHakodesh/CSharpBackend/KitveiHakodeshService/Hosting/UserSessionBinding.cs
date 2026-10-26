@@ -81,6 +81,7 @@ public sealed class UserSessionBinding(
         // The data host runs - and is rebuilt in this process on a reload request (an added or
         // removed library, a switched database) - until the SCM stops us or something stops it
         // without asking for a reload (the installer's "shutdown", a host that cannot be built).
+        logger.LogWarning("data host: supervisor starting");
         var supervisor = new DataHostSupervisor(
             () => WindowsServiceMode.CreatePipe(pipeName),
             () => Program.BuildDataHost(Array.Empty<string>()),

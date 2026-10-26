@@ -57,16 +57,20 @@ internal sealed class DataHostSupervisor
         // connection nothing was armed, and every further client got PIPE_BUSY for as long as
         // the build took. Their requests are read and held, then answered once it is up.
         StartupConnectionHolder holder = StartHolder(stoppingToken);
+        _logger.LogWarning("data host: startup listeners armed");
 
         while (true)
         {
             IHost host;
             try
             {
+                _logger.LogWarning("data host: building");
                 host = _buildHost();
+                _logger.LogWarning("data host: built, starting");
                 try
                 {
                     await host.StartAsync(stoppingToken);
+                    _logger.LogWarning("data host: started");
                 }
                 catch
                 {
@@ -118,6 +122,7 @@ internal sealed class DataHostSupervisor
                 pendingRequest = null;
             }
 
+            _logger.LogWarning("data host: answering held connections");
             try
             {
                 // Ends when the data host stops itself or the SCM stops us.
@@ -126,6 +131,7 @@ internal sealed class DataHostSupervisor
             catch (OperationCanceledException) { }
 
             bool reload = !stoppingToken.IsCancellationRequested && _consumeReload();
+            _logger.LogWarning("data host: stopping (reload: {Reload})", reload);
             // Listening again BEFORE the old host finishes stopping: no moment without a pipe.
             if (reload) holder = StartHolder(stoppingToken);
 
@@ -140,6 +146,7 @@ internal sealed class DataHostSupervisor
             if (stoppedInTime) { try { await stopping; } catch { } }
             else _logger.LogError("The data host did not stop within {Seconds:N0}s; abandoning it", StopTimeout.TotalSeconds);
             if (stoppedInTime) { try { current.Dispose(); } catch { } }
+            _logger.LogWarning("data host: stop finished (in time: {InTime})", stoppedInTime);
 
             if (!reload) return;
             _logger.LogInformation("Data host stopped for a reload; rebuilding it in this process (the service keeps running)");
