@@ -374,4 +374,10 @@ Continue?</value>
   <data name="SwitchLanguage" xml:space="preserve">
     <value>עברית</value>
   </data>
+  <data name="WhatsNew_Title" xml:space="preserve">
+    <value>What's new</value>
+  </data>
+  <data name="WhatsNew_Continue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
 </root>

@@ -409,3 +409,6 @@ KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json
 # Separate repo (KleiKodesh/SearchExpansion); its built DB is shipped via KitveiHakodesh/CSharpBackend/FtsLib-Csharp/SearchExpansion/expansion-routed.db
 /SearchExpansion/
 /SearchExpansion-models/
+
+# Release notes written by CI before the installer build (embedded into the installer)
+Build/Installer/ReleaseNotes/

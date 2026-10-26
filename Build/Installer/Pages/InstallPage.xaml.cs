@@ -13,7 +13,8 @@ namespace KleiKodeshVstoInstallerWpf
     /// Reached two ways:
     ///   - LandingPage "התקן" → NavigateToInstall(showSettingsAfter: true)
     ///   - RepairPage (after cleanup) → NavigateToInstall(showSettingsAfter: true)
-    /// Both then navigate to SettingsPage for post-install config. showSettingsAfter:false
+    /// Both then navigate to WhatsNewPage (release notes; skipped when none are embedded)
+    /// and from there to SettingsPage for post-install config. showSettingsAfter:false
     /// exits with code 0 instead; no caller currently uses it.
     ///
     /// Auto-updates come through LandingPage like any other install: --silent is ignored
@@ -95,7 +96,7 @@ namespace KleiKodeshVstoInstallerWpf
                 _status.Report(Strings.Install_Complete);
                 await Task.Delay(300);
                 if (_showSettingsAfter)
-                    (Window.GetWindow(this) as MainWindow)?.NavigateToSettings();
+                    (Window.GetWindow(this) as MainWindow)?.NavigateToWhatsNew();
                 else
                     WordHelper.ExitAfterInstall();
             }
