@@ -117,7 +117,9 @@ namespace KitveiHakodeshLib.LocalFile
                 }
                 catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
 
-                await OpenAsync(filePath, openInNewTab: false, replyId: id);
+                // async void: an escaped exception would crash the host, so catch it here.
+                try { await OpenAsync(filePath, openInNewTab: false, replyId: id); }
+                catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
             }));
         }
 
