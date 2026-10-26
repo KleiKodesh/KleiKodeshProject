@@ -384,11 +384,11 @@
     <Content Include="Resources\About.dotx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!-- Built by Ribbon\Build-MacrosTemplate.ps1; the installer copies it to Word's STARTUP folder -->
+    <!-- Macros rebuilt by Ribbon\build_macros_template.py; the installer copies it to Word's STARTUP folder -->
     <Content Include="Resources\KleiKodeshMacros.dotm" Condition="Exists('Resources\KleiKodeshMacros.dotm')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="Ribbon\Build-MacrosTemplate.ps1" />
+    <None Include="Ribbon\build_macros_template.py" />
   </ItemGroup>
   <ItemGroup>
     <Page Include="Ribbon\RibbonSettingsView.xaml">

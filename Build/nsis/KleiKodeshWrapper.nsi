@@ -493,6 +493,11 @@ Section Uninstall
 
   ; ── File system ──────────────────────────────────────────────────────────────
   DetailPrint "מסיר קבצי התוכנה..."
+  ; VBA macros template the WPF installer put in Word's STARTUP folder (default and custom)
+  Delete "$APPDATA\Microsoft\Word\STARTUP\KleiKodeshMacros.dotm"
+  ReadRegStr $0 HKCU "Software\Microsoft\Office\16.0\Word\Options" "STARTUP-PATH"
+  StrCmp $0 "" +2
+  Delete "$0\KleiKodeshMacros.dotm"
   ; Current install location (v1.0.24+)
   RMDir /r "$LOCALAPPDATA\KleiKodesh"
   ; Old install locations — English name (v1.0.x through ~v1.0.23)
