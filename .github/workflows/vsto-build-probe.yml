@@ -29,5 +29,8 @@ jobs:
         working-directory: KitveiHakodesh/vue-frontend
         run: npm ci
 
+      - name: Restore (solution, packages.config too)
+        run: msbuild KleiKodeshProject.slnx -t:restore -p:RestorePackagesConfig=true -v:minimal -nologo
+
       - name: Build KleiKodeshVsto (unsigned)
-        run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -restore -p:RestorePackagesConfig=true -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
+        run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
