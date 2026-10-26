@@ -93,7 +93,7 @@ namespace Nakdan.Properties
         /// <summary>Resolves culture texts from "&lt;base&gt;.&lt;lang&gt;.resources" inside this dll.</summary>
         sealed class EmbeddedCultureResourceManager : ResourceManager
         {
-            public EmbeddedCultureResourceManager() : base(BaseName, typeof(Strings).Assembly) { }
+            public EmbeddedCultureResourceManager() : base(Strings.BaseName, typeof(Strings).Assembly) { }
 
             protected override ResourceSet InternalGetResourceSet(CultureInfo culture, bool createIfNotExists, bool tryParents)
             {
