@@ -18,6 +18,18 @@ import { setCurrentMark } from './useBookViewLineRenderer'
 import type { LineItem } from './useBookViewLinesTable'
 
 /**
+ * Breathing room a programmatic landing leaves above its target: the scroll stops
+ * this many pixels before the line's start, so a section opens with a sliver of
+ * the previous line showing rather than text flush against the edge.
+ *
+ * Imported by the top-line derivation too (useBookViewLinesScroll), which must
+ * agree with it: the sliver means the line straddling the very top after a
+ * landing is the PREVIOUS line, and a derivation that counts slivers resolves to
+ * the previous TOC entry.
+ */
+export const SCROLL_LANDING_GAP_PX = 8
+
+/**
  * Height the search bar overlays at the top of the lines scroller. Landings
  * reserve this much extra so the target is not hidden under the bar, and the
  * scroll sync skips it when deriving the top visible line.
@@ -32,9 +44,6 @@ export const SEARCH_BAR_INSET_PX = 44
  */
 const BOTTOM_LANDING_CLEARANCE_PX = 48
 
-/** Frames allowed for a freshly mounted row to paint its marks. */
-const MARK_POLL_FRAMES = 10
-
 export interface ScrollToLineOptions {
   /**
    * Which search occurrence within the line to mark `.current` and centre.
@@ -43,9 +52,8 @@ export interface ScrollToLineOptions {
    */
   occurrence?: number
   /**
-   * Scroll even when already within 2px of the target. Explicit section
-   * navigation needs this: sub-pixel rounding can put scrollTop a hair from the
-   * target while the view is not actually at the section start.
+   * Land the LINE at the top even when a match on it is already in view. Section
+   * navigation is about the line's position, not a match's visibility.
    */
   force?: boolean
   /**
@@ -75,8 +83,8 @@ export function useBookViewLinesNavigation(
   lines: () => LineItem[],
   searchBarVisible: () => boolean,
   suppressPositionSave: () => void,
-  /** Ends a pending session restore — a jump supersedes it. */
-  cancelRestoreCorrection: () => void,
+  /** Ends the opening's follow-ups — a jump supersedes them. */
+  cancelRestore: () => void,
 ) {
   // Bumped at the start of every navigation so the mark poll of a previous call
   // cancels instead of stomping the newer call's mark and scroll.
@@ -96,9 +104,9 @@ export function useBookViewLinesNavigation(
 
     if (options.skipIfVisible && api.isRowFullyVisible(lineIndex)) return
 
-    // The reader is going somewhere else: session restore must not re-land its
-    // own target when that chunk arrives.
-    cancelRestoreCorrection()
+    // The reader is going somewhere else: the opening's follow-ups (flash, mark)
+    // must not run against a view that has moved on.
+    cancelRestore()
 
     const { occurrence, force = false, direction = 'backward' } = options
     // No occurrence means no match to refine toward — a plain jump to the line.
@@ -154,20 +162,13 @@ export function useBookViewLinesNavigation(
 
     suppressPositionSave()
     await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
-    if (isStale() || !wantsMark) return
-
-    // The row is mounted with its text; the mark is there on the next frame.
-    let attempts = 0
-    function tryApplyMark() {
-      if (isStale()) return
-      suppressPositionSave()
-      if (applyCurrentMark()) {
-        adjustToMark()
-        return
-      }
-      if (++attempts < MARK_POLL_FRAMES) requestAnimationFrame(tryApplyMark)
-    }
-    tryApplyMark()
+    if (isStale()) return
+    // Re-armed: the fetch may have outlasted the window armed before it, and the
+    // landing's scroll event is only dispatched in the next frame.
+    suppressPositionSave()
+    if (!wantsMark) return
+    // The row is mounted with its text, marks included — nothing to wait for.
+    if (applyCurrentMark()) adjustToMark()
   }
 
   /**

@@ -14,7 +14,7 @@
  * landing's small correction cannot tug the thumb from under the reader's hand.
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useElementSize, useEventListener } from '@vueuse/core'
+import { useElementSize, useEventListener, useIntervalFn } from '@vueuse/core'
 import { revealScrollbarOnHover } from '@/composables/useUiChromeVisibility'
 import type { WindowedScrollerBarState } from './windowedScrollerTypes'
 
@@ -170,8 +170,15 @@ useEventListener(barElement, 'wheel', (event: WheelEvent) => {
   props.viewport.scrollBy({ top: event.deltaY })
 }, { passive: false })
 
-// Hidden-scrollbars mode keeps the bar invisible until the pointer reaches it.
-useEventListener(barElement, 'mousemove', () => revealScrollbarOnHover(props.viewport))
+// Hidden-scrollbars mode keeps the bar invisible until the pointer reaches it, and
+// keeps it shown for as long as the pointer stays — see REVEAL_KEEPALIVE_MS.
+const revealKeepalive = useIntervalFn(() => revealScrollbarOnHover(props.viewport), REVEAL_KEEPALIVE_MS, { immediate: false })
+useEventListener(barElement, 'mouseenter', () => {
+  revealScrollbarOnHover(props.viewport)
+  revealKeepalive.resume()
+})
+useEventListener(barElement, 'mouseleave', () => revealKeepalive.pause())
+
 
 defineExpose({ barElement })
 </script>

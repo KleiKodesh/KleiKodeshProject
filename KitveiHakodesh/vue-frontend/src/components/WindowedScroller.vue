@@ -80,6 +80,7 @@ const {
   findRowIndexAt,
   rememberAnchor,
   holdAnchor,
+  holdAnchorThroughScroll,
   landAt,
   fill,
 } = useWindowedScrollerWindow({
@@ -132,7 +133,7 @@ const bar = useWindowedScrollerBarMapping({
 // corrects any such shift against the last anchor; on a plain reader scroll the
 // anchor row has not moved within the content and the hold is a no-op.
 function onViewportScroll() {
-  holdAnchor()
+  holdAnchorThroughScroll()
   rememberAnchor()
   bar.syncFromViewport()
   fill()
@@ -147,14 +148,14 @@ useResizeObserver(contentElement, () => {
 })
 useResizeObserver(viewportElement, () => fill())
 
-let opened = false
+let hasOpened = false
 watch(
   () => props.count,
   (count) => {
     clampToCount()
-    if (!opened && count > 0 && props.initialIndex != null) {
-      opened = true
-      void scrollToIndex(props.initialIndex, { offsetPx: props.initialOffsetPx })
+    if (!hasOpened && count > 0 && props.initialIndex != null) {
+      hasOpened = true
+      void scrollToIndex(props.initialIndex, { offsetPx: props.initialOffsetPx }).then(() => emit('opened'))
       return
     }
     nextTick(fill)

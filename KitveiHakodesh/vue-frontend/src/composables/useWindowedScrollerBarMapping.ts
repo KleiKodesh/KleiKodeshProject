@@ -84,18 +84,22 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     const above = pixelsAboveWindow()
     const below = (options.count() - options.windowEnd.value) * estimatedRowHeight
     totalHeight.value = Math.round(above + viewport.scrollHeight + below)
-    position.value = Math.round(above + viewport.scrollTop)
+    position.value = pendingPosition ?? Math.round(above + viewport.scrollTop)
+    landmarkTiers.value = options.landmarkTiers().map((tier) => tier.map(positionForIndex))
   }
 
   // Seeks outside the window land the scroller, which is asynchronous (rows are
   // fetched first). A drag produces many per second: only the latest matters, so
-  // they coalesce into one landing at a time.
-  let landing = false
+  // they coalesce into one landing at a time. While one is in flight the reported
+  // position is the seek's TARGET, not the viewport's — a patch landing meanwhile
+  // (an extension finishing) must not pull the thumb back to where the view still
+  // is, only for the landing to throw it forward again.
+  let isLanding = false
   let pendingIndex: number | null = null
 
   async function landPending() {
-    if (landing) return
-    landing = true
+    if (isLanding) return
+    isLanding = true
     try {
       while (pendingIndex != null) {
         const index = pendingIndex
@@ -103,7 +107,9 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
         await options.landAt(index)
       }
     } finally {
-      landing = false
+      isLanding = false
+      pendingPosition = null
+      syncFromViewport()
     }
   }
 
