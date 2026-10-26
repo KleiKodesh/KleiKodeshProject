@@ -74,6 +74,7 @@ const {
   requireOrdered,
   allWords,
   setAllWords,
+  perWord,
   sortOrder,
   executeSearch,
   cancelSearch,
@@ -147,6 +148,7 @@ const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
 const isOptionsActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || WORD_OPTIONS.some((option) => allWords.value[option] !== (option === 'ketiv'))
+     || Object.values(perWord.value).some((words) => words?.length)
      || settings.searchContextMarginWords !== 30,
 )
 
@@ -203,6 +205,7 @@ watch(
     maxWordDistance,
     requireOrdered,
     allWords,
+    perWord,
     () => settings.searchContextMarginWords,
   ],
   () => scheduleRerun(),
@@ -348,6 +351,7 @@ async function saveFilterState(keepScrollCleared = false) {
     // Persist the sort only when it's not the default — 'catalogOrder' is the
     // reset-on-new-search default, so there's nothing to remember for it.
     searchSortOrder: sortOrder.value !== 'catalogOrder' ? sortOrder.value : undefined,
+    searchPerWord: Object.keys(perWord.value).length ? perWord.value : undefined,
   }
   // Mirror the scroll scalars to localStorage FIRST — synchronous, so it lands even when
   // this runs during reload teardown and the async IDB write below never commits.
@@ -384,6 +388,8 @@ onMounted(async () => {
   } else {
     initCheckedBooks()
   }
+
+  if (saved?.searchPerWord) perWord.value = saved.searchPerWord
 
   if (saved?.searchAtFilters?.length) {
     setAtFilters(saved.searchAtFilters)
@@ -488,10 +494,13 @@ onBeforeUnmount(() => {
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
         :all-words="allWords"
+        :per-word="perWord"
+        :query="searchQuery"
         @update:max-word-distance="maxWordDistance = $event"
         @update:require-ordered="requireOrdered = $event"
         @update:context-words="settings.searchContextMarginWords = $event"
         @set-all-words="setAllWords"
+        @update:per-word="perWord = $event"
         @close="isOptionsOpen = false"
       />
     </div>
@@ -506,10 +515,13 @@ onBeforeUnmount(() => {
           :require-ordered="requireOrdered"
           :context-words="settings.searchContextMarginWords"
           :all-words="allWords"
+          :per-word="perWord"
+          :query="searchQuery"
           @update:max-word-distance="maxWordDistance = $event"
           @update:require-ordered="requireOrdered = $event"
           @update:context-words="settings.searchContextMarginWords = $event"
           @set-all-words="setAllWords"
+          @update:per-word="perWord = $event"
         />
       </PageCard>
       <div v-if="!showOptionsCard" class="results-list-wrap">

@@ -1,6 +1,7 @@
 /**
- * Per-word search syntax. The options panel's persisted settings are written onto every word
- * at search time (applyAllWords); the panel never reads or edits the typed text.
+ * Per-word search syntax. The options panel's toggles ("all words" settings and per-word
+ * choices) are written onto the words at search time (applyWordOptions); the panel never
+ * reads or edits the typed text.
  *   - prefixes / suffixes: `*word`, `word*` (both: `*word*`)
  *   - grammatical prefixes / suffixes: `%word`, `word%` (both: `%word%`)
  *   - fuzzy: `word~1` (or `~N` as typed)
@@ -137,14 +138,22 @@ export function rewriteQuery(query: string, map: (word: QueryWord) => QueryWord)
   return joinQuery(next, filter)
 }
 
-/** The "all words" options written onto every word; a wrap is skipped on a word holding a
- *  wrap it conflicts with (the word's own choice wins). */
-export function applyAllWords(query: string, allWords: AllWords): string {
-  const on = WORD_OPTIONS.filter((option) => allWords[option])
-  if (!on.length) return query
+/** The words each option is on for, by core; a key present (even empty) means the option's
+ *  row is in "per word" mode. Separate from the typed text. */
+export type PerWord = Partial<Record<WordOption, string[]>>
+
+/** The toggles written onto the typed words. A word's own typed signs always win: an option
+ *  already typed is not doubled, and a wrap that conflicts with a typed wrap is skipped.
+ *  Per-word choices are applied before "all words", so a per-word wrap beats a conflicting
+ *  "all words" one on that word. */
+export function applyWordOptions(query: string, allWords: AllWords, perWord: PerWord): string {
+  const all = WORD_OPTIONS.filter((option) => allWords[option])
+  const per = WORD_OPTIONS.filter((option) => perWord[option]?.length)
+  if (!all.length && !per.length) return query
   return rewriteQuery(query, (word) => {
+    const options = [...per.filter((option) => perWord[option]!.includes(word.core)), ...all]
     let next = word
-    for (const option of on) {
+    for (const option of options) {
       if (WRAP_OPTIONS.some((other) => optionsConflict(other, option) && hasOption(next, other))) continue
       next = withOption(next, option, true)
     }
