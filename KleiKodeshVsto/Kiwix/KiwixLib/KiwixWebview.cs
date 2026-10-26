@@ -72,6 +72,12 @@ namespace KiwixLib
                 _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "kiwix-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
+                // Kiwix.js UI language + direction follow the add-in UI culture (read by www/js/init.js).
+                string uiLanguage = System.Threading.Thread.CurrentThread.CurrentUICulture
+                    .TwoLetterISOLanguageName == "en" ? "en" : "he";
+                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "window.__khUiLanguage = '" + uiLanguage + "';");
+
                 _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
                 _webView.Source = new Uri("https://kiwix-app/index.html");
