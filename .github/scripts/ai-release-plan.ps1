@@ -49,6 +49,16 @@ Task 2 - write polished release notes, like a professional app's "What's new":
   "### New", "### Improved", "### Fixed". One short line per bullet.
 - notes_en in English. notes_he is the same content in natural Hebrew (not a word-for-word
   translation), with the section headings in Hebrew too.
+- Hebrew quality: write correct, fluent Israeli Hebrew with no misspellings or invented
+  words. Re-read every Hebrew line before answering. Use these exact terms:
+  Word add-in = תוסף לוורד, Kitvei Hakodesh app = תוכנת כתבי הקודש, book view = תצוגת ספר,
+  full-text search = חיפוש בטקסט מלא, catalog = קטלוג, dictionary = מילון,
+  Nakdan = נקדן, HebrewBooks = היברובוקס, PDF viewer = מציג PDF, installer = תוכנת ההתקנה,
+  settings = הגדרות, toolbar = סרגל כלים, commentaries = מפרשים, tab = לשונית.
+- Scope each item to the right part of the app. Commit subjects start with the area
+  ("Book view (lines):", "Word add-in:" ...) - keep that area in the note. A commit body
+  line "User-facing: none" means leave that commit out entirely; "User-facing: new/
+  improved/fixed" tells you the section.
 - No title line and no version number - those are added separately.
 $(if ($Auto) { '- End BOTH notes_en and notes_he with a final italic line (own paragraph) saying this
   version was published automatically by the weekly automatic release.' })

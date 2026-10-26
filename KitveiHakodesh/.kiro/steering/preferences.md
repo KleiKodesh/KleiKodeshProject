@@ -248,6 +248,16 @@ The UI is bilingual (Hebrew default, English option) via vue-i18n. Hebrew mode: 
 
 - Never use git commands unless explicitly asked by the user
 
+### Commit messages feed the release notes
+
+The release workflow's Gemini agent writes the user-facing release notes from commit subjects/bodies alone. Vague or internal-only messages produce wrong or generic notes (v10.3.0: "Lines view: drawn scrollbar…" became "smoother scrolling without jumpy jumps"; scroller internals were reported as features). So every commit message must let an outsider place it and describe it correctly:
+
+- **Subject starts with the user-visible area**, named as the user sees it: `Book view (lines):`, `Book view toolbar:`, `PDF viewer:`, `Catalog search:`, `Full-text search:`, `Word add-in:`, `Installer:`, `Settings:`, `Home:`. Not component/file names (`WindowedScroller:`, `useBookViewLinesScroll:`).
+- **Say what the user notices**, not the mechanism: "Book view (lines): scrollbar thumb no longer jumps while dragging in long books" — not "anchor through scroll events".
+- **Body: one line `User-facing:` + kind** — `new` / `improved` / `fixed` / `none` — and the concrete effect. Internal-only work (refactors, cleanup, CI, licensing, build signing, tests) gets `User-facing: none` so the agent drops it.
+- One area per commit where possible; if a commit spans areas, list each area's effect on its own line.
+- Name the exact control/feature ("HebrewBooks editions dropdown", "Nakdan clean-text options"), never "UI tweaks" / "fixes".
+
 ## Prettier Compatibility
 
 This project uses Prettier with `printWidth: 100`. The Vue template compiler rejects multiline expressions inside attribute quote strings — Prettier causes this by wrapping long inline handlers across lines. When this happens the compiler embeds a literal newline character (visible as `` `n `` in the attribute value) and throws `InvalidCharacterError: Failed to execute 'setAttribute' on 'Element': '`n' is not a valid attribute name` at runtime, producing a blank component with no rendered output.
