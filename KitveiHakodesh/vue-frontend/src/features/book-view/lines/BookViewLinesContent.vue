@@ -87,7 +87,7 @@ const props = defineProps<
      * static per-row height estimate. null while loading, or for a library without
      * the column; the bar then estimates from the rows it measures.
      */
-    lineCharacterCounts?: number[] | null
+    lineCharacterCounts?: ArrayLike<number> | null
   }
 >()
 

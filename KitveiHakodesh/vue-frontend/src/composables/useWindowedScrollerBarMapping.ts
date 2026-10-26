@@ -42,7 +42,7 @@ export interface WindowedScrollerBarMappingOptions {
   /** Row indexes of the list's section starts, coarse tier first. */
   landmarkTiers: () => readonly (readonly number[])[]
   /** A size weight per row, `count` long, or nothing — see the file comment. */
-  rowWeights: () => readonly number[] | null | undefined
+  rowWeights: () => ArrayLike<number> | null | undefined
 }
 
 /** How much of each fresh window average flows into the average estimate. */
@@ -81,12 +81,12 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   let appliedCalibration: WeightCalibration | null = null
   /** `prefixSums[i]` = estimated height of rows [0, i); `count + 1` long. */
   let prefixSums: Float64Array | null = null
-  let prefixSumsWeights: readonly number[] | null = null
+  let prefixSumsWeights: ArrayLike<number> | null = null
   /** The window the last fit was taken from — a fit per window, not per scroll tick. */
   let fittedWindowStart = -1
   let fittedWindowEnd = -1
 
-  function usableWeights(): readonly number[] | null {
+  function usableWeights(): ArrayLike<number> | null {
     const weights = options.rowWeights()
     return weights && weights.length === options.count() ? weights : null
   }
@@ -100,7 +100,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
    * geometric grid of capacities (the one non-linear parameter). Null when the rows
    * cannot tell the parameters apart.
    */
-  function fitCalibration(weights: readonly number[]): WeightCalibration | null {
+  function fitCalibration(weights: ArrayLike<number>): WeightCalibration | null {
     const start = options.windowStart.value
     const end = options.windowEnd.value
     const rowWeights: number[] = []
@@ -151,7 +151,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     )
   }
 
-  function rebuildPrefixSums(weights: readonly number[], applied: WeightCalibration) {
+  function rebuildPrefixSums(weights: ArrayLike<number>, applied: WeightCalibration) {
     const count = weights.length
     const sums = new Float64Array(count + 1)
     let total = 0
