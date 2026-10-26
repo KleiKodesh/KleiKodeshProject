@@ -77,7 +77,11 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  /** The landing on `initialIndex` is on screen — the opening render. Not emitted without one. */
+  /**
+   * The opening landing on `initialIndex` has run — the opening render. Not emitted
+   * without one. Emitted even if the landing applied nothing (its rows could not be
+   * had, or a newer landing superseded it), so listeners null-check what they touch.
+   */
   opened: []
 }>()
 
