@@ -50,5 +50,12 @@ jobs:
         shell: pwsh
         run: Set-Content KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json '{}'
 
-      - name: Build KleiKodeshVsto (unsigned)
-        run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -p:Configuration=Release -p:Platform=AnyCPU -p:SignManifests=false -v:minimal -nologo
+      - name: Throwaway signing cert (real one comes from a secret)
+        id: cert
+        shell: pwsh
+        run: |
+          $c = New-SelfSignedCertificate -Subject CN=probe -Type CodeSigningCert -CertStoreLocation Cert:\CurrentUser\My
+          "thumb=$($c.Thumbprint)" >> $env:GITHUB_OUTPUT
+
+      - name: Build KleiKodeshVsto (signed)
+        run: msbuild KleiKodeshVsto/KleiKodeshVsto.csproj -p:Configuration=Release -p:Platform=AnyCPU -p:ManifestCertificateThumbprint=${{ steps.cert.outputs.thumb }} -p:ManifestKeyFile= -v:minimal -nologo
