@@ -65,6 +65,8 @@ type LinesContentInstance = {
   scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
   focusScroller: () => void
   readCurrentPosition: () => { lineIndex: number; fullLineIndex: number } | null
+  retainedLineRanges: () => ReadonlyArray<readonly [number, number]>
+  onLinesTextEvicted: (lineIds: number[]) => void
   $el?: HTMLElement
 }
 type SearchBarInstance = { focus: (opts?: { selectAll?: boolean }) => void }
@@ -149,7 +151,10 @@ export function useBookView(
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
-  } = useLines(() => bookId)
+  } = useLines(() => bookId, {
+    retainedRanges: () => linesContentRef()?.retainedLineRanges() ?? [],
+    onTextEvicted: (lineIds) => linesContentRef()?.onLinesTextEvicted(lineIds),
+  })
 
   // Warm up the connection type ID table immediately — single tiny query that must
   // resolve before any line-tap commentary load fires its reverse queries.
