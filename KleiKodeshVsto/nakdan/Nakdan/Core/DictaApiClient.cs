@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -173,7 +173,7 @@ namespace Nakdan.Core
 
             // Provide user-friendly error message
             string errorMessage = isNetworkError
-                ? "אין חיבור לאינטרנט או שהשרת אינו זמין.\nבדוק את החיבור שלך ונסה שוב."
+                ? Nakdan.Properties.Strings.Err_NoInternet
                 : "Dicta API unavailable: " + lastError?.Message;
 
             throw new Exception(errorMessage, lastError);

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="SectionParagraph" xml:space="preserve"><value>עיצוב פסקה</value></data>
+  <data name="MinLineCount" xml:space="preserve"><value>מניין שורות</value></data>
+  <data name="TipFirstWordStyle" xml:space="preserve"><value>סגנון מילה ראשונה</value></data>
+  <data name="TipRemoveFirstWordStyle" xml:space="preserve"><value>הסר סגנון מילה ראשונה</value></data>
+  <data name="TipHanging" xml:space="preserve"><value>עיצוב חלון</value></data>
+  <data name="TipDoubleHanging" xml:space="preserve"><value>עיצוב חלון כפול</value></data>
+  <data name="TipRemoveHanging" xml:space="preserve"><value>הסר עיצוב חלון</value></data>
+  <data name="TipCenterLastLine" xml:space="preserve"><value>מירכוז שורה אחרונה</value></data>
+  <data name="TipRemoveCenterLastLine" xml:space="preserve"><value>הסר מירכוז שורה אחרונה</value></data>
+  <data name="ApplyTo" xml:space="preserve"><value>החל על ▾</value></data>
+  <data name="SelectAll" xml:space="preserve"><value>סמן הכל</value></data>
+  <data name="ChooseFirstWordStyle" xml:space="preserve"><value>בחר סגנון עבור עיצוב מילה ראשונה</value></data>
+  <data name="TipChooseFirstWordStyle" xml:space="preserve"><value>בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)</value></data>
+  <data name="TipNewCharStyle" xml:space="preserve"><value>צור סגנון תו חדש</value></data>
+  <data name="NewStyle" xml:space="preserve"><value>סגנון חדש</value></data>
+  <data name="SectionColumns" xml:space="preserve"><value>איזון טורים</value></data>
+  <data name="TipAlignColumns" xml:space="preserve"><value>יישור טורים</value></data>
+  <data name="TipColumnsSettings" xml:space="preserve"><value>הגדרות טורים</value></data>
+  <data name="TipFindUneven" xml:space="preserve"><value>חפש טורים שאינם מאוזנים</value></data>
+  <data name="MaxSpaceBetween" xml:space="preserve"><value>מרווח מקסימלי בין קטעים</value></data>
+  <data name="SectionSpacing" xml:space="preserve"><value>מרווחים</value></data>
+  <data name="SpaceAfter" xml:space="preserve"><value>מרווח אחרי</value></data>
+  <data name="SpaceBefore" xml:space="preserve"><value>מרווח לפני</value></data>
+  <data name="LineSpacing" xml:space="preserve"><value>בין שורות</value></data>
+  <data name="WordSpacing" xml:space="preserve"><value>בין מילים</value></data>
+  <data name="CharStretch" xml:space="preserve"><value>מתיחת אותיות</value></data>
+  <data name="StepSize" xml:space="preserve"><value>גודל צעד</value></data>
+  <data name="TipReset" xml:space="preserve"><value>איפוס</value></data>
+  <data name="TipIncrease" xml:space="preserve"><value>הגדל</value></data>
+  <data name="TipDecrease" xml:space="preserve"><value>הקטן</value></data>
+  <data name="NoResults" xml:space="preserve"><value>לא נמצאו תוצאות</value></data>
+  <data name="NoResultsSearchFromStart" xml:space="preserve"><value>לא נמצאו תוצאות. האם ברצונך לחפש מתחילת המסמך</value></data>
+  <data name="UndoAlignColumns" xml:space="preserve"><value>יישור טורים</value></data>
+  <data name="StatusDone" xml:space="preserve"><value>הפעולה הסתיימה</value></data>
+  <data name="UndoResetTabs" xml:space="preserve"><value>איפוס טאבים</value></data>
+  <data name="UndoCenterLastLine" xml:space="preserve"><value>מירכוז שורה אחרונה</value></data>
+  <data name="UndoHanging" xml:space="preserve"><value>עיצוב חלון</value></data>
+  <data name="UndoFirstWordStyle" xml:space="preserve"><value>עיצוב מילה ראשונה</value></data>
+  <data name="UndoRemoveFirstWordStyle" xml:space="preserve"><value>הסרת עיצוב מילה ראשונה</value></data>
+  <data name="NewStylePrompt" xml:space="preserve"><value>הזן שם לסגנון התו החדש:</value></data>
+  <data name="NewStyleTitle" xml:space="preserve"><value>צור סגנון חדש</value></data>
+  <data name="StyleExistsFormat" xml:space="preserve"><value>סגנון בשם '{0}' כבר קיים במסמך.</value></data>
+  <data name="StyleCreatedFormat" xml:space="preserve"><value>הסגנון '{0}' נוצר בהצלחה וזמין לשימוש.
+
+כדי לערוך את עיצובו, השתמש בכלי עריכת הסגנונות המובנה של וורד').</value></data>
+  <data name="StyleCreatedTitle" xml:space="preserve"><value>סגנון נוצר</value></data>
+</root>

@@ -82,10 +82,10 @@ namespace Nakdan.UI
             // ── Genre list ──────────────────────────────────────
             Genres = new ObservableCollection<GenreItem>
             {
-                new GenreItem { Genre = DictaGenre.Rabbinic, DisplayName = "טקסט רבני"       },
-                new GenreItem { Genre = DictaGenre.Bible,    DisplayName = "טקסט מקראי"      },
-                new GenreItem { Genre = DictaGenre.Modern,   DisplayName = "עברית מודרנית"  },
-                new GenreItem { Genre = DictaGenre.Poetry,   DisplayName = "שירה"            },
+                new GenreItem { Genre = DictaGenre.Rabbinic, DisplayName = Nakdan.Properties.Strings.Genre_Rabbinic       },
+                new GenreItem { Genre = DictaGenre.Bible,    DisplayName = Nakdan.Properties.Strings.Genre_Bible      },
+                new GenreItem { Genre = DictaGenre.Modern,   DisplayName = Nakdan.Properties.Strings.Genre_Modern  },
+                new GenreItem { Genre = DictaGenre.Poetry,   DisplayName = Nakdan.Properties.Strings.Genre_Poetry            },
             };
 
             // Load saved genre preference from registry, default to Modern
@@ -96,13 +96,13 @@ namespace Nakdan.UI
             var savedClean = SettingsManager.GetEnum("Nakdan", "CleanTextOptions", DefaultCleanOptions);
             CleanOptions = new ObservableCollection<CleanOptionItem>
             {
-                new CleanOptionItem(TextCleanOptions.Nikkud,                 "ניקוד"),
-                new CleanOptionItem(TextCleanOptions.Cantillations,          "טעמים"),
-                new CleanOptionItem(TextCleanOptions.Periods,                "נקודות"),
-                new CleanOptionItem(TextCleanOptions.Commas,                 "פסיקים"),
-                new CleanOptionItem(TextCleanOptions.Dashes,                 "מקפים"),
-                new CleanOptionItem(TextCleanOptions.QuestionAndExclamation, "סימני שאלה וקריאה"),
-                new CleanOptionItem(TextCleanOptions.Colons,                 "נקודותיים"),
+                new CleanOptionItem(TextCleanOptions.Nikkud,                 Nakdan.Properties.Strings.Clean_Nikkud),
+                new CleanOptionItem(TextCleanOptions.Cantillations,          Nakdan.Properties.Strings.Clean_Cantillations),
+                new CleanOptionItem(TextCleanOptions.Periods,                Nakdan.Properties.Strings.Clean_Periods),
+                new CleanOptionItem(TextCleanOptions.Commas,                 Nakdan.Properties.Strings.Clean_Commas),
+                new CleanOptionItem(TextCleanOptions.Dashes,                 Nakdan.Properties.Strings.Clean_Dashes),
+                new CleanOptionItem(TextCleanOptions.QuestionAndExclamation, Nakdan.Properties.Strings.Clean_QuestionExclamation),
+                new CleanOptionItem(TextCleanOptions.Colons,                 Nakdan.Properties.Strings.Clean_Colons),
             };
             _keepPunctuationAtParagraphEnd = (savedClean & TextCleanOptions.KeepPunctuationAtParagraphEnd) != 0;
             foreach (var o in CleanOptions)
@@ -286,11 +286,11 @@ namespace Nakdan.UI
                 try
                 {
                     await _nakdanWrapper.VowelizeSelectionAsync(_cancellationTokenSource.Token);
-                    SetStatus("הניקוד הושלם ✓", false);
+                    SetStatus(Nakdan.Properties.Strings.Status_Done, false);
                 }
                 catch (OperationCanceledException)
                 {
-                    SetStatus("הניקוד בוטל על ידי המשתמש", false);
+                    SetStatus(Nakdan.Properties.Strings.Status_Cancelled, false);
                 }
                 finally
                 {
@@ -308,7 +308,7 @@ namespace Nakdan.UI
             try
             {
                 _nakdanWrapper.CleanSelection(SelectedCleanOptions);
-                SetStatus("הטקסט נוקה ✓", false);
+                SetStatus(Nakdan.Properties.Strings.Status_Cleaned, false);
             }
             catch (Exception ex)
             {
@@ -367,8 +367,8 @@ namespace Nakdan.UI
         public bool HasSuggestionsStatus => !string.IsNullOrEmpty(_suggestionsStatus);
         public bool HasWordOptions => WordOptions.Count > 0;
         public string SuggestionsHint => HasWordOptions
-            ? "לחיצה על הצעה מחליפה את המילה ועוברת לבאה."
-            : "בחרו מילה במסמך ולחצו הצג.";
+            ? Nakdan.Properties.Strings.Hint_ClickOption
+            : Nakdan.Properties.Strings.Hint_SelectWord;
 
         /// <summary>Explicit request: fetch options for the word at the selection, even if it is the same word.</summary>
         public void ShowSuggestions() => UpdateSuggestionsAsync(true);
@@ -466,7 +466,7 @@ namespace Nakdan.UI
                 return;
             }
 
-            ResetSuggestions("טוען הצעות…");
+            ResetSuggestions(Nakdan.Properties.Strings.Sugg_Loading);
             _suggestionRange = wordRange;
             _suggestionWord = word;
             var cts = new CancellationTokenSource();
@@ -478,12 +478,12 @@ namespace Nakdan.UI
                 List<string> options = await _suggestionsApi.GetWordOptionsAsync(context, offset, genre, cts.Token);
                 if (cts.IsCancellationRequested) return;
                 foreach (string o in options) WordOptions.Add(o);
-                SuggestionsStatus = options.Count == 0 ? "אין הצעות למילה זו" : string.Empty;
+                SuggestionsStatus = options.Count == 0 ? Nakdan.Properties.Strings.Sugg_None : string.Empty;
             }
             catch
             {
                 if (cts.IsCancellationRequested) return;
-                SuggestionsStatus = "לא ניתן לטעון הצעות (בדוק חיבור לאינטרנט)";
+                SuggestionsStatus = Nakdan.Properties.Strings.Sugg_LoadFailed;
             }
         }
 
@@ -498,11 +498,11 @@ namespace Nakdan.UI
             {
                 if (range.Text != _suggestionWord)
                 {
-                    ResetSuggestions("המילה השתנתה — בחר אותה שוב");
+                    ResetSuggestions(Nakdan.Properties.Strings.Sugg_WordChanged);
                     return;
                 }
                 undo = VstoHelper.Application.UndoRecord;
-                undo.StartCustomRecord("הצעת ניקוד");
+                undo.StartCustomRecord(Nakdan.Properties.Strings.Undo_Suggestion);
                 started = true;
                 range.Text = option;
                 _suggestionWord = option;
@@ -510,7 +510,7 @@ namespace Nakdan.UI
             }
             catch
             {
-                SuggestionsStatus = "ההחלפה נכשלה";
+                SuggestionsStatus = Nakdan.Properties.Strings.Sugg_ReplaceFailed;
             }
             finally
             {

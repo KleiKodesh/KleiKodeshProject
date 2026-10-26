@@ -1,4 +1,4 @@
-using RegexFindLib.Search;
+﻿using RegexFindLib.Search;
 using System;
 using System.Diagnostics;
 using System.Windows.Media;
@@ -84,7 +84,7 @@ namespace RegexFindLib.UI
                 AddReplaceToHistory();
                 _search.Execute(BuildRequest(), replaceAll: true);
                 int count = _search.Results?.Length ?? 0;
-                StatusText = $"הוחלפו {count} תוצאות";
+                StatusText = string.Format(Properties.Strings.Status_Replaced, count);
                 Results.Clear();
                 NoResults = false;
             }
@@ -100,7 +100,7 @@ namespace RegexFindLib.UI
             if (_search.Results == null || _search.Results.Length == 0)
             {
                 NoResults = true;
-                StatusText = "לא נמצאו תוצאות התואמות לחיפוש";
+                StatusText = Properties.Strings.NoResults;
                 return;
             }
 
@@ -108,7 +108,7 @@ namespace RegexFindLib.UI
             foreach (var r in _search.Results)
                 Results.Add(new SnippetModel(r.ContextBefore, r.MatchText, r.ContextAfter));
 
-            StatusText = $"נמצאו {_search.Results.Length} תוצאות";
+            StatusText = string.Format(Properties.Strings.Status_Found, _search.Results.Length);
 
             // Sync the list selection to whichever result Word has already highlighted.
             // SelectResultByIndex is NOT called here because the search engine already

@@ -311,7 +311,7 @@ namespace WebSitesLib.UI
             }
         }
 
-        public string Title => _addressModel?.Name ?? "כרטיסייה חדשה";
+        public string Title => _addressModel?.DisplayName ?? Properties.Strings.NewTabTitle;
         public string CurrentUrl { get; private set; }
 
         public RelayCommand CloseTabCommand { get; }

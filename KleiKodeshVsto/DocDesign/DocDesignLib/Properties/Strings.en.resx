@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="SectionParagraph" xml:space="preserve"><value>Paragraph design</value></data>
+  <data name="MinLineCount" xml:space="preserve"><value>Min lines</value></data>
+  <data name="TipFirstWordStyle" xml:space="preserve"><value>First word style</value></data>
+  <data name="TipRemoveFirstWordStyle" xml:space="preserve"><value>Remove first word style</value></data>
+  <data name="TipHanging" xml:space="preserve"><value>Window design</value></data>
+  <data name="TipDoubleHanging" xml:space="preserve"><value>Double window design</value></data>
+  <data name="TipRemoveHanging" xml:space="preserve"><value>Remove window design</value></data>
+  <data name="TipCenterLastLine" xml:space="preserve"><value>Center last line</value></data>
+  <data name="TipRemoveCenterLastLine" xml:space="preserve"><value>Remove last line centering</value></data>
+  <data name="ApplyTo" xml:space="preserve"><value>Apply to ▾</value></data>
+  <data name="SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="ChooseFirstWordStyle" xml:space="preserve"><value>Choose style for first word design</value></data>
+  <data name="TipChooseFirstWordStyle" xml:space="preserve"><value>Choose style for the first word (character style only)</value></data>
+  <data name="TipNewCharStyle" xml:space="preserve"><value>Create new character style</value></data>
+  <data name="NewStyle" xml:space="preserve"><value>New style</value></data>
+  <data name="SectionColumns" xml:space="preserve"><value>Column balancing</value></data>
+  <data name="TipAlignColumns" xml:space="preserve"><value>Align columns</value></data>
+  <data name="TipColumnsSettings" xml:space="preserve"><value>Column settings</value></data>
+  <data name="TipFindUneven" xml:space="preserve"><value>Find unbalanced columns</value></data>
+  <data name="MaxSpaceBetween" xml:space="preserve"><value>Max space between sections</value></data>
+  <data name="SectionSpacing" xml:space="preserve"><value>Spacing</value></data>
+  <data name="SpaceAfter" xml:space="preserve"><value>Space after</value></data>
+  <data name="SpaceBefore" xml:space="preserve"><value>Space before</value></data>
+  <data name="LineSpacing" xml:space="preserve"><value>Line spacing</value></data>
+  <data name="WordSpacing" xml:space="preserve"><value>Word spacing</value></data>
+  <data name="CharStretch" xml:space="preserve"><value>Letter stretch</value></data>
+  <data name="StepSize" xml:space="preserve"><value>Step size</value></data>
+  <data name="TipReset" xml:space="preserve"><value>Reset</value></data>
+  <data name="TipIncrease" xml:space="preserve"><value>Increase</value></data>
+  <data name="TipDecrease" xml:space="preserve"><value>Decrease</value></data>
+  <data name="NoResults" xml:space="preserve"><value>No results found</value></data>
+  <data name="NoResultsSearchFromStart" xml:space="preserve"><value>No results found. Search from the beginning of the document?</value></data>
+  <data name="UndoAlignColumns" xml:space="preserve"><value>Align columns</value></data>
+  <data name="StatusDone" xml:space="preserve"><value>Done</value></data>
+  <data name="UndoResetTabs" xml:space="preserve"><value>Reset tabs</value></data>
+  <data name="UndoCenterLastLine" xml:space="preserve"><value>Center last line</value></data>
+  <data name="UndoHanging" xml:space="preserve"><value>Window design</value></data>
+  <data name="UndoFirstWordStyle" xml:space="preserve"><value>First word design</value></data>
+  <data name="UndoRemoveFirstWordStyle" xml:space="preserve"><value>Remove first word design</value></data>
+  <data name="NewStylePrompt" xml:space="preserve"><value>Enter a name for the new character style:</value></data>
+  <data name="NewStyleTitle" xml:space="preserve"><value>Create new style</value></data>
+  <data name="StyleExistsFormat" xml:space="preserve"><value>A style named '{0}' already exists in the document.</value></data>
+  <data name="StyleCreatedFormat" xml:space="preserve"><value>The style '{0}' was created and is ready to use.
+
+To edit its formatting, use Word's built-in style editor.</value></data>
+  <data name="StyleCreatedTitle" xml:space="preserve"><value>Style created</value></data>
+</root>

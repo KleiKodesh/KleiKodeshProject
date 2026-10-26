@@ -5,10 +5,11 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:Nakdan.UI"
+             xmlns:p="clr-namespace:Nakdan.Properties"
              xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib"
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="300"
-             FlowDirection="RightToLeft"
+             FlowDirection="{x:Static p:Strings.ChromeFlowDirection}"
              FontFamily="Segoe UI"
              FontSize="13"
              Background="White"
@@ -45,7 +46,7 @@
             <!-- ─────────────────────────────────────────────────
                  SECTION LABEL: VOWELIZE ACTIONS
             ───────────────────────────────────────────────── -->
-            <TextBlock Text="פעולות ניקוד"
+            <TextBlock Text="{x:Static p:Strings.Section_Actions}"
                        Style="{StaticResource SectionLabel}"
                        Margin="0,0,0,8"/>
 
@@ -53,8 +54,8 @@
             <Button Style="{StaticResource ActionButton}"
                     Command="{Binding VowelizeSelectionCommand}"
                     Margin="0,0,0,12"
-                    ToolTip="נקד רק את הטקסט המסומן">
-                <TextBlock Text="נקד טקסט מסומן" VerticalAlignment="Center"/>
+                    ToolTip="{x:Static p:Strings.Tip_Vowelize}">
+                <TextBlock Text="{x:Static p:Strings.Action_Vowelize}" VerticalAlignment="Center"/>
             </Button>
 
             <!-- Clean selection: one button + dropdown of what to remove -->
@@ -66,8 +67,8 @@
                 <Button Grid.Column="0"
                         Style="{StaticResource ActionButton}"
                         Command="{Binding CleanTextCommand}"
-                        ToolTip="הסר מהטקסט המסומן את הסימנים שנבחרו">
-                    <TextBlock Text="ניקוי טקסט" VerticalAlignment="Center"/>
+                        ToolTip="{x:Static p:Strings.Tip_Clean}">
+                    <TextBlock Text="{x:Static p:Strings.Action_Clean}" VerticalAlignment="Center"/>
                 </Button>
                 <ToggleButton x:Name="CleanOptionsToggle"
                               Grid.Column="1"
@@ -76,7 +77,7 @@
                               Width="28"
                               Padding="7"
                               Margin="4,0,0,0"
-                              ToolTip="בחר מה להסיר">
+                              ToolTip="{x:Static p:Strings.Tip_CleanChoose}">
                     <Path Stretch="Uniform"
                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
                           Data="M4.21967 6.96967C4.51256 6.67678 4.98744 6.67678 5.28033 6.96967L10 11.6893L14.7197 6.96967C15.0126 6.67678 15.4874 6.67678 15.7803 6.96967C16.0732 7.26256 16.0732 7.73744 15.7803 8.03033L10.5303 13.2803C10.2374 13.5732 9.76256 13.5732 9.46967 13.2803L4.21967 8.03033Z"/>
@@ -95,7 +96,7 @@
                                   MaxHeight="200">
                         <StackPanel>
                             <Border Style="{StaticResource HoverRow}">
-                                <CheckBox Content="הכל"
+                                <CheckBox Content="{x:Static p:Strings.Clean_All}"
                                           IsChecked="{Binding AllCleanOptionsChecked, Mode=TwoWay}"
                                           Padding="4,0"
                                           Margin="8,4"/>
@@ -114,7 +115,7 @@
                             </ItemsControl>
                             <Separator Margin="8,2"/>
                             <Border Style="{StaticResource HoverRow}">
-                                <CheckBox Content="השאר פיסוק בסוף פסקה"
+                                <CheckBox Content="{x:Static p:Strings.Clean_KeepEndPunct}"
                                           IsChecked="{Binding KeepPunctuationAtParagraphEnd, Mode=TwoWay}"
                                           Padding="4,0"
                                           Margin="8,4"/>
@@ -127,7 +128,7 @@
             <!-- ─────────────────────────────────────────────────
                  GENRE SELECTOR
             ───────────────────────────────────────────────── -->
-            <TextBlock Text="סוג הטקסט"
+            <TextBlock Text="{x:Static p:Strings.Section_Genre}"
                        Style="{StaticResource SectionLabel}"
                        Margin="0,0,0,4"/>
             <ComboBox ItemsSource="{Binding Genres}"
@@ -145,14 +146,14 @@
                  SECTION LABEL: IGNORE STYLES
             ───────────────────────────────────────────────── -->
 
-            <TextBlock Text="סמן סגנונות לדלג בתהליך הניקוד:"
+            <TextBlock Text="{x:Static p:Strings.Section_IgnoreStyles}"
                        Style="{StaticResource SectionLabel}"
                        Margin="0,0,0,8"/>
 
             <!-- Dropdown with checkboxes -->
             <ToggleButton x:Name="IgnoreStylesToggle"
                           Style="{StaticResource CheckedToggle}"
-                          Content="בחר סגנונות ▾"
+                          Content="{x:Static p:Strings.ChooseStyles}"
                           Height="28"
                           Padding="8,0"
                           FontSize="12"
@@ -189,7 +190,7 @@
             <!-- ─────────────────────────────────────────────────
                  NIKUD SUGGESTIONS — alternatives for the selected word
             ───────────────────────────────────────────────── -->
-            <TextBlock Text="הצעות ניקוד"
+            <TextBlock Text="{x:Static p:Strings.Section_Suggestions}"
                        Style="{StaticResource SectionLabel}"
                        Margin="0,12,0,4"/>
             <!-- Pane is RightToLeft: column 0 renders rightmost (next on the right). -->
@@ -202,20 +203,20 @@
                 <Button Grid.Column="0"
                         Style="{StaticResource ActionButton}"
                         Command="{Binding NextWordCommand}">
-                    <TextBlock Text="מילה הבאה" VerticalAlignment="Center"/>
+                    <TextBlock Text="{x:Static p:Strings.NextWord}" VerticalAlignment="Center"/>
                 </Button>
                 <Button Grid.Column="1"
                         Style="{StaticResource ActionButton}"
                         Command="{Binding ShowSuggestionsCommand}"
                         Margin="6,0,6,0"
                         Padding="14,0"
-                        ToolTip="הצג חלופות ניקוד למילה המסומנת">
-                    <TextBlock Text="הצג" VerticalAlignment="Center"/>
+                        ToolTip="{x:Static p:Strings.Tip_Show}">
+                    <TextBlock Text="{x:Static p:Strings.Show}" VerticalAlignment="Center"/>
                 </Button>
                 <Button Grid.Column="2"
                         Style="{StaticResource ActionButton}"
                         Command="{Binding PreviousWordCommand}">
-                    <TextBlock Text="מילה הקודמת" VerticalAlignment="Center"/>
+                    <TextBlock Text="{x:Static p:Strings.PrevWord}" VerticalAlignment="Center"/>
                 </Button>
             </Grid>
             <TextBlock Text="{Binding SuggestionsHint}"
@@ -249,7 +250,7 @@
                                     Padding="10,2"
                                     Margin="0,0,6,6"
                                     Cursor="Hand"
-                                    ToolTip="החלף את המילה בניקוד זה"/>
+                                    ToolTip="{x:Static p:Strings.Tip_ApplyOption}"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -276,7 +277,7 @@
                         </Style.Triggers>
                     </Style>
                 </StackPanel.Style>
-                <TextBlock Text="סטטוס"
+                <TextBlock Text="{x:Static p:Strings.Section_Status}"
                            Style="{StaticResource SectionLabel}"
                            Margin="0,12,0,4"/>
 
@@ -323,7 +324,7 @@
                                                     Converter={StaticResource OpacityConverter}}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                                <Setter Property="Text" Value="מנקד… אנא המתן"/>
+                                                <Setter Property="Text" Value="{x:Static p:Strings.Busy}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsActive}" Value="True">
                                                 <Setter Property="Text" Value="{Binding StatusMessage}"/>
@@ -344,7 +345,7 @@
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                         <Setter Property="Command"  Value="{Binding ClearStatusCommand}"/>
-                                        <Setter Property="ToolTip"  Value="סגור"/>
+                                        <Setter Property="ToolTip"  Value="{x:Static p:Strings.Close}"/>
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsActive}" Value="True">
@@ -352,7 +353,7 @@
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsBusy}" Value="True">
                                                 <Setter Property="Command" Value="{Binding CancelCommand}"/>
-                                                <Setter Property="ToolTip" Value="בטל את הניקוד"/>
+                                                <Setter Property="ToolTip" Value="{x:Static p:Strings.Tip_Cancel}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>

@@ -61,6 +61,25 @@ namespace KleiKodeshVstoInstallerWpf
                 rb.Checked += (s, e) =>
                     _defaultButton = rb.Name.Replace("_Option", "");
             }
+
+            bool english = UiLanguage.Current == UiLanguage.English;
+            EnglishLanguageRadio.IsChecked = english;
+            HebrewLanguageRadio.IsChecked  = !english;
+            EnglishLanguageRadio.Checked += (s, e) => SwitchLanguage(UiLanguage.English);
+            HebrewLanguageRadio.Checked  += (s, e) => SwitchLanguage(UiLanguage.Hebrew);
+        }
+
+        // Saves the language (General/UiLanguage, shared with the add-in), tells the user
+        // to restart Word if it is running, and reloads this page in the new language.
+        private void SwitchLanguage(string lang)
+        {
+            if (UiLanguage.Current == lang) return;
+            CommitSettings();
+            UiLanguage.Set(lang);
+            if (WordHelper.IsWordRunning())
+                MessageBox.Show(Properties.Strings.Settings_RestartWordNotice, Properties.Strings.Settings,
+                    MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);
+            _host.NavigateToSettings();
         }
 
         private void CommitSettings()

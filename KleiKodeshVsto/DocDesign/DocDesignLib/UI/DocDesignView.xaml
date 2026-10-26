@@ -6,9 +6,10 @@
              xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib"
              xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
              xmlns:local="clr-namespace:DocDesign.UI"
+             xmlns:p="clr-namespace:DocDesign.Properties"
              mc:Ignorable="d"
              MinWidth="280"
-             FlowDirection="RightToLeft"
+             FlowDirection="{x:Static p:UiDirection.FlowDirection}"
              FontFamily="Segoe UI"
              FontSize="12"
              Background="White">
@@ -31,7 +32,7 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: עיצוב פסקה
             ══════════════════════════════════════════════════════ -->
-            <Expander Style="{StaticResource BandedExpander}" Header="עיצוב פסקה" IsExpanded="True">
+            <Expander Style="{StaticResource BandedExpander}" Header="{x:Static p:Strings.SectionParagraph}" IsExpanded="True">
                 <StackPanel Margin="10,4,10,4">
 
                     <!-- Shared min-line group: buttons hug the start (right, RTL),
@@ -45,11 +46,11 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
-                            <Button ToolTip="סגנון מילה ראשונה"
+                            <Button ToolTip="{x:Static p:Strings.TipFirstWordStyle}"
                                     Command="{Binding ParagraphsViewModel.ApplyFirstWordStyleCommand}">
                                 <Path Data="{StaticResource Icon.FirstWordStyle}"/>
                             </Button>
-                            <Button ToolTip="הסר סגנון מילה ראשונה"
+                            <Button ToolTip="{x:Static p:Strings.TipRemoveFirstWordStyle}"
                                     Command="{Binding ParagraphsViewModel.RemoveFirstWordStyleCommand}">
                                 <Grid>
                                     <Path Data="{StaticResource Icon.FirstWordStyle}" Opacity="0.45"/>
@@ -63,7 +64,7 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <TextBlock Text="{x:Static p:Strings.MinLineCount}" Margin="0,0,4,0" Opacity="0.65"/>
                             <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.FirstWordMinLineCount}"
                                                     Minimum="1"
                                                     Width="38" Height="26"/>
@@ -77,15 +78,15 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
-                            <Button ToolTip="עיצוב חלון"
+                            <Button ToolTip="{x:Static p:Strings.TipHanging}"
                                     Command="{Binding ParagraphsViewModel.ApplyFirstWordHangingCommand}">
                                 <Path Data="{StaticResource Icon.Hanging}"/>
                             </Button>
-                            <Button ToolTip="עיצוב חלון כפול"
+                            <Button ToolTip="{x:Static p:Strings.TipDoubleHanging}"
                                     Command="{Binding ParagraphsViewModel.ApplyDoubleFirstWordHangingCommand}">
                                 <Path Data="{StaticResource Icon.DoubleHanging}"/>
                             </Button>
-                            <Button ToolTip="הסר עיצוב חלון"
+                            <Button ToolTip="{x:Static p:Strings.TipRemoveHanging}"
                                     Command="{Binding ParagraphsViewModel.RemoveFirstWordHangingCommand}">
                                 <Grid>
                                     <Path Data="{StaticResource Icon.Hanging}" Opacity="0.45"/>
@@ -99,7 +100,7 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <TextBlock Text="{x:Static p:Strings.MinLineCount}" Margin="0,0,4,0" Opacity="0.65"/>
                             <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.HangingMinLineCount}"
                                                     Minimum="2"
                                                     Width="38" Height="26"/>
@@ -113,11 +114,11 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
-                            <Button ToolTip="מירכוז שורה אחרונה"
+                            <Button ToolTip="{x:Static p:Strings.TipCenterLastLine}"
                                     Command="{Binding ParagraphsViewModel.ApplyCenterLastLineCommand}">
                                 <Path Data="{StaticResource Icon.CenterLastLine}"/>
                             </Button>
-                            <Button ToolTip="הסר מירכוז שורה אחרונה"
+                            <Button ToolTip="{x:Static p:Strings.TipRemoveCenterLastLine}"
                                     Command="{Binding ParagraphsViewModel.RemoveCenterLastLineCommand}">
                                 <Grid>
                                     <Path Data="{StaticResource Icon.CenterLastLine}" Opacity="0.45"/>
@@ -131,7 +132,7 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <TextBlock Text="{x:Static p:Strings.MinLineCount}" Margin="0,0,4,0" Opacity="0.65"/>
                             <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.CenterLastLineMinLineCount}"
                                                     Minimum="2"
                                                     Width="38" Height="26"/>
@@ -142,7 +143,7 @@
                         <ToggleButton x:Name="ChooseStylesToggle"
                                       Grid.Column="0"
                                       Style="{StaticResource CheckedToggle}"
-                                      Content="החל על ▾"
+                                      Content="{x:Static p:Strings.ApplyTo}"
                                       Height="26"
                                       Margin="0,7"
                                       Padding="8,0"
@@ -162,7 +163,7 @@
                                     MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}">
                                 <StackPanel>
                                     <Border x:Name="SelectAllBd" Style="{StaticResource HoverRow}">
-                                        <CheckBox Content="סמן הכל"
+                                        <CheckBox Content="{x:Static p:Strings.SelectAll}"
                                                   IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
                                                   Padding="4,0"
                                                   Margin="8,5"/>
@@ -190,11 +191,11 @@
 
 
                         <!-- First-word character style picker -->
-                    <TextBlock Text="בחר סגנון עבור עיצוב מילה ראשונה"
+                    <TextBlock Text="{x:Static p:Strings.ChooseFirstWordStyle}"
                                Opacity="0.55"
                                FontSize="11"
                                Margin="0,5,0,3"
-                               ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)"/>
+                               ToolTip="{x:Static p:Strings.TipChooseFirstWordStyle}"/>
                     <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -205,7 +206,7 @@
                                   ItemsSource="{Binding ParagraphsViewModel.FirstWordStyle.Styles}"
                                   Text="{Binding ParagraphsViewModel.FirstWordStyle.SelectedStyle}"
                                   IsEditable="True"
-                                  ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)"/>
+                                  ToolTip="{x:Static p:Strings.TipChooseFirstWordStyle}"/>
                         <Button Grid.Column="1"
                                 Width="Auto"
                                 Height="26"
@@ -213,8 +214,8 @@
                                 Margin="4,0,0,0"
                                 FontSize="11"
                                 Command="{Binding ParagraphsViewModel.FirstWordStyle.CreateNewStyleCommand}"
-                                ToolTip="צור סגנון תו חדש">
-                            <TextBlock Text="סגנון חדש" FlowDirection="RightToLeft"/>
+                                ToolTip="{x:Static p:Strings.TipNewCharStyle}">
+                            <TextBlock Text="{x:Static p:Strings.NewStyle}"/>
                         </Button>
                     </Grid>
 
@@ -224,19 +225,19 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: איזון טורים
             ══════════════════════════════════════════════════════ -->
-            <Expander Style="{StaticResource BandedExpander}" Header="איזון טורים">
+            <Expander Style="{StaticResource BandedExpander}" Header="{x:Static p:Strings.SectionColumns}">
                 <StackPanel Margin="10,4,10,4">
 
                     <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
-                        <Button ToolTip="יישור טורים"
+                        <Button ToolTip="{x:Static p:Strings.TipAlignColumns}"
                                 Command="{Binding ColumnsViewModel.AlignColumnsCommand}">
                             <Path Data="{StaticResource Icon.AlignColumns}"/>
                         </Button>
-                        <Button ToolTip="הגדרות טורים"
+                        <Button ToolTip="{x:Static p:Strings.TipColumnsSettings}"
                                 Command="{Binding ColumnsViewModel.OpenColumnsDialogCommand}">
                             <Path Data="{StaticResource Icon.ColumnsSettings}"/>
                         </Button>
-                        <Button ToolTip="חפש טורים שאינם מאוזנים"
+                        <Button ToolTip="{x:Static p:Strings.TipFindUneven}"
                                 Command="{Binding ColumnsViewModel.FindNextUnevenColumnsCommand}">
                             <Path Data="{StaticResource Icon.ColumnsSearch}"/>
                         </Button>
@@ -248,7 +249,7 @@
                             <ColumnDefinition Width="5"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock DockPanel.Dock="Right" Text="מרווח מקסימלי בין קטעים" Opacity="0.65"/>
+                        <TextBlock DockPanel.Dock="Right" Text="{x:Static p:Strings.MaxSpaceBetween}" Opacity="0.65"/>
                         <controls:UpDownTextBox Grid.Column="2"
                             Value="{Binding ColumnsViewModel.AlignColumns.MaxSpaceAfter}"
                                                 Width="38" Height="26"/>
@@ -260,7 +261,7 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: מרווחים
             ══════════════════════════════════════════════════════ -->
-            <Expander Style="{StaticResource BandedExpander}" Header="מרווחים">
+            <Expander Style="{StaticResource BandedExpander}" Header="{x:Static p:Strings.SectionSpacing}">
                 <StackPanel Margin="10,4,10,6">
 
                     <Grid ap:GridSetup.Columns="auto * auto auto auto"
@@ -273,7 +274,7 @@
                                 Command="{Binding SpacingViewModel.SetSpaceAfterCommand}" CommandParameter="=">
                             <Path/>
                         </Button>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="מרווח אחרי" Opacity="0.75" Margin="6,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Static p:Strings.SpaceAfter}" Opacity="0.75" Margin="6,0"/>
                         <controls:UpDownFloatTextBox Grid.Row="0" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.SpaceAfter}"/>
                         <RepeatButton Grid.Row="0" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
@@ -289,7 +290,7 @@
                                 Command="{Binding SpacingViewModel.SetSpaceBeforeCommand}" CommandParameter="=">
                             <Path/>
                         </Button>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="מרווח לפני" Opacity="0.75" Margin="6,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Static p:Strings.SpaceBefore}" Opacity="0.75" Margin="6,0"/>
                         <controls:UpDownFloatTextBox Grid.Row="1" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.SpaceBefore}"/>
                         <RepeatButton Grid.Row="1" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
@@ -305,7 +306,7 @@
                                 Command="{Binding SpacingViewModel.SetLineSpacingCommand}" CommandParameter="=">
                             <Path/>
                         </Button>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="בין שורות" Opacity="0.75" Margin="6,0"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Static p:Strings.LineSpacing}" Opacity="0.75" Margin="6,0"/>
                         <controls:UpDownFloatTextBox Grid.Row="2" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.LineSpacing}"/>
                         <RepeatButton Grid.Row="2" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
@@ -321,7 +322,7 @@
                                 Command="{Binding SpacingViewModel.SetWordSpacingCommand}" CommandParameter="=">
                             <Path/>
                         </Button>
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="בין מילים" Opacity="0.75" Margin="6,0"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Static p:Strings.WordSpacing}" Opacity="0.75" Margin="6,0"/>
                         <controls:UpDownFloatTextBox Grid.Row="3" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.WordSpacing}"/>
                         <RepeatButton Grid.Row="3" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
@@ -337,7 +338,7 @@
                                 Command="{Binding SpacingViewModel.SetCharacterStretchCommand}" CommandParameter="=">
                             <Path/>
                         </Button>
-                        <TextBlock Grid.Row="4" Grid.Column="1" Text="מתיחת אותיות" Opacity="0.75" Margin="6,0"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{x:Static p:Strings.CharStretch}" Opacity="0.75" Margin="6,0"/>
                         <controls:UpDownFloatTextBox Grid.Row="4" Grid.Column="2" Width="44" Height="26" Margin="0,2"
                                 Step="{Binding SpacingViewModel.StepSize}" Value="{Binding SpacingViewModel.CharacterStretch}"/>
                         <RepeatButton Grid.Row="4" Grid.Column="3" Style="{StaticResource DecreaseButton}" Height="26"
@@ -356,7 +357,7 @@
                             <ColumnDefinition Width="5"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock DockPanel.Dock="Left" Text="גודל צעד" Opacity="0.65"/>
+                        <TextBlock DockPanel.Dock="Left" Text="{x:Static p:Strings.StepSize}" Opacity="0.65"/>
                         <controls:UpDownFloatTextBox Step="0.5"
                                                      Grid.Column="2"
                                                      Value="{Binding SpacingViewModel.StepSize}"

@@ -25,13 +25,13 @@ namespace Nakdan.UI
                 switch (genre)
                 {
                     case DictaGenre.Modern:
-                        return "עברית מודרנית: מתאים לרוב הטקסטים";
+                        return Nakdan.Properties.Strings.GenreDesc_Modern;
                     case DictaGenre.Poetry:
-                        return "שירה: מיוחד לשירה ולטקסטים פיוטיים";
+                        return Nakdan.Properties.Strings.GenreDesc_Poetry;
                     case DictaGenre.Bible:
-                        return "מקראי: לטקסטים ממקור מקראי";
+                        return Nakdan.Properties.Strings.GenreDesc_Bible;
                     case DictaGenre.Rabbinic:
-                        return "רבני: לספרות הלכתית ורבנית";
+                        return Nakdan.Properties.Strings.GenreDesc_Rabbinic;
                     default:
                         return string.Empty;
                 }

@@ -178,7 +178,10 @@
     <value>ברירת מחדל: {0}</value>
   </data>
   <data name="Db_NotFound" xml:space="preserve">
-    <value>לא נמצאה אפליקציית זית או אוצריה — הגדר נתיב ידנית</value>
+    <value>לא נמצאה ספריית ספרים — הורד אותה למטה, או הגדר את הנתיב ידנית</value>
+  </data>
+  <data name="Db_DownloadLibrary" xml:space="preserve">
+    <value>הורד את ספריית הספרים (כ-1.9 GB)</value>
   </data>
   <data name="Db_PickTitle" xml:space="preserve">
     <value>בחר קובץ מסד נתונים לכתבי הקודש</value>
@@ -379,5 +382,14 @@
   </data>
   <data name="WhatsNew_Continue" xml:space="preserve">
     <value>המשך</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>שפת ממשק</value>
+  </data>
+  <data name="Settings_LanguageHint" xml:space="preserve">
+    <value>השינוי יחול במלואו לאחר הפעלה מחדש של Word.</value>
+  </data>
+  <data name="Settings_RestartWordNotice" xml:space="preserve">
+    <value>שפת הממשק שונתה. יש להפעיל מחדש את Word כדי שהשינוי יחול במלואו.</value>
   </data>
 </root>

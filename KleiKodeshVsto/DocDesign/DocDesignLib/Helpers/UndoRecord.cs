@@ -36,7 +36,7 @@ namespace DocDesign.Helpers
             win.VerticalPercentScrolled = _top;
             win.HorizontalPercentScrolled = _left;
 
-            Vsto.Application.StatusBar = "הפעולה הסתיימה";
+            Vsto.Application.StatusBar = Properties.Strings.StatusDone;
         }
     }
 }

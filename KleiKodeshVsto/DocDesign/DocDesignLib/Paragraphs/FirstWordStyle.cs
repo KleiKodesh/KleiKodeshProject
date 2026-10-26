@@ -48,8 +48,8 @@ namespace DocDesign.Paragraphs
             if (Vsto.Application == null) return;
 
             string name = Interaction.InputBox(
-                "הזן שם לסגנון התו החדש:",
-                "צור סגנון חדש",
+                Properties.Strings.NewStylePrompt,
+                Properties.Strings.NewStyleTitle,
                 "");
 
             if (string.IsNullOrWhiteSpace(name)) return;
@@ -64,12 +64,12 @@ namespace DocDesign.Paragraphs
                     if (string.Equals(s.NameLocal, name, StringComparison.OrdinalIgnoreCase))
                     {
                         System.Windows.Forms.MessageBox.Show(
-                            $"סגנון בשם '{name}' כבר קיים במסמך.",
-                            "צור סגנון חדש",
+                            string.Format(Properties.Strings.StyleExistsFormat, name),
+                            Properties.Strings.NewStyleTitle,
                             System.Windows.Forms.MessageBoxButtons.OK,
                             System.Windows.Forms.MessageBoxIcon.Warning,
                             System.Windows.Forms.MessageBoxDefaultButton.Button1,
-                            System.Windows.Forms.MessageBoxOptions.RightAlign | System.Windows.Forms.MessageBoxOptions.RtlReading);
+                            Properties.UiDirection.WinFormsMessageBoxOptions);
                         return;
                     }
                 }
@@ -87,12 +87,12 @@ namespace DocDesign.Paragraphs
             SelectedStyle = newStyle.NameLocal;
 
             System.Windows.Forms.MessageBox.Show(
-                $"הסגנון '{name}' נוצר בהצלחה וזמין לשימוש.\n\nכדי לערוך את עיצובו, השתמש בכלי עריכת הסגנונות המובנה של וורד').",
-                "סגנון נוצר",
+                string.Format(Properties.Strings.StyleCreatedFormat, name),
+                Properties.Strings.StyleCreatedTitle,
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Information,
                 System.Windows.Forms.MessageBoxDefaultButton.Button1,
-                System.Windows.Forms.MessageBoxOptions.RightAlign | System.Windows.Forms.MessageBoxOptions.RtlReading);
+                Properties.UiDirection.WinFormsMessageBoxOptions);
         }
 
         int _lastSeenStylesCount = -1;
@@ -174,7 +174,7 @@ namespace DocDesign.Paragraphs
 
             var selectionRange = Vsto.Application.Selection.Range;
 
-            using (new UndoRecordHelper("עיצוב מילה ראשונה"))
+            using (new UndoRecordHelper(Properties.Strings.UndoFirstWordStyle))
             {
                 PrepareFootnotes(selectionRange);
                 var paragraphs = ValidParagraphs(selectionRange, styles, minLineCount);
@@ -273,7 +273,7 @@ namespace DocDesign.Paragraphs
             targetRange.Start = targetRange.Paragraphs.First.Range.Start;
             targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-            using (new UndoRecordHelper("הסרת עיצוב מילה ראשונה"))
+            using (new UndoRecordHelper(Properties.Strings.UndoRemoveFirstWordStyle))
             {
                 counter = 0;
                 foreach (Paragraph paragraph in targetRange.Paragraphs.Cast<Paragraph>().ToList())
