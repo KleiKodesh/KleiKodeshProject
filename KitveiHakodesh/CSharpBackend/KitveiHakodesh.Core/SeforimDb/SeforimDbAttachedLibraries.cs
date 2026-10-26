@@ -50,6 +50,25 @@ namespace KitveiHakodesh.Core.SeforimDb
         private static readonly ConcurrentDictionary<string, (DateTime WriteTimeUtc, string? Rejection)> CompatibilityCache =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>The line-id translation of a library whose stored line ids do not fit the band, keyed
+        /// like <see cref="CompatibilityCache"/> (same probe, same file version). Absent/null for an
+        /// ordinary library.</summary>
+        private static readonly ConcurrentDictionary<string, (DateTime WriteTimeUtc, SeforimDbIdMap? Map)> LineMapCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Same as <see cref="LineMapCache"/>, for the TOC-entry ids.</summary>
+        private static readonly ConcurrentDictionary<string, (DateTime WriteTimeUtc, SeforimDbIdMap? Map)> TocMapCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The line-id map of <paramref name="path"/> as of its last probe, or null when its
+        /// line ids are used as stored. Call after <see cref="Rejection"/> has accepted the path.</summary>
+        internal static SeforimDbIdMap? LineMapFor(string path) =>
+            LineMapCache.TryGetValue(path, out var entry) ? entry.Map : null;
+
+        /// <summary>The TOC-entry id map of <paramref name="path"/> as of its last probe, or null.</summary>
+        internal static SeforimDbIdMap? TocMapFor(string path) =>
+            TocMapCache.TryGetValue(path, out var entry) ? entry.Map : null;
+
         /// <summary>
         /// Why a configured path is not (or is) attached, for a settings page and for logs:
         /// <see cref="Rejection"/> is null exactly when the library is attachable. The reasons
@@ -87,7 +106,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 
                 string? rejection = Rejection(entry.Path);
                 result.Add(new Status(entry,
-                    rejection is null ? new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path)) : null,
+                    rejection is null ? new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path), LineMapFor(entry.Path), TocMapFor(entry.Path)) : null,
                     rejection));
             }
             return result;
@@ -132,18 +151,55 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// </summary>
         public readonly struct Library
         {
-            public Library(string path, string alias, int index, string label)
+            public Library(string path, string alias, int index, string label, SeforimDbIdMap? lineIds = null, SeforimDbIdMap? tocIds = null)
             {
                 Path = path;
                 Alias = alias;
                 Index = index;
                 Label = label;
+                LineIds = lineIds;
+                TocIds = tocIds;
             }
 
             public string Path { get; }
             public string Alias { get; }
             public int Index { get; }
             public string Label { get; }
+
+            /// <summary>Non-null only for a library whose line ids are too large for the id band and are
+            /// translated (see <see cref="SeforimDbIdMap"/>): the ids stored in the file are NOT the
+            /// ids this feature hands out, so every query/index that binds or reads a line id of this
+            /// library goes through <see cref="ToStoredLineId"/> / <see cref="ToLocalLineId"/>.</summary>
+            internal SeforimDbIdMap? LineIds { get; }
+
+            /// <summary>Same for TOC-entry ids (tocEntry.id, its parentId, line_toc.tocEntryId): non-null only
+            /// when the stored ids do not fit the band.</summary>
+            internal SeforimDbIdMap? TocIds { get; }
+
+            /// <summary>The TOC-entry id to BIND into this library's own SQL for a LOCAL TOC-entry id.</summary>
+            internal long ToStoredTocId(int localId) => TocIds is null ? localId : TocIds.ToStored(localId);
+
+            /// <summary>The LOCAL TOC-entry id for an id READ from this library's own SQL.</summary>
+            internal int ToLocalTocId(long storedId)
+            {
+                // 0 / NULL is "no TOC entry" in the library's own data and stays 0.
+                if (TocIds is null || storedId == 0) return storedId == 0 ? 0 : checked((int)storedId);
+                int local = TocIds.ToLocal(storedId);
+                if (local == 0) throw new InvalidDataException($"TOC entry id {storedId} of '{Label}' is not in its id map");
+                return local;
+            }
+
+            /// <summary>The line id to BIND into this library's own SQL for a LOCAL line id.</summary>
+            internal long ToStoredLineId(int localId) => LineIds is null ? localId : LineIds.ToStored(localId);
+
+            /// <summary>The LOCAL line id for a line id READ from this library's own SQL.</summary>
+            internal int ToLocalLineId(long storedId)
+            {
+                if (LineIds is null) return checked((int)storedId);
+                int local = LineIds.ToLocal(storedId);
+                if (local == 0) throw new InvalidDataException($"line id {storedId} of '{Label}' is not in its id map");
+                return local;
+            }
         }
 
         /// <summary>
@@ -170,7 +226,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 if (!usedIndices.Add(entry.Index)) continue;
                 if (Rejection(entry.Path) is not null) continue;
 
-                result.Add(new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path)));
+                result.Add(new Library(entry.Path, "lib" + entry.Index, entry.Index, LabelFor(entry.Path), LineMapFor(entry.Path), TocMapFor(entry.Path)));
             }
             return result;
         }
@@ -256,7 +312,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>Null when the library at <paramref name="path"/> is attachable, else why not.</summary>
-        private static string? Rejection(string path)
+        internal static string? Rejection(string path)
         {
             DateTime writeTimeUtc;
             try
@@ -269,13 +325,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (CompatibilityCache.TryGetValue(path, out var cached) && cached.WriteTimeUtc == writeTimeUtc)
                 return cached.Rejection;
 
-            string? rejection = Probe(path);
+            string? rejection = Probe(path, out var lineMap, out var tocMap);
+            LineMapCache[path] = (writeTimeUtc, lineMap);
+            TocMapCache[path] = (writeTimeUtc, tocMap);
             CompatibilityCache[path] = (writeTimeUtc, rejection);
             return rejection;
         }
 
-        private static string? Probe(string path)
+        private static string? Probe(string path, out SeforimDbIdMap? lineMap, out SeforimDbIdMap? tocMap)
         {
+            lineMap = null;
+            tocMap = null;
             try
             {
                 using var connection = Common.SqliteConnectionFactory.OpenCorpusProbe(path);
@@ -297,8 +357,27 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // fine and then throw in the middle of an index build, after the primary was
                 // already indexed. Rejected here, before any enumeration begins.
                 if (!HasColumns(connection)) return "required tables have unexpected columns";
-                foreach (string table in new[] { "book", "category", "line" })
+                foreach (string table in new[] { "book", "category" })
                     if (!MaxIdFits(connection, table)) return $"ids in table '{table}' exceed the per-library id range";
+                if (!MaxIdFits(connection, "line"))
+                {
+                    // Line ids are opaque handles, so a library that reserved a huge private range for
+                    // them (to merge cleanly into another database) is still usable when each book's
+                    // lines are consecutive: they are translated to dense local ids instead of rejected.
+                    lineMap = SeforimDbIdMap.TryBuildForLines(connection, "", out string? mapFailure);
+                    if (lineMap is null)
+                        return "ids in table 'line' exceed the per-library id range" +
+                               (mapFailure is null ? "" : " (" + mapFailure + ")");
+                }
+                // The same library built for merging reserves a high range for its TOC entries too
+                // (tocEntry.id / parentId / line_toc.tocEntryId): translated the same way.
+                if (SeforimDbSchema.TableExists(connection, "tocEntry") && !MaxIdFits(connection, "tocEntry"))
+                {
+                    tocMap = SeforimDbIdMap.TryBuildForTocEntries(connection, "", out string? tocFailure);
+                    if (tocMap is null)
+                        return "ids in table 'tocEntry' exceed the per-library id range" +
+                               (tocFailure is null ? "" : " (" + tocFailure + ")");
+                }
                 return null;
             }
             catch (Exception ex)

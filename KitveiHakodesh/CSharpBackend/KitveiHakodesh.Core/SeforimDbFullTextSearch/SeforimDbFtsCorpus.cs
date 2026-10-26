@@ -46,8 +46,18 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly SeforimDbSchema _schema;
         private readonly SeforimDbLineContentCodec _codec;
 
-        public SeforimDbFtsCorpus(string databasePath)
+        /// <summary>Non-null for a library whose stored line ids are translated to dense local ids
+        /// (<see cref="SeforimDbIdMap"/>): every id handed out is the local one, every id bound into
+        /// this library's own SQL is the stored one.</summary>
+        private readonly SeforimDbIdMap? _lineIds;
+
+        /// <summary>Same for TOC-entry ids (the placement a hit reports).</summary>
+        private readonly SeforimDbIdMap? _tocIds;
+
+        public SeforimDbFtsCorpus(string databasePath, SeforimDbIdMap? lineIds = null, SeforimDbIdMap? tocIds = null)
         {
+            _lineIds = lineIds;
+            _tocIds = tocIds;
             _connection = SqliteConnectionFactory.OpenCorpusRead(databasePath);
             try
             {
@@ -74,6 +84,36 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
+        /// <summary>The id to BIND into this database's SQL for an id the rest of the app uses.</summary>
+        private long StoredId(int id) => _lineIds is null ? id : _lineIds.ToStored(id);
+
+        /// <summary>The id the rest of the app uses for an id READ from this database's SQL.</summary>
+        private int LocalId(long storedId)
+        {
+            if (_lineIds is null) return checked((int)storedId);
+            int local = _lineIds.ToLocal(storedId);
+            if (local == 0) throw new InvalidDataException($"line id {storedId} is not in the id map");
+            return local;
+        }
+
+        private int LocalTocId(long storedId)
+        {
+            if (storedId == 0) return 0;   // "this line has no TOC entry"
+            if (_tocIds is null) return checked((int)storedId);
+            int local = _tocIds.ToLocal(storedId);
+            if (local == 0) throw new InvalidDataException($"TOC entry id {storedId} is not in the id map");
+            return local;
+        }
+
+        /// <summary>Stored-id bound for an "id &lt;= x" / "id &gt; x" comparison: stored ids ascend with the
+        /// local ids, so the comparison keeps its meaning, and a bound beyond the library covers all of it.</summary>
+        private long StoredBound(int id)
+        {
+            if (_lineIds is null) return id;
+            if (id < 1) return 0;
+            return id > _lineIds.Total ? long.MaxValue : _lineIds.ToStored(id);
+        }
+
         public long CountDocuments()
         {
             using var command = _connection.CreateCommand();
@@ -85,7 +125,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsCountLinesUpTo;
-            command.Parameters.AddWithValue("@id", upToId);
+            command.Parameters.AddWithValue("@id", StoredBound(upToId));
             return (long)command.ExecuteScalar()!;
         }
 
@@ -93,7 +133,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsGetLineContent(_schema);
-            command.Parameters.AddWithValue("@id", id);
+            command.Parameters.AddWithValue("@id", StoredId(id));
             return _codec.Decode(command.ExecuteScalar());
         }
 
@@ -107,7 +147,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1));
             }
         }
 
@@ -154,7 +194,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 while (reader.Read())
                 {
                     ct.ThrowIfCancellationRequested();
-                    yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                    yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1));
                 }
             }
         }
@@ -163,14 +203,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsReadLinesAfter(_schema, limit > 0);
-            command.Parameters.AddWithValue("@after", afterId);
+            command.Parameters.AddWithValue("@after", StoredBound(afterId));
             if (limit > 0) command.Parameters.AddWithValue("@lim", limit);
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1));
             }
         }
 
@@ -213,7 +253,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             command.CommandText = SeforimDbSqlStrings.FtsFetchPlacedLines(_schema, ids.Count);
             for (int i = 0; i < ids.Count; i++)
-                command.Parameters[parameterNames[i]].Value = ids[i];
+                command.Parameters[parameterNames[i]].Value = StoredId(ids[i]);
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -221,8 +261,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 var placement = new FtsDocumentPlacement(
                     bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
                     lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
-                    tocEntryId: reader.GetInt32(4));
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), placement);
+                    tocEntryId: LocalTocId(reader.GetInt64(4)));
+                yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1), placement);
             }
         }
 
@@ -257,7 +297,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 while (reader.Read())
                 {
                     lines.Add(new SeforimDbFtsLineAtPosition(
-                        id: reader.GetInt32(0),
+                        id: LocalId(reader.GetInt64(0)),
                         bookId: reader.GetInt32(1),
                         lineIndex: reader.GetInt32(2),
                         text: _codec.DecodeColumnOrEmpty(reader, 3)));
@@ -304,16 +344,16 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     int count = Math.Min(SqliteInListChunkSize, ids.Count - start);
                     command.CommandText = SeforimDbSqlStrings.FtsFetchNeighborLines(_schema, count);
                     for (int i = 0; i < count; i++)
-                        command.Parameters[parameterNames[i]].Value = ids[start + i];
+                        command.Parameters[parameterNames[i]].Value = StoredId(ids[start + i]);
 
                     using var reader = command.ExecuteReader();
                     while (reader.Read())
                     {
-                        int matchedId = reader.GetInt32(0);
+                        int matchedId = LocalId(reader.GetInt64(0));
                         int delta = reader.GetInt32(1);
                         string text = _codec.DecodeColumnOrEmpty(reader, 2);
                         if (text.Length == 0) continue;
-                        int neighbourId = reader.GetInt32(3);
+                        int neighbourId = LocalId(reader.GetInt64(3));
 
                         var side = delta < 0 ? previousParts : nextParts;
                         if (!side.TryGetValue(matchedId, out var parts))

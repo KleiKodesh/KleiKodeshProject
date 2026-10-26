@@ -741,7 +741,7 @@ namespace KitveiHakodeshService.Tests
         /// <summary>A real zstd dictionary (trained on synthetic Hebrew-ish samples with a per-seed
         /// vocabulary, so two libraries get DIFFERENT dictionaries with different ids) and a frame
         /// compressed with it.</summary>
-        private static (byte[] Dictionary, byte[] Frame) Compress(string text, int seed)
+        internal static (byte[] Dictionary, byte[] Frame) Compress(string text, int seed)
         {
             var rnd = new Random(1000 + seed);
             string[] words = Enumerable.Range(0, 400).Select(i => "מילה" + seed + "x" + i.ToString("x")).ToArray();
@@ -755,7 +755,7 @@ namespace KitveiHakodeshService.Tests
             return (dict, frame);
         }
 
-        private static FtsIndexStatus WaitForIndex(SeforimDbFtsIndexCoordinator coordinator, TimeSpan timeout)
+        internal static FtsIndexStatus WaitForIndex(SeforimDbFtsIndexCoordinator coordinator, TimeSpan timeout)
         {
             var deadline = DateTime.UtcNow + timeout;
             FtsIndexStatus status = coordinator.Status();
@@ -810,7 +810,7 @@ namespace KitveiHakodeshService.Tests
             SqliteConnection.ClearAllPools();
         }
 
-        private static void Exec(SqliteConnection conn, string sql)
+        internal static void Exec(SqliteConnection conn, string sql)
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;

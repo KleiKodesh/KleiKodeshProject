@@ -78,7 +78,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 SeforimDbFtsCorpus? corpus = null;
                 try
                 {
-                    corpus = new SeforimDbFtsCorpus(library.Path);
+                    corpus = new SeforimDbFtsCorpus(library.Path, library.LineIds, library.TocIds);
                     // Prove the line text is actually readable BEFORE this library joins the
                     // corpus, so a library that passed the catalog-level probe but cannot serve
                     // text (corrupt page, missing content column/table) is excluded up front and

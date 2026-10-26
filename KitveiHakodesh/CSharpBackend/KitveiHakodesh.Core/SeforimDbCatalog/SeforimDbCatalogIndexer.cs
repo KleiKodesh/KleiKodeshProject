@@ -381,7 +381,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         srcCategories.Add((Global(index, c.Id), c.ParentId is { } pid ? Global(index, pid) : null, c.Title));
                     foreach (var b in LoadBooks(conn))
                         srcBooks.Add((Global(index, b.Id), b.Title, Global(index, b.CategoryId), b.Authors));
-                    foreach (var kv in LoadFirstLines(conn))
+                    foreach (var kv in LoadFirstLines(conn, index == 0 ? null : additionalLibraries.First(l => l.Index == index)))
                         srcFirstLines[Global(index, kv.Key)] = (Global(index, kv.Value.LineId), kv.Value.LineIndex);
                     // Structure ids are internal bookkeeping (never surfaced to the frontend),
                     // but globalized so two libraries' alt-TOC structures cannot collide. 0 (the
@@ -490,7 +490,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
               {
                 // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
                 if (HasRegularToc(conn))
-                foreach (var group in StreamTocRowsByBook(conn))
+                foreach (var group in StreamTocRowsByBook(conn, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds))
                 {
                     ct.ThrowIfCancellationRequested();
                     int globalBookId = Global(index, group.BookId);
@@ -534,7 +534,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             foreach (var (index, conn) in sources)
             {
                 var libraryBooks = books.Where(b => SeforimDbLibraryId.Resolve(b.Id).LibraryIndex == index).ToList();
-                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct); }
+                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds); }
                 catch (Exception ex) when (index != 0)
                 {
                     uncovered.Add(index);
@@ -598,7 +598,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private static int IndexTanachVerses(
         IndexWriter writer, SqliteConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
-        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
+        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct,
+        SeforimDbIdMap? tocIds = null)
     {
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
@@ -619,7 +620,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
             // The book's TOC entries (chapters), root-stripped, with resolved paths.
             var rows = StripTitleRoots(
-                hasRegularToc ? LoadTocRowsForBook(conn, localBookId) : new List<TocRow>(), book.Title, localBookId);
+                hasRegularToc ? LoadTocRowsForBook(conn, localBookId, tocIds) : new List<TocRow>(), book.Title, localBookId);
             var byId = rows.ToDictionary(r => r.Id);
             var chainCache = new Dictionary<int, (string Path, int Level)>();
             (string Path, int Level) GetChain(TocRow row)
@@ -700,7 +701,12 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         && SeforimDbSchema.TableExists(conn, "alt_toc_entry")
         && SeforimDbSchema.TableExists(conn, "tocText");
 
-    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId)
+    /// <summary>A TOC-entry id as stored in the file -> the local id the build works in (see
+    /// <see cref="SeforimDbIdMap"/>; stored ids can exceed int32, so they are read as 64-bit).</summary>
+    private static int LocalToc(SeforimDbIdMap? map, long stored) =>
+        map is null ? checked((int)stored) : map.ToLocal(stored);
+
+    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId, SeforimDbIdMap? tocIds = null)
     {
         var rows = new List<TocRow>();
         using var cmd = conn.CreateCommand();
@@ -710,8 +716,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         while (r.Read())
             rows.Add(new TocRow
             {
-                Id = r.GetInt32(0),
-                ParentId = r.IsDBNull(1) ? null : r.GetInt32(1),
+                Id = LocalToc(tocIds, r.GetInt64(0)),
+                ParentId = r.IsDBNull(1) ? null : LocalToc(tocIds, r.GetInt64(1)),
                 BookId = bookId,
                 Text = r.IsDBNull(2) ? "" : r.GetString(2),
                 LineIndex = r.IsDBNull(3) ? -1 : r.GetInt32(3),
@@ -1010,7 +1016,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         return list;
     }
 
-    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(SqliteConnection conn)
+    /// <summary>Each book's first line. The line id comes back as the id STORED in the file, which for
+    /// a library with translated line ids (<see cref="SeforimDbIdMap"/>) can exceed int32, so it
+    /// is read as 64-bit and translated to the local id the rest of the build works in.</summary>
+    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(
+        SqliteConnection conn, SeforimDbAttachedLibraries.Library? library = null)
     {
         // SQLite MIN() aggregate guarantees the bare columns come from the minimal row.
         var map = new Dictionary<int, (int, int)>();
@@ -1018,7 +1028,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         cmd.CommandText = SeforimDbSqlStrings.CatalogIndexFirstLines;
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? -1 : r.GetInt32(2));
+            map[r.GetInt32(0)] = (library is { } lib ? lib.ToLocalLineId(r.GetInt64(1)) : checked((int)r.GetInt64(1)), r.IsDBNull(2) ? -1 : r.GetInt32(2));
         return map;
     }
 
@@ -1047,7 +1057,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
     /// <summary>Stream all TOC entries ordered by book — one group per book so each
     /// book's tree is materialized (and released) in turn instead of all at once.</summary>
-    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn)
+    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn, SeforimDbIdMap? tocIds = null)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = SeforimDbSqlStrings.CatalogIndexTocRowsAllBooks;
@@ -1064,8 +1074,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             }
             group.Rows.Add(new TocRow
             {
-                Id = r.GetInt32(1),
-                ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
+                Id = LocalToc(tocIds, r.GetInt64(1)),
+                ParentId = r.IsDBNull(2) ? null : LocalToc(tocIds, r.GetInt64(2)),
                 BookId = bookId,
                 Text = r.IsDBNull(3) ? "" : r.GetString(3),
                 LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
+using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 {
@@ -73,7 +74,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             try
             {
-                using var corpus = new SeforimDbFtsCorpus(path);
+                // Loads (or re-validates) the line / TOC id maps for this file version before they are read.
+                SeforimDbAttachedLibraries.Rejection(path);
+                using var corpus = new SeforimDbFtsCorpus(path, SeforimDbAttachedLibraries.LineMapFor(path), SeforimDbAttachedLibraries.TocMapFor(path));
                 corpus.CountDocuments();
                 foreach (var _ in corpus.ReadDocumentsInResultOrder(0, ct)) { }
                 return null;

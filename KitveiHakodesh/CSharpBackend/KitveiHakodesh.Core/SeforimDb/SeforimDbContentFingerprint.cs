@@ -223,7 +223,20 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// </summary>
         private static string ComputeAdditional(string libraryPath)
         {
-            try { return Compute(libraryPath); }
+            try
+            {
+                string stamp = Compute(libraryPath);
+                // A library whose line / TOC ids are translated (SeforimDbIdMap) hands out ids that are
+                // POSITIONS in its layout: adding or removing a book in the middle shifts every later id
+                // while min / max / count may stay the same. The layout's signature goes into the stamp so
+                // an index built over the old layout is never trusted for the new one.
+                SeforimDbAttachedLibraries.Rejection(libraryPath);
+                var lineMap = SeforimDbAttachedLibraries.LineMapFor(libraryPath);
+                var tocMap = SeforimDbAttachedLibraries.TocMapFor(libraryPath);
+                if (lineMap is not null || tocMap is not null)
+                    stamp += "|ids=" + (lineMap?.Signature() ?? "-") + "," + (tocMap?.Signature() ?? "-");
+                return stamp;
+            }
             catch (SeforimDbUnreadableException)
             {
                 long length = -1;
