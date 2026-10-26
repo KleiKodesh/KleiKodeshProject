@@ -23,6 +23,9 @@ internal sealed class DataHostSupervisor
     private readonly Func<bool> _consumeReload;
     private readonly ILogger _logger;
 
+    /// <summary>How long a data host gets to stop before it is abandoned.</summary>
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(40);
+
     /// <summary>Number of data hosts started so far (diagnostics and tests).</summary>
     public int HostsStarted { get; private set; }
 
@@ -126,8 +129,17 @@ internal sealed class DataHostSupervisor
             // Listening again BEFORE the old host finishes stopping: no moment without a pipe.
             if (reload) holder = StartHolder(stoppingToken);
 
-            try { await current.StopAsync(CancellationToken.None); } catch { }
-            try { current.Dispose(); } catch { }
+            // Bounded: a hosted service whose stop never returns used to leave this process alive
+            // with no pipe - the SCM still said "Running", so nothing could start it again and
+            // every client waited on a dead service. Past the limit the host is abandoned (a
+            // reload rebuilds beside it; a real stop ends the process in UserSessionBinding).
+            Task stopping = current.StopAsync(CancellationToken.None);
+            bool stoppedInTime = false;
+            try { stoppedInTime = await Task.WhenAny(stopping, Task.Delay(StopTimeout)) == stopping; }
+            catch { stoppedInTime = true; }
+            if (stoppedInTime) { try { await stopping; } catch { } }
+            else _logger.LogError("The data host did not stop within {Seconds:N0}s; abandoning it", StopTimeout.TotalSeconds);
+            if (stoppedInTime) { try { current.Dispose(); } catch { } }
 
             if (!reload) return;
             _logger.LogInformation("Data host stopped for a reload; rebuilding it in this process (the service keeps running)");

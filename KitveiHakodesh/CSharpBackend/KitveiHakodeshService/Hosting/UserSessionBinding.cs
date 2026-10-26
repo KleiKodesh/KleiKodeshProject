@@ -92,7 +92,19 @@ public sealed class UserSessionBinding(
         {
             // The data host stopped for good (or never started): the service stops with it, and
             // the next client starts a fresh one. Not when the SCM itself is stopping us.
-            if (!stoppingToken.IsCancellationRequested) serviceLifetime.StopApplication();
+            if (!stoppingToken.IsCancellationRequested)
+            {
+                serviceLifetime.StopApplication();
+                // A stop that never completes leaves a service the SCM reports as running with no
+                // pipe behind it, and nothing can start it again. End the process instead, so the
+                // next client starts a fresh one.
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(60));
+                    logger.LogError("The service did not stop within 60s; ending the process");
+                    Environment.Exit(1);
+                });
+            }
         }
     }
 
