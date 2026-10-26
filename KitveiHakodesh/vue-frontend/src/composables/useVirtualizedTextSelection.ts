@@ -12,9 +12,9 @@
  * shrink — it becomes nonsense.
  *
  * THE FIX
- * The two rows holding the selection's boundaries are PINNED into the virtualizer's
- * rendered range, via TanStack's rangeExtractor. They stay mounted at their real
- * offsets however far off-screen they scroll, so the native Range keeps both
+ * The two rows holding the selection's boundaries are PINNED into the rendered
+ * range — via TanStack's rangeExtractor, or WindowedScroller's `pinnedIndexes`. They
+ * stay mounted however far off-screen they scroll, so the native Range keeps both
  * boundaries in live text nodes and never breaks.
  *
  * Everything else then follows for free, which is the point of fixing it here rather
@@ -209,6 +209,17 @@ export function useVirtualizedTextSelection(
   })
 
   /**
+   * The same two boundary rows for a WindowedScroller, which takes the indexes to
+   * keep mounted as a prop rather than a range extractor.
+   */
+  const pinnedRowIndexes = computed(() => {
+    const indexes: number[] = []
+    if (anchorBoundary.value) indexes.push(anchorBoundary.value.rowIndex)
+    if (focusBoundary.value) indexes.push(focusBoundary.value.rowIndex)
+    return indexes
+  })
+
+  /**
    * The rows the selection spans, in ascending row-index order, or null when there is
    * no selection in this scroller. The copy paths use this to fill in the rows that
    * are between the boundaries but not in the DOM.
@@ -279,6 +290,7 @@ export function useVirtualizedTextSelection(
 
   return {
     rangeExtractor,
+    pinnedRowIndexes,
     selectedRowIndexRange,
     restoreSelectionFromPinnedRows,
     clearPinnedRows,

@@ -1,29 +1,23 @@
 ﻿/**
- * Manages scroll position for the book view lines scroller.
+ * Manages scroll position for the book view lines scroller (a WindowedScroller).
  *
- * Scroll save:
- * - captureScrollPos saves firstVisible.index (not the overscan item) and the pixel
- *   offset within that item. If the gap between scrollTop and firstVisible.start exceeds
- *   2000px the virtualizer hasn't re-rendered after a programmatic scroll — skip the save.
+ * Scroll save: captureScrollPos reads the first visible row and the pixel offset
+ * into it straight from the DOM — the scroller mounts real rows, so there is no
+ * estimated position to mistrust.
  *
- * Scroll restore — two stages, virtualizer API only, never touch scrollTop directly:
- * Stage 1 — scrollToIndex(targetIndex, 'start') immediately when placeholders are allocated.
- *   Uses estimated item heights but gets the item on screen fast.
- * Stage 2 — once the target line's chunk loads (real DOM heights), scrollToIndex again.
- *   Tracks item.start in a rAF loop; whenever it shifts (background chunks above load and
- *   push item.start down), re-issues scrollToIndex. Exits once stable for 3 consecutive frames.
- *   After stabilization, applies the saved sub-line pixel offset via scrollToOffset — but only
- *   if the offset fits within the item's actual height (guards against stale saves).
- *   A post-stabilization MutationObserver keeps tracking for a bounded window (10s,
- *   cancelled by user input): late chunks above the target re-measure when they
- *   RENDER, which arrives as a DOM mutation, not as a lines-array change - a
- *   watch on lines() slept through exactly those shifts.
+ * Scroll restore, in two exact steps rather than a settle loop:
+ *   1. As soon as the lines array exists, scrollToIndex(target, saved offset). The
+ *      window is rebuilt around the target and the scroll set from its real position;
+ *      the target may still be a placeholder of placeholder height.
+ *   2. When the target's chunk arrives its rows take their real heights, and because a
+ *      chunk is written in one go there is no anchored row to hold the view in place —
+ *      so the landing is re-applied once, from the real height. Every later chunk
+ *      above the target is absorbed by the scroller's own re-anchoring.
  */
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
-import { useEventListener } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
-import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import type { LineItem } from './useBookViewLinesTable'
 import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
 import { SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
@@ -31,7 +25,6 @@ import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
   CommentaryPanelPersistStates,
-  CommentarySlot,
   CommentaryTreeState,
   CommentaryTreeStatePersist,
   SideEditionPersistState,
@@ -87,12 +80,15 @@ export interface BookViewLinesScrollStoreRefs {
   bookId: number
 }
 
+/** Frames to keep looking for a row that renders a little after its scroll. */
+const ROW_POLL_FRAMES = 30
+/** Matches the `.flash-open` animation in BookViewLinesContent.vue. */
+const FLASH_DURATION_MS = 3600
+
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useBookViewLinesScroll(
-  scrollerEl: Ref<HTMLElement | null>,
-  virtualizer: () => Virtualizer<Element, Element>,
-  virtualItems: () => VirtualItem[],
+  scroller: () => WindowedScrollerApi | null,
   lines: () => LineItem[],
   props: BookViewLinesScrollProps,
   storeRefs: BookViewLinesScrollStoreRefs,
@@ -109,49 +105,33 @@ export function useBookViewLinesScroll(
   // ── Scroll capture ──────────────────────────────────────────────────────────
 
   function captureScrollPos() {
-    const items = virtualItems()
-    const first = items[0]
-    if (!first || !scrollerEl.value) return null
-    const scrollTop = scrollerEl.value.scrollTop
-    const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? first
-
-    // If firstVisible is more than 2000px above scrollTop the virtualizer hasn't
-    // re-rendered after a programmatic scroll yet — skip this save to avoid
-    // persisting a stale overscan-item position.
-    if (scrollTop - firstVisible.start > 2000) return null
-
+    const first = scroller()?.readFirstVisible(0)
+    if (!first) return null
     return {
-      scrollIndex: firstVisible.index,
-      scrollOffset: Math.max(0, scrollTop - firstVisible.start),
+      scrollIndex: first.index,
+      scrollOffset: Math.max(0, first.offsetWithinRow),
     }
   }
 
-  // ── Scroll restore (public wrapper) ────────────────────────────────────────
+  // ── Position-save suppression ───────────────────────────────────────────────
 
   let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
   let saveSuppressed = false
 
-  function restoreScrollPos(lineIndex: number, _scrollOffset = 0) {
-    virtualizer().scrollToIndex(lineIndex, { align: 'start' })
+  function suppressPositionSave() {
+    saveSuppressed = true
+    if (saveSuppressTimer) clearTimeout(saveSuppressTimer)
+    saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
   }
 
   // ── Initial scroll on load ──────────────────────────────────────────────────
 
-  let cancelStabilize: (() => void) | null = null
-  // Vue does not drop queued nextTick callbacks on unmount, and cancelStabilize is only
-  // assigned INSIDE the one below — so an unmount in between leaves onBeforeUnmount with
-  // nothing to call while the callback still runs and creates a watch nobody owns.
+  // Ends the restore's step 2 (and its flash / mark follow-ups) early: a jump
+  // elsewhere supersedes the restore, and an unmount must leave nothing behind.
+  let cancelRestore: (() => void) | null = null
   let scrollTeardown = false
-  // The post-restore correction window installs a MutationObserver and three listeners on
-  // the scroller. They are only torn down by its own 10s timer, so without a handle up here
-  // they stay attached to a detached element for up to 10s after unmount. Idempotent.
-  let finishPostRestore: (() => void) | null = null
-  // Timer for the deep-link line flash; cleared on cancel/unmount so it never fires
-  // against a stale element.
-  let flashTimer: number | null = null
   {
     let restored = false
-    let stopContentWatch: (() => void) | null = null
     let stop: (() => void) | null = null
 
     stop = watch(
@@ -164,197 +144,12 @@ export function useBookViewLinesScroll(
         stop?.()
         stop = null
         prioritise(targetIndex)
-
-        // Capture as const number — TypeScript loses the narrowing across nextTick closures.
         const target: number = targetIndex
 
         nextTick(() => {
           if (restored || scrollTeardown) return
           restored = true
-
-          let cancelled = false
-          cancelStabilize = () => {
-            cancelled = true
-            saveSuppressed = false
-            if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
-            // Created inside this nextTick, so it is outside the effect scope and unmount
-            // won't dispose it. The `cancelled` flag already neuters its effects, but the
-            // watcher itself would stay subscribed to lines() and retain the closure.
-            stopContentWatch?.()
-            stopContentWatch = null
-            // Disconnects the observer and drops the scroller listeners now instead of
-            // leaving them on a detached element until the 10s window expires.
-            finishPostRestore?.()
-            finishPostRestore = null
-          }
-          saveSuppressed = true
-
-          // Stage 1 — estimated heights, gets item on screen immediately.
-          virtualizer().scrollToIndex(target, { align: 'start' })
-
-          // Stage 2 — once the target chunk loads, re-issue scrollToIndex with real heights,
-          // then track item.start until stable, then apply the saved sub-line offset.
-          stopContentWatch = watch(
-            () => lines()[target]?.content,
-            (content) => {
-              if (content == null) return
-              stopContentWatch?.()
-              if (cancelled) return
-              nextTick(() => {
-                if (cancelled) return
-
-                virtualizer().scrollToIndex(target, { align: 'start' })
-
-                let lastStart = virtualizer().measurementsCache.find((m) => m.index === target)?.start ?? -1
-                let stableFrames = 0
-                let trackAttempts = 0
-                const offsetToApply = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
-
-                function trackAndCorrect() {
-                  if (cancelled) return
-                  const fresh = virtualizer().measurementsCache.find((m) => m.index === target)
-                  const freshStart = fresh?.start ?? lastStart
-                  if (freshStart !== lastStart) {
-                    lastStart = freshStart
-                    stableFrames = 0
-                    virtualizer().scrollToIndex(target, { align: 'start' })
-                  } else {
-                    stableFrames++
-                  }
-
-                  if (stableFrames >= 3) {
-                    // Apply saved sub-line offset — only if it fits within the item's
-                    // actual height (guards against stale saves from old code).
-                    if (offsetToApply > 0) {
-                      const offsetCache = virtualizer().measurementsCache.find((m) => m.index === target)
-                      if (offsetCache && offsetToApply < offsetCache.end - offsetCache.start) {
-                        saveSuppressed = true
-                        virtualizer().scrollToOffset(offsetCache.start + offsetToApply)
-                        requestAnimationFrame(() => { if (!cancelled) saveSuppressed = false })
-                      } else {
-                        saveSuppressed = false
-                      }
-                    } else {
-                      saveSuppressed = false
-                    }
-
-                    // Post-stabilization: late chunks above the target re-measure when
-                    // they render and push the content under the viewport. The shifts
-                    // arrive with DOM mutations, NOT with lines-array changes (backfill
-                    // mutates line objects in place), so a watch on lines() slept through
-                    // them - the drift the reader saw as "restored to the wrong place".
-                    // Mirror the commentary panels' startRestoreCorrection instead:
-                    // observe the scroller and re-anchor whenever the target's measured
-                    // start moves, for a bounded window. The reader taking over (wheel /
-                    // touch / pointer) cancels immediately - their scroll wins.
-                    const POST_RESTORE_WINDOW_MS = 10000
-                    const postEl = scrollerEl.value
-                    let postLastStart = lastStart
-                    let postDone = false
-                    let postObserver: MutationObserver | null = null
-                    const postStartedAt = performance.now()
-
-                    function postFinish() {
-                      if (postDone) return
-                      postDone = true
-                      postObserver?.disconnect()
-                      postEl?.removeEventListener('wheel', postFinish)
-                      postEl?.removeEventListener('touchstart', postFinish)
-                      postEl?.removeEventListener('pointerdown', postFinish)
-                    }
-
-                    function postCorrect() {
-                      if (postDone) return
-                      if (cancelled || performance.now() - postStartedAt > POST_RESTORE_WINDOW_MS) {
-                        postFinish()
-                        return
-                      }
-                      const postCache = virtualizer().measurementsCache.find((m) => m.index === target)
-                      if (!postCache) return
-                      if (postCache.start === postLastStart) return
-                      postLastStart = postCache.start
-                      virtualizer().scrollToIndex(target, { align: 'start' })
-                      if (offsetToApply > 0) {
-                        requestAnimationFrame(() => {
-                          if (cancelled || postDone) return
-                          const driftCache = virtualizer().measurementsCache.find((m) => m.index === target)
-                          if (driftCache) virtualizer().scrollToOffset(driftCache.start + offsetToApply)
-                        })
-                      }
-                    }
-
-                    if (postEl) {
-                      postEl.addEventListener('wheel', postFinish, { passive: true })
-                      postEl.addEventListener('touchstart', postFinish, { passive: true })
-                      postEl.addEventListener('pointerdown', postFinish, { passive: true })
-                      postObserver = new MutationObserver(() => postCorrect())
-                      postObserver.observe(postEl, { childList: true, subtree: true, attributes: false })
-                      setTimeout(postFinish, POST_RESTORE_WINDOW_MS + 100)
-                      finishPostRestore = postFinish // so teardown can close the window early
-                    }
-
-                    // FTS: scroll to the highlighted mark once positioned.
-                    if (props.searchHighlightLineIndex != null) {
-                      let markAttempts = 0
-                      function tryScrollToMark() {
-                        if (cancelled || !scrollerEl.value) return
-                        const mark = scrollerEl.value.querySelector('mark.search-match') as HTMLElement | null
-                        if (mark) { mark.scrollIntoView({ block: 'center' }); return }
-                        if (++markAttempts < 30) requestAnimationFrame(tryScrollToMark)
-                      }
-                      requestAnimationFrame(tryScrollToMark)
-                    }
-
-                    // Deep-link open (otzaria:// / zayit://): momentarily flash the
-                    // target line's background so the user sees where the link landed.
-                    // The row may not be in the DOM yet (virtualizer), so poll by
-                    // [data-index] with the same rAF-retry pattern as the mark scroll.
-                    if (props.flashLineOnOpen) {
-                      let flashAttempts = 0
-                      function tryFlashLine() {
-                        if (cancelled || !scrollerEl.value) return
-                        const row = scrollerEl.value.querySelector(
-                          `[data-index="${target}"] .line`,
-                        ) as HTMLElement | null
-                        if (row) {
-                          row.classList.add('flash-open')
-                          // Remove after the animation finishes (must match the CSS
-                          // animation duration, ~3.5s) so the class doesn't linger and
-                          // re-fire on virtualizer recycle. Cleared on cancel/unmount.
-                          flashTimer = window.setTimeout(() => {
-                            row.classList.remove('flash-open')
-                            flashTimer = null
-                          }, 3600)
-                          return
-                        }
-                        if (++flashAttempts < 30) requestAnimationFrame(tryFlashLine)
-                      }
-                      requestAnimationFrame(tryFlashLine)
-                    }
-                    return
-                  }
-
-                  if (++trackAttempts < 200) {
-                    requestAnimationFrame(trackAndCorrect)
-                  } else {
-                    saveSuppressed = false
-                  }
-                }
-
-                requestAnimationFrame(trackAndCorrect)
-              })
-            },
-            { immediate: true, flush: 'post' },
-          )
-
-          // Safety: clear saveSuppressed if content never loads.
-          setTimeout(() => { if (!cancelled) saveSuppressed = false }, 5000)
-
-          // No manual `scrolled` emit here any more. Restore scrolls the scroller,
-          // and onScroll now reports every scroll — this used to be a hand-rolled
-          // copy of onScroll's index maths, needed only because the old latch
-          // swallowed the real event.
-          scrollerEl.value?.focus({ preventScroll: true })
+          void restoreTo(target)
         })
       },
       { flush: 'post', immediate: true },
@@ -367,25 +162,102 @@ export function useBookViewLinesScroll(
         if (props.initialLineIndex == null && props.initialScrollIndex == null) {
           stop?.()
           stop = null
-          nextTick(() => scrollerEl.value?.focus({ preventScroll: true }))
+          nextTick(() => scroller()?.scrollerElement?.focus({ preventScroll: true }))
         }
       },
       { flush: 'post' },
     )
   }
 
+  async function restoreTo(target: number) {
+    let cancelled = false
+    let stopContentWatch: (() => void) | null = null
+    let flashTimer: number | null = null
+    cancelRestore = () => {
+      cancelled = true
+      saveSuppressed = false
+      stopContentWatch?.()
+      stopContentWatch = null
+      if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
+    }
+    // A saved offset belongs to a session-restore position only — a TOC/deep-link
+    // target lands at the line's top.
+    const savedOffset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
+
+    saveSuppressed = true
+    // Step 1 — land now, on whatever height the target has (placeholder or real).
+    await scroller()?.scrollToIndex(target, { offsetPx: savedOffset })
+    if (cancelled) return
+    scroller()?.scrollerElement?.focus({ preventScroll: true })
+
+    // Step 2 — once the target's chunk is in, re-land from its real height. The
+    // saved offset is applied only if it still fits the row (guards stale saves).
+    stopContentWatch = watch(
+      () => lines()[target]?.content,
+      (content) => {
+        if (content == null) return
+        stopContentWatch?.()
+        stopContentWatch = null
+        if (cancelled) return
+        nextTick(async () => {
+          if (cancelled) return
+          const rowHeight = scroller()?.rowElement(target)?.offsetHeight ?? 0
+          const offset = savedOffset > 0 && savedOffset < rowHeight ? savedOffset : 0
+          await scroller()?.scrollToIndex(target, { offsetPx: offset })
+          if (cancelled) return
+          saveSuppressed = false
+          scrollToSearchMark()
+          flashTargetLine(target)
+        })
+      },
+      { immediate: true, flush: 'post' },
+    )
+
+    // Safety: never hold saves forever if the content never arrives.
+    setTimeout(() => { if (!cancelled) saveSuppressed = false }, 5000)
+
+    // FTS: bring the highlighted mark into view once positioned.
+    function scrollToSearchMark() {
+      if (props.searchHighlightLineIndex == null) return
+      let attempts = 0
+      function tryScrollToMark() {
+        const element = scroller()?.scrollerElement
+        if (cancelled || !element) return
+        const mark = element.querySelector('mark.search-match') as HTMLElement | null
+        if (mark) { mark.scrollIntoView({ block: 'center' }); return }
+        if (++attempts < ROW_POLL_FRAMES) requestAnimationFrame(tryScrollToMark)
+      }
+      requestAnimationFrame(tryScrollToMark)
+    }
+
+    // Deep-link open (otzaria:// / zayit://): momentarily flash the target line's
+    // background so the user sees where the link landed. One-shot; the class is
+    // removed imperatively after the animation.
+    function flashTargetLine(lineIndex: number) {
+      if (!props.flashLineOnOpen) return
+      let attempts = 0
+      function tryFlashLine() {
+        if (cancelled) return
+        const row = scroller()?.rowElement(lineIndex)?.querySelector('.line') as HTMLElement | null
+        if (row) {
+          row.classList.add('flash-open')
+          flashTimer = window.setTimeout(() => {
+            row.classList.remove('flash-open')
+            flashTimer = null
+          }, FLASH_DURATION_MS)
+          return
+        }
+        if (++attempts < ROW_POLL_FRAMES) requestAnimationFrame(tryFlashLine)
+      }
+      requestAnimationFrame(tryFlashLine)
+    }
+  }
+
   // ── Persist scroll position ─────────────────────────────────────────────────
 
   let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
 
-  /**
-   * Copy for storage: the reader's search input only — see CommentaryTreeStatePersist.
-   *
-   * There used to be a `lastValidFilterState` backfill here, because a panel's
-   * visibilityList empties whenever its tree closes and saving the live value blindly
-   * would overwrite a good filter with an empty one. That list is no longer persisted
-   * at all, and searchQuery has no such empty phase, so the backfill is gone with it.
-   */
+  /** Copy for storage: the reader's search input only — see CommentaryTreeStatePersist. */
   function cloneFilterState(state: CommentaryTreeState): CommentaryTreeStatePersist {
     return {
       searchQuery: state.searchQuery,
@@ -465,7 +337,7 @@ export function useBookViewLinesScroll(
   onBeforeUnmount(() => {
     unregisterHostFlush()
     scrollTeardown = true
-    cancelStabilize?.()
+    cancelRestore?.()
     saveSuppressed = false
     if (saveSuppressTimer) {
       clearTimeout(saveSuppressTimer)
@@ -483,103 +355,63 @@ export function useBookViewLinesScroll(
 
   // ── Scroll handler ──────────────────────────────────────────────────────────
 
-  // Reports the scroller's position on EVERY scroll, programmatic ones included.
-  //
-  // This deliberately does not consult saveSuppressed. That flag means "do not
-  // persist a reading position right now", which is a statement about saving, not
-  // about where the reader actually is. The `scrolled` consumers — the breadcrumb
-  // (tocPath), the active TOC entry, auto-select — track the CURRENT position and
-  // are just as right after a programmatic jump as after a wheel. Gating them here
-  // is what forced every programmatic caller (TOC click, section nav, restore,
-  // search) to re-derive and re-publish the position itself.
-  //
-  // Consumers that must ignore a jump's in-transit hops still can: the TOC sync
-  // waits for programmatic events to settle before syncing (see
-  // useBookViewScrollSync), keyed off the isUserScroll argument below.
   /**
-   * Derives which line is at the top of the view RIGHT NOW: the first line
-   * meaningfully visible below the top of the view — below the search bar when it
-   * overlays the scroller, and past a sliver allowance slightly larger than the
-   * landing gap.
+   * Which line is at the top of the view RIGHT NOW: the first line meaningfully
+   * visible below the top — below the search bar when it overlays the scroller, and
+   * past a sliver allowance slightly larger than the landing gap.
    *
-   * The sliver allowance fixes the TOC flicker that appeared only at section
-   * boundaries: a programmatic landing deliberately stops SCROLL_LANDING_GAP_PX
-   * above its target, leaving that many pixels of the PREVIOUS line at the top.
-   * Counting that sliver made this derivation report the previous line, whose TOC
+   * The sliver allowance: a programmatic landing deliberately stops
+   * SCROLL_LANDING_GAP_PX above its target, leaving that many pixels of the PREVIOUS
+   * line at the top. Counting that sliver would report the previous line, whose TOC
    * entry is the previous section — a click on "daf 142a" answered by a sync
-   * announcing "daf 141b". For reader scrolling the allowance is imperceptible:
-   * the active section flips a few pixels later than it used to.
+   * announcing "daf 141b". For reader scrolling the allowance is imperceptible.
    *
-   * The fallback chain matters at the very bottom of the book, where the last
-   * line itself may have less than the allowance visible: fall back to the
-   * sliver-counting find rather than items[0], which is the top overscan row.
-   *
-   * CAVEAT — exposed as readCurrentPosition for exactly this: during a long jump
-   * the scroll event fires BEFORE the virtualizer re-renders, so the items here
-   * still describe the window around the OLD position and the derivation returns
-   * old-position garbage (live-verified: every backward TOC jump reported the
-   * previous location minus one row). Consumers acting LATER — the scroll sync's
-   * settle pass — must re-derive fresh instead of trusting an event-time value.
+   * Always current: the scroller mounts the rows around a jump BEFORE setting the
+   * scroll, so a scroll event never describes a stale window.
    */
   function readCurrentPosition(): { lineIndex: number; fullLineIndex: number } | null {
-    if (!scrollerEl.value) return null
-    const scrollTop = scrollerEl.value.scrollTop
-    const items = virtualItems()
+    const api = scroller()
+    if (!api) return null
     const inset = props.searchBarVisible ? SEARCH_BAR_INSET_PX : 0
-    const visibleTop = scrollTop + inset + SCROLL_LANDING_GAP_PX + 4
-    const firstVisible =
-      items.find((v) => v.start + v.size > visibleTop) ??
-      items.find((v) => v.start + v.size > scrollTop) ??
-      items[0]
+    const firstVisible = api.readFirstVisible(inset + SCROLL_LANDING_GAP_PX + 4) ?? api.readFirstVisible(0)
     if (!firstVisible) return null
-    const lineIndex = firstVisible.index
     // Fully visible means fully visible BELOW the search bar too — a short line
     // hidden entirely under the bar is not something auto-select should act on.
-    const firstFull = items.find((v) => v.start >= scrollTop + inset) ?? firstVisible
-    return { lineIndex, fullLineIndex: firstFull.index }
+    const firstFull = api.readFirstVisible(inset, true) ?? firstVisible
+    return { lineIndex: firstVisible.index, fullLineIndex: firstFull.index }
   }
 
+  // Reports the scroller's position on EVERY scroll, programmatic ones included.
+  // saveSuppressed is a statement about saving, not about where the reader is: the
+  // breadcrumb, the active TOC entry and auto-select track the CURRENT position and
+  // are just as right after a programmatic jump as after a wheel.
   function onScroll() {
-    if (!scrollerEl.value) return
     const position = readCurrentPosition()
     if (!position) return
     const { lineIndex, fullLineIndex } = position
     lastKnownPos = captureScrollPos()
     prioritise(lineIndex)
     // The third argument says whether the READER moved the view, as opposed to a
-    // jump the app performed (TOC click, search match, restore). saveSuppressed
-    // already draws exactly that line and every programmatic scroller sets it, so
-    // it is reused here rather than tracked a second time — and unlike a `wheel`
-    // listener it also catches scrollbar drags and keyboard scrolling.
+    // jump the app performed. saveSuppressed already draws exactly that line and
+    // every programmatic scroller sets it — and unlike a `wheel` listener it also
+    // catches scrollbar drags and keyboard scrolling.
     emit('scrolled', lineIndex, fullLineIndex, !saveSuppressed)
-  }
-
-  // ── Position-save suppression ───────────────────────────────────────────────
-
-  function suppressPositionSave() {
-    saveSuppressed = true
-    if (saveSuppressTimer) clearTimeout(saveSuppressTimer)
-    saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * Closes the post-restore correction window early. Restore keeps re-anchoring
-   * its OWN target for up to 10s while late chunks shift it — right up until the
-   * reader goes somewhere else. A new programmatic jump is exactly that, and
-   * without this the two positioners fight: the jump lands, a late chunk shifts
-   * the old restore target, and the observer yanks the view back to the restored
-   * position.
+   * Ends a pending session restore: step 2 re-lands the restore target when its
+   * chunk arrives, and a reader who has since jumped elsewhere must not be yanked
+   * back to it.
    */
   function cancelRestoreCorrection() {
-    finishPostRestore?.()
-    finishPostRestore = null
+    cancelRestore?.()
+    cancelRestore = null
   }
 
   return {
     captureScrollPos,
-    restoreScrollPos,
     readCurrentPosition,
     cancelRestoreCorrection,
     isPositionSaveSuppressed: () => saveSuppressed,
