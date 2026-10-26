@@ -13,7 +13,7 @@ namespace DocDesign.Paragraphs
             Remove();
             var selectionRange = Vsto.Application.Selection.Range;
 
-            using (new UndoRecordHelper("עיצוב חלון"))
+            using (new UndoRecordHelper(Properties.Strings.UndoHanging))
             {
                 PrepareFootnotes(selectionRange);
                 var paragraphs = ValidParagraphs(Vsto.Selection.Range, styles, minLineCount);
@@ -48,7 +48,7 @@ namespace DocDesign.Paragraphs
 
             var selectionRange = Vsto.Application.Selection.Range;
 
-            using (new UndoRecordHelper("עיצוב חלון"))
+            using (new UndoRecordHelper(Properties.Strings.UndoHanging))
             {
                 PrepareFootnotes(selectionRange);
                 var paragraphs = ValidParagraphs(Vsto.Selection.Range, styles, minLineCount);

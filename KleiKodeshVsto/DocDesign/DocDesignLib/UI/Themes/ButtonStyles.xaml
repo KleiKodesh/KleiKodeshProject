@@ -1,6 +1,7 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:kk="http://schemas.kleikodesh.org/wpf"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:p="clr-namespace:DocDesign.Properties">
 
     <!-- Merged here, not only in DocDesignDictionary, so the BasedOn keys below
          resolve inside this dictionary rather than relying on a sibling. -->
@@ -21,7 +22,7 @@
 
     <!-- ── Reset button (= icon) ─────────────────────────────────── -->
     <Style x:Key="ResetButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="ToolTip"  Value="איפוס"/>
+        <Setter Property="ToolTip"  Value="{x:Static p:Strings.TipReset}"/>
         <Setter Property="Width"    Value="26"/>
         <Setter Property="Height"   Value="26"/>
         <Setter Property="Padding"  Value="5"/>
@@ -33,7 +34,7 @@
     </Style>
 
     <Style x:Key="IncreaseButton" TargetType="RepeatButton" BasedOn="{StaticResource StepButton}">
-        <Setter Property="ToolTip" Value="הגדל"/>
+        <Setter Property="ToolTip" Value="{x:Static p:Strings.TipIncrease}"/>
         <Style.Resources>
             <Style TargetType="Path" BasedOn="{StaticResource IconPath}">
                 <Setter Property="Margin" Value="5"/>
@@ -44,7 +45,7 @@
     </Style>
 
     <Style x:Key="DecreaseButton" TargetType="RepeatButton" BasedOn="{StaticResource StepButton}">
-        <Setter Property="ToolTip" Value="הקטן"/>
+        <Setter Property="ToolTip" Value="{x:Static p:Strings.TipDecrease}"/>
         <Style.Resources>
             <Style TargetType="Path" BasedOn="{StaticResource IconPath}">
                 <Setter Property="Margin" Value="5"/>

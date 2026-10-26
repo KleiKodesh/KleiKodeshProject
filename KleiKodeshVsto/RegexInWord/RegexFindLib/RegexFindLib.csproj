@@ -119,6 +119,22 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
+    <Compile Include="Properties\UiLanguage.cs" />
+    <Compile Include="Properties\Strings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Properties\Strings.resx">
+    </EmbeddedResource>
+    <!-- English embedded in the main assembly (no satellite dll); read by EmbeddedCultureResourceManager. -->
+    <EmbeddedResource Include="Properties\Strings.en.resx">
+      <WithCulture>false</WithCulture>
+      <LogicalName>RegexFindLib.Properties.Strings.en.resources</LogicalName>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

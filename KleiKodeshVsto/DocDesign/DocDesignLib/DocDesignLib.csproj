@@ -100,6 +100,24 @@
     <Compile Include="UI\DocDesignViewModel.cs" />
     <!-- Properties -->
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\EmbeddedCultureResourceManager.cs" />
+    <Compile Include="Properties\Strings.Designer.cs">
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <!--
+    UI texts: Strings.resx = Hebrew (default), Strings.en.resx = English.
+    English is embedded in DocDesign.dll itself (WithCulture=false) instead of
+    an en\ satellite dll; EmbeddedCultureResourceManager serves it.
+  -->
+  <ItemGroup>
+    <!-- No code generator: Strings.Designer.cs is hand-maintained (custom ResourceManager). -->
+    <EmbeddedResource Include="Properties\Strings.resx" />
+    <EmbeddedResource Include="Properties\Strings.en.resx">
+      <WithCulture>false</WithCulture>
+      <LogicalName>DocDesign.Properties.Strings.en.resources</LogicalName>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

@@ -4,8 +4,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:WebSitesLib.UI"
+             xmlns:p="clr-namespace:WebSitesLib.Properties"
              mc:Ignorable="d"
-             FlowDirection="RightToLeft"
+             FlowDirection="{x:Static p:Strings.PaneFlowDirection}"
              FontFamily="Segoe UI"
              FontSize="13"
              Background="White">
@@ -80,7 +81,7 @@
                             VerticalAlignment="Stretch">
 
                     <ToggleButton x:Name="TabDropDownToggle"
-                                  ToolTip="הצג את כל הכרטיסיות"
+                                  ToolTip="{x:Static p:Strings.ShowAllTabs}"
                                   Width="26" Height="26"
                                   Padding="5"
                                   VerticalAlignment="Center">
@@ -89,7 +90,7 @@
                                       Data="{StaticResource Icon.ChevronDown}"/>
                     </ToggleButton>
 
-                    <Button ToolTip="כרטיסייה חדשה"
+                    <Button ToolTip="{x:Static p:Strings.NewTab}"
                             Command="{Binding ElementName=BrowserTabs, Path=NewTabCommand}"
                             Width="26" Height="26"
                             Padding="5"
@@ -126,7 +127,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Button Grid.Column="0"
-                                                        ToolTip="סגור כרטיסייה"
+                                                        ToolTip="{x:Static p:Strings.CloseTab}"
                                                         Command="{Binding CloseTabCommand}"
                                                         Width="20" Height="20"
                                                         Padding="3"
@@ -198,7 +199,7 @@
                                     <Button x:Name="CloseTabBtn"
                                             DockPanel.Dock="Right"
                                             Command="{Binding CloseTabCommand}"
-                                            ToolTip="סגור כרטיסייה"
+                                            ToolTip="{x:Static p:Strings.CloseTab}"
                                             Width="18" Height="18"
                                             Padding="3"
                                             Margin="0,0,3,0"
@@ -288,22 +289,22 @@
                             FlowDirection="LeftToRight"
                             Margin="2,0,0,0">
                     <Button x:Name="PopOutButton"
-                            ToolTip="הצג בחלונית \ חלון צד"
+                            ToolTip="{x:Static p:Strings.PopOut}"
                             Click="PopOutButton_Click">
                         <Path  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
 Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
                     </Button>
-                    <Button ToolTip="רענן"
+                    <Button ToolTip="{x:Static p:Strings.Refresh}"
         Command="{Binding ElementName=BrowserTabs, Path=RefreshCommand}">
                         <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   Data="{StaticResource Icon.Reload}"/>
                     </Button>
-                    <Button ToolTip="חזור אחורה"
+                    <Button ToolTip="{x:Static p:Strings.Back}"
                             Command="{Binding ElementName=BrowserTabs, Path=GoBackCommand}">
                         <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.Back}"/>
                     </Button>
-                    <Button ToolTip="קדימה"
+                    <Button ToolTip="{x:Static p:Strings.Forward}"
                             Command="{Binding ElementName=BrowserTabs, Path=GoForwardCommand}">
                         <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                       Data="{StaticResource Icon.Forward}"/>

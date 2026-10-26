@@ -1,4 +1,4 @@
-using Microsoft.Office.Interop.Word;
+﻿using Microsoft.Office.Interop.Word;
 using System;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -9,7 +9,7 @@ namespace RegexFindLib.Search
     {
         void ReplaceAll(FindRequest find)
         {
-            using (_ = new Helpers.WdActionManager(_word, "החלפה מרובה", saveRange: true))
+            using (_ = new Helpers.WdActionManager(_word, Properties.Strings.Undo_ReplaceAll, saveRange: true))
                 for (int i = Results.Length - 1; i >= 0; i--)
                     ApplyReplace(Results[i].Range, find);
         }
@@ -18,7 +18,7 @@ namespace RegexFindLib.Search
         {
             try
             {
-                using (_ = new Helpers.WdActionManager(_word, "החלפה", doEvents: false))
+                using (_ = new Helpers.WdActionManager(_word, Properties.Strings.Replace, doEvents: false))
                     ApplyReplace(Selection.Range, find);
             }
             catch (Exception ex)

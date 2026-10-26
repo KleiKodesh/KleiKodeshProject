@@ -5,9 +5,9 @@ namespace WpfLib.Helpers
 {
     public static class MsgBox
     {
-        public static void Information(string message, string title = "", bool isRtl = true)
+        public static void Information(string message, string title = "", bool? isRtl = null)
         {
-            if (isRtl)
+            if (isRtl ?? System.Globalization.CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft)
                  MessageBox.Show(
                                    message,
                                    title ?? AppDomain.CurrentDomain.FriendlyName,
@@ -26,9 +26,9 @@ namespace WpfLib.Helpers
                        );
         }
 
-        public static MessageBoxResult Question (string message, string title = "", bool isRtl = true)
+        public static MessageBoxResult Question (string message, string title = "", bool? isRtl = null)
         {
-            if (isRtl)
+            if (isRtl ?? System.Globalization.CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft)
                 return  MessageBox.Show(
                                    message,
                                    title ?? AppDomain.CurrentDomain.FriendlyName,

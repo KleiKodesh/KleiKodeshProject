@@ -178,7 +178,10 @@ Close Word now?</value>
     <value>Default: {0}</value>
   </data>
   <data name="Db_NotFound" xml:space="preserve">
-    <value>No Zayit or Otzaria app found - set the path manually</value>
+    <value>No book library found - download it below, or set the path manually</value>
+  </data>
+  <data name="Db_DownloadLibrary" xml:space="preserve">
+    <value>Download the book library (about 1.9 GB)</value>
   </data>
   <data name="Db_PickTitle" xml:space="preserve">
     <value>Select a database file for Kitvei HaKodesh</value>
@@ -379,5 +382,14 @@ Continue?</value>
   </data>
   <data name="WhatsNew_Continue" xml:space="preserve">
     <value>Continue</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>Interface language</value>
+  </data>
+  <data name="Settings_LanguageHint" xml:space="preserve">
+    <value>Takes full effect after restarting Word.</value>
+  </data>
+  <data name="Settings_RestartWordNotice" xml:space="preserve">
+    <value>The interface language was changed. Restart Word for the change to take full effect.</value>
   </data>
 </root>

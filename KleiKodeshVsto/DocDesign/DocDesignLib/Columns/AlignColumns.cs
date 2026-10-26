@@ -67,11 +67,11 @@ namespace DocDesign.Columns
 
             if (!repeat)
             {
-                MsgBox.Information("לא נמצאו תוצאות");
+                MsgBox.Information(Properties.Strings.NoResults);
                 return;
             }
 
-            var result = MsgBox.Question("לא נמצאו תוצאות. האם ברצונך לחפש מתחילת המסמך");
+            var result = MsgBox.Question(Properties.Strings.NoResultsSearchFromStart);
             if (result == System.Windows.MessageBoxResult.Yes)
             {
                 document.Content.Characters.First.Select();
@@ -81,7 +81,7 @@ namespace DocDesign.Columns
 
         public void Apply()
         {
-            using (new UndoRecordHelper("יישור טורים"))
+            using (new UndoRecordHelper(Properties.Strings.UndoAlignColumns))
             {
                 Document document = Vsto.ActiveDocument;
                 var pageData = Vsto.Selection.Range.RangePageCount();

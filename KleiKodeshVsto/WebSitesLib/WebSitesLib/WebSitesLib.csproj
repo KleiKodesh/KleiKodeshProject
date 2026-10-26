@@ -116,6 +116,16 @@
     </Compile>
     <!-- Properties -->
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\Strings.Designer.cs" />
+  </ItemGroup>
+  <!-- UI texts: Strings.resx = Hebrew (default), Strings.en.resx = English,
+       embedded in this dll (no en\ satellite); Strings.Designer.cs serves it. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Properties\Strings.resx" />
+    <EmbeddedResource Include="Properties\Strings.en.resx">
+      <WithCulture>false</WithCulture>
+      <LogicalName>WebSitesLib.Properties.Strings.en.resources</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

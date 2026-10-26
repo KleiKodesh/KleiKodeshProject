@@ -32,7 +32,7 @@ namespace RegexFindLib.UI
             new ObservableCollection<string>();
 
         public static readonly IReadOnlyList<string> SearchModes =
-            new[] { "הכל", "כלפי מטה", "כלפי מעלה", "לפי בחירה" };
+            new[] { Properties.Strings.Mode_All, Properties.Strings.Mode_Down, Properties.Strings.Mode_Up, Properties.Strings.Mode_Selection };
 
         // ── Constructor ───────────────────────────────────────────────────────
 
@@ -163,8 +163,8 @@ namespace RegexFindLib.UI
         /// Tooltip for the .* toggle — changes meaning depending on active engine.
         /// </summary>
         public string WildcardTooltip => UseWordSearch
-            ? "השתמש בתווים כלליים של Word"
-            : "השתמש בביטויים רגולריים";
+            ? Properties.Strings.UseWordWildcards
+            : Properties.Strings.UseRegex;
 
         int _slop = 0;
         public int Slop

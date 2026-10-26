@@ -17,7 +17,7 @@ namespace KleiKodeshVstoInstallerWpf
     /// </summary>
     public static class UiLanguage
     {
-        const string Section = "Installer";
+        const string Section = "General"; // shared with the Word add-in (KleiKodeshVsto/Helpers/AddinUiLanguage.cs)
         const string Key     = "UiLanguage";
 
         public const string Hebrew  = "he";
@@ -47,6 +47,9 @@ namespace KleiKodeshVstoInstallerWpf
             Apply(lang);
             SettingsManager.Save(Section, Key, lang);
         }
+
+        /// <summary>Writes the current language back, e.g. after a clean wiped the settings.</summary>
+        public static void Persist() => SettingsManager.Save(Section, Key, Current);
 
         static void Apply(string lang)
         {
