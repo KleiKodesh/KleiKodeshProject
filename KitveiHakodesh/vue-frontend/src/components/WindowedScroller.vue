@@ -8,12 +8,18 @@
  * then drifts while the real heights arrive — every consumer ends up with a settle
  * loop. Here rows are real flow content: a jump rebuilds the window around the target
  * and sets the scroll from its measured position, exactly and once. When rows above
- * the viewport change height (a placeholder filling in, a zoom, the window growing)
+ * the viewport change height (a zoom, a font swap, the window growing)
  * the reader's row is held in place — see useWindowedScrollerWindow.
  *
- * The viewport is a native scroll container with its scrollbar hidden; wheel, touch,
- * PageUp/PageDown and the arrows are the browser's own. Only Home/End need help, as
- * they must reach rows that are not mounted.
+ * The viewport is a native scroll container with its own scrollbar hidden; wheel,
+ * touch, PageUp/PageDown and the arrows are the browser's own. Only Home/End need
+ * help, as they must reach rows that are not mounted. The scrollbar the reader sees
+ * is drawn beside the viewport in the native bar's image and represents the whole
+ * list: estimated heights outside the window, real ones inside it
+ * (WindowedScrollerBar.vue, useWindowedScrollerBarMapping).
+ *
+ * Rows are asked for (`ensureRows`) before a range is mounted, so nothing is ever
+ * rendered as a placeholder.
  *
  * `pinnedIndexes` keeps rows mounted outside the window, out of flow and clipped —
  * the two ends of a text selection, so a native Range keeps its boundary text nodes.
@@ -25,6 +31,7 @@ import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch, type Compone
 import { useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
+import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
 import type { WindowedScrollerScrollToOptions, WindowedScrollerVisibleRow } from './windowedScrollerTypes'
 
 defineOptions({ inheritAttrs: false })
@@ -41,6 +48,13 @@ const props = withDefaults(
     initialIndex?: number
     /** Pixels added to the initial row's top — a saved offset into the row. */
     initialOffsetPx?: number
+    /**
+     * Resolves once the rows of [start, end) can be rendered. The scroller asks
+     * before it mounts a range — a landing or an extension — so a row never appears
+     * without its content and a landing renders exactly once. Omit when the rows
+     * are always available.
+     */
+    ensureRows?: (start: number, end: number) => Promise<void>
   }>(),
   { pinnedIndexes: () => [] },
 )
@@ -72,6 +86,7 @@ const {
   count: () => props.count,
   viewport: () => viewportElement.value,
   rowElement,
+  ensureRows: (start, end) => props.ensureRows?.(start, end) ?? Promise.resolve(),
 })
 
 const renderedRange = computed(() => ({ start: windowStart.value, end: windowEnd.value }))
@@ -96,23 +111,20 @@ const renderedIndexes = computed(() => {
 onBeforeUpdate(rememberAnchor)
 onUpdated(() => {
   holdAnchor()
-  updateVisibleRows()
+  bar.syncFromViewport()
 })
 
-// ── Visible rows (feeds the bar) ───────────────────────────────────────────────
+// ── The scrollbar ──────────────────────────────────────────────────────────────
 
-const firstVisibleIndex = ref(0)
-const visibleRowCount = ref(1)
-
-function updateVisibleRows() {
-  const viewport = viewportElement.value
-  if (!viewport) return
-  const first = findRowIndexAt(viewport.scrollTop, false)
-  if (first == null) return
-  const last = findRowIndexAt(viewport.scrollTop + viewport.clientHeight, true) ?? windowEnd.value
-  firstVisibleIndex.value = first
-  visibleRowCount.value = Math.max(1, last - first)
-}
+const bar = useWindowedScrollerBarMapping({
+  count: () => props.count,
+  viewport: () => viewportElement.value,
+  windowStart,
+  windowEnd,
+  rowElement,
+  findRowIndexAt,
+  landAt: (index) => scrollToIndex(index),
+})
 
 // Hold BEFORE remembering: a layout change the scroller did not make (a font
 // swap re-wrapping rows above) can land between a scroll and the resize observer
@@ -122,7 +134,7 @@ function updateVisibleRows() {
 function onViewportScroll() {
   holdAnchor()
   rememberAnchor()
-  updateVisibleRows()
+  bar.syncFromViewport()
   fill()
 }
 
@@ -131,7 +143,7 @@ function onViewportScroll() {
 useResizeObserver(contentElement, () => {
   holdAnchor()
   fill()
-  updateVisibleRows()
+  bar.syncFromViewport()
 })
 useResizeObserver(viewportElement, () => fill())
 
@@ -174,7 +186,7 @@ function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibl
 
 async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
   await landAt(index, options)
-  updateVisibleRows()
+  bar.syncFromViewport()
 }
 
 function onViewportKeydown(event: KeyboardEvent) {
@@ -191,7 +203,7 @@ function onViewportKeydown(event: KeyboardEvent) {
 
 defineExpose({
   scrollerElement: viewportElement,
-  scrollbarTrackElement: computed(() => barReference.value?.trackElement ?? null),
+  scrollbarTrackElement: computed(() => barReference.value?.barElement ?? null),
   renderedRange,
   scrollToIndex,
   readFirstVisible,
@@ -223,13 +235,13 @@ defineExpose({
         </div>
       </div>
     </div>
+    <!-- The bar state goes in as refs on purpose: unwrapping them here would make
+         this whole row list re-render on every scroll tick and resize frame. -->
     <WindowedScrollerBar
       ref="barReference"
-      :count="count"
-      :first-visible-index="firstVisibleIndex"
-      :visible-row-count="visibleRowCount"
+      :state="bar"
       :viewport="viewportElement"
-      @jump-to-index="(index) => scrollToIndex(index)"
+      @seek="bar.seek"
     />
   </div>
 </template>
@@ -254,6 +266,10 @@ defineExpose({
 }
 .windowed-scroller-content {
   position: relative;
+  /* A formatting context, so a leading row's top margin cannot collapse through
+     this element and move every row relative to the viewport without changing
+     their offsetTop — the one shift the anchor could not see. */
+  display: flow-root;
 }
 /* Mounted only so a selection boundary keeps its text node: no box. */
 .windowed-scroller-row.pinned-out-of-window {

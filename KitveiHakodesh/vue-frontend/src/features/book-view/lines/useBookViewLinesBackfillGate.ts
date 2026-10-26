@@ -8,7 +8,7 @@
  * plain line click during the initial fill) queues behind those chunks and
  * takes seconds instead of milliseconds. This gate pauses the backfill while
  * commentary is loading and resumes it afterwards; the visible lines are
- * unaffected because the first chunk and prefetch()/prioritise() fetches
+ * unaffected because the view's own window (ensureLines()/prefetch() fetches)
  * bypass the queue.
  *
  * Hold/release timeline:

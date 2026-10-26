@@ -16,7 +16,7 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 
 ## Composables
 
-**useBookViewLinesTable.ts** - paginated line fetching in chunks of 200. Pre-allocates placeholder slots for correct virtualizer height. Use `prioritise(lineIndex)` to move a chunk to the front of the queue when the user jumps to a specific position. `holdBackfill()`/`releaseBackfill()` pause and resume the full-book backfill queue (out-of-band `prefetch`/`prioritise` fetches keep working while held). The backfill queue and its workers stop on unmount — a switched-away tab must not keep flooding the data channel while the next mount loads.
+**useBookViewLinesTable.ts** - paginated line fetching in chunks of 200. `ensureLines(start, end)` resolves once a range has its text — the WindowedScroller asks for every range before mounting it, so no row is ever rendered without content. `holdBackfill()`/`releaseBackfill()` pause and resume the full-book backfill queue (out-of-band `prefetch`/`ensureLines` fetches keep working while held). The backfill queue and its workers stop on unmount — a switched-away tab must not keep flooding the data channel while the next mount loads.
 
 **useBookViewLinesBackfillGate.ts** - makes the full-book backfill yield to commentary loading (the "commentary loads slowly on tab return" bug). Held from setup so the tab-return flood cannot start before the restored commentary panel gets on the wire; re-held whenever a commentary load starts; released a short grace after each load settles, when no commentary panel is being restored, when the panel closes, or on a per-hold safety timeout (in-book search must never be starved of the full book).
 

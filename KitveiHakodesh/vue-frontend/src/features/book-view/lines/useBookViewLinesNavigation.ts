@@ -8,11 +8,10 @@
  *
  * Positioning, in order:
  *   1. Resolve the target to a line index (by id, or given directly).
- *   2. scroller.scrollToIndex — exact, because the scroller mounts the target's rows
- *      before it sets the scroll from their real positions. No retry, no settling.
+ *   2. scroller.scrollToIndex — exact, because the scroller fetches and mounts the
+ *      target's rows before it sets the scroll from their real positions. No retry.
  *   3. Optional refinement: apply the `.current` mark for a search occurrence and
- *      nudge it into view. The line's text may still be loading (a placeholder
- *      row), so this polls for the mark rather than assuming.
+ *      nudge it into view.
  */
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
@@ -34,8 +33,8 @@ export const SEARCH_BAR_INSET_PX = 44
  */
 const BOTTOM_LANDING_CLEARANCE_PX = 48
 
-/** Frames to wait for a match's line text to arrive and render its marks (~2s). */
-const MARK_POLL_FRAMES = 120
+/** Frames allowed for a freshly mounted row to paint its marks. */
+const MARK_POLL_FRAMES = 10
 
 export interface ScrollToLineOptions {
   /**
@@ -77,9 +76,8 @@ export function useBookViewLinesNavigation(
   lines: () => LineItem[],
   searchBarVisible: () => boolean,
   suppressPositionSave: () => void,
-  /** Ends the session-restore correction — a jump supersedes the restore. */
+  /** Ends a pending session restore — a jump supersedes it. */
   cancelRestoreCorrection: () => void,
-  prioritise: (lineIndex: number) => void,
 ) {
   // Bumped at the start of every navigation so the mark poll of a previous call
   // cancels instead of stomping the newer call's mark and scroll.
@@ -96,7 +94,6 @@ export function useBookViewLinesNavigation(
     if (!api || !scrollerElement) return
     const generation = ++scrollGeneration
     const isStale = () => generation !== scrollGeneration
-    prioritise(lineIndex)
 
     if (options.skipIfVisible && api.isRowFullyVisible(lineIndex)) return
 
@@ -160,7 +157,7 @@ export function useBookViewLinesNavigation(
     await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
     if (isStale() || !wantsMark) return
 
-    // The row is mounted; its text may not be. Poll for the mark, then refine.
+    // The row is mounted with its text; the mark is there on the next frame.
     let attempts = 0
     function tryApplyMark() {
       if (isStale()) return
