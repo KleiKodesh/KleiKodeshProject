@@ -17,7 +17,6 @@
  * - useBookViewSidePanel          — TOC / commentary-tree panel open/close
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useCommentaryPanelSlot        — everything one commentary panel owns
- * - useBookViewLinesBackfillGate  — full-book lines backfill yields to commentary loads
  */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -41,7 +40,6 @@ import { useBookViewKeyboardShortcuts } from './useBookViewKeyboardShortcuts'
 import { useBookViewLineSelection } from './useBookViewLineSelection'
 import { useBookViewSidePanel } from './useBookViewSidePanel'
 import { useBookViewSearchPanel } from './useBookViewSearchPanel'
-import { useBookViewLinesBackfillGate } from './lines/useBookViewLinesBackfillGate'
 import { useBookViewTocNavigation } from './useBookViewTocNavigation'
 import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
 import { buildPin } from './useBookViewPinnedCommentary'
@@ -147,7 +145,7 @@ export function useBookView(
   } = useToc(() => bookId, () => bookTitle)
 
   const {
-    lines, prefetch, ensureLines, holdBackfill, releaseBackfill,
+    lines, prefetch, ensureLines, ensureLineIds, ensureAllLines,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
@@ -204,6 +202,7 @@ export function useBookView(
     selectedLineId,
     () => pinFns.captureActivePins(),
     (snapshot) => pinFns.applyPendingPins(snapshot),
+    ensureLineIds,
   )
 
   // ── Commentary data (shared by both panels) ───────────────────────────────
@@ -211,7 +210,7 @@ export function useBookView(
   const {
     groups, filterGroups, staticFilterGroups,
     loading: commentaryLoading, loadError: commentaryLoadError,
-    staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority,
+    staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, ensureLineContents,
   } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
@@ -402,7 +401,12 @@ export function useBookView(
 
   // ── Search panel ──────────────────────────────────────────────────────────
 
-  const contentSearch = useBookViewSearch(() => lines.value, () => currentFullLineIndex.value)
+  const contentSearch = useBookViewSearch({
+    bookId: () => bookId,
+    activeVersionId: () => activeVersionId.value,
+    lineCount: () => lines.value.length,
+    currentLineIndex: () => currentFullLineIndex.value,
+  })
 
   const searchPanel = useBookViewSearchPanel(
     contentSearch,
@@ -441,13 +445,6 @@ export function useBookView(
   // ── Side panel (the TOC; each panel owns its own filter tree) ─────────────
 
   const sidePanel = useBookViewSidePanel(toolbarRef)
-
-  // Make the full-book lines backfill yield to commentary loading — commentary
-  // queries must never queue behind ~100 large chunk fetches.
-  const backfillGate = useBookViewLinesBackfillGate(
-    holdBackfill, releaseBackfill,
-    anyCommentaryVisible, commentaryLoading,
-  )
 
   // ── TOC navigation + keyboard shortcuts ──────────────────────────────────
 
@@ -628,7 +625,7 @@ export function useBookView(
     // A title that no longer resolves — the library changed underneath the saved
     // state — leaves the book in its merged text rather than guessing at a substitute.
     const match = list.find((v) => v.versionTitle === title)
-    if (match) setVersion(match.id, currentScrollLineIndex.value)
+    if (match) setVersion(match.id)
   }, { immediate: true })
 
   /** The active version's title, for persistence. null = the merged text. */
@@ -640,9 +637,7 @@ export function useBookView(
   function selectVersion(versionId: number | null) {
     // The reader's own choice from here on; a late-arriving list must not override it.
     versionRestoreDone = true
-    // Refill from where they are reading, not from line 0 — on a long book the two are
-    // thousands of lines apart, and only the visible window is worth waiting for.
-    setVersion(versionId, currentScrollLineIndex.value)
+    setVersion(versionId)
   }
 
   watch(() => bookId, () => {
@@ -674,10 +669,6 @@ export function useBookView(
     groups.value = []
     await restoreSession()
     if (unmounted) return // tab closed while restore awaited IndexedDB
-
-    // Panel visibility is final for this restore — release the lines backfill
-    // right away when no commentary panel is reopening.
-    backfillGate.onSessionRestoreSettled()
 
     // After session restore the lines scroller opens on the saved line index, but
     // onLinesScrolled has not fired yet, so tocPath is empty and the breadcrumb
@@ -766,8 +757,8 @@ export function useBookView(
     tocPersistState,
     // data
     tabId, bookId,
-    lines, ensureLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
+    lines, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
+    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation (hoisted — survive v-if toggle)

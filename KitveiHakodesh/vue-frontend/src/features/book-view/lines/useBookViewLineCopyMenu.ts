@@ -66,6 +66,11 @@ interface CopyMenuOptions {
    * select-all case is additionally warmed the moment the selection is made.
    */
   prepareForLines?: (lineIds: number[]) => Promise<void>
+  /**
+   * Fetches every line of the book. Select-all copies the whole book, and lines are
+   * only ever fetched on demand, so the copy asks for them when the user selects all.
+   */
+  ensureAllLines: () => Promise<void>
   /** Resolves only the citations already rendered in a fragment — the selection path. */
   prepareForRenderedHtml?: (html: string) => Promise<void>
   /** Resolves one point citation's target for its endnote. Synchronous by necessity. */
@@ -607,20 +612,31 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         // the budget the copy goes ahead with whatever has arrived; the load keeps running
         // and the next copy has it all.
         const prepared = isSelectAll.value
-          ? options.prepareForLines?.(lines().map((l) => l.id))
+          ? wholeBookReady().then(() => options.prepareForLines?.(lines().map((l) => l.id)))
           : options.prepareForRenderedHtml?.(selectionHtml())
         if (prepared) await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
+    } else if (isSelectAll.value) {
+      try { await awaitWithinActivationWindow(wholeBookReady()) } catch { /* copy what is loaded */ }
     }
     triggerCopy(afterCopy)
+  }
+
+  // The whole book's text, fetched once per select-all (started the moment the user
+  // selects all, below, so the copy rarely has to wait for it).
+  let wholeBook: Promise<void> | null = null
+  function wholeBookReady(): Promise<void> {
+    return (wholeBook ??= options.ensureAllLines().finally(() => { wholeBook = null }))
   }
 
   // Select-all is the one case whose warm-up can be big, so it runs here — outside
   // any clipboard gesture — rather than inside the copy action. Covers both routes
   // into select-all (Ctrl+A and the menu item), since both set this flag.
   watch(isSelectAll, (on) => {
-    if (!on || !settingsStore.copyWithNotes || !options.prepareForLines) return
-    void options.prepareForLines(lines().map((l) => l.id))
+    if (!on) return
+    const loading = wholeBookReady()
+    if (!settingsStore.copyWithNotes || !options.prepareForLines) return
+    void loading.then(() => options.prepareForLines?.(lines().map((l) => l.id)))
   })
 
   function onCopy(): void {

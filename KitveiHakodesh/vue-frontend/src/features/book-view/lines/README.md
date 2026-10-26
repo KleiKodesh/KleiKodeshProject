@@ -16,9 +16,7 @@ The book view's main text: a `WindowedScroller` (src/components) mounting a slid
 
 ## Composables
 
-**useBookViewLinesTable.ts** - paginated line fetching in chunks of 200. `ensureLines(start, end)` resolves once a range has its text — the WindowedScroller asks for every range before mounting it, so no row is ever rendered without content. `holdBackfill()`/`releaseBackfill()` pause and resume the full-book backfill queue (out-of-band `prefetch`/`ensureLines` fetches keep working while held). The backfill queue and its workers stop on unmount — a switched-away tab must not keep flooding the data channel while the next mount loads.
-
-**useBookViewLinesBackfillGate.ts** - makes the full-book backfill yield to commentary loading (the "commentary loads slowly on tab return" bug). Held from setup so the tab-return flood cannot start before the restored commentary panel gets on the wire; re-held whenever a commentary load starts; released a short grace after each load settles, when no commentary panel is being restored, when the panel closes, or on a per-hold safety timeout (in-book search must never be starved of the full book).
+**useBookViewLinesTable.ts** - the book's lines, fetched ON DEMAND only. `ensureLines(start, end)` resolves once a range has its text (consecutive missing 200-line slots are fetched in one request, up to 2000 lines) — the WindowedScroller asks for every range before mounting it, so no row is ever rendered without content. `ensureAllLines()` fetches the whole book, used only by whole-book actions (select-all copy, export to Word). Nothing downloads the book in the background: in-book search has its own source (`useBookViewSearch`).
 
 **useBookViewLineRenderer.ts** - line content rendering with diacritics filtering, divine name censoring, and search highlighting. Caches rendered HTML per line to avoid re-running expensive transformations on every render cycle.
 

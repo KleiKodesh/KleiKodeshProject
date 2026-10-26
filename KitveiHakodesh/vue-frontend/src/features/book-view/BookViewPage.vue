@@ -61,11 +61,11 @@ const {
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
-  tabId, bookId, lines, ensureLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
+  tabId, bookId, lines, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions,
-  filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
+  filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
@@ -128,7 +128,7 @@ const commentarySharedProps = computed(() => ({
   prepareExportData: prepareCommentaryExportData,
   prepareExportTargets: prepareCommentaryExportTargets,
   resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
-  requestContentPriority,
+  ensureLineContents,
   createNote,
   updateNote,
   deleteNote,
@@ -564,6 +564,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     ref="linesContentRef"
                     :lines="lines"
                     :ensure-lines="ensureLines"
+                    :ensure-all-lines="ensureAllLines"
                     :line-character-counts="lineCharacterCounts"
                     :alt-toc-label-map="altTocLabelMap"
                     :selected-line-id="selectedLineId"
