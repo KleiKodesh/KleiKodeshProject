@@ -299,6 +299,7 @@ const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
+  viewportElement: scrollerEl,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
   getActiveAltTocEntry: () => props.getActiveAltTocEntry,
