@@ -16,7 +16,6 @@ $DemoAppProjectPath  = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\Kitv
 $DemoAppReleaseDir   = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\bin\Release"
 # Separate git repo (kleikodesh.github.io), gitignored by this one. The release step
 # rewrites its download link to the new version and pushes it.
-$WebsiteRepo         = Join-Path $ProjectRoot "kleikodesh-website"
 
 # -- Step timing --------------------------------------------------------------
 # Start-BuildStep closes the previous step and opens the next, so every stage gets a
