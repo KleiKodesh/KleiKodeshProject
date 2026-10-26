@@ -48,6 +48,8 @@ const AUTO_REASONS = new Set([
 export function useCommentaryScroll(
   flatItems: () => any[],
   visibleGroups: () => any[],
+  /** Flat index of every group header, ascending — what every header lookup walks instead of the rows. */
+  headerIndexes: () => number[],
   scroller: () => WindowedScrollerApi | null,
   /**
    * Which commentary panel this instance drives (see CommentarySlot). Only used to
@@ -68,18 +70,30 @@ export function useCommentaryScroll(
    * leaves above it, so a group just landed on is the active one. Mounted headers are
    * measured; a header above the mounted window is the last one before it in the list.
    */
+  /** Position in `headers` of the last header at or before `index`, or -1. */
+  function lastHeaderAtOrBefore(headers: number[], index: number): number {
+    let low = 0
+    let high = headers.length - 1
+    let found = -1
+    while (low <= high) {
+      const mid = (low + high) >> 1
+      if (headers[mid]! <= index) { found = mid; low = mid + 1 } else high = mid - 1
+    }
+    return found
+  }
+
   const stickyHeader = computed(() => {
     const api = scroller()
     const items = flatItems()
+    const headers = headerIndexes()
     const top = scrollTop.value + LANDING_GAP_PX + 1
     if (!api) return null
     const { start, end } = api.renderedRange
     let active: any = null
-    for (let index = start - 1; index >= 0; index--) {
-      if (items[index]?.type === 'header') { active = items[index]; break }
-    }
-    for (let index = start; index < end; index++) {
-      if (items[index]?.type !== 'header') continue
+    let h = lastHeaderAtOrBefore(headers, start - 1)
+    if (h >= 0) active = items[headers[h]!]
+    for (h = h + 1; h < headers.length && headers[h]! < end; h++) {
+      const index = headers[h]!
       const row = api.rowElement(index)
       if (!row) continue
       if (row.offsetTop <= top) active = items[index]
@@ -88,12 +102,11 @@ export function useCommentaryScroll(
     return active
   })
 
-  const activeHeader = computed(
-    () =>
-      stickyHeader.value ??
-      (flatItems().find((i) => i.type === 'header') as any) ??
-      null,
-  )
+  const activeHeader = computed(() => {
+    if (stickyHeader.value) return stickyHeader.value
+    const first = headerIndexes()[0]
+    return first == null ? null : (flatItems()[first] as any) ?? null
+  })
 
   const activePinnedGroup = computed<any>(() => {
     const header = activeHeader.value
@@ -273,10 +286,14 @@ export function useCommentaryScroll(
 
   function resolveGroupIndex(bookId: number, sectionLabel?: string, subSectionLabel?: string): number {
     const items = flatItems()
-    const exact = items.findIndex(
+    const headers = headerIndexes()
+    const findHeader = (matches: (item: any) => boolean): number => {
+      for (const index of headers) if (matches(items[index])) return index
+      return -1
+    }
+    const exact = findHeader(
       (item) =>
-        item.type === 'header' &&
-        item.bookId === bookId &&
+        item?.bookId === bookId &&
         (sectionLabel == null || item.sectionLabel === sectionLabel) &&
         (subSectionLabel == null || item.subSectionLabel === subSectionLabel),
     )
@@ -286,7 +303,7 @@ export function useCommentaryScroll(
     // PREVIOUS line, and the same book can sit under a different section there,
     // so an exact-only match refused to scroll and read as "the panel lost its
     // place". Fall back to book identity.
-    return items.findIndex((item) => item.type === 'header' && item.bookId === bookId)
+    return findHeader((item) => item?.bookId === bookId)
   }
 
   /**
