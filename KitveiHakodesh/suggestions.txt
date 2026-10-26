@@ -2,8 +2,42 @@ fts:
 ai search with api?
 symantic search
 aramaic to Hebrew?
+make sur the validation stage is not fetching any data it doesn't need any other data will be fetched when teh snippet is fetched
+also make sure of this in te new tantivy engine
+
+catlog:
+now that the search is lucene we need to stop loading teh whole catlog rther load it lziy
+in cases where the alt toc aprleles the same line ids as teh main toc its just diffent labeling
+
+linesview:
+tr windowed loadeing 
+use teh fst index for eseaching and use in memory fts for fallback
+
+new fts:
+make srue otzria uses teh new mthods and not just the old mathods with teh same way they were done
+
+
+speculative
+------------
+releases:
+automate releases
+ask teh bot to take care of ciommit notes
+
+bot:
+the bot uses app tag chnge it to kitvie hakodsh tag
+
+app:
+add no sleep reading mode.
+
+chrome tabs:
+use same backgound as bookview toolbar?
 
 bookview suggestions:
 adjust text files to open in teh bookview and parse them as html content
 also maybe msword files
+
+bookview:
+search:
+needs to validate selected result is in view if not then scroll again into view
+Hebrew books parlel open by searching for opening sentence using a sliding window till it matches
 
