@@ -164,8 +164,45 @@ function renderSnippet(snippet: string): string {
 function ensureRows(start: number, end: number): Promise<void> {
   const hits = shownResults.value.slice(start, end)
   requestReferences(hits)
+  scheduleLookahead(start, end)
   return ensureSnippets(hits)
 }
+
+// ── Lookahead ──────────────────────────────────────────────────────────────────
+//
+// The scroller asks for a range only when the viewport nears the mounted edge, and
+// waits for its snippets (two service round trips) before mounting it — so a steady
+// wheel scroll caught up with the fetch and SAT at the edge for the wait. Each asked
+// range therefore also warms, without being awaited, the next windows in the scroll
+// direction (and a smaller margin behind): by the time the scroller asks for them,
+// their snippets are already here and the range mounts at once. Debounced so a fast
+// fling warms only the window it is heading to, not every window it passed; the
+// request itself is bounded (LOOKAHEAD_AHEAD + LOOKAHEAD_BEHIND hits at most).
+const LOOKAHEAD_AHEAD = 60
+const LOOKAHEAD_BEHIND = 20
+const LOOKAHEAD_DEBOUNCE_MS = 40
+let lookaheadTimer: ReturnType<typeof setTimeout> | null = null
+let lastAskedStart = 0
+function scheduleLookahead(start: number, end: number) {
+  const downward = start >= lastAskedStart
+  lastAskedStart = start
+  if (lookaheadTimer) clearTimeout(lookaheadTimer)
+  lookaheadTimer = setTimeout(() => {
+    lookaheadTimer = null
+    const list = shownResults.value
+    const [aheadFrom, aheadTo] = downward
+      ? [end, Math.min(list.length, end + LOOKAHEAD_AHEAD)]
+      : [Math.max(0, start - LOOKAHEAD_AHEAD), start]
+    const [behindFrom, behindTo] = downward
+      ? [Math.max(0, start - LOOKAHEAD_BEHIND), start]
+      : [end, Math.min(list.length, end + LOOKAHEAD_BEHIND)]
+    const hits = [...list.slice(aheadFrom, aheadTo), ...list.slice(behindFrom, behindTo)]
+    if (!hits.length) return
+    requestReferences(hits)
+    ensureSnippets(hits).catch(() => { /* the real ask retries on its own */ })
+  }, LOOKAHEAD_DEBOUNCE_MS)
+}
+onScopeDispose(() => { if (lookaheadTimer) clearTimeout(lookaheadTimer) })
 
 // "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
 const { previewOf, togglePreview, loadAbove, loadBelow, reseedPreview, clearPreviews } = useFullTextSearchPreview()
