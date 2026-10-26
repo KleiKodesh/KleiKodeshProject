@@ -230,6 +230,9 @@ function Build-Variant {
     $script:LastBuiltInstaller = $outFile
 }
 
+Start-BuildStep "Add-in signing certificate"
+Update-SigningCertificate
+
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 

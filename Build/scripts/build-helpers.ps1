@@ -103,6 +103,38 @@ function Set-Version {
     }
 }
 
+# -- Add-in signing certificate ---------------------------------------------
+# The VSTO manifests must be signed, but any key will do: the installer registers the
+# manifest's own public key as trusted on every install. The key is a self-signed
+# temporary one (VS "Create Test Certificate"), so when it is missing or about to
+# expire, make a fresh one - same as deleting it in VS and creating a new one.
+# Updates the pfx (gitignored) and the thumbprint in KleiKodeshVsto.csproj.
+function Update-SigningCertificate {
+    $pfx  = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx"
+    $proj = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodeshVsto.csproj"
+
+    if (Test-Path $pfx) {
+        $current = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfx, "")
+        if ($current.NotAfter -gt (Get-Date).AddDays(30)) {
+            Write-Host "Signing certificate valid until $($current.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor Gray
+            return
+        }
+        Write-Host "Signing certificate expires $($current.NotAfter.ToString('yyyy-MM-dd')) - creating a new one" -ForegroundColor Yellow
+    } else {
+        Write-Host "No signing certificate - creating one" -ForegroundColor Yellow
+    }
+
+    $cert = New-SelfSignedCertificate -Subject "CN=KleiKodesh" -Type CodeSigningCert `
+        -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)
+    Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (New-Object System.Security.SecureString) | Out-Null
+
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $c = [System.IO.File]::ReadAllText($proj, $utf8)
+    $c = $c -replace '<ManifestCertificateThumbprint>[^<]*<', "<ManifestCertificateThumbprint>$($cert.Thumbprint)<"
+    [System.IO.File]::WriteAllText($proj, $c, $utf8)
+    Write-Host "New signing certificate $($cert.Thumbprint), valid until $($cert.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor Green
+}
+
 # -- Locate MSBuild -----------------------------------------------------------
 function Find-MSBuild {
     # foreach statement, not ForEach-Object: `return` inside a ForEach-Object block only
