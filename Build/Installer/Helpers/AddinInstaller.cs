@@ -378,7 +378,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
         /// <summary>
         /// Copies the macros template (one VBA macro per add-in command, built by
-        /// KleiKodeshVsto\Ribbon\Build-MacrosTemplate.ps1) into Word's STARTUP folder,
+        /// KleiKodeshVsto\Ribbon\build_macros_template.py) into Word's STARTUP folder,
         /// so the commands show in Word's macro list for the QAT and shortcuts.
         /// </summary>
         private static void InstallMacrosTemplate()

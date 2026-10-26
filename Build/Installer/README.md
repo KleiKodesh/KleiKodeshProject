@@ -242,4 +242,4 @@ name, and it re-runs on every update, so a moved install folder is corrected the
 
 ## VBA macros template
 
-`RegisterAddInAsync` copies `Resources\KleiKodeshMacros.dotm` from the install folder into Word's STARTUP folder (`WordStartupFolder`: the user's custom STARTUP-PATH if set, else `%AppData%\Microsoft\Word\STARTUP`). Skipped silently if the payload has no .dotm. `FullSystemCleaner` deletes it. The template is built by `KleiKodeshVsto\Ribbon\Build-MacrosTemplate.ps1`.
+`RegisterAddInAsync` copies `Resources\KleiKodeshMacros.dotm` from the install folder into Word's STARTUP folder (`WordStartupFolder`: the user's custom STARTUP-PATH if set, else `%AppData%\Microsoft\Word\STARTUP`). Skipped silently if the payload has no .dotm. `FullSystemCleaner` (repair) and the NSIS uninstaller delete it. The template is built by `KleiKodeshVsto\Ribbon\build_macros_template.py`.
