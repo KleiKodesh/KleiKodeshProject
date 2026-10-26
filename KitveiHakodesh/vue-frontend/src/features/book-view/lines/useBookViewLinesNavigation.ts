@@ -15,6 +15,7 @@
  */
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { setCurrentMark } from './useBookViewLineRenderer'
+import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
 import type { LineItem } from './useBookViewLinesTable'
 
 /**
@@ -90,9 +91,18 @@ export function useBookViewLinesNavigation(
   // await (its mark and adjustment) is dropped instead of stomping the newer one.
   let scrollGeneration = 0
 
-  /** Resolve a line id to its index, falling back when the line is not loaded yet. */
-  function lineIndexForId(lineId: number, fallbackLineIndex?: number): number | undefined {
-    return lines().find((line) => line.id === lineId)?.lineIndex ?? fallbackLineIndex
+  /**
+   * Resolve a line id to its index: from the loaded lines, else the caller's own index,
+   * else the database (lines are fetched on demand, so most of a book is not loaded).
+   */
+  async function lineIndexForId(lineId: number, fallbackLineIndex?: number): Promise<number | undefined> {
+    const loaded = lines().find((line) => line.id === lineId)?.lineIndex ?? fallbackLineIndex
+    if (loaded != null) return loaded
+    try {
+      return (await getLineIndexFromLineId(lineId))[0]?.lineIndex
+    } catch {
+      return undefined
+    }
   }
 
   async function scrollToLine(lineIndex: number, options: ScrollToLineOptions = {}) {
@@ -181,9 +191,9 @@ export function useBookViewLinesNavigation(
     fallbackLineIndex?: number,
     options: ScrollToLineOptions = {},
   ) {
-    const lineIndex = lineIndexForId(lineId, fallbackLineIndex)
-    if (lineIndex == null) return
-    void scrollToLine(lineIndex, options)
+    void lineIndexForId(lineId, fallbackLineIndex).then((lineIndex) => {
+      if (lineIndex != null) void scrollToLine(lineIndex, options)
+    })
   }
 
   return { scrollToLine, scrollToLineId }

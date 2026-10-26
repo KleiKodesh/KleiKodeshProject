@@ -60,6 +60,8 @@ const props = defineProps<
     lines: LineItem[]
     /** Resolves once the lines of [start, end) have their text — the scroller's row source. */
     ensureLines: (start: number, end: number) => Promise<void>
+    /** Resolves once every line of the book has its text — whole-book actions only. */
+    ensureAllLines: () => Promise<void>
     altTocLabelMap?: Map<number, string>
     searchQuery?: string
     currentMatchLineIndex?: number
@@ -163,6 +165,15 @@ const {
   // The version overlay keeps the line ids and the count but replaces every line's
   // text, so the count alone would not notice it.
   () => `${props.activeVersionId ?? 0}:${props.lines.length}`,
+)
+
+// A selection dragged past the window spans lines the scroller never mounted: their
+// text is fetched as the selection grows, so copy and annotations can read it.
+watch(
+  () => selectedRowIndexRange(),
+  (range) => {
+    if (range) void props.ensureLines(range.firstRowIndex, range.lastRowIndex + 1).catch(() => {})
+  },
 )
 
 const {
@@ -277,6 +288,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   prepareForLines,
   prepareForRenderedHtml,
   resolveWordLinkTarget,
+  ensureAllLines: () => props.ensureAllLines(),
 })
 useScopedCopy(
   scrollerEl,
@@ -392,6 +404,8 @@ onMounted(() => {
 // does nothing — the warm-up is cached by then, so a second click goes through
 // instantly; the toast says so. The select-all is dropped afterwards either way.
 async function pasteAllIntoWord(): Promise<void> {
+  // The whole book is exported, and lines are fetched only on demand: fetch it now.
+  try { await props.ensureAllLines() } catch { /* export what is loaded */ }
   selectAllInContainer()
   if (settingsStore.copyWithNotes) {
     try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
