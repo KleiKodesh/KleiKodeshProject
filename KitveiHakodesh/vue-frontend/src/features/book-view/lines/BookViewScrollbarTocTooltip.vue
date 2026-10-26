@@ -69,24 +69,32 @@ const style = computed(() => {
   z-index: 3000;
   /* Never intercepts the pointer: the scrollbar it sits beside is being dragged. */
   pointer-events: none;
-  max-width: min(420px, 50vw);
+  max-width: min(280px, 40vw);
   /* DMScrollBar's info label: a dark rounded bubble with light text that fades and
      grows in beside the bar, inverted against the page in every theme. */
-  padding: 5px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--text-primary) 82%, transparent);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 78%, transparent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   color: var(--bg-primary);
   animation: scrollbar-toc-tooltip-in 160ms ease-out;
   font-family: var(--ui-font, inherit);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
   /* The title and path are Hebrew text — RTL, and wrapped rather than ellipsised
      so a long path stays readable (the same call the breadcrumb makes). */
   direction: rtl;
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+/* Dark theme: not inverted (a white bubble glares on a dark page) — a raised dark
+   surface with light text and a hairline border, as browsers and VS Code do. */
+:global(:root.dark) .scrollbar-toc-tooltip {
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
 }
 /* Following the thumb through a scroll: the thumb's own ease-out glide
    (WindowedScrollerBar), so the two move as one. Hover follows the pointer, unanimated. */
@@ -109,6 +117,6 @@ const style = computed(() => {
 }
 /* Only when both are present — a lone title must not carry a hanging gap. */
 .book-title + .toc-path {
-  margin-block-start: 2px;
+  margin-block-start: 0;
 }
 </style>
