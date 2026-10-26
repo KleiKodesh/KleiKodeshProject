@@ -4,7 +4,7 @@
  * No Vue reactivity — purely async functions and pure transformations.
  */
 import { getReverseLineData, getReverseBooks, getStaticFilterBooks } from '@/webview-host/seforimApi'
-import type { BookRow } from '@/webview-host/queries.types'
+import type { BookRow, CommentaryLinkGroupRow } from '@/webview-host/queries.types'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
   ensureConnectionTypeNamesLoaded,
@@ -146,30 +146,29 @@ export function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[])
 }
 
 export async function buildCommentaryGroupsFromCombined(
-  rows: Array<{
-    targetBookId: number
-    targetLineId: number
-    connectionTypeId: number
-    lineIndex: number
-    // Absent when the caller used the links-only range query — content is
-    // backfilled afterwards via GET_LINE_CONTENTS (lines start as '').
-    content?: string
-  }>,
+  /**
+   * The forward links, already DISTINCT and grouped per (target book, connection
+   * type id) by Core (getCommentaryLinkGroupsForSourceLineRange): ids and line
+   * indexes only. Text is fetched per window later (lines start as '').
+   */
+  linkGroups: CommentaryLinkGroupRow[],
   sourceEntries: CommentaryBookEntry[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
   // ensureConnectionTypeNamesLoaded is guaranteed by the caller (load() in useCommentary)
   // before this function is called — no need to await it again here.
   const byBookConnection: ByBookConnectionMap = new Map()
-  const lineData = new Map<number, { lineIndex: number; content: string | undefined }>()
+  const lineIndexById = new Map<number, number>()
 
-  for (const row of rows) {
+  for (const row of linkGroups) {
     const rawConnectionTypeName = getConnectionTypeName(row.connectionTypeId)
     const canonicalConnectionTypeName = normalizeConnectionTypeName(rawConnectionTypeName)
     // SOURCE is the one type retrieved via a reverse query — its forward-direction
     // links are unreliable, so skip forward SOURCE rows. Every other type, TARGUM
     // included, is a normal forward link and is handled right here.
     if (canonicalConnectionTypeName === 'SOURCE') continue
+    // Several raw type ids can normalize to one canonical name, so a (book, name)
+    // entry may collect the lines of more than one Core group.
     const key: ByBookConnectionKey = `${row.targetBookId}::${canonicalConnectionTypeName}`
     if (!byBookConnection.has(key))
       byBookConnection.set(key, {
@@ -177,8 +176,12 @@ export async function buildCommentaryGroupsFromCombined(
         lineIds: new Set(),
         connectionType: canonicalConnectionTypeName,
       })
-    byBookConnection.get(key)!.lineIds.add(row.targetLineId)
-    lineData.set(row.targetLineId, { lineIndex: row.lineIndex, content: row.content })
+    const entry = byBookConnection.get(key)!
+    for (let i = 0; i < row.lineIds.length; i++) {
+      const lineId = row.lineIds[i]!
+      entry.lineIds.add(lineId)
+      lineIndexById.set(lineId, row.lineIndexes[i] ?? 0)
+    }
   }
 
   // Collect all connection types per book so each entry's connectionTypes field
@@ -200,8 +203,8 @@ export async function buildCommentaryGroupsFromCombined(
         lines: [...lineIds]
           .map((id) => ({
             lineId: id,
-            lineIndex: lineData.get(id)?.lineIndex ?? 0,
-            content: lineData.get(id)?.content ?? '',
+            lineIndex: lineIndexById.get(id) ?? 0,
+            content: '',
           }))
           .sort((a, b) => a.lineIndex - b.lineIndex),
         category: resolveCategory(book),
