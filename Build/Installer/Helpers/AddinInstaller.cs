@@ -346,53 +346,15 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 }
 
                 await AddToOfficeInclusionListAsync();
-                InstallMacrosTemplate();
             }
             catch { }
         }
 
         // ── VBA macros template ──────────────────────────────────────────────────
 
-        public const string MacrosTemplateFileName = "KleiKodeshMacros.dotm";
-
-        /// <summary>
-        /// Word's STARTUP folder: templates there load as global add-ins on every Word
-        /// start, and it is a trusted location, so their macros run without a prompt.
-        /// Honours a user-changed folder (Options → Advanced → File Locations).
-        /// </summary>
-        public static string WordStartupFolder
-        {
-            get
-            {
-                try
-                {
-                    using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Office\16.0\Word\Options"))
-                        if (key?.GetValue("STARTUP-PATH") is string custom && Directory.Exists(custom))
-                            return custom;
-                }
-                catch { }
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                                    @"Microsoft\Word\STARTUP");
-            }
-        }
-
-        /// <summary>
-        /// Copies the macros template (one VBA macro per add-in command, built by
-        /// KleiKodeshVsto\Ribbon\build_macros_template.py) into Word's STARTUP folder,
-        /// so the commands show in Word's macro list for the QAT and shortcuts.
-        /// </summary>
-        private static void InstallMacrosTemplate()
-        {
-            try
-            {
-                string source = Path.Combine(InstallPath, "Resources", MacrosTemplateFileName);
-                if (!File.Exists(source)) return;
-
-                Directory.CreateDirectory(WordStartupFolder);
-                File.Copy(source, Path.Combine(WordStartupFolder, MacrosTemplateFileName), overwrite: true);
-            }
-            catch { }
-        }
+        // Never installed here: the user opts in on SettingsPage (or in the add-in's
+        // settings pane). See KleiKodesh.Helpers.VbaMacrosTemplate.
+        public static string MacrosResourcesFolder => Path.Combine(InstallPath, "Resources");
 
         // ── VSTO trust ───────────────────────────────────────────────────────────
 
