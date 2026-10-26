@@ -100,8 +100,23 @@ const liveThumbHeight = computed(() => {
   const proportional = (trackHeight.value * viewportHeight.value) / totalHeight.value
   return Math.min(trackHeight.value, Math.max(barWidth.value, proportional))
 })
+/**
+ * The thumb's length follows the estimated total, which wobbles a few percent each
+ * time the window slides and a row's real height replaces its estimate. That wobble
+ * is not news to the reader, so the shown length only follows a real change: one
+ * past THUMB_LENGTH_HYSTERESIS, the track resizing, or reaching either bound.
+ */
+const THUMB_LENGTH_HYSTERESIS = 0.1
+const steadyThumbHeight = ref(0)
+watch([liveThumbHeight, trackHeight], ([next], [, previousTrack]) => {
+  const shown = steadyThumbHeight.value
+  const atBound = next <= barWidth.value || next >= trackHeight.value
+  if (!shown || !next || atBound || trackHeight.value !== previousTrack || Math.abs(next - shown) / shown > THUMB_LENGTH_HYSTERESIS) {
+    steadyThumbHeight.value = next
+  }
+}, { immediate: true })
 // Frozen while dragged — see the drag section.
-const thumbHeight = computed(() => drag.value?.thumbHeight ?? liveThumbHeight.value)
+const thumbHeight = computed(() => drag.value?.thumbHeight ?? steadyThumbHeight.value)
 const thumbTravel = computed(() => Math.max(0, trackHeight.value - thumbHeight.value))
 
 const trackMap = computed(() =>
@@ -154,7 +169,7 @@ function onThumbPointerDown(event: PointerEvent) {
     startY: event.clientY,
     startThumbTop: thumbTop.value,
     thumbTop: thumbTop.value,
-    thumbHeight: liveThumbHeight.value,
+    thumbHeight: thumbHeight.value,
     travel: thumbTravel.value,
     map: trackMap.value,
     maxPosition: maxPosition.value,
@@ -285,6 +300,7 @@ defineExpose({ barElement, targetAt })
       <div
         v-if="isScrollable"
         class="windowed-scroller-thumb"
+        :class="{ 'is-dragging': isDragging }"
         :style="{ top: `${thumbTop}px`, height: `${thumbHeight}px` }"
         @pointerdown="onThumbPointerDown"
         @pointermove="onThumbPointerMove"
@@ -330,6 +346,18 @@ defineExpose({ barElement, targetAt })
   translate: -50% 0;
   border-radius: 999px;
   background: var(--bar-thumb);
+  /* Glides rather than jumps — ease-out (easeOutCubic): quick to start, slowing into
+     place. A scroll tick, a page step or the estimate correcting itself all flow; a
+     new target mid-glide retargets from where the thumb is. The scroll-follow label
+     (BookViewScrollbarTocTooltip) glides on the same curve. */
+  transition:
+    top var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
+    height var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
+    background-color 120ms;
+}
+/* Under the hand it must track the pointer exactly. */
+.windowed-scroller-thumb.is-dragging {
+  transition: background-color 120ms;
 }
 .windowed-scroller-thumb:hover {
   background: var(--bar-thumb-hover);

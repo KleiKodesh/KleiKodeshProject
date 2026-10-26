@@ -21,13 +21,15 @@
  * no gap bridge, and it closes when the pointer leaves the track. No fixed timing
  * windows — the only timer is the standard hover-intent delay before the first show.
  */
-import { onScopeDispose, ref, type Ref } from 'vue'
+import { nextTick, onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { TocEntry } from '@/webview-host/queries.types'
 
 export interface ScrollbarTocTooltipData {
   /** Viewport Y of the pointer, so the label sits beside the pointer on the track. */
   pointerY: number
+  /** Set while the label follows the thumb through a scroll: it glides with it. */
+  followsThumb?: boolean
   /** Physical side the scrollbar is on — the label goes on its inner side. */
   side: 'left' | 'right'
   /** Viewport X of the scrollbar's inner edge. */
@@ -38,6 +40,10 @@ export interface ScrollbarTocTooltipData {
 }
 
 const HOVER_DELAY_MS = 120
+/** A scroll this soon after wheel/touch/key input is the reader's own. */
+const USER_SCROLL_WINDOW_MS = 400
+/** How long the scroll-follow label stays after the scrolling stops. */
+const SCROLL_LINGER_MS = 1000
 
 export function useBookViewScrollbarTocTooltip(
   scrollbarElement: Ref<HTMLElement | null>,
@@ -61,6 +67,12 @@ export function useBookViewScrollbarTocTooltip(
      * results streaming in), so the thumb moves without the reader moving it.
      */
     isSuspended?: () => boolean
+    /**
+     * The scroller's viewport. Given, the label also shows beside the thumb while the
+     * reader scrolls (wheel, touch, keys) and fades shortly after — DMScrollBar's
+     * info label. Programmatic scrolls (a TOC jump, a restore) do not show it.
+     */
+    viewportElement?: Ref<HTMLElement | null>
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -75,7 +87,58 @@ export function useBookViewScrollbarTocTooltip(
 
   function closeScrollbarTocTooltip() {
     clearHoverTimer()
+    clearScrollLinger()
+    isScrollFollow = false
     scrollbarTocTooltip.value = null
+  }
+
+  /** The bar's physical side and inner edge — the label hangs off that edge. */
+  function barPlacement(bar: HTMLElement): { side: 'left' | 'right'; edgeX: number } {
+    // In RTL the bar sits on the physical left.
+    const onLeft = getComputedStyle(bar).direction === 'rtl'
+    const rect = bar.getBoundingClientRect()
+    return { side: onLeft ? 'left' : 'right', edgeX: onLeft ? rect.right : rect.left }
+  }
+
+  // ── Scroll-follow: shown beside the thumb while the reader scrolls ─────────────
+
+  /** True while the label is the scroll-follow one, not the hover one. */
+  let isScrollFollow = false
+  let lastUserInputAt = -Infinity
+  let scrollLingerTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearScrollLinger() {
+    if (scrollLingerTimer !== null) {
+      clearTimeout(scrollLingerTimer)
+      scrollLingerTimer = null
+    }
+  }
+
+  if (options.viewportElement) {
+    useEventListener(options.viewportElement, ['wheel', 'touchmove', 'keydown'], () => {
+      lastUserInputAt = performance.now()
+    }, { passive: true })
+  }
+
+  function followScroll() {
+    const bar = scrollbarElement.value
+    const thumb = bar?.querySelector<HTMLElement>('.windowed-scroller-thumb')
+    if (!bar || !thumb || options.isSuspended?.()) return
+    // Where the thumb is GOING, not where its glide has got to: its inline top and
+    // height are the target, inside the track (its offset parent).
+    const trackTop = (thumb.offsetParent as HTMLElement | null)?.getBoundingClientRect().top ?? bar.getBoundingClientRect().top
+    const thumbCenterY = trackTop + (parseFloat(thumb.style.top) || 0) + (parseFloat(thumb.style.height) || 0) / 2
+    const index = lineIndexForPointer(thumbCenterY)
+    const bookTitle = titleAt(index)
+    const path = index == null ? '' : pathAtLine(index)
+    if (!bookTitle && !path) return
+    isScrollFollow = true
+    scrollbarTocTooltip.value = { pointerY: thumbCenterY, followsThumb: true, ...barPlacement(bar), bookTitle, path }
+    clearScrollLinger()
+    scrollLingerTimer = setTimeout(() => {
+      scrollLingerTimer = null
+      if (isScrollFollow) closeScrollbarTocTooltip()
+    }, SCROLL_LINGER_MS)
   }
 
   /** The path at a line, or '' when the book has no TOC or none covers it. */
@@ -115,11 +178,10 @@ export function useBookViewScrollbarTocTooltip(
   useEventListener(scrollbarElement, 'pointermove', (event: PointerEvent) => {
     const bar = scrollbarElement.value
     if (!bar) return
-    // In RTL the bar sits on the physical left; the label hangs off its inner edge.
-    const onLeft = getComputedStyle(bar).direction === 'rtl'
-    const rect = bar.getBoundingClientRect()
-    const side: 'left' | 'right' = onLeft ? 'left' : 'right'
-    const edgeX = onLeft ? rect.right : rect.left
+    const { side, edgeX } = barPlacement(bar)
+    // The pointer on the bar takes the label over from scroll-follow.
+    isScrollFollow = false
+    clearScrollLinger()
 
     lastPointerY = event.clientY
     const show = () => {
@@ -156,7 +218,10 @@ export function useBookViewScrollbarTocTooltip(
   // A tab switch or book change is a real unmount, and it can land while the pointer
   // is on the track — the pending hover timer would read position off a detached
   // scroller. Same guard as useNoteTooltip and useWordLinkTooltip.
-  onScopeDispose(clearHoverTimer)
+  onScopeDispose(() => {
+    clearHoverTimer()
+    clearScrollLinger()
+  })
 
   /**
    * Called as the view scrolls. Dragging the thumb is exactly when the path changes
@@ -164,6 +229,11 @@ export function useBookViewScrollbarTocTooltip(
    * would sit frozen on a stale section for the whole drag.
    */
   function refreshScrollbarTocTooltip() {
+    if (options.viewportElement && (isScrollFollow || !scrollbarTocTooltip.value)) {
+      // After the flush: the thumb's inline top/height are this scroll's only then.
+      if (performance.now() - lastUserInputAt <= USER_SCROLL_WINDOW_MS) void nextTick(followScroll)
+      return
+    }
     if (!scrollbarTocTooltip.value) return
     if (options.isSuspended?.()) {
       scrollbarTocTooltip.value = null

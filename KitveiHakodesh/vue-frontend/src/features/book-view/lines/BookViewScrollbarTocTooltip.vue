@@ -56,7 +56,7 @@ const style = computed(() => {
 
 <template>
   <Teleport to="body">
-    <div dir="rtl" ref="labelEl" class="scrollbar-toc-tooltip" :style="style">
+    <div dir="rtl" ref="labelEl" class="scrollbar-toc-tooltip" :class="{ 'follows-thumb': data.followsThumb }" :style="style">
       <div v-if="data.bookTitle" class="book-title">{{ data.bookTitle }}</div>
       <div v-if="data.path" class="toc-path">{{ data.path }}</div>
     </div>
@@ -87,6 +87,11 @@ const style = computed(() => {
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+/* Following the thumb through a scroll: the thumb's own ease-out glide
+   (WindowedScrollerBar), so the two move as one. Hover follows the pointer, unanimated. */
+.scrollbar-toc-tooltip.follows-thumb {
+  transition: top 220ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 /* The book leads: it is the coarser answer, and the one that survives when no TOC
    entry covers the current line. */
