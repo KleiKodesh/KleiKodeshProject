@@ -235,6 +235,7 @@ jobs:
       # Same reason: release-issue-check.yml would not see this release, so start it here.
       - name: Tell open issues about this release
         if: ${{ !inputs.dry_run }}
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
