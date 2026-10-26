@@ -30,6 +30,13 @@ const CONCURRENT_WHOLE_BOOK_FETCHES = 3
 const SLOT_UNFETCHED = 0
 const SLOT_PENDING = 1
 
+/** Uint16 when every count fits (the usual case), Int32 for a line longer than 65535 characters. */
+function packCounts(counts: number[]): Uint16Array | Int32Array {
+  let max = 0
+  for (let i = 0; i < counts.length; i++) if (counts[i]! > max) max = counts[i]!
+  return max <= 0xffff ? Uint16Array.from(counts) : Int32Array.from(counts)
+}
+
 export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
   // Start OPEN: the toolbar hides these controls when false, and metadata only
@@ -41,8 +48,9 @@ export function useLines(bookId: () => number | undefined) {
   // Every line's character count, by lineIndex: the scrollbar's static per-row height
   // estimate, fetched once per book with no text. null until it arrives, and stays
   // null on a library whose line table has no charCount column — the bar then
-  // estimates from the heights it measures.
-  const lineCharacterCounts = ref<number[] | null>(null)
+  // estimates from the heights it measures. A typed array: 2 or 4 bytes per line
+  // instead of a boxed number each, for a value that is only ever read by index.
+  const lineCharacterCounts = ref<Uint16Array | Int32Array | null>(null)
   const hasTeamim = ref(false)
 
   // ── Alternate versions ──────────────────────────────────────────────────────
@@ -315,7 +323,7 @@ export function useLines(bookId: () => number | undefined) {
     // until the counts land, and keeps doing so if the library has none.
     lineCharacterCounts.value = null
     void getLineCharCounts(id)
-      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? counts : null })
+      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? packCounts(counts) : null })
       .catch(() => { /* the bar's measured fallback stands */ })
 
     let metadataFailed = false

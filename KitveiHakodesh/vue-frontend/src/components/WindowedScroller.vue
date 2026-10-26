@@ -79,7 +79,7 @@ const props = withDefaults(
      * and a drag's landing reflect where a row really is. Must be `count` long to
      * be used; otherwise, or when omitted, the bar estimates from measured rows.
      */
-    rowWeights?: readonly number[]
+    rowWeights?: ArrayLike<number>
   }>(),
   { pinnedIndexes: () => [] },
 )
