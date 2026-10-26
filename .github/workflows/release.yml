@@ -41,6 +41,10 @@ on:
         description: Leave as is (counts automatic retries when Gemini is down)
         type: string
         default: "1"
+      auto:
+        description: Leave as is (marks retries of the weekly auto-release)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -55,6 +59,7 @@ env:
   NOTES: ${{ inputs.release_notes || 'ai' }}
   BUMP: ${{ inputs.version_increment || 'auto' }}
   ATTEMPT: ${{ inputs.attempt || '1' }}
+  AUTO: ${{ github.event_name == 'schedule' || inputs.auto == true }}
 
 jobs:
   # Manual first attempt: always go. Scheduled runs and automatic retries: only on a
@@ -77,9 +82,9 @@ jobs:
           export TZ=Asia/Jerusalem
           dow=$(date +%u); today=$(date +%F); tomorrow=$(date -d tomorrow +%F)
           if [ "$dow" -ge 5 ] && [ "$dow" -le 6 ]; then go false "Friday/Shabbat - not releasing"; fi
-          # Yom Tov today (incl. its night) or tomorrow (erev Yom Tov). Diaspora calendar:
-          # it covers Israel's days plus the second days. Calendar down = don't release.
-          yt=$(curl -sf --retry 3 "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&ss=off&mf=off&c=off&start=$today&end=$tomorrow" \
+          # Yom Tov today (incl. its night) or tomorrow (erev Yom Tov). Israel calendar
+          # (i=on): no second-day Yom Tov. Calendar down = don't release.
+          yt=$(curl -sf --retry 3 "https://www.hebcal.com/hebcal?v=1&cfg=json&i=on&maj=on&min=off&mod=off&nx=off&ss=off&mf=off&c=off&start=$today&end=$tomorrow" \
                  | jq -r '[.items[] | select(.yomtov == true) | .date[0:10]] | unique | join(" ")') \
             || go false "hebcal unreachable - not releasing"
           if [ -n "$yt" ]; then go false "Yom Tov / erev Yom Tov ($yt) - not releasing"; fi
@@ -113,7 +118,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/ai-release-plan.ps1
+        run: .github/scripts/ai-release-plan.ps1 -Auto:($env:AUTO -eq 'true')
 
       - uses: actions/upload-artifact@v7
         if: steps.ai.outcome == 'success'
@@ -141,7 +146,7 @@ jobs:
             -f delete_fts_index=${{ inputs.delete_fts_index || false }} \
             -f force_clean_install=${{ inputs.force_clean_install || false }} \
             -f dry_run=${{ inputs.dry_run || false }} \
-            -f attempt=$(( ATTEMPT + 1 ))
+            -f attempt=$(( ATTEMPT + 1 ))             -f auto=$AUTO
 
   release:
     needs: plan
