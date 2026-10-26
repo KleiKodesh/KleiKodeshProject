@@ -2397,6 +2397,9 @@
       document.addEventListener('kh-save-complete', function () {
         outlineDirty = false;
         notifyHost();
+        // [KleiKodesh] Refresh the "* " dirty prefix: setTitle() last ran
+        // before the save dialog finished, so the title kept the asterisk.
+        if (typeof app.setTitle === 'function') app.setTitle();
       });
 
       app.eventBus._on('outlineloaded', function (evt) {

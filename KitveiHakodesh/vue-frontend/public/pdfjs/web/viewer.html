@@ -1323,7 +1323,7 @@ See https://github.com/adobe-type-tools/cmap-resources
 
           input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { applyZoom(); edited = false; input.blur(); }
-            if (e.key === 'Escape') { input.blur(); }
+            if (e.key === 'Escape') { edited = false; input.blur(); }
           });
 
           input.addEventListener('blur', function () {
