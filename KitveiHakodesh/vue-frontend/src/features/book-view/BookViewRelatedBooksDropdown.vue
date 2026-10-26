@@ -453,7 +453,7 @@ async function resolveLinkedTarget(book: RelatedBook): Promise<ResolvedTarget> {
   const top: ReaderPosition = { bookId: props.bookId, lineIndex: props.currentScrollLineIndex }
 
   // Find the line id for the current top visible line
-  const topLine = props.lines.find((l) => l.lineIndex === props.currentScrollLineIndex)
+  const topLine = props.lines[props.currentScrollLineIndex]
   if (topLine == null) return { linked: undefined, positions: [top] }
 
   // A commentary of a source book has no direct link: hop through the source's line —
