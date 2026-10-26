@@ -1,3 +1,5 @@
+import type { Ref } from 'vue'
+
 /**
  * The public surface of WindowedScroller.vue, for the composables that drive it
  * (scroll restore, navigation) — they take the component instance as a getter
@@ -21,10 +23,21 @@ export interface WindowedScrollerVisibleRow {
   offsetWithinRow: number
 }
 
+/**
+ * What the drawn scrollbar shows, kept as refs the BAR reads — never unwrapped in
+ * the scroller's own template, or every scroll tick would re-render every row.
+ */
+export interface WindowedScrollerBarState {
+  /** Estimated height of the whole list, in viewport pixels. */
+  totalHeight: Ref<number>
+  /** The viewport's position within the whole list, in the same pixels. */
+  position: Ref<number>
+}
+
 export interface WindowedScrollerApi {
   /** The native scroll container holding the rows — focus, keys and pointer listeners go here. */
   scrollerElement: HTMLElement | null
-  /** The index-based scrollbar's track. */
+  /** The drawn scrollbar beside the viewport, arrows included — what a hover label listens on. */
   scrollbarTrackElement: HTMLElement | null
   /** Rows currently mounted in flow: [start, end). Pinned rows outside it are mounted too, out of flow. */
   renderedRange: { start: number; end: number }

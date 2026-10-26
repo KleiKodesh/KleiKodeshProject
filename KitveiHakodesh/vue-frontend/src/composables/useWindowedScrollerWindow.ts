@@ -7,14 +7,17 @@
  * Rows are real flow content, so every position here is a DOM measurement
  * (offsetTop within the content element) — nothing is estimated.
  *
+ * Rows are asked for before they are mounted (`ensureRows`), so a row is never on
+ * screen without its content: no placeholders, and a landing renders once.
+ *
  * Keeping the viewport still — the ANCHOR. Anything that changes the height of the
  * content above the viewport would shift what the reader is looking at: rows being
- * prepended or trimmed, a placeholder row filling in with its text, a zoom. The
- * browser's own scroll anchoring handles some of these and misses others (nothing
- * at scrollTop 0, and its choice of anchor node is its own), so the scroller owns
- * this itself and the browser's is switched off. The first visible row and its
- * offset are remembered before every change (`rememberAnchor`) and the row is put
- * back exactly where it was right after (`holdAnchor`).
+ * prepended or trimmed, a zoom, a font arriving. The browser's own scroll anchoring
+ * handles some of these and misses others (nothing at scrollTop 0, and its choice of
+ * anchor node is its own), so the scroller owns this itself and the browser's is
+ * switched off. The first visible row and its offset are remembered before every
+ * change (`rememberAnchor`) and the row is put back exactly where it was right after
+ * (`holdAnchor`).
  *
  * Ordering matters and is why the component calls these from its own update hooks:
  * a `scroll` event is dispatched a frame after a programmatic scroll and a
@@ -25,22 +28,28 @@
 import { nextTick, ref } from 'vue'
 
 /** Rows mounted above / below the target when the window is rebuilt around a jump. */
-const ROWS_ABOVE_ON_REBUILD = 30
-const ROWS_BELOW_ON_REBUILD = 90
-/** Rows added per extension step. */
-const EXTEND_ROWS = 40
-/** Past this the far edge is trimmed. */
-const MAX_WINDOW_ROWS = 320
-/** Extend when the content runs out within this many pixels of the viewport (at least two screens). */
-const MIN_EDGE_PX = 1200
-/** Rows this far outside the viewport are kept when trimming. */
-const TRIM_KEEP_PX = 400
+const ROWS_ABOVE_ON_REBUILD = 12
+const ROWS_BELOW_ON_REBUILD = 36
+/** Rows added per extension step — small, so a step is a cheap patch. */
+const EXTEND_ROWS = 12
+/** Extend when the content runs out within this many pixels of the viewport (at least a screen). */
+const MIN_EDGE_PX = 600
+/**
+ * Rows this far outside the viewport are kept when the far side is trimmed, as a
+ * multiple of the extension edge. MUST exceed 1: trimming below the edge would put
+ * that side straight back under its own extension threshold, and the two sides
+ * would extend and trim each other forever. Mounted rows are what every reflow (a
+ * resize, a zoom) has to lay out again, so this stays as small as that allows.
+ */
+const TRIM_KEEP_EDGES = 1.5
 
 export interface WindowedScrollerWindowOptions {
   count: () => number
   viewport: () => HTMLElement | null
   /** The mounted element of an in-window row, or null. */
   rowElement: (index: number) => HTMLElement | null
+  /** Resolves once the rows of [start, end) can be rendered. */
+  ensureRows: (start: number, end: number) => Promise<void>
 }
 
 export interface WindowedScrollerLandingOptions {
@@ -51,11 +60,11 @@ export interface WindowedScrollerLandingOptions {
 export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions) {
   const windowStart = ref(0)
   const windowEnd = ref(0)
-  // Window changes applied but not yet patched into the DOM. No filling until they
-  // are: it would measure a layout the pending patch is about to change. A count,
-  // because a landing and an extension can overlap. Cleared on the very next tick,
-  // never on a timer.
-  let rendersPending = 0
+  // Window changes being prepared (rows requested) or applied but not yet patched
+  // into the DOM. No filling until they are done: it would measure a layout that is
+  // about to change. A count, because a landing and an extension can overlap.
+  // Cleared on the very next tick after the patch, never on a timer.
+  let changesPending = 0
 
   function isRowInWindow(index: number) {
     return index >= windowStart.value && index < windowEnd.value
@@ -128,8 +137,9 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   /**
    * Puts the row at the top of the viewport (or its bottom at the bottom, for
-   * 'end'), rebuilding the window around it first when it is not mounted. Exact:
-   * the scroll is set from the row's real position once it is in the DOM.
+   * 'end'), rebuilding the window around it first when it is not mounted — after
+   * its rows have been asked for, so the one render has their content. Exact: the
+   * scroll is set from the row's real position once it is in the DOM.
    */
   async function landAt(index: number, landing: WindowedScrollerLandingOptions = {}): Promise<void> {
     const count = options.count()
@@ -137,13 +147,15 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const target = Math.max(0, Math.min(index, count - 1))
     if (!isRowInWindow(target) || !options.rowElement(target)) {
       const start = Math.max(0, target - ROWS_ABOVE_ON_REBUILD)
-      windowStart.value = start
-      windowEnd.value = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
+      const end = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
+      changesPending++
+      await options.ensureRows(start, end)
       // Nothing to hold through the rebuild: the view is leaving wherever it was.
       anchor = null
-      rendersPending++
+      windowStart.value = start
+      windowEnd.value = end
       await nextTick()
-      rendersPending--
+      changesPending--
     }
     const viewport = options.viewport()
     const row = options.rowElement(target)
@@ -160,35 +172,62 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   // ── Growing and trimming ──────────────────────────────────────────────────────
 
   function edgePx(viewport: HTMLElement) {
-    return Math.max(MIN_EDGE_PX, viewport.clientHeight * 2)
+    return Math.max(MIN_EDGE_PX, viewport.clientHeight)
   }
 
   /** Extends the window toward an edge the viewport is near. Call on scroll and on content resize. */
   function fill() {
     const viewport = options.viewport()
-    if (!viewport || rendersPending) return
+    if (!viewport || changesPending) return
     const count = options.count()
     const edge = edgePx(viewport)
     const belowViewport = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
     if (windowEnd.value < count && belowViewport < edge) {
-      mutateWindow(() => {
-        windowEnd.value = Math.min(count, windowEnd.value + EXTEND_ROWS)
-        trimTop(viewport)
-      })
-      return
-    }
-    if (windowStart.value > 0 && viewport.scrollTop < edge) {
-      mutateWindow(() => {
-        windowStart.value = Math.max(0, windowStart.value - EXTEND_ROWS)
-        trimBottom(viewport)
-      })
+      void extend('bottom')
+    } else if (windowStart.value > 0 && viewport.scrollTop < edge) {
+      void extend('top')
     }
   }
 
+  /**
+   * Asks for the next rows on one side, then mounts them and trims the far side.
+   * The component's update hooks hold the anchor through the render. Dropped if a
+   * landing moved the window meanwhile.
+   */
+  async function extend(side: 'top' | 'bottom') {
+    const startBefore = windowStart.value
+    const endBefore = windowEnd.value
+    const addStart = side === 'bottom' ? endBefore : Math.max(0, startBefore - EXTEND_ROWS)
+    const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + EXTEND_ROWS) : startBefore
+    changesPending++
+    await options.ensureRows(addStart, addEnd)
+    const viewport = options.viewport()
+    if (!viewport || windowStart.value !== startBefore || windowEnd.value !== endBefore) {
+      changesPending--
+      return
+    }
+    if (side === 'bottom') {
+      windowEnd.value = addEnd
+      trimTop(viewport)
+    } else {
+      windowStart.value = addStart
+      trimBottom(viewport)
+    }
+    await nextTick()
+    changesPending--
+    // One step may not have been enough (a landing near the end of a short book, a
+    // zoom-out that halved every row).
+    fill()
+  }
+
+  function keepPx(viewport: HTMLElement) {
+    return edgePx(viewport) * TRIM_KEEP_EDGES
+  }
+
   function trimTop(viewport: HTMLElement) {
-    const limit = viewport.scrollTop - TRIM_KEEP_PX
+    const limit = viewport.scrollTop - keepPx(viewport)
     let start = windowStart.value
-    while (windowEnd.value - start > MAX_WINDOW_ROWS) {
+    while (start < windowEnd.value - 1) {
       const row = options.rowElement(start)
       if (!row || row.offsetTop + row.offsetHeight >= limit) break
       start++
@@ -197,28 +236,14 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   }
 
   function trimBottom(viewport: HTMLElement) {
-    const limit = viewport.scrollTop + viewport.clientHeight + TRIM_KEEP_PX
+    const limit = viewport.scrollTop + viewport.clientHeight + keepPx(viewport)
     let end = windowEnd.value
-    while (end - windowStart.value > MAX_WINDOW_ROWS) {
+    while (end > windowStart.value + 1) {
       const row = options.rowElement(end - 1)
       if (!row || row.offsetTop <= limit) break
       end--
     }
     windowEnd.value = end
-  }
-
-  /**
-   * Applies a window change; the component's update hooks hold the anchor through
-   * its render. Once rendered, keeps filling — one step may not have been enough (a
-   * landing near the end of a short book, a zoom-out that halved every row).
-   */
-  function mutateWindow(apply: () => void) {
-    apply()
-    rendersPending++
-    nextTick(() => {
-      rendersPending--
-      fill()
-    })
   }
 
   return {

@@ -58,7 +58,8 @@ const emit = defineEmits<{
 const props = defineProps<
   BookViewLinesScrollProps & {
     lines: LineItem[]
-    prioritise: (lineIndex: number) => void
+    /** Resolves once the lines of [start, end) have their text — the scroller's row source. */
+    ensureLines: (start: number, end: number) => Promise<void>
     altTocLabelMap?: Map<number, string>
     searchQuery?: string
     currentMatchLineIndex?: number
@@ -177,7 +178,6 @@ const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, c
   { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
   (event, firstVisible, firstFull, isUserScroll) =>
     emit(event, firstVisible, firstFull, isUserScroll),
-  props.prioritise,
 )
 
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
@@ -304,7 +304,6 @@ const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
   () => props.searchBarVisible ?? false,
   suppressPositionSave,
   cancelRestoreCorrection,
-  props.prioritise,
 )
 
 function onLineClick(index: number, event: MouseEvent) {
@@ -435,6 +434,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       :count="lines.length"
       :initial-index="initialLineIndex ?? initialScrollIndex"
       :initial-offset-px="initialLineIndex == null ? initialScrollOffset : 0"
+      :ensure-rows="ensureLines"
       :pinned-indexes="pinnedRowIndexes"
       tabindex="0"
       data-ctrlf-enabled
@@ -445,6 +445,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
       @contextmenu="contextMenuRef?.show($event)"
     >
       <template #row="{ index }">
+        <!-- Never a placeholder: the scroller asked for these lines before mounting them. -->
         <div
           v-if="lines[index]?.content != null"
           class="line"
@@ -457,7 +458,6 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, ca
           v-html="lineContent(lines[index]!.content!, index, lines[index]!.id)"
           @click="onLineClick(index, $event)"
         />
-        <div v-else class="line placeholder" />
       </template>
     </WindowedScroller>
   </div>
@@ -532,15 +532,6 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   .line {
     padding-inline: 22px;
   }
-}
-.line.placeholder {
-  height: 28px;
-  max-width: var(--lines-content-max-width, none);
-  margin-inline: auto;
-  padding-inline: 0;
-  margin-block: 4px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 .line::after {
   content: '';

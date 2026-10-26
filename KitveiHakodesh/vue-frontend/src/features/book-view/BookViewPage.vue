@@ -61,7 +61,7 @@ const {
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
-  tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  tabId, bookId, lines, ensureLines, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions,
@@ -563,7 +563,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :key="sideColumnsKey"
                     ref="linesContentRef"
                     :lines="lines"
-                    :prioritise="prioritise"
+                    :ensure-lines="ensureLines"
                     :alt-toc-label-map="altTocLabelMap"
                     :selected-line-id="selectedLineId"
                     :commentary-visible="anyCommentaryVisible"

@@ -65,7 +65,6 @@ function mountScroll(tabId: string) {
         {},
         { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
         () => undefined,
-        () => undefined,
       )
       return () => null
     },

@@ -5,14 +5,9 @@
  * into it straight from the DOM — the scroller mounts real rows, so there is no
  * estimated position to mistrust.
  *
- * Scroll restore, in two exact steps rather than a settle loop:
- *   1. As soon as the lines array exists, scrollToIndex(target, saved offset). The
- *      window is rebuilt around the target and the scroll set from its real position;
- *      the target may still be a placeholder of placeholder height.
- *   2. When the target's chunk arrives its rows take their real heights, and because a
- *      chunk is written in one go there is no anchored row to hold the view in place —
- *      so the landing is re-applied once, from the real height. Every later chunk
- *      above the target is absorbed by the scroller's own re-anchoring.
+ * Scroll restore: one scrollToIndex(target, saved offset). The scroller fetches the
+ * target's lines, mounts the window around it with their text, and sets the scroll
+ * from the row's real position — one render, nothing to correct afterwards.
  */
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
@@ -80,8 +75,8 @@ export interface BookViewLinesScrollStoreRefs {
   bookId: number
 }
 
-/** Frames to keep looking for a row that renders a little after its scroll. */
-const ROW_POLL_FRAMES = 30
+/** Frames allowed for a freshly mounted row to paint before it is looked for. */
+const ROW_POLL_FRAMES = 10
 /** Matches the `.flash-open` animation in BookViewLinesContent.vue. */
 const FLASH_DURATION_MS = 3600
 
@@ -98,7 +93,6 @@ export function useBookViewLinesScroll(
     firstFull: number,
     isUserScroll: boolean,
   ) => void,
-  prioritise: (lineIndex: number) => void,
 ) {
   const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId } = storeRefs
 
@@ -126,8 +120,8 @@ export function useBookViewLinesScroll(
 
   // ── Initial scroll on load ──────────────────────────────────────────────────
 
-  // Ends the restore's step 2 (and its flash / mark follow-ups) early: a jump
-  // elsewhere supersedes the restore, and an unmount must leave nothing behind.
+  // Ends a restore in flight (and its flash / mark follow-ups): a jump elsewhere
+  // supersedes it, and an unmount must leave nothing behind.
   let cancelRestore: (() => void) | null = null
   let scrollTeardown = false
   {
@@ -143,7 +137,6 @@ export function useBookViewLinesScroll(
         if (targetIndex >= currentLines.length) return
         stop?.()
         stop = null
-        prioritise(targetIndex)
         const target: number = targetIndex
 
         nextTick(() => {
@@ -171,13 +164,10 @@ export function useBookViewLinesScroll(
 
   async function restoreTo(target: number) {
     let cancelled = false
-    let stopContentWatch: (() => void) | null = null
     let flashTimer: number | null = null
     cancelRestore = () => {
       cancelled = true
       saveSuppressed = false
-      stopContentWatch?.()
-      stopContentWatch = null
       if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
     }
     // A saved offset belongs to a session-restore position only — a TOC/deep-link
@@ -185,36 +175,12 @@ export function useBookViewLinesScroll(
     const savedOffset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
 
     saveSuppressed = true
-    // Step 1 — land now, on whatever height the target has (placeholder or real).
     await scroller()?.scrollToIndex(target, { offsetPx: savedOffset })
     if (cancelled) return
+    saveSuppressed = false
     scroller()?.scrollerElement?.focus({ preventScroll: true })
-
-    // Step 2 — once the target's chunk is in, re-land from its real height. The
-    // saved offset is applied only if it still fits the row (guards stale saves).
-    stopContentWatch = watch(
-      () => lines()[target]?.content,
-      (content) => {
-        if (content == null) return
-        stopContentWatch?.()
-        stopContentWatch = null
-        if (cancelled) return
-        nextTick(async () => {
-          if (cancelled) return
-          const rowHeight = scroller()?.rowElement(target)?.offsetHeight ?? 0
-          const offset = savedOffset > 0 && savedOffset < rowHeight ? savedOffset : 0
-          await scroller()?.scrollToIndex(target, { offsetPx: offset })
-          if (cancelled) return
-          saveSuppressed = false
-          scrollToSearchMark()
-          flashTargetLine(target)
-        })
-      },
-      { immediate: true, flush: 'post' },
-    )
-
-    // Safety: never hold saves forever if the content never arrives.
-    setTimeout(() => { if (!cancelled) saveSuppressed = false }, 5000)
+    scrollToSearchMark()
+    flashTargetLine(target)
 
     // FTS: bring the highlighted mark into view once positioned.
     function scrollToSearchMark() {
@@ -390,7 +356,6 @@ export function useBookViewLinesScroll(
     if (!position) return
     const { lineIndex, fullLineIndex } = position
     lastKnownPos = captureScrollPos()
-    prioritise(lineIndex)
     // The third argument says whether the READER moved the view, as opposed to a
     // jump the app performed. saveSuppressed already draws exactly that line and
     // every programmatic scroller sets it — and unlike a `wheel` listener it also
@@ -400,11 +365,7 @@ export function useBookViewLinesScroll(
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  /**
-   * Ends a pending session restore: step 2 re-lands the restore target when its
-   * chunk arrives, and a reader who has since jumped elsewhere must not be yanked
-   * back to it.
-   */
+  /** Ends a restore in flight: a reader who has jumped elsewhere must not be landed back. */
   function cancelRestoreCorrection() {
     cancelRestore?.()
     cancelRestore = null

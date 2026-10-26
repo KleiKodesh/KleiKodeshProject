@@ -147,7 +147,7 @@ export function useBookView(
   } = useToc(() => bookId, () => bookTitle)
 
   const {
-    lines, prioritise, prefetch, holdBackfill, releaseBackfill,
+    lines, prefetch, ensureLines, holdBackfill, releaseBackfill,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
@@ -654,9 +654,12 @@ export function useBookView(
     groups.value = []
   })
 
+  // The first text fetch is the window the view will open on — never line 0 on
+  // spec. Fired the moment the position is known, alongside the book metadata the
+  // view is still waiting for, so the opening render has its text.
   watch(
-    () => idbResolved.value && initialScrollTop.value != null,
-    (ready) => { if (ready) prefetch(initialScrollTop.value!) },
+    () => idbResolved.value,
+    (resolved) => { if (resolved) prefetch(initialLineIndex.value ?? initialScrollTop.value ?? 0) },
     { immediate: true },
   )
 
@@ -763,7 +766,7 @@ export function useBookView(
     tocPersistState,
     // data
     tabId, bookId,
-    lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+    lines, ensureLines, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,

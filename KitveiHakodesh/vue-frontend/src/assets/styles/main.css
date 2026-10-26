@@ -546,8 +546,8 @@ h1::after {
    rule, keyed on the viewport that `scrollbars-scrolling` lands on. */
 :root.scrollbars-hidden
   .windowed-scroller:not(:has(> .windowed-scroller-viewport.scrollbars-scrolling))
-  .windowed-scroller-thumb {
-  background: transparent;
+  .windowed-scroller-bar {
+  opacity: 0;
 }
 
 /* Thin scrollbars — opt-in via the .toc-thin-scroll class. Named for the TOC, which
