@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
+    <!-- IL2104/IL3053 are one-line summaries saying a THIRD-PARTY assembly (Lucene.Net,
+         J2N, MessagePack, framework libs) has trim/AOT notes inside it. Nothing to fix
+         on our side; the AOT service is tested working. Our own code still warns. -->
+    <NoWarn>$(NoWarn);IL2104;IL3053</NoWarn>
 
     <!-- Idle-RAM tuning. The service spends most of its life idle between bursts of
          search/index work; a heavy search grows the GC heap to hundreds of MB. These
