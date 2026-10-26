@@ -5,15 +5,20 @@
 # picks them up) and the bump to $env:GITHUB_OUTPUT as "bump=...".
 #
 # Env: GEMINI_API_KEY, GH_TOKEN. Optional: GEMINI_MODEL.
-param([string]$OutFile = "RELEASE_NOTES.txt")
+#
+# -Tag vX.Y.Z: write notes for that existing release instead (commits since the
+# release before it) - used by rewrite-release-notes.yml.
+param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag)
 
 $ErrorActionPreference = 'Stop'
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
 # still leaves the second. No AI notes = no release (the step fails, nothing is built).
 $models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-pro-latest') }
 
-$previousTag = gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName'
-$range   = if ($previousTag) { "$previousTag..HEAD" } else { "-30" }
+$tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
+$previousTag = if ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
+$end     = if ($Tag) { $Tag } else { 'HEAD' }
+$range   = if ($previousTag) { "$previousTag..$end" } else { "-30" }
 $commits = (git log $range --no-merges --pretty=format:"### %s%n%b" | Out-String).Trim()
 if (-not $commits) { throw "No commits since $previousTag - nothing to release." }
 Write-Host "Previous release: $previousTag"
@@ -80,7 +85,7 @@ $plan = $null
         }
     }
 }
-if (-not $plan) { throw "Gemini failed on every model - no release. Run the workflow again later." }
+if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
 
