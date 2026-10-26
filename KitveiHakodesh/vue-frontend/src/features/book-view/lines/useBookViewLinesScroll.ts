@@ -5,9 +5,12 @@
  * into it straight from the DOM — the scroller mounts real rows, so there is no
  * estimated position to mistrust.
  *
- * Scroll restore: one scrollToIndex(target, saved offset). The scroller fetches the
- * target's lines, mounts the window around it with their text, and sets the scroll
- * from the row's real position — one render, nothing to correct afterwards.
+ * Scroll restore: the scroller itself opens on the saved line (its `initialIndex`
+ * and `initialOffsetPx`, passed by BookViewLinesContent). It fetches the line's
+ * chunk, mounts the window around it with its text, and sets the scroll from the
+ * row's real position — one render, nothing to correct afterwards. This composable
+ * only holds the position save through that landing and runs the follow-ups (focus,
+ * the search mark, the deep-link flash) once the scroller reports it is open.
  */
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
@@ -74,8 +77,6 @@ export interface BookViewLinesScrollStoreRefs {
   bookId: number
 }
 
-/** Frames allowed for a freshly mounted row to paint before it is looked for. */
-const ROW_POLL_FRAMES = 10
 /** Matches the `.flash-open` animation in BookViewLinesContent.vue. */
 const FLASH_DURATION_MS = 3600
 
@@ -109,7 +110,10 @@ export function useBookViewLinesScroll(
   // ── Position-save suppression ───────────────────────────────────────────────
 
   let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
-  let saveSuppressed = false
+  // Held from the start when the scroller opens on a saved or requested line: its
+  // landing's scroll event must not be taken for the reader moving, nor persisted.
+  const openingTarget = props.initialLineIndex ?? props.initialScrollIndex
+  let saveSuppressed = openingTarget != null
 
   function suppressPositionSave() {
     saveSuppressed = true
@@ -117,105 +121,56 @@ export function useBookViewLinesScroll(
     saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
   }
 
-  // ── Initial scroll on load ──────────────────────────────────────────────────
+  // ── Opening at the saved / requested line ───────────────────────────────────
 
-  // Ends a restore in flight (and its flash / mark follow-ups): a jump elsewhere
-  // supersedes it, and an unmount must leave nothing behind.
-  let cancelRestore: (() => void) | null = null
-  let scrollTeardown = false
-  {
-    let restored = false
-    let stop: (() => void) | null = null
+  let restoreCancelled = false
+  let flashTimer: number | null = null
 
-    stop = watch(
-      () => [lines(), props.initialScrollIndex] as const,
-      ([currentLines]) => {
-        if (!currentLines.length) return
-        const targetIndex = props.initialLineIndex ?? props.initialScrollIndex
-        if (targetIndex == null) return
-        if (targetIndex >= currentLines.length) return
-        stop?.()
-        stop = null
-        const target: number = targetIndex
-
-        nextTick(() => {
-          if (restored || scrollTeardown) return
-          restored = true
-          void restoreTo(target)
-        })
-      },
-      { flush: 'post', immediate: true },
-    )
-
-    watch(
-      () => [lines(), props.idbResolved] as const,
-      ([currentLines, resolved]) => {
-        if (!currentLines.length || restored || !resolved) return
-        if (props.initialLineIndex == null && props.initialScrollIndex == null) {
-          stop?.()
-          stop = null
-          nextTick(() => scroller()?.scrollerElement?.focus({ preventScroll: true }))
-        }
-      },
-      { flush: 'post' },
-    )
+  /** Ends the opening's follow-ups: a jump elsewhere supersedes them, and an unmount must leave nothing behind. */
+  function cancelRestore() {
+    restoreCancelled = true
+    saveSuppressed = false
+    if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
   }
 
-  async function restoreTo(target: number) {
-    let cancelled = false
-    let flashTimer: number | null = null
-    cancelRestore = () => {
-      cancelled = true
-      saveSuppressed = false
-      if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
+  /** The scroller's opening landing is on screen — wired to its `opened` event. */
+  function onScrollerOpened() {
+    if (restoreCancelled || openingTarget == null) return
+    // The landing's scroll event is dispatched at the next frame's start, ahead of
+    // its animation callbacks — so this releases the hold just after it.
+    requestAnimationFrame(() => { if (!restoreCancelled) saveSuppressed = false })
+    const element = scroller()?.scrollerElement
+    element?.focus({ preventScroll: true })
+    // FTS: the highlighted mark is in the rendered row — bring it into view.
+    if (props.searchHighlightLineIndex != null) {
+      element?.querySelector('mark.search-match')?.scrollIntoView({ block: 'center' })
     }
-    // A saved offset belongs to a session-restore position only — a TOC/deep-link
-    // target lands at the line's top.
-    const savedOffset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
-
-    saveSuppressed = true
-    await scroller()?.scrollToIndex(target, { offsetPx: savedOffset })
-    if (cancelled) return
-    saveSuppressed = false
-    scroller()?.scrollerElement?.focus({ preventScroll: true })
-    scrollToSearchMark()
-    flashTargetLine(target)
-
-    // FTS: bring the highlighted mark into view once positioned.
-    function scrollToSearchMark() {
-      if (props.searchHighlightLineIndex == null) return
-      let attempts = 0
-      function tryScrollToMark() {
-        const element = scroller()?.scrollerElement
-        if (cancelled || !element) return
-        const mark = element.querySelector('mark.search-match') as HTMLElement | null
-        if (mark) { mark.scrollIntoView({ block: 'center' }); return }
-        if (++attempts < ROW_POLL_FRAMES) requestAnimationFrame(tryScrollToMark)
-      }
-      requestAnimationFrame(tryScrollToMark)
-    }
-
     // Deep-link open (otzaria:// / zayit://): momentarily flash the target line's
     // background so the user sees where the link landed. One-shot; the class is
     // removed imperatively after the animation.
-    function flashTargetLine(lineIndex: number) {
-      if (!props.flashLineOnOpen) return
-      let attempts = 0
-      function tryFlashLine() {
-        if (cancelled) return
-        const row = scroller()?.rowElement(lineIndex)?.querySelector('.line') as HTMLElement | null
-        if (row) {
-          row.classList.add('flash-open')
-          flashTimer = window.setTimeout(() => {
-            row.classList.remove('flash-open')
-            flashTimer = null
-          }, FLASH_DURATION_MS)
-          return
-        }
-        if (++attempts < ROW_POLL_FRAMES) requestAnimationFrame(tryFlashLine)
+    if (props.flashLineOnOpen) {
+      const row = scroller()?.rowElement(openingTarget)?.querySelector('.line')
+      if (row) {
+        row.classList.add('flash-open')
+        flashTimer = window.setTimeout(() => {
+          row.classList.remove('flash-open')
+          flashTimer = null
+        }, FLASH_DURATION_MS)
       }
-      requestAnimationFrame(tryFlashLine)
     }
+  }
+
+  // Opening at the top (nothing saved): focus once the book is in.
+  if (openingTarget == null) {
+    const stop = watch(
+      () => [lines().length, props.idbResolved] as const,
+      ([count, resolved]) => {
+        if (!count || !resolved) return
+        stop()
+        nextTick(() => scroller()?.scrollerElement?.focus({ preventScroll: true }))
+      },
+      { flush: 'post' },
+    )
   }
 
   // ── Persist scroll position ─────────────────────────────────────────────────
@@ -301,8 +256,7 @@ export function useBookViewLinesScroll(
 
   onBeforeUnmount(() => {
     unregisterHostFlush()
-    scrollTeardown = true
-    cancelRestore?.()
+    cancelRestore()
     saveSuppressed = false
     if (saveSuppressTimer) {
       clearTimeout(saveSuppressTimer)
@@ -362,18 +316,11 @@ export function useBookViewLinesScroll(
     emit('scrolled', lineIndex, fullLineIndex, !saveSuppressed)
   }
 
-  // ── Public API ──────────────────────────────────────────────────────────────
-
-  /** Ends a restore in flight: a reader who has jumped elsewhere must not be landed back. */
-  function cancelRestoreCorrection() {
-    cancelRestore?.()
-    cancelRestore = null
-  }
-
   return {
     captureScrollPos,
     readCurrentPosition,
-    cancelRestoreCorrection,
+    cancelRestore,
+    onScrollerOpened,
     isPositionSaveSuppressed: () => saveSuppressed,
     suppressPositionSave,
     onScroll,

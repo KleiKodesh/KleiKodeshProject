@@ -30,8 +30,14 @@ import { nextTick, ref } from 'vue'
 /** Rows mounted above / below the target when the window is rebuilt around a jump. */
 const ROWS_ABOVE_ON_REBUILD = 12
 const ROWS_BELOW_ON_REBUILD = 36
-/** Rows added per extension step — small, so a step is a cheap patch. */
+/**
+ * Rows added per extension step — small, so a step is a cheap patch. A fast scroll
+ * that has already eaten into the edge gets more: enough rows to cover the shortfall
+ * at the mounted rows' average height, so the window keeps ahead of a fling instead
+ * of the native scroll clamping at the end of the mounted content.
+ */
 const EXTEND_ROWS = 12
+const MAX_EXTEND_ROWS = 120
 /** Extend when the content runs out within this many pixels of the viewport (at least a screen). */
 const MIN_EDGE_PX = 600
 /**
@@ -48,7 +54,7 @@ export interface WindowedScrollerWindowOptions {
   viewport: () => HTMLElement | null
   /** The mounted element of an in-window row, or null. */
   rowElement: (index: number) => HTMLElement | null
-  /** Resolves once the rows of [start, end) can be rendered. */
+  /** Resolves once the rows of [start, end) can be rendered; rejects when they cannot be. */
   ensureRows: (start: number, end: number) => Promise<void>
 }
 
@@ -99,8 +105,8 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   // ── Anchor ────────────────────────────────────────────────────────────────────
 
-  /** The first visible row and where it was within the content, as of the last look. */
-  let anchor: { index: number; offsetTop: number } | null = null
+  /** The first visible row, where it was within the content, and where the viewport was, as of the last look. */
+  let anchor: { index: number; offsetTop: number; scrollTop: number } | null = null
 
   /**
    * The reader's row is wherever the viewport is now. Call before the DOM changes.
@@ -114,59 +120,134 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport) return
     const index = findRowIndexAt(viewport.scrollTop, false)
     const row = index != null ? options.rowElement(index) : null
-    if (row && index != null) anchor = { index, offsetTop: row.offsetTop }
+    if (row && index != null) anchor = { index, offsetTop: row.offsetTop, scrollTop: viewport.scrollTop }
   }
 
   /**
-   * Call after the DOM changed: if the anchor row moved within the content, the
-   * scroll follows it by the same amount, so the row stays where the reader saw it.
+   * Call after the DOM changed (a patch, a layout change): puts the anchor row back
+   * exactly where the reader saw it. The scroll is set ABSOLUTELY, from the row's
+   * new offset and the remembered distance into it — not by the row's movement. An
+   * extension that trims more above than it adds below leaves the content shorter
+   * for a moment, and the browser clamps the scroll during that layout; a relative
+   * correction would then stack on top of the clamp and land a screen early.
    */
   function holdAnchor() {
     const viewport = options.viewport()
     if (!viewport || !anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
-    const delta = row.offsetTop - anchor.offsetTop
-    if (delta !== 0) {
-      viewport.scrollTop += delta
+    const expected = row.offsetTop + (anchor.scrollTop - anchor.offsetTop)
+    if (viewport.scrollTop !== expected) {
+      viewport.scrollTop = expected
       anchor.offsetTop = row.offsetTop
+      anchor.scrollTop = viewport.scrollTop
     }
+  }
+
+  /**
+   * On a scroll event, before the new position is remembered: the reader's scroll
+   * is real and must be kept, so only a shift of the anchor row within the content
+   * (a layout change that landed between the scroll and the observer that would
+   * hold it) is corrected, relatively.
+   */
+  function holdAnchorThroughScroll() {
+    const viewport = options.viewport()
+    if (!viewport || !anchor) return
+    const row = options.rowElement(anchor.index)
+    if (!row) return
+    const delta = row.offsetTop - anchor.offsetTop
+    if (delta !== 0) viewport.scrollTop += delta
   }
 
   // ── Landing ───────────────────────────────────────────────────────────────────
 
+  // Bumped by every landing. A landing whose rows arrive after a newer one started
+  // must not apply: two jumps in flight would otherwise resolve in fetch order, and
+  // the earlier one would yank the view away from where the reader just went.
+  let landingGeneration = 0
+
+  /**
+   * Asks for rows, then applies a window change and waits for its render. False —
+   * and nothing applied — when the rows are unavailable or a newer landing has
+   * superseded this one.
+   */
+  async function prepareWindow(generation: number, start: number, end: number, apply: () => void): Promise<boolean> {
+    changesPending++
+    try {
+      await options.ensureRows(start, end)
+    } catch {
+      changesPending--
+      return false
+    }
+    if (generation !== landingGeneration) {
+      changesPending--
+      return false
+    }
+    apply()
+    await nextTick()
+    changesPending--
+    return true
+  }
+
   /**
    * Puts the row at the top of the viewport (or its bottom at the bottom, for
    * 'end'), rebuilding the window around it first when it is not mounted — after
-   * its rows have been asked for, so the one render has their content. Exact: the
-   * scroll is set from the row's real position once it is in the DOM.
+   * its rows have been asked for, so the one render has their content. A mounted
+   * target near the window's end first gets the rows below it, so the landing has
+   * text under it rather than a gap. Exact: the scroll is set from the row's real
+   * position once it is in the DOM. Does nothing when the rows cannot be had.
    */
   async function landAt(index: number, landing: WindowedScrollerLandingOptions = {}): Promise<void> {
     const count = options.count()
     if (count <= 0) return
     const target = Math.max(0, Math.min(index, count - 1))
+    const generation = ++landingGeneration
+    const wantEnd = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
     if (!isRowInWindow(target) || !options.rowElement(target)) {
       const start = Math.max(0, target - ROWS_ABOVE_ON_REBUILD)
-      const end = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
-      changesPending++
-      await options.ensureRows(start, end)
-      // Nothing to hold through the rebuild: the view is leaving wherever it was.
-      anchor = null
-      windowStart.value = start
-      windowEnd.value = end
-      await nextTick()
-      changesPending--
+      const applied = await prepareWindow(generation, start, wantEnd, () => {
+        // Nothing to hold through the rebuild: the view is leaving wherever it was.
+        anchor = null
+        windowStart.value = start
+        windowEnd.value = wantEnd
+      })
+      if (!applied) return
+    } else if (windowEnd.value < wantEnd) {
+      const applied = await prepareWindow(generation, windowEnd.value, wantEnd, () => {
+        windowEnd.value = wantEnd
+      })
+      if (!applied) return
     }
     const viewport = options.viewport()
     const row = options.rowElement(target)
     if (!viewport || !row) return
-    const offset = landing.offsetPx ?? 0
+    // A positive offset is a saved position partway down the row; one that no
+    // longer fits (the row re-wrapped at another zoom or width) lands at its top
+    // rather than inside the row after it.
+    const requested = landing.offsetPx ?? 0
+    const offset = requested > 0 && requested >= row.offsetHeight ? 0 : requested
+    // offsetHeight is rounded down; a row of fractional height would be clipped by
+    // that fraction at the bottom, so the end landing rounds the other way.
     viewport.scrollTop =
       landing.align === 'end'
-        ? row.offsetTop + row.offsetHeight - viewport.clientHeight + offset
+        ? Math.ceil(row.getBoundingClientRect().bottom - viewport.getBoundingClientRect().top + viewport.scrollTop - viewport.clientHeight + offset)
         : Math.max(0, row.offsetTop + offset)
     rememberAnchor()
     fill()
+  }
+
+  /**
+   * The row source changed under the mounted window (a text version swap): asks
+   * for the window's rows again. The rows re-render as their new content arrives,
+   * and the update hooks hold the reader's row through the height changes.
+   */
+  async function refreshRows(): Promise<void> {
+    if (windowEnd.value <= windowStart.value) return
+    try {
+      await options.ensureRows(windowStart.value, windowEnd.value)
+    } catch {
+      // Unavailable for now; the next extension or landing asks again.
+    }
   }
 
   // ── Growing and trimming ──────────────────────────────────────────────────────
@@ -183,29 +264,45 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const edge = edgePx(viewport)
     const belowViewport = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
     if (windowEnd.value < count && belowViewport < edge) {
-      void extend('bottom')
+      void extend('bottom', rowsToExtend(viewport, edge - belowViewport))
     } else if (windowStart.value > 0 && viewport.scrollTop < edge) {
-      void extend('top')
+      void extend('top', rowsToExtend(viewport, edge - viewport.scrollTop))
     }
+  }
+
+  /** EXTEND_ROWS plus whatever covers `shortfallPx` of edge already lost, at the mounted average. */
+  function rowsToExtend(viewport: HTMLElement, shortfallPx: number): number {
+    const mounted = windowEnd.value - windowStart.value
+    if (mounted <= 0 || shortfallPx <= 0) return EXTEND_ROWS
+    const averageRowPx = viewport.scrollHeight / mounted
+    return Math.min(MAX_EXTEND_ROWS, EXTEND_ROWS + Math.ceil(shortfallPx / Math.max(1, averageRowPx)))
   }
 
   /**
    * Asks for the next rows on one side, then mounts them and trims the far side.
    * The component's update hooks hold the anchor through the render. Dropped if a
-   * landing moved the window meanwhile.
+   * landing moved the window meanwhile, or if the rows cannot be had — the next
+   * scroll asks again, so a failing source costs one request per reader scroll,
+   * never a loop.
    */
-  async function extend(side: 'top' | 'bottom') {
+  async function extend(side: 'top' | 'bottom', rows: number) {
     const startBefore = windowStart.value
     const endBefore = windowEnd.value
-    const addStart = side === 'bottom' ? endBefore : Math.max(0, startBefore - EXTEND_ROWS)
-    const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + EXTEND_ROWS) : startBefore
+    const addStart = side === 'bottom' ? endBefore : Math.max(0, startBefore - rows)
+    const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + rows) : startBefore
     changesPending++
-    await options.ensureRows(addStart, addEnd)
+    try {
+      await options.ensureRows(addStart, addEnd)
+    } catch {
+      changesPending--
+      return
+    }
     const viewport = options.viewport()
     if (!viewport || windowStart.value !== startBefore || windowEnd.value !== endBefore) {
       changesPending--
       return
     }
+    const heightBefore = viewport.scrollHeight
     if (side === 'bottom') {
       windowEnd.value = addEnd
       trimTop(viewport)
@@ -215,6 +312,8 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     }
     await nextTick()
     changesPending--
+    // Rows that added no height would be asked for again at once, forever.
+    if (viewport.scrollHeight === heightBefore) return
     // One step may not have been enough (a landing near the end of a short book, a
     // zoom-out that halved every row).
     fill()
@@ -254,7 +353,9 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     findRowIndexAt,
     rememberAnchor,
     holdAnchor,
+    holdAnchorThroughScroll,
     landAt,
+    refreshRows,
     fill,
   }
 }

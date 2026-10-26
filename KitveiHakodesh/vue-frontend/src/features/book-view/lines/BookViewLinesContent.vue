@@ -170,7 +170,7 @@ const {
     ),
 )
 
-const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, cancelRestoreCorrection } =
+const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelRestore } =
   useBookViewLinesScroll(
   scroller,
   () => props.lines,
@@ -303,7 +303,7 @@ const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
   () => props.lines,
   () => props.searchBarVisible ?? false,
   suppressPositionSave,
-  cancelRestoreCorrection,
+  cancelRestore,
 )
 
 function onLineClick(index: number, event: MouseEvent) {

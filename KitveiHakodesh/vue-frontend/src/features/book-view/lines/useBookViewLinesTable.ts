@@ -5,7 +5,8 @@ import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.
 export interface LineItem {
   id: number
   lineIndex: number
-  content: string | null // null = placeholder, not yet loaded
+  /** null = not fetched yet. Never rendered: the scroller asks for a range before mounting it. */
+  content: string | null
 }
 
 // Chunk size for user-facing fetches (first paint, scroll target, TOC jump).
@@ -103,8 +104,8 @@ export function useLines(bookId: () => number | undefined) {
   // Write a completed chunk's rows into lines.value.
   function writeRows(rows: { id: number; lineIndex: number; content: string }[]) {
     // Grow ONCE to fit the whole chunk before writing. Growing per row re-copied the entire
-    // array for each of up to CHUNK_SIZE/BACKFILL_CHUNK_SIZE rows — and since the first chunk
-    // is fetched before load() pre-sizes to totalLines, that path runs on every book open.
+    // array for each of up to CHUNK_SIZE/BACKFILL_CHUNK_SIZE rows — and the opening window's
+    // prefetch can land before load() pre-sizes to totalLines.
     let maxLineIndex = -1
     for (const row of rows) if (row.lineIndex > maxLineIndex) maxLineIndex = row.lineIndex
     growTo(maxLineIndex + 1)
@@ -114,7 +115,7 @@ export function useLines(bookId: () => number | undefined) {
     }
   }
 
-  /** Extend `lines` with placeholders up to `count` entries. No-op if already that long. */
+  /** Extend `lines` with unfetched entries up to `count`. No-op if already that long. */
   function growTo(count: number) {
     const from = lines.value.length
     if (count <= from) return
@@ -126,8 +127,9 @@ export function useLines(bookId: () => number | undefined) {
     lines.value = [...lines.value, ...extra]
   }
 
+  /** Fetches a range and registers the fetch on its slots, so ensureLines can ride on it. */
   function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
-    const fetching = fetchRangeRows(bookIdAtStart, offset, limit)
+    const fetching = fetchAndWriteRange(bookIdAtStart, offset, limit)
     const first = slotOf(offset)
     const last = slotOf(offset + limit - 1)
     for (let slot = first; slot <= last; slot++) slotFetches.set(slot, fetching)
@@ -139,7 +141,7 @@ export function useLines(bookId: () => number | undefined) {
     return fetching
   }
 
-  async function fetchRangeRows(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
+  async function fetchAndWriteRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
     // Captured with the book id: a version swap keeps currentBookId the same, so the
     // book guard alone would let a chunk fetched under the OLD version write its text
     // into the new one — the two versions differ line for line, which would show as a
@@ -256,8 +258,9 @@ export function useLines(bookId: () => number | undefined) {
   /**
    * Resolves once every line in [start, end) has its text — fetching whatever is
    * not loaded or in flight yet. The windowed scroller calls this BEFORE it mounts a
-   * range, so a row is never on screen without its text. Resolves on a failed fetch
-   * too (the slots are released for a retry); the caller renders what there is.
+   * range, so a row is never on screen without its text. REJECTS when a line is
+   * still without text afterwards (a failed query; the slots are released for a
+   * retry), so the scroller mounts nothing rather than empty rows.
    */
   async function ensureLines(start: number, end: number): Promise<void> {
     const id = currentBookId
@@ -274,6 +277,10 @@ export function useLines(bookId: () => number | undefined) {
       waits.push(fetchRange(id, offset, CHUNK_SIZE))
     }
     if (waits.length) await Promise.all(waits)
+    if (currentBookId !== id) return
+    for (let index = start; index < Math.min(end, lines.value.length); index++) {
+      if (lines.value[index]?.content == null) throw new Error(`lines ${start}-${end} unavailable`)
+    }
   }
 
   /**
@@ -284,14 +291,15 @@ export function useLines(bookId: () => number | undefined) {
    * the TOC, commentary anchors, highlights and the scroll position all key off line
    * ids and indices, none of which a version changes.
    *
-   * Content is blanked rather than the array emptied, for the same reason. Dropping to
-   * [] would collapse the virtualiser's total height to zero and lose the scroll
-   * position before the first chunk arrived; placeholders keep the document its full
-   * height and simply re-fill in place, exactly as an unfetched region does.
+   * The old text STAYS in place until the new text replaces it, line by line. The
+   * mounted rows keep their height and the reader's row stays under their eyes; a
+   * row that went blank would collapse, and with it the scroll position. Every slot
+   * is marked unfetched, so the scroller's re-ask for its window (its
+   * `rowSourceVersion`) and the backfill fetch the new text.
    *
    * `visibleLineIndex` is where the reader is actually looking. It matters on a long
-   * book: refilling from line 0 would leave someone mid-tractate watching blank lines
-   * until the backfill crawled all the way down to them.
+   * book: refilling from line 0 would leave someone mid-tractate reading the old
+   * version until the backfill crawled all the way down to them.
    */
   function setVersion(versionId: number | null, visibleLineIndex = 0) {
     if (activeVersionId.value === versionId) return
@@ -310,7 +318,6 @@ export function useLines(bookId: () => number | undefined) {
     slotFetches = new Map()
 
     const total = lines.value.length
-    lines.value = lines.value.map((line) => ({ ...line, content: null }))
     ensureSlotCapacity(slotOf(Math.max(total - 1, 0)) + 1)
 
     // The reader's own window first, so the new text appears where they are looking.

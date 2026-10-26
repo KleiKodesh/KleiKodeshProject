@@ -1,10 +1,10 @@
 # lines
 
-Virtual-scrolled main text display for the book view. Handles line rendering, selection, and persistence.
+The book view's main text: a `WindowedScroller` (src/components) mounting a sliding window of real line rows. Handles line rendering, selection, and persistence.
 
 ## Components
 
-**BookViewLinesContent.vue** - virtual-scrolled main text. Handles line selection, scroll position persistence, and communicates the selected line to the commentary panel. Any change to how lines are rendered or selected belongs here.
+**BookViewLinesContent.vue** - the main text, rendered through `WindowedScroller.vue` (`src/components`): the scroller asks for each range of lines (`ensureLines`) before mounting it, so no row is ever a placeholder, and it opens directly on the saved line (`initialIndex`) — one render, no correction. Handles line selection, scroll position persistence, and communicates the selected line to the commentary panel. Any change to how lines are rendered or selected belongs here.
 
 **BookViewAnnotationMenuRow.vue** - context menu row for highlight color selection and note editing. Uses `HIGHLIGHT_COLORS_LIST` from `bookViewAnnotationColors.ts`. Shows color swatches, an edit button for existing notes, and an eraser to clear highlights.
 
@@ -37,9 +37,9 @@ scheme and URL shape are defined: `kitveihakodeshapp://book/<bookId>?index=<line
 
 **useBookViewNotes.ts** - manages user notes for the currently open book. Lazy viewport-driven loading, create/update/delete mutations with immediate in-memory map updates. Called internally by useBookViewAnnotations.
 
-**useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLine(index, {occurrence, force, skipIfVisible})` is the one scroller every jump goes through (TOC click, section nav, search match, commentary jump); `scrollToLineId(id, fallbackIndex, options)` resolves a line id to its index over the same core. The slow path stabilizes the landing while late chunk loads shift the target.
+**useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLine(index, {occurrence, force, skipIfVisible, direction})` is the one scroller every jump goes through (TOC click, section nav, search match, commentary jump); `scrollToLineId(id, fallbackIndex, options)` resolves a line id to its index over the same core. A jump is `WindowedScroller.scrollToIndex`: the target's lines are fetched, the window is mounted around them, and the scroll is set from the row's real position — exact, no retry. Owns `SCROLL_LANDING_GAP_PX`, the sliver a landing leaves above its target.
 
-**useBookViewLinesScroll.ts** - scroll position save and restore. Save: captures `firstVisible.index` (not the overscan item) and the pixel offset within that item; skips saves where the gap between scrollTop and firstVisible.start exceeds 2000px (stale mid-restore state). Restore: two-stage virtualizer-API-only approach — stage 1 calls `scrollToIndex` immediately with estimated heights, stage 2 fires when the target chunk loads, re-issues `scrollToIndex`, then tracks `item.start` in a rAF loop until stable (correcting each time background chunks above shift the layout), then applies the saved sub-line offset via `scrollToOffset` if it fits within the item's actual height. A post-stabilization watch handles late-loading chunks. Never sets `scrollTop` directly.
+**useBookViewLinesScroll.ts** - scroll position save and restore. Save: the first visible row's index and the pixel offset into it, read from the DOM. Restore: the scroller itself opens on the saved line (`initialIndex` / `initialOffsetPx` on `WindowedScroller`) — rows fetched first, one render, scroll set from the real row; an offset that no longer fits the row (zoom or width changed) lands at the row's top. This composable holds the position save through that landing, releases it after the landing's scroll event, and on the scroller's `opened` event runs the follow-ups: focus, scrolling an FTS mark into view, the deep-link flash.
 
 ## Utilities
 
