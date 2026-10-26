@@ -169,16 +169,36 @@ Log "קבצים בחבילה: $($items.Count)"
 # Word יציג MissingMethodException כבר בפתיחה. הבדיקה במצב קריאה בלבד (שום קוד לא מורץ), ומשווה מול
 # הספרייה המותקנת כבסיס: רק קריאה שנשברת בגלל העדכון נחשבת. נכשלה הבדיקה עצמה - ממשיכים, והגיבוי מגן.
 $compatScript = Join-Path $PSScriptRoot 'compat-check.ps1'
+$StandaloneExeName = 'כתבי הקודש.exe'
 $addinDll     = Join-Path $TargetDir 'KleiKodesh.dll'
 $installedLib = Join-Path $TargetDir 'KitveiHakodeshLib.dll'
 $newLibItem   = $items | Where-Object { $_.Rel -ieq 'KitveiHakodeshLib.dll' } | Select-Object -First 1
 if ($newLibItem -and (Test-Path -LiteralPath $compatScript) -and (Test-Path -LiteralPath $addinDll) -and (Test-Path -LiteralPath $installedLib)) {
     $psExe = Join-Path $PSHOME 'powershell.exe'
-    function Invoke-Compat([string]$lib, [string]$listFile) {
-        $o = & $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $compatScript -Addin $addinDll -Lib $lib -InstallDir $TargetDir -ListFile $listFile 2>&1
+    function Invoke-CompatOne([string]$scan, [string]$lib, [string]$listFile) {
+        $o = & $psExe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $compatScript -Addin $scan -Lib $lib -InstallDir $TargetDir -ListFile $listFile 2>&1
         $rc = $LASTEXITCODE; $n = $null
         foreach ($l in @($o)) { if ("$l" -match '^UNRESOLVED=(\d+)') { $n = [int]$Matches[1] } }
         return [pscustomobject]@{ Rc = $rc; N = $n; Text = (($o | Out-String).Trim()) }
+    }
+    # שלוש בדיקות לכל גרסת ספרייה: התוסף -> הספרייה, האפליקציה העצמאית -> הספרייה, והספרייה עצמה -> הרכיבים
+    # המותקנים לידה (למשל FluentChromeTabs: ספרייה שנבנתה מול רכיב אחר נשברת רק באפליקציה העצמאית).
+    function Invoke-Compat([string]$lib, [string]$listFile) {
+        $standalone = Join-Path $TargetDir ([IO.Path]::GetFileName($StandaloneExeName))
+        $scans = @($addinDll, $lib)
+        if (Test-Path -LiteralPath $standalone) { $scans += $standalone }
+        $total = 0; $rc = 0; $text = @(); $lines = New-Object System.Collections.Generic.List[string]
+        $k = 0
+        foreach ($sc in $scans) {
+            $k++; $lf = "$listFile.$k"
+            $r = Invoke-CompatOne $sc $lib $lf
+            if ($r.Rc -ne 0 -or $null -eq $r.N) { $rc = 1; $text += $r.Text; continue }
+            $total += $r.N
+            if ($r.N -gt 0 -and (Test-Path -LiteralPath $lf)) { foreach ($l in (Get-Content -LiteralPath $lf -Encoding UTF8)) { $lines.Add($l) } }
+            Remove-Item -LiteralPath $lf -Force -ErrorAction SilentlyContinue
+        }
+        [IO.File]::WriteAllLines($listFile, $lines.ToArray())
+        return [pscustomobject]@{ Rc = $rc; N = $(if ($rc -eq 0) { $total } else { $null }); Text = ($text -join ' ') }
     }
     $listBase = Join-Path ([IO.Path]::GetTempPath()) 'kk-compat-base.txt'
     $listNew  = Join-Path ([IO.Path]::GetTempPath()) 'kk-compat-new.txt'
@@ -188,7 +208,7 @@ if ($newLibItem -and (Test-Path -LiteralPath $compatScript) -and (Test-Path -Lit
         Log ('לא ניתן היה לבדוק תאימות (ממשיכים; גיבוי יישמר): ' + $base.Text + ' | ' + $new.Text)
     }
     elseif ($new.N -gt $base.N) {
-        Log 'התוסף המותקן אינו תואם לגרסה שבחבילה: הוא קורא לפעולות של KitveiHakodeshLib שאינן קיימות בגרסה החדשה. לא שונה דבר.'
+        Log 'הגרסה שבחבילה אינה תואמת להתקנה: התוסף, האפליקציה העצמאית או הספרייה עצמה קוראים לפעולות שאינן קיימות בגרסה שמול הרכיבים המותקנים. לא שונה דבר.'
         try { Get-Content -LiteralPath $listNew -Encoding UTF8 | Select-Object -First 5 | ForEach-Object { Log ('  חסר: ' + $_) } } catch { }
         Log 'התקן קודם את כתבי הקודש הרשמי בגרסה האחרונה, ואז הרץ שוב את העדכון.'
         exit 7
