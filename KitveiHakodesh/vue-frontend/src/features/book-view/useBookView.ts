@@ -215,7 +215,7 @@ export function useBookView(
   const {
     groups, filterGroups, staticFilterGroups,
     loading: commentaryLoading, loadError: commentaryLoadError,
-    staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, ensureLineContents,
+    staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, ensureLineContents, trimLineContents,
   } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
@@ -763,7 +763,7 @@ export function useBookView(
     // data
     tabId, bookId,
     lines, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents,
+    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation (hoisted — survive v-if toggle)

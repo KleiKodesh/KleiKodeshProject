@@ -188,27 +188,64 @@ export function useCommentary(
   // about to show (ensureLineContents). Nothing downloads the panel's text in the
   // background — the panel's search has sources of its own (useCommentarySearch).
 
-  // lineIds whose content fetch is done or in flight for the CURRENT selection, so no
-  // line is ever requested twice. Reset on every load().
   // The fetch each requested line rides on, so ensureLineContents can await a line
-  // that another window's fetch already has in flight.
+  // that another window's fetch already has in flight. Reset on every load().
   const contentFetches = new Map<number, Promise<void>>()
-  // Lines whose fetch has returned, with or without text: never waited for again.
+  // Lines whose fetch has returned, with or without text: never waited for again
+  // (until trimLineContents releases them).
   const contentSettled = new Set<number>()
+  // Every line object carrying a line id, for the CURRENT groups. The same line can
+  // sit in two groups (one book linked under two connection types), and each copy
+  // gets the text. Built once per load instead of scanning the groups per id.
+  let linesById = new Map<number, CommentaryLine[]>()
 
-  /** Fetches content for one batch of lines and writes it into every matching line object. */
-  function fetchContentsInto(builtGroups: CommentaryGroup[], batch: CommentaryLine[]): Promise<void> {
-    const ids = batch.map((line) => line.lineId)
+  function indexLines(builtGroups: CommentaryGroup[]): Map<number, CommentaryLine[]> {
+    const byId = new Map<number, CommentaryLine[]>()
+    for (const group of builtGroups) {
+      for (const line of group.lines) {
+        if (line.lineId <= 0) continue
+        const list = byId.get(line.lineId)
+        if (list) list.push(line)
+        else byId.set(line.lineId, [line])
+      }
+    }
+    return byId
+  }
+
+  // ── Bounded text cache ──────────────────────────────────────────────────────
+  // The groups hold a line object for every linked line (a whole-book range has
+  // ~50k), but only the text NEAR the scroller's window is kept: settled fetches are
+  // remembered in arrival order, and once more than TEXT_BUDGET lines hold text the
+  // oldest are released (content back to '', not settled) unless the panel says it
+  // still shows them. A released line comes back through ensureLineContents like
+  // any line the scroller has not shown yet.
+  const TEXT_BUDGET = 3000
+  // The newest settled batches are never released: the landing a goal or restore
+  // just fetched is the newest batch, and it may still be a tick from mounting.
+  const PROTECTED_NEWEST_BATCHES = 2
+  let settledBatches: number[][] = []
+  let settledCount = 0
+  // What each panel still shows, by panel: the two panels share this instance, so a
+  // trim asked by one must not release the rows the other has on screen.
+  const keepByPanel = new Map<string, (lineId: number) => boolean>()
+
+  /** Fetches content for one batch of lines and writes it into every line object with that id. */
+  function fetchContentsInto(ids: number[]): Promise<void> {
+    const index = linesById
     const fetching = (async () => {
       const rows = await getLineContents(ids)
+      // A new load replaced the groups while this was in flight: its lines are gone,
+      // and marking the ids settled would leave the new load's rows without text.
+      if (linesById !== index) return
       const contentById = new Map(rows.map((row) => [row.id, row.content ?? '']))
-      for (const group of builtGroups) {
-        for (const line of group.lines) {
-          const content = contentById.get(line.lineId)
-          if (content !== undefined && line.content === '') line.content = content
-        }
+      for (const id of ids) {
+        const content = contentById.get(id)
+        if (content === undefined) continue
+        for (const line of linesById.get(id) ?? []) if (line.content === '') line.content = content
       }
       for (const id of ids) contentSettled.add(id)
+      settledBatches.push(ids)
+      settledCount += ids.length
     })()
     for (const id of ids) {
       contentFetches.set(id, fetching)
@@ -219,6 +256,9 @@ export function useCommentary(
     return fetching
   }
 
+  // One request per this many lines: a select-all copy asks for every line at once.
+  const FETCH_CHUNK = 500
+
   /**
    * Resolves once every one of these lines has its text (or is known to have
    * none): the windowed scroller's row source. It asks for a range BEFORE mounting
@@ -227,29 +267,67 @@ export function useCommentary(
    * the scroller mounts nothing rather than empty rows.
    */
   async function ensureLineContents(lineIds: number[]): Promise<void> {
-    const currentGroups = groups.value
-    if (!currentGroups.length) return
+    if (!linesById.size) return
     const waits: Promise<void>[] = []
-    const wanted = new Set<number>()
+    const wanted: number[] = []
+    const seen = new Set<number>()
     for (const id of lineIds) {
-      if (id <= 0 || contentSettled.has(id)) continue
+      if (id <= 0 || contentSettled.has(id) || seen.has(id)) continue
+      seen.add(id)
       const inFlight = contentFetches.get(id)
       if (inFlight) waits.push(inFlight)
-      else wanted.add(id)
+      else if (linesById.has(id)) wanted.push(id)
     }
-    if (wanted.size) {
-      const batch: CommentaryLine[] = []
-      for (const group of currentGroups) {
-        for (const line of group.lines) {
-          if (wanted.has(line.lineId) && line.content === '') {
-            wanted.delete(line.lineId)
-            batch.push(line)
-          }
-        }
-      }
-      if (batch.length) waits.push(fetchContentsInto(currentGroups, batch))
+    for (let i = 0; i < wanted.length; i += FETCH_CHUNK) {
+      waits.push(fetchContentsInto(wanted.slice(i, i + FETCH_CHUNK)))
     }
     if (waits.length) await Promise.all(waits)
+  }
+
+  /**
+   * Records what `panel` still shows (its mounted and pinned rows; null when the
+   * panel unmounts), then releases the text of the lines fetched longest ago until
+   * the held text is within budget. A line either panel still shows is never
+   * released, whatever its age. Called by a panel after its window moves; a no-op
+   * while the held text is within budget.
+   */
+  function trimLineContents(panel: string, keep: ((lineId: number) => boolean) | null): void {
+    if (keep) keepByPanel.set(panel, keep)
+    else keepByPanel.delete(panel)
+    if (!keep || settledCount <= TEXT_BUDGET) return
+    const keeps = [...keepByPanel.values()]
+    const shown = (lineId: number) => keeps.some((k) => k(lineId))
+    const survivors: number[][] = []
+    let count = settledCount
+    const lastEvictable = settledBatches.length - PROTECTED_NEWEST_BATCHES
+    for (let b = 0; b < settledBatches.length; b++) {
+      const batch = settledBatches[b]!
+      if (count <= TEXT_BUDGET || b >= lastEvictable) {
+        survivors.push(batch)
+        continue
+      }
+      const kept: number[] = []
+      for (const id of batch) {
+        if (shown(id)) {
+          kept.push(id)
+          continue
+        }
+        contentSettled.delete(id)
+        for (const line of linesById.get(id) ?? []) line.content = ''
+        count--
+      }
+      if (kept.length) survivors.push(kept)
+    }
+    settledBatches = survivors
+    settledCount = count
+  }
+
+  function resetContents() {
+    contentFetches.clear()
+    contentSettled.clear()
+    settledBatches = []
+    settledCount = 0
+    linesById = new Map()
   }
 
   async function load(lineId: number) {
@@ -258,8 +336,7 @@ export function useCommentary(
     const isMulti = multiIds != null && multiIds.length > 0
     loadedIdsSignature = idsSignature(lineId, multiIds)
     groups.value = []
-    contentFetches.clear()
-    contentSettled.clear()
+    resetContents()
     loading.value = true
     loadError.value = false
     try {
@@ -302,8 +379,10 @@ export function useCommentary(
 
       // The structure (which commentators, which lines) is all the panel needs to
       // open: the windowed scroller asks for exactly the lines it will show, before
-      // it shows them.
+      // it shows them. The line index is built from the REACTIVE line objects, so a
+      // fetch writes text the rows see.
       groups.value = built
+      linesById = indexLines(groups.value)
     } catch {
       // Link/content queries failed (older or mismatched seforim DB, service
       // error). Without this catch the rejection was unhandled and the panel
@@ -334,6 +413,7 @@ export function useCommentary(
         loadedForLineId = null
         loadedIdsSignature = null
         groups.value = []
+        resetContents()
         loadError.value = false
         return
       }
@@ -395,6 +475,7 @@ export function useCommentary(
     staticFilterGroupsLoaded,
     ensureStaticFilterGroupsLoaded,
     ensureLineContents,
+    trimLineContents,
   }
 }
 

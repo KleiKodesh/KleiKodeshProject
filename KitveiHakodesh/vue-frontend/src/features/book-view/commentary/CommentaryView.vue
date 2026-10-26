@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
@@ -14,7 +14,7 @@ import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import type { CommentaryGroup } from './useCommentary'
+import type { CommentaryGroup, CommentaryLine } from './useCommentary'
 import { commentaryGroupKey } from './useCommentary'
 import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useCommentaryScroll } from './useCommentaryScroll'
@@ -81,6 +81,11 @@ const props = defineProps<{
    * range's lines before mounting it, so a line is never on screen without its text.
    */
   ensureLineContents: (lineIds: number[]) => Promise<void>
+  /**
+   * Releases the text of lines far from the window, keeping the ones `keep` names
+   * (see useCommentary's bounded text cache). Called after the window moves.
+   */
+  trimLineContents?: (panel: CommentarySlot, keep: ((lineId: number) => boolean) | null) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
@@ -139,7 +144,10 @@ type FlatItem =
       firstLineIndex?: number
       tocPath?: string
     }
-  | { type: 'line'; content: string; lineId: number }
+  // The line object itself, not a copy of its text: the list is STRUCTURAL and is
+  // rebuilt only when the groups or the TOC paths change. Text arriving in (or
+  // released from) a line re-renders that row alone, not the whole list.
+  | { type: 'line'; line: CommentaryLine }
 
 // The windowed scroller mounts only the rows around the viewport, fetched before
 // they are mounted. Its viewport is the scroll element every listener below uses;
@@ -179,7 +187,7 @@ const flatItems = computed<FlatItem[]>(() => {
       firstLineIndex: g.lines[0]?.lineIndex,
       tocPath: tocPaths.get(commentaryGroupKey(g)),
     })
-    for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
+    for (const l of g.lines) items.push({ type: 'line', line: l })
   }
   return items
 })
@@ -245,7 +253,7 @@ function lineIdsIn(start: number, end: number): number[] {
   const items = flatItems.value
   for (let index = Math.max(0, start); index < Math.min(end, items.length); index++) {
     const item = items[index]
-    if (item?.type === 'line' && item.lineId > 0) ids.push(item.lineId)
+    if (item?.type === 'line' && item.line.lineId > 0) ids.push(item.line.lineId)
   }
   return ids
 }
@@ -254,6 +262,30 @@ function lineIdsIn(start: number, end: number): number[] {
 function ensureRows(start: number, end: number): Promise<void> {
   return props.ensureLineContents(lineIdsIn(start, end))
 }
+
+/** Every real line id the panel shows, in reading order: the select-all copy scope. */
+function allLineIds(): number[] {
+  return lineIdsIn(0, flatItems.value.length)
+}
+
+// After the window moves, text far from it is released — never a mounted or pinned
+// row's. The goal a landing is fetching for is covered by the cache's own rule (its
+// newest batches are never released).
+watch(
+  () => [windowedScroller.value?.renderedRange, pinnedRowIndexes.value] as const,
+  ([range, pinned]) => {
+    if (!range || !props.trimLineContents) return
+    const keep = new Set(lineIdsIn(range.start, range.end))
+    const items = flatItems.value
+    for (const index of pinned) {
+      const item = items[index]
+      if (item?.type === 'line') keep.add(item.line.lineId)
+    }
+    props.trimLineContents(props.slotName, (lineId) => keep.has(lineId))
+  },
+  { flush: 'post' },
+)
+onBeforeUnmount(() => props.trimLineContents?.(props.slotName, null))
 
 // ── Notes and word links — loaded for the mounted rows ────────────────────────
 // The data layers live in useBookView (hoisted). Only the rows the scroller has
@@ -308,6 +340,7 @@ const {
 } = useCommentaryScroll(
   () => flatItems.value,
   () => visibleGroups.value,
+  () => headerIndexes.value,
   scroller,
   props.slotName,
 )
@@ -408,7 +441,7 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
   buildAllCommentaryContentHtml,
   props.prepareExportData && props.prepareExportTargets && props.resolveWordLinkTarget
     ? {
-        getAllLineIds: () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.lineId)),
+        getAllLineIds: allLineIds,
         prepareForLines: props.prepareExportData,
         prepareForRenderedHtml: props.prepareExportTargets,
         resolveWordLinkTarget: props.resolveWordLinkTarget,
@@ -421,8 +454,13 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
     lineAtRowIndex: (rowIndex) => {
       const item = flatItems.value[rowIndex]
       if (!item || item.type !== 'line') return null
-      return { lineId: item.lineId, offsetLength: props.annotationOffsetLengthOf(item.content) }
+      return { lineId: item.line.lineId, offsetLength: props.annotationOffsetLengthOf(item.line.content) }
     },
+    // The rows a selection spans beyond the window, and the whole document for a
+    // select-all, are built from the model — which only holds the text the scroller
+    // has fetched. Fetch the rest before the copy reads it.
+    ensureContentsForRange: (firstIndex, lastIndex) => props.ensureLineContents(lineIdsIn(firstIndex, lastIndex + 1)),
+    ensureAllContents: () => props.ensureLineContents(allLineIds()),
   },
   () => openCommentaryErrorReport(),
 )
@@ -683,10 +721,10 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
               <div
                 v-else-if="flatItems[index]"
                 class="line"
-                :class="{ 'line-no-text': (flatItems[index] as any).lineId === -1 }"
-                :data-line-id="(flatItems[index] as any).lineId"
-                :style="teamimFontStyle((flatItems[index] as any).content)"
-                v-html="renderContent((flatItems[index] as any).content, index, (flatItems[index] as any).lineId, props.searchQuery)"
+                :class="{ 'line-no-text': (flatItems[index] as any).line.lineId === -1 }"
+                :data-line-id="(flatItems[index] as any).line.lineId"
+                :style="teamimFontStyle((flatItems[index] as any).line.content)"
+                v-html="renderContent((flatItems[index] as any).line.content, index, (flatItems[index] as any).line.lineId, props.searchQuery)"
               />
             </template>
           </WindowedScroller>
