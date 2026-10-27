@@ -917,21 +917,23 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // Libraries that list a tractate's pages as bare "ד." / "ד:" entries are read as pages too, but only
         // under a parent whose entries really are a page list: the same page appears with both marks. A lone
         // "א." that is just a list item stays what it is.
-        HashSet<int?>? bareListParents = null;
+        // Keyed by the parent id, with int.MinValue standing for "no parent" (a dictionary key cannot be null).
+        HashSet<int>? bareListParents = null;
         {
-            var dots = new Dictionary<int?, HashSet<string>>();
-            var colons = new Dictionary<int?, HashSet<string>>();
+            var dots = new Dictionary<int, HashSet<string>>();
+            var colons = new Dictionary<int, HashSet<string>>();
             foreach (var row in rows)
             {
                 if (SeforimDbCatalogTextNormalizer.TryParseDafText(row.Text, out _, out _)) continue;
                 if (!SeforimDbCatalogTextNormalizer.TryParseBareDafText(row.Text, out string c, out bool b)) continue;
                 var map = b ? colons : dots;
-                if (!map.TryGetValue(row.ParentId, out var set)) map[row.ParentId] = set = new HashSet<string>(StringComparer.Ordinal);
+                int parentKey = row.ParentId ?? int.MinValue;
+                if (!map.TryGetValue(parentKey, out var set)) map[parentKey] = set = new HashSet<string>(StringComparer.Ordinal);
                 set.Add(c);
             }
             foreach (var (parent, set) in dots)
                 if (colons.TryGetValue(parent, out var other) && set.Overlaps(other))
-                    (bareListParents ??= new HashSet<int?>()).Add(parent);
+                    (bareListParents ??= new HashSet<int>()).Add(parent);
         }
 
         List<TocRow>? result = null;
@@ -942,7 +944,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         {
             var r = rows[i];
             if (!SeforimDbCatalogTextNormalizer.TryParseDafText(r.Text, out string core, out bool isAmudB)
-                && !(bareListParents is not null && bareListParents.Contains(r.ParentId)
+                && !(bareListParents is not null && bareListParents.Contains(r.ParentId ?? int.MinValue)
                      && SeforimDbCatalogTextNormalizer.TryParseBareDafText(r.Text, out core, out isAmudB)))
             {
                 result?.Add(r);

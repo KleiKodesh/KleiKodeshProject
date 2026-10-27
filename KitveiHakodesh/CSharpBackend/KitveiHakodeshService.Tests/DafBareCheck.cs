@@ -27,6 +27,9 @@ public static class DafBareCheck
             new() { Id = 4, ParentId = 2, BookId = 9, LineIndex = 24, Text = "ב:" },
             new() { Id = 5, ParentId = 2, BookId = 9, LineIndex = 30, Text = "ד." },
             new() { Id = 6, ParentId = 2, BookId = 9, LineIndex = 32, Text = "ד:" },
+            // a page list at the top of the book (no parent entry at all) - must not throw
+            new() { Id = 20, ParentId = null, BookId = 9, LineIndex = 70, Text = "ה." },
+            new() { Id = 21, ParentId = null, BookId = 9, LineIndex = 72, Text = "ה:" },
             // a list that is not a page list: only "." marks, no page with both marks
             new() { Id = 7, ParentId = 1, BookId = 9, LineIndex = 50, Text = "א." },
             new() { Id = 8, ParentId = 1, BookId = 9, LineIndex = 52, Text = "ב." },
@@ -42,6 +45,8 @@ public static class DafBareCheck
         Expect(result.Any(r => r.Text == "א." && r.ParentId == 1) && result.Any(r => r.Text == "ב." && r.ParentId == 1),
             "list items with only one mark (no page list) are left alone");
         Expect(result.Any(r => r.Text == "מאימתי"), "ordinary entries are untouched");
+        Expect(result.Any(r => r.Text == "דף ה" && r.ParentId is null),
+            "a page list with no parent entry is read as pages too (and does not throw on the missing parent)");
 
         string core;
         bool amudB;
