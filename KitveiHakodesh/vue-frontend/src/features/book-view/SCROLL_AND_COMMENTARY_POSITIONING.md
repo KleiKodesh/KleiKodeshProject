@@ -281,6 +281,40 @@ though the commentator has not — compare `data-book-id`, never the text, when 
 `header-nav-picker`, `already-restored`) — one `BEGIN` per
 panel per line switch is correct; two means a stale callback is firing.
 
+## A2. The KEYBOARD CARET is part of the position (2026-10)
+
+Caret browsing (F7, "הפעלת סמן טקסט לניווט ובחירה" in the shortcuts list) is Chromium's own —
+there is no app code behind the key. It navigates and selects from the DOCUMENT's
+caret: the collapsed `window.getSelection()`. So the lines pane has TWO positions,
+and both have to be put where the reader was sent:
+
+- **where the view is scrolled to** — the scroller's landing, everything above; and
+- **where the caret is** — the document selection.
+
+A click sets the second for free, which is why the arrows follow the text during
+normal reading. An OPENING does not click: `onScrollerOpened` lands the window and
+gives the viewport focus, and **focus is not a caret**. With none inside the focused
+element the browser picks its own starting point, and in a `WindowedScroller` that is
+the start of the MOUNTED WINDOW — which a landing builds `ROWS_ABOVE_ON_REBUILD`
+rows above the target and `fill` then grows upward by a screenful more. The view
+showed the right line while the caret sat some dozens of lines higher, so the first
+arrow key left it: "it opens on the right verse and then the cursor jumps to another
+chapter", reported for the address bar (`openTocLineIndex`) and for opening a
+full-text-search result, which are one bug — both are this opening path.
+
+`placeCaretAtRowStart` (`lines/lineCaret.ts`) therefore seats a collapsed caret on the
+opened line, from `onScrollerOpened` and from the open-at-the-top path beside it.
+Collapsed matters: `hasActiveTextSelection`, `useSelectAllInContainer` and
+`useVirtualizedTextSelection` all ignore a collapsed selection, so nothing else sees
+it. A real (non-collapsed) selection is never replaced — at the moment a book opens,
+text still selected belongs to something still on screen (the other split pane, a
+commentary panel) and is the reader's.
+
+Still not covered, and a different situation rather than the same bug: a jump WITHIN
+an open book (`scrollToLine` — a TOC click, a section step, a search match) leaves the
+caret where it was. Those are driven from another panel or an input, which keeps the
+focus, so the arrows are not addressing the text at all.
+
 ## B. Blank slate → default commentary
 
 When a line is selected and there is **no pending pin** (fresh open, no saved
