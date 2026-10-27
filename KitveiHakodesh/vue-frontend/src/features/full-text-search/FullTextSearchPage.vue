@@ -339,19 +339,29 @@ function onResultsKeydown(event: KeyboardEvent): boolean {
 }
 
 /**
- * Focused elements that own these keys themselves, and so are left alone.
- *
- * A focused text field is where the forwarding above runs anyway, with the
- * recent-searches dropdown ahead of it; `select` needs the arrows for its options;
- * and a button or a link is ACTIVATED by Enter — taking that would press the filter
- * button and open a result instead of pressing it. Only the arrows would be safe on
- * those last two, and splitting the rule per key buys a page's reader nothing.
+ * A focused field that owns EVERY one of these keys: the search field, where the
+ * forwarding above runs anyway with the recent-searches dropdown ahead of it, any
+ * other text input on the page, and `select`, whose options the arrows pick.
  */
 function focusedElementOwnsTheseKeys(element: Element | null): boolean {
   if (!(element instanceof HTMLElement)) return false
-  if (element.isContentEditable) return true
-  if (element.getAttribute('role') === 'button') return true
-  return ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(element.tagName)
+  return element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)
+}
+
+/**
+ * A focused control that Enter ACTIVATES: taking Enter there would open a result
+ * instead of pressing the filter button. The arrows mean nothing to these, so they
+ * keep only the one key — deliberately, and not as tidiness.
+ *
+ * Caret browsing is the reason. With it on, Chromium moves DOM focus to focusable
+ * elements as the caret travels through the text, and every result row carries two
+ * icon buttons. Were these to keep the arrows too, the list would stop responding
+ * to them for as long as the caret happened to rest on a button: the bug this whole
+ * change is about, back intermittently and nearly impossible to describe.
+ */
+function focusedElementOwnsEnter(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false
+  return element.getAttribute('role') === 'button' || ['BUTTON', 'A'].includes(element.tagName)
 }
 
 // The same keys from ANYWHERE on this page, not only from the search field.
@@ -366,21 +376,31 @@ function focusedElementOwnsTheseKeys(element: Element | null): boolean {
 //   · The results scroller carries tabindex="0", so a click anywhere in the list —
 //     to scroll it, to select a word — focuses the scroller.
 //
-// From either state the field's keydown never fired: the arrows went to Chromium's
-// own scrolling of the focused scroller (or to the document caret, with F7 caret
-// browsing on) and Enter went nowhere. That is the Word task pane's normal state,
-// which is where it was reported.
+// From either state the field's keydown never fired and the arrows fell through to
+// whatever Chromium does with them on the focused scroller. For this app's readers
+// that is usually CARET BROWSING (F7): it is their normal working mode, not an edge
+// case — it is how they walk a book line by line — so with it on the arrows drag the
+// document caret through the result text while the highlight never moves and Enter
+// never arrives. That is the Word task pane's normal state, which is where it was
+// reported.
 //
 // Guarded like the title bar's and the book view's shortcuts: this pane focused, and
-// this pane's active tab actually being the search page.
+// this pane's active tab actually being the search page. That guard IS the rule for
+// where the caret keeps the arrows and where the list takes them: the book view's
+// lines pane is another route, where this page is not mounted at all and the caret
+// goes on being driven by the arrows exactly as before. Caret browsing is never
+// turned off and no key is taken outside this page.
 //
-// CAPTURE phase, as those two also use: arrow scrolling, caret browsing and the
-// scroller's own Home/End are all cancellable defaults, and capture reaches the key
-// before them. stopPropagation as well, so a key taken here never reaches the
-// scroller's viewport — a keydown there is what marks a scroll as the reader's own
-// for the scrollbar's position label, and the landing this handler performs would
-// otherwise raise that label's bubble over the bar for a keystroke that scrolled
-// nothing by hand.
+// CAPTURE phase, as those two also use: arrow scrolling, the caret-browsing caret
+// move and the scroller's own Home/End are all DEFAULT actions, which Blink runs
+// after dispatch and only for a key nobody cancelled — so preventDefault settles
+// the precedence, and capture gets there before any of the page's own handlers.
+// stopPropagation as well, so a key taken here never reaches the scroller's
+// viewport: a keydown there is what marks a scroll as the reader's own for the
+// scrollbar's position label, and the landing this handler performs would otherwise
+// raise that label's bubble over the bar for a keystroke that scrolled nothing by
+// hand. (The label is upstream's and is untouched; it still shows for real
+// scrolling — wheel, drag, hover.)
 useEventListener(
   window,
   'keydown',
@@ -389,6 +409,7 @@ useEventListener(
     if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
     if (!isSearchActive.value) return
     if (focusedElementOwnsTheseKeys(document.activeElement)) return
+    if (event.code === 'Enter' && focusedElementOwnsEnter(document.activeElement)) return
     // A dialog sits above the whole page: its own Enter must not open a result too.
     if (document.querySelector('.confirm-backdrop, .alert-backdrop')) return
     if (!onResultsKeydown(event)) return
