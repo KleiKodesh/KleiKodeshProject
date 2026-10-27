@@ -137,7 +137,7 @@ function onNativeSearch() {
 
 // Three handlers want the arrows and Enter, in this order:
 //
-//   1. the recent-searches dropdown, while it is open — the list the user can SEE
+//   1. the recent-searches dropdown, while it is OPEN — the list the user can SEE
 //      under the field wins its own keys; it preventDefaults what it consumed.
 //      A plain Enter closes it and falls through, so running a search hands the
 //      arrows straight to the results.
@@ -146,10 +146,31 @@ function onNativeSearch() {
 //      that result. Left/Right are never taken — they are the caret's.
 //   3. this field's own Enter (run the search) and Esc (clear), for keys nobody
 //      above claimed.
+//
+// "While it is open" is the whole reason this is not one straight call chain.
+// CLOSED, the dropdown still claims ArrowDown — to open itself, which is right for a
+// bar with nothing under it. On a page of results it is not: the first ArrowDown
+// after a search would raise a list of past queries instead of stepping into the
+// results just found, and the Enter after it would re-run one of those queries
+// rather than open a result. The suggestions are a PREFIX match, so the field
+// holding the query that was searched usually hides them — the exact match is
+// excluded — and the dropdown stays silent; with history that shares the prefix it
+// does not, which is how this reached a user with a real search history and not the
+// browser tests. So closed, the results get first refusal and the dropdown keeps
+// whatever they leave.
 function onInputKeydown(e: KeyboardEvent) {
-  recents.onKeydown(e)
-  if (e.defaultPrevented) return
+  // Read before anything runs: the dropdown's own handler closes it as it goes, and
+  // the order must be decided by the state the key ARRIVED in.
+  const dropdownWasOpen = recents.open.value
+  if (dropdownWasOpen) {
+    recents.onKeydown(e)
+    if (e.defaultPrevented) return
+  }
   if (props.resultsKeydown?.(e)) return
+  if (!dropdownWasOpen) {
+    recents.onKeydown(e)
+    if (e.defaultPrevented) return
+  }
   if (e.key === 'Enter') handleSearch()
   else if (e.key === 'Escape') handleClear()
 }

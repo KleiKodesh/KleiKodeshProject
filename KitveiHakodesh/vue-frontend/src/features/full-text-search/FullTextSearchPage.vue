@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
 import PageCard from '@/components/PageCard.vue'
-import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
-import { useElementSize, useMediaQuery } from '@vueuse/core'
+import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
+import { useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -12,6 +12,7 @@ import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStat
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
@@ -22,6 +23,10 @@ import { WORD_OPTIONS } from './queryWordSyntax'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const paneNavigation = usePaneNavigation()
+// For the page's own keyboard shortcuts: which pane this is, and whether it is the
+// focused one while split view is open (see the window handler below).
+const paneId = inject<1 | 2>('paneId', 1)
+const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
 const settings = useSettingsStore()
@@ -325,13 +330,73 @@ watch(
   },
 )
 
-// Combobox model: focus stays in the search field and the bar forwards its keydown
-// here, so the arrows move the results highlight and Enter opens the highlighted
-// result — through the same handleResultClick a click goes through. The bar is a
-// sibling of the list, so the hop has to go through this parent.
+// Combobox model: the arrows move the results highlight and Enter opens the
+// highlighted result — through the same handleResultClick a click goes through. The
+// bar forwards its keydown here, and the window handler below covers the rest of the
+// page; the bar is a sibling of the list, so either hop goes through this parent.
 function onResultsKeydown(event: KeyboardEvent): boolean {
-  return resultsListRef.value?.onSearchInputKeydown(event) ?? false
+  return resultsListRef.value?.onNavigationKeydown(event) ?? false
 }
+
+/**
+ * Focused elements that own these keys themselves, and so are left alone.
+ *
+ * A focused text field is where the forwarding above runs anyway, with the
+ * recent-searches dropdown ahead of it; `select` needs the arrows for its options;
+ * and a button or a link is ACTIVATED by Enter — taking that would press the filter
+ * button and open a result instead of pressing it. Only the arrows would be safe on
+ * those last two, and splitting the rule per key buys a page's reader nothing.
+ */
+function focusedElementOwnsTheseKeys(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false
+  if (element.isContentEditable) return true
+  if (element.getAttribute('role') === 'button') return true
+  return ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(element.tagName)
+}
+
+// The same keys from ANYWHERE on this page, not only from the search field.
+//
+// Bound to the field alone the feature was unreachable in practice, because focus is
+// usually not in the field by the time the reader wants the arrows:
+//
+//   · Running the first search teleports the bar out of the empty page's card into
+//     the dock. A Teleport MOVES the DOM node, and Chromium blurs a focused element
+//     that leaves the document even for an instant — so focus is on <body> exactly
+//     when the results appear.
+//   · The results scroller carries tabindex="0", so a click anywhere in the list —
+//     to scroll it, to select a word — focuses the scroller.
+//
+// From either state the field's keydown never fired: the arrows went to Chromium's
+// own scrolling of the focused scroller (or to the document caret, with F7 caret
+// browsing on) and Enter went nowhere. That is the Word task pane's normal state,
+// which is where it was reported.
+//
+// Guarded like the title bar's and the book view's shortcuts: this pane focused, and
+// this pane's active tab actually being the search page.
+//
+// CAPTURE phase, as those two also use: arrow scrolling, caret browsing and the
+// scroller's own Home/End are all cancellable defaults, and capture reaches the key
+// before them. stopPropagation as well, so a key taken here never reaches the
+// scroller's viewport — a keydown there is what marks a scroll as the reader's own
+// for the scrollbar's position label, and the landing this handler performs would
+// otherwise raise that label's bubble over the bar for a keystroke that scrolled
+// nothing by hand.
+useEventListener(
+  window,
+  'keydown',
+  (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+    if (!isSearchActive.value) return
+    if (focusedElementOwnsTheseKeys(document.activeElement)) return
+    // A dialog sits above the whole page: its own Enter must not open a result too.
+    if (document.querySelector('.confirm-backdrop, .alert-backdrop')) return
+    if (!onResultsKeydown(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+  },
+  { capture: true },
+)
 
 // `searchQuery` is the field's LIVE text (v-model), so this fires on every keystroke:
 // the results on screen are the previous query's until a search is actually run, and a
