@@ -29,6 +29,12 @@ const props = defineProps<{
   showOptionsToggle?: boolean
   sortOrder: FullTextSearchSortOrder
   disabled?: boolean
+  /**
+   * The results list's combobox keydown handler, forwarded by the page (the list is
+   * this bar's sibling, so it cannot be reached from here). Returns true when it
+   * consumed the key — see onInputKeydown for where in the order it runs.
+   */
+  resultsKeydown?: (event: KeyboardEvent) => boolean
 }>()
 const emit = defineEmits<{
   search: [string]
@@ -129,11 +135,21 @@ function onNativeSearch() {
   if (!localQuery.value) handleClear()
 }
 
-// Recent-searches navigation runs first; if it consumed the key (accepted a suggestion,
-// or closed the dropdown on Esc) it preventDefaults and we don't act.
+// Three handlers want the arrows and Enter, in this order:
+//
+//   1. the recent-searches dropdown, while it is open — the list the user can SEE
+//      under the field wins its own keys; it preventDefaults what it consumed.
+//      A plain Enter closes it and falls through, so running a search hands the
+//      arrows straight to the results.
+//   2. the results list (combobox model, useInputListNavigation): the arrows move
+//      its highlight without moving the caret, and Enter WITH a highlight opens
+//      that result. Left/Right are never taken — they are the caret's.
+//   3. this field's own Enter (run the search) and Esc (clear), for keys nobody
+//      above claimed.
 function onInputKeydown(e: KeyboardEvent) {
   recents.onKeydown(e)
   if (e.defaultPrevented) return
+  if (props.resultsKeydown?.(e)) return
   if (e.key === 'Enter') handleSearch()
   else if (e.key === 'Escape') handleClear()
 }

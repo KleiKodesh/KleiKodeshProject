@@ -325,6 +325,20 @@ watch(
   },
 )
 
+// Combobox model: focus stays in the search field and the bar forwards its keydown
+// here, so the arrows move the results highlight and Enter opens the highlighted
+// result — through the same handleResultClick a click goes through. The bar is a
+// sibling of the list, so the hop has to go through this parent.
+function onResultsKeydown(event: KeyboardEvent): boolean {
+  return resultsListRef.value?.onSearchInputKeydown(event) ?? false
+}
+
+// `searchQuery` is the field's LIVE text (v-model), so this fires on every keystroke:
+// the results on screen are the previous query's until a search is actually run, and a
+// highlight left over from them would swallow the Enter meant to search what was just
+// typed. Editing the query therefore drops the highlight, and Enter searches again.
+watch(searchQuery, () => resultsListRef.value?.clearHighlight())
+
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset
@@ -486,6 +500,7 @@ onBeforeUnmount(() => {
         :is-options-open="isOptionsOpen"
         :is-options-active="isOptionsActive"
         :show-options-toggle="!showOptionsCard"
+        :results-keydown="onResultsKeydown"
         v-model:sort-order="sortOrder"
         @search="onSearch"
         @cancel="cancelSearch"
