@@ -215,6 +215,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
     /// v23: root TOC entries are stripped only when they add no word beyond the title.
     /// v24: Lucene field names spelled out (were single letters). Full rebuild.
+    /// v26: a library that names a tractate's pages "ד." / "ד:" (no word "דף") is indexed as pages too.
     /// v25: no index-format change; forces ONE rebuild of every index built before the
     /// additional-library hardening. Those builds dropped a library they could not read
     /// whole (a schema-6+ library without alt_toc_structure was one) yet stamped the index
@@ -222,7 +223,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// current build computes for the same files - so the current build trusted the old
     /// index and never rebuilt it, leaving the library's book titles out of book-name
     /// search for as long as its file did not change.</summary>
-    public const string IndexFormatVersion = "v25";
+    public const string IndexFormatVersion = "v26";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -911,8 +912,28 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// and sits a level above; amud hits can only rank below the daf level. The default
     /// navigation for "דף X" is עמוד א.
     /// </summary>
-    private static List<TocRow> ExpandDafAmudim(List<TocRow> rows)
+    internal static List<TocRow> ExpandDafAmudim(List<TocRow> rows)
     {
+        // Libraries that list a tractate's pages as bare "ד." / "ד:" entries are read as pages too, but only
+        // under a parent whose entries really are a page list: the same page appears with both marks. A lone
+        // "א." that is just a list item stays what it is.
+        HashSet<int?>? bareListParents = null;
+        {
+            var dots = new Dictionary<int?, HashSet<string>>();
+            var colons = new Dictionary<int?, HashSet<string>>();
+            foreach (var row in rows)
+            {
+                if (SeforimDbCatalogTextNormalizer.TryParseDafText(row.Text, out _, out _)) continue;
+                if (!SeforimDbCatalogTextNormalizer.TryParseBareDafText(row.Text, out string c, out bool b)) continue;
+                var map = b ? colons : dots;
+                if (!map.TryGetValue(row.ParentId, out var set)) map[row.ParentId] = set = new HashSet<string>(StringComparer.Ordinal);
+                set.Add(c);
+            }
+            foreach (var (parent, set) in dots)
+                if (colons.TryGetValue(parent, out var other) && set.Overlaps(other))
+                    (bareListParents ??= new HashSet<int?>()).Add(parent);
+        }
+
         List<TocRow>? result = null;
         Dictionary<(int? ParentId, string Core), TocRow>? parents = null;
         int syntheticId = int.MinValue / 2;
@@ -920,7 +941,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         for (int i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            if (!SeforimDbCatalogTextNormalizer.TryParseDafText(r.Text, out string core, out bool isAmudB))
+            if (!SeforimDbCatalogTextNormalizer.TryParseDafText(r.Text, out string core, out bool isAmudB)
+                && !(bareListParents is not null && bareListParents.Contains(r.ParentId)
+                     && SeforimDbCatalogTextNormalizer.TryParseBareDafText(r.Text, out core, out isAmudB)))
             {
                 result?.Add(r);
                 continue;
@@ -968,7 +991,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
     // ── DB loading ──────────────────────────────────────────────────────────────
 
-    private sealed class TocRow
+    internal sealed class TocRow
     {
         public int Id;
         public int? ParentId;

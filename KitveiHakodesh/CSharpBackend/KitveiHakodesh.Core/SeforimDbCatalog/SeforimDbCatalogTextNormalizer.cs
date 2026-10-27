@@ -453,6 +453,29 @@ public static class SeforimDbCatalogTextNormalizer
         return true;
     }
 
+    /// <summary>
+    /// Recognize a BARE Talmud page entry: just the page number and the amud mark, "ד." (amud א) or
+    /// "ד:" (amud ב), the way libraries that list a tractate's pages without the word "דף" name
+    /// them. Returns the same core a spelled-out entry would have ("דף ד"). Only the shape is
+    /// checked here; the caller decides whether a group of siblings really is a page list.
+    /// </summary>
+    public static bool TryParseBareDafText(string text, out string core, out bool isAmudB)
+    {
+        core = "";
+        isAmudB = false;
+        string t = text.Trim();
+        if (t.Length < 2 || t.Length > 6) return false;
+        char last = t[^1];
+        if (last != '.' && last != ':') return false;
+        string body = t[..^1].Trim();
+        if (body.Length == 0 || body.Length > 4) return false;
+        foreach (char c in body)
+            if (!((c >= '\u05D0' && c <= '\u05EA') || c == '\'' || c == '"' || c == '\u05F3' || c == '\u05F4')) return false;
+        core = "\u05D3\u05E3 " + body;
+        isAmudB = last == ':';
+        return true;
+    }
+
     // ── ה-prefix stripping (ported from the Vue frontend's bookCatalogSearchNormalizer) ──
     // Symmetric definite-article folding so הרמבן and רמבן resolve to the same match:
     // the index adds the stripped form as an extra token at the same position, and the

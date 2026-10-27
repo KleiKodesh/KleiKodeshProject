@@ -81,7 +81,7 @@ if (watcherMode)
 if (expanderSelfTest)
     return RelatedFormExpanderCheck.SelfTest() == 0 ? 0 : 1;
 if (treeOrderSelfTest)
-    return TreeOrderCheck.SelfTest() == 0 ? 0 : 1;
+    return TreeOrderCheck.SelfTest() + DafBareCheck.SelfTest() == 0 ? 0 : 1;
 if (variantMode)
     // Normalised to 0/1 like the line above: Run() returns a failure COUNT, and an
     // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
