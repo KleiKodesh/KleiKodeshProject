@@ -356,9 +356,14 @@ async function landOn(index: number, landing: WindowedScrollerScrollToOptions = 
 // ── Keyboard navigation ───────────────────────────────────────────────────────
 //
 // The combobox model every search list in the app uses (useInputListNavigation):
-// DOM focus never leaves the search field — the bar forwards its keydown here
-// through `onSearchInputKeydown` — and the arrows move a HIGHLIGHT instead, so the
-// user can keep typing mid-word and ArrowLeft/ArrowRight stay the caret's.
+// the arrows move a HIGHLIGHT rather than DOM focus, so the user can keep typing
+// mid-word while the field has the caret and ArrowLeft/ArrowRight stay the caret's.
+//
+// `onNavigationKeydown` is the one entry point, reached two ways (both through the
+// page): forwarded from the search field's own keydown, and — because focus is
+// usually NOT in that field by the time the reader wants the arrows — from the
+// page's window-level capture handler for everywhere else. See the handler in
+// FullTextSearchPage.vue for why the field alone was not enough.
 //
 // The highlight is an INDEX into `shownResults`, not an element: this list mounts
 // only the rows around the viewport, so an element reference would be dropped the
@@ -398,24 +403,26 @@ const { activeIndex, onKeydown: moveHighlight } = useInputListNavigation({
   scrollIntoView: revealResult,
 })
 
+/** The vertical movement keys, unmodified — the ones that ENTER the list. */
+const ENTERING_KEYS = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp']
+
 /**
- * The search field's keydown, forwarded by the bar through the page. Returns true
- * when it was consumed.
+ * A keydown aimed at the results, from the field or from the page's window
+ * handler. Returns true when it was consumed.
  *
  * Entering the list is the one thing this list does not take from the shared
- * handler. Its rule — first arrow goes to result 1 — is right for a dropdown that
- * opens at its top, but this list is a page the reader scrolls: they wheel down to
- * result 300, or come Back from a book onto their restored position (a rebuild,
- * which drops the highlight), and the first ArrowDown would then yank them to the
- * top. So an arrow pressed with nothing highlighted enters at the row they are
- * LOOKING at. At the top of the list there is nothing to preserve and the shared
- * rule stands, ArrowUp entering at the last result included.
+ * handler. Its rule — the first press goes to result 1 — is right for a dropdown
+ * that opens at its top, but this list is a page the reader scrolls: they wheel
+ * down to result 300, or come Back from a book onto their restored position (a
+ * rebuild, which drops the highlight), and the first ArrowDown would then yank them
+ * to the top. So a movement key pressed with nothing highlighted enters at the row
+ * they are LOOKING at. At the top of the list there is nothing to preserve and the
+ * shared rule stands, ArrowUp entering at the last result included.
  */
-function onSearchInputKeydown(event: KeyboardEvent): boolean {
-  const isPlainVerticalArrow =
-    (event.code === 'ArrowDown' || event.code === 'ArrowUp') &&
-    !event.ctrlKey && !event.metaKey && !event.altKey
-  if (isPlainVerticalArrow && activeIndex.value < 0) {
+function onNavigationKeydown(event: KeyboardEvent): boolean {
+  const isEnteringKey =
+    ENTERING_KEYS.includes(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey
+  if (isEnteringKey && activeIndex.value < 0) {
     const firstVisible = scroller()?.readFirstVisible(0, true)?.index
     if (firstVisible) {
       event.preventDefault()
@@ -553,7 +560,7 @@ defineExpose({
   scrollToBook,
   armRestore,
   cancelRestore,
-  onSearchInputKeydown,
+  onNavigationKeydown,
   clearHighlight,
 })
 </script>
