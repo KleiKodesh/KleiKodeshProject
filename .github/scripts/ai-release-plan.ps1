@@ -77,8 +77,9 @@ SECTIONS:
   improved, not new; a faster home page is improved).
 - "fixed" = something that went wrong before (wrong text, lost or shifted position,
   scrambled copy, failed print, wrong text direction, blank screen) and now does not.
-  A commit whose subject says fix / no longer / now works / correctly is "fixed", even
-  if it also reads like an improvement.
+  A commit whose subject says fix / no longer / instead of refusing / now works /
+  correctly / keeps the same text in place / always right-to-left is "fixed", even if
+  it also reads like an improvement: the old behaviour was wrong.
 - Saving edits into the file, a new keyboard shortcut, a new download -> "new".
 
 WORDING:
@@ -290,6 +291,40 @@ $glossary
             $extra = Invoke-Gemini $p3 $mergeSchema { param($o) $null -ne $o.changes }
             if ($extra) { $plan.changes = @($plan.changes) + @($extra.changes); Write-Host "Pass 3: +$(@($extra.changes).Count)" }
         }
+    }
+    # Pass 4: an editor's read of the finished list - sections, jargon, one idea per item.
+    if ($plan) {
+        $draft = ($plan.changes | ForEach-Object { "- $($_.section) | $($_.area_en) | $($_.en)" }) -join "`n"
+        $p4 = @"
+$about
+
+You are the editor. Below is the draft English list of release-note changes, as
+"section | area | sentence". Return the final list:
+- Keep EVERY feature in the draft - remove an item only when another item says exactly
+  the same thing. Do not add features that are not in the draft.
+- Put each item in the right section using the rules below. When an item mixes a fix
+  with an improvement or a new feature, split it into two items in their sections.
+- An item that lists more than two things: keep the two that matter most to a reader,
+  or split it into two items.
+- Rewrite any wording that names a mechanism or uses jargon (pills, panes, rendering,
+  native, index, cache, flyout, task pane, tooltip...) into what the reader sees.
+- en: one plain sentence, at most ~20 words. he: the same in natural, fluent Hebrew as
+  a native Israeli writer would phrase it - not a word-for-word translation, no
+  anglicisms, correct spelling, exact glossary terms.
+- rank: 1 = headline, 2 = notable, 3 = minor.
+- bump: keep "$($plan.bump)" unless a section change makes it wrong; reason: one line.
+
+$rules
+
+GLOSSARY (English = Hebrew):
+$glossary
+
+DRAFT:
+$draft
+"@
+        Write-Host "Pass 4 (editor)"
+        $edited = Invoke-Gemini $p4 $planSchema { param($o) @($o.changes).Count -and $o.bump }
+        if ($edited) { $plan = $edited }
     }
 } else {
     $prompt = @"
