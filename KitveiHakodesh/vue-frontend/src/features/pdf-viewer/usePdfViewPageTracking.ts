@@ -176,12 +176,14 @@ async function buildOutlineIndex(
 
 /**
  * Start of the trailing outline-only section written by a TOC autosave, read from
- * its "%KH-TOC start=<S> prev=<P>" marker (patched pdf.worker.mjs SaveDocument —
- * same parse, same plausibility check). Null when the file has none.
+ * its "%KH-TOC start=<S> prev=<P> [sha=<H>]" marker (patched pdf.worker.mjs
+ * SaveDocument). Only a hint: the worker does the full proof (khReadTocMarker); when it
+ * rejects the marker its save keeps every loaded byte, so writing saved[S..] at S
+ * still reproduces the full file + appended section. Null when the file has none.
  */
 function tocMarkerStart(bytes: Uint8Array): number | null {
-  const tail = String.fromCharCode(...bytes.subarray(Math.max(0, bytes.length - 128)))
-  const m = /%KH-TOC start=(\d+) prev=(\d+)\s*$/.exec(tail)
+  const tail = String.fromCharCode(...bytes.subarray(Math.max(0, bytes.length - 256)))
+  const m = /%KH-TOC start=(\d+) prev=(\d+)(?: sha=[0-9a-f]{64})?\s*$/.exec(tail)
   if (!m) return null
   const start = Number(m[1])
   const prev = Number(m[2])
