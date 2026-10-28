@@ -38,7 +38,13 @@ $hashes = @(git log $range --no-merges --pretty=format:%H)
 $blocks = foreach ($h in $hashes) {
     $msg = (git log -1 --pretty=format:"%s%n%b" $h | Out-String).Trim()
     if ($msg -match '(?im)^\s*User-facing:\s*none\b') { continue }
-    $areas = @(git diff-tree --no-commit-id --name-only -r $h |
+    $files = @(git diff-tree --no-commit-id --name-only -r $h)
+    # Nothing a user runs: CI, build scripts, docs, notes, tests.
+    $shipped = @($files | Where-Object { $_ -notmatch '^(\.github|\.kiro|\.claude|Build/scripts|docs?)/|\.md$|^suggestions\.txt$|^todo\.txt$|(^|/)tests?/|\.(test|spec)\.[jt]s$' })
+    if ($files -and -not $shipped) { continue }
+    # Long bodies are implementation detail; the subject and first lines carry the gist.
+    if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) + '...' }
+    $areas = @($shipped |
         ForEach-Object { $p = @($_ -split '/'); if ($p.Count -gt 1) { $p[0..([Math]::Min(4, $p.Count - 2))] -join '/' } else { $_ } } |
         Sort-Object -Unique | Select-Object -First 6)
     if ($env:NOTES_INPUT -eq 'plain') { "### $msg" } else { "### $msg`nFiles: $($areas -join ', ')" }
