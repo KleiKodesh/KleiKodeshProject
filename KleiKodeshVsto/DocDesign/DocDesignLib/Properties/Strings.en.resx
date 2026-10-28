@@ -29,7 +29,8 @@
   <data name="SpaceBefore" xml:space="preserve"><value>Space before</value></data>
   <data name="LineSpacing" xml:space="preserve"><value>Line spacing</value></data>
   <data name="WordSpacing" xml:space="preserve"><value>Word spacing</value></data>
-  <data name="CharStretch" xml:space="preserve"><value>Letter stretch</value></data>
+  <data name="CharStretch" xml:space="preserve"><value>Character spacing</value></data>
+  <data name="CharScale" xml:space="preserve"><value>Letter stretch (%)</value></data>
   <data name="StepSize" xml:space="preserve"><value>Step size</value></data>
   <data name="TipReset" xml:space="preserve"><value>Reset</value></data>
   <data name="TipIncrease" xml:space="preserve"><value>Increase</value></data>

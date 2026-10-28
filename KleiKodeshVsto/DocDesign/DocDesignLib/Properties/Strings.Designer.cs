@@ -45,6 +45,7 @@ namespace DocDesign.Properties
         public static string LineSpacing => ResourceManager.GetString("LineSpacing", resourceCulture);
         public static string WordSpacing => ResourceManager.GetString("WordSpacing", resourceCulture);
         public static string CharStretch => ResourceManager.GetString("CharStretch", resourceCulture);
+        public static string CharScale => ResourceManager.GetString("CharScale", resourceCulture);
         public static string StepSize => ResourceManager.GetString("StepSize", resourceCulture);
         public static string TipReset => ResourceManager.GetString("TipReset", resourceCulture);
         public static string TipIncrease => ResourceManager.GetString("TipIncrease", resourceCulture);
