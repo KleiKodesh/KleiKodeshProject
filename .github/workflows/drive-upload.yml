@@ -23,6 +23,9 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
     env:
       FOLDER_ID: 16lBZzaLRjdz5aIG54Uanhmdk9EczwEKo   # the KleiKodesh folder in the shared Drive
       PREVIOUS_DIR: גרסה קודמת
@@ -92,3 +95,47 @@ jobs:
           rclone delete gdrive: --drive-root-folder-id "$FOLDER_ID" --include 'ReleaseNotes-*' \
             --include "$NOTES_HE - *" --include "$NOTES_EN - *" -v
           rclone copy notes gdrive: --drive-root-folder-id "$FOLDER_ID" --drive-import-formats docx -v
+
+      # GitHub's own failure email is generic: open an issue (emailed to the repo owner) with the fix steps.
+      - name: Open an issue with fix steps
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Drive sync failed - Google Drive is out of date"
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "An open issue already exists."; exit 0
+          fi
+          cat > body.md <<'MD'
+          The Drive sync failed, so the shared Google Drive folder may not have the latest release.
+
+          **First, try a rerun** (a temporary Google/GitHub hiccup fixes itself):
+          open the failed run below, click **Re-run jobs**. If it passes, close this issue.
+
+          **If it fails again with `invalid_grant`, `token expired` or `401`, the Google login expired. Fix (about 5 minutes), in Windows PowerShell:**
+
+          1. Install rclone:
+             `winget install Rclone.Rclone --source winget`
+             then close PowerShell and open a new one.
+          2. Get the Client ID and Client secret: https://console.cloud.google.com/auth/clients?project=kleikodesh-release-clone
+             (sign in as kleikodeshproject@gmail.com; open the client; the secret can be copied or a new one added there).
+          3. Log in (a browser opens; on "Google hasn't verified this app" click Advanced, then Go to kleikodesh-release):
+             `rclone config create gdrive drive scope=drive client_id=PASTE_ID client_secret=PASTE_SECRET`
+          4. Save the new login to GitHub:
+             ```powershell
+             $conf = Get-Content "$env:APPDATA\rclone\rclone.conf"
+             function Get-Val($k) { ($conf | Where-Object { $_ -like "$k = *" }) -replace "^$k = ", '' }
+             Get-Val token         | gh secret set RCLONE_GDRIVE_TOKEN         --repo KleiKodesh/KleiKodeshProject
+             Get-Val client_id     | gh secret set RCLONE_GDRIVE_CLIENT_ID     --repo KleiKodesh/KleiKodeshProject
+             Get-Val client_secret | gh secret set RCLONE_GDRIVE_CLIENT_SECRET --repo KleiKodesh/KleiKodeshProject
+             ```
+          5. Clean up:
+             `winget uninstall Rclone.Rclone` and `Remove-Item -Recurse "$env:APPDATA\rclone"`
+          6. Rerun the sync: `gh workflow run drive-upload.yml --repo KleiKodesh/KleiKodeshProject`
+             When it passes, close this issue.
+
+          **If the error mentions the folder (`not found`, `404`)**, the KleiKodesh Drive folder was moved or deleted:
+          update `FOLDER_ID` in `.github/workflows/drive-upload.yml`.
+          MD
+          printf '\nFailed run: %s\n' "$RUN_URL" >> body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
