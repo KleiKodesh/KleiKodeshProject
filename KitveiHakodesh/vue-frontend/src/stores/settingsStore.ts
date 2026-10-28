@@ -96,6 +96,7 @@ const KEYS = {
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
+  SETTINGS_DICTIONARY_SOURCE_FILTER: 'dictionary.sourceFilter',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
   SETTINGS_TERMS_ACCEPTED: 'app.termsAccepted',
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
@@ -178,6 +179,8 @@ const DEFAULTS = {
   wordLinkTooltipFontSize: 100,
   appZoom: 1.0,
   dictionaryZoom: 100,
+  /** Dictionary source pills the user picked; empty = all sources. */
+  dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'tiles' as BooksView,
   fileSearchSortOrder:
@@ -307,6 +310,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const wordLinkTooltipFontSize = ref(DEFAULTS.wordLinkTooltipFontSize)
   const appZoom = ref(DEFAULTS.appZoom)
   const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
+  const dictionarySourceFilter = ref<string[]>([...DEFAULTS.dictionarySourceFilter])
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
@@ -463,6 +467,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE, wordLinkTooltipFontSize)
     loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
     loadSetting(KEYS.SETTINGS_DICTIONARY_ZOOM, dictionaryZoom)
+    loadSetting(KEYS.SETTINGS_DICTIONARY_SOURCE_FILTER, dictionarySourceFilter)
     const storedNewTabPage = normalizeNewTabPage(lsGet<LegacyNewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE))
     if (storedNewTabPage != null) newTabPage.value = storedNewTabPage
     loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
@@ -568,6 +573,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(wordLinkTooltipFontSize, KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
+  persistSetting(dictionarySourceFilter, KEYS.SETTINGS_DICTIONARY_SOURCE_FILTER)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
@@ -744,6 +750,7 @@ export const useSettingsStore = defineStore('settings', () => {
     wordLinkTooltipFontSize.value = DEFAULTS.wordLinkTooltipFontSize
     appZoom.value = DEFAULTS.appZoom
     dictionaryZoom.value = DEFAULTS.dictionaryZoom
+    dictionarySourceFilter.value = [...DEFAULTS.dictionarySourceFilter]
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
@@ -807,7 +814,7 @@ export const useSettingsStore = defineStore('settings', () => {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
     cleanTextFlags, cleanTextActive, cleanTextOptions, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
-    appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
+    appZoom, dictionaryZoom, dictionarySourceFilter, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     dateBarPinned,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
