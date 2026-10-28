@@ -1830,7 +1830,18 @@ a `%KH-TOC start=<S> prev=<P>` comment after `%%EOF` (patched `pdf.worker.mjs`
 SaveDocument, search "KH-TOC marker"). When the loaded file ends with one, the worker
 builds the save from the bytes before S and chains `/Prev` to P, and the host writes at S
 — the old section is overwritten, so repeated sessions do not grow the file. A section
-that also carries annotation changes gets no marker and is kept. Re-apply this worker
+that also carries annotation changes gets no marker and is kept. The marker is now
+`%KH-TOC start=<S> prev=<P> sha=<H>` (H = lowercase SHA-256 hex of bytes [S, marker
+line)), and `khReadTocMarker` only lets the save truncate when it PROVES the marker is our
+intact last section: bytes before S end in `%%EOF`; [S, marker) is exactly one section
+(one `startxref`, one `%%EOF`) whose startxref points inside it at an xref table/stream
+with a single `/Prev` = P; bytes at P are `xref` or an `/XRef` stream object; only
+whitespace follows the marker line; H matches when present (old markers without `sha=`
+are accepted on the structural checks alone). Anything else — a forged/stale marker,
+another tool's append or same-length in-place edit — is a plain append on the full file,
+never a truncation (a forged `start=` at half the file used to drop the page tree). The
+host's `tocMarkerStart` only reads S as a hint; when the worker rejects the marker its
+save keeps every loaded byte, so writing `saved[S..]` at S is still correct. Re-apply this worker
 patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
 On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
 (capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
