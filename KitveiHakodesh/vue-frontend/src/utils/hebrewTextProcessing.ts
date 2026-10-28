@@ -204,19 +204,25 @@ export function removeDiacriticsForSearch(text: string): string {
  * a walker that skips tags and treats entities as single atomic characters.
  */
 export function stripHtmlForSearch(html: string): string {
+  // Plain runs between tags and entities are folded in bulk (one regex pass each),
+  // not char by char: a whole-book scan strips tens of MB, and per-char calls made
+  // that the slowest part of the in-book search.
   let result = ''
-  let inTag = false
   let i = 0
-  while (i < html.length) {
-    const ch = html[i]!
-    if (ch === '<') { inTag = true; i++; continue }
-    if (ch === '>') { inTag = false; i++; continue }
-    if (inTag) { i++; continue }
-
-    // Only treat & as an entity start if there is a ; within 12 chars with no whitespace.
-    if (ch === '&') {
+  const length = html.length
+  while (i < length) {
+    const ch = html.charCodeAt(i)
+    if (ch === 0x3C /* < */) {
+      const close = html.indexOf('>', i + 1)
+      if (close === -1) break
+      i = close + 1
+      continue
+    }
+    if (ch === 0x3E /* > */) { i++; continue }   // a stray '>' outside a tag: dropped, as before
+    if (ch === 0x26 /* & */) {
+      // Only treat & as an entity start if there is a ; within 12 chars with no whitespace.
       let entityEnd = -1
-      for (let j = i + 1; j < html.length && j <= i + 12; j++) {
+      for (let j = i + 1; j < length && j <= i + 12; j++) {
         const c = html[j]!
         if (c === ';') { entityEnd = j; break }
         if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
@@ -228,17 +234,29 @@ export function stripHtmlForSearch(html: string): string {
         i = entityEnd + 1
         continue
       }
-      // Bare & (not a real entity) — treat as a regular character.
-      result += ch
+      // Bare & (not a real entity) — a regular character.
+      result += '&'
       i++
       continue
     }
-
-    // The maqaf survives as a space so it still occupies one position — the
-    // walkers that map positions back into the HTML count it the same way.
-    if (ch === MAQAF) result += ' '
-    else if (!isSearchIgnoredMark(ch)) result += foldQuotesForSearch(ch)
-    i++
+    // A run of plain text up to the next tag or entity.
+    let end = i + 1
+    while (end < length) {
+      const c = html.charCodeAt(end)
+      if (c === 0x3C || c === 0x26 || c === 0x3E) break
+      end++
+    }
+    result += foldPlainRunForSearch(html.slice(i, end))
+    i = end
   }
   return result
+}
+
+/**
+ * One run of plain text as the search sees it: diacritics removed, the maqaf kept as a
+ * space (it still occupies one position for the walkers that map positions back into
+ * the HTML), quotes folded.
+ */
+function foldPlainRunForSearch(run: string): string {
+  return foldQuotesForSearch(run.replace(SEARCH_IGNORED_MARKS, '').split(MAQAF).join(' '))
 }
