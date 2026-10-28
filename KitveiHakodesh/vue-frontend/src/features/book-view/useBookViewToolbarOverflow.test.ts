@@ -30,17 +30,40 @@ function widthsOf(keys: readonly ToolbarOverflowKey[]) {
 
 describe('collapse order', () => {
   it('is the order the product fixed, worst-first', () => {
-    expect(ALL).toEqual(['book-info', 'hebrewbooks-editions', 'export-to-word', 'sync-commentaries', 'zoom'])
+    expect(ALL).toEqual([
+      'book-info',
+      'hebrewbooks-editions',
+      'versions',
+      'word-link-markers',
+      'export-to-word',
+      'sync-commentaries',
+      'related-books',
+      'clean-text',
+      'zoom',
+      'side-commentaries',
+      'bottom-commentary',
+      'bookmarks',
+      'search',
+      'section-nav',
+      'toc',
+    ])
   })
 })
 
 describe('widthOf', () => {
-  it('charges zoom for both buttons', () => {
-    expect(widthOf('zoom')).toBe(2)
+  const PAIRS: ToolbarOverflowKey[] = ['zoom', 'side-commentaries', 'section-nav']
+
+  it('charges each pair for both buttons', () => {
+    for (const key of PAIRS) expect(widthOf(key)).toBe(2)
+  })
+
+  it('charges the clean-text combo for its eraser plus chevron', () => {
+    expect(widthOf('clean-text')).toBeGreaterThan(1)
+    expect(widthOf('clean-text')).toBeLessThan(2)
   })
 
   it('charges every other control one button', () => {
-    for (const key of ALL.filter((k) => k !== 'zoom')) expect(widthOf(key)).toBe(1)
+    for (const key of ALL.filter((k) => !PAIRS.includes(k) && k !== 'clean-text')) expect(widthOf(key)).toBe(1)
   })
 })
 
@@ -85,22 +108,16 @@ describe('keysToCollapse', () => {
     expect(keysToCollapse(full - 3 * BUTTON, PINNED, ALL)).toEqual([
       'book-info',
       'hebrewbooks-editions',
-      'export-to-word',
+      'versions',
     ])
   })
 
   it('counts zoom as the two buttons it is', () => {
-    // Short by six buttons: book info, editions, export and sync free one each, and zoom's
-    // two clear the rest. Were zoom counted as one, the toolbar would still be a button over
-    // with nothing left to collapse.
-    const room = roomForEverything(PINNED) - 6 * BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual([
-      'book-info',
-      'hebrewbooks-editions',
-      'export-to-word',
-      'sync-commentaries',
-      'zoom',
-    ])
+    // Book info, editions, export and sync free one each, and zoom's two clear the rest.
+    // Were zoom counted as one, the toolbar would still be a button over.
+    const present: ToolbarOverflowKey[] = ['book-info', 'hebrewbooks-editions', 'export-to-word', 'sync-commentaries', 'zoom']
+    const room = (PINNED + widthsOf(present)) * BUTTON - 6 * BUTTON
+    expect(keysToCollapse(room, PINNED, present)).toEqual(present)
   })
 
   it('holds a collapsed control collapsed until there is real room again', () => {

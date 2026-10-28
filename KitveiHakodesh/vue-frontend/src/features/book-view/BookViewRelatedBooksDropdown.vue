@@ -20,6 +20,7 @@ import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import {
   getLinkTargetForSourceLineAndBook,
   getNextSectionWithCommentary,
@@ -52,6 +53,8 @@ const props = defineProps<{
   currentScrollLineIndex: number
   lines: LinesTable
   onOpen?: () => void
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
@@ -108,6 +111,7 @@ interface RelatedBooksSection {
 const dropdownPositionClass = computed(() => {
   return `dropdown-${toolbarPosition.value}`
 })
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 const sections = computed<RelatedBooksSection[]>(() => {
   const sectionMap = new Map<string, RelatedBook[]>()
@@ -510,17 +514,19 @@ async function onBookClick(book: RelatedBook) {
 </script>
 
 <template>
-  <div class="related-books-wrapper">
+  <div class="related-books-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen }"
+      :class="{ active: isOpen, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="$t('bookView.related.title')"
       @click="toggleOpen"
     >
       <IconLibrary16Regular />
+      <span v-if="inOverflow">{{ $t('bookView.related.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <div v-if="!relatedBooksLoaded" class="loading-message">{{ $t('bookView.related.scanning') }}</div>
       <div v-else-if="sections.length === 0" class="empty-message">{{ $t('bookView.related.empty') }}</div>
       <template v-else v-for="section in sections" :key="section.label">

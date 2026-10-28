@@ -8,8 +8,7 @@ import { useElementSize } from '@vueuse/core'
  */
 const TOOLBAR_BUTTON_SIZE = 28
 /**
- * The clean-text combo (BookViewCleanTextCombo) is pinned - never collapses - and takes
- * its eraser button plus the chevron (14px), its two separator borders (1px each) and
+ * The clean-text combo (BookViewCleanTextCombo) takes its eraser button plus the chevron (14px), its two separator borders (1px each) and
  * their padding (2px each). It is one pair: both halves always stay together.
  */
 export const CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS = 1 + (14 + 2 * 1 + 2 * 2) / TOOLBAR_BUTTON_SIZE
@@ -49,21 +48,17 @@ const TOOLBAR_HORIZONTAL_CHROME = 2 * TOOLBAR_RESERVED_EDGE
 const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
 
 /**
- * Every button that can collapse, in the order it collapses - the FIRST key here is the
- * first to go. Fixed by product decision, not by position in the toolbar: these are the
- * controls a reader can do without while the pane is cramped, worst-first.
+ * Every control on the toolbar, in the order it collapses - the FIRST key here is the first
+ * to go. No control is pinned: a pane narrow enough loses all of them into the flyout, the
+ * most essential last.
  *
- * The HebrewBooks editions dropdown is the one list-opening control that IS here (second,
- * by product decision): in the flyout its row expands the editions inline beneath it, the
- * same way the book-info row expands its panel, so no second floating layer is involved.
+ * Worst-first: reference panels about the book (info, scanned editions, versions, marker
+ * filter), then one-off actions and settings (export, sync, related books, clean text,
+ * zoom), then the panel toggles, and last what reading itself runs on - bookmarks, search,
+ * section navigation and the TOC.
  *
- * The versions and related-books dropdowns are deliberately NOT here: they open lists of
- * their own, and a list opening out of a row in the flyout is a second floating layer that
- * has to be measured and clamped against the window - in exactly the narrow window that
- * collapsed the toolbar. They stay on the toolbar at every width; the zoom pair, which is
- * two plain buttons and has keyboard equivalents (Ctrl+/Ctrl-), collapses in their place.
- *
- * The clean-text combo is NOT here either: it is always visible, by product decision.
+ * Every dropdown among them opens the same way in the flyout: its row opens the list as a
+ * side submenu beside the flyout (useOverflowSubmenu), like a context menu's.
  *
  * Keys are internal names rather than labels, because none of these are destinations - the
  * flyout renders each one's face and the toolbar dispatches its action.
@@ -71,22 +66,33 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
 export const TOOLBAR_OVERFLOW_ORDER = [
   'book-info',
   'hebrewbooks-editions',
+  'versions',
+  'word-link-markers',
   'export-to-word',
   'sync-commentaries',
+  'related-books',
+  'clean-text',
   'zoom',
+  'side-commentaries',
+  'bottom-commentary',
+  'bookmarks',
+  'search',
+  'section-nav',
+  'toc',
 ] as const
 
 export type ToolbarOverflowKey = (typeof TOOLBAR_OVERFLOW_ORDER)[number]
 
 /**
- * How much toolbar room a key is worth, in button-widths. Only zoom differs: it is a pair of
- * buttons collapsing as one control into a single flyout row, so it
- * frees more than twice what any other key does. Counting it as one would make the toolbar
- * think collapsing it saved a fraction of what it does, and stop collapsing a button early.
+ * How much toolbar room a key is worth, in button-widths. The pairs - zoom out/in, the two
+ * side-panel toggles, previous/next section - collapse as one control into one flyout row,
+ * and the clean-text combo is its eraser plus chevron. Counting any of them as one would make
+ * the toolbar think collapsing it saved less than it does, and stop collapsing early.
  */
 export function widthOf(key: ToolbarOverflowKey): number {
-  // Zoom is a PAIR - zoom out and zoom in - collapsing together into one flyout row.
-  return key === 'zoom' ? 2 : 1
+  if (key === 'zoom' || key === 'side-commentaries' || key === 'section-nav') return 2
+  if (key === 'clean-text') return CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS
+  return 1
 }
 
 /**
@@ -171,8 +177,7 @@ export function keysToCollapse(
  * A toolbar too short for all its buttons does not clip them away invisibly (it has no
  * scrollbar): the buttons collapse into a "more" button, in the fixed worst-first order
  * above rather than in toolbar order, so what survives a squeeze is what a reader needs
- * most. Everything not in that order - the TOC, section navigation, the two dropdowns, the
- * panel toggles and search - is pinned and never collapses.
+ * most.
  *
  * The fit is computed from the toolbar's measured size, never observed off the buttons
  * themselves, so nothing has to render before it can be counted and the answer never
@@ -185,14 +190,10 @@ export function keysToCollapse(
  *                        TOOLBAR_OVERFLOW_ORDER. A book with no commentaries has no
  *                        sync button, and a control nothing renders must not be counted
  *                        against the fit.
- * @param pinnedCount   - how much room the non-collapsible buttons take,
- *                        in button-widths. They always have theirs, so it comes off before
- *                        anything collapsible is measured.
  */
 export function useBookViewToolbarOverflow(
   toolbarEl: Ref<HTMLElement | null>,
   presentKeys: ComputedRef<ToolbarOverflowKey[]>,
-  pinnedCount: ComputedRef<number>,
   isVertical: ComputedRef<boolean>,
 ) {
   // Measured as the BORDER box, then the toolbar's own chrome is taken off, rather than
@@ -218,7 +219,7 @@ export function useBookViewToolbarOverflow(
   const overflowedKeys = computed<ToolbarOverflowKey[]>(() => {
     lastCollapsed = keysToCollapse(
       availableLength.value,
-      pinnedCount.value,
+      0,
       presentKeys.value,
       lastCollapsed,
     )

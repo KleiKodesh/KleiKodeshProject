@@ -12,6 +12,13 @@ import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { CLEAN_TEXT } from '@/utils/hebrewTextProcessing'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
+
+const props = defineProps<{
+  /** Renders as a row of the toolbar's "more" flyout: its body toggles cleaning, the chevron
+   *  at its end opens the options as a side submenu. */
+  inOverflow?: boolean
+}>()
 
 const settingsStore = useSettingsStore()
 const { cleanTextFlags, cleanTextOptions } = storeToRefs(settingsStore)
@@ -39,6 +46,7 @@ const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false
   toggleButton: toggleButtonRef,
 })
 useDropdownViewportFit(dropdownRef)
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return
@@ -47,7 +55,44 @@ function toggleOpen() {
 </script>
 
 <template>
+  <div v-if="inOverflow" role="group" class="overflow-host clean-text-overflow-row">
+    <button
+      role="menuitemcheckbox"
+      class="overflow-row"
+      :class="{ active: cleanTextFlags !== 0 }"
+      :aria-checked="cleanTextFlags !== 0"
+      :title="`${$t('bookView.toolbar.cleanText')} (Ctrl+D)`"
+      @click="settingsStore.toggleCleanText()"
+    >
+      <IconEraser20Filled v-if="cleanTextFlags !== 0" />
+      <IconEraser20Regular v-else />
+      <span>{{ $t('bookView.toolbar.cleanText') }}</span>
+    </button>
+    <button
+      ref="toggleButtonRef"
+      role="menuitem"
+      aria-haspopup="menu"
+      class="clean-text-overflow-chevron"
+      :class="{ open: isOpen }"
+      :title="$t('bookView.toolbar.cleanTextOptions')"
+      @click="toggleOpen"
+    >
+      <IconChevronDown12Regular />
+    </button>
+
+    <div v-if="isOpen" ref="dropdownRef" class="clean-text-dropdown overflow-submenu" :style="submenuStyle">
+      <label v-for="option in OPTIONS" :key="option.flag" class="option-row">
+        <input
+          type="checkbox"
+          :checked="(cleanTextOptions & option.flag) !== 0"
+          @change="toggleOption(option.flag)"
+        />
+        <span>{{ $t(option.labelKey) }}</span>
+      </label>
+    </div>
+  </div>
   <div
+    v-else
     class="clean-text-combo"
     :class="{ active: cleanTextFlags !== 0, vertical: toolbarPosition === 'left' || toolbarPosition === 'right' }"
   >
@@ -125,6 +170,15 @@ button {
   width: var(--toolbar-button-size);
   height: 14px;
 }
+/* In the flyout: the row's body and the chevron side by side. */
+.clean-text-overflow-row {
+  display: flex;
+  align-items: center;
+}
+.clean-text-overflow-chevron {
+  width: var(--toolbar-button-size);
+}
+.clean-text-overflow-chevron.open,
 .clean-text-chevron.open {
   color: var(--accent-color);
 }

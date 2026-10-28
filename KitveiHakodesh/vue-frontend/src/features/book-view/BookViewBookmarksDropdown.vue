@@ -20,6 +20,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import { readBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
@@ -32,6 +33,8 @@ const props = defineProps<{
   labelForLine?: (lineIndex: number) => string
   /** Where a bookmark made now points: the selection, or the top of the view. */
   readBookmarkPoint?: () => BookViewLinesBookmarkPoint | null
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ goToBookmark: [bookmark: BookBookmark]; presenceChange: [present: boolean] }>()
@@ -53,6 +56,7 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── The book's list ───────────────────────────────────────────────────────────
 //
@@ -173,20 +177,22 @@ defineExpose({ createBookmark })
 </script>
 
 <template>
-  <div v-if="isPresent" class="bookmarks-wrapper">
+  <div v-if="isPresent" class="bookmarks-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
       class="toggle-button"
-      :class="{ active: isOpen, marked: currentLineBookmarked }"
+      :class="{ active: isOpen, marked: currentLineBookmarked, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="`${$t('bookView.bookmarks.title')} (Ctrl+Shift+D)`"
       :disabled="bookId == null"
       @click="toggleOpen"
     >
       <IconBookmark16Filled v-if="currentLineBookmarked" />
       <IconBookmark16Regular v-else />
+      <span v-if="inOverflow">{{ $t('bookView.bookmarks.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <div class="bookmark-list">
         <div
           v-for="bookmark in bookmarks"

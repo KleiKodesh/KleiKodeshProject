@@ -15,8 +15,6 @@ import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
-  IconInfo20Regular,
-  IconDocumentPdf20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
@@ -25,9 +23,7 @@ import type { BookBookmark } from '@/stores/bookBookmarks'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
 import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDropdown.vue'
-import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
-import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
 import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
@@ -35,7 +31,6 @@ import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
   TOOLBAR_OVERFLOW_ORDER,
-  CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
 import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
@@ -97,57 +92,6 @@ const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
 /** The overflow button's name - the same word the nav rail's overflow button wears. */
 const MORE_LABEL = t('bookView.toolbar.more')
 
-/** The book-info control's name - its tooltip on the toolbar, its row text in the flyout. */
-const BOOK_INFO_LABEL = t('bookView.bookInfo.title')
-
-/** Whether the book-info row in the flyout has its panel expanded beneath it. */
-const bookInfoExpandedInOverflow = ref(false)
-
-/** The HebrewBooks editions control's name - its row text in the flyout. */
-const HEBREWBOOKS_EDITIONS_LABEL = t('bookView.hebrewBooks.title')
-
-/** Whether the editions row in the flyout has its submenu open beside it. */
-const hebrewBooksEditionsExpandedInOverflow = ref(false)
-
-/**
- * The editions submenu: a panel beside its flyout row, like a context-menu submenu. Fixed-
- * positioned (the flyout scrolls, so an absolute child would be clipped by it) but still a
- * DOM child of the flyout, so a click in it is not an outside click that closes the flyout.
- * Opens toward the inline start (left, RTL); flips right when that side has no room, and is
- * clamped into the viewport either way.
- */
-const EDITIONS_SUBMENU_MARGIN = 8
-const editionsRowEl = ref<HTMLElement | null>(null)
-const editionsSubmenuEl = ref<HTMLElement | null>(null)
-const editionsSubmenuPos = ref({ top: 0, left: 0, placed: false })
-
-async function openEditionsSubmenu() {
-  hebrewBooksEditionsExpandedInOverflow.value = true
-  editionsSubmenuPos.value.placed = false
-  await nextTick()
-  const row = editionsRowEl.value
-  const panel = editionsSubmenuEl.value
-  if (!row || !panel) return
-  const m = EDITIONS_SUBMENU_MARGIN
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  panel.style.maxHeight = `${vh - 2 * m}px`
-  const rowRect = row.getBoundingClientRect()
-  const menuRect = (row.closest('.toolbar-overflow-menu') ?? row).getBoundingClientRect()
-  const width = panel.offsetWidth
-  const height = panel.offsetHeight
-  let left = menuRect.left - width
-  if (left < m && menuRect.right + width <= vw - m) left = menuRect.right
-  left = Math.max(m, Math.min(left, vw - width - m))
-  const top = Math.max(m, Math.min(rowRect.top - 4, vh - height - m))
-  editionsSubmenuPos.value = { top, left, placed: true }
-}
-
-function toggleEditionsSubmenu() {
-  if (hebrewBooksEditionsExpandedInOverflow.value) hebrewBooksEditionsExpandedInOverflow.value = false
-  else void openEditionsSubmenu()
-}
-
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
  * tooltip - the tooltip carries the name followed by an explanation, and a row wants just
@@ -157,10 +101,20 @@ const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
+const overflowBookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
 
-/** Ctrl+Shift+D: opens the bookmarks dropdown on a new bookmark, its name field focused. */
-function createBookmark() {
-  void bookmarksDropdownRef.value?.createBookmark()
+/**
+ * Ctrl+Shift+D: opens the bookmarks dropdown on a new bookmark, its name field focused. With
+ * bookmarks collapsed, that is the flyout's bookmarks row and its submenu.
+ */
+async function createBookmark() {
+  if (toolbarButtonVisible('bookmarks')) {
+    void bookmarksDropdownRef.value?.createBookmark()
+    return
+  }
+  overflowOpen.value = true
+  await nextTick()
+  void overflowBookmarksDropdownRef.value?.createBookmark()
 }
 
 // Continuous zoom — fires immediately on pointerdown, then waits 400ms before
@@ -265,10 +219,9 @@ const sideLeftCommentaryTitle = computed(() =>
 // ── Overflow ───────────────────────────────────────────────────────────────────
 //
 // A pane too narrow (or, for a side toolbar, too short) for every button collapses its
-// least essential controls into a "more" flyout, worst-first in the order
-// TOOLBAR_OVERFLOW_ORDER fixes. The composable owns the fit arithmetic; what stays here is
-// which of those controls this book actually has, how much room the pinned ones take, and
-// the flyout's state.
+// controls into a "more" flyout, worst-first in the order TOOLBAR_OVERFLOW_ORDER fixes. The
+// composable owns the fit arithmetic; what stays here is which of those controls this book
+// actually has, and the flyout's state.
 const toolbarEl = ref<HTMLElement | null>(null)
 const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
 const isVerticalToolbar = computed(
@@ -284,53 +237,41 @@ const wordLinkMarkersPresent = ref(false)
 /** Whether the bookmarks control is on the toolbar - only once the book has a bookmark; it tells us. */
 const bookmarksPresent = ref(false)
 
-/** The collapsible controls this book renders, in collapse order. */
+/**
+ * The controls this book renders, in collapse order. Every condition here must match the
+ * `v-if` it stands for - including the word-link markers dropdown's, which lives in that
+ * component - or the toolbar counts room for a control that is not there, or misses one
+ * that is and leaves it overflowing the pane.
+ */
 const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
-  // The zoom pair is on every book; the commentary sync depends
-  // on the book having commentaries at all, and export to Word on it not being restricted.
   TOOLBAR_OVERFLOW_ORDER.filter((key) => {
-    if (key === 'sync-commentaries') return props.hasCommentaries
-    if (key === 'export-to-word') return !props.exportRestricted
-    if (key === 'hebrewbooks-editions') return hasHebrewBooksEditions.value
-    return true
+    switch (key) {
+      case 'hebrewbooks-editions': return hasHebrewBooksEditions.value
+      case 'versions': return hasVersions.value
+      // Reported by the control itself: it renders out of a list it fetches.
+      case 'word-link-markers': return wordLinkMarkersPresent.value
+      case 'bookmarks': return bookmarksPresent.value
+      case 'export-to-word': return !props.exportRestricted
+      case 'sync-commentaries': return props.hasCommentaries
+      case 'related-books': return props.hasRelatedBooks
+      case 'side-commentaries': return props.hasCommentaries && !!props.canUseSidePanel
+      case 'bottom-commentary': return props.hasCommentaries
+      default: return true
+    }
   }),
 )
-
-/**
- * The room the pinned controls take, in button-widths - they always have theirs, so it comes
- * off before anything collapsible is measured. Counted the same way the template renders
- * them, conditions included.
- *
- * Every condition here must match the `v-if` it stands for, including the word-link markers
- * dropdown's, which lives in that component rather than in this template. An undercount is
- * not a rounding error: the toolbar believes it has a button's more room than it does and
- * collapses one control too few, so a button is left overflowing the pane.
- */
-const pinnedButtonCount = computed(() => {
-  const alwaysOn = 3 // TOC, previous section, next section
-  const dropdowns =
-    (props.hasRelatedBooks ? 1 : 0) +
-    (hasVersions.value ? 1 : 0)
-  const commentaryToggles = props.hasCommentaries
-    ? 1 + (props.canUseSidePanel ? 2 : 0) // bottom panel, plus both side panels when they fit
-    : 0
-  const search = 1
-  // The clean-text combo: eraser + chevron as one pinned pair.
-  const cleanText = CLEAN_TEXT_COMBO_WIDTH_IN_BUTTONS
-  // Reported by the control itself rather than predicted here: it renders out of a list it
-  // fetches, so nothing on this side can know in advance whether it is there.
-  const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  // Also reported by the control: it is there only once the book has a bookmark.
-  const bookmarks = bookmarksPresent.value ? 1 : 0
-  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers + bookmarks + cleanText
-})
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
   toolbarEl,
   presentOverflowKeys,
-  pinnedButtonCount,
   isVerticalToolbar,
 )
+
+/** What a control on the toolbar wears so it can collapse into the flyout. */
+function collapseAttrs(key: ToolbarOverflowKey) {
+  const visible = toolbarButtonVisible(key)
+  return { class: { collapsible: true, collapsed: !visible }, inert: !visible }
+}
 
 const overflowOpen = ref(false)
 const overflowButtonEl = ref<HTMLElement | null>(null)
@@ -349,13 +290,6 @@ watch(hasToolbarOverflow, (has) => {
   if (!has) overflowOpen.value = false
 })
 
-// Each opening of the flyout starts with the info panel and editions list folded, like a fresh dropdown.
-watch(overflowOpen, (open) => {
-  if (open) return
-  bookInfoExpandedInOverflow.value = false
-  hebrewBooksEditionsExpandedInOverflow.value = false
-})
-
 defineExpose({ tocBtnRef, createBookmark })
 </script>
 
@@ -366,6 +300,7 @@ defineExpose({ tocBtnRef, createBookmark })
     </Teleport>
     <button
       ref="tocBtnRef"
+      v-bind="collapseAttrs('toc')"
       :class="{ active: tocVisible }"
       :disabled="!hasToc"
       :title="$t('bookView.toolbar.toc')"
@@ -374,6 +309,7 @@ defineExpose({ tocBtnRef, createBookmark })
       <IconTreeRtl />
     </button>
     <button
+      v-bind="collapseAttrs('section-nav')"
       :disabled="!hasToc"
       :title="$t('bookView.toolbar.prevSection')"
       @click="$emit('navigateToPreviousSection')"
@@ -381,6 +317,7 @@ defineExpose({ tocBtnRef, createBookmark })
       <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
+      v-bind="collapseAttrs('section-nav')"
       :disabled="!hasToc"
       :title="$t('bookView.toolbar.nextSection')"
       @click="$emit('navigateToNextSection')"
@@ -389,6 +326,8 @@ defineExpose({ tocBtnRef, createBookmark })
     </button>
     <BookViewBookmarksDropdown
       ref="bookmarksDropdownRef"
+      v-bind="collapseAttrs('bookmarks')"
+      class="dropdown-host"
       :book-id="bookId"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
@@ -399,6 +338,8 @@ defineExpose({ tocBtnRef, createBookmark })
     />
     <BookViewRelatedBooksDropdown
       v-if="hasRelatedBooks"
+      v-bind="collapseAttrs('related-books')"
+      class="dropdown-host"
       :book-id="bookId"
       :filter-groups="filterGroups"
       :related-books-loaded="relatedBooksLoaded"
@@ -412,20 +353,22 @@ defineExpose({ tocBtnRef, createBookmark })
     -->
     <BookViewVersionsDropdown
       v-if="hasVersions"
+      v-bind="collapseAttrs('versions')"
+      class="dropdown-host"
       :versions="versions"
       :active-version-id="activeVersionId"
       @select="$emit('selectVersion', $event)"
     />
-    <!-- Only for books with scanned editions on HebrewBooks; absent otherwise, like versions.
-         The second control to collapse; in the flyout its row expands the list inline. -->
+    <!-- Only for books with scanned editions on HebrewBooks; absent otherwise, like versions. -->
     <BookViewHebrewBooksEditionsDropdown
       v-if="hasHebrewBooksEditions"
-      class="collapsible hebrewbooks-editions-toolbar-item"
-      :class="{ collapsed: !toolbarButtonVisible('hebrewbooks-editions') }"
-      :inert="!toolbarButtonVisible('hebrewbooks-editions')"
+      v-bind="collapseAttrs('hebrewbooks-editions')"
+      class="dropdown-host"
       :editions="hebrewBooksEditions"
     />
     <BookViewWordLinkMarkersDropdown
+      v-bind="collapseAttrs('word-link-markers')"
+      class="dropdown-host"
       :book-id="bookId"
       @presence-change="wordLinkMarkersPresent = $event"
     />
@@ -438,6 +381,7 @@ defineExpose({ tocBtnRef, createBookmark })
     -->
     <button
       v-if="canUseSidePanel && hasCommentaries"
+      v-bind="collapseAttrs('side-commentaries')"
       :class="{ active: sideCommentaryVisible }"
       :title="sideCommentaryTitle"
       @click="$emit('toggleSideCommentary')"
@@ -447,6 +391,7 @@ defineExpose({ tocBtnRef, createBookmark })
     </button>
     <button
       v-if="hasCommentaries"
+      v-bind="collapseAttrs('bottom-commentary')"
       :class="{ active: bottomCommentaryVisible }"
       :title="bottomCommentaryTitle"
       @click="$emit('toggleBottomCommentary')"
@@ -456,6 +401,7 @@ defineExpose({ tocBtnRef, createBookmark })
     </button>
     <button
       v-if="canUseSidePanel && hasCommentaries"
+      v-bind="collapseAttrs('side-commentaries')"
       :class="{ active: sideLeftCommentaryVisible }"
       :title="sideLeftCommentaryTitle"
       @click="$emit('toggleSideLeftCommentary')"
@@ -471,9 +417,8 @@ defineExpose({ tocBtnRef, createBookmark })
     -->
     <button
       v-if="hasCommentaries"
-      class="collapsible"
-      :class="{ active: autoSelectTopLine, collapsed: !toolbarButtonVisible('sync-commentaries') }"
-      :inert="!toolbarButtonVisible('sync-commentaries')"
+      v-bind="collapseAttrs('sync-commentaries')"
+      :class="{ active: autoSelectTopLine }"
       :title="autoSelectTopLineTitle"
       @click="bookViewStore.toggleAutoSelectTopLine()"
     >
@@ -481,27 +426,23 @@ defineExpose({ tocBtnRef, createBookmark })
       <IconTimeline20Regular v-else />
     </button>
     <button
+      v-bind="collapseAttrs('search')"
       :class="{ active: searchVisible }"
       :title="$t('bookView.toolbar.search')"
       @click="$emit('toggleSearch')"
     >
       <IconSearch20Regular />
     </button>
-    <!-- The first control to collapse. In the flyout its row expands the same panel inline
-         rather than opening a second floating layer. -->
     <BookViewBookInfoDropdown
-      class="collapsible book-info-toolbar-item"
-      :class="{ collapsed: !toolbarButtonVisible('book-info') }"
-      :inert="!toolbarButtonVisible('book-info')"
+      v-bind="collapseAttrs('book-info')"
+      class="dropdown-host"
       :is-collapsed="!toolbarButtonVisible('book-info')"
       :book-id="bookId"
     />
 
     <button
-      class="collapsible"
-      :class="{ collapsed: !toolbarButtonVisible('zoom') }"
+      v-bind="collapseAttrs('zoom')"
       :title="zoomOutTitle"
-      :inert="!toolbarButtonVisible('zoom')"
       :disabled="zoom <= ZOOM_CONFIG.MIN && commentaryZoom <= ZOOM_CONFIG.MIN"
       @pointerdown="startContinuousZoom('out')"
       @pointerup="stopContinuousZoom"
@@ -511,10 +452,8 @@ defineExpose({ tocBtnRef, createBookmark })
       <IconZoomOut20Regular />
     </button>
     <button
-      class="collapsible"
-      :class="{ collapsed: !toolbarButtonVisible('zoom') }"
+      v-bind="collapseAttrs('zoom')"
       :title="zoomInTitle"
-      :inert="!toolbarButtonVisible('zoom')"
       :disabled="zoom >= ZOOM_CONFIG.MAX && commentaryZoom >= ZOOM_CONFIG.MAX"
       @pointerdown="startContinuousZoom('in')"
       @pointerup="stopContinuousZoom"
@@ -524,13 +463,11 @@ defineExpose({ tocBtnRef, createBookmark })
       <IconZoomIn20Regular />
     </button>
 
-    <BookViewCleanTextCombo />
+    <BookViewCleanTextCombo v-bind="collapseAttrs('clean-text')" class="dropdown-host" />
 
     <button
       v-if="!exportRestricted"
-      class="collapsible"
-      :class="{ collapsed: !toolbarButtonVisible('export-to-word') }"
-      :inert="!toolbarButtonVisible('export-to-word')"
+      v-bind="collapseAttrs('export-to-word')"
       :title="EXPORT_TO_WORD_LABEL"
       :disabled="exportingToWord"
       :aria-busy="exportingToWord"
@@ -573,63 +510,24 @@ defineExpose({ tocBtnRef, createBookmark })
       :toolbar-position="toolbarPosition"
     >
       <!--
-        The one row that dismisses the flyout, because it is the one row that is finished
-        when you pick it: the others are toggles and a zoom you watch, and closing the menu
-        under someone about to press again is the wrong answer for all of them.
+        Rows in collapse order. Each dropdown renders a second instance of itself as a row
+        whose list opens as a side submenu, like a context menu's. Rows that finish when
+        picked (export, search, TOC) dismiss the flyout; toggles and steps you repeat do not.
       -->
-      <!--
-        Expands the info panel inline beneath the row instead of opening a floating dropdown
-        out of the flyout - a second floating layer the flyout does not measure or clamp.
-      -->
-      <template v-if="isOverflowed('book-info')">
-        <button
-          role="menuitem"
-          class="overflow-row"
-          :class="{ active: bookInfoExpandedInOverflow }"
-          :disabled="bookId == null"
-          :aria-expanded="bookInfoExpandedInOverflow"
-          @click="bookInfoExpandedInOverflow = !bookInfoExpandedInOverflow"
-        >
-          <IconInfo20Regular />
-          <span>{{ BOOK_INFO_LABEL }}</span>
-        </button>
-        <BookViewBookInfoPanel
-          v-if="bookInfoExpandedInOverflow"
-          class="overflow-book-info-panel"
-          :book-id="bookId"
-        />
-      </template>
-      <!-- A side submenu, like a context menu's: the editions open beside the row. -->
-      <template v-if="isOverflowed('hebrewbooks-editions')">
-        <button
-          ref="editionsRowEl"
-          role="menuitem"
-          class="overflow-row"
-          :class="{ active: hebrewBooksEditionsExpandedInOverflow }"
-          aria-haspopup="menu"
-          :aria-expanded="hebrewBooksEditionsExpandedInOverflow"
-          @click="toggleEditionsSubmenu()"
-        >
-          <IconDocumentPdf20Regular />
-          <span>{{ HEBREWBOOKS_EDITIONS_LABEL }}</span>
-        </button>
-        <div
-          v-if="hebrewBooksEditionsExpandedInOverflow"
-          ref="editionsSubmenuEl"
-          role="menu"
-          class="overflow-editions-submenu"
-          :style="{
-            top: `${editionsSubmenuPos.top}px`,
-            left: `${editionsSubmenuPos.left}px`,
-            visibility: editionsSubmenuPos.placed ? 'visible' : 'hidden',
-          }"
-        >
-          <BookViewHebrewBooksEditionsList
-            :editions="hebrewBooksEditions"
-            @picked="overflowOpen = false"
-          />
-        </div>
-      </template>
+      <BookViewBookInfoDropdown v-if="isOverflowed('book-info')" in-overflow :book-id="bookId" />
+      <BookViewHebrewBooksEditionsDropdown
+        v-if="isOverflowed('hebrewbooks-editions')"
+        in-overflow
+        :editions="hebrewBooksEditions"
+      />
+      <BookViewVersionsDropdown
+        v-if="isOverflowed('versions')"
+        in-overflow
+        :versions="versions"
+        :active-version-id="activeVersionId"
+        @select="$emit('selectVersion', $event)"
+      />
+      <BookViewWordLinkMarkersDropdown v-if="isOverflowed('word-link-markers')" in-overflow :book-id="bookId" />
       <button
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
@@ -654,6 +552,17 @@ defineExpose({ tocBtnRef, createBookmark })
         <IconTimeline20Regular v-else />
         <span>{{ SYNC_COMMENTARIES_LABEL }}</span>
       </button>
+      <BookViewRelatedBooksDropdown
+        v-if="isOverflowed('related-books')"
+        in-overflow
+        :book-id="bookId"
+        :filter-groups="filterGroups"
+        :related-books-loaded="relatedBooksLoaded"
+        :current-scroll-line-index="currentScrollLineIndex"
+        :lines="lines"
+        :on-open="onRelatedBooksOpen"
+      />
+      <BookViewCleanTextCombo v-if="isOverflowed('clean-text')" in-overflow />
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width
         strip and there is no reason to spend two of them on a control whose two halves are
@@ -693,6 +602,91 @@ defineExpose({ tocBtnRef, createBookmark })
           <IconZoomIn20Regular />
         </button>
       </div>
+      <template v-if="isOverflowed('side-commentaries')">
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :class="{ active: sideCommentaryVisible }"
+          @click="$emit('toggleSideCommentary')"
+        >
+          <IconLayoutColumnTwoFocusRight20Filled v-if="sideCommentaryVisible" />
+          <IconLayoutColumnTwo20Regular v-else />
+          <span>{{ sideCommentaryTitle }}</span>
+        </button>
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :class="{ active: sideLeftCommentaryVisible }"
+          @click="$emit('toggleSideLeftCommentary')"
+        >
+          <IconLayoutColumnTwoFocusLeft20Filled v-if="sideLeftCommentaryVisible" />
+          <IconLayoutColumnTwo20Regular v-else />
+          <span>{{ sideLeftCommentaryTitle }}</span>
+        </button>
+      </template>
+      <button
+        v-if="isOverflowed('bottom-commentary')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: bottomCommentaryVisible }"
+        @click="$emit('toggleBottomCommentary')"
+      >
+        <IconLayoutRowTwoFocusBottom20Filled v-if="bottomCommentaryVisible" />
+        <IconLayoutRowTwo20Regular v-else />
+        <span>{{ bottomCommentaryTitle }}</span>
+      </button>
+      <BookViewBookmarksDropdown
+        v-if="isOverflowed('bookmarks')"
+        ref="overflowBookmarksDropdownRef"
+        in-overflow
+        :book-id="bookId"
+        :current-scroll-line-index="currentScrollLineIndex"
+        :lines="lines"
+        :label-for-line="bookmarkLabelForLine"
+        :read-bookmark-point="readBookmarkPoint"
+        @go-to-bookmark="overflowOpen = false; $emit('goToBookmark', $event)"
+      />
+      <button
+        v-if="isOverflowed('search')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: searchVisible }"
+        @click="overflowOpen = false; $emit('toggleSearch')"
+      >
+        <IconSearch20Regular />
+        <span>{{ $t('bookView.toolbar.search') }}</span>
+      </button>
+      <template v-if="isOverflowed('section-nav')">
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :disabled="!hasToc"
+          @click="$emit('navigateToPreviousSection')"
+        >
+          <IconChevronRight20Regular class="dir-icon" />
+          <span>{{ $t('bookView.toolbar.prevSection') }}</span>
+        </button>
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :disabled="!hasToc"
+          @click="$emit('navigateToNextSection')"
+        >
+          <IconChevronLeft20Regular class="dir-icon" />
+          <span>{{ $t('bookView.toolbar.nextSection') }}</span>
+        </button>
+      </template>
+      <button
+        v-if="isOverflowed('toc')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: tocVisible }"
+        :disabled="!hasToc"
+        @click="overflowOpen = false; $emit('toggleToc')"
+      >
+        <IconTreeRtl />
+        <span>{{ $t('bookView.toolbar.toc') }}</span>
+      </button>
     </BookViewToolbarOverflowMenu>
   </div>
 </template>
@@ -928,35 +922,10 @@ button:disabled {
 }
 
 
-/* The info and editions dropdowns hang out of their boxes, so their clipping is lifted while
-   they are on the bar; collapsing them still clips, as .collapsible intends. */
-.collapsible.book-info-toolbar-item:not(.collapsed),
-.collapsible.hebrewbooks-editions-toolbar-item:not(.collapsed) {
+/* The dropdowns hang out of their boxes, so their clipping is lifted while they are on the
+   bar; collapsing them still clips, as .collapsible intends. */
+.collapsible.dropdown-host:not(.collapsed) {
   overflow: visible;
-}
-/* The editions submenu: a floating sheet of its own beside the flyout, same surface as it. */
-.overflow-editions-submenu {
-  position: fixed;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  max-width: 300px;
-  max-height: 320px;
-  padding: 2px 0;
-  overflow-y: auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-.overflow-book-info-panel {
-  max-width: 300px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 4px 10px 8px;
 }
 
 .export-spinner {
