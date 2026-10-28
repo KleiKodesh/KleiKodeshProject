@@ -29,7 +29,7 @@ The panels differ only in how tall their dropdown is, and therefore in who rende
 - **Side columns** — `CommentaryPanelHost` renders it, clipped to that column so it stays over its own commentary and never touches the text.
 - **Bottom panel** — `BookViewPage` renders it, anchored to `.content-area` so it runs the full height of the book-view body. It cannot live in the host: `SplitPane` and `.side-lines` both clip, so a dropdown mounted inside the bottom panel could only be as tall as that panel.
 
-The trees used to share `BookViewSidePanel` with the TOC, which is why only one could be open and why opening one closed the TOC. That panel is now the TOC's alone.
+The trees used to share the side panel with the TOC, which is why only one could be open and why opening one closed the TOC. That panel is now the TOC's alone.
 
 Adding a fourth panel means adding a slot to `COMMENTARY_SLOTS` plus its layout and toggle: the composables, the store, persistence and session restore all loop over the constant and need no edit.
 
@@ -47,7 +47,7 @@ With the toggle row on top of the editions dropdown on (per pane, persisted, def
 
 **BookViewToolbar.vue** - zoom, search, TOC toggle, and one toggle per commentary panel. Add new toolbar actions here.
 
-**BookViewSidePanel.vue** - the side-panel shell, holding the table of contents. Commentary filters used to share it; they now live in their own panels (see above).
+**SidePanel** (`components/SidePanel.vue`, shared) - the side-panel shell, holding the table of contents. Commentary filters used to share it; they now live in their own panels (see above).
 
 **BookViewSearchBar.vue** - inline search bar. Query input, mode selection, and match navigation.
 
@@ -192,8 +192,4 @@ Storage: `user_settings.db` table `user_notes`. All access via `userSettingsDb.t
 
 ## Text selection keyboard handling
 
-**useTextSelectionKeys.ts** — `Ctrl+A` (select all), `Ctrl+F` (open search), `Ctrl+V` and `Ctrl+Shift+C`, scoped to one element. Used by `lines/BookViewLinesContent.vue` and `commentary/CommentaryView.vue`, which is why it sits at the feature root rather than in either subfolder. `Ctrl+A` drives `useSelectAllInContainer`, whose `isSelectAll` / `selectAllInContainer` it re-exports.
-
-**useSelectAllInContainer.ts** — tracks whether the current selection is a whole-container "select all" as a reactive `isSelectAll` boolean, plus a `selectAll()` trigger. The flag matters for copy/export: with virtualized content, "select all" must grab the ENTIRE line set rather than only the DOM range that happens to be mounted (see `useLineCopy`). Auto-clears on the next `selectionchange` that collapses or replaces the selection.
-
-Both lived in `src/composables/` until 2026-07-29 and moved here because book-view is their only consumer. If a second feature needs them, move them back to `src/composables/`.
+`useTextSelectionKeys` (`useScopedKeys`) and `useSelectAllInContainer` are shared composables in `src/composables/` (the book view and FastDocView both use them).
