@@ -1,6 +1,8 @@
 # WpfLib — Shared WPF Class Library
 
-Shared WPF utilities used by all task pane libraries in KleiKodesh (DocDesignLib, RegexFindLib, WebSitesLib).
+Shared WPF utilities used by the KleiKodesh Word add-in and its task pane libraries.
+
+Referenced by: `KleiKodeshVsto`, `DocDesignLib`, `RegexFindLib`, `WebSitesLib`, `Nakdan`, plus `WpfLib.Gallery` (style gallery) and `WpfLib.Gallery.Tests`.
 
 ## What It Provides
 
