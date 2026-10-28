@@ -945,7 +945,7 @@ public sealed class Dispatcher(
                 var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
                 await fts.StreamSearch(
                     a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords,
-                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct, a.ResumeAfterLineId);
                 return true;
             }
 

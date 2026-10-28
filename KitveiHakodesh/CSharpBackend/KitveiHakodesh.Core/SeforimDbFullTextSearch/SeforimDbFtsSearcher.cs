@@ -94,6 +94,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <param name="requireOrdered">Only match windows where the query words appear in
         /// query order.</param>
         /// <param name="contextWords">Words of context requested per side of the match.</param>
+        /// <param name="afterPosition">Resume: only lines after this index position
+        /// (<see cref="SeforimDbFtsEngine.PositionOfLine"/>); 0 = from the start. A resumed
+        /// search seeds no snippet texts — the caller already shows its first screen.</param>
         public IEnumerable<SeforimDbFtsHitBatch> SearchInBatches(
             SeforimDbFtsEngine engine,
             string query,
@@ -102,7 +105,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             int contextWords,
             FtsTermTable terms,
             CancellationToken cancellationToken = default,
-            Action<string>? onStage = null)
+            Action<string>? onStage = null,
+            long afterPosition = 0)
         {
             if (engine == null) throw new ArgumentNullException(nameof(engine));
             if (terms == null) throw new ArgumentNullException(nameof(terms));
@@ -115,7 +119,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             Action<string>? stage = onStage == null ? null : s => { if (s != last) { last = s; onStage(s); } };
 
             int batchIndex = 0;
-            int seedLeft = SeedSnippetTextHitCount;
+            int seedLeft = afterPosition > 0 ? 0 : SeedSnippetTextHitCount;
             var batch = new List<SearchResult>(FirstBatchSize);
 
             // The verification fetch reads the matched lines' text only (withPlacement: false):
@@ -126,7 +130,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             try
             {
                 foreach (var hit in index.Search(query, cap: 0, ct: cancellationToken,
-                                                 onStage: stage, batchSizeAt: BatchSizeAt, withPlacement: false))
+                                                 onStage: stage, batchSizeAt: BatchSizeAt, withPlacement: false,
+                                                 afterPosition: afterPosition))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     batch.Add(hit);

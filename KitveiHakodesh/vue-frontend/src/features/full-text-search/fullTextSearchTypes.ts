@@ -27,7 +27,8 @@ export interface FullTextSearchResult {
    */
   snippetStart: number
   snippetEnd: number
-  snippetMarks: number[]
+  /** A plain array off the wire; a view into its chunk's packed array when read from the cache. */
+  snippetMarks: number[] | Int32Array
   /** Bit flags — see SNIPPET_FLAG_LEADING_ELLIPSIS / _TRAILING_ELLIPSIS / _SHORT. */
   snippetFlags: number
 }
