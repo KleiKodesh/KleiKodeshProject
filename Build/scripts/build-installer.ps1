@@ -140,7 +140,7 @@ Push-Location (Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend")
 # npm ci deletes node_modules first, which fails half-way (leaving it gutted) while a
 # local dev server holds esbuild.exe. So npm ci only in CI; locally the same lock file
 # is installed in place, without rewriting package.json / package-lock.json.
-$npmArgs = if ($env:CI) { @("ci") } else { @("install", "--no-save", "--no-audit", "--no-fund") }
+$npmArgs = @(if ($env:CI) { "ci" } else { "install", "--no-save", "--no-audit", "--no-fund" })
 try { & "C:\Program Files\nodejs\npm.cmd" @npmArgs } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: npm ci failed." -ForegroundColor Red; exit 1 }
 
