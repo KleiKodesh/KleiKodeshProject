@@ -12,12 +12,15 @@ namespace DocDesign.Spacing
         float _lineSpacing;
         float _wordSpacing;
         float _characterStretch;
+        float _characterScale = 100;
 
         public float StepSize { get => _stepSize; set { if (SetProperty(ref _stepSize, value)) DocDesignSettings.Save(nameof(StepSize), value); } }
         public float SpaceAfter { get => _spaceAfter; set => SetSpaceAfter(value); }
         public float SpaceBefore { get => _spaceBefore; set => SetSpaceBefore(value); }
         public float LineSpacing { get => _lineSpacing; set => SetLineSpacing(value); }
         public float WordSpacing { get => _wordSpacing; set => SetWordSpacing(value); }
+        /// <summary>Real letter stretch: Word's character scale (Font.Scaling, percent width). CharacterStretch is spacing between characters.</summary>
+        public float CharacterScale { get => _characterScale; set => SetCharacterScale(value); }
         public float CharacterStretch { get => _characterStretch; set => SetCharacterStretch(value); }
 
 
@@ -25,7 +28,7 @@ namespace DocDesign.Spacing
         public RelayCommand<string> SetSpaceBeforeCommand => new RelayCommand<string>(param => SetSpaceBefore(param));
         public RelayCommand<string> SetLineSpacingCommand => new RelayCommand<string>(param => SetLineSpacing(param));
         public RelayCommand<string> SetWordSpacingCommand => new RelayCommand<string>(param => SetWordSpacing(param));
-        public RelayCommand<string> SetWideLettersCommand => new RelayCommand<string>(param => SetWideLetters(param == "+"));
+        public RelayCommand<string> SetCharacterScaleCommand => new RelayCommand<string>(param => SetCharacterScale(param));
         public RelayCommand<string> SetCharacterStretchCommand => new RelayCommand<string>(param => SetCharacterStretch(param));
 
 
@@ -123,6 +126,8 @@ namespace DocDesign.Spacing
                 SetProperty(ref _lineSpacing, selection.ParagraphFormat.LineSpacing, nameof(LineSpacing));
                 SetProperty(ref _wordSpacing, selection.GetSpaceBetweenWords(), nameof(WordSpacing));
                 SetProperty(ref _characterStretch, selection.Font.Spacing, nameof(CharacterStretch));
+                var scale = selection.Font.Scaling; // 9999999 (wdUndefined) on mixed selection
+                if (scale > 0 && scale <= 600) SetProperty(ref _characterScale, scale, nameof(CharacterScale));
             }
             catch { } // selection can enter transient states (e.g. mid-close) that throw on read
         }
@@ -189,36 +194,22 @@ namespace DocDesign.Spacing
             }
         }
 
-        /// <summary>
-        /// Letter stretch as in a Sefer Torah: only the roof of the letter grows,
-        /// stroke thickness stays. Unicode has exactly these as the Hebrew wide
-        /// letters (U+FB21..FB28: alef, dalet, he, kaf, lamed, final mem, resh, tav),
-        /// present in all common Windows fonts. Word's Font.Scaling widens the whole
-        /// glyph including strokes, which is why it is not used here (#345).
-        /// </summary>
-        static readonly string Narrow = "אדהכלםרת";
-        static readonly string Wide = "ﬡﬢﬣﬤﬥﬦﬧﬨ";
-
-        void SetWideLetters(bool widen)
+        void SetCharacterScale(object param)
         {
+            // Word accepts 1..600 percent.
+            int Clamp(float v) => (int)System.Math.Max(1, System.Math.Min(600, System.Math.Round(v)));
             try
             {
-                Range range = Vsto.Selection.Range;
-                if (range.Start == range.End) return;
-                string from = widen ? Narrow : Wide, to = widen ? Wide : Narrow;
-                for (int i = 0; i < from.Length; i++)
+                var font = Vsto.Selection.Font;
+                if (param is float f) font.Scaling = Clamp(f);
+                else if (param is string s && !string.IsNullOrEmpty(s))
                 {
-                    Range r = range.Duplicate;
-                    Find find = r.Find;
-                    find.ClearFormatting();
-                    find.Replacement.ClearFormatting();
-                    find.Text = from[i].ToString();
-                    find.Replacement.Text = to[i].ToString();
-                    find.MatchWildcards = false;
-                    find.Format = false;
-                    find.Wrap = WdFindWrap.wdFindStop;
-                    find.Execute(Replace: WdReplace.wdReplaceAll);
+                    int cur = font.Scaling > 0 && font.Scaling <= 600 ? font.Scaling : 100;
+                    if (s == "=") font.Scaling = 100;
+                    else if (s == "+") font.Scaling = Clamp(cur + 5);
+                    else if (s == "-") font.Scaling = Clamp(cur - 5);
                 }
+                SetProperty(ref _characterScale, Vsto.Selection.Font.Scaling, nameof(CharacterScale));
             }
             catch { }
         }
