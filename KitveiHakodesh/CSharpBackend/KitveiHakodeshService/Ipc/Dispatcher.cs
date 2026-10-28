@@ -863,13 +863,6 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(fts.SnippetTexts(a.LineIds ?? new(), a.ShortLineIds ?? new())));
                 }
 
-                // Scoped substring search (in-book, commentary panel): candidate lines from the index (Core).
-                case "ftsLinesSearch":
-                {
-                    var a = MsgPack.De<FtsLinesSearchArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(fts.LinesSearch(a.Query ?? "", a.Ranges ?? new())));
-                }
-
                 case "ftsIndexingStatus":
                     return RpcResponse.Ok(MsgPack.Ser(fts.Status()));
 

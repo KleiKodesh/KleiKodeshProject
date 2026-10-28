@@ -237,7 +237,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 **Main composables:**
 - `useBookView.ts` — central composable; owns data loading, state, event handlers, and watchers
-- `useBookViewSearch.ts` / `useBookViewSearchPanel.ts` — content search (line-based) and its panel state
+- `useBookViewSearch.ts` / `useBookViewSearchPanel.ts` — in-book substring search and its panel state. The search runs in the service (`linesSubstringSearch`, Core `SeforimDbLineSubstringSearch`): FTS index narrowing from two characters + native confirm, else a native scan of the lines — the frontend sends ranges and gets line ids and counts; no book text is held for search. Lines near the reader are asked first; typing narrows from the previous (or in-flight) answer
 - `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
 - `useBookViewSessionRestore.ts` — restores per-book view state on mount
 - `useBookViewPinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback

@@ -287,13 +287,6 @@ public sealed class FtsSnippetTextsArgs
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsLinesSearchArgs
-{
-    public string? Query { get; set; }
-    public List<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange>? Ranges { get; set; }
-}
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class FtsSearchStreamArgs
 {
     public string? Query { get; set; }

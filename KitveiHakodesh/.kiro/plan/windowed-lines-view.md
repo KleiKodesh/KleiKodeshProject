@@ -64,31 +64,11 @@ accepted: a far jump or fast flick shows blank shells for one fetch.
 
 ## In-book search
 
-No corpus in the frontend, so the JS scan in `useBookViewSearch.ts` has nothing to
-scan. Decision: **scan in the service, do not build an index.**
-
-- A trigram index answers substrings without reading text (Google Code Search / Zoekt;
-  ~20% of corpus, positional ~1.2x) — **rejected on disk cost** against a 7.5 GB corpus.
-- Scanning is fast enough. ripgrep's thesis: SIMD search runs at several GB/s. .NET 10
-  AOT ordinal `IndexOf` is vectorized (AVX2/AVX-512). A 190k-line book is ~40 MB; a
-  fused normalize-and-match pass lands in tens of ms, and the OS page cache makes
-  repeat searches in the same book near-free — under the existing 150 ms debounce.
-  It is also 10-50x faster than today's JS scan, which allocates a string per line.
-- Reuse in-house parts: FtsLib `Tokenization/TokenStream.cs` (reused `_norm` buffer,
-  nikud stripped) and `HtmlWordScanner.cs` for tag-aware normalization; the existing
-  `ftsSearchStream` RPC for pushing frames; `getLinesWithContentPatternForBooks` as
-  the SQL-layer precedent.
-- Wire contract stays `{ lineIndex, occurrenceInLine }` — ordinals, not offsets, so the
-  renderer keeps locating matches in the row it is already rendering. Only numbers
-  cross the bridge. Stream frames with converging counts (PDF.js
-  `updateMatchesCountOnProgress` behavior); never cap results.
-- Semantics must match `stripHtmlForSearch` exactly: strip tags, collapse each entity
-  to one sentinel char, strip U+0591-U+05C7, then substring match. Token/FTS matching
-  is the wrong tool here — Telegram's word-based server search is the cautionary case
-  for non-space-separated languages.
-- Optional later: the corpus FTS index already on disk can pre-filter word/prefix
-  queries to candidate lines (zero new disk); mid-word substrings fall back to the scan.
-
-Tradeoff accepted: every search re-reads that book's text in the service (page-cached
-after the first) instead of being in-memory after a long backfill. Flat memory, bounded
-work per keystroke.
+DONE (2026-10-28): one Core op, `linesSubstringSearch` (`SeforimDbLineSubstringSearch`):
+the FTS index narrows (from two characters; merged text only) and the candidates are
+confirmed natively (`SeforimDbLineTextScan`, one pass per line with the frontend's exact
+normalization); when the index cannot answer (alternate version, book not indexed, a
+too-common fragment) the same scanner reads the ranges' lines itself. Nothing is kept
+anywhere. The frontend (`useBookViewSearch.ts`, `useCommentarySearch.ts`) sends ranges
+and gets line ids and counts; it asks for the lines near the reader first, and an
+extended query narrows from the previous or in-flight answer.

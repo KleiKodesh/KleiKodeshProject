@@ -749,7 +749,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     }
 
     /// <summary>
-    /// Scoped substring search (ftsLinesSearch): the lines inside <paramref name="ranges"/>
+    /// Scoped substring candidates (SeforimDbLineSubstringSearch narrows with it): the lines inside <paramref name="ranges"/>
     /// that may hold <paramref name="query"/> as a substring, from the index — the book
     /// view's in-book search (one range: the book) and the commentary panel's (one range
     /// per commentator group). Not answered while the index is building or cannot answer
