@@ -11,6 +11,7 @@ import { ref, computed, watch } from 'vue'
 import { useOnline } from '@vueuse/core'
 import { lsGet, lsSet, registerLocalStorageReclaimer } from '@/utils/persistence'
 import {
+  ERROR_REPORT_SCHEMA_VERSION,
   encodeErrorReportBody,
   reissueReportId,
   withContentDigest,
@@ -62,7 +63,17 @@ interface ErrorReportResponse {
  */
 function readPendingReports(): ErrorReportPayload[] {
   const stored = lsGet<ErrorReportPayload[]>(PENDING_REPORTS_KEY)
-  return Array.isArray(stored) ? stored : []
+  return Array.isArray(stored) ? stored.filter(isCurrentShape) : []
+}
+
+/** A queued report from an older schema (or a half-written one) cannot be digested or
+ *  sent — it would throw inside every flush. Dropped on load, never migrated. */
+function isCurrentShape(p: unknown): p is ErrorReportPayload {
+  const report = p as Partial<ErrorReportPayload> | null
+  return typeof report === 'object' && report !== null
+    && typeof report.report_id === 'string'
+    && report.schema_version === ERROR_REPORT_SCHEMA_VERSION
+    && typeof report.location === 'object' && report.location !== null
 }
 
 /** The queue shares localStorage's ~5 MB with every other key: past this many reports the
@@ -242,7 +253,17 @@ export async function flushPendingErrorReports(): Promise<void> {
       .filter((p) => !p.manualResendOnly)
       .slice(0, MAX_FLUSH_PER_RUN)
     for (const payload of sweepable) {
-      const { sent, outcome, needsManualResend } = await postReport(payload)
+      let posted: Awaited<ReturnType<typeof postReport>>
+      try {
+        posted = await postReport(payload)
+      } catch (err) {
+        // A report that cannot even be built into a request never will be: drop it, or it
+        // throws again on every flush and holds up the reports behind it.
+        console.warn('[errorReport] dropping a queued report that cannot be sent:', err)
+        dequeue(payload.report_id)
+        continue
+      }
+      const { sent, outcome, needsManualResend } = posted
       // A reissued id replaces the queued entry rather than joining it, so a report
       // that keeps failing transiently does not accumulate one copy per 409.
       if (needsManualResend) {
