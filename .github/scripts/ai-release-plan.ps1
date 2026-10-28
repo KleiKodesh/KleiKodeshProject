@@ -331,6 +331,10 @@ $plain = [ordered]@{
 foreach ($c in $kept) { foreach ($k in $plain.Keys) { $c.en = $c.en -replace $k, $plain[$k] } }
 
 # --- Step 3: the Hebrew - written in batches, then one proofreading pass ---
+# Hebrew quality needs a full Flash model; each has its own free-tier quota, so try
+# several before falling back to lite (NOTES_HEBREW_MODEL overrides the list).
+$heChain = @(if ($env:NOTES_HEBREW_MODEL) { $env:NOTES_HEBREW_MODEL -split ',' | ForEach-Object Trim }
+             else { 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash' }) + $models
 $heSchema = @{
     type       = 'OBJECT'
     properties = @{ he = @{ type = 'ARRAY'; items = @{ type = 'STRING' } } }
@@ -364,7 +368,7 @@ ITEMS:
 $($numbered -join "`n")
 "@
     Write-Host "Step 3, Hebrew batch $([int]($i / 15) + 1)"
-    $r = Invoke-Gemini $prompt $heSchema $mergeChain { param($o) Test-Hebrew $o $batch.Count }
+    $r = Invoke-Gemini $prompt $heSchema $heChain { param($o) Test-Hebrew $o $batch.Count }
     if (-not $r) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
     $heText += @($r.he)
 }
@@ -385,7 +389,7 @@ LINES:
 $($numbered -join "`n")
 "@
 Write-Host "Step 3, proofreading"
-$proof = Invoke-Gemini $prompt $heSchema $mergeChain { param($o) Test-Hebrew $o $heText.Count }
+$proof = Invoke-Gemini $prompt $heSchema $heChain { param($o) Test-Hebrew $o $heText.Count }
 if ($proof) { $heText = @($proof.he) } else { Write-Host "Proofreading failed - keeping the unproofed Hebrew" }
 for ($k = 0; $k -lt $kept.Count; $k++) { $kept[$k] | Add-Member he $heText[$k] }
 
