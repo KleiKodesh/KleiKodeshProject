@@ -61,6 +61,12 @@ interface ErrorReportResponse {
  * build, or was half-written — and a non-array here would throw on the first enqueue,
  * losing the report the user just typed. Start empty instead.
  */
+/** What the key held, before any filtering — so a load that dropped something can tell. */
+const storedReportCount = (() => {
+  const stored = lsGet<unknown[]>(PENDING_REPORTS_KEY)
+  return Array.isArray(stored) ? stored.length : 0
+})()
+
 function readPendingReports(): ErrorReportPayload[] {
   const stored = lsGet<ErrorReportPayload[]>(PENDING_REPORTS_KEY)
   return Array.isArray(stored) ? stored.filter(isCurrentShape) : []
@@ -91,14 +97,13 @@ function trimPendingReports(reports: ErrorReportPayload[]): ErrorReportPayload[]
   return live.slice(-MAX_PENDING_REPORTS)
 }
 
-const storedReports = readPendingReports()
-const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(storedReports))
+const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(readPendingReports()))
 
 function savePendingReports(): void {
   lsSet(PENDING_REPORTS_KEY, pendingReports.value)
 }
-// The load trimmed something: write the trimmed queue back now, not on the next enqueue.
-if (pendingReports.value.length !== storedReports.length) savePendingReports()
+// The load dropped or trimmed something: write the queue back now, not on the next enqueue.
+if (pendingReports.value.length !== storedReportCount) savePendingReports()
 
 // localStorage is full: the older half of the queue goes — the newest reports stay.
 registerLocalStorageReclaimer(() => {
