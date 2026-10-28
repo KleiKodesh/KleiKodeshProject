@@ -334,7 +334,7 @@ foreach ($c in $kept) { foreach ($k in $plain.Keys) { $c.en = $c.en -replace $k,
 # Hebrew quality needs a full Flash model; each has its own free-tier quota, so try
 # several before falling back to lite (NOTES_HEBREW_MODEL overrides the list).
 $heChain = @(if ($env:NOTES_HEBREW_MODEL) { $env:NOTES_HEBREW_MODEL -split ',' | ForEach-Object Trim }
-             else { 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-2.5-flash' }) + $models
+             else { 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash' }) + $models
 $heSchema = @{
     type       = 'OBJECT'
     properties = @{ he = @{ type = 'ARRAY'; items = @{ type = 'STRING' } } }
