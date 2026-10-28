@@ -104,17 +104,27 @@ const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> 
 const overflowBookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
 
 /**
- * Ctrl+Shift+D: opens the bookmarks dropdown on a new bookmark, its name field focused. With
- * bookmarks collapsed, that is the flyout's bookmarks row and its submenu.
+ * Ctrl+Shift+D and the lines' context menu: opens the bookmarks dropdown on a new bookmark,
+ * its name field focused. With bookmarks collapsed, that is the flyout's bookmarks row and
+ * its submenu.
+ *
+ * The point is read first, before the flyout opens and moves focus off the selection. Then
+ * the control is counted as present BEFORE the toolbar decides where it goes: on a book's
+ * first bookmark it is not on the toolbar yet, and opening it there would add it to the
+ * count only after the choice was made - on a narrow pane it then collapses in the same
+ * tick, taking the panel and its name field with it, invisible and inert.
  */
 async function createBookmark() {
+  const point = props.readBookmarkPoint?.() ?? null
+  bookmarksPresent.value = true
+  await nextTick()
   if (toolbarButtonVisible('bookmarks')) {
-    void bookmarksDropdownRef.value?.createBookmark()
+    void bookmarksDropdownRef.value?.createBookmark(point)
     return
   }
   overflowOpen.value = true
   await nextTick()
-  void overflowBookmarksDropdownRef.value?.createBookmark()
+  void overflowBookmarksDropdownRef.value?.createBookmark(point)
 }
 
 // Continuous zoom — fires immediately on pointerdown, then waits 400ms before

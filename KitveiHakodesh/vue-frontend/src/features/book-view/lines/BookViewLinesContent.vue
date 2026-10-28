@@ -345,7 +345,7 @@ const {
   },
 })
 
-const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
+const { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration } = useBookViewLinesNavigation(
   scroller,
   () => props.lines,
   () => props.searchBarVisible ?? false,
@@ -357,6 +357,8 @@ const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoi
   scroller,
   () => props.searchBarVisible ?? false,
   scrollToLine,
+  lineIndexForId,
+  currentScrollGeneration,
   suppressPositionSave,
 )
 

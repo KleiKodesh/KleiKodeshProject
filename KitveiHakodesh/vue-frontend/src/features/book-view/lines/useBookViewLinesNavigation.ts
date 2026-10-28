@@ -196,5 +196,14 @@ export function useBookViewLinesNavigation(
     })
   }
 
-  return { scrollToLine, scrollToLineId }
+  /**
+   * Bumped by every scrollToLine. A caller that follows a landing up (a bookmark's nudge to
+   * its exact character) reads it right after starting the scroll and gives up once it moves:
+   * a later jump has taken the view.
+   */
+  function currentScrollGeneration() {
+    return scrollGeneration
+  }
+
+  return { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration }
 }
