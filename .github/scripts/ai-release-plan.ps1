@@ -178,7 +178,8 @@ Below are $($batch.Count) developer commit messages. For EACH commit return one 
 the same id: is anything in it visible to a user of the app or the Word add-in?
 - visible=false (section "none", empty texts) for: CI, GitHub Actions, build/release/
   signing scripts, docs, tests, refactors, renames, code removal, background service
-  plumbing, logging, licence text, version bumps, pure internal clean-up.
+  plumbing, logging, licence text, version bumps, add-in version numbers, signing
+  certificates, pure internal clean-up.
 - visible=true otherwise - including speed-ups a user would feel, small fixes, new
   options, English interface work, installer settings, About page, macros, downloads.
 - A body line "User-facing: <section> - <Area>: <sentence>" is the author's own verdict:
