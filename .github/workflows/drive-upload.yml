@@ -5,15 +5,21 @@
 # The run reads the current releases, so it is safe to start any number of times.
 # Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
 # and by release events from manual edits/deletes.
-# Monthly it only lists the folder: Google expires a login unused for 6 months, and releases can pause that long.
+# Weekly it only compares Drive's installer names with the releases and syncs on a mismatch: a cheap
+# safety net that also keeps the Google login in use (Google expires one unused for 6 months).
 name: Drive sync
 
 on:
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: Sync only if Drive's installers differ from the releases (what the weekly run does)
+        type: boolean
+        default: false
   release:
     types: [published, edited, deleted, unpublished]
   schedule:
-    - cron: '0 3 1 * *'
+    - cron: '0 3 * * 0'
 
 concurrency:
   group: drive-sync
@@ -38,14 +44,29 @@ jobs:
       RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_GDRIVE_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Keep the Google login alive
-        if: github.event_name == 'schedule'
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash > /dev/null
+
+      - name: Is Drive out of date?
+        id: check
+        env:
+          CHECK_ONLY: ${{ inputs.check_only }}
         run: |
-          curl -fsSL https://rclone.org/install.sh | sudo bash > /dev/null
-          rclone lsf gdrive: --drive-root-folder-id "$FOLDER_ID" --max-depth 1
+          if [ "$GITHUB_EVENT_NAME" != schedule ] && [ "$CHECK_ONLY" != true ]; then echo "sync=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+                   --limit 2 --json tagName --jq '.[].tagName')
+          sub=""
+          for tag in $tags; do
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+              | grep -E '^(KleiKodeshSetup-.*\.exe|KitveiHakodeshPortable-.*\.zip)$' | sed "s|^|$sub|"
+            sub="$PREVIOUS_DIR/"
+          done | sort > expected.txt
+          rclone lsf -R --files-only gdrive: --drive-root-folder-id "$FOLDER_ID" \
+            | grep -E '^(|.*/)(KleiKodeshSetup-.*\.exe|KitveiHakodeshPortable-.*\.zip)$' | sort > actual.txt || true
+          if diff expected.txt actual.txt; then echo "Drive is up to date."; else echo "sync=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Download the latest two releases
-        if: github.event_name != 'schedule'
+        if: steps.check.outputs.sync == 'true'
         run: |
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
                    --limit 2 --json tagName --jq '.[].tagName')
@@ -76,13 +97,9 @@ jobs:
           done
           find mirror notes -type f | sort
 
-      - name: Install rclone
-        if: github.event_name != 'schedule'
-        run: curl -fsSL https://rclone.org/install.sh | sudo bash
-
       # Release notes are left out of the sync: they are Google Docs on Drive, re-created below.
       - name: Sync to Drive
-        if: github.event_name != 'schedule'
+        if: steps.check.outputs.sync == 'true'
         run: |
           rclone sync mirror gdrive: --drive-root-folder-id "$FOLDER_ID" -v \
             --filter "- $NOTES_HE - *" --filter "- $NOTES_EN - *" \
@@ -90,7 +107,7 @@ jobs:
             --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
 
       - name: Release notes as Google Docs
-        if: github.event_name != 'schedule'
+        if: steps.check.outputs.sync == 'true'
         run: |
           rclone delete gdrive: --drive-root-folder-id "$FOLDER_ID" --include 'ReleaseNotes-*' \
             --include "$NOTES_HE - *" --include "$NOTES_EN - *" -v
