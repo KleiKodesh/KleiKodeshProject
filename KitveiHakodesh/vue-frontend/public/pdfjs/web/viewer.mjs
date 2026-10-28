@@ -9217,9 +9217,44 @@ class PDFPrintService {
   }
 }
 const print = window.print;
+// [KleiKodesh] disableAutoFetch leaves pageViewsReady false until every page was
+// displayed, so beforePrint refused ("not fully loaded"). Fetch the missing pdfPages
+// first (like PDFViewer.setDocument does without disableAutoFetch), then print.
+// A print before the document's pages exist is deferred until "pagesinit".
+let khPrintPreparing = false;
+async function khPreparePrintPages() {
+  const app = PDFViewerApplication;
+  const viewer = app.pdfViewer;
+  if (!viewer?.pdfDocument || !viewer.pagesCount) {
+    await new Promise(resolve => app.eventBus._on("pagesinit", resolve, { once: true }));
+  }
+  const pdfDocument = viewer.pdfDocument;
+  const pending = [];
+  for (let i = 0; i < viewer.pagesCount; i++) {
+    const pageView = viewer.getPageView(i);
+    if (pageView && !pageView.pdfPage) {
+      pending.push(pdfDocument.getPage(i + 1).then(pdfPage => {
+        if (pdfDocument === viewer.pdfDocument && !pageView.pdfPage) {
+          pageView.setPdfPage(pdfPage);
+        }
+      }, reason => console.error(`Unable to get page ${i + 1} for printing`, reason)));
+    }
+  }
+  await Promise.all(pending);
+}
 window.print = function () {
   if (activeService) {
     console.warn("Ignored window.print() because of a pending print job.");
+    return;
+  }
+  const khViewer = PDFViewerApplication.pdfViewer;
+  if (!khViewer?.pdfDocument || !khViewer.pagesCount || !khViewer.pageViewsReady) {
+    if (!khPrintPreparing) {
+      khPrintPreparing = true;
+      khPreparePrintPages().finally(() => {
+        khPrintPreparing = false;
+      }).then(() => window.print(), reason => console.error(reason));
+    }
     return;
   }
   ensureOverlay().then(function () {
