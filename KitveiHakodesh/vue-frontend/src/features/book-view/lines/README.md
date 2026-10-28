@@ -16,7 +16,7 @@ The book view's main text: a `WindowedScroller` (src/components) mounting a slid
 
 ## Composables
 
-**useBookViewLinesTable.ts** - the book's lines, fetched ON DEMAND only. `ensureLines(start, end)` resolves once a range has its text (consecutive missing 200-line slots are fetched in one request, up to 2000 lines) — the WindowedScroller asks for every range before mounting it, so no row is ever rendered without content. `ensureAllLines()` fetches the whole book, used only by whole-book actions (select-all copy, export to Word). Nothing downloads the book in the background: in-book search has its own source (`useBookViewSearch`).
+**useBookViewLinesTable.ts** - the book's lines, fetched ON DEMAND only. `ensureLines(start, end)` resolves once a range has its text (consecutive missing 200-line slots are fetched in one request, up to 2000 lines) — the WindowedScroller asks for every range before mounting it, so no row is ever rendered without content. `ensureAllLines()` fetches the whole book, used only by whole-book actions (select-all copy, export to Word). Nothing downloads the book in the background: the in-book search runs in the service (`useBookViewSearch` → `linesSubstringSearch`, numbers only).
 
 **useBookViewLineRenderer.ts** - line content rendering with diacritics filtering, divine name censoring, and search highlighting. Caches rendered HTML per line to avoid re-running expensive transformations on every render cycle.
 

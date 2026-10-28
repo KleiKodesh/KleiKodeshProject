@@ -163,7 +163,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     }
 
     /// <summary>
-    /// Substring search candidates inside given line ranges (ftsLinesSearch: the book
+    /// Substring search candidates inside given line ranges (SeforimDbLineSubstringSearch: the book
     /// view's in-book search, the commentary panel's search). <c>Answered</c> false: the
     /// index cannot answer exactly right now, and the caller reads the lines itself.
     /// Otherwise the three parallel arrays name every line that MAY contain the query —
@@ -179,7 +179,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public int[] LineIds { get; set; } = System.Array.Empty<int>();
     }
 
-    /// <summary>One (book, first lineIndex, last lineIndex) range of an ftsLinesSearch, inclusive.</summary>
+    /// <summary>One (book, first lineIndex, last lineIndex) range of a scoped substring search, inclusive.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class FtsLineRange
     {

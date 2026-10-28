@@ -66,9 +66,6 @@ public sealed class FullTextSearchService
     public List<FtsSnippetText> SnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyList<int> shortLineIds) =>
         _coordinator.SnippetTexts(lineIds, shortLineIds);
 
-    public FtsLinesSearchResult LinesSearch(string query, IReadOnlyList<FtsLineRange> ranges) =>
-        _coordinator.LinesSearch(query, ranges);
-
     public Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
         Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, int resumeAfterLineId = 0) =>

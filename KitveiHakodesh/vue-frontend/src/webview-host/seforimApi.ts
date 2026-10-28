@@ -101,20 +101,6 @@ export async function ftsSnippetTexts(lineIds: number[], shortLineIds: number[])
 }
 
 /**
- * Scoped substring search from the full-text index: every line inside the given
- * (book, first lineIndex, last lineIndex) ranges that MAY hold `query` as a substring
- * (a superset — confirm on the text), as parallel arrays. `answered` false while the
- * index is building, or when it cannot answer exactly (a fragment too common): the
- * caller reads the lines itself. Used by the in-book search and the commentary search.
- */
-export async function ftsLinesSearch(
-  query: string,
-  ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
-): Promise<{ answered: boolean; bookIds: number[]; lineIndexes: number[]; lineIds: number[] }> {
-  return serviceCall('ftsLinesSearch', { query, ranges })
-}
-
-/**
  * Every line's character count, by lineIndex, with no text — the reader's scrollbar
  * estimates row heights from them. null when the library has no `line.charCount`
  * column (older schemas), in which case the bar falls back to measured averages.
