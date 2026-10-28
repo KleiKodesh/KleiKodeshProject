@@ -279,9 +279,9 @@ defineExpose({ show, showAtPosition, hide })
   /* The row metrics, published as variables so any row rendered INSIDE this menu can
      consume them — including rows in a `component` item, which this scoped CSS cannot
      select. Change them here only, and read the ROW METRICS note below first. */
-  --context-menu-row-height: 31px;
+  --context-menu-row-height: 27px;
   --context-menu-row-padding-block: 2px;
-  --context-menu-row-padding-inline: 12px;
+  --context-menu-row-padding-inline: 10px;
 
   position: fixed;
   z-index: 9999;
@@ -292,6 +292,8 @@ defineExpose({ show, showAtPosition, hide })
     0 8px 24px rgba(0, 0, 0, 0.08);
   min-width: 140px;
   border-radius: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
   /* No padding-block, and no overflow:hidden — see the ROW METRICS note below for the
      padding, and note that the submenu panel is positioned outside this box, so
      clipping overflow would erase it. */
@@ -308,7 +310,7 @@ defineExpose({ show, showAtPosition, hide })
       menu's top and bottom edges (which is why the menu box has no padding-block and
       no :first-child/:last-child special cases are needed).
 
-   2. (row height + separator height) must be a MULTIPLE OF 4 — here 31 + 1 = 32.
+   2. (row height + separator height) must be a MULTIPLE OF 4 — here 27 + 1 = 28.
       "Even" is not enough: a 30px pitch alternates subpixel fractions at 1.25x /
       1.75x / 2.25x because 30 x 1.75 = 52.5, and the compositor then rasterizes each
       rule with a different weight, so the separators visibly disagree in thickness.
@@ -344,9 +346,9 @@ defineExpose({ show, showAtPosition, hide })
    an RTL row and must render left-to-right, but `direction: ltr` also reverses this
    flex item's own inline axis, so `margin-inline-start` resolves onto the same side
    as the row's `padding-inline-start` and the two stack — measured 22px of left gap
-   against 12px on the label side. plaintext gets the glyph order from first-strong
+   against the padding on the label side. plaintext gets the glyph order from first-strong
    -character detection while leaving the box in the row's direction, so the margin
-   stays between shortcut and label and both edges measure 12px. */
+   stays between shortcut and label and both edges match the row padding. */
 .item-shortcut {
   flex-shrink: 0;
   font-size: 11px;
