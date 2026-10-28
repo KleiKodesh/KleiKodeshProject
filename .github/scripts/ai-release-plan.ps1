@@ -21,9 +21,12 @@ $ErrorActionPreference = 'Stop'
 # Hebrew commit messages: read git's output as UTF-8 (Windows PowerShell 5.1 locally).
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
-# still leaves the second (Pro has a zero free-tier quota - don't use it).
+# still leaves the next (Pro has a zero free-tier quota - don't use it). Explicit names:
+# the *-latest aliases moved to models that time out. Lite judges the commit batches;
+# the merge passes try the stronger NOTES_MERGE_MODEL first (default gemini-3.5-flash,
+# 'none' = lite only) - it merges and sorts sections best, but is often overloaded.
 # No AI notes = no release (the step fails, nothing is built).
-$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL -split ',' | ForEach-Object Trim) } else { @('gemini-flash-latest', 'gemini-flash-lite-latest') }
+$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL -split ',' | ForEach-Object Trim) } else { @('gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest') }
 
 $tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
 $previousTag = if ($Since) { $Since } elseif ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
@@ -56,7 +59,7 @@ Write-Host "Previous release: $previousTag ($($hashes.Count) commits, $(@($block
 $blocks = @($blocks)
 # map (default): pass 1 judges commits in small batches so none are skipped, pass 2
 # merges the per-commit lines into the notes. single: one prompt with all commits.
-$mode = if ($env:NOTES_MODE) { $env:NOTES_MODE } else { 'single' }
+$mode = if ($env:NOTES_MODE) { $env:NOTES_MODE } else { 'map' }
 
 $about = @"
 You write the "What's new" notes for KleiKodesh, a free Windows app for Torah study:
@@ -265,7 +268,8 @@ $lines
     $mergeSchema.properties.changes.items.propertyOrdering = @('from') + $changeSchema.propertyOrdering
     $mergeSchema.required = $planSchema.required + 'omitted'
     $mergeSchema.propertyOrdering = @('changes', 'omitted', 'bump', 'reason')
-    if ($env:NOTES_MERGE_MODEL) { $models = @($env:NOTES_MERGE_MODEL -split ',' | ForEach-Object Trim) + $models }
+    $merge = if ($env:NOTES_MERGE_MODEL) { $env:NOTES_MERGE_MODEL } else { 'gemini-3.5-flash' }
+    if ($merge -ne 'none') { $models = @($merge -split ',' | ForEach-Object Trim) + $models }
     Write-Host "Pass 2"
     $plan = Invoke-Gemini $p2 $mergeSchema { param($o) @($o.changes).Count -and $o.bump }
     # Coverage check: lines neither merged nor knowingly omitted get one more look.
@@ -304,7 +308,7 @@ $glossary
 "@
             Write-Host "Pass 3 (coverage)"
             $before = @($plan.changes).Count
-            $extra = Invoke-Gemini $p3 $mergeSchema { param($o) @($o.changes).Count -ge $before }
+            $extra = Invoke-Gemini $p3 $mergeSchema { param($o) @($o.changes).Count -ge [Math]::Ceiling($before * 0.6) }
             if ($extra) { $plan.changes = @($extra.changes); Write-Host "Pass 3: $before -> $(@($extra.changes).Count) changes" }
         }
     }
