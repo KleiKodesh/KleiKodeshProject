@@ -121,8 +121,12 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const index = findRowIndexAt(viewport.scrollTop, false)
     const row = index != null ? options.rowElement(index) : null
     if (row && index != null) {
+      // The scroll our own hold set is not the reader moving: keep the same words
+      // anchored, or each hold would hand the anchor to whichever character the
+      // re-wrap left at the top, and the reader's words would walk a line per step.
+      const isOwnHold = viewport.scrollTop === heldScrollTop && textAnchor != null && row.contains(textAnchor.node)
       anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
-      textAnchor = findTextAnchor(viewport, row)
+      if (!isOwnHold) textAnchor = findTextAnchor(viewport, row)
     }
   }
 
@@ -133,6 +137,8 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   // in place keeps the very words the reader was on, where a row fraction drifts.
 
   let textAnchor: { node: Text; offset: number; top: number } | null = null
+  /** The scrollTop the last hold left, so the scroll event it causes is recognised as ours. */
+  let heldScrollTop: number | null = null
 
   function caretAt(x: number, y: number): { node: Node; offset: number } | null {
     const doc = document as Document & {
@@ -156,16 +162,26 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     return rect && (rect.height > 0 || rect.width > 0) ? rect.top : null
   }
 
+  /** The first text line that starts inside the viewport — one the reader can see, not one cut off above. */
   function findTextAnchor(viewport: HTMLElement, row: HTMLElement) {
     const box = viewport.getBoundingClientRect()
     const rowBox = row.getBoundingClientRect()
-    const y = Math.max(box.top, rowBox.top) + 2
-    if (y >= Math.min(box.bottom, rowBox.bottom)) return null
-    const caret = caretAt(box.left + box.width / 2, y)
-    if (!caret || caret.node.nodeType !== Node.TEXT_NODE || !row.contains(caret.node)) return null
-    const node = caret.node as Text
-    const top = textTop(node, caret.offset)
-    return top == null ? null : { node, offset: caret.offset, top: top - box.top }
+    const bottom = Math.min(box.bottom, rowBox.bottom)
+    let y = Math.max(box.top, rowBox.top) + 2
+    for (let probe = 0; probe < 2 && y < bottom; probe++) {
+      const caret = caretAt(box.left + box.width / 2, y)
+      if (!caret || caret.node.nodeType !== Node.TEXT_NODE || !row.contains(caret.node)) return null
+      const node = caret.node as Text
+      const top = textTop(node, caret.offset)
+      if (top == null) return null
+      if (top >= box.top) return { node, offset: caret.offset, top: top - box.top }
+      // A line cut off at the top: try the line below it.
+      const range = document.createRange()
+      range.setStart(node, Math.min(caret.offset, node.length - 1))
+      range.setEnd(node, Math.min(caret.offset, node.length - 1) + 1)
+      y = range.getBoundingClientRect().bottom + 2
+    }
+    return null
   }
 
   /** Puts the anchored character back at its distance below the viewport's top. True when it could. */
@@ -176,6 +192,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (top == null) return false
     const delta = Math.round(top - viewport.getBoundingClientRect().top - text.top)
     if (delta !== 0) viewport.scrollTop += delta
+    heldScrollTop = viewport.scrollTop
     return true
   }
 
@@ -210,6 +227,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
       : offsetInto
     const expected = row.offsetTop + scaled
     if (viewport.scrollTop !== expected) viewport.scrollTop = expected
+    heldScrollTop = viewport.scrollTop
     anchor.offsetTop = row.offsetTop
     anchor.offsetHeight = height
     anchor.scrollTop = viewport.scrollTop
