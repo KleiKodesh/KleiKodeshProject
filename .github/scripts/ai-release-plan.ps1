@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
 # still leaves the second (Pro has a zero free-tier quota - don't use it).
 # No AI notes = no release (the step fails, nothing is built).
-$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-flash-lite-latest') }
+$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL -split ',' | ForEach-Object Trim) } else { @('gemini-flash-latest', 'gemini-flash-lite-latest') }
 
 $tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
 $previousTag = if ($Since) { $Since } elseif ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
@@ -146,6 +146,7 @@ function Invoke-Gemini([string]$text, $schema, [scriptblock]$valid) {
                 throw "incomplete answer"
             } catch {
                 Write-Host "  $model attempt $attempt failed: $($_.Exception.Message)"
+                if ($_.Exception.Message -match '404') { break }   # model not available - next one
                 if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
             }
         }
