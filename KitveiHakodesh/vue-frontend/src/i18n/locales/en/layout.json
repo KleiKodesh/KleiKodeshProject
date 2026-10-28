@@ -36,6 +36,14 @@
       "label": "Measurements",
       "description": "Convert halachic measures"
     },
+    "update": {
+      "ready": "Version {version} available – click to install",
+      "downloading": "Downloading update {version}... {percent}%",
+      "installing": "Installing the update...",
+      "failed": "Install did not start - click to retry",
+      "installHint": "Click to install. Installing closes Word and the program.",
+      "retryHint": "Click to try starting the installer again."
+    },
     "settings": {
       "label": "Settings",
       "description": "Adjust the program to your preferences"

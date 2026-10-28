@@ -10,8 +10,8 @@ import {
 } from '@/webview-host/bridge'
 
 /**
- * The app's self-update, shared by UpdateAvailablePrompt (app root) and the settings page's
- * updates section: read the status, run a check now, install a downloaded update, and read or
+ * The app's self-update, used by useUpdateNavState (the nav surfaces' shared instance) and the
+ * settings page's updates section: read the status, run a check now, install a downloaded update, and read or
  * change the turn-off-automatic-updates flag. Each caller gets its own state.
  *
  * readyVersion — the version of the downloaded installer waiting to run, or null. Also set the

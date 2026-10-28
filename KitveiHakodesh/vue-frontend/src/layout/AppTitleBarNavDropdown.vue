@@ -8,6 +8,7 @@ import {
   IconChevronDoubleLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { useAppNavUpdateItem } from './appNavUpdateItem'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { showPopOutButton } from '@/webview-host/bridge'
@@ -34,23 +35,30 @@ const settingsStore = useSettingsStore()
 //
 // Workspaces is deliberately not among them any more: it is a picker, not a destination,
 // and it lives in the title bar beside home - one place, not three.
-type MenuRow = 'settings' | 'navSidebar' | 'popOut'
+//
+// The update row is the Windows / Firefox one: it exists only while an update is
+// downloading, ready or installing, sits first after the divider, and a click installs.
+// There is no "later" - like Windows' orange dot it simply stays until it is clicked.
+type MenuRow = 'update' | 'settings' | 'navSidebar' | 'popOut'
 
-const menuRows: MenuRow[] = [
+const { item: updateItem, install: installUpdate } = useAppNavUpdateItem()
+
+const menuRows = computed<MenuRow[]>(() => [
+  ...(updateItem.value ? ['update' as const] : []),
   'settings',
   'navSidebar',
   ...(showPopOutButton ? ['popOut' as const] : []),
-]
+])
 
 useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
 })
 
 function menuRowIndex(row: MenuRow) {
-  return APP_NAV_ITEMS.value.length + menuRows.indexOf(row)
+  return APP_NAV_ITEMS.value.length + menuRows.value.indexOf(row)
 }
 
-const itemCount = computed(() => APP_NAV_ITEMS.value.length + menuRows.length)
+const itemCount = computed(() => APP_NAV_ITEMS.value.length + menuRows.value.length)
 
 const { focusedIndex } = useListKeys(menuRef, () => itemCount.value, (index) => {
   activateIndex(index)
@@ -61,8 +69,9 @@ function activateIndex(index: number) {
     onTap(APP_NAV_ITEMS.value[index]!.label)
     return
   }
-  const row = menuRows[index - APP_NAV_ITEMS.value.length]
-  if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
+  const row = menuRows.value[index - APP_NAV_ITEMS.value.length]
+  if (row === 'update') onInstallUpdate()
+  else if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
   else if (row === 'navSidebar') onShowNavSidebar()
   else if (row === 'popOut') onPopOut()
 }
@@ -95,6 +104,13 @@ function onPopOut() {
   togglePopOut()
   emit('close')
 }
+
+// The menu stays open: the row turns into "installing" and, should the installer fail to
+// start, into the retry row - both are answers the user is waiting for right here.
+function onInstallUpdate() {
+  if (updateItem.value?.disabled) return
+  void installUpdate()
+}
 </script>
 
 <template>
@@ -116,6 +132,20 @@ ${item.description}`"
       <span class="nav-shortcut">{{ item.shortcut }}</span>
     </button>
     <hr class="nav-divider" />
+    <button
+      v-if="updateItem"
+      class="nav-row nav-row--update"
+      :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('update') }"
+      :style="{ '--update-color': updateItem.color }"
+      :disabled="updateItem.disabled"
+      data-nav-item
+      aria-live="polite"
+      :title="updateItem.title"
+      @click="onInstallUpdate"
+    >
+      <span class="nav-icon"><component :is="updateItem.icon" /></span>
+      <span class="nav-label">{{ updateItem.text }}</span>
+    </button>
     <button
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('settings') }"
@@ -219,6 +249,22 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
   white-space: nowrap;
   direction: ltr;
   margin-inline-start: auto;
+}
+
+/* The row the hamburger's dot points at: the same colour runs down its start edge and
+   through its icon, so the dot's reason is obvious the moment the menu opens. */
+.nav-row--update {
+  border-inline-start: 3px solid var(--update-color);
+  padding-inline-start: 7px;
+}
+.nav-row--update .nav-icon svg {
+  color: var(--update-color);
+}
+.nav-row--update:disabled {
+  cursor: default;
+}
+.nav-row--update:disabled .nav-label {
+  color: var(--text-secondary);
 }
 
 .nav-divider {

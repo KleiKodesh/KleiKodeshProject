@@ -8,6 +8,7 @@ import {
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { APP_NAV_UPDATE_KEY, useAppNavUpdateItem } from './appNavUpdateItem'
 import AppNavSidebarOverflowMenu from './AppNavSidebarOverflowMenu.vue'
 import { useAppNavSidebarOverflow } from './useAppNavSidebarOverflow'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -62,8 +63,19 @@ const navPanelEl = ref<HTMLElement | null>(null)
 // exactly when the rail got cramped would trap it open. The composable owns the fit
 // arithmetic and the flat key list; what stays here is the flyout's state and what each
 // collapsed row does when picked.
+// The update button (Windows' orange dot as a rail button): present only while an update
+// is downloading, ready or installing; a click installs. It leads the controls group so
+// the collapse folds it away last, and while it IS folded away the more button wears its
+// dot, so a cramped rail still says an update is waiting.
+const { item: updateItem, install: installUpdate } = useAppNavUpdateItem()
+const isUpdateButtonVisible = computed(() => updateItem.value !== null)
+
 const { hasNavOverflow, railButtonVisible, visibleNavItems, overflowedRailKeys } =
-  useAppNavSidebarOverflow(navPanelEl, isSplitViewButtonVisible)
+  useAppNavSidebarOverflow(navPanelEl, isSplitViewButtonVisible, isUpdateButtonVisible)
+
+const isUpdateCollapsed = computed(
+  () => isUpdateButtonVisible.value && !railButtonVisible(APP_NAV_UPDATE_KEY),
+)
 
 const overflowOpen = ref(false)
 const overflowButtonEl = ref<HTMLElement | null>(null)
@@ -72,7 +84,8 @@ const overflowButtonEl = ref<HTMLElement | null>(null)
 // reports the picked key back. A key with no branch is a destination (settings included),
 // keyed by its label, which IS the routing key.
 function onOverflowRowSelect(key: string) {
-  if (key === 'split-view') bookViewStore.toggleSplitView()
+  if (key === APP_NAV_UPDATE_KEY) void installUpdate()
+  else if (key === 'split-view') bookViewStore.toggleSplitView()
   else if (key === 'pop-out') togglePopOut()
   else navigateInNewTab(key)
 }
@@ -105,6 +118,18 @@ watch(hasNavOverflow, (has) => {
            overflow arithmetic (useAppNavSidebarOverflow) counts every child on one pitch,
            and even at zero height this spacer costs the one extra flex gap it budgets. -->
       <div class="nav-spacer" />
+      <button
+        v-if="updateItem && railButtonVisible(APP_NAV_UPDATE_KEY)"
+        class="nav-btn nav-btn--update"
+        :style="{ '--update-color': updateItem.color }"
+        :disabled="updateItem.disabled"
+        tabindex="-1"
+        aria-live="polite"
+        :title="updateItem.title"
+        @click="installUpdate()"
+      >
+        <component :is="updateItem.icon" />
+      </button>
       <button
         v-if="railButtonVisible('split-view')"
         class="nav-btn nav-btn-sm"
@@ -139,9 +164,11 @@ watch(hasNavOverflow, (has) => {
         v-if="hasNavOverflow"
         ref="overflowButtonEl"
         class="nav-btn"
-        :class="{ 'nav-btn--on': overflowOpen }"
+        :class="{ 'nav-btn--on': overflowOpen, 'nav-btn--dot': isUpdateCollapsed }"
+        :style="isUpdateCollapsed && updateItem ? { '--update-color': updateItem.color } : undefined"
         tabindex="-1"
-        :title="t('layout.moreItems')"
+        :title="isUpdateCollapsed && updateItem ? `${t('layout.moreItems')}
+${updateItem.text}` : t('layout.moreItems')"
         :aria-expanded="overflowOpen"
         @click="overflowOpen = !overflowOpen"
       >
@@ -274,6 +301,32 @@ watch(hasNavOverflow, (has) => {
 .nav-btn-sm svg {
   width: var(--nav-glyph-size-sm);
   height: var(--nav-glyph-size-sm);
+}
+
+/* The update button paints its glyph in the update's colour (accent, then orange, then red
+   as it ages); it is the rail's whole signal, so nothing else on the button changes. */
+.nav-btn--update svg {
+  color: var(--update-color);
+}
+.nav-btn--update:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* The more button standing in for a folded-away update button carries its dot. */
+.nav-btn--dot {
+  position: relative;
+}
+.nav-btn--dot::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--update-color);
+  box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 
 /* Held down while its submenu is up, so the rail says which button the panel belongs to. */

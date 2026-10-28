@@ -9,6 +9,7 @@
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { restoreLocalFile } from '@/webview-host/bridge'
+import { useUpdateNavState } from '@/composables/useUpdateNavState'
 
 export function installDevTestHook() {
   const tabStore = useTabStore()
@@ -29,8 +30,19 @@ export function installDevTestHook() {
     return tab.id
   }
 
+  // Stage the nav update row without a real download: `fakeUpdate('99.9.9', 3)` = ready
+  // for 3 days (orange); `fakeUpdate(null)` clears it.
+  const updateNav = useUpdateNavState()
+  function fakeUpdate(version: string | null, ageDays = 0, state: 'ready' | 'installing' | 'failed' = 'ready') {
+    updateNav.devRefs.readyVersion.value = version
+    updateNav.devRefs.readySince.value = version ? Date.now() - ageDays * 86_400_000 : null
+    updateNav.devRefs.isInstalling.value = state === 'installing'
+    updateNav.devRefs.hasInstallFailed.value = state === 'failed'
+  }
+
   ;(window as unknown as Record<string, unknown>).__khTest = {
     openLocalFile,
+    fakeUpdate,
     tabStore,
     bookViewStore,
   }
