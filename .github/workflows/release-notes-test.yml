@@ -1,0 +1,38 @@
+# Tries the Gemini release-notes prompt (.github/scripts/ai-release-plan.ps1) on the
+# commits since a release, without building, tagging or publishing anything.
+# gh workflow run release-notes-test.yml [-f since=v10.3.0] ; then gh run download
+name: Release notes test
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Previous release tag (empty = latest release)
+        type: string
+        required: false
+      model:
+        description: Gemini model (empty = default chain)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Write notes with Gemini
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ inputs.model }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-test
+          path: test-notes.md
