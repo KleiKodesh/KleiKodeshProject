@@ -1819,6 +1819,24 @@ teardown moment). Contract, all on the iframe `window`:
   fallback anchor download fired). A cancelled save picker dispatches nothing, so edits
   correctly stay dirty. Clears the editor's dirty flag and notifies the host.
 
+**TOC autosave (writable local `.pdf` only).** `usePdfViewPageTracking` writes every
+outline edit straight into the file, debounced 600 ms after each dirty notify: it runs
+`pdfDocument.saveDocument()` and sends ONLY the bytes past the loaded length to the
+`writePdfTail` op (service in dev, C# bridge action hosted; logic in Core
+`PdfIncrementalSaveWriter`), which writes them at that offset and truncates after. The
+loaded prefix never changes (the viewer keeps range-reading it safely), and each save of a
+session REPLACES the previous tail. Across sessions too: an outline-only section ends with
+a `%KH-TOC start=<S> prev=<P>` comment after `%%EOF` (patched `pdf.worker.mjs`
+SaveDocument, search "KH-TOC marker"). When the loaded file ends with one, the worker
+builds the save from the bytes before S and chains `/Prev` to P, and the host writes at S
+— the old section is overwritten, so repeated sessions do not grow the file. A section
+that also carries annotation changes gets no marker and is kept. Re-apply this worker
+patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
+On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
+(capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
+it immediately — no picker. Word-rendered PDFs and HebrewBooks downloads have no writable
+source path and keep the stock save-as flow + parked-snapshot rehydrate.
+
 Vue side (not in this folder): `bookViewStore` (snapshots + `hasUnsavedPdfChanges` +
 dialog state), `tabStore` (synchronous close guards at the single chokepoint all close
 paths funnel through, including the native chrome-tabs mirror), `App.vue` (themed

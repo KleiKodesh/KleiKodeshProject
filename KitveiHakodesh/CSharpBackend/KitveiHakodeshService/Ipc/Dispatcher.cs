@@ -235,6 +235,19 @@ public sealed class Dispatcher(
                         : new OpenInDefaultAppResult { Error = openError }));
                 }
 
+                // PDF viewer TOC autosave — the dev-mode equivalent of the hosted "writePdfTail"
+                // bridge action. Same path checks as a shell-open, then Core's tail writer.
+                case "writePdfTail":
+                {
+                    var a = MsgPack.De<WritePdfTailArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    string? writeError = PdfIncrementalSaveWriter.WriteTail(full, a.Offset, a.Tail, a.Anchor);
+                    return RpcResponse.Ok(MsgPack.Ser(writeError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = writeError }));
+                }
+
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
                 // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word
                 // imports HTML only by opening a file, so the service writes a temp .html named

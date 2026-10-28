@@ -1440,6 +1440,22 @@
       return row;
     }
 
+    /** `row`, or its outermost ancestor whose children are collapsed (hidden). */
+    function visibleRowFor(row) {
+      var result = row;
+      var node = row && row.parentNode;
+      while (node && node !== outlinesView) {
+        if (node.classList && node.classList.contains('treeItem')) {
+          var toggler = node.querySelector(':scope > .treeItemToggler');
+          if (toggler && toggler.classList.contains('treeItemsHidden')) {
+            result = node;
+          }
+        }
+        node = node.parentNode;
+      }
+      return result;
+    }
+
     /**
      * Add an entry pointing at the CURRENT page (the Acrobat convention).
      * `reference` — insert after this row (same level); `asChild` — insert as
@@ -1459,6 +1475,12 @@
       var page = (app && app.page) || 1;
       var row = createRow('פריט חדש', page);
       var target = reference || focusedRow() || activeItem;
+      if (!reference) {
+        // The current-entry row may sit inside a collapsed branch — a row added
+        // next to it would land hidden INSIDE that branch. Go after the outermost
+        // collapsed ancestor instead, the row the user actually sees.
+        target = visibleRowFor(target);
+      }
       if (asChild && target) {
         ensureToggler(target);
         ensureItemsContainer(target).append(row);

@@ -298,6 +298,50 @@ export async function openFileInDefaultApp(filePath: string): Promise<boolean> {
 }
 
 /**
+ * PDF viewer TOC autosave: write an incremental-save `tail` back into the PDF at `offset`
+ * (the length the viewer loaded). `anchor` = the loaded bytes just before `offset`; the
+ * write is refused when they no longer match the disk (rules: Core PdfIncrementalSaveWriter).
+ * Hosted: the C# host writes (`writePdfTail`, bytes as base64). Dev: the service op.
+ * Returns an error message, or null when written.
+ */
+export async function writePdfTail(
+  filePath: string,
+  offset: number,
+  tail: Uint8Array,
+  anchor: Uint8Array,
+): Promise<string | null> {
+  try {
+    const r =
+      typeof window.__webviewAction !== 'function'
+        ? // Copied into THIS realm: the viewer's arrays come from the PDF.js iframe, and a
+          // cross-realm Uint8Array fails `instanceof` in the encoder and goes out as a map.
+          await serviceCall<{ ok?: boolean; error?: string }>('writePdfTail', {
+            path: filePath,
+            offset,
+            tail: new Uint8Array(tail),
+            anchor: new Uint8Array(anchor),
+          })
+        : await action<{ ok?: boolean; error?: string }>('writePdfTail', {
+            filePath,
+            offset,
+            tail: bytesToBase64(tail),
+            anchor: bytesToBase64(anchor),
+          })
+    return r?.ok ? null : r?.error || 'write failed'
+  } catch (e) {
+    return String(e)
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/**
  * Open an http/https address in the user's default browser.
  *
  * Hosted: the C# host shell-executes the URL (`openUrlInSystemBrowser`) - a plain

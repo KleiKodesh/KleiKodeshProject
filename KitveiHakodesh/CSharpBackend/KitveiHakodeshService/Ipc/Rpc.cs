@@ -119,6 +119,18 @@ public sealed class OpenInDefaultAppResult
     public string? Error { get; set; }
 }
 
+/// <summary>Args for <c>writePdfTail</c> — the PDF viewer's TOC autosave: an incremental-save
+/// tail written at <see cref="Offset"/>, guarded by <see cref="Anchor"/> (see
+/// PdfIncrementalSaveWriter). Replies with <see cref="OpenInDefaultAppResult"/>'s { ok, error }.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WritePdfTailArgs
+{
+    public string? Path { get; set; }
+    public long Offset { get; set; }
+    public byte[]? Tail { get; set; }
+    public byte[]? Anchor { get; set; }
+}
+
 /// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
 /// for the temp file name.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

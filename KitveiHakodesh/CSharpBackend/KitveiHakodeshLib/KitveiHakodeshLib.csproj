@@ -172,6 +172,9 @@
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileOpenRules.cs">
       <Link>Core\LocalFiles\LocalFileOpenRules.cs</Link>
     </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\PdfIncrementalSaveWriter.cs">
+      <Link>Core\LocalFiles\PdfIncrementalSaveWriter.cs</Link>
+    </Compile>
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileContentTypes.cs">
       <Link>Core\LocalFiles\LocalFileContentTypes.cs</Link>
     </Compile>
