@@ -63,8 +63,8 @@ public sealed class FullTextSearchService
         string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords) =>
         _coordinator.Search(query, cap, maxWordDistance, requireOrdered, contextWords);
 
-    public FtsSnippetsResult Snippets(string query, IReadOnlyList<int> lineIds, bool requireOrdered, int contextWords) =>
-        _coordinator.Snippets(query, lineIds, requireOrdered, contextWords);
+    public List<FtsSnippetText> SnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyList<int> shortLineIds) =>
+        _coordinator.SnippetTexts(lineIds, shortLineIds);
 
     public FtsLinesSearchResult LinesSearch(string query, IReadOnlyList<FtsLineRange> ranges) =>
         _coordinator.LinesSearch(query, ranges);

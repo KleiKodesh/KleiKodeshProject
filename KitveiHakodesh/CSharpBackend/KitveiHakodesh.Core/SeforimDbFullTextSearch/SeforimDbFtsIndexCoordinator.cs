@@ -70,10 +70,9 @@ public sealed class SeforimDbFtsIndexCoordinator
         _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
     private SeforimDbFtsIndexer? _indexer;
 
-    /// <summary>Snippeting, the word-distance filter and short-snippet embellishment — all
+    /// <summary>Snippeting, the word-distance filter and short-snippet flagging — all
     /// Core's, and the same code the hosted app runs, so one query cannot come back ranked or
-    /// rendered differently in the two apps. Book id and TOC entry id ride on the engine's
-    /// content fetch, so the searcher needs no queries of its own.</summary>
+    /// rendered differently in the two apps.</summary>
     private SeforimDbFtsSearcher Searcher => _searcher ??= new SeforimDbFtsSearcher();
     private SeforimDbFtsSearcher? _searcher;
 
@@ -723,14 +722,14 @@ public sealed class SeforimDbFtsIndexCoordinator
         try
         {
             // Core's searcher yields finished batches; the one-shot path just collects them, so
-            // it gets exactly the same parallel snippeting, short-snippet embellishment and
+            // it gets exactly the same parallel snippeting, short-snippet flagging and
             // enrichment as the streaming path.
             var terms = new FtsTermTable();
             foreach (var batch in Searcher.SearchInBatches(
                          GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms))
             {
                 result.Results.AddRange(batch.Hits);
-                foreach (var entry in batch.LineTexts) result.LineTexts[entry.Key] = entry.Value;
+                result.SnippetTexts.AddRange(batch.SnippetTexts);
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
             if (cap > 0 && result.Results.Count > cap)
@@ -787,34 +786,24 @@ public sealed class SeforimDbFtsIndexCoordinator
     }
 
     /// <summary>
-    /// Snippets on demand (ftsSnippets): the stream sends snippets only for a search's
-    /// first hits; the page asks for the rows it shows, with the same query and options.
+    /// Snippet texts for the rows a page shows (ftsSnippetTexts): each line's own text, and
+    /// for the lines the hit flagged short also their neighbour context — one statement
+    /// (<see cref="SeforimDbFtsCorpus.FetchSnippetTexts"/>). No index, no query, no locate:
+    /// the descriptor already rode on the hit. Works while the index is still building.
     /// </summary>
-    public FtsSnippetsResult Snippets(string query, IReadOnlyList<int> lineIds, bool requireOrdered, int contextWords)
+    public List<FtsSnippetText> SnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyList<int> shortLineIds)
     {
-        // A tab restored from the result cache asks for snippets before any search has run.
-        EnsureIndexing();
-        var result = new FtsSnippetsResult();
-        if (!HasDb || !_isReady || string.IsNullOrWhiteSpace(query) || lineIds.Count == 0) return result;
-        if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query)) query = RewriteRelated(query);
-        lock (_lock) _activeOneShotSearches++;
+        if (!HasDb || (lineIds.Count == 0 && shortLineIds.Count == 0)) return new List<FtsSnippetText>();
         try
         {
-            var terms = new FtsTermTable();
-            var batch = Searcher.SnippetsFor(GetEngine(), query, lineIds, requireOrdered, contextWords, terms);
-            result.Hits = batch.Hits;
-            result.LineTexts = batch.LineTexts;
-            result.Terms = terms.All();
+            using var corpus = new SeforimDbFtsCorpus(_dbPath!);
+            return corpus.FetchSnippetTexts(lineIds, shortLineIds);
         }
         catch (Exception ex)
         {
-            _log(FtsIndexLogLevel.Error, "FTS snippets failed", ex);
+            _log(FtsIndexLogLevel.Error, "FTS snippet texts failed", ex);
+            return new List<FtsSnippetText>();
         }
-        finally
-        {
-            lock (_lock) _activeOneShotSearches--;
-        }
-        return result;
     }
 
     private string RewriteRelated(string query) =>
@@ -896,12 +885,12 @@ public sealed class SeforimDbFtsIndexCoordinator
                 string? stageSinceLastResults = null;
                 await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords,
                     linked.Token,
-                    (built, newTerms, lineTexts) =>
+                    (built, newTerms, snippetTexts) =>
                     {
                         resultsSent = true;
                         string? stage = stageSinceLastResults;
                         stageSinceLastResults = null;
-                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts, Stage = stage });
+                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, SnippetTexts = snippetTexts, Stage = stage });
                     },
                     stage =>
                     {
@@ -941,27 +930,21 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
+        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, Task> onBatch,
         Action<string>? onStage = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built. Each batch goes out with
         // the matched-term strings it introduced (hits carry ids into the search's table), and
-        // the leading SeedLineTextHitCount hits of the search with their snippet line texts,
+        // the leading SeedSnippetTextHitCount hits of the search with their snippet texts,
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
                      GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage))
         {
-            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.LineTexts);
+            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts);
         }
     }
-
-    // How many lines of context to pull on each side when embellishing (same book). Two
-    // lines is enough to fill the snippet's visual space (~4 clamped lines) and reach about
-    // the requested per-side word context for prose; benchmarking showed radius 2 costs
-    // roughly half of radius 3 (it re-tokenizes fewer neighbor lines). See EmbellishBenchTest.
-    private const int NeighborLineRadius = 2;
 
     // ── Indexing-progress stream (ftsIndexProgressStream) ────────────────────────
     // Event-driven push: the build's progress callback signals every subscriber, and

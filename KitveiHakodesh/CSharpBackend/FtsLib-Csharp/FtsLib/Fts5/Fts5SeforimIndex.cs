@@ -80,31 +80,11 @@ namespace FtsLib.Fts5
             return engine.FindSubstringCandidates(query, ranges, maxTermsPerFragment, ct);
         }
 
-        /// <summary>
-        /// The given lines as matches of <paramref name="query"/>, read without running the
-        /// full-text MATCH — see <see cref="Fts5SearchEngine.MatchesForLines"/>.
-        /// </summary>
-        public List<SearchResult> MatchesForLines(string query, IReadOnlyList<int> lineIds, CancellationToken ct = default)
-        {
-            if (!IsBuilt) return new List<SearchResult>();
-            using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            return engine.MatchesForLines(query, lineIds, ct);
-        }
-
         // ── Snippet windows (FtsLib's own, unchanged) ────────────────
 
         public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
                                                      int contextWords = DefaultContextWords)
             => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords);
-
-        public SnippetDescriptor LocateSnippetWindowOverNeighbourLines(SearchResult result, string previousContent, string nextContent,
-                                                                       bool requireOrdered = false, int contextWords = DefaultContextWords)
-        {
-            if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
-            var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetDescriptorPipeline.LocateOverNeighbourLines(previousContent, result.Content, nextContent, prepared,
-                                                                      requireOrdered, result.OriginalGroupCount, contextWords);
-        }
 
         public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)
         {

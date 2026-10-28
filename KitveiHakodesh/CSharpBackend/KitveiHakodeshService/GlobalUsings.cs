@@ -52,6 +52,7 @@ global using FtsHit = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit;
 global using FtsIndexStatus = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsIndexStatus;
 global using FtsSearchResult = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsSearchResult;
 global using FtsStreamChunk = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsStreamChunk;
+global using FtsSnippetText = KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsSnippetText;
 global using FileHit = KitveiHakodesh.Core.LocalFiles.FileHit;
 global using LocateDocumentsResult = KitveiHakodesh.Core.LocalFiles.LocateDocumentsResult;
 global using LocalFileIndexStatusResult = KitveiHakodesh.Core.LocalFiles.LocalFileIndexStatusResult;

@@ -681,51 +681,46 @@ namespace KitveiHakodesh.Core.SeforimDb
             (schema.HasSplitLineContent ? "SELECT id, content FROM line_content" : "SELECT id, content FROM line") +
             " WHERE id IN (" + InPlaceholders("p", count) + ")";
 
-        /// <summary>One chunk of PLACEMENTS: id, bookId, lineIndex and the line's own TOC entry
-        /// (0 when none; `line_toc` when the database has it, else `line.tocEntryId`). No text.
-        /// Read after verification, for the hits that passed.</summary>
+        /// <summary>One chunk of PLACEMENTS: id, bookId, lineIndex. No text, no TOC entry (the
+        /// page fetches TOC paths for the rows it renders). Read after verification, for the
+        /// hits that passed.</summary>
         internal static string FtsFetchPlacements(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, l.bookId, l.lineIndex, " +
-            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
-             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
-             : "0") +
-            " FROM line l" +
-            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
+            "SELECT l.id, l.bookId, l.lineIndex FROM line l" +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>One chunk of search-result rows: id, content, and the line's PLACEMENT -
-        /// bookId, lineIndex and its own TOC entry (0 when it has none) - read off the same
-        /// `line` row the content fetch visits anyway, so hits leave the searcher complete
-        /// without a second query per batch. No book title: the page resolves titles from the
-        /// book id. The TOC entry comes from `line_toc` when the database has it (the
-        /// authoritative source; `line.tocEntryId` is NULL for most lines), else from that
-        /// column, else 0. IN-list sized to the chunk.</summary>
+        /// bookId and lineIndex - read off the same `line` row the content fetch visits
+        /// anyway, so hits leave the searcher complete without a second query per batch. No
+        /// book title or TOC entry: the page resolves both for the rows it renders.
+        /// IN-list sized to the chunk.</summary>
         internal static string FtsFetchPlacedLines(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex, " +
-            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
-             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
-             : "0") +
+            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex" +
             " FROM line l" + C_ContentJoin(schema, "l") +
-            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>
-        /// The lines at a set of (bookId, lineIndex) positions — one row-value IN over the
-        /// (bookId, lineIndex) index, so a whole batch's neighbour lines cost one round-trip.
-        /// Parameters go in pairs: @p0,@p1 = first position, @p2,@p3 = second, and so on.
-        /// A position with no line is simply absent.
+        /// The texts of the snippets a page shows, in ONE statement: (matched id, lineIndex
+        /// delta, content). Rows @p* are plain lines, read by primary key from the table that
+        /// holds the text, exactly as <see cref="FtsFetchLines"/> (delta 0). Rows @s* are SHORT
+        /// lines: the line itself (delta 0) and every line of the SAME BOOK within
+        /// ±@radius by lineIndex, over the (bookId, lineIndex) index — the bookId bound keeps
+        /// context from bleeding across a book boundary. Either list may be empty.
         /// </summary>
-        internal static string FtsFetchLinesAtBookPositions(SeforimDbSchema schema, int positionCount)
+        internal static string FtsFetchSnippetLines(SeforimDbSchema schema, int plainCount, int shortCount)
         {
-            var values = new System.Text.StringBuilder(positionCount * 12);
-            for (int i = 0; i < positionCount; i++)
-            {
-                if (i > 0) values.Append(',');
-                values.Append("(@p").Append(2 * i).Append(",@p").Append(2 * i + 1).Append(')');
-            }
-            return "SELECT l.id, l.bookId, l.lineIndex, " + C_ContentColumn(schema, "l") +
-                   " FROM line l" + C_ContentJoin(schema, "l") +
-                   " WHERE (l.bookId, l.lineIndex) IN (VALUES " + values + ")";
+            string? plain = plainCount == 0 ? null :
+                (schema.HasSplitLineContent ? "SELECT id, 0, content FROM line_content" : "SELECT id, 0, content FROM line") +
+                " WHERE id IN (" + InPlaceholders("p", plainCount) + ")";
+            string? withNeighbours = shortCount == 0 ? null :
+                "SELECT m.id, n.lineIndex - m.lineIndex, " + C_ContentColumn(schema, "n") +
+                // The sidecar join must come AFTER this JOIN's own ON clause (see FtsFetchNeighborLines).
+                " FROM line m JOIN line n" +
+                " ON n.bookId = m.bookId" +
+                " AND n.lineIndex BETWEEN m.lineIndex - @radius AND m.lineIndex + @radius" +
+                " AND (n.lineIndex <> m.lineIndex OR n.id = m.id)" +
+                C_ContentJoin(schema, "n") +
+                " WHERE m.id IN (" + InPlaceholders("s", shortCount) + ")";
+            return plain == null ? withNeighbours! : withNeighbours == null ? plain : plain + " UNION ALL " + withNeighbours;
         }
 
         /// <summary>

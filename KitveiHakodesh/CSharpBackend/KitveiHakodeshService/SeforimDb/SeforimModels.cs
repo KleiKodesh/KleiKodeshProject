@@ -255,12 +255,12 @@ public sealed class FtsSearchArgs
 //    over one pipe connection until the search finishes. No polling anywhere. ──
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSnippetsArgs
+public sealed class FtsSnippetTextsArgs
 {
-    public string? Query { get; set; }
+    /// <summary>Lines whose own text is wanted.</summary>
     public List<int>? LineIds { get; set; }
-    public bool RequireOrdered { get; set; }
-    public int ContextWords { get; set; } = 8;
+    /// <summary>Lines flagged short: their text plus neighbour context.</summary>
+    public List<int>? ShortLineIds { get; set; }
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
