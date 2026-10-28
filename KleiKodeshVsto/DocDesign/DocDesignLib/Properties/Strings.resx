@@ -29,7 +29,8 @@
   <data name="SpaceBefore" xml:space="preserve"><value>מרווח לפני</value></data>
   <data name="LineSpacing" xml:space="preserve"><value>בין שורות</value></data>
   <data name="WordSpacing" xml:space="preserve"><value>בין מילים</value></data>
-  <data name="CharStretch" xml:space="preserve"><value>מתיחת אותיות</value></data>
+  <data name="CharStretch" xml:space="preserve"><value>ריווח בין תווים</value></data>
+  <data name="CharScale" xml:space="preserve"><value>מתיחת אותיות</value></data>
   <data name="StepSize" xml:space="preserve"><value>גודל צעד</value></data>
   <data name="TipReset" xml:space="preserve"><value>איפוס</value></data>
   <data name="TipIncrease" xml:space="preserve"><value>הגדל</value></data>
