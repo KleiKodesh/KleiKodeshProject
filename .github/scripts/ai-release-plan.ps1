@@ -101,6 +101,8 @@ WORDING:
 - Word add-in changes (ribbon, panes, installer settings, About, macros, interface
   language) get area "Klei Kodesh (Word add-in)" or the exact ribbon tool name
   (e.g. "Torani Design"), never "Settings" (Settings is the library app's page).
+  Never put library-app things (book toolbar, update row, search, book view) under the
+  Word add-in area, and never make a catch-all item that lists unrelated areas.
 - TERMINOLOGY: area names and button/feature names MUST use the exact glossary term.
   If something is not in the glossary, describe it in plain words, do not coin a name.
 
