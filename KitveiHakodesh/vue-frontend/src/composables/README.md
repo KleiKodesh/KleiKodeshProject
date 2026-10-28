@@ -4,7 +4,17 @@ Shared composables used across multiple features. Feature-specific composables l
 
 Only create a file here if the composable is used by two or more features. Single-feature logic stays in the feature folder.
 
-That rule is enforced, not aspirational. `useTextSelectionKeys` and `useSelectAllInContainer` (book-view only) were moved out into their feature folders on 2026-07-29 for breaking it. If a second feature needs one of them, move it back here — that is the intended lifecycle, not a reason to leave it here pre-emptively.
+That rule is enforced, not aspirational. A composable that becomes single-feature moves into its feature folder; one a second feature needs moves here.
+
+**useTextSelectionKeys.ts** — `useScopedKeys(element, { onCtrlF, onCtrlC, onCtrlV, onCtrlShiftC })`: `Ctrl+A` (select all) and the optional handlers, scoped to one focused element. Used by the book view (lines, commentary) and FastDocView. `Ctrl+A` drives `useSelectAllInContainer`, whose `isSelectAll` / `selectAllInContainer` it returns.
+
+**useSelectAllInContainer.ts** — whether the current selection is a whole-container select-all (`isSelectAll`), plus `selectAll()`. With virtualized content a select-all copy must export the whole row set, not only the mounted DOM range. Auto-clears on the next `selectionchange` that replaces the selection.
+
+**useToolbarOverflow.ts** — the page toolbar's fit arithmetic: which collapsible controls (generic string keys, each with a width in button-widths) collapse into the "more" flyout, worst-first, with hysteresis. `keysToCollapse` is pure and tested through the book view's wrapper (`features/book-view/useBookViewToolbarOverflow.ts`, which owns that toolbar's keys and widths).
+
+**useToolbarOverflowSubmenu.ts** — a toolbar dropdown's panel while its control sits in the "more" flyout: a fixed side submenu beside its flyout row, clamped to the viewport.
+
+**useToolbarDrag.ts** — drag a page toolbar by its empty background to any edge of its page (`pageSelector` names the page root); previews the edge and commits the `ToolbarPosition` on release.
 
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton`, handles the file picker, external links, and search navigation. Any code that needs to navigate between pages should use this, not call `tabStore` directly.
 

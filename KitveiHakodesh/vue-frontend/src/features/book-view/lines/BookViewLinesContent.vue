@@ -12,7 +12,7 @@ import type { TocEntry } from '@/webview-host/queries.types'
 import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
-import { useScopedKeys } from '../useTextSelectionKeys'
+import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useZoomHandler } from '@/composables/useZoom'
@@ -532,7 +532,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint
         <!-- Never a placeholder: the scroller asked for these lines before mounting them. -->
         <div
           v-if="rowHasText(index)"
-          class="line"
+          class="line reading-column-line"
           :class="{
             selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines.idAt(index),
             'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(index),
@@ -556,66 +556,21 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint
 .scroller :deep(.windowed-scroller-content) {
   padding-block-end: 24px;
 }
-.line {
-  padding-inline: 12px;
-  max-width: var(--lines-content-max-width, none);
-  margin-inline: auto;
-  font-family: var(--text-font);
-  font-size: var(--font-size, 100%);
-  font-weight: var(--font-weight, 400);
-  line-height: var(--line-height, 1.7);
-  color: var(--text-primary);
-  text-align: justify;
-  position: relative;
-}
+/* Typography, exact line spacing, wide-pane padding, headings and search marks come
+   from the shared reading-column stylesheet (assets/styles/readingColumn.css) through
+   the row's `reading-column-line` class. Only the book view's own decorations live here. */
 /* Books whose text carries cantillation marks get their own body font — set on the
    scroller so each pane in a split view follows its own book, not a global flag. */
 .scroller[data-teamim='true'] .line {
   font-family: var(--teamim-text-font);
 }
-/* Exact line spacing (רווח מדוייק), opt-in from settings.
-   `line-height` is normally a unitless multiplier, so every inline element
-   recomputes its own line box from its own font-size — one enlarged word mid-line
-   makes THAT row taller than its neighbours. Multiplying by 1em resolves the
-   leading once, against .line's font-size, and it then inherits as a fixed length;
-   the explicit inherit on inline children stops those with their own font-size
-   (bold runs, note markers, wrapper spans) from contributing a taller box.
-   Trade-off: a genuinely oversized word now overlaps the row above instead of
-   pushing it away — which is why this is off by default.
-
+/* Markers keep their zero-height box even in exact line-spacing mode.
    The attribute is matched on a bare `html[...]` ancestor, NOT via `:global()`:
    Vue's scoped-CSS compiler replaces the whole selector with the `:global()`
-   argument and discards the rest, so `:global([attr]) .line` would collapse to a
-   bare `[attr]` — matching <html> itself and leaking line-height app-wide. */
-html[data-fixed-line-height='true'] .line {
-  line-height: calc(var(--line-height, 1.7) * 1em);
-}
-/* Inline text elements only. Deliberately NOT `*`: the superscript markers below
-   set `line-height: 1` so they contribute no box at all, and nested blocks keep
-   their own leading. */
-html[data-fixed-line-height='true'] .line :deep(b),
-html[data-fixed-line-height='true'] .line :deep(strong),
-html[data-fixed-line-height='true'] .line :deep(i),
-html[data-fixed-line-height='true'] .line :deep(em),
-html[data-fixed-line-height='true'] .line :deep(big),
-html[data-fixed-line-height='true'] .line :deep(span),
-html[data-fixed-line-height='true'] .line :deep(a),
-html[data-fixed-line-height='true'] .line :deep(mark),
-html[data-fixed-line-height='true'] .line :deep(font) {
-  line-height: inherit;
-}
-/* …but the markers keep their zero-height box even in exact mode. */
+   argument and discards the rest. */
 html[data-fixed-line-height='true'] .line :deep(.user-note-marker),
 html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   line-height: 1;
-}
-/* On a wide pane give the reading column a bit more breathing room from the
-   edges (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so
-   it reacts to THIS pane's width, not the viewport (split-shell aware). */
-@container app-shell (min-width: 600px) {
-  .line {
-    padding-inline: 22px;
-  }
 }
 .line::after {
   content: '';
@@ -667,27 +622,6 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   font-weight: 600;
   opacity: 0.35;
   padding-block-end: 2px;
-}
-/* Headings are always 200 units heavier than the body so they stay visually
-   distinct at every slider stop. calc() is clamped to 100–900 by the browser;
-   the slider tops out at 700, so the maximum produced here is 900. */
-.line :deep(h1),
-.line :deep(h2),
-.line :deep(h3),
-.line :deep(h4),
-.line :deep(h5),
-.line :deep(h6) {
-  font-family: var(--header-font);
-  font-weight: calc(var(--font-weight, 400) + 300);
-}
-.line :deep(mark.search-match) {
-  background: rgba(255, 165, 0, 0.4);
-  color: inherit;
-  border-radius: 2px;
-}
-.line :deep(mark.search-match.current) {
-  background: rgba(255, 165, 0, 0.9);
-  color: #000;
 }
 .line :deep(mark.user-highlight) {
   border-radius: 2px;
