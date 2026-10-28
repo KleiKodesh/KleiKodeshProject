@@ -16,7 +16,7 @@ import { storeToRefs } from 'pinia'
 import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import type { BookVersionRow } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -55,7 +55,7 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@
  *
  * The button renders only when the book has editions, which the toolbar decides — see
  * `hasHebrewBooksEditions` there. It is collapsible: in the toolbar's "more" flyout it is a
- * row whose list opens as a side submenu (useOverflowSubmenu).
+ * row whose list opens as a side submenu (useToolbarOverflowSubmenu).
  */
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -19,7 +19,7 @@ import { IconDocumentPdf20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 
 const props = defineProps<{
@@ -54,7 +54,7 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 </script>
 

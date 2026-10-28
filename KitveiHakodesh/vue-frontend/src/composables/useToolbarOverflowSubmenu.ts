@@ -19,7 +19,7 @@ const SUBMENU_MARGIN = 8
  * @param panelEl    - the dropdown panel
  * @returns the inline style the panel wears while in the flyout, `undefined` on the toolbar
  */
-export function useOverflowSubmenu(
+export function useToolbarOverflowSubmenu(
   inOverflow: () => boolean,
   isOpen: Ref<boolean>,
   rowEl: Ref<HTMLElement | null>,

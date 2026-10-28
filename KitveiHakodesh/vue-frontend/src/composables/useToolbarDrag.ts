@@ -6,13 +6,16 @@ import type { ToolbarPosition } from '@/stores/bookViewStore'
 const DRAG_START_THRESHOLD_PX = 5
 
 /**
- * Lets the user drag the book-view toolbar by its empty background to any edge of the
- * book view (top/bottom/left/right, physical sides). The edge nearest the pointer wins;
- * a fixed band previews it while dragging, and the position is committed on release.
+ * Lets the user drag a page toolbar by its empty background to any edge of its page
+ * (top/bottom/left/right, physical sides). The edge nearest the pointer wins; a fixed
+ * band previews it while dragging, and the position is committed on release.
+ *
+ * @param pageSelector - CSS selector of the page root the toolbar docks to (closest ancestor)
  */
-export function useBookViewToolbarDrag(
+export function useToolbarDrag(
   toolbarEl: Ref<HTMLElement | null>,
   toolbarPosition: Ref<ToolbarPosition>,
+  pageSelector: string,
 ) {
   const dropTarget = ref<ToolbarPosition | null>(null)
   const viewRect = ref<DOMRect | null>(null)
@@ -42,7 +45,7 @@ export function useBookViewToolbarDrag(
   useEventListener(toolbarEl, 'pointermove', (e: PointerEvent) => {
     if (!pressed) return
     if (!dropTarget.value && Math.hypot(e.clientX - pressX, e.clientY - pressY) < DRAG_START_THRESHOLD_PX) return
-    const view = toolbarEl.value?.closest('.book-view') as HTMLElement | null
+    const view = toolbarEl.value?.closest(pageSelector) as HTMLElement | null
     if (!view) return
     viewRect.value = view.getBoundingClientRect()
     dropTarget.value = nearestEdge(e.clientX, e.clientY, viewRect.value)

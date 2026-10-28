@@ -12,7 +12,7 @@ import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { CLEAN_TEXT } from '@/utils/hebrewTextProcessing'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 
 const props = defineProps<{
   /** Renders as a row of the toolbar's "more" flyout: its body toggles cleaning, the chevron
@@ -46,7 +46,7 @@ const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false
   toggleButton: toggleButtonRef,
 })
 useDropdownViewportFit(dropdownRef)
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return
