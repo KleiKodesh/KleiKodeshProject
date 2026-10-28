@@ -21,6 +21,9 @@ interface TabHistory {
   cursor: number
 }
 
+/** Frames kept per tab, oldest dropped first — Chrome's per-tab session history limit. */
+const MAX_ENTRIES = 50
+
 // Reactive so `canGoBack`/`canGoForward` can drive button disabled state.
 const histories = ref(new Map<string, TabHistory>())
 
@@ -45,7 +48,7 @@ export function pushLocation(tabId: string, location: NavLocation): void {
     bump()
     return
   }
-  history.entries = [...history.entries.slice(0, history.cursor + 1), location]
+  history.entries = [...history.entries.slice(0, history.cursor + 1), location].slice(-MAX_ENTRIES)
   history.cursor = history.entries.length - 1
   bump()
 }
