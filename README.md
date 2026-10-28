@@ -113,23 +113,23 @@ git config diff.submodule log             # git diff יציג את רשימת ה
 Build\build-menu.bat
 ```
 
-או בעקיפין:
+או ישירות (ללא שאלות):
 
 ```powershell
-cd Build\scripts
-.\build-installer.ps1
+.\Build\scripts\build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
 ```
 
-זה יבנה **שלוש גרסאות מתקינות**:
-- `KleiKodeshSetup-vX.Y.Z-x64.exe` — 64-bit
-- `KleiKodeshSetup-vX.Y.Z-x86.exe` — 32-bit  
-- `KleiKodeshSetup-vX.Y.Z.exe` — AnyCPU (auto-detect)
+זה יבנה מתקין **אחד** (AnyCPU, מאז 2026-10-11) וגרסה ניידת:
+- `KleiKodeshSetup-vX.Y.Z.exe` — מתקין יחיד, עובד עם Word של 32 ו-64 ביט
+- `KitveiHakodeshPortable-vX.Y.Z.zip` — תוכנת כתבי הקודש הניידת
+
+שחרור גרסה רגיל רץ ב-GitHub Actions (`.github/workflows/release.yml`, אותו `build-installer.ps1`). פירוט כל ה-workflows: `Build/README.md`.
 
 ### בנייה לפיתוח
 
 ```powershell
 # אם אתה משנה את תוסף ה-VSTO בלבד
-msbuild KleiKodeshProject.slnx /p:Configuration=Debug /p:Platform=x64
+msbuild KleiKodeshProject.slnx /p:Configuration=Debug
 
 # אם אתה משנה את ממשק KitveiHakodesh (Vue)
 cd KitveiHakodesh
@@ -139,15 +139,7 @@ npm run dev
 
 ### גרסאות בנייה
 
-הבנייה מייצרת שלוש גרסאות מ-run בודד — ראה `.kiro/steering/build-variants.md`:
-
-| Platform | Output |
-|----------|--------|
-| x64 | `KleiKodeshVsto/bin/Release-x64/` |
-| x86 | `KleiKodeshVsto/bin/Release-x86/` |
-| AnyCPU | `KleiKodeshVsto/bin/Release/` |
-
-כל פרויקט בשרשרת התלויות חייב להגדיר את שלוש ההגדרות הללו.
+יש גרסה אחת בלבד: `Release|AnyCPU` → `KleiKodeshVsto/bin/Release/`. גרסאות x64/x86 הוסרו — ראה `.kiro/steering/build-variants.md`.
 
 ## גרסאונות וניהול
 
@@ -232,8 +224,8 @@ This section helps AI agents find the right file for a given change without sear
 | Change build pipeline | `Build/scripts/build-installer.ps1` — orchestrator |
 | Change installer logic | `Build/Installer/Helpers/AddinInstaller.cs` — extract, register, version |
 | Change NSIS wrapper | `Build/nsis/KleiKodeshWrapper.nsi` — prerequisite checks, uninstall |
-| Change release process | `Build/scripts/build-helpers.ps1` — `New-GitHubRelease` function |
-| Add new platform variant | See `.kiro/steering/build-variants.md` — must define output paths in every `.csproj` in the chain |
+| Change release process | `.github/workflows/release.yml` (CI) + GitHub release step at the end of `Build/scripts/build-installer.ps1`; notes: `.github/scripts/ai-release-plan.ps1`, `New-ReleaseNotes` in `build-helpers.ps1` |
+| Platform variants | None — AnyCPU only; see `.kiro/steering/build-variants.md` |
 
 ### Key Entry Points
 
