@@ -84,7 +84,8 @@ const worldClockCloser = useDropdownClose(
   () => {
     isWorldClockOpen.value = false
   },
-  { ignore: [worldClockMenuRef] },
+  // The wrapper is the inline bar item; only the popup is fitted.
+  { ignore: [worldClockMenuRef], fitToViewport: false },
 )
 
 function toggleWorldClockMenu() {
