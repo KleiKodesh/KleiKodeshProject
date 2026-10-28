@@ -45,12 +45,20 @@ jobs:
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "mirror/$sub" \
               --pattern 'KleiKodeshSetup-*.exe' --pattern 'KitveiHakodeshPortable-*.zip'
             # The notes are Hebrew, a "---" line, then English: one doc each.
+            # Notes without Hebrew (e.g. a plain commit list) are English only.
             gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > body.md
-            awk '/^---[[:space:]]*$/ && !s { s=1; next } !s' body.md | grep -v -i '^</\?div' \
-              | pandoc -f gfm -t docx -M dir=rtl -M lang=he -o "notes/$sub/$NOTES_HE - $tag.docx"
-            if grep -q '^---[[:space:]]*$' body.md; then
-              awk 's; /^---[[:space:]]*$/ { s=1 }' body.md \
-                | pandoc -f gfm -t docx -M lang=en -o "notes/$sub/$NOTES_EN - $tag.docx"
+            if grep -qP '[\x{0590}-\x{05FF}]' body.md; then
+              awk '/^---[[:space:]]*$/ && !s { s=1; next } !s' body.md > he.md
+              awk 's; /^---[[:space:]]*$/ { s=1 }' body.md > en.md
+            else
+              : > he.md; cp body.md en.md
+            fi
+            if [ -s he.md ]; then
+              grep -v -i '^</\?div' he.md \
+                | pandoc -f gfm -t docx -M dir=rtl -M lang=he -o "notes/$sub/$NOTES_HE - $tag.docx"
+            fi
+            if grep -q '[^[:space:]]' en.md; then
+              pandoc -f gfm -t docx -M lang=en -o "notes/$sub/$NOTES_EN - $tag.docx" en.md
             fi
             sub="$PREVIOUS_DIR"
           done
