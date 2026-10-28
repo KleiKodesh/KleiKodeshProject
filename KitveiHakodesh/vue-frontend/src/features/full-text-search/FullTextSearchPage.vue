@@ -409,7 +409,8 @@ useEventListener(
     if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
     if (!isSearchActive.value) return
     if (focusedElementOwnsTheseKeys(document.activeElement)) return
-    if (event.code === 'Enter' && focusedElementOwnsEnter(document.activeElement)) return
+    // Space activates a focused button just as Enter does.
+    if ((event.code === 'Enter' || event.code === 'Space') && focusedElementOwnsEnter(document.activeElement)) return
     // A dialog sits above the whole page: its own Enter must not open a result too.
     if (document.querySelector('.confirm-backdrop, .alert-backdrop')) return
     if (!onResultsKeydown(event)) return

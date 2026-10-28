@@ -190,9 +190,14 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
   text-align: justify;
   user-select: text;
 }
+/* The hit line: full ink and an accent edge at the reading start, so it is found at a
+   glance among the muted context lines however far the window has been scrolled. */
 .preview-line.matched {
+  color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-color) 7%, transparent);
   border-radius: 4px;
+  border-inline-start: 3px solid var(--accent-color);
+  padding-inline-start: 6px;
 }
 .preview-line :deep(mark) {
   background: transparent;
