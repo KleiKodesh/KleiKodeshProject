@@ -5,7 +5,49 @@ aramaic to Hebrew?
 make sur the validation stage is not fetching any data it doesn't need any other data will be fetched when teh snippet is fetched
 also make sure of this in te new tantivy engine
 
+homepage:
 pin homepage bottom bar?
+suggestions for daf yomi are slow to load and when switching tabs and back very very slow!
+
+persistence:
+how much memry do persisted items take on disk?
+
+fts page persistence not working for large result sets - why not? also should eprsisit the chinks and search resumes form where holding so persitnce works akso for a search that hasn't comleted yet and add to coomntes this point
+probably left over of pre windowed rendirng with what i am saying and with windowed rendering it really should be instant sicne we know imidatly the data thats suppsed to berended and can ftch its snippet etc/ all we need to do is keep streaming teh rest of teh results if tehre are more results
+
+bookview:
+seardh: make sure the place holder search is usin same tokenizer as fts lib
+also make sure that its efiicntly producing snippets
+also teh ftslib make sure that it efiicintly producing snippets
+search: option for side panel
+bookview create a flow mode now that we have windwoed rendering.
+limit teh width of the scrollbar tooltip
+bookmarks
+
+zoom shouldn't show the scrollbar tooltip
+zoom kooks ugly the reflow of teh text is not smooth
+is zoom using teh wrong paradigm
+
+עדכון מלון ראשי תיבות
+
+dictinary:
+add pills like teh zayit dictionary
+
+homepage:
+loadtime
+
+pdf:
+i edited teh toc i switched tabs and lost all my work
+also cntrl s should dfintaly save teh tc wrk also bets f it saves teh toc directly as its being edoted and not wait for save
+cant use oce capture when teh ahnd tool is selected
+ocr - auto detect gibberish like all teh text is squares or other place holders and run כפה
+ocr- switch engine
+
+
+homepage tiles:
+some of teh descriptions are teriible some ar vrbose
+
+scoller toooltip ned to rsearch more maybe only hsow for citniueis scrolling and not for tiny scrolls
 
 catlog:
 now that the search is lucene we need to stop loading teh whole catlog rther load it lziy
