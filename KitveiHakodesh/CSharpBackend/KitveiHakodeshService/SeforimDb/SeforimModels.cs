@@ -65,20 +65,22 @@ public sealed class LinesResult { public List<LineRow> Rows { get; set; } = new(
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineCharCountsArgs { public int BookId { get; set; } }
 
-/// <summary>A native substring scan of line text (the search's fallback): the query as typed,
-/// the ranges to read, and the version to read through (0 = the merged text).</summary>
+/// <summary>The in-book / commentary substring search: the query as typed, the ranges to
+/// search as flat triples (bookId, firstLineIndex, lastLineIndex — flat so a panel's
+/// thousands of ranges stay small on the wire), and the version to read through (0 = the
+/// merged text).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LinesTextScanArgs
+public sealed class LinesSubstringSearchArgs
 {
     public string? Query { get; set; }
-    public List<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange>? Ranges { get; set; }
+    public int[]? RangeTriples { get; set; }
     public int VersionId { get; set; }
 }
 
-/// <summary>Parallel arrays: the lines holding the query, in range order then reading order,
-/// and how many times each holds it.</summary>
+/// <summary>Parallel arrays: the lines holding the query, by book in first-seen order then
+/// reading order, and how many times each holds it.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LinesTextScanResult
+public sealed class LinesSubstringSearchResult
 {
     public int[] BookIds { get; set; } = Array.Empty<int>();
     public int[] LineIndexes { get; set; } = Array.Empty<int>();
