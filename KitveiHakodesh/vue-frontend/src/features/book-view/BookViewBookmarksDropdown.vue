@@ -5,12 +5,12 @@
  * Absent until the book has a bookmark: bookmarks are CREATED from the lines' context menu
  * or Ctrl+Shift+D, which open this dropdown on the new row in rename mode (its suggested name
  * the TOC path). A bookmark points at an exact place - the reader's selection, or the
- * character at the top of the view - not just a line, since a line can run for pages.
+ * word at the top of the view - not just a line, since a line can run for pages.
  * The book's bookmarks are listed in reading order with their TOC path and text: clicking
  * one scrolls there, the pencil renames it inline, the bin deletes it. The toolbar icon is
  * filled while the top line is bookmarked.
  */
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, watchEffect, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconBookmark16Regular,
@@ -21,7 +21,7 @@ import {
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useOverflowSubmenu } from './useOverflowSubmenu'
-import { readBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
+import { loadBookBookmarks, loadedBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
 
@@ -60,34 +60,36 @@ const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggle
 
 // ── The book's list ───────────────────────────────────────────────────────────
 //
-// A display copy only. Every change goes through updateBookBookmarks, which edits the
-// STORED list, so a copy that is stale (another pane changed it, or the first read has
-// not landed yet) can never be written back over newer bookmarks.
-
-const bookmarks = ref<BookBookmark[]>([])
-
-async function reload() {
-  const bookId = props.bookId
-  if (bookId == null) return
-  const loaded = await readBookBookmarks(bookId).catch(() => null)
-  if (loaded && bookId === props.bookId) bookmarks.value = loaded
-}
+// Read from the store's shared per-book list, so the other pane and the flyout's copy of
+// this dropdown see a change the moment it is saved. Every change goes through
+// updateBookBookmarks, which edits the STORED list - never this display copy.
 
 watch(
   () => props.bookId,
-  () => {
-    bookmarks.value = []
-    void reload()
+  (bookId) => {
+    if (bookId != null) void loadBookBookmarks(bookId).catch(() => {})
   },
   { immediate: true },
 )
 
-async function update(change: (stored: BookBookmark[]) => BookBookmark[]) {
-  const bookId = props.bookId
-  if (bookId == null) return
-  const saved = await updateBookBookmarks(bookId, change)
-  // The book may have changed while the write was in flight; its list is not this one.
-  if (bookId === props.bookId) bookmarks.value = saved
+// Kept on the previous book's list until the next one has loaded, so switching between
+// two bookmarked books does not flash the control away and back for a frame.
+const bookmarks = shallowRef<BookBookmark[]>([])
+watchEffect(() => {
+  if (props.bookId == null) { bookmarks.value = []; return }
+  const loaded = loadedBookBookmarks(props.bookId)
+  if (loaded) bookmarks.value = loaded
+})
+
+async function update(change: (stored: BookBookmark[]) => BookBookmark[]): Promise<boolean> {
+  if (props.bookId == null) return false
+  try {
+    await updateBookBookmarks(props.bookId, change)
+    return true
+  } catch (error) {
+    console.error('Saving bookmarks failed', error)
+    return false
+  }
 }
 
 /**
@@ -104,27 +106,22 @@ const currentLineBookmarked = computed(() =>
   currentLine.value != null && bookmarks.value.some((b) => b.lineId === currentLine.value!.id),
 )
 
-async function addBookmark() {
-  const point = props.readBookmarkPoint?.() ?? null
+/** A bookmark for where the reader is now, or null when there is no real line to mark yet. */
+function bookmarkForPoint(point: BookViewLinesBookmarkPoint | null): BookBookmark | null {
   const line = props.lines.at(point?.lineIndex ?? props.currentScrollLineIndex)
   // A negative id is a placeholder for a line whose real id is not known yet.
-  if (line == null || line.id <= 0) return
+  if (line == null || line.id <= 0) return null
   const tocPath = props.labelForLine?.(line.lineIndex).trim() || undefined
-  const label = tocPath ?? `${line.lineIndex + 1}`
-  const bookmark: BookBookmark = {
+  return {
     id: Date.now(),
     lineId: line.id,
     lineIndex: line.lineIndex,
-    characterOffset: point?.characterOffset,
-    selectionLength: point?.selectionLength,
-    label,
+    letterOffset: point?.letterOffset,
+    selectionLetterCount: point?.selectionLetterCount,
+    label: tocPath ?? `${line.lineIndex + 1}`,
     tocPath,
     snippet: point?.snippet,
   }
-  // Like a browser's "add bookmark": the new row opens with its name field selected, so the
-  // reader names it on the spot or presses Enter to keep the suggested TOC path.
-  await update((stored) => [...stored, bookmark])
-  await startRename(bookmark)
 }
 
 function deleteBookmark(bookmark: BookBookmark) {
@@ -160,17 +157,26 @@ function commitRename() {
 }
 
 watch(isOpen, (open) => {
-  // Opening re-reads, so a bookmark made in the other pane shows up here too.
-  if (open) void reload()
-  else commitRename()
+  if (!open) commitRename()
 })
 
-/** The context menu's and Ctrl+Shift+D's entry: open the dropdown on a new bookmark. */
-async function createBookmark() {
-  if (props.bookId == null) return
+/**
+ * The context menu's and Ctrl+Shift+D's entry. The point is read BEFORE anything opens -
+ * opening moves focus, and the selection must still be the reader's; a caller that opens
+ * something first (the toolbar's flyout) reads it earlier and passes it in. With no line
+ * to mark nothing opens at all. Then, like a browser's "add bookmark", the dropdown opens on
+ * the new row with its name selected: type a name, or Enter keeps the suggested TOC path.
+ */
+async function createBookmark(point: BookViewLinesBookmarkPoint | null = props.readBookmarkPoint?.() ?? null) {
+  const bookmark = bookmarkForPoint(point)
+  if (bookmark == null) {
+    // The toolbar counted the control as present ahead of this; set it straight.
+    emit('presenceChange', isPresent.value)
+    return
+  }
   isOpen.value = true
-  await nextTick()
-  await addBookmark()
+  if (!(await update((stored) => [...stored, bookmark]))) return
+  await startRename(bookmark)
 }
 
 defineExpose({ createBookmark })
@@ -193,7 +199,8 @@ defineExpose({ createBookmark })
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
-      <div class="bookmark-list">
+      <div v-if="bookmarks.length === 0" class="empty-message">{{ $t('bookView.bookmarks.empty') }}</div>
+      <div v-else class="bookmark-list">
         <div
           v-for="bookmark in bookmarks"
           :key="bookmark.id"
@@ -290,6 +297,13 @@ defineExpose({ createBookmark })
 .dropdown-right {
   top: 0;
   inset-inline-start: calc(100% + 4px);
+}
+
+/* Only while a first bookmark failed to save - the dropdown is not shown on a book without any. */
+.empty-message {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* ── List ── */

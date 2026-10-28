@@ -145,7 +145,8 @@ function bookmarkLabelForLine(lineIndex: number): string {
 
 /** Lands the bookmark's exact point - and reselects its text when it was made from a selection. */
 function goToBookmark(bookmark: BookBookmark) {
-  void linesContentRef.value?.scrollToBookmarkPoint(bookmark.lineIndex, bookmark.characterOffset ?? 0, bookmark.selectionLength ?? 0)
+  void linesContentRef.value?.scrollToBookmarkPoint(
+    bookmark.lineId, bookmark.lineIndex, bookmark.letterOffset ?? 0, bookmark.selectionLetterCount ?? 0)
 }
 
 /** The lines' context menu: the toolbar's bookmarks dropdown opens on the new bookmark. */
