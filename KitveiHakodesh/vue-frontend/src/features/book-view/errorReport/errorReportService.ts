@@ -9,7 +9,7 @@
 
 import { ref, computed, watch } from 'vue'
 import { useOnline } from '@vueuse/core'
-import { lsGet, lsSet } from '@/utils/persistence'
+import { lsGet, lsSet, registerLocalStorageReclaimer } from '@/utils/persistence'
 import {
   encodeErrorReportBody,
   reissueReportId,
@@ -85,6 +85,13 @@ const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(readPendingR
 function savePendingReports(): void {
   lsSet(PENDING_REPORTS_KEY, pendingReports.value)
 }
+
+// localStorage is full: the older half of the queue goes — the newest reports stay.
+registerLocalStorageReclaimer(() => {
+  if (pendingReports.value.length < 2) return
+  pendingReports.value = pendingReports.value.slice(Math.floor(pendingReports.value.length / 2))
+  savePendingReports()
+})
 
 function enqueue(payload: ErrorReportPayload): void {
   // Keyed by report_id, so re-queueing a report that already failed once replaces it

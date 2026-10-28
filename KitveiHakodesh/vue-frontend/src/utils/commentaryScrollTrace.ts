@@ -54,6 +54,7 @@ interface TraceEvent {
 }
 
 import { copyTextToClipboard } from './clipboard'
+import { registerLocalStorageReclaimer } from './persistence'
 
 const LS_ENABLED = 'kitvei-hakodesh.debug.commentaryScrollTrace'
 const LS_EVENTS = 'kitvei-hakodesh.debug.commentaryScrollTrace.events'
@@ -112,6 +113,11 @@ function maskEvents(events: TraceEvent[]): TraceEvent[] {
 // ── Persistence across reloads ───────────────────────────────────────────────
 
 let _persistTimer: ReturnType<typeof setTimeout> | null = null
+
+// localStorage is full: the debug mirror goes first (the events stay in memory).
+registerLocalStorageReclaimer(() => {
+  try { localStorage.removeItem(LS_EVENTS) } catch { /* ignore */ }
+})
 
 function writePersisted(): void {
   _persistTimer = null
