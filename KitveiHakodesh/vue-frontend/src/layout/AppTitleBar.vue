@@ -308,7 +308,7 @@ useAppTitleBarShortcuts({
     <header class="title-bar" @click="onTitleBarClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
-        <!-- The Firefox / Windows dot: while an update is downloading, ready or installing the
+        <!-- The Firefox / Windows dot: while an update is downloading, ready, installing or failed the
              hamburger wears a dot in the update's colour, and the menu's first row after the
              divider is the one it points at. -->
         <button
