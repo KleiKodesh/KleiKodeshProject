@@ -22,7 +22,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/txt-view'
+export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/txt-view' | '/fast-doc-view'
 
 export interface RecentlyOpenedEntry extends PopularityScored {
   /** Stable unique key; also what a visit is matched on. */
@@ -258,6 +258,7 @@ export const TRACKABLE_ROUTES = new Set<TabRoute>([
   '/pdf-view',
   '/html-view',
   '/txt-view',
+  '/fast-doc-view',
 ])
 
 export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {

@@ -18,6 +18,7 @@ import {
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 import { useSettingsStore } from './settingsStore'
 import { t } from '@/i18n'
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 
 function stripFileExtension(fileName: string): string {
   const lastDot = fileName.lastIndexOf('.')
@@ -130,9 +131,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
       )
     }
     if (msg.event === 'localFileTxtReady') {
-      // .txt files are opened in /txt-view — no virtual URL, just the file path for restore
+      // .txt files are opened in /txt-view — no virtual URL, just the file path for restore.
+      // With FastDocView on, they and the Word family open there instead (same fields).
       const tabFields = {
-        route: '/txt-view' as TabRoute,
+        route: (opensInFastDocView(msg.filePath as string) ? '/fast-doc-view' : '/txt-view') as TabRoute,
         title: stripFileExtension(msg.fileName as string),
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
@@ -596,6 +598,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
 
     if (localFilePath) {
       const ext = localFilePath.substring(localFilePath.lastIndexOf('.')).toLowerCase()
+      if (opensInFastDocView(localFilePath)) {
+        placeTab({ route: '/fast-doc-view', title, localFileName: entry.localFileName ?? title, localFilePath })
+        return
+      }
       if (ext === '.txt') {
         placeTab({ route: '/txt-view', title, localFileName: entry.localFileName ?? title, localFilePath })
         return

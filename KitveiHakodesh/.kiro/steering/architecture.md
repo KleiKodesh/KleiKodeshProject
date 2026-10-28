@@ -164,7 +164,7 @@ Navigation rules:
 
 Singleton routes enforce one-tab-per-route and are never persisted across sessions. The authoritative list is `SINGLETON_ROUTES` in `tabStore.ts` (with Hebrew titles in `SINGLETON_TITLES` beside it): `/settings`, `/books`, `/hebrewbooks`, `/workspaces`, `/hebrew-calendar`, `/dictionary`, `/midot`, `/file-search`.
 
-Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt-view`) can have multiple tabs open simultaneously.
+Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt-view`, `/fast-doc-view`) can have multiple tabs open simultaneously.
 
 ## Pages & Routes
 
@@ -180,6 +180,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt
 | `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                           |
 | `/html-view`       | `HtmlViewPage.vue`         | multi-instance                           |
 | `/txt-view`        | `TxtViewPage.vue`          | multi-instance (keyed by tabId)          |
+| `/fast-doc-view`   | `FastDocViewPage.vue`      | multi-instance (keyed by tabId + file)   |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                                |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                                |
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                                |
@@ -393,6 +394,10 @@ Native Vue viewer for local `.txt` files. Renders content directly in a `<div>` 
 - `TxtViewPage.vue` — loads raw text via bridge (`readTxtFileContent` action in C#), parses custom line markup (`@#$` → h2, `!` → strip prefix), renders with RTL layout. Scroll position persisted to `TabState.htmlViewScrollTop`.
 - `useTxtViewSearch.ts` — in-document search
 - `useTxtViewCopyMenu.ts` — copy context menu
+
+### fast-doc-view/
+
+The FastDocView page: Word-family / OpenDocument / RTF / text files read in windows of blocks from the service (ops `fastDocView*`, contract in the folder README). Its own feature - not the book view; it shares only `src/components` / `src/composables` pieces and `assets/styles/readingColumn.css`. Routing is behind `OPEN_DOCUMENTS_IN_FAST_DOC_VIEW` in `utils/fastDocViewFiles.ts` (off until the service ops exist).
 
 ### local-file-search/
 

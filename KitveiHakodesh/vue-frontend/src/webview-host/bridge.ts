@@ -7,6 +7,7 @@
  */
 
 import { hasHostBridge, emitWebviewEvent } from './seforimDb'
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
@@ -133,8 +134,9 @@ export async function pickLocalFile(
         picked.fileName || filePath.substring(Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')) + 1)
       const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
 
-      if (ext === '.txt') {
-        // .txt opens in /txt-view straight off the path (TxtViewPage reads it via the bridge).
+      if (ext === '.txt' || opensInFastDocView(filePath)) {
+        // .txt opens in /txt-view straight off the path (TxtViewPage reads it via the bridge);
+        // with FastDocView on, Word-family files take the same event and the store routes them.
         emitWebviewEvent({ event: 'localFileTxtReady', fileName, filePath, openInNewTab })
         return { url: '', fileName, filePath }
       }

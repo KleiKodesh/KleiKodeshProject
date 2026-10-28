@@ -128,6 +128,8 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'html'
     case '/txt-view':
       return 'txt'
+    case '/fast-doc-view':
+      return 'document'
     case '/':
       return 'home'
     case '/search':

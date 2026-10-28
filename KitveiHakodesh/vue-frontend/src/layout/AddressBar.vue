@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 /**
  * AddressBar — the editable search field hosted inside AppTitleBar (an
  * Explorer-style address bar). It reuses the global search engine
@@ -351,7 +352,9 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
   const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
   const isHtmlLike = extension === '.htm' || extension === '.html'
-  const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+  const route = opensInFastDocView(fullPath)
+    ? '/fast-doc-view'
+    : extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
 
   // The addin name is known synchronously, so the placeholder tab gets it too —
   // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
@@ -364,9 +367,9 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
     ? pane.openTab({ route, title: displayTitle }).id
     : pane.activeTabId.value
 
-  if (extension === '.txt') {
+  if (route === '/fast-doc-view' || route === '/txt-view') {
     tabStore.updateTab(targetTabId, {
-      route: '/txt-view',
+      route,
       title: displayTitle,
       localFileName: fileName,
       localFilePath: fullPath,
