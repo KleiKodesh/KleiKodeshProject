@@ -1,0 +1,56 @@
+# Keeps the shared Google Drive folder in sync with GitHub releases:
+#   folder root          = latest release (installers, portable zip, release notes)
+#   previous subfolder   = the release before it (fallback in case of bugs)
+# Anything older, or of a deleted release, goes to the Drive trash. Other files in the folder are untouched.
+# The run reads the current releases, so it is safe to start any number of times.
+# Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
+# by release events from manual edits/deletes, and daily as a safety net.
+name: Drive sync
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published, edited, deleted, unpublished]
+  schedule:
+    - cron: '0 3 * * *'
+
+concurrency:
+  group: drive-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      FOLDER_ID: 16lBZzaLRjdz5aIG54Uanhmdk9EczwEKo   # the KleiKodesh folder in the shared Drive
+      PREVIOUS_DIR: גרסה קודמת
+      RCLONE_CONFIG_GDRIVE_TYPE: drive
+      RCLONE_CONFIG_GDRIVE_SCOPE: drive
+      RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.RCLONE_GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.RCLONE_GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_GDRIVE_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the latest two releases
+        run: |
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+                   --limit 2 --json tagName --jq '.[].tagName')
+          [ -n "$tags" ] || { echo "No releases - nothing to sync."; exit 1; }
+          dir=mirror
+          for tag in $tags; do
+            mkdir -p "$dir"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dir" \
+              --pattern 'KleiKodeshSetup-*.exe' --pattern 'KitveiHakodeshPortable-*.zip'
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$dir/ReleaseNotes-$tag.txt"
+            dir="mirror/$PREVIOUS_DIR"
+          done
+          find mirror -type f | sort
+
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Sync to Drive
+        run: |
+          rclone sync mirror gdrive: --drive-root-folder-id "$FOLDER_ID" -v \
+            --filter '+ /KleiKodeshSetup-*.exe' --filter '+ /KitveiHakodeshPortable-*.zip' \
+            --filter '+ /ReleaseNotes-*.txt' --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
