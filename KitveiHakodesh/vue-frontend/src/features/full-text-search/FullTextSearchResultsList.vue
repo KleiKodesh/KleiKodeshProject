@@ -431,6 +431,19 @@ function onNavigationKeydown(event: KeyboardEvent): boolean {
       return true
     }
   }
+  // Space toggles the highlighted result's preview ("הצג עוד") — the keyboard
+  // counterpart of the header's toggle button. Only with a highlight: without one
+  // Space is the scroller's own page-down. Never from a text field — the search
+  // field forwards every key here, and a space typed there is part of the query.
+  const fromTextField = event.target instanceof HTMLElement
+    && (event.target.isContentEditable || ['INPUT', 'TEXTAREA'].includes(event.target.tagName))
+  if (event.code === 'Space' && activeIndex.value >= 0 && !fromTextField && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const result = shownResults.value[activeIndex.value]
+    if (!result) return false
+    event.preventDefault()
+    void togglePreview(result)
+    return true
+  }
   return moveHighlight(event)
 }
 
