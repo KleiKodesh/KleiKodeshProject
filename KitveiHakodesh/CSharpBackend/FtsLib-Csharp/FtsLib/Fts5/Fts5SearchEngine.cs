@@ -124,6 +124,9 @@ namespace FtsLib.Fts5
         /// <paramref name="maxTermsPerFragment"/> dictionary terms (a fragment that common
         /// matches most of the book anyway — reading the book is the cheaper answer).
         /// </summary>
+        /// <summary>From this many ranges on, one MATCH over their span beats one per range.</summary>
+        private const int ManyRanges = 16;
+
         public List<(int Range, long Position, int LineId)> FindSubstringCandidates(
             string query, IReadOnlyList<(long First, long Last)> ranges, int maxTermsPerFragment, CancellationToken ct)
         {
@@ -152,8 +155,10 @@ namespace FtsLib.Fts5
             }
             if (groups.Count == 0) return null;
 
-            // One MATCH per range: a rowid range is a seek FTS5 does natively, where an OR of
-            // ranges in one statement would make it read the whole doclist.
+            // A rowid range is a seek FTS5 does natively, but each executed MATCH costs its
+            // planning (~2 ms with a wide term expression). A few ranges: one MATCH each. Many
+            // (a commentary panel's books): ONE MATCH over their whole span, and each row
+            // assigned to its range here, or dropped when it falls between ranges.
             var found = new List<(int, long, int)>();
             using var cmd = _lines.CreateCommand();
             cmd.CommandText = "SELECT line_fts.rowid, p.line_id FROM line_fts JOIN line_position p ON p.position = line_fts.rowid " +
@@ -161,15 +166,38 @@ namespace FtsLib.Fts5
             cmd.Parameters.AddWithValue("$q", BuildMatchExpression(groups));
             var pFirst = cmd.Parameters.Add("$first", SqliteType.Integer);
             var pLast = cmd.Parameters.Add("$last", SqliteType.Integer);
-            for (int range = 0; range < ranges.Count; range++)
+            if (ranges.Count < ManyRanges)
             {
-                pFirst.Value = ranges[range].First;
-                pLast.Value = ranges[range].Last;
-                using var r = cmd.ExecuteReader();
+                for (int range = 0; range < ranges.Count; range++)
+                {
+                    pFirst.Value = ranges[range].First;
+                    pLast.Value = ranges[range].Last;
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        found.Add((range, r.GetInt64(0), (int)r.GetInt64(1)));
+                    }
+                }
+                return found;
+            }
+            var order = new int[ranges.Count];
+            for (int i = 0; i < order.Length; i++) order[i] = i;
+            Array.Sort(order, (a, b) => ranges[a].First.CompareTo(ranges[b].First));
+            long spanFirst = ranges[order[0]].First, spanLast = 0;
+            foreach (var range in ranges) if (range.Last > spanLast) spanLast = range.Last;
+            pFirst.Value = spanFirst;
+            pLast.Value = spanLast;
+            using (var r = cmd.ExecuteReader())
+            {
+                int cursor = 0;   // rows and ranges both ascend: the cursor only moves forward
                 while (r.Read())
                 {
                     ct.ThrowIfCancellationRequested();
-                    found.Add((range, r.GetInt64(0), (int)r.GetInt64(1)));
+                    long position = r.GetInt64(0);
+                    while (cursor < order.Length && ranges[order[cursor]].Last < position) cursor++;
+                    if (cursor == order.Length) break;
+                    if (ranges[order[cursor]].First <= position) found.Add((order[cursor], position, (int)r.GetInt64(1)));
                 }
             }
             return found;
