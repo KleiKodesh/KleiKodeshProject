@@ -106,7 +106,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   // ── Anchor ────────────────────────────────────────────────────────────────────
 
   /** The first visible row, where it was within the content, and where the viewport was, as of the last look. */
-  let anchor: { index: number; offsetTop: number; scrollTop: number } | null = null
+  let anchor: { index: number; offsetTop: number; offsetHeight: number; scrollTop: number } | null = null
 
   /**
    * The reader's row is wherever the viewport is now. Call before the DOM changes.
@@ -120,7 +120,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport) return
     const index = findRowIndexAt(viewport.scrollTop, false)
     const row = index != null ? options.rowElement(index) : null
-    if (row && index != null) anchor = { index, offsetTop: row.offsetTop, scrollTop: viewport.scrollTop }
+    if (row && index != null) anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
   }
 
   /**
@@ -130,18 +130,26 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
    * extension that trims more above than it adds below leaves the content shorter
    * for a moment, and the browser clamps the scroll during that layout; a relative
    * correction would then stack on top of the clamp and land a screen early.
+   *
+   * The distance into the row is kept as a FRACTION of its height: when the row
+   * re-wraps (a zoom, a width change) a fixed pixel offset would point at other
+   * text, and a tall row would visibly slide under the reader.
    */
   function holdAnchor() {
     const viewport = options.viewport()
     if (!viewport || !anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
-    const expected = row.offsetTop + (anchor.scrollTop - anchor.offsetTop)
-    if (viewport.scrollTop !== expected) {
-      viewport.scrollTop = expected
-      anchor.offsetTop = row.offsetTop
-      anchor.scrollTop = viewport.scrollTop
-    }
+    const offsetInto = anchor.scrollTop - anchor.offsetTop
+    const height = row.offsetHeight
+    const scaled = anchor.offsetHeight > 0 && height !== anchor.offsetHeight
+      ? Math.round(offsetInto * (height / anchor.offsetHeight))
+      : offsetInto
+    const expected = row.offsetTop + scaled
+    if (viewport.scrollTop !== expected) viewport.scrollTop = expected
+    anchor.offsetTop = row.offsetTop
+    anchor.offsetHeight = height
+    anchor.scrollTop = viewport.scrollTop
   }
 
   /**
