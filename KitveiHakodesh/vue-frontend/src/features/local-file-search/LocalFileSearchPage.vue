@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 import { t } from '@/i18n'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
@@ -151,7 +152,9 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     const titleWithoutExtension = dotIndex > 0 ? item.fileName.substring(0, dotIndex) : item.fileName
 
     const isHtmlLike = extension === '.htm' || extension === '.html'
-    const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+    const route = opensInFastDocView(item.fullPath)
+    ? '/fast-doc-view'
+    : extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
 
     // The addin name is known synchronously, so the placeholder tab gets it too —
     // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
@@ -165,9 +168,9 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
       ? paneNavigation.openTab({ route, title: displayTitle }).id
       : fileSearchTabId
 
-    if (extension === '.txt') {
+    if (route === '/fast-doc-view' || route === '/txt-view') {
       tabStore.updateTab(targetTabId, {
-        route: '/txt-view',
+        route,
         title: displayTitle,
         localFileName: item.fileName,
         localFilePath: item.fullPath,

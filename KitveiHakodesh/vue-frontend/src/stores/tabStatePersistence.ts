@@ -28,6 +28,9 @@ export interface TabState {
   searchPerWord?: import('@/features/full-text-search/queryWordSyntax').PerWord // per-tab per-word option choices
   htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
   txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
+  fastDocViewZoom?: number        // per-tab zoom level for /fast-doc-view tabs
+  fastDocViewBlockIndex?: number  // first visible block of a /fast-doc-view tab (position restore)
+  fastDocViewBlockOffset?: number // pixels the viewport sits below that block's top
 }
 
 export interface BookState {

@@ -243,6 +243,7 @@
 /* Text-bearing surfaces opt back in. .word-link-tooltip is Teleported to body, so
    it sits outside every other selector here and needs its own entry. */
 .lines-content *, .commentary-view *, .word-page *, .txt-content *,
+.fast-doc-view-content *, .fast-doc-view-notes-pane *,
 .word-link-tooltip, .word-link-tooltip * { user-select: text; }
 
 /* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).

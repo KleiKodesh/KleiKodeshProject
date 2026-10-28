@@ -1,0 +1,13 @@
+{
+  "loading": "Opening document...",
+  "loadError": "The document could not be opened",
+  "noFileOpen": "No file open",
+  "retry": "Try again",
+  "toc": "Table of contents",
+  "notes": "Notes",
+  "noNotes": "No notes in view",
+  "zoomIn": "Zoom in (Ctrl+)\nReset: Ctrl+0",
+  "zoomOut": "Zoom out (Ctrl-)\nReset: Ctrl+0",
+  "footnote": "Footnote",
+  "endnote": "Endnote"
+}

@@ -60,6 +60,7 @@ export type TabRoute =
   | '/pdf-view'
   | '/html-view'
   | '/txt-view'
+  | '/fast-doc-view'
   | '/settings'
   | '/books'
   | '/book-view'
@@ -998,7 +999,10 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab.localFileConverting) return
     if (tab.route === '/book-view' && !tab.bookId) return
     if (
-      (tab.route === '/pdf-view' || tab.route === '/html-view' || tab.route === '/txt-view') &&
+      (tab.route === '/pdf-view' ||
+        tab.route === '/html-view' ||
+        tab.route === '/txt-view' ||
+        tab.route === '/fast-doc-view') &&
       !tab.localFilePath &&
       !tab.localFileHbBookId &&
       !tab.localFileName

@@ -1,3 +1,4 @@
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { t } from '@/i18n'
 import { useTabStore } from '@/stores/tabStore'
@@ -78,7 +79,9 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
     const isHtmlLike = extension === '.htm' || extension === '.html'
-    const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+    const route = opensInFastDocView(fullPath)
+    ? '/fast-doc-view'
+    : extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
 
     // The addin name is known synchronously, so the placeholder tab gets it too —
     // otherwise a Ctrl/⌘-clicked addin reads "index" for as long as restoreLocalFile
@@ -92,9 +95,9 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
       ? paneNavigation.openTab({ route, title: displayTitle }).id
       : paneNavigation.activeTabId
 
-    if (extension === '.txt') {
+    if (route === '/fast-doc-view' || route === '/txt-view') {
       tabStore.updateTab(targetTabId, {
-        route: '/txt-view',
+        route,
         title: displayTitle,
         localFileName: fileName,
         localFilePath: fullPath,
