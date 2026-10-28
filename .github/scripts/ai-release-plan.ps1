@@ -209,13 +209,15 @@ $($numbered -join "`n`n")
         $found += @($r.notes | Where-Object { $_.visible -and $_.section -ne 'none' -and $_.en })
         Start-Sleep -Seconds 5
     }
-    $lines = ($found | ForEach-Object { "- $($_.section) | $($_.area_en) | $($_.en)" }) -join "`n"
+    $lines = (0..($found.Count - 1) | ForEach-Object { "[$_] $($found[$_].section) | $($found[$_].area_en) | $($found[$_].en)" }) -join "`n"
     Write-Host "Pass 1: $($found.Count) visible commits`n$lines"
     $p2 = @"
 $about
 
 Below are one-line summaries of every user-visible commit since the last release
-($previousTag), as "section | area | summary". Many are steps of the same feature.
+($previousTag), as "[number] section | area | summary". Many are steps of the same
+feature. Account for EVERY number: each goes into "from" of the change that covers it,
+or into "omitted" when it is cosmetic trivia or fully repeated by another line.
 
 TASK 1 - merge them into the final release notes:
 - Merge lines about the same feature into ONE change describing the finished result
@@ -245,8 +247,50 @@ $glossary
 SUMMARIES:
 $lines
 "@
+    $mergeSchema = $planSchema.Clone()
+    $mergeSchema.properties = $planSchema.properties.Clone()
+    $mergeSchema.properties.omitted = @{ type = 'ARRAY'; items = @{ type = 'INTEGER' } }
+    $mergeSchema.properties.changes = @{ type = 'ARRAY'; items = $changeSchema.Clone() }
+    $mergeSchema.properties.changes.items.properties = $changeSchema.properties.Clone()
+    $mergeSchema.properties.changes.items.properties.from = @{ type = 'ARRAY'; items = @{ type = 'INTEGER' } }
+    $mergeSchema.properties.changes.items.required = $changeSchema.required + 'from'
+    $mergeSchema.properties.changes.items.propertyOrdering = @('from') + $changeSchema.propertyOrdering
+    $mergeSchema.required = $planSchema.required + 'omitted'
+    $mergeSchema.propertyOrdering = @('changes', 'omitted', 'bump', 'reason')
+    if ($env:NOTES_MERGE_MODEL) { $models = @($env:NOTES_MERGE_MODEL -split ',' | ForEach-Object Trim) + $models }
     Write-Host "Pass 2"
-    $plan = Invoke-Gemini $p2 $planSchema { param($o) @($o.changes).Count -and $o.bump }
+    $plan = Invoke-Gemini $p2 $mergeSchema { param($o) @($o.changes).Count -and $o.bump }
+    # Coverage check: lines neither merged nor knowingly omitted get one more look.
+    if ($plan) {
+        $used = @($plan.changes | ForEach-Object { $_.from }) + @($plan.omitted)
+        $missed = @(0..($found.Count - 1) | Where-Object { $_ -notin $used })
+        Write-Host "Pass 2: $(@($plan.changes).Count) changes, $(@($plan.omitted).Count) omitted, $($missed.Count) unaccounted"
+        if ($missed.Count) {
+            $have = ($plan.changes | ForEach-Object { "- $($_.section) | $($_.area_en) | $($_.en)" }) -join "`n"
+            $left = ($missed | ForEach-Object { "[$_] $($found[$_].section) | $($found[$_].area_en) | $($found[$_].en)" }) -join "`n"
+            $p3 = @"
+$about
+
+These release notes are already written:
+$have
+
+These commit summaries are not covered yet:
+$left
+
+Return ONLY additional changes for features the notes above do not already mention
+(same rules; put the numbers in "from"); numbers that are trivia or already covered go
+into "omitted". bump/reason: repeat "$($plan.bump)" and "covered".
+
+$rules
+
+GLOSSARY (English = Hebrew):
+$glossary
+"@
+            Write-Host "Pass 3 (coverage)"
+            $extra = Invoke-Gemini $p3 $mergeSchema { param($o) $null -ne $o.changes }
+            if ($extra) { $plan.changes = @($plan.changes) + @($extra.changes); Write-Host "Pass 3: +$(@($extra.changes).Count)" }
+        }
+    }
 } else {
     $prompt = @"
 $about
