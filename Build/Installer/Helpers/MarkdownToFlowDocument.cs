@@ -7,14 +7,15 @@ namespace KleiKodeshVstoInstallerWpf
 {
     /// <summary>
     /// Minimal Markdown → FlowDocument for the LLM-written release notes.
-    /// Supports exactly: "### Heading" lines (any 1-6 '#'), "- " / "* " bullets,
+    /// Supports exactly: "### Heading" lines (any 1-6 '#'), "- " / "* " bullets (an
+    /// indented bullet - 2+ spaces - nests one level under the bullet above it),
     /// **bold** and `code` inline, plain paragraphs (consecutive lines join), blank lines.
     /// Anything else is shown as plain text.
     /// </summary>
     public static class MarkdownToFlowDocument
     {
         static readonly Regex HeadingRx = new Regex(@"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$");
-        static readonly Regex BulletRx  = new Regex(@"^\s*[-*]\s+(.*)$");
+        static readonly Regex BulletRx  = new Regex(@"^(\s*)[-*]\s+(.*)$");
         static readonly Regex InlineRx  = new Regex(@"\*\*(.+?)\*\*|`([^`]+)`");
 
         static readonly Brush TextBrush  = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x1F));
@@ -32,7 +33,7 @@ namespace KleiKodeshVstoInstallerWpf
                 TextAlignment = TextAlignment.Left, // Left = start edge; mirrored under RTL
             };
 
-            List list = null;
+            List list = null, subList = null;
             Paragraph para = null;
 
             foreach (string raw in (markdown ?? "").Replace("\r\n", "\n").Split('\n'))
@@ -41,14 +42,14 @@ namespace KleiKodeshVstoInstallerWpf
 
                 if (line.Trim().Length == 0)
                 {
-                    list = null; para = null;
+                    list = null; subList = null; para = null;
                     continue;
                 }
 
                 var h = HeadingRx.Match(line);
                 if (h.Success)
                 {
-                    list = null; para = null;
+                    list = null; subList = null; para = null;
                     var hp = new Paragraph { FontSize = 15, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 4) };
                     AddInlines(hp.Inlines, h.Groups[2].Value);
                     doc.Blocks.Add(hp);
@@ -59,18 +60,29 @@ namespace KleiKodeshVstoInstallerWpf
                 if (b.Success)
                 {
                     para = null;
+                    var ip = new Paragraph { Margin = new Thickness(0, 0, 0, 3) };
+                    AddInlines(ip.Inlines, b.Groups[2].Value);
+                    if (b.Groups[1].Value.Length >= 2 && list != null && list.ListItems.Count > 0)
+                    {
+                        if (subList == null)
+                        {
+                            subList = new List { MarkerStyle = TextMarkerStyle.Circle, Margin = new Thickness(0, 2, 0, 2), Padding = new Thickness(18, 0, 0, 0) };
+                            list.ListItems.LastListItem.Blocks.Add(subList);
+                        }
+                        subList.ListItems.Add(new ListItem(ip));
+                        continue;
+                    }
+                    subList = null;
                     if (list == null)
                     {
                         list = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(0, 2, 0, 6), Padding = new Thickness(18, 0, 0, 0) };
                         doc.Blocks.Add(list);
                     }
-                    var ip = new Paragraph { Margin = new Thickness(0, 0, 0, 3) };
-                    AddInlines(ip.Inlines, b.Groups[1].Value);
                     list.ListItems.Add(new ListItem(ip));
                     continue;
                 }
 
-                list = null;
+                list = null; subList = null;
                 if (para == null)
                 {
                     para = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
