@@ -67,13 +67,46 @@ export function useDailyLearningOpener() {
   }
 }
 
+type DailyLearningItemWithTarget = HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }
+
+// Today's resolved items, shared by the date bar and the cards and kept across home remounts.
+let todayItems: { dateKey: string; items: DailyLearningItemWithTarget[] } | null = null
+let todayItemsPending: { dateKey: string; promise: Promise<DailyLearningItemWithTarget[]> } | null = null
+// Bumped when the library goes away, so a load still in flight can't cache its stale ids.
+let libraryEpoch = 0
+
+function loadTodayItems(dateKey: string): Promise<DailyLearningItemWithTarget[]> {
+  if (todayItemsPending?.dateKey === dateKey) return todayItemsPending.promise
+  const epoch = libraryEpoch
+  const promise = (async () => {
+    const items = await computeHomeDailyLearningItems(new Date())
+    // All cycles in parallel: each one is several service round-trips.
+    const withTargets = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        resolved: (await resolveHomeDailyLearningTarget(item.target).catch(() => null)) ?? null,
+      })),
+    )
+    // Cleared meanwhile (library went away): don't put the old library's ids back.
+    if (epoch === libraryEpoch) todayItems = { dateKey, items: withTargets }
+    return withTargets
+  })()
+  todayItemsPending = { dateKey, promise }
+  promise.catch(() => {
+    if (todayItemsPending?.promise === promise) todayItemsPending = null
+  })
+  return promise
+}
+
 function useDailyLearningState() {
   const paneNavigation = usePaneNavigation()
   const booksDataStore = useBooksDataStore()
   const now = useNow({ interval: 60_000 })
   // Recompute only when the civil date changes, not every minute tick.
   const todayKey = computed(() => now.value.toDateString())
-  const allItems = shallowRef<Array<HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }>>([])
+  const allItems = shallowRef<DailyLearningItemWithTarget[]>(
+    todayItems?.dateKey === todayKey.value ? todayItems.items : [],
+  )
   const resolvedItems = computed(() =>
     allItems.value.filter((item): item is ResolvedDailyLearningItem => item.resolved !== null),
   )
@@ -83,17 +116,20 @@ function useDailyLearningState() {
     [todayKey, dbReady],
     async () => {
       const currentGeneration = ++generation
-      if (!dbReady.value) return
-      const items = await computeHomeDailyLearningItems(new Date())
-      const withTargets: Array<HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }> = []
-      for (const item of items) {
-        let resolved: HomeDailyLearningResolvedTarget | null = null
-        try {
-          resolved = (await resolveHomeDailyLearningTarget(item.target)) ?? null
-        } catch {}
-        withTargets.push({ ...item, resolved })
+      if (!dbReady.value) {
+        // Library going away (swap/update): its book ids may not survive it.
+        todayItems = null
+        todayItemsPending = null
+        libraryEpoch++
+        return
       }
-      if (currentGeneration === generation) allItems.value = withTargets
+      const cached = todayItems?.dateKey === todayKey.value ? todayItems.items : null
+      if (cached) {
+        allItems.value = cached
+        return
+      }
+      const items = await loadTodayItems(todayKey.value)
+      if (currentGeneration === generation) allItems.value = items
     },
     { immediate: true },
   )

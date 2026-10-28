@@ -51,8 +51,9 @@ export async function resolveHomeDailyLearningTarget(
   const book = await findBookByName(target)
   if (!book) return null
 
-  for (const pattern of target.tocPatterns) {
-    const rows = await getTocEntryByTextPrefix(book.id, pattern)
+  // All patterns in parallel; the first match in pattern order still wins.
+  const rowsPerPattern = await Promise.all(target.tocPatterns.map((pattern) => getTocEntryByTextPrefix(book.id, pattern)))
+  for (const rows of rowsPerPattern) {
     const tocEntry = rows[0]
     if (tocEntry) {
       return {

@@ -83,6 +83,14 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldLevelDv = "levelSortKey";          // numeric doc-values (sort key)
     private const string FieldTreeOrderDv = "treeOrderSortKey";  // numeric doc-values (sort key)
     private const string FieldStructureDv = "tocStructureId";    // numeric doc-values (truncation group)
+    // Search-side data computed here so no search builds a table off the reader:
+    private const string FieldVariantSkeleton = "variantSkeleton";   // every indexed word as "skeleton + U+0001 + word" (spelling-variant lookup)
+    private const string FieldBookTitle = "bookTitleWords";           // level 0 only: the title's words (title ranking, "query names the book")
+    private const string FieldBookTitleJoined = "bookTitleJoined";    // level 0 only: the title's words joined by spaces, untokenized (starts-with)
+    private const string FieldBookTitleWordsDv = "bookTitleDistinctWords"; // level 0 only: distinct title word count
+    private const string FieldBookIdDv = "bookIdValue";               // level 0 only: book id as doc-values
+    internal const string VariantSkeletonField = FieldVariantSkeleton;
+    internal const char SkeletonSeparator = '\u0001';
 
     /// <summary>Structure id of the regular TOC (and of book-title docs) — the alt
     /// structures carry their own positive ids from the DB, so 0 never collides.</summary>
@@ -104,8 +112,6 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private DirectoryReader? _reader;
     private IndexSearcher? _searcher;
     private IndexWriter? _writer;   // non-null only while a build is in flight
-    private VariantIndex? _variants; // lazily (re)built off the current reader — see GetVariantsLocked
-    private Dictionary<long, List<string>>? _titleTokensByRank; // lazily built off the current reader — see GetTitleTokensLocked
 
     public string RootPath => rootPath;
 
@@ -201,7 +207,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // v23: root TOC entries are stripped only when they add no word beyond the title.
     // v24: Lucene field names spelled out (were single letters). Full rebuild.
     // v25: level indexed (Int32Field) so the book-title search can filter to level 0.
-    public const string IndexFormatVersion = "v25";
+    // v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
+    //      searches are pure index queries with no per-reader tables.
+    public const string IndexFormatVersion = "v26";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -241,7 +249,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
     /// <summary>How often (in indexed books) to refresh the near-real-time reader so
     /// partial results appear during a build. Cheap when nothing changed.</summary>
-    private const int NrtRefreshEveryBooks = 200;
+    private const int NrtRefreshEveryBooks = 1000;
 
     /// <summary>
     /// Rebuild the whole index from the seforim DB IN PLACE, keeping it searchable the
@@ -314,7 +322,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         var config = new IndexWriterConfig(Ver, analyzer)
         {
             OpenMode = OpenMode.CREATE,
-            RAMBufferSizeMB = 48,
+            // Fewer, larger flushes: analysis dominates the build, and every flush of a
+            // small segment feeds merges later. Bounded, well under the build's budget.
+            RAMBufferSizeMB = 128,
         };
         var writer = new IndexWriter(fsDir, config);
         // Publish the writer, drop any committed reader, and open the first NRT reader so
@@ -399,7 +409,6 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // the verses become visible), then disposes it.
         docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ct);
         writer.Commit();
-
         return docCount;
     }
 
@@ -562,6 +571,29 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         return value;
     }
 
+    /// <summary>Indexed, tokenized, unstored, docs-only, no norms: the search-side fields that
+    /// are only ever matched (term existence / postings), never scored or displayed.</summary>
+    private static readonly FieldType DocsOnlyText = CreateDocsOnlyText(stored: false);
+
+    /// <summary>The three matchable fields (path, catalog, author): stored for display, and
+    /// indexed docs-only too — every query on them is term/prefix/fuzzy matching whose score
+    /// is ignored, so positions, freqs and norms were pure build cost.</summary>
+    private static readonly FieldType StoredDocsOnlyText = CreateDocsOnlyText(stored: true);
+
+    private static FieldType CreateDocsOnlyText(bool stored)
+    {
+        var type = new FieldType
+        {
+            IsIndexed = true,
+            IsTokenized = true,
+            IsStored = stored,
+            OmitNorms = true,
+            IndexOptions = IndexOptions.DOCS_ONLY,
+        };
+        type.Freeze();
+        return type;
+    }
+
     /// <summary>The TOC path is one field doing double duty: indexed (searchable, and
     /// the order rule's reference text) and stored (the display path). Catalog path and
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
@@ -571,7 +603,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     {
         var doc = new Document
         {
-            new TextField(FieldFullTocPath, fullTocPath, Field.Store.YES),
+            new Field(FieldFullTocPath, fullTocPath, StoredDocsOnlyText),
             new StoredField(FieldBookId, bookId),
             new StoredField(FieldLineIndex, lineIndex),
             new Int32Field(FieldLevel, level, Field.Store.YES), // indexed: the book-title search filters level 0
@@ -588,10 +620,27 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             // to one structure without materializing stored fields.
             new NumericDocValuesField(FieldStructureDv, structureId),
         };
+        // Each indexed text once more into the skeleton field (the analyzer maps every word
+        // to "skeleton + U+0001 + word"), one value per text so each tokenizes on its own.
+        doc.Add(new Field(FieldVariantSkeleton, fullTocPath, DocsOnlyText));
         if (catalogPath.Length > 0)
-            doc.Add(new TextField(FieldCatalog, catalogPath, Field.Store.YES));
+        {
+            doc.Add(new Field(FieldCatalog, catalogPath, StoredDocsOnlyText));
+            doc.Add(new Field(FieldVariantSkeleton, catalogPath, DocsOnlyText));
+        }
         if (!string.IsNullOrWhiteSpace(authors))
-            doc.Add(new TextField(FieldAuthor, authors, Field.Store.YES));
+        {
+            doc.Add(new Field(FieldAuthor, authors, StoredDocsOnlyText));
+            doc.Add(new Field(FieldVariantSkeleton, authors, DocsOnlyText));
+        }
+        if (level == 0)
+        {
+            var titleWords = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
+            doc.Add(new Field(FieldBookTitle, fullTocPath, DocsOnlyText));
+            doc.Add(new StringField(FieldBookTitleJoined, string.Join(" ", titleWords), Field.Store.NO));
+            doc.Add(new NumericDocValuesField(FieldBookTitleWordsDv, new HashSet<string>(titleWords, StringComparer.Ordinal).Count));
+            doc.Add(new NumericDocValuesField(FieldBookIdDv, bookId));
+        }
         return doc;
     }
 
