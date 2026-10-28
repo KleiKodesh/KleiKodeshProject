@@ -274,6 +274,18 @@ foreach ($c in $plan.changes) {
     $c | Add-Member area_he $(if ($t) { $t[1] } else { $c.area_en })
     if ($t) { $c.area_en = $t[0] }
 }
+# Fixes the merge folded into an improvement come back as their own items, one per
+# area, in step 1's wording - a fix is what a reader most needs to hear about.
+$inFixed = @($plan.changes | Where-Object section -eq 'fixed' | ForEach-Object { $_.from })
+$lost = @(0..($found.Count - 1) | Where-Object { $found[$_].section -eq 'fixed' -and $_ -notin $inFixed })
+foreach ($g in ($lost | Group-Object { $found[$_].area_en })) {
+    $f = $found[$g.Group[0]]
+    $t = $terms[(($f.area_en -replace '\s*\(.*?\)', '').Trim()).ToLowerInvariant()]
+    $plan.changes = @($plan.changes) + [pscustomobject]@{
+        from = @($g.Group); area_en = $(if ($t) { $t[0] } else { $f.area_en }); area_he = $(if ($t) { $t[1] } else { $f.area_en })
+        en = $f.en; rank = 2; section = 'fixed'; weight = $g.Count }
+}
+if ($lost) { Write-Host "Fixes brought back: $($lost.Count) lines" }
 # Short and focused: no cosmetic-only areas, at most 8 per section and 20 in all.
 # Order of preference: the best change of each area first (so no area vanishes behind
 # five speed-ups of another), then the rest; within that, rank, then most commits.
