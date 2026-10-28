@@ -267,7 +267,9 @@ $lines
     $plan = Invoke-Gemini $p2 $mergeSchema { param($o) @($o.changes).Count -and $o.bump }
     # Coverage check: lines neither merged nor knowingly omitted get one more look.
     if ($plan) {
-        $used = @($plan.changes | ForEach-Object { $_.from }) + @($plan.omitted)
+        # Fixes and new features are never trivia: omitting one counts as missing it.
+        $kept = @($plan.omitted | Where-Object { $_ -ge 0 -and $_ -lt $found.Count -and $found[$_].section -eq 'improved' })
+        $used = @($plan.changes | ForEach-Object { $_.from }) + $kept
         $missed = @(0..($found.Count - 1) | Where-Object { $_ -notin $used })
         Write-Host "Pass 2: $(@($plan.changes).Count) changes, $(@($plan.omitted).Count) omitted, $($missed.Count) unaccounted"
         if ($missed.Count) {
@@ -279,7 +281,8 @@ $about
 These release notes are already written:
 $have
 
-These commit summaries are not covered yet:
+These commit summaries are not covered yet (fixes and new features must appear unless
+the notes above already say the same thing):
 $left
 
 Return ONLY additional changes for features the notes above do not already mention
