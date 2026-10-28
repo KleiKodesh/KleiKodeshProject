@@ -75,6 +75,84 @@ kbd {
 a { color: var(--accent); }
 .note { color: var(--muted); font-size: .95rem; }
 footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .95rem; }
+html { scroll-behavior: smooth; }
+section { scroll-margin-top: 12px; }
+/* Contents: a side column on wide screens, a sticky dropdown on narrow ones. */
+.page {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 780px);
+  justify-content: center;
+  gap: 24px;
+  padding-inline: 16px;
+}
+.page .wrap { margin: 0; padding-inline: 0; }
+.toc {
+  position: sticky;
+  top: 32px;
+  align-self: start;
+  margin-top: 56px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+.toc-title { font-size: 1rem; margin: 0 0 8px; color: var(--muted); }
+.toc-toggle { display: none; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: .95rem;
+  line-height: 1.4;
+}
+.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+@media (max-width: 900px) {
+  .page { display: block; padding-inline: 0; }
+  .page .wrap { margin: 0 auto; padding: 0 16px 56px; }
+  .toc {
+    top: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 8px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    max-height: none;
+    overflow: visible;
+  }
+  .toc-title { display: none; }
+  .toc-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 14px;
+    cursor: pointer;
+  }
+  .toc ol {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 16px;
+    min-width: 220px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 4px 0;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
+  }
+  .toc.open ol { display: block; }
+  .toc a { border-radius: 0; padding: 6px 14px; }
+  section { scroll-margin-top: 56px; }
+}
 @media (max-width: 520px) {
   body { font-size: 16px; }
   section { padding: 16px; }
@@ -83,6 +161,26 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
 </style>
 </head>
 <body>
+<div class="page">
+<nav class="toc" id="toc">
+  <button type="button" class="toc-toggle" aria-expanded="false" aria-controls="toc-list">&#9776; תוכן עניינים</button>
+  <h2 class="toc-title">תוכן עניינים</h2>
+  <ol id="toc-list">
+    <li><a href="#s1">מה זה?</a></li>
+    <li><a href="#s2">הכלים שבתפריט</a></li>
+    <li><a href="#s3">כתבי הקודש</a></li>
+    <li><a href="#s4">בתפריט הלחיצה הימנית בוורד</a></li>
+    <li><a href="#s5">נקדן דיקטה</a></li>
+    <li><a href="#s6">עיצוב תורני</a></li>
+    <li><a href="#s7">חיפוש רגקס</a></li>
+    <li><a href="#s8">ספריית קיוויקס ודרך האתרים</a></li>
+    <li><a href="#s9">הגדרות</a></li>
+    <li><a href="#s10">פקודות מאקרו (לא חובה)</a></li>
+    <li><a href="#s11">עדכונים</a></li>
+    <li><a href="#s12">יצירת קשר</a></li>
+  </ol>
+</nav>
+
 <div class="wrap">
 
 <header>
@@ -90,15 +188,16 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   <p class="tagline">ארגז כלים לעורך התורני, בתוך וורד</p>
 </header>
 
-<section>
+
+<section id="s1">
   <h2>מה זה?</h2>
-  <p>כלי קודש הוא תוסף חינמי ל-Word. הוא מוסיף ללשונית חדשה בשם <span class="chip">כלי קודש</span> כמה כלים שעוזרים לכתוב ולערוך ספרים ומסמכים תורניים.</p>
+  <p>כלי קודש הוא תוסף חינמי ל-Word. הוא מוסיף ללשונית <span class="chip">בית</span> תפריט נפתח בשם <span class="chip">כלי קודש</span>, ובו כמה כלים שעוזרים לכתוב ולערוך ספרים ומסמכים תורניים.</p>
   <p>כל כלי נפתח בחלונית צד, ליד המסמך. אפשר להמשיך לכתוב תוך כדי.</p>
   <p>התוסף בקוד פתוח, ונבנה על ידי מתנדבים.</p>
 </section>
 
-<section>
-  <h2>הכפתורים בלשונית</h2>
+<section id="s2">
+  <h2>הכלים שבתפריט</h2>
   <ul>
     <li><span class="name">כתבי הקודש</span> - ספריית הספרים. פירוט בהמשך.</li>
     <li><span class="name">ספריית קיוויקס</span> - ספרים ואנציקלופדיות בלי חיבור לאינטרנט, דרך קיוויקס.</li>
@@ -113,7 +212,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   <p class="note">לחיצה על הכפתור הגדול של <span class="name">כלי קודש</span> פותחת את הכלי שבחרתם כברירת מחדל. את החצים שלידו פותחים כדי לבחור כלי אחר.</p>
 </section>
 
-<section>
+<section id="s3">
   <h2>כתבי הקודש</h2>
   <p>ספרייה לקריאה ולחיפוש בספרים. היא עובדת על מאגר הספרים של זית, והיא נמצאת בתוך וורד. אם אין עדיין מאגר במחשב, התוכנה מורידה אותו.</p>
 
@@ -145,7 +244,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   <p class="note">ספרים מסוימים לא ניתנים לייצוא לוורד, לפי בקשת המו"ל. קריאה והדפסה ממשיכות לעבוד.</p>
 </section>
 
-<section>
+<section id="s4">
   <h2>בתפריט הלחיצה הימנית בוורד</h2>
   <p>סמנו טקסט במסמך ולחצו קליק ימני. יש שם פקודות לכתבי הקודש:</p>
   <ul>
@@ -156,7 +255,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   </ul>
 </section>
 
-<section>
+<section id="s5">
   <h2>נקדן דיקטה</h2>
   <p>מנקד את הטקסט המסומן, בעזרת שירות הניקוד של דיקטה. <strong>צריך חיבור לאינטרנט.</strong></p>
   <ul>
@@ -167,7 +266,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   </ul>
 </section>
 
-<section>
+<section id="s6">
   <h2>עיצוב תורני</h2>
   <ul>
     <li><span class="name">עיצוב פסקה</span> - סגנון למילה הראשונה, <span class="name">עיצוב חלון</span> (רגיל וכפול) ו<span class="name">מירכוז שורה אחרונה</span>. אפשר לבחור על אילו פסקאות להחיל.</li>
@@ -177,7 +276,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   <p class="note">כל פעולה נרשמת כפעולה אחת בוורד, אז <kbd>Ctrl+Z</kbd> מחזיר אותה.</p>
 </section>
 
-<section>
+<section id="s7">
   <h2>חיפוש רגקס</h2>
   <p>חיפוש והחלפה בוורד עם ביטויים רגולריים (רגקס). זה מאפשר לחפש דפוסים, כמו "כל מספר" או "מילה שמתחילה באות מסוימת".</p>
   <ul>
@@ -189,13 +288,13 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   </ul>
 </section>
 
-<section>
+<section id="s8">
   <h2>ספריית קיוויקס ודרך האתרים</h2>
   <p><span class="name">ספריית קיוויקס</span> קוראת קבצי ZIM. אלה ספרים, ויקיפדיה ואתרים אחרים שנשמרו במחשב, כדי לקרוא בלי אינטרנט.</p>
   <p><span class="name">דרך האתרים</span> פותחת אתרים תורניים בלשוניות, בתוך וורד. הרשימה כוללת למשל את אתר כלי קודש, דיקטה, המשיב, אוצר החכמה והיברו-בוקס. אפשר לערוך את הרשימה בהתקנה.</p>
 </section>
 
-<section>
+<section id="s9">
   <h2>הגדרות</h2>
   <p>בכפתור <span class="name">הגדרות</span> אפשר:</p>
   <ul>
@@ -209,7 +308,7 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   <p class="note">חלק מההגדרות נכנסות לתוקף רק אחרי שסוגרים את וורד ופותחים אותו מחדש.</p>
 </section>
 
-<section>
+<section id="s10">
   <h2>פקודות מאקרו (לא חובה)</h2>
   <p>אפשר להתקין את פקודות התוסף גם כמאקרו. כך אפשר להוסיף אותן לסרגל הגישה המהירה, או לתת להן קיצור מקשים.</p>
   <ul>
@@ -219,13 +318,13 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
   </ul>
 </section>
 
-<section>
+<section id="s11">
   <h2>עדכונים</h2>
   <p>התוסף בודק מדי פעם אם יש גרסה חדשה, ומוריד אותה ברקע. אפשר לבדוק גם ידנית ב<span class="name">הגדרות</span> של כתבי הקודש. אם אתם לא רוצים עדכונים, כבו את הבדיקה האוטומטית.</p>
   <p>ההתקנה היא רק עבורכם, בלי הרשאות מנהל.</p>
 </section>
 
-<section>
+<section id="s12">
   <h2>יצירת קשר</h2>
   <p>מצאתם תקלה, או יש לכם רעיון?</p>
   <ul>
@@ -239,5 +338,21 @@ footer { text-align: center; color: var(--muted); margin-top: 28px; font-size: .
 <footer>תודה שאתם משתמשים בכלי קודש.</footer>
 
 </div>
+</div>
+
+<script>
+(function () {
+  var toc = document.getElementById('toc');
+  var toggle = toc.querySelector('.toc-toggle');
+  function setOpen(open) {
+    toc.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function () { setOpen(!toc.classList.contains('open')); });
+  toc.addEventListener('click', function (e) { if (e.target.closest('a')) setOpen(false); });
+  document.addEventListener('click', function (e) { if (!toc.contains(e.target)) setOpen(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+})();
+</script>
 </body>
 </html>
