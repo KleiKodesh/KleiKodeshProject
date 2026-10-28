@@ -76,7 +76,8 @@ namespace KitveiHakodeshLib
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
                         case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
-                        case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
+                        case "writePdfTail": _localFile.HandleWritePdfTail(root, id); break;
+                        case "readTxtFileContent":await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
                         // The restored view has fetched and painted: the snapshot splash can go.

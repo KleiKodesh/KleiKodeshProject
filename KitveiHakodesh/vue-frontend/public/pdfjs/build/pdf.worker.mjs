@@ -62904,6 +62904,25 @@ class WorkerMessageHandler {
         }
       }
     });
+    // [KleiKodesh] Parse a trailing "%KH-TOC start=<S> prev=<P>" marker (see
+    // the SaveDocument patch). Null when absent or implausible.
+    function khReadTocMarker(bytes) {
+      const from = Math.max(0, bytes.length - 128);
+      let tail = "";
+      for (let i = from; i < bytes.length; i++) {
+        tail += String.fromCharCode(bytes[i]);
+      }
+      const m = /%KH-TOC start=(\d+) prev=(\d+)\s*$/.exec(tail);
+      if (!m) {
+        return null;
+      }
+      const start = Number(m[1]);
+      const prev = Number(m[2]);
+      if (!(start > 0 && start < bytes.length && prev >= 0 && prev < start)) {
+        return null;
+      }
+      return { start, prev };
+    }
     handler.on("SaveDocument", async function ({
       isPureXfa,
       numPages,
@@ -62978,6 +62997,10 @@ class WorkerMessageHandler {
         }
       }
       const refs = await Promise.all(promises);
+      // [KleiKodesh] PATCH: outline-only sections replace each other (see the
+      // "KH-TOC marker" block below) — remember whether anything but the outline
+      // changed.
+      const khOnlyOutline = changes.size === 0 && !isPureXfa;
       // PATCH: write a user-edited outline (תוכן עניינים) into the incremental
       // update. `editedOutline` is [{title, page, items}] serialized from the
       // sidebar editor (outline-search.js); null means no outline edits. New
@@ -63172,8 +63195,25 @@ class WorkerMessageHandler {
           filename
         };
       }
-      return incrementalUpdate({
-        originalData: stream.bytes,
+      // [KleiKodesh] PATCH: KH-TOC marker. A TOC autosave appends one
+      // incremental section and, when that section holds ONLY the outline,
+      // ends it with "%KH-TOC start=<S> prev=<P>" (S = where the section
+      // begins, P = the startxref it chains back to). When the loaded file
+      // ends with such a marker, this save is built from the bytes BEFORE S
+      // and chains back to P, so it REPLACES the old outline section instead
+      // of stacking a new one on it — the file stops growing per session.
+      // Safe because the replaced section held only the outline + a catalog
+      // copy, both rewritten here from the parsed (cached) objects.
+      let khOriginalData = stream.bytes;
+      const khMarker = editedOutline != null ? khReadTocMarker(stream.bytes) : null;
+      if (khMarker && newXrefInfo.startXRef !== undefined) {
+        khOriginalData = stream.bytes.subarray(0, khMarker.start);
+        newXrefInfo.startXRef = khMarker.prev;
+      }
+      const khSectionStart = khOriginalData.length;
+      const khPrev = newXrefInfo.startXRef;
+      const khSaved = await incrementalUpdate({
+        originalData: khOriginalData,
         xrefInfo: newXrefInfo,
         changes,
         xref,
@@ -63188,6 +63228,14 @@ class WorkerMessageHandler {
       }).finally(() => {
         xref.resetNewTemporaryRef();
       });
+      if (!khOnlyOutline || editedOutline == null || !Number.isInteger(khPrev)) {
+        return khSaved;
+      }
+      const khMarkerText = `%KH-TOC start=${khSectionStart} prev=${khPrev}\n`;
+      const khWithMarker = new Uint8Array(khSaved.length + khMarkerText.length);
+      khWithMarker.set(khSaved);
+      writeString(khMarkerText, khSaved.length, khWithMarker);
+      return khWithMarker;
     });
     handler.on("GetOperatorList", function (data, sink) {
       const {

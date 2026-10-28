@@ -92,9 +92,23 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
       }
     }
     if (words.length === 0) return null;
-    // Join words and clean up whitespace
-    const text = words.join(' ').replace(/\s+/g, ' ').trim();
+    // Join words and clean up whitespace. (Backslashes are doubled: this is a template string.)
+    const text = words.join(' ').replace(/\\s+/g, ' ').trim();
     return text.length > 0 ? text : null;
+  }
+
+  // A text layer that is there but unreadable — boxes/replacement chars, private-use or
+  // control glyphs (fonts with no Unicode map), or Latin-1 mojibake (old Hebrew fonts
+  // mapped onto à-ú). Such a selection goes to canvas OCR, as if forceOcr were set.
+  function isGibberish(text) {
+    const chars = Array.from(text.replace(/\\s+/g, ''));
+    if (chars.length === 0) return true;
+    let bad = 0;
+    for (const ch of chars) {
+      if (/[\\uFFFD\\u25A0-\\u25FF\\u0000-\\u001F\\u007F-\\u009F]|\\p{Co}|\\p{Cn}/u.test(ch)) bad++;
+      else if (/[\\u00C0-\\u00FF]/.test(ch)) bad++;
+    }
+    return bad / chars.length >= 0.3;
   }
 
   // ── Canvas capture ───────────────────────────────────────────────────────
@@ -142,9 +156,14 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 
   function onMouseDown(e) {
     if (!tool.isActive || e.button !== 0) return;
-    e.preventDefault();
-    tool.isDrawing = true;
     const container = document.getElementById('viewerContainer');
+    if (!container || !container.contains(e.target)) return;
+    e.preventDefault();
+    // The hand tool (GrabToPan) takes mousedown in the CAPTURE phase on the
+    // container and stops it there — these listeners sit on window, capture
+    // phase, so they run first; stop the event so the page doesn't pan.
+    e.stopImmediatePropagation();
+    tool.isDrawing = true;
     const start = toContentCoords(container, e.clientX, e.clientY);
     tool.startX = start.x;
     tool.startY = start.y;
@@ -164,6 +183,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 
   function onMouseMove(e) {
     if (!tool.isDrawing || !tool.selectionDiv) return;
+    e.stopImmediatePropagation();
     const container = document.getElementById('viewerContainer');
     const current = toContentCoords(container, e.clientX, e.clientY);
     const currentX = current.x;
@@ -189,6 +209,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 
   function onMouseUp(e) {
     if (!tool.isDrawing) return;
+    e.stopImmediatePropagation();
     tool.isDrawing = false;
 
     // Restore crosshair cursor
@@ -219,7 +240,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     // When forceOcr is set, skip the text layer entirely and go straight to canvas OCR.
     if (!tool.forceOcr) {
       const text = extractText(rect);
-      if (text) {
+      if (text && !isGibberish(text)) {
         window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text, isOcr: false }, '*');
         return;
       }
@@ -242,9 +263,9 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     const container = document.getElementById('viewerContainer');
     if (!container) return;
     container.classList.add('kitvei-hakodesh-ocr-mode');
-    container.addEventListener('mousedown', onMouseDown);
-    container.addEventListener('mousemove', onMouseMove);
-    container.addEventListener('mouseup',   onMouseUp);
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mousemove', onMouseMove, true);
+    window.addEventListener('mouseup',   onMouseUp, true);
     container.style.userSelect = 'none';
   };
 
@@ -254,9 +275,9 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     if (!container) return;
     container.classList.remove('kitvei-hakodesh-ocr-mode');
     container.classList.remove('kitvei-hakodesh-ocr-drawing');
-    container.removeEventListener('mousedown', onMouseDown);
-    container.removeEventListener('mousemove', onMouseMove);
-    container.removeEventListener('mouseup',   onMouseUp);
+    window.removeEventListener('mousedown', onMouseDown, true);
+    window.removeEventListener('mousemove', onMouseMove, true);
+    window.removeEventListener('mouseup',   onMouseUp, true);
     container.style.userSelect = '';
     if (tool.selectionDiv) { tool.selectionDiv.remove(); tool.selectionDiv = null; }
     window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-deactivated' }, '*');

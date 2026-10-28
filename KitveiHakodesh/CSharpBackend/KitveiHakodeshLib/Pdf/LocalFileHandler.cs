@@ -293,6 +293,22 @@ namespace KitveiHakodeshLib.LocalFile
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
+        /// <summary>PDF viewer TOC autosave: write an incremental-save tail back into the file
+        /// (rules in PdfIncrementalSaveWriter). Bytes arrive base64 over the JSON bridge.</summary>
+        public void HandleWritePdfTail(JsonElement root, string id)
+        {
+            try
+            {
+                string error = PdfIncrementalSaveWriter.WriteTail(
+                    root.GetProperty("filePath").GetString(),
+                    root.GetProperty("offset").GetInt64(),
+                    Convert.FromBase64String(root.GetProperty("tail").GetString() ?? ""),
+                    Convert.FromBase64String(root.GetProperty("anchor").GetString() ?? ""));
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
         public async Task HandleReadTxtFileContent(JsonElement root, string id)
         {
             try
