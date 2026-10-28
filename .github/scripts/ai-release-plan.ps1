@@ -53,116 +53,215 @@ $commits = ($blocks -join "`n`n").Trim()
 if (-not $commits) { throw "No commits since $previousTag - nothing to release." }
 Write-Host "Previous release: $previousTag ($($hashes.Count) commits, $(@($blocks).Count) sent)"
 
-$glossary = Get-Content (Join-Path $PSScriptRoot 'release-glossary.txt') -Raw -Encoding UTF8
+$blocks = @($blocks)
+# map (default): pass 1 judges commits in small batches so none are skipped, pass 2
+# merges the per-commit lines into the notes. single: one prompt with all commits.
+$mode = if ($env:NOTES_MODE) { $env:NOTES_MODE } else { 'single' }
 
-$prompt = @"
+$about = @"
 You write the "What's new" notes for KleiKodesh, a free Windows app for Torah study:
 the "Kitvei Hakodesh" library app (book view with commentaries, full-text search, book
-catalog, HebrewBooks scans, dictionary, calendar and daily learning) and the "Klei Kodesh"
-Microsoft Word add-in (Torani Design, Dicta Nakdan, Regex Find, Websites, Kiwix).
-Readers are Torah scholars and yeshiva students. They are not programmers and do not
-care how anything works inside - only what they can now do, what got better, and what
-no longer goes wrong.
+catalog, HebrewBooks scans, PDF viewer, dictionary, calendar and daily learning) and the
+"Klei Kodesh" Microsoft Word add-in (Torani Design, Dicta Nakdan, Regex Find, Websites,
+Kiwix, installer settings, About page, macros). Readers are Torah scholars and yeshiva
+students. They are not programmers and do not care how anything works inside - only what
+they can now do, what got better, and what no longer goes wrong.
+"@
+
+$rules = @"
+SECTIONS:
+- "new" = something users could not do at all before: a new feature, option, button,
+  keyboard shortcut, language, download, page.
+- "improved" = something that already existed now works better, faster, clearer, or a
+  bit differently (e.g. a Torani Design row that now changes letters in another way is
+  improved, not new; a faster home page is improved).
+- "fixed" = something that went wrong before (wrong text, lost position, scrambled copy,
+  failed print, wrong direction) and now does not.
+
+WORDING:
+- Describe the effect a user sees, never the mechanism. Bad: "custom scrollbar",
+  "native indexing", "filter pills", "virtualized rendering", "character scaling",
+  "cache", "lazy load". Good: "the scrollbar shows which section you are in", "results
+  appear almost at once", "filter definitions by source", "letter stretch widens the
+  letters themselves".
+- Never mention internal names: WindowedScroller, TanStack, Lucene, FTS, FtsLib, Core,
+  service, LinesTable, localStorage, IndexedDB, MessagePack, Vue, VSTO, COM, ref, flush,
+  cache, quota, schema, op, API, Fluent, pills, stream, chunk, index, native, render,
+  "TOC" (say table of contents), "lines pane", hashes, file names, pixel/ms numbers.
+- Word add-in changes (ribbon, panes, installer settings, About, macros, interface
+  language) get area "Klei Kodesh (Word add-in)" or the exact ribbon tool name
+  (e.g. "Torani Design"), never "Settings" (Settings is the library app's page).
+- TERMINOLOGY: area names and button/feature names MUST use the exact glossary term.
+  If something is not in the glossary, describe it in plain words, do not coin a name.
+
+STYLE EXAMPLES (from older releases, same tone wanted):
+- new | Calendar | Tap a date to see that day's zmanim and daily learning.
+- improved | Book catalog | Opening a large category is instant and keeps your scroll place.
+- fixed | Tabs | Closing a tab no longer jumps to the first tab.
+- new | Dicta Nakdan | Vocalize only the selected words.
+"@
+
+$glossary = Get-Content (Join-Path $PSScriptRoot 'release-glossary.txt') -Raw -Encoding UTF8
+
+$changeSchema = @{
+    type       = 'OBJECT'
+    properties = @{
+        section = @{ type = 'STRING'; enum = @('new', 'improved', 'fixed') }
+        area_en = @{ type = 'STRING' }
+        area_he = @{ type = 'STRING' }
+        en      = @{ type = 'STRING' }
+        he      = @{ type = 'STRING' }
+        rank    = @{ type = 'INTEGER' }
+    }
+    required   = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
+    propertyOrdering = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
+}
+$planSchema = @{
+    type       = 'OBJECT'
+    properties = @{
+        changes = @{ type = 'ARRAY'; items = $changeSchema }
+        bump    = @{ type = 'STRING'; enum = @('major', 'minor', 'patch') }
+        reason  = @{ type = 'STRING' }
+    }
+    required   = @('changes', 'bump', 'reason')
+    propertyOrdering = @('changes', 'bump', 'reason')
+}
+
+# One generateContent call, trying each model in turn; returns the parsed JSON or $null.
+function Invoke-Gemini([string]$text, $schema, [scriptblock]$valid) {
+    $body = @{
+        contents         = @(@{ parts = @(@{ text = $text }) })
+        generationConfig = @{ temperature = 0.2; responseMimeType = 'application/json'; responseSchema = $schema }
+    } | ConvertTo-Json -Depth 30
+    foreach ($model in $models) {
+        foreach ($attempt in 1..3) {
+            try {
+                $resp = Invoke-RestMethod -Method Post -TimeoutSec 180 `
+                    -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
+                    -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
+                    -ContentType 'application/json; charset=utf-8' `
+                    -Body ([Text.Encoding]::UTF8.GetBytes($body))
+                $out = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
+                if (& $valid $out) { Write-Host "  model: $model"; return $out }
+                throw "incomplete answer"
+            } catch {
+                Write-Host "  $model attempt $attempt failed: $($_.Exception.Message)"
+                if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
+            }
+        }
+    }
+    $null
+}
+
+$plan = $null
+if ($mode -eq 'map') {
+    $noteSchema = @{
+        type       = 'OBJECT'
+        properties = @{ notes = @{ type = 'ARRAY'; items = @{
+            type       = 'OBJECT'
+            properties = @{
+                id      = @{ type = 'INTEGER' }
+                visible = @{ type = 'BOOLEAN' }
+                section = @{ type = 'STRING'; enum = @('new', 'improved', 'fixed', 'none') }
+                area_en = @{ type = 'STRING' }
+                en      = @{ type = 'STRING' }
+            }
+            required   = @('id', 'visible', 'section', 'area_en', 'en')
+            propertyOrdering = @('id', 'visible', 'section', 'area_en', 'en')
+        } } }
+        required   = @('notes')
+    }
+    $size = 15
+    $found = @()
+    for ($i = 0; $i -lt $blocks.Count; $i += $size) {
+        $batch = @($blocks[$i..([Math]::Min($i + $size, $blocks.Count) - 1)])
+        $numbered = for ($k = 0; $k -lt $batch.Count; $k++) { "[id $($i + $k)]`n$($batch[$k])" }
+        $p1 = @"
+$about
+
+Below are $($batch.Count) developer commit messages. For EACH commit return one entry
+with the same id: is anything in it visible to a user of the app or the Word add-in?
+- visible=false (section "none", empty texts) for: CI, GitHub Actions, build/release/
+  signing scripts, docs, tests, refactors, renames, code removal, background service
+  plumbing, logging, licence text, version bumps, pure internal clean-up.
+- visible=true otherwise - including speed-ups a user would feel, small fixes, new
+  options, English interface work, installer settings, About page, macros, downloads.
+- A body line "User-facing: <section> - <Area>: <sentence>" is the author's own verdict:
+  copy it. "User-facing: none" means visible=false.
+- area_en: where the user finds it (glossary term). en: one plain sentence, at most ~20
+  words, describing the effect for the user.
+
+$rules
+
+GLOSSARY (English = Hebrew):
+$glossary
+
+COMMITS:
+$($numbered -join "`n`n")
+"@
+        Write-Host "Pass 1 batch $([int]($i / $size) + 1)"
+        $r = Invoke-Gemini $p1 $noteSchema { param($o) $null -ne $o.notes }
+        if (-not $r) { throw "Gemini failed on pass 1 - no release now; Release retries by itself in an hour." }
+        $found += @($r.notes | Where-Object { $_.visible -and $_.section -ne 'none' -and $_.en })
+        Start-Sleep -Seconds 5
+    }
+    $lines = ($found | ForEach-Object { "- $($_.section) | $($_.area_en) | $($_.en)" }) -join "`n"
+    Write-Host "Pass 1: $($found.Count) visible commits`n$lines"
+    $p2 = @"
+$about
+
+Below are one-line summaries of every user-visible commit since the last release
+($previousTag), as "section | area | summary". Many are steps of the same feature.
+
+TASK 1 - merge them into the final release notes:
+- Merge lines about the same feature into ONE change describing the finished result
+  (e.g. ten bookmark lines -> one bookmarks change). Different features stay separate
+  changes - do NOT drop a feature because it is small; small polish of one area may be
+  combined into one change about that area.
+- Cover BOTH products. Expect roughly 12-25 changes for a release this size.
+- Re-check the section of each merged change against the rules below.
+- area_en / area_he: exact glossary terms. en: one plain sentence, at most ~25 words.
+  he: the same in natural, fluent Hebrew as a native Israeli writer would phrase it -
+  not a word-for-word translation, no anglicisms, correct spelling, glossary terms.
+- rank: 1 = headline, 2 = notable, 3 = minor. Never invent features or numbers.
+
+TASK 2 - the semantic version bump: "major" = something users relied on was removed or
+works differently, or old settings/data stop working; "minor" = any new feature or
+option; "patch" = only fixes, polish and speed.
+
+$rules
+
+GLOSSARY (English = Hebrew):
+$glossary
+
+SUMMARIES:
+$lines
+"@
+    Write-Host "Pass 2"
+    $plan = Invoke-Gemini $p2 $planSchema { param($o) @($o.changes).Count -and $o.bump }
+} else {
+    $prompt = @"
+$about
 
 Below are the developer commit messages since the last release ($previousTag). Each has
 a subject, an optional body and "Files:" - the source folders it changed.
+- Most commits are internal (CI, build scripts, docs, tests, refactors, service
+  plumbing): leave them out. A body line "User-facing: ..." is the author's verdict.
+- Go through ALL commits, note every user-visible change, then merge steps of one
+  feature into ONE change. Cover BOTH products.
+- rank: 1 = headline, 2 = notable, 3 = minor. Never invent features or numbers.
+- bump: "major" = removed/changed behaviour users relied on; "minor" = any new feature
+  or option; "patch" = only fixes, polish, speed.
 
-HOW TO READ THE COMMITS
-- Most commits are internal. Leave a commit out entirely when it is about: CI, GitHub
-  Actions, release/build/signing scripts, Drive sync, README/docs/steering, tests,
-  refactors, renames, code removal, the service/Core/wire/MessagePack/SQL plumbing,
-  memory/caching internals, logging, licence text, suggestions.txt, version bumps.
-  Files only under .github, Build, docs, *.md, tests -> internal.
-- Speed-ups count only when a user would feel them; describe the effect ("search in a
-  large book shows results almost at once"), never the technique.
-- A body line "User-facing: new|improved|fixed - <Area>: <sentence>" is the author's own
-  summary: use that section, area and wording (polish it, merge duplicates).
-- Many commits are steps of one feature (e.g. ten commits about bookmarks or the
-  scrollbar). Merge them into ONE bullet describing the finished result.
-- Never mention internal names: WindowedScroller, TanStack, Lucene, FTS, FtsLib, Core,
-  service, LinesTable, localStorage, IndexedDB, MessagePack, Vue, VSTO, COM, shallow
-  ref, flush, cache, quota, schema, op, API, Fluent, pills, stream, chunk, index,
-  "TOC" (say table of contents), "lines pane", hashes, file names, pixel/ms numbers.
+$rules
 
-TASK 1 - the semantic version bump:
-- "major": something users relied on was removed or works in a different way, or old
-  settings/data stop working.
-- "minor": a new feature or a new option in an existing one.
-- "patch": only fixes, polish and speed.
-Pick the highest level any included change reaches.
-
-TASK 2 - the notes, as a list of "changes" (the script formats them):
-- First go through ALL the commits and note every change a user could see. Then merge
-  commits that belong to one feature into ONE change describing the finished result.
-- Cover BOTH products - Word add-in changes count as much as app changes.
-- section: "new" = something users could not do before (including new options and
-  keyboard shortcuts); "improved" = existing thing better/faster/clearer; "fixed" = a
-  bug that hurt users before.
-- area_en / area_he: where the user finds it, named exactly as in the glossary (e.g.
-  "Book view" / its Hebrew term). Word add-in tools: "Klei Kodesh - Torani Design".
-- en: one plain sentence, at most ~20 words, about what the user can now do or notices.
-  he: the same in natural, fluent Hebrew as a native Israeli writer would phrase it - not
-  a word-for-word translation, no anglicisms, no invented words, correct spelling.
-- rank: 1 = headline, 2 = notable, 3 = minor. Order the list by rank.
-- Keep to what the commits say - never invent features or numbers.
-- TERMINOLOGY: every app-area, button and feature name MUST use the exact term from the
-  glossary below. If something is not in the glossary, describe it in plain words rather
-  than coining a name.
-
-GLOSSARY (English = Hebrew, as shown in the app):
+GLOSSARY (English = Hebrew):
 $glossary
 
 COMMITS:
 $commits
 "@
-
-$body = @{
-    contents         = @(@{ parts = @(@{ text = $prompt }) })
-    generationConfig = @{
-        responseMimeType = 'application/json'
-        responseSchema   = @{
-            type       = 'OBJECT'
-            properties = @{
-                bump     = @{ type = 'STRING'; enum = @('major', 'minor', 'patch') }
-                reason   = @{ type = 'STRING' }
-                changes  = @{ type = 'ARRAY'; items = @{
-                    type       = 'OBJECT'
-                    properties = @{
-                        section = @{ type = 'STRING'; enum = @('new', 'improved', 'fixed') }
-                        area_en = @{ type = 'STRING' }
-                        area_he = @{ type = 'STRING' }
-                        en      = @{ type = 'STRING' }
-                        he      = @{ type = 'STRING' }
-                        rank    = @{ type = 'INTEGER' }
-                    }
-                    required   = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
-                    propertyOrdering = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
-                } }
-            }
-            required   = @('changes', 'bump', 'reason')
-            propertyOrdering = @('changes', 'bump', 'reason')
-        }
-    }
-} | ConvertTo-Json -Depth 20
-
-$plan = $null
-:models foreach ($model in $models) {
-    foreach ($attempt in 1..3) {
-        try {
-            $resp = Invoke-RestMethod -Method Post -TimeoutSec 180 `
-                -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
-                -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
-                -ContentType 'application/json; charset=utf-8' `
-                -Body ([Text.Encoding]::UTF8.GetBytes($body))
-            $plan = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
-            if (@($plan.changes).Count) { Write-Host "Model: $model"; break models }
-            throw "incomplete answer"
-        } catch {
-            Write-Host "$model attempt $attempt failed: $($_.Exception.Message)"
-            $plan = $null
-            if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
-        }
-    }
+    $plan = Invoke-Gemini $prompt $planSchema { param($o) @($o.changes).Count -and $o.bump }
 }
 if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
