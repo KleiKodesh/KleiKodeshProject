@@ -268,7 +268,7 @@ The release workflow's Gemini agent writes the user-facing release notes from co
 
 - **Subject starts with the user-visible area**, named as the user sees it: `Book view (lines):`, `Book view toolbar:`, `PDF viewer:`, `Catalog search:`, `Full-text search:`, `Word add-in:`, `Installer:`, `Settings:`, `Home:`. Not component/file names (`WindowedScroller:`, `useBookViewLinesScroll:`).
 - **Say what the user notices**, not the mechanism: "Book view (lines): scrollbar thumb no longer jumps while dragging in long books" — not "anchor through scroll events".
-- **Body: one line `User-facing:` + kind** — `new` / `improved` / `fixed` / `none` — and the concrete effect. Internal-only work (refactors, cleanup, CI, licensing, build signing, tests) gets `User-facing: none` so the agent drops it.
+- **Body: one line per user-visible effect: `User-facing: new|improved|fixed - <Area>: <one plain sentence>`** — Area = the name in `.github/scripts/release-glossary.txt`; the sentence is what a non-programmer user notices, no jargon (Gemini uses it as written in the release notes). Internal-only work (refactors, cleanup, CI, licensing, build signing, tests) gets `User-facing: none` so it is dropped. Example: `User-facing: new - Book view: save bookmarks at the exact place in the text (Ctrl+Shift+D)`
 - One area per commit where possible; if a commit spans areas, list each area's effect on its own line.
 - Name the exact control/feature ("HebrewBooks editions dropdown", "Nakdan clean-text options"), never "UI tweaks" / "fixes".
 
