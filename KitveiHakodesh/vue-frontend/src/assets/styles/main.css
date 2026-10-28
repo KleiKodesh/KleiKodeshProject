@@ -584,3 +584,12 @@ h1::after {
 :root[dir='ltr'] .ui-chrome {
   direction: ltr;
 }
+
+/* English UI: what's typed into any text box is usually Hebrew - let the typed text pick its
+   own direction (Hebrew runs RTL, an English placeholder stays LTR). */
+:root[dir='ltr'] input[type='search'],
+:root[dir='ltr'] input[type='text'],
+:root[dir='ltr'] input:not([type]),
+:root[dir='ltr'] textarea {
+  unicode-bidi: plaintext;
+}
