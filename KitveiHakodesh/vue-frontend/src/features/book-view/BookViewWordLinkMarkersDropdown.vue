@@ -18,9 +18,14 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import { getWordLinkTargetsForBook, wordLinkAnchorsSupported } from '@/webview-host/seforimApi'
 
-const props = defineProps<{ bookId: number | undefined }>()
+const props = defineProps<{
+  bookId: number | undefined
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
+}>()
 
 const settingsStore = useSettingsStore()
 const booksDataStore = useBooksDataStore()
@@ -36,6 +41,7 @@ const toggleButtonRef = ref<HTMLElement | null>(null)
 const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
 })
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return
@@ -187,18 +193,20 @@ function toggleAll() {
   <!-- Absent entirely (not just disabled) unless this book actually has marker
        citations to filter: schema-v1 users never see a control for a subsystem they
        don't have, and neither does anyone reading a book that cites nothing. -->
-  <div v-if="isPresent" class="wl-markers-wrapper">
+  <div v-if="isPresent" class="wl-markers-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen || anyHiddenGlobally }"
+      :class="{ active: isOpen || anyHiddenGlobally, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="$t('bookView.markers.title')"
       @click="toggleOpen"
     >
       <IconLinkDismiss20Regular v-if="anyHiddenGlobally" />
       <IconLink20Regular v-else />
+      <span v-if="inOverflow">{{ $t('bookView.markers.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="`dropdown-${toolbarPosition}`">
+    <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="inOverflow ? 'overflow-submenu' : `dropdown-${toolbarPosition}`" :style="submenuStyle">
       <!-- Only reachable while a retry after a failed load is in flight — the button
            itself does not exist until the list has arrived and is non-empty. -->
       <div v-if="!loaded" class="state-message">{{ $t('bookView.loading') }}</div>

@@ -10,8 +10,8 @@
  * wherever they scrolled to, not where they were when the book opened.
  *
  * The button renders only when the book has editions, which the toolbar decides — see
- * `hasHebrewBooksEditions` there. It is collapsible: in the toolbar's "more" flyout the same
- * rows (BookViewHebrewBooksEditionsList) expand inline under its row instead.
+ * `hasHebrewBooksEditions` there. It is collapsible: in the toolbar's "more" flyout it is a
+ * row whose list opens as a side submenu (useOverflowSubmenu).
  */
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -19,10 +19,13 @@ import { IconDocumentPdf20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 
-defineProps<{
+const props = defineProps<{
   editions: HebrewBooksEdition[]
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
@@ -51,23 +54,26 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 </script>
 
 <template>
-  <div class="editions-wrapper">
+  <div class="editions-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
       class="editions-toggle"
-      :class="{ active: isOpen }"
+      :class="{ active: isOpen, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="$t('bookView.hebrewBooks.title')"
       :aria-label="$t('bookView.hebrewBooks.title')"
       @click="toggleOpen"
     >
       <IconDocumentPdf20Regular />
+      <span v-if="inOverflow">{{ $t('bookView.hebrewBooks.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <div class="editions-header">{{ $t('bookView.hebrewBooks.title') }}</div>
       <BookViewHebrewBooksEditionsList :editions="editions" @picked="setOpen(false)" />
     </div>

@@ -12,6 +12,7 @@ import { IconInfo20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -20,6 +21,8 @@ const props = defineProps<{
   bookId: number | undefined
   /** True once the toolbar has collapsed this button into its overflow flyout. */
   isCollapsed?: boolean
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const bookViewStore = useBookViewStore()
@@ -51,23 +54,26 @@ watch(
 )
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 </script>
 
 <template>
-  <div class="book-info-wrapper">
+  <div class="book-info-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen }"
+      :class="{ active: isOpen, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :disabled="bookId == null"
       :title="BUTTON_LABEL"
       :aria-expanded="isOpen"
       @click="toggleOpen"
     >
       <IconInfo20Regular />
+      <span v-if="inOverflow">{{ BUTTON_LABEL }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="book-info-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="book-info-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <BookViewBookInfoPanel :book-id="bookId" />
     </div>
   </div>

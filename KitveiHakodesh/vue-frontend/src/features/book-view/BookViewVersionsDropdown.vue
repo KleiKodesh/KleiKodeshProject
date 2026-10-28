@@ -16,6 +16,7 @@ import { storeToRefs } from 'pinia'
 import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import type { BookVersionRow } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -24,6 +25,8 @@ const { t } = useI18n()
 const props = defineProps<{
   versions: BookVersionRow[]
   activeVersionId: number | null
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean]; select: [versionId: number | null] }>()
@@ -52,6 +55,7 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 
@@ -77,17 +81,19 @@ function onSelect(versionId: number | null) {
 </script>
 
 <template>
-  <div class="versions-wrapper">
+  <div class="versions-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen || activeVersionId != null }"
+      :class="{ active: isOpen || activeVersionId != null, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="buttonTitle"
       @click="toggleOpen"
     >
       <IconManuscript />
+      <span v-if="inOverflow">{{ $t('bookView.versions.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="versions-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="versions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <button
         class="version-row"
         :class="{ selected: activeVersionId == null }"

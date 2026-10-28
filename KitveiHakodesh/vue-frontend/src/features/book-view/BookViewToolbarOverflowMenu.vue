@@ -231,6 +231,19 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A dropdown rendered as a row: its wrapper is a full-width strip rather than the toolbar
+   button box it is on the bar, and its panel is a fixed side submenu (useOverflowSubmenu). */
+.toolbar-overflow-menu :deep(.overflow-host) {
+  position: static;
+  width: 100%;
+  height: auto;
+  border: none;
+  padding: 0;
+}
+.toolbar-overflow-menu :deep(.overflow-host > .overflow-row) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 /* The zoom pair: its heading takes the row and the two buttons sit at the end, square and
    the size they are on the toolbar, so the row reads as a label with a control rather than
    as three things in a line. */
