@@ -11,6 +11,7 @@ import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchF
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
+import { searchCachePinOwner } from '@/stores/tabStatePersistence'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -88,7 +89,7 @@ const {
   clearSearch,
   loadCachedResults,
   clearCachedResults,
-} = useFullTextSearch(() => indexingState.value.isIndexing)
+} = useFullTextSearch(() => indexingState.value.isIndexing, searchCachePinOwner(tabId))
 
 const {
   searchQuery,

@@ -65,7 +65,22 @@ function readPendingReports(): ErrorReportPayload[] {
   return Array.isArray(stored) ? stored : []
 }
 
-const pendingReports = ref<ErrorReportPayload[]>(readPendingReports())
+/** The queue shares localStorage's ~5 MB with every other key: past this many reports the
+ *  oldest are dropped, so a long offline spell cannot fill the quota and block every write. */
+const MAX_PENDING_REPORTS = 20
+/** A refused (409) report waits this long for a manual resend, then is dropped. */
+const MANUAL_RESEND_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Drop expired manual-resend reports, then the oldest past MAX_PENDING_REPORTS. */
+function trimPendingReports(reports: ErrorReportPayload[]): ErrorReportPayload[] {
+  const now = Date.now()
+  const live = reports.filter(
+    (p) => !p.manualResendOnly || !(now - Date.parse(p.created_at) > MANUAL_RESEND_TTL_MS),
+  )
+  return live.slice(-MAX_PENDING_REPORTS)
+}
+
+const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(readPendingReports()))
 
 function savePendingReports(): void {
   lsSet(PENDING_REPORTS_KEY, pendingReports.value)
@@ -77,6 +92,7 @@ function enqueue(payload: ErrorReportPayload): void {
   const existing = pendingReports.value.findIndex((p) => p.report_id === payload.report_id)
   if (existing >= 0) pendingReports.value[existing] = payload
   else pendingReports.value.push(payload)
+  pendingReports.value = trimPendingReports(pendingReports.value)
   savePendingReports()
 }
 

@@ -20,6 +20,11 @@
  * Chunks are stored (and read) in write order, so the concatenated result array is the
  * exact streamed order. Scroll restore and resume both key off it.
  *
+ * SIZE BUDGET. Every meta counts its chunks' bytes. Entries no open tab shows are evicted,
+ * least recently used first, until they all fit in BYTE_BUDGET. An entry an open tab shows
+ * is PINNED (`search:pins`, owner = workspace:tab) and never evicted or capped, whatever it
+ * costs — its tab's scroll restore must stay instant. Closing the tab unpins it.
+ *
  * WRITE PATH IS OFF THE STREAM LOOP: appended hits are buffered and written as one chunk
  * per CHUNK_FLUSH_FRAMES frames or CHUNK_FLUSH_HITS hits; every write joins one pending
  * chain, so writes stay ordered and nothing is awaited per frame.
@@ -49,6 +54,8 @@ interface SearchCacheMeta {
   indexingComplete: boolean
   /** The term table as of the last chunk written. */
   terms: string[]
+  /** Bytes of every chunk written so far. Missing on metas from before the size budget (0). */
+  bytes?: number
 }
 
 /**
@@ -97,6 +104,10 @@ function pack(hits: readonly FullTextSearchResult[]): PackedChunk {
   return { n, ...columns, marks }
 }
 
+function packedBytes(chunk: PackedChunk): number {
+  return chunk.lineId.byteLength * 8 + chunk.marks.byteLength
+}
+
 function unpackInto(chunk: PackedChunk, out: FullTextSearchResult[]): void {
   let from = 0
   for (let i = 0; i < chunk.n; i++) {
@@ -130,6 +141,10 @@ const LRU_KEY = `${PREFIX}lru`
  */
 const DISPLAY_LRU_KEY = `${PREFIX}display-lru`
 const MAX = 100
+/** Owner (workspace:tab) → the cache key that tab shows. Pinned keys are never evicted. */
+const PINS_KEY = `${PREFIX}pins`
+/** Total bytes the UNPINNED entries may hold. */
+const BYTE_BUDGET = 100 * 1024 * 1024
 /** A buffered chunk is written once this many frames have been appended to it... */
 const CHUNK_FLUSH_FRAMES = 8
 /** ...or once it holds this many hits, whichever comes first. */
@@ -173,6 +188,7 @@ function flushBufferedChunk(): void {
   active.bufferedHits = []
   active.bufferedFrames = 0
   active.meta.chunks = index + 1
+  active.meta.bytes = (active.meta.bytes ?? 0) + packedBytes(chunk)
   const meta: SearchCacheMeta = { ...active.meta, terms: active.terms.slice() }
   const key = active.key
   enqueueWrite(() => idbSet(chunkKey(meta.id, index), chunk))
@@ -213,7 +229,8 @@ async function getDisplayLru(): Promise<string[]> {
   return (await idbGet<string[]>(DISPLAY_LRU_KEY)) ?? []
 }
 
-async function touchLru(key: string, displayQuery: string): Promise<void> {
+function touchLru(key: string, displayQuery: string): Promise<void> {
+  return serial(async () => {
   const [lru, displayLru] = await Promise.all([getLru(), getDisplayLru()])
   const existingIndex = lru.indexOf(key)
   const updatedLru = [...lru.filter((k) => k !== key), key]
@@ -223,6 +240,7 @@ async function touchLru(key: string, displayQuery: string): Promise<void> {
       ? [...displayLru.filter((_, index) => index !== existingIndex), displayQuery]
       : [...displayLru, displayQuery]
   await Promise.all([idbSet(LRU_KEY, updatedLru), idbSet(DISPLAY_LRU_KEY, updatedDisplayLru)])
+  })
 }
 
 /** Delete a query's meta record and every one of its chunk records. */
@@ -236,12 +254,81 @@ async function deleteEntry(key: string): Promise<void> {
   ])
 }
 
-async function evictIfNeeded(key: string): Promise<void> {
+/**
+ * Every read-modify-write of the LRU lists and the pins runs on this one chain, so two of
+ * them never interleave: no lost LRU slot, no display list drifting out of step, and no
+ * eviction that misses a pin made a moment earlier. Never nest a serial() inside another.
+ */
+let lruChain: Promise<unknown> = Promise.resolve()
+function serial<T>(work: () => Promise<T>): Promise<T> {
+  const run = lruChain.then(work)
+  lruChain = run.catch(() => {})
+  return run
+}
+
+function updatePins(change: (pins: Record<string, string>) => void): Promise<void> {
+  return serial(async () => {
+    const pins = (await idbGet<Record<string, string>>(PINS_KEY)) ?? {}
+    change(pins)
+    await idbSet(PINS_KEY, pins)
+  })
+}
+
+/** Keys that must not be evicted: every open tab's entry, and the one being written. */
+async function pinnedKeys(): Promise<Set<string>> {
+  const pins = await idbGet<Record<string, string>>(PINS_KEY)
+  const pinned = new Set(Object.values(pins ?? {}))
+  if (activeWrite) pinned.add(activeWrite.key)
+  return pinned
+}
+
+/** Evict unpinned entries, least recently used first, until they fit in BYTE_BUDGET. */
+function enforceByteBudget(): Promise<void> {
+  return serial(async () => {
+  const [lru, pinned] = await Promise.all([getLru(), pinnedKeys()])
+  const unpinned = lru.filter((k) => !pinned.has(k))
+  const sizes = await Promise.all(unpinned.map((k) => entryBytes(k)))
+  let total = sizes.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < unpinned.length && total > BYTE_BUDGET; i++) {
+    await evictEntry(unpinned[i]!)
+    total -= sizes[i]!
+  }
+  })
+}
+
+/** An entry's bytes on disk. A meta from before the budget has no count: its chunks are
+ *  measured once and the count written back. */
+async function entryBytes(key: string): Promise<number> {
+  const meta = await idbGet<SearchCacheMeta>(metaKey(key))
+  if (!meta || meta.id == null) return 0
+  if (meta.bytes != null) return meta.bytes
+  const chunks = await Promise.all(
+    Array.from({ length: meta.chunks }, (_, i) => idbGet<PackedChunk>(chunkKey(meta.id, i))),
+  )
+  const bytes = chunks.reduce((sum, chunk) => sum + (chunk ? packedBytes(chunk) : 0), 0)
+  await idbSet(metaKey(key), { ...meta, bytes })
+  return bytes
+}
+
+/** Drop one entry and its slot in both LRU lists. */
+async function evictEntry(key: string): Promise<void> {
   const [lru, displayLru] = await Promise.all([getLru(), getDisplayLru()])
+  const index = lru.indexOf(key)
+  await Promise.all([
+    deleteEntry(key),
+    idbSet(LRU_KEY, lru.filter((k) => k !== key)),
+    idbSet(DISPLAY_LRU_KEY, index !== -1 ? displayLru.filter((_, i) => i !== index) : displayLru),
+  ])
+}
+
+function evictIfNeeded(key: string): Promise<void> {
+  return serial(async () => {
+  const [lru, displayLru, pinned] = await Promise.all([getLru(), getDisplayLru(), pinnedKeys()])
   const without = lru.filter((k) => k !== key)
   if (without.length < MAX) return
-  // Evict the least-recently-used entry (first element)
-  const evictKey = without.shift()!
+  // Evict the least-recently-used entry no open tab shows. All pinned: keep them, go over MAX.
+  const evictKey = without.find((k) => !pinned.has(k))
+  if (evictKey === undefined) return
   // The two lists are index-parallel over the UNFILTERED lru, so the display entry to drop
   // is the one at the evicted key's index THERE. displayLru.slice(1) is only the same thing
   // while `key` is not itself at index 0; when it is, the two lists shift apart by one and
@@ -251,9 +338,10 @@ async function evictIfNeeded(key: string): Promise<void> {
     evictIndex !== -1 ? displayLru.filter((_, i) => i !== evictIndex) : displayLru.slice(1)
   await Promise.all([
     deleteEntry(evictKey),
-    idbSet(LRU_KEY, without),
+    idbSet(LRU_KEY, lru.filter((k) => k !== evictKey)),
     idbSet(DISPLAY_LRU_KEY, updatedDisplayLru),
   ])
+  })
 }
 
 export const useSearchCacheStore = defineStore('searchCache', () => {
@@ -331,6 +419,31 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     const meta: SearchCacheMeta = { ...active.meta, complete: true, terms: active.terms.slice() }
     enqueueWrite(() => (activeWriteFailed ? deleteEntry(key) : idbSet(metaKey(key), meta)))
     await settleActiveWrite()
+    await enforceByteBudget()
+  }
+
+  /** The tab `owner` (workspace:tab) now shows `key`: pin it, and release what it showed before. */
+  async function pin(owner: string, key: string): Promise<void> {
+    let released = false
+    await updatePins((pins) => {
+      released = pins[owner] !== undefined && pins[owner] !== key
+      pins[owner] = key
+    })
+    if (released) await enforceByteBudget()
+  }
+
+  /** The tab `owner` closed: its entry becomes an ordinary one, subject to the budget. */
+  async function unpin(owner: string): Promise<void> {
+    await updatePins((pins) => { delete pins[owner] })
+    await enforceByteBudget()
+  }
+
+  /** A workspace was deleted: release every pin its tabs held (owners `<prefix>...`). */
+  async function unpinAllWithPrefix(prefix: string): Promise<void> {
+    await updatePins((pins) => {
+      for (const owner of Object.keys(pins)) if (owner.startsWith(prefix)) delete pins[owner]
+    })
+    await enforceByteBudget()
   }
 
   async function clear(): Promise<void> {
@@ -348,16 +461,7 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
   async function remove(key: string): Promise<void> {
     // The active search's queued chunks must land before the wipe, not after it.
     if (activeWrite?.key === key) await settleActiveWrite()
-    const [lru, displayLru] = await Promise.all([getLru(), getDisplayLru()])
-    const index = lru.indexOf(key)
-    const updatedLru = lru.filter((k) => k !== key)
-    const updatedDisplayLru =
-      index !== -1 ? displayLru.filter((_, i) => i !== index) : displayLru
-    await Promise.all([
-      deleteEntry(key),
-      idbSet(LRU_KEY, updatedLru),
-      idbSet(DISPLAY_LRU_KEY, updatedDisplayLru),
-    ])
+    await serial(() => evictEntry(key))
   }
 
   /**
@@ -379,5 +483,5 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     return unique
   }
 
-  return { get, init, resume, appendBatch, flush, markComplete, clear, remove, getRecentQueries }
+  return { get, init, resume, appendBatch, flush, markComplete, clear, remove, getRecentQueries, pin, unpin, unpinAllWithPrefix }
 })
