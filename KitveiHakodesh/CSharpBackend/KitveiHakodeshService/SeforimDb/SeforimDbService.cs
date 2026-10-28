@@ -117,6 +117,11 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0) =>
         Run(() => _queries.GetLinesPaged(bookId, limit, offset, versionId), new List<LineRow>(), "getLinesPaged");
 
+    public List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit> ScanLineText(
+        IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> ranges, int versionId, string query) =>
+        Run(() => global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.ScanRanges(_queries, ranges, versionId, query),
+            new List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit>(), "linesTextScan");
+
     public int[] GetLineIds(int bookId, int fromIndex, int toIndex) =>
         Run(() => _queries.GetLineIds(bookId, fromIndex, toIndex), Array.Empty<int>(), "getLineIds");
 

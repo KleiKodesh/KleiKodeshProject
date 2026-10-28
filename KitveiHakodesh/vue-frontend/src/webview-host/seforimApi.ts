@@ -52,6 +52,21 @@ export async function getLinesPaged(
 }
 
 /**
+ * The search's fallback, run natively by the service: every line inside the (book, first
+ * lineIndex, last lineIndex) ranges that holds `query` as a substring — the same
+ * normalization as stripHtmlForSearch/removeDiacriticsForSearch — and how many times, as
+ * parallel arrays in range order then reading order. `versionId` reads through an alternate
+ * version's overlay (0 = the merged text). Nothing is kept by the service afterwards.
+ */
+export async function linesTextScan(
+  query: string,
+  ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
+  versionId = 0,
+): Promise<{ bookIds: number[]; lineIndexes: number[]; lineIds: number[]; counts: number[] }> {
+  return serviceCall('linesTextScan', { query, ranges, versionId })
+}
+
+/**
  * The ids of a book's lines in [fromIndex, toIndex), by lineIndex, with no text (0
  * where a lineIndex has no row). A TOC section's commentary and a shift-click range
  * need ids only; this is what lets them skip downloading the section's text.

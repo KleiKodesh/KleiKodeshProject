@@ -1,7 +1,7 @@
-import { ref, shallowRef, computed, watch, onScopeDispose } from 'vue'
-import { refDebounced, useTimeoutFn } from '@vueuse/core'
+import { ref, shallowRef, computed, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
-import { ftsLinesSearch, getLineContents } from '@/webview-host/seforimApi'
+import { ftsLinesSearch, getLineContents, linesTextScan } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './useCommentary'
 
 export interface CommentaryMatch {
@@ -13,23 +13,21 @@ export interface CommentaryMatch {
  * The commentary panel's search: every occurrence of the query as a SUBSTRING of the
  * panel's lines (diacritics and markup ignored), in panel order.
  *
- * Commentary text is fetched on demand for reading, so the search has sources of its own:
+ * Commentary text is fetched on demand for reading, so the search has sources of its own,
+ * both answering with numbers only:
  *
  *  1. The full-text index (ftsLinesSearch), scoped to the panel's lines — one range per
  *     commentator group (its book's lines are one block in the index). Only the text of
  *     the lines it names is fetched, and each is checked here for the exact substring.
- *  2. The panel's lines themselves, fetched, when the index cannot answer (still being
- *     built, a fragment too common). That text is held for the next searches — typing
- *     refines a query keystroke by keystroke — and dropped after FALLBACK_TEXT_IDLE_MS
- *     without a search, when the panel's lines change, or when the panel goes away.
+ *  2. The service's native scan (linesTextScan) of exactly the panel's lines when the
+ *     index cannot answer (still being built, a fragment too common): it returns the
+ *     matching lines and their counts, and keeps nothing.
  *
  * Typing narrows: a query that CONTAINS the previous one can only match lines the
- * previous one matched, so those lines' text (kept from the last search) is all that is
- * checked — no index query, no fetch.
+ * previous one matched, so only those are checked again — from their text kept from
+ * the last search when it was fetched here, or by a scan of just those lines.
  */
 
-/** How long the fetched text of a panel's lines outlives the last search that used it. */
-const FALLBACK_TEXT_IDLE_MS = 2 * 60 * 1000
 /** Line ids per text request. */
 const TEXT_BATCH = 1000
 
@@ -51,6 +49,7 @@ export function useCommentarySearch(
   const placement = computed(() => {
     const flatIndexOf = new Map<string, number[]>()
     const lineIdAt = new Map<number, number>()
+    const placeAt = new Map<number, { bookId: number; lineIndex: number }>()
     let flatIndex = 0
     for (const group of groups()) {
       flatIndex++ // header
@@ -61,12 +60,25 @@ export function useCommentarySearch(
           if (at) at.push(flatIndex)
           else flatIndexOf.set(key, [flatIndex])
           lineIdAt.set(flatIndex, line.lineId)
+          placeAt.set(flatIndex, { bookId: group.bookId, lineIndex: line.lineIndex })
         }
         flatIndex++
       }
     }
-    return { flatIndexOf, lineIdAt }
+    return { flatIndexOf, lineIdAt, placeAt }
   })
+
+  /** Ascending (book, lineIndex) places as runs of consecutive lines — the ranges a search takes. */
+  function runsOf(places: Iterable<{ bookId: number; lineIndex: number }>) {
+    const sorted = [...places].sort((a, b) => a.bookId - b.bookId || a.lineIndex - b.lineIndex)
+    const ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[] = []
+    for (const { bookId, lineIndex } of sorted) {
+      const last = ranges[ranges.length - 1]
+      if (last && last.bookId === bookId && last.lastLineIndex >= lineIndex - 1) { if (lineIndex > last.lastLineIndex) last.lastLineIndex = lineIndex }
+      else ranges.push({ bookId, firstLineIndex: lineIndex, lastLineIndex: lineIndex })
+    }
+    return ranges
+  }
 
   /** The panel's lines as index ranges: per group, its book's lowest to highest lineIndex. */
   function lineRanges() {
@@ -84,24 +96,13 @@ export function useCommentarySearch(
     return ranges
   }
 
-  // ── The fetched panel text (fallback source) ─────────────────────────────────
-
-  /** Stripped text by line id, for the panel's current lines. */
-  let fallbackText: Map<number, string> | null = null
-  const dropFallbackTimer = useTimeoutFn(() => { fallbackText = null }, FALLBACK_TEXT_IDLE_MS, { immediate: false })
-  onScopeDispose(() => {
-    dropFallbackTimer.stop()
-    fallbackText = null
-  })
-
-  /** Stripped text for these line ids: the held text, the model's loaded text, else fetched. */
-  async function textsFor(lineIds: number[], hold: boolean): Promise<Map<number, string>> {
-    const texts = hold ? (fallbackText ??= new Map()) : new Map<number, string>()
+  /** Stripped text for these line ids: the model's loaded text, else fetched. */
+  async function textsFor(lineIds: number[]): Promise<Map<number, string>> {
+    const texts = new Map<number, string>()
     const loaded = new Map<number, string>()
     for (const group of groups()) for (const line of group.lines) if (line.content) loaded.set(line.lineId, line.content)
     const missing: number[] = []
     for (const id of lineIds) {
-      if (texts.has(id)) continue
       const content = loaded.get(id)
       if (content !== undefined) texts.set(id, stripHtmlForSearch(content))
       else missing.push(id)
@@ -119,8 +120,21 @@ export function useCommentarySearch(
 
   let currentSearchToken = 0
 
-  /** The last complete search on these groups: its needle and the stripped text of every matched line. */
-  let lastSearch: { needle: string; lines: Map<number, string> } | null = null
+  /**
+   * The last complete search on these groups: its needle and every matched flat index —
+   * with the line's stripped text when it was fetched here, null when the service scanned it.
+   */
+  let lastSearch: { needle: string; lines: Map<number, string | null> } | null = null
+
+  /** Matches from a native scan's answer, placed in the panel; `into` is sorted by the caller. */
+  function collectScanned(into: CommentaryMatch[], matched: Map<number, string | null>, flatIndexOf: Map<string, number[]>, scanned: { bookIds: number[]; lineIndexes: number[]; counts: number[] }) {
+    for (let i = 0; i < scanned.lineIndexes.length; i++) {
+      for (const flatIndex of flatIndexOf.get(`${scanned.bookIds[i]}:${scanned.lineIndexes[i]}`) ?? []) {
+        matched.set(flatIndex, null)
+        for (let occurrenceInLine = 0; occurrenceInLine < scanned.counts[i]!; occurrenceInLine++) into.push({ flatIndex, occurrenceInLine })
+      }
+    }
+  }
 
   function collect(into: CommentaryMatch[], flatIndex: number, stripped: string, needle: string) {
     let characterIndex = 0
@@ -136,7 +150,7 @@ export function useCommentarySearch(
     const token = ++currentSearchToken
     const isStale = () => token !== currentSearchToken
     const needle = removeDiacriticsForSearch(searchQuery.trim())
-    const { flatIndexOf, lineIdAt } = placement.value
+    const { flatIndexOf, lineIdAt, placeAt } = placement.value
     if (!needle || !lineIdAt.size) {
       matches.value = []
       currentMatchIdx.value = 0
@@ -146,9 +160,17 @@ export function useCommentarySearch(
     const previous = lastSearch
     if (previous && previous.needle.length >= 2 && needle.includes(previous.needle)) {
       const found: CommentaryMatch[] = []
-      const matched = new Map<number, string>()
+      const matched = new Map<number, string | null>()
+      const toScan: { bookId: number; lineIndex: number }[] = []
       for (const [flatIndex, text] of previous.lines) {
-        if (text.includes(needle)) { matched.set(flatIndex, text); collect(found, flatIndex, text, needle) }
+        if (text == null) toScan.push(placeAt.get(flatIndex)!)
+        else if (text.includes(needle)) { matched.set(flatIndex, text); collect(found, flatIndex, text, needle) }
+      }
+      if (toScan.length) {
+        const scanned = await linesTextScan(searchQuery, runsOf(toScan), 0).catch(() => null)
+        if (isStale()) return
+        if (scanned) collectScanned(found, matched, flatIndexOf, scanned)
+        found.sort((a, b) => a.flatIndex - b.flatIndex || a.occurrenceInLine - b.occurrenceInLine)
       }
       lastSearch = { needle, lines: matched }
       publish(found)
@@ -168,23 +190,26 @@ export function useCommentarySearch(
         flatIndexes = [...set].sort((first, second) => first - second)
       }
     } catch { /* the index is unavailable: read the lines */ }
-    const answered = flatIndexes != null
-    if (!flatIndexes) flatIndexes = [...lineIdAt.keys()]
+    const found: CommentaryMatch[] = []
+    const matched = new Map<number, string | null>()
+    if (!flatIndexes) {
+      // The index could not answer: the service scans exactly the panel's lines.
+      const scanned = await linesTextScan(searchQuery, runsOf(placeAt.values()), 0).catch(() => null)
+      if (isStale()) return
+      if (scanned) collectScanned(found, matched, flatIndexOf, scanned)
+      found.sort((a, b) => a.flatIndex - b.flatIndex || a.occurrenceInLine - b.occurrenceInLine)
+      lastSearch = { needle, lines: matched }
+      publish(found)
+      return
+    }
 
-    // The index's candidates are few and fetched per search; the whole panel's text is
-    // held (see above) for the searches that follow.
-    if (!answered) dropFallbackTimer.stop()
     let texts: Map<number, string>
     try {
-      texts = await textsFor(flatIndexes.map((flatIndex) => lineIdAt.get(flatIndex)!), !answered)
+      texts = await textsFor(flatIndexes.map((flatIndex) => lineIdAt.get(flatIndex)!))
     } catch {
       texts = new Map()
     }
-    if (!answered) dropFallbackTimer.start()
     if (isStale()) return
-
-    const found: CommentaryMatch[] = []
-    const matched = new Map<number, string>()
     for (const flatIndex of flatIndexes) {
       const text = texts.get(lineIdAt.get(flatIndex)!)
       if (!text || !text.includes(needle)) continue
@@ -208,7 +233,6 @@ export function useCommentarySearch(
   watch(
     () => groups().map((group) => `${group.bookId}:${group.lines.length}:${group.lines[0]?.lineId ?? 0}`).join('|'),
     () => {
-      fallbackText = null
       lastSearch = null
       if (debouncedQuery.value) void runSearch(debouncedQuery.value)
       else matches.value = []
