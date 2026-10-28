@@ -16,11 +16,15 @@ export interface BookBookmark {
   lineId: number
   /** Fallback when the line id no longer resolves (a library update renumbered the rows). */
   lineIndex: number
+  /** Characters into the line's text where the bookmark points; absent = the line's start. */
+  characterOffset?: number
+  /** Set when the bookmark was made from a selection: how many characters it covers. */
+  selectionLength?: number
   /** The reader's name for it; defaults to the TOC path of the marked line. */
   label: string
   /** The TOC path of the marked line, kept apart from the label so a rename does not lose it. */
   tocPath?: string
-  /** The marked line's opening words, shown under the name. */
+  /** The bookmarked text - the selection, or the words at the point - shown under the name. */
   snippet?: string
 }
 
@@ -49,7 +53,8 @@ export function updateBookBookmarks(
   const previous = pendingUpdates.get(bookId) ?? Promise.resolve()
   const next = previous.catch(() => {}).then(async () => {
     const sorted = change(await readBookBookmarks(bookId))
-      .sort((a, b) => a.lineIndex - b.lineIndex || a.id - b.id)
+      .sort((a, b) =>
+        a.lineIndex - b.lineIndex || (a.characterOffset ?? 0) - (b.characterOffset ?? 0) || a.id - b.id)
     if (sorted.length === 0) await dbDelete(BOOKMARKS_DB, bookmarksKey(bookId))
     else await dbSet(BOOKMARKS_DB, bookmarksKey(bookId), sorted)
     return sorted

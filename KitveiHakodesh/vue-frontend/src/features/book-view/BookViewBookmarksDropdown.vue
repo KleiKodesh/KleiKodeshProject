@@ -2,20 +2,19 @@
 /**
  * Bookmarks dropdown in the BookView toolbar - places the reader marked in this book.
  *
- * A header with the count, then a "create bookmark" button for the current top line (the
- * new row opens in rename mode, its suggested name the TOC path). Below it the book's
- * bookmarks in reading order, each with its TOC path and the marked line's opening words:
- * clicking one scrolls there, the pencil renames it inline, the bin deletes it. A line may
- * carry several bookmarks under different names. The toolbar icon is filled while the top
- * line is bookmarked.
+ * Absent until the book has a bookmark: bookmarks are CREATED from the lines' context menu
+ * or Ctrl+Shift+D, which open this dropdown on the new row in rename mode (its suggested name
+ * the TOC path). A bookmark points at an exact place - the reader's selection, or the
+ * character at the top of the view - not just a line, since a line can run for pages.
+ * The book's bookmarks are listed in reading order with their TOC path and text: clicking
+ * one scrolls there, the pencil renames it inline, the bin deletes it. The toolbar icon is
+ * filled while the top line is bookmarked.
  */
 import { ref, computed, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconBookmark16Regular,
   IconBookmark16Filled,
-  IconBookmark20Regular,
-  IconBookmarkAdd20Regular,
   IconEdit16Regular,
   IconDelete16Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -23,6 +22,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { readBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
+import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
 
 const props = defineProps<{
   bookId: number | undefined
@@ -30,9 +30,11 @@ const props = defineProps<{
   lines: LinesTable
   /** The default name for a bookmark on this line - its TOC path. */
   labelForLine?: (lineIndex: number) => string
+  /** Where a bookmark made now points: the selection, or the top of the view. */
+  readBookmarkPoint?: () => BookViewLinesBookmarkPoint | null
 }>()
 
-const emit = defineEmits<{ goToBookmark: [lineId: number, lineIndex: number] }>()
+const emit = defineEmits<{ goToBookmark: [bookmark: BookBookmark]; presenceChange: [present: boolean] }>()
 
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
@@ -84,29 +86,36 @@ async function update(change: (stored: BookBookmark[]) => BookBookmark[]) {
   if (bookId === props.bookId) bookmarks.value = saved
 }
 
+/**
+ * Whether the control is on the toolbar: only once the book has a bookmark - or while it
+ * is open, so a first bookmark being named does not vanish under the reader. Reported to
+ * the toolbar, which counts the room only of controls that are there.
+ */
+const isPresent = computed(() => bookmarks.value.length > 0 || isOpen.value)
+watch(isPresent, (present) => emit('presenceChange', present), { immediate: true })
+
 const currentLine = computed(() => props.lines.at(props.currentScrollLineIndex))
 
 const currentLineBookmarked = computed(() =>
   currentLine.value != null && bookmarks.value.some((b) => b.lineId === currentLine.value!.id),
 )
 
-/** How much of the marked line is kept to show under the bookmark's name. */
-const SNIPPET_LENGTH = 80
-
-function lineSnippet(html: string | null): string | undefined {
-  if (!html) return undefined
-  const text = new DOMParser().parseFromString(html, 'text/html').body.textContent ?? ''
-  return text.replace(/\s+/g, ' ').trim().slice(0, SNIPPET_LENGTH) || undefined
-}
-
 async function addBookmark() {
-  const line = currentLine.value
+  const point = props.readBookmarkPoint?.() ?? null
+  const line = props.lines.at(point?.lineIndex ?? props.currentScrollLineIndex)
   // A negative id is a placeholder for a line whose real id is not known yet.
   if (line == null || line.id <= 0) return
   const tocPath = props.labelForLine?.(line.lineIndex).trim() || undefined
   const label = tocPath ?? `${line.lineIndex + 1}`
   const bookmark: BookBookmark = {
-    id: Date.now(), lineId: line.id, lineIndex: line.lineIndex, label, tocPath, snippet: lineSnippet(line.content),
+    id: Date.now(),
+    lineId: line.id,
+    lineIndex: line.lineIndex,
+    characterOffset: point?.characterOffset,
+    selectionLength: point?.selectionLength,
+    label,
+    tocPath,
+    snippet: point?.snippet,
   }
   // Like a browser's "add bookmark": the new row opens with its name field selected, so the
   // reader names it on the spot or presses Enter to keep the suggested TOC path.
@@ -121,7 +130,7 @@ function deleteBookmark(bookmark: BookBookmark) {
 
 function goToBookmark(bookmark: BookBookmark) {
   isOpen.value = false
-  emit('goToBookmark', bookmark.lineId, bookmark.lineIndex)
+  emit('goToBookmark', bookmark)
 }
 
 // ── Inline rename ─────────────────────────────────────────────────────────────
@@ -152,7 +161,7 @@ watch(isOpen, (open) => {
   else commitRename()
 })
 
-/** The keyboard shortcut's entry: open the dropdown and create a bookmark on the top line. */
+/** The context menu's and Ctrl+Shift+D's entry: open the dropdown on a new bookmark. */
 async function createBookmark() {
   if (props.bookId == null) return
   isOpen.value = true
@@ -164,7 +173,7 @@ defineExpose({ createBookmark })
 </script>
 
 <template>
-  <div class="bookmarks-wrapper">
+  <div v-if="isPresent" class="bookmarks-wrapper">
     <button
       ref="toggleButtonRef"
       class="toggle-button"
@@ -178,30 +187,13 @@ defineExpose({ createBookmark })
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="bookmarks-dropdown" :class="dropdownPositionClass">
-      <div class="dropdown-header">
-        <span class="header-title">{{ $t('bookView.bookmarks.title') }}</span>
-        <span v-if="bookmarks.length" class="header-count">{{ bookmarks.length }}</span>
-      </div>
-
-      <button class="create-button" :disabled="currentLine == null" @click="addBookmark">
-        <IconBookmarkAdd20Regular />
-        <span>{{ $t('bookView.bookmarks.add') }}</span>
-        <kbd class="create-shortcut">Ctrl+Shift+D</kbd>
-      </button>
-
-      <div v-if="bookmarks.length === 0" class="empty-state">
-        <IconBookmark20Regular class="empty-icon" />
-        <span>{{ $t('bookView.bookmarks.empty') }}</span>
-      </div>
-
-      <div v-else class="bookmark-list">
+      <div class="bookmark-list">
         <div
           v-for="bookmark in bookmarks"
           :key="bookmark.id"
           class="bookmark-row"
           :class="{ current: bookmark.lineId === currentLine?.id, editing: editingId === bookmark.id }"
         >
-          <IconBookmark16Filled class="row-icon" />
           <input
             v-if="editingId === bookmark.id"
             ref="renameInputRef"
@@ -260,27 +252,21 @@ defineExpose({ createBookmark })
   cursor: not-allowed;
 }
 
-/* ── Dropdown panel ── */
+/* ── Dropdown panel - same sheet as the toolbar's other dropdowns ── */
 .bookmarks-dropdown {
   position: absolute;
   display: flex;
   flex-direction: column;
-  width: 280px;
-  max-width: 300px;
+  min-width: 180px;
+  max-width: 260px;
+  width: max-content;
   max-height: 320px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   z-index: 100;
   overflow: hidden;
-  animation: dropdown-in 120ms ease-out;
-}
-@keyframes dropdown-in {
-  from { opacity: 0; transform: translateY(-4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bookmarks-dropdown { animation: none; }
 }
 
 .dropdown-top {
@@ -300,90 +286,9 @@ defineExpose({ createBookmark })
   inset-inline-start: calc(100% + 4px);
 }
 
-/* ── Header ── */
-.dropdown-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px 4px;
-  flex-shrink: 0;
-}
-.header-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.header-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 9px;
-  font-size: 11px;
-  line-height: 18px;
-  text-align: center;
-  color: var(--accent-color);
-  background: var(--accent-bg-light);
-}
-
-/* ── Create button ── */
-.create-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  margin: 4px 8px 8px;
-  padding: 0 10px;
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent-color);
-  background: var(--accent-bg-light);
-  border-radius: 6px;
-  transition: background 120ms;
-}
-.create-button:not(:disabled):hover {
-  background: var(--accent-bg);
-}
-.create-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.create-button svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.create-shortcut {
-  margin-inline-start: auto;
-  font-family: inherit;
-  font-size: 10px;
-  opacity: 0.7;
-  direction: ltr;
-}
-
-/* ── Empty state ── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 16px 18px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  text-align: center;
-}
-.empty-icon {
-  width: 28px;
-  height: 28px;
-  opacity: 0.35;
-}
-
 /* ── List ── */
 .bookmark-list {
   overflow-y: auto;
-  padding: 0 4px 6px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
@@ -391,48 +296,28 @@ defineExpose({ createBookmark })
 .bookmark-row {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  transition: background 100ms;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 10px;
+}
+.bookmark-row.current .bookmark-name {
+  color: var(--accent-color);
 }
 .bookmark-row:hover {
   background: var(--hover-bg);
-}
-/* The bookmark the reader is sitting on: an accent ribbon at the row's start edge. */
-.bookmark-row.current::before {
-  content: '';
-  position: absolute;
-  inset-inline-start: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent-color);
-}
-
-.row-icon {
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
-  flex-shrink: 0;
-  color: var(--accent-color);
-  opacity: 0.55;
-}
-.bookmark-row.current .row-icon {
-  opacity: 1;
 }
 
 .bookmark-body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 1px;
   flex: 1;
   min-width: 0;
+  height: auto;
   padding: 0;
   text-align: start;
+  line-height: 1.3;
   background: none;
   border-radius: 0;
 }
@@ -447,26 +332,28 @@ defineExpose({ createBookmark })
   text-overflow: ellipsis;
 }
 .bookmark-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
   color: var(--text-primary);
 }
-.bookmark-toc {
-  font-size: 11px;
-  color: var(--accent-color);
-}
+.bookmark-toc,
 .bookmark-snippet {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-secondary);
-  font-family: var(--text-font);
 }
 
+/* Overlaid on the row's end rather than given room of their own, so the panel is only as
+   wide as the bookmarks' text; the backdrop matches the row's hover tint over the sheet. */
 .row-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0;
   display: flex;
-  gap: 2px;
-  flex-shrink: 0;
+  align-items: center;
+  padding-inline: 4px;
+  /* Solid: the row's hover tint is translucent, so it is laid over the sheet's own colour. */
+  background: linear-gradient(var(--hover-bg), var(--hover-bg)), var(--bg-secondary);
   opacity: 0;
-  transition: opacity 100ms;
 }
 .bookmark-row:hover .row-actions,
 .row-actions:focus-within {
@@ -476,8 +363,8 @@ defineExpose({ createBookmark })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 4px;
   border-radius: 4px;
   color: var(--text-secondary);
@@ -490,21 +377,20 @@ defineExpose({ createBookmark })
   color: var(--status-danger);
 }
 .row-action svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .rename-input {
   flex: 1;
   min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  font-size: 13px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
   color: var(--text-primary);
   background: var(--input-bg-focus);
   border: 1px solid var(--accent-color);
-  border-radius: 4px;
+  border-radius: 3px;
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-bg-light);
 }
 </style>

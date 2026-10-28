@@ -29,6 +29,7 @@ import { useBookViewErrorReport } from '../errorReport/useBookViewErrorReport'
 import { useBookViewAnnotations } from './useBookViewAnnotations'
 import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
+import { useBookViewLinesBookmarkPoint } from './useBookViewLinesBookmarkPoint'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
 import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
@@ -50,6 +51,7 @@ const emit = defineEmits<{
   scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
   lineSelected: [lineId: number, isShiftClick: boolean]
   'ctrl-f': []
+  createBookmark: []
 }>()
 // The scroll-related props come from useBookViewLinesScroll's own interface —
 // never re-declare them here. The hand-copied list diverged once: all of those
@@ -291,6 +293,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   onAddNote,
   onCopyLineLink: copyLineLink,
   onReportError: openErrorReport,
+  onCreateBookmark: () => emit('createBookmark'),
   prepareForLines,
   prepareForRenderedHtml,
   resolveWordLinkTarget,
@@ -348,6 +351,13 @@ const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
   () => props.searchBarVisible ?? false,
   suppressPositionSave,
   cancelRestore,
+)
+
+const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoint(
+  scroller,
+  () => props.searchBarVisible ?? false,
+  scrollToLine,
+  suppressPositionSave,
 )
 
 /** Whether the row at `index` has its text — read in the row slot, with the lines revision so a text change under the same index re-renders the row. */
@@ -446,7 +456,7 @@ function onLinesTextEvicted(lineIds: number[]) {
   evictWordLinkAnchorsForLines(lineIds)
 }
 
-defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
+defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
 </script>
 
 <template>

@@ -21,6 +21,8 @@ import {
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewBookmarksDropdown from './BookViewBookmarksDropdown.vue'
+import type { BookBookmark } from '@/stores/bookBookmarks'
+import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
 import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDropdown.vue'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
@@ -74,6 +76,8 @@ const props = defineProps<{
   onRelatedBooksOpen?: () => void
   /** The default name for a bookmark on a line - its TOC path. */
   bookmarkLabelForLine?: (lineIndex: number) => string
+  /** Where a bookmark made now points - the lines pane reads the selection or top of view. */
+  readBookmarkPoint?: () => BookViewLinesBookmarkPoint | null
   bottomCommentaryVisible?: boolean
   sideCommentaryVisible?: boolean
   sideLeftCommentaryVisible?: boolean
@@ -81,7 +85,7 @@ const props = defineProps<{
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [lineId: number, lineIndex: number] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -277,6 +281,9 @@ const hasHebrewBooksEditions = computed(() => props.hebrewBooksEditions.length >
 /** Whether the word-link markers control is on the toolbar - it tells us; see its own note. */
 const wordLinkMarkersPresent = ref(false)
 
+/** Whether the bookmarks control is on the toolbar - only once the book has a bookmark; it tells us. */
+const bookmarksPresent = ref(false)
+
 /** The collapsible controls this book renders, in collapse order. */
 const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
   // The zoom pair is on every book; the commentary sync depends
@@ -300,7 +307,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
  * collapses one control too few, so a button is left overflowing the pane.
  */
 const pinnedButtonCount = computed(() => {
-  const alwaysOn = 4 // TOC, previous section, next section, bookmarks
+  const alwaysOn = 3 // TOC, previous section, next section
   const dropdowns =
     (props.hasRelatedBooks ? 1 : 0) +
     (hasVersions.value ? 1 : 0)
@@ -313,7 +320,9 @@ const pinnedButtonCount = computed(() => {
   // Reported by the control itself rather than predicted here: it renders out of a list it
   // fetches, so nothing on this side can know in advance whether it is there.
   const wordLinkMarkers = wordLinkMarkersPresent.value ? 1 : 0
-  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers + cleanText
+  // Also reported by the control: it is there only once the book has a bookmark.
+  const bookmarks = bookmarksPresent.value ? 1 : 0
+  return alwaysOn + dropdowns + commentaryToggles + search + wordLinkMarkers + bookmarks + cleanText
 })
 
 const { hasToolbarOverflow, overflowedKeys, toolbarButtonVisible } = useBookViewToolbarOverflow(
@@ -384,7 +393,9 @@ defineExpose({ tocBtnRef, createBookmark })
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :label-for-line="bookmarkLabelForLine"
-      @go-to-bookmark="(lineId, lineIndex) => $emit('goToBookmark', lineId, lineIndex)"
+      :read-bookmark-point="readBookmarkPoint"
+      @presence-change="bookmarksPresent = $event"
+      @go-to-bookmark="$emit('goToBookmark', $event)"
     />
     <BookViewRelatedBooksDropdown
       v-if="hasRelatedBooks"
