@@ -1900,11 +1900,13 @@ Two patches in `web/viewer.mjs`, both marked `[KleiKodesh]`:
 
 ## Focus, title and text-layer fixes
 
-Three small `[KleiKodesh]` patches:
+Four small `[KleiKodesh]` patches:
 
 1. **`web/viewer.mjs` `PDFLinkService.goToDestination`** — the `textlayerrendered` handler focuses the target page's text layer late. It now skips that when `document.activeElement` is contentEditable, an INPUT or a TEXTAREA: a double-click rename of an outline row on another page was blurred (and so cancelled) by it.
 2. **`web/outline-search.js` `kh-save-complete` listener** — calls `app.setTitle()` after clearing `outlineDirty`. `setTitle()` last ran before the save dialog finished, so the window title kept its `* ` prefix after a completed save.
 3. **`web/viewer.mjs` `PDFViewer._cancelRendering()`** (the big-jump cancel patch) — a text layer whose div is already appended (built) is kept: `cancelRendering({ keepTextLayer: true })`. A still-pending text layer is cancelled as before, and if the canvas is FINISHED the page goes back to INITIAL so the rendering queue redraws it and re-requests the text layer when visible. Before, three jumps on long.pdf left visible page 22 with 0 spans for good.
+
+4. **`web/viewer.mjs` `window.print` override (pdf_print_service)** — with `disableAutoFetch` the page views only get their `pdfPage` once displayed, so `pageViewsReady` stayed false and every print (button, Ctrl+P, the app's `contentWindow.print()`) only alerted `pdfjs-printing-not-ready`. Now `window.print()` first fetches the missing pages (`pdfDocument.getPage` → `pageView.setPdfPage`, like `PDFViewer.setDocument` without disableAutoFetch) and then prints. A print before the pages exist waits for `pagesinit` instead of throwing. `disableAutoFetch` stays on.
 
 ---
 
