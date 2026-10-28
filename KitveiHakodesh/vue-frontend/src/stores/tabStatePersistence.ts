@@ -5,6 +5,7 @@ import {
   idbTabsDeleteByPrefix,
 } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
+import { useSearchCacheStore } from './searchCacheStore'
 
 /**
  * Key layout for the `app-tabs` IndexedDB database — the record shape of this slice,
@@ -77,6 +78,11 @@ function workspaceId(): string {
 // `recentLocations` as the tab navigated away or closed.
 
 const bookStateCache = new Map<string, BookState | null>()
+
+/** The search cache pins the entry each open tab shows under this owner (see searchCacheStore). */
+export function searchCachePinOwner(tabId: string): string {
+  return `${workspaceId()}:${tabId}`
+}
 
 /**
  * Cache-key builders. Kept beside each other deliberately: the entry key and the
@@ -167,6 +173,7 @@ export function clearBookViewState(tabId: string, bookId: number): Promise<void>
  */
 export function deleteAllStateForTab(tabId: string): void {
   const wsId = workspaceId()
+  useSearchCacheStore().unpin(searchCachePinOwner(tabId)).catch(() => {/* non-fatal */})
   idbTabsDelete(KEYS.tab(wsId, tabId))
   idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tabId))
   tabStateCache.delete(KEYS.tab(wsId, tabId))

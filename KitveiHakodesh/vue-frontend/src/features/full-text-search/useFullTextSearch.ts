@@ -65,7 +65,8 @@ export const SEARCH_STAGE_LABELS: Record<string, string> = {
   enrich: t('fullTextSearch.stage.enrich'),
 }
 
-export function useFullTextSearch(isIndexing?: () => boolean) {
+/** `pinOwner` (workspace:tab) pins the entry this tab shows, so the cache budget never evicts it. */
+export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
@@ -350,6 +351,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
+    if (pinOwner) await cache.pin(pinOwner, cacheKey).catch(() => {/* non-fatal */})
     setSnippetContextWords(settings.searchContextMarginWords)
     // Every run is cached, batch by batch. One run while the index is still building is
     // marked so: a later visit shows it, then runs it again once the index is ready.
@@ -514,6 +516,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   async function loadCachedResults(q: string): Promise<boolean> {
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
+    if (pinOwner) await cache.pin(pinOwner, cacheKey).catch(() => {/* non-fatal */})
     const cached = await cache.get(cacheKey, q).catch(() => null)
     if (!cached || (cached.results.length === 0 && cached.complete === false)) return false
     results.value = cached.results
