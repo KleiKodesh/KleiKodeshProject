@@ -79,7 +79,8 @@ SECTIONS:
   scrambled copy, failed print, wrong text direction, blank screen) and now does not.
   A commit whose subject says fix / no longer / instead of refusing / now works /
   correctly / keeps the same text in place / always right-to-left is "fixed", even if
-  it also reads like an improvement: the old behaviour was wrong.
+  it also reads like an improvement: the old behaviour was wrong (text drifting or
+  shifting on resize/zoom, wrong direction in the English interface, wobbling).
 - Saving edits into the file, a new keyboard shortcut, a new download -> "new".
 
 WORDING:
@@ -92,6 +93,8 @@ WORDING:
   service, LinesTable, localStorage, IndexedDB, MessagePack, Vue, VSTO, COM, ref, flush,
   cache, quota, schema, op, API, Fluent, pills, stream, chunk, index, native, render,
   "TOC" (say table of contents), "lines pane", hashes, file names, pixel/ms numbers.
+- Never mention version numbers, certificates, signing or security of the release
+  itself - the reader already knows which version this is.
 - Word add-in changes (ribbon, panes, installer settings, About, macros, interface
   language) get area "Klei Kodesh (Word add-in)" or the exact ribbon tool name
   (e.g. "Torani Design"), never "Settings" (Settings is the library app's page).
