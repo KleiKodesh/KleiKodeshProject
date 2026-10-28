@@ -17,7 +17,8 @@ namespace KleiKodesh.Ribbon
     /// editor itself does to type them.
     /// Deliberately NOT exposed: Settings and DuplicatePane. Both act on the add-in's
     /// own panes rather than on the document, so they make no sense in a macro.
-    /// Do not add them back when adding new commands here.
+    /// Do not add them back when adding new commands here. TogglePaneFocus is the
+    /// exception on purpose: moving keyboard focus is exactly what a shortcut is for.
     /// </summary>
     [ComVisible(true)]
     [InterfaceType(ComInterfaceType.InterfaceIsDual)]
@@ -55,6 +56,9 @@ namespace KleiKodesh.Ribbon
 
         void OpenLink();
         void פתח_קישור_בכתבי_הקודש();
+
+        void TogglePaneFocus();
+        void מעבר_בין_מסמך_לחלונית();
     }
 
     [ComVisible(true)]
@@ -93,5 +97,8 @@ namespace KleiKodesh.Ribbon
 
         public void OpenLink() => AddinCommands.OpenSelectionLink();
         public void פתח_קישור_בכתבי_הקודש() => OpenLink();
+
+        public void TogglePaneFocus() => AddinCommands.TogglePaneFocus();
+        public void מעבר_בין_מסמך_לחלונית() => TogglePaneFocus();
     }
 }

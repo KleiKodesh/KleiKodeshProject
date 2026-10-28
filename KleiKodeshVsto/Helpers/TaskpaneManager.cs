@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
@@ -207,6 +208,79 @@ namespace KleiKodesh.Helpers
             else
                 pane.Visible = true;
         }
+
+        /// <summary>
+        /// Keyboard focus toggle for a macro shortcut: from the document into the pane
+        /// the user is working in (showing it if hidden), and from that pane back to the
+        /// document. The pane is the last revealed one in this window, else any shown
+        /// one; with none, nothing happens.
+        /// </summary>
+        public static void ToggleFocus()
+        {
+            var activeHwnd = ActiveWindowHandle();
+            var panes = Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
+                .Where(p => ControlTypeOf(p) != null && IsForWindow(p, activeHwnd))
+                .ToList();
+            var pane = panes.FirstOrDefault(IsLastRevealed)
+                ?? panes.FirstOrDefault(IsUsable);
+            if (pane == null) return;
+
+            if (HasFocus(pane))
+            {
+                var window = Globals.ThisAddIn.Application.ActiveWindow;
+                window.Activate();   // leaves a popped-out window
+                window.SetFocus();   // leaves a docked pane
+                return;
+            }
+
+            Reveal(pane);
+            var popOut = TaskPanePopOut.For(pane);
+            FocusInto(popOut?.PopOutForm ?? pane.Control);
+        }
+
+        // Whether keyboard focus is inside the pane or its pop-out window. Read from
+        // the foreground thread: WebView2 content is a window of another process, so
+        // GetFocus on this thread does not see it, but it is still a child window here.
+        static bool HasFocus(CustomTaskPane pane)
+        {
+            var info = new GUITHREADINFO { cbSize = Marshal.SizeOf(typeof(GUITHREADINFO)) };
+            if (!GetGUIThreadInfo(0, ref info) || info.hwndFocus == IntPtr.Zero) return false;
+
+            var form = TaskPanePopOut.For(pane)?.PopOutForm;
+            Control root = form ?? pane.Control;
+            return root.IsHandleCreated
+                && (info.hwndFocus == root.Handle || IsChild(root.Handle, info.hwndFocus));
+        }
+
+        static void FocusInto(Control root)
+        {
+            if (root is KitveiHakodeshLib.AppViewer viewer) { viewer.FocusWebContent(); return; }
+
+            var wpf = root.Controls.OfType<System.Windows.Forms.Integration.ElementHost>().FirstOrDefault();
+            if (wpf?.Child != null)
+            {
+                wpf.Focus();
+                wpf.Child.Focus();
+                wpf.Child.MoveFocus(new System.Windows.Input.TraversalRequest(
+                    System.Windows.Input.FocusNavigationDirection.First));
+                return;
+            }
+
+            // A popped-out AppViewer hosts its bare WebView2 in the form.
+            var first = root.Controls.Count > 0 ? root.Controls[0] : root;
+            first.Focus();
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct GUITHREADINFO
+        {
+            public int cbSize, flags;
+            public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+            public int left, top, right, bottom;
+        }
+
+        [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
+        [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent, IntPtr child);
 
         public static CustomTaskPane DuplicateCurrent()
         {

@@ -23,18 +23,16 @@ namespace KleiKodesh.Ribbon
 
         private void InitializeMacros()
         {
-            string installed = VbaMacrosTemplate.Installed;
-            MacrosNoneRadio.IsChecked    = installed == null;
-            MacrosHebrewRadio.IsChecked  = installed == VbaMacrosTemplate.Hebrew;
-            MacrosEnglishRadio.IsChecked = installed == VbaMacrosTemplate.English;
-            MacrosNoneRadio.Checked    += (_, __) => InstallMacros(null);
-            MacrosHebrewRadio.Checked  += (_, __) => InstallMacros(VbaMacrosTemplate.Hebrew);
-            MacrosEnglishRadio.Checked += (_, __) => InstallMacros(VbaMacrosTemplate.English);
+            bool installed = VbaMacrosTemplate.IsInstalled;
+            MacrosNoneRadio.IsChecked    = !installed;
+            MacrosInstallRadio.IsChecked = installed;
+            MacrosNoneRadio.Checked    += (_, __) => InstallMacros(false);
+            MacrosInstallRadio.Checked += (_, __) => InstallMacros(true);
         }
 
         // Word holds a loaded STARTUP template open, so unload ours before replacing or
         // removing it. The new one loads on Word's next start - say so.
-        private void InstallMacros(string lang)
+        private void InstallMacros(bool install)
         {
             bool english = AddinUiLanguage.IsEnglish;
             try
@@ -43,7 +41,7 @@ namespace KleiKodesh.Ribbon
                     if (addIn.Name.StartsWith("KleiKodeshMacros", System.StringComparison.OrdinalIgnoreCase))
                         addIn.Delete();
 
-                VbaMacrosTemplate.Install(lang, System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "Resources"));
+                VbaMacrosTemplate.Install(install, System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "Resources"));
                 ShowMacrosMessage(VbaMacrosTemplate.ReopenWordText(english), MessageBoxImage.Information);
             }
             catch (System.Exception ex)
@@ -72,8 +70,7 @@ namespace KleiKodesh.Ribbon
             bool english = AddinUiLanguage.IsEnglish;
             MacrosHeader.Text          = VbaMacrosTemplate.HeaderText(english);
             MacrosNoneRadio.Content    = VbaMacrosTemplate.NoneText(english);
-            MacrosHebrewRadio.Content  = VbaMacrosTemplate.HebrewNamesText(english);
-            MacrosEnglishRadio.Content = VbaMacrosTemplate.EnglishNamesText(english);
+            MacrosInstallRadio.Content = VbaMacrosTemplate.InstallText(english);
             MacrosHint.Text            = VbaMacrosTemplate.HintText(english);
 
             foreach (var cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
