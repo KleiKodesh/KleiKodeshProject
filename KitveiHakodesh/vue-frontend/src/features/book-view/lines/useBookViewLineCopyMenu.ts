@@ -8,6 +8,7 @@ import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
+import BookViewAddNoteMenuRow from './BookViewAddNoteMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
@@ -61,6 +62,8 @@ interface CopyMenuOptions {
    * them alive after the menu closes.
    */
   onReportError?: () => void
+  /** Bookmarks the selection, or the top of the view with none. */
+  onCreateBookmark?: () => void
   /**
    * Warms the lazily-loaded notes and citations for a set of lines before an export
    * reads them. Awaited by the copy actions — see prepareAndCopy for why the
@@ -661,8 +664,13 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     props: {
       onHighlight: options.onHighlight ?? (() => {}),
       onClearHighlight: options.onClearHighlight ?? (() => {}),
-      onAddNote: options.onAddNote ?? (() => {}),
     },
+  }
+
+  const addNoteRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAddNoteMenuRow,
+    props: { onAddNote: options.onAddNote ?? (() => {}) },
   }
 
   return {
@@ -672,6 +680,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
       { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: t('bookView.copy.link'), action: options.onCopyLineLink ?? (() => {}) },
+      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      addNoteRow,
+      { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       {
         type: 'submenu',
@@ -719,8 +730,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
           },
         ],
       },
-      { type: 'separator' },
-      { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       annotationRow,
     ],

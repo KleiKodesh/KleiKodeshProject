@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconEdit20Regular, IconEraser20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconEraser20Regular } from '@iconify-prerendered/vue-fluent'
 import { HIGHLIGHT_COLORS_LIST } from './bookViewAnnotationColors'
 import AlertDialog from '@/components/AlertDialog.vue'
 
 const props = defineProps<{
   onHighlight: (colorArgb: number) => void
   onClearHighlight: () => void
-  onAddNote: () => void
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -31,12 +30,6 @@ function onClear() {
   emit('close')
 }
 
-function onNote() {
-  if (!hasSelection()) { showNoSelectionAlert.value = true; return }
-  props.onAddNote()
-  emit('close')
-}
-
 function argbToCss(signedArgb: number): string {
   const unsigned = signedArgb >>> 0
   const r = (unsigned >>> 16) & 0xff
@@ -53,11 +46,6 @@ function argbToCss(signedArgb: number): string {
       :message="$t('bookView.annotation.selectFirst')"
       @close="showNoSelectionAlert = false"
     />
-    <div class="note-row" @click="onNote">
-      <IconEdit20Regular class="note-icon" />
-      <span class="note-label">{{ $t('bookView.annotation.addNote') }}</span>
-    </div>
-    <div class="separator" />
     <div class="highlight-row">
       <span class="highlight-label">{{ $t('bookView.annotation.highlight') }}</span>
       <button
@@ -81,45 +69,12 @@ function argbToCss(signedArgb: number): string {
    variables rather than restating the numbers. Do not inline literals here: the height
    and padding are load-bearing for hover-flushness and separator rasterization, and
    the reasoning lives in one place, on .context-menu-item. */
-.note-row,
 .highlight-row {
   display: flex;
   align-items: center;
   padding: var(--context-menu-row-padding-block) var(--context-menu-row-padding-inline);
   box-sizing: border-box;
   height: var(--context-menu-row-height);
-}
-
-.note-row {
-  gap: 6px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.note-row:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.note-row:active {
-  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
-}
-
-.note-icon {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.note-label {
-  color: var(--text-primary);
-}
-
-/* Same rule as ContextMenu.vue's .context-menu-separator, which cannot reach into this
-   component. margin MUST stay 0 — margin around a separator is dead space no row's
-   hover can paint, and that is what left a gap between the highlight and the rule. */
-.separator {
-  height: 1px;
-  background: var(--border-color);
-  margin-block: 0;
 }
 
 .highlight-row {

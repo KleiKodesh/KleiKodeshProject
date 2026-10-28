@@ -7,6 +7,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
 import { isExportRestricted } from './exportRestriction'
+import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -142,8 +143,14 @@ function bookmarkLabelForLine(lineIndex: number): string {
   return entry ? getTocPath(entry) : ''
 }
 
-function goToBookmark(lineId: number, lineIndex: number) {
-  linesContentRef.value?.scrollToLineId(lineId, lineIndex, { force: true })
+/** Lands the bookmark's exact point - and reselects its text when it was made from a selection. */
+function goToBookmark(bookmark: BookBookmark) {
+  void linesContentRef.value?.scrollToBookmarkPoint(bookmark.lineIndex, bookmark.characterOffset ?? 0, bookmark.selectionLength ?? 0)
+}
+
+/** The lines' context menu: the toolbar's bookmarks dropdown opens on the new bookmark. */
+function createBookmark() {
+  void toolbarRef.value?.createBookmark()
 }
 
 // All toolbar props that do not depend on its position, so the three placements
@@ -167,6 +174,7 @@ const toolbarProps = computed(() => ({
   lines: lines.value,
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
   bookmarkLabelForLine,
+  readBookmarkPoint: () => linesContentRef.value?.readBookmarkPoint() ?? null,
   bottomCommentaryVisible: panels.bottom.visible.value,
   sideCommentaryVisible: sideCommentaryOpen.value,
   sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
@@ -576,6 +584,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     v-if="scrollStateReady"
                     :key="sideColumnsKey"
                     ref="linesContentRef"
+                    @create-bookmark="createBookmark"
                     :lines="lines"
                     :lines-revision="linesRevision"
                     :ensure-lines="ensureLines"
