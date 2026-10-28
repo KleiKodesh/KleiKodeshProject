@@ -66,6 +66,7 @@ const KEYS = {
   SETTINGS_APP_ZOOM: 'app.zoom',
   SETTINGS_NEW_TAB_PAGE: 'app.newTabPage',
   SETTINGS_SHOW_CLOCK: 'app.showClock',
+  SETTINGS_DATE_BAR_PINNED: 'app.dateBarPinned',
   SETTINGS_SETUP_DONE: 'app.setupDone',
   SETTINGS_ADDRESS_BAR_HINT_DONE: 'app.addressBarHintDone',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
@@ -187,6 +188,7 @@ const DEFAULTS = {
   pdfPageFilters: false,
   resumeLastRead: true,
   showClock: false,
+  dateBarPinned: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
   searchContextMarginWords: 30,
@@ -309,6 +311,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
   const showClock = ref(DEFAULTS.showClock)
+  const dateBarPinned = ref(DEFAULTS.dateBarPinned)
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
@@ -465,6 +468,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
     loadSetting(KEYS.SETTINGS_RESUME_LAST_READ, resumeLastRead)
     loadSetting(KEYS.SETTINGS_SHOW_CLOCK, showClock)
+    loadSetting(KEYS.SETTINGS_DATE_BAR_PINNED, dateBarPinned)
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
@@ -568,6 +572,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
   persistSetting(showClock, KEYS.SETTINGS_SHOW_CLOCK)
+  persistSetting(dateBarPinned, KEYS.SETTINGS_DATE_BAR_PINNED)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
   persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
@@ -747,6 +752,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // life of the process. (Callers reload today, which would hide the mismatch.)
     addressBarHintDone.value = false
     showClock.value = DEFAULTS.showClock
+    dateBarPinned.value = DEFAULTS.dateBarPinned
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
@@ -803,6 +809,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
+    dateBarPinned,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,

@@ -2,6 +2,7 @@
 import AppTitleBar from './AppTitleBar.vue'
 import AppNavSidebar from './AppNavSidebar.vue'
 import AppPageView from './AppPageView.vue'
+import HomePageDateBar from '@/features/home/HomePageDateBar.vue'
 import { provide } from 'vue'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useTabStore } from '@/stores/tabStore'
@@ -55,22 +56,25 @@ provide(PANE_NAVIGATION_KEY, {
          included, since that is where the tab's title, breadcrumb and per-tab controls
          live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
          rail splits with it. -->
-    <AppNavSidebar v-if="settingsStore.getNavSidebarVisible(props.paneId)" />
-    <div class="app-shell-main">
-      <AppTitleBar :pane-id="props.paneId" />
-      <main class="app-shell-content">
-        <AppPageView :pane-id="props.paneId" />
-      </main>
+    <div class="app-shell-body">
+      <AppNavSidebar v-if="settingsStore.getNavSidebarVisible(props.paneId)" />
+      <div class="app-shell-main">
+        <AppTitleBar :pane-id="props.paneId" />
+        <main class="app-shell-content">
+          <AppPageView :pane-id="props.paneId" />
+        </main>
+      </div>
     </div>
+    <!-- Pinned date bar as the window's status bar: full pane width, under the rail too. -->
+    <HomePageDateBar v-if="settingsStore.dateBarPinned" status-bar class="app-shell-date-bar" />
   </div>
 </template>
 
 <style scoped>
 .app-shell {
   display: flex;
-  /* A row, not a column: the nav rail owns the pane's edge for its full height and the
-     title-bar-plus-content column sits beside it. */
-  flex-direction: row;
+  /* The body row on top, the pinned status bar (if any) under it. */
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
   min-width: 0;
@@ -83,6 +87,14 @@ provide(PANE_NAVIGATION_KEY, {
   /* The chrome surface flows continuously from the title bar down around the
      content panel's rounded corners — no separator line between them. */
   background: var(--bg-secondary);
+}
+.app-shell-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  /* A row, not a column: the nav rail owns the pane's edge for its full height and the
+     title-bar-plus-content column sits beside it. */
+  flex-direction: row;
 }
 .app-shell-main {
   flex: 1;
@@ -100,5 +112,8 @@ provide(PANE_NAVIGATION_KEY, {
      for split-shell where each pane is only part of the window. */
   container: app-shell / inline-size;
   background: var(--bg-primary);
+}
+.app-shell-date-bar {
+  flex-shrink: 0;
 }
 </style>
