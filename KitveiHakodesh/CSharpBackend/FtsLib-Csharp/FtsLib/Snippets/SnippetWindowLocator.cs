@@ -154,6 +154,31 @@ namespace FtsLib.Snippets
             return (bestILeft, bestIRight, bestScore);
         }
 
+        /// <summary>
+        /// True when <paramref name="rawHtml"/> carries a quoted phrase: a word of each of
+        /// <paramref name="phrase"/>'s groups at consecutive positions, in group order
+        /// (positions as the tokenizer gives them, so a paired reading's second reading
+        /// stands at its first reading's position).
+        /// </summary>
+        public bool ContainsPhrase(string rawHtml, PreparedQueryGroups phrase)
+        {
+            if (string.IsNullOrEmpty(rawHtml) || phrase == null || phrase.IsEmpty) return false;
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            int n = phrase.GroupCount;
+            var at = new HashSet<int>[n];
+            for (int g = 0; g < n; g++) at[g] = new HashSet<int>();
+            foreach (var t in tokens)
+                if (phrase.TryGetGroups(t.NormSpan, out int[] groups))
+                    foreach (int g in groups) at[g].Add(t.Position);
+            foreach (int p in at[0])
+            {
+                int g = 1;
+                while (g < n && at[g].Contains(p + g)) g++;
+                if (g == n) return true;
+            }
+            return false;
+        }
+
         private void EnsureGroupCount(int required)
         {
             if (_groupCount.Length < required)

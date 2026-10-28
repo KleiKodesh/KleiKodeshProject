@@ -203,7 +203,9 @@ namespace FtsLib.Fts5
             return found;
         }
 
-        /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
+        /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.
+        /// A quoted phrase needs the text: here its words are only required (a superset);
+        /// <see cref="Search"/> checks the phrase.</summary>
         public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
@@ -286,6 +288,9 @@ namespace FtsLib.Fts5
             public IReadOnlyList<IReadOnlyCollection<string>> MatchedGroups;
             public int OriginalGroupCount;
             public HashSet<int> Filter;   // null = no filter
+            /// <summary>Quoted phrases a line must carry (adjacent, in order), checked on its text.</summary>
+            public List<PreparedQueryGroups> Phrases;
+            public SnippetWindowLocator PhraseLocator;
         }
 
         /// <summary>Parse + expand. Null when the query can match nothing.</summary>
@@ -306,15 +311,31 @@ namespace FtsLib.Fts5
 
             onStage?.Invoke("expand");
             var groups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
+            var expandedOf = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
             foreach (var group in parsed.Groups)
             {
                 ct.ThrowIfCancellationRequested();
                 var groupTerms = ExpandGroup(group, ct, out bool hardMiss);
                 if (hardMiss) return null;
+                expandedOf.Add(groupTerms);
                 if (groupTerms.Count == 0) continue;
                 groups.Add(groupTerms);
             }
             if (groups.Count == 0) return null;
+
+            // Quoted phrases (Otzaria): each must stand in the line, adjacent and in order.
+            // A phrase with a word that has no index term can never match.
+            List<PreparedQueryGroups> phrases = null;
+            foreach (var phrase in parsed.Phrases)
+            {
+                var phraseGroups = new List<IReadOnlyCollection<string>>(phrase.Count);
+                foreach (int g in phrase)
+                {
+                    if (expandedOf[g].Count == 0) return null;
+                    phraseGroups.Add(expandedOf[g]);
+                }
+                (phrases ??= new List<PreparedQueryGroups>()).Add(PreparedQueryGroups.FromGroups(phraseGroups));
+            }
 
             return new QueryPlan
             {
@@ -322,6 +343,8 @@ namespace FtsLib.Fts5
                 MatchedGroups = groups,
                 OriginalGroupCount = parsed.Groups.Count,
                 Filter = filter,
+                Phrases = phrases,
+                PhraseLocator = phrases == null ? null : new SnippetWindowLocator(),
             };
         }
 
@@ -367,9 +390,18 @@ namespace FtsLib.Fts5
             foreach (int lineId in ids)
             {
                 ct.ThrowIfCancellationRequested();
-                if (byId.TryGetValue(lineId, out var row))
+                if (byId.TryGetValue(lineId, out var row) && CarriesPhrases(plan, row.Content))
                     yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared, row.Placement);
             }
+        }
+
+        /// <summary>True when the line carries every quoted phrase of the query.</summary>
+        static bool CarriesPhrases(QueryPlan plan, string content)
+        {
+            if (plan.Phrases == null) return true;
+            foreach (var phrase in plan.Phrases)
+                if (!plan.PhraseLocator.ContainsPhrase(content, phrase)) return false;
+            return true;
         }
 
         static string BuildMatchExpression(IReadOnlyList<IReadOnlyCollection<string>> groups)
