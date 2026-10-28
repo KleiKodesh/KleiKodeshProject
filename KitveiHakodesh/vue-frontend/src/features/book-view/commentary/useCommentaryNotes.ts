@@ -189,6 +189,14 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
     return notesByLine.value.get(lineId) ?? []
   }
 
+  function getNoteById(noteId: number): Note | undefined {
+    for (const list of notesByLine.value.values()) {
+      const found = list.find((n) => n.id === noteId)
+      if (found) return found
+    }
+    return undefined
+  }
+
   // ── Internal map helpers ───────────────────────────────────────────────────
 
   function _addToMap(note: Note) {
@@ -270,6 +278,7 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
 
   return {
     getNotesForLine,
+    getNoteById,
     scheduleNotesLoad,
     loadNotesForLines,
     createNote,
