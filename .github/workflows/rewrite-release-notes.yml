@@ -20,6 +20,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch release notes backfill (git notes)
+        run: git fetch origin refs/notes/release:refs/notes/release || true
+
       - name: Gemini - release notes
         shell: pwsh
         env:
