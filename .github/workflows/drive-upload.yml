@@ -4,15 +4,13 @@
 # Anything older, or of a deleted release, goes to the Drive trash. Other files in the folder are untouched.
 # The run reads the current releases, so it is safe to start any number of times.
 # Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
-# by release events from manual edits/deletes, and daily as a safety net.
+# and by release events from manual edits/deletes.
 name: Drive sync
 
 on:
   workflow_dispatch:
   release:
     types: [published, edited, deleted, unpublished]
-  schedule:
-    - cron: '0 3 * * *'
 
 concurrency:
   group: drive-sync
