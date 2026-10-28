@@ -17,7 +17,9 @@ import {
 // in the background; it never installs on its own. This section shows the installed version,
 // a live progress bar while the service downloads (pushed, useUpdateDownloadProgress), whether
 // a downloaded update is ready, runs a check on demand, installs through the same path
-// as UpdateAvailablePrompt (useSelfUpdate), and holds the "turn off automatic updates" toggle.
+// as the nav update row (useSelfUpdate), and holds the "turn off automatic updates" toggle.
+// The nav row (appNavUpdateItem) is the quiet, always-there signal; this section is the
+// detailed view.
 
 const {
   readyVersion,

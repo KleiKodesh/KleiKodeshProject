@@ -36,7 +36,6 @@
     "title": "New version available",
     "body": "Klei Kodesh version {version} has been downloaded and is ready to install. Installing will close Word and the program.",
     "installNow": "Install now",
-    "later": "Later",
     "installFailed": "The installer could not be started. Please try again later."
   }
 }
