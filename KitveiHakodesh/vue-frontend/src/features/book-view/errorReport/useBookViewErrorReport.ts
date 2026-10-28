@@ -2,7 +2,7 @@ import { t } from '@/i18n'
 import { ref, type Ref } from 'vue'
 import { showToast } from '@/composables/useToast'
 import { htmlToText } from '@/utils/htmlText'
-import type { LineItem } from '../lines/useBookViewLinesTable'
+import type { LinesTable } from '../lines/linesTable'
 import { resolveErrorReportSource, type ErrorReportSource } from './errorReportSource'
 
 /**
@@ -29,7 +29,7 @@ export interface ErrorReportTarget {
 }
 
 interface ErrorReportOptions {
-  lines: () => LineItem[]
+  lines: () => LinesTable
   /** The line the context-menu gesture started on — see useBookViewLineLink. */
   pressedLineIndex: () => number | null
   scrollerEl: Ref<HTMLElement | null>
@@ -59,7 +59,7 @@ export function useBookViewErrorReport(options: ErrorReportOptions): {
 
   function openErrorReport(): void {
     const lineIndex = options.pressedLineIndex()
-    const line = lineIndex == null ? undefined : options.lines()[lineIndex]
+    const line = lineIndex == null ? undefined : options.lines().at(lineIndex)
     // The line's stored content is HTML; a report is about the text a reader sees, and
     // a server matching it against its own copy would choke on our render markup.
     const originalLine = htmlToText(line?.content ?? '').trim()

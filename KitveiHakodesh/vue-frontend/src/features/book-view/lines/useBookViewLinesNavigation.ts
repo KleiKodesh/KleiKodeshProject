@@ -16,7 +16,7 @@
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { setCurrentMark } from './useBookViewLineRenderer'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 
 /**
  * Breathing room a programmatic landing leaves above its target: the scroll stops
@@ -81,7 +81,7 @@ export interface ScrollToLineOptions {
 
 export function useBookViewLinesNavigation(
   scroller: () => WindowedScrollerApi | null,
-  lines: () => LineItem[],
+  lines: () => LinesTable,
   searchBarVisible: () => boolean,
   suppressPositionSave: () => void,
   /** Ends the opening's follow-ups — a jump supersedes them. */
@@ -96,7 +96,7 @@ export function useBookViewLinesNavigation(
    * else the database (lines are fetched on demand, so most of a book is not loaded).
    */
   async function lineIndexForId(lineId: number, fallbackLineIndex?: number): Promise<number | undefined> {
-    const loaded = lines().find((line) => line.id === lineId)?.lineIndex ?? fallbackLineIndex
+    const loaded = lines().indexOfId(lineId) ?? fallbackLineIndex
     if (loaded != null) return loaded
     try {
       return (await getLineIndexFromLineId(lineId))[0]?.lineIndex

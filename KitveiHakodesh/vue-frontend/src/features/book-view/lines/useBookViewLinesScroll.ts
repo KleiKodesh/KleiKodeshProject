@@ -17,7 +17,7 @@ import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 import { placeCaretAtRowStart } from './lineCaret'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
@@ -86,7 +86,7 @@ const FLASH_DURATION_MS = 3600
 
 export function useBookViewLinesScroll(
   scroller: () => WindowedScrollerApi | null,
-  lines: () => LineItem[],
+  lines: () => LinesTable,
   props: BookViewLinesScrollProps,
   storeRefs: BookViewLinesScrollStoreRefs,
   emit: (

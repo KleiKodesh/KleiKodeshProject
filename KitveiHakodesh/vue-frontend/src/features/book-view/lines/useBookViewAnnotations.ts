@@ -14,7 +14,7 @@ import type { Ref } from 'vue'
 import { useBookViewHighlights } from './useBookViewHighlights'
 import { useBookViewNotes } from './useBookViewNotes'
 import type { Note } from './useBookViewNotes'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 
 // ── Internal selection types ──────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ interface MultiLineSelection {
 export function useBookViewAnnotations(
   bookId: number,
   scrollerEl: Ref<HTMLElement | null>,
-  lines: () => LineItem[],
+  lines: () => LinesTable,
   /** Ids of the lines mounted in the scroller's window — what the lazy note loader watches. */
   renderedLineIds: () => number[],
   /**
@@ -103,7 +103,7 @@ export function useBookViewAnnotations(
       const virtualItemElement = lineElement.closest('[data-index]') as HTMLElement | null
       if (!virtualItemElement) continue
       const virtualIndex = parseInt(virtualItemElement.dataset['index'] ?? '', 10)
-      const lineItem = lines()[virtualIndex]
+      const lineItem = lines().at(virtualIndex)
       if (!lineItem || lineItem.content == null) continue
 
       const strippedText = (lineElement.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
@@ -168,7 +168,7 @@ export function useBookViewAnnotations(
     const allLines = lines()
 
     for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
-      const line = allLines[rowIndex]
+      const line = allLines.at(rowIndex)
       if (!line || line.content == null) continue
       if (alreadyCollectedLineIds.has(line.id)) continue
       const strippedLength = annotationOffsetLengthOf(line.content)

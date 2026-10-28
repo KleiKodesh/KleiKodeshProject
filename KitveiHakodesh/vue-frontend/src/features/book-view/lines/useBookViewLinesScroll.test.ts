@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { LinesTable } from './linesTable'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, ref, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -67,7 +68,7 @@ function mountScroll(
     setup() {
       scroll = useBookViewLinesScroll(
         () => scroller,
-        () => [],
+        () => new LinesTable(),
         props,
         { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
         () => undefined,

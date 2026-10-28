@@ -12,11 +12,11 @@ import { storeToRefs } from 'pinia'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
-import type { LineItem } from './lines/useBookViewLinesTable'
+import type { LinesTable } from './lines/linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import type { CommentaryPinSnapshot } from './bookViewTypes'
 export function useBookViewScrollSync(
-  lines: () => LineItem[],
+  lines: () => LinesTable,
   activeTocEntryId: Ref<number | undefined>,
   activeAltTocEntryId: Ref<number | undefined>,
   selectedLineId: Ref<number | null>,
@@ -98,7 +98,7 @@ export function useBookViewScrollSync(
     }
 
     if (!autoSelectTopLine.value) return
-    const line = lines()[fullLineIndex]
+    const line = lines().at(fullLineIndex)
     if (line && line.content !== null) {
       selectedLineId.value = line.id
       // Capture the active pinned group synchronously now — groups are still loaded

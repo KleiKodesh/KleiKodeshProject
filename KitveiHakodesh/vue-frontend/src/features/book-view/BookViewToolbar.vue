@@ -41,7 +41,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
-import type { LineItem } from './lines/useBookViewLinesTable'
+import type { LinesTable } from './lines/linesTable'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
 
@@ -69,7 +69,7 @@ const props = defineProps<{
   // The book's scanned editions on HebrewBooks. Empty for most books, which hides the control.
   hebrewBooksEditions: HebrewBooksEdition[]
   currentScrollLineIndex: number
-  lines: LineItem[]
+  lines: LinesTable
   onRelatedBooksOpen?: () => void
   bottomCommentaryVisible?: boolean
   sideCommentaryVisible?: boolean

@@ -19,10 +19,10 @@ import { useCopyExportData } from './lines/useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
 import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
+import type { LinesTable } from './lines/linesTable'
 import { computed } from 'vue'
 import type { useSettingsStore } from '@/stores/settingsStore'
 
-type Line = { id: number; lineIndex: number; content: string | null }
 type GroupsForDisplay = Parameters<typeof useCommentaryHighlights>[0] extends () => infer T ? T : never
 
 export function useBookViewCommentaryAnnotations(
@@ -33,7 +33,7 @@ export function useBookViewCommentaryAnnotations(
    */
   groupsForDisplay: () => GroupsForDisplay,
   selectedSectionLineIds: () => number[] | null,
-  lines: () => Line[],
+  lines: () => LinesTable,
   bookTitle: string | undefined,
   settings: ReturnType<typeof useSettingsStore>,
 ) {

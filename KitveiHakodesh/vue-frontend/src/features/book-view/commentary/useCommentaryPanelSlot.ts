@@ -88,7 +88,7 @@ export interface SharedCommentaryDeps {
   selectedLineId: import('vue').Ref<number | null>
   commentaryLineId: import('vue').Ref<number | null>
   hasCommentaries: import('vue').Ref<boolean>
-  lines: () => { content: string | null }[]
+  lines: () => { loadedCount: number }
   ensureStaticFilterGroupsLoaded: () => void
   getHighlightsForLine: (lineId: number) => Highlight[]
   getNotesForLine: (lineId: number) => Note[]

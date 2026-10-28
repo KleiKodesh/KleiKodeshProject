@@ -21,7 +21,7 @@ import {
   findPrevTocCommentarySection,
 } from './commentaryNavigation'
 import type { Ref } from 'vue'
-import type { LineItem } from '../lines/useBookViewLinesTable'
+import type { LinesTable } from '../lines/linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 interface LinesContentRef {
   scrollToLineId: (
@@ -36,7 +36,7 @@ export function useCommentaryNavigation(
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
   commentaryVisible: Ref<boolean>,
-  lines: () => LineItem[],
+  lines: () => LinesTable,
   tocEntries: () => TocEntry[],
   linesContentRef: () => LinesContentRef | null,
   manualSelectionLineIds: () => number[] | null,
@@ -110,21 +110,17 @@ export function useCommentaryNavigation(
       const allLines = lines()
       if (direction === 'next') {
         const lastSelectedId = multiIds[multiIds.length - 1]!
-        const lastLine = allLines.find((l) => l.id === lastSelectedId)
-        if (lastLine == null) return
-        const targetLine = allLines.find(
-          (l) => l.lineIndex === lastLine.lineIndex + 1 && l.content !== null,
-        )
-        if (targetLine == null) return
+        const lastLineIndex = allLines.indexOfId(lastSelectedId)
+        if (lastLineIndex == null) return
+        const targetLine = allLines.at(lastLineIndex + 1)
+        if (targetLine == null || targetLine.content === null) return
         afterNavigate(targetLine.id)
       } else {
         const firstSelectedId = multiIds[0]!
-        const firstLine = allLines.find((l) => l.id === firstSelectedId)
-        if (firstLine == null) return
-        const targetLine = allLines.find(
-          (l) => l.lineIndex === firstLine.lineIndex - 1 && l.content !== null,
-        )
-        if (targetLine == null) return
+        const firstLineIndex = allLines.indexOfId(firstSelectedId)
+        if (firstLineIndex == null) return
+        const targetLine = allLines.at(firstLineIndex - 1)
+        if (targetLine == null || targetLine.content === null) return
         afterNavigate(targetLine.id)
       }
       return
@@ -141,10 +137,10 @@ export function useCommentaryNavigation(
     }
 
     // Normal mode: navigate to next/prev line with commentary for this book
-    const currentLine = lines().find((l) => l.id === selectedLineId.value)
-    if (currentLine == null) return
+    const currentLineIndex = selectedLineId.value == null ? undefined : lines().indexOfId(selectedLineId.value)
+    if (currentLineIndex == null) return
     const fn = direction === 'next' ? findNextCommentarySection : findPrevCommentarySection
-    const result = await fn(bookId, commentaryBookId, currentLine.lineIndex)
+    const result = await fn(bookId, commentaryBookId, currentLineIndex)
     if (result == null) return
     afterNavigate(result.id)
   }
