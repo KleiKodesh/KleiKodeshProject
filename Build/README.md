@@ -73,7 +73,7 @@ build-menu.bat  ──┐
                       ├─ MSBuild KitveiHakodeshDemoApp (Release|AnyCPU)
                       │  └─ Zip bin\Release\ → KitveiHakodeshPortable-vX.Y.Z.zip
                       └─ unless -NoRelease: gh release create (replaces an existing same tag) + upload EXE + ZIP,
-                         then dispatch website "release-changed" + run release-issue-check.yml
+                         then dispatch website "release-changed" + run release-issue-check.yml + drive-upload.yml
 ```
 
 Other switches: `-ManualVersion vX.Y.Z`, `-DeleteFtsIndex`, `-ForceCleanInstall`.
@@ -103,6 +103,7 @@ All in `.github/workflows/`. Secrets: `GEMINI_API_KEY`, `HB_MIRROR_JSON`, `WEBSI
 | `rewrite-release-notes.yml` | Manual, input `tag` | Runs `ai-release-plan.ps1 -Tag` (commits between that release and the one before) and replaces the release body | `GEMINI_API_KEY` | Edited release notes |
 | `release-issue-check.yml` | Release `published` + manual (input `tag`); also dispatched by `build-installer.ps1` | Compares commit messages since the previous release with each open issue (Gemini, one issue per request); comments where a commit likely fixes it or adds a useful diagnostic option. Max 30 comments. | `GEMINI_API_KEY` | Bot comments on issues |
 | `notify-website.yml` | Release published/unpublished/edited/deleted/released/prereleased | `repository_dispatch` `release-changed` to `KleiKodesh/kleikodesh.github.io` so its download button follows "latest" | `WEBSITE_DISPATCH_TOKEN` | — |
+| `drive-upload.yml` ("Drive sync") | Release published/edited/deleted/unpublished; dispatched by `build-installer.ps1` (CI releases fire no release events); weekly cron `0 3 * * 0`; manual (input `check_only`) | rclone-syncs the shared Google Drive folder (`FOLDER_ID` in the workflow): root = latest release's installer + portable zip + notes as Google Docs (Hebrew `מה חדש - vX`, English `Release notes - vX`, split at the `---` line), `גרסה קודמת/` = the release before it; older files go to the Drive trash, other files untouched. The weekly run only compares installer names and syncs on a mismatch (also keeps the Google login used; Google expires one unused 6 months). On failure opens an issue with step-by-step re-login instructions. Google OAuth client: Cloud project `kleikodesh-release-clone` (kleikodeshproject@gmail.com). | `RCLONE_GDRIVE_TOKEN`, `RCLONE_GDRIVE_CLIENT_ID`, `RCLONE_GDRIVE_CLIENT_SECRET` | Drive folder contents |
 | `issue-clarity-check.yml` | Issue `opened` + manual (input `issue`) | Gemini fixes a vague title, adds type + area labels (allow-listed), posts one comment: summary or missing-detail questions, likely duplicates | `GEMINI_API_KEY` | Title edit, labels, bot comment |
 | `close-stale-issues.yml` | Daily cron `0 3 * * *` + manual | `actions/stale`: issues idle 90 days get `stale` + a warning, closed (not planned) 14 days later. PRs untouched. | — | Labels / closed issues |
 
