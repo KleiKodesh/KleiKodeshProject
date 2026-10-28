@@ -12,10 +12,10 @@
 import { ref, computed, watch } from 'vue'
 import type { TocEntry } from '@/webview-host/queries.types'
 import type { CommentaryPinSnapshot } from './bookViewTypes'
-type Line = { id: number; lineIndex: number; content: string | null }
+import type { LinesTable } from './lines/linesTable'
 
 export function useBookViewLineSelection(
-  lines: () => Line[],
+  lines: () => LinesTable,
   tocEntries: () => TocEntry[],
   commentaryLineId: import('vue').Ref<number | null>,
   selectedLineId: import('vue').Ref<number | null>,
@@ -97,11 +97,11 @@ export function useBookViewLineSelection(
 
     if (isShiftClick && manualSelectionAnchorLineId.value != null) {
       const anchorId = manualSelectionAnchorLineId.value
-      const anchorLine = lines().find((l) => l.id === anchorId)
-      const clickedLine = lines().find((l) => l.id === lineId)
-      if (anchorLine != null && clickedLine != null) {
-        const fromIndex = Math.min(anchorLine.lineIndex, clickedLine.lineIndex)
-        const toIndex = Math.max(anchorLine.lineIndex, clickedLine.lineIndex)
+      const anchorIndex = lines().indexOfId(anchorId)
+      const clickedIndex = lines().indexOfId(lineId)
+      if (anchorIndex != null && clickedIndex != null) {
+        const fromIndex = Math.min(anchorIndex, clickedIndex)
+        const toIndex = Math.max(anchorIndex, clickedIndex)
         const applyRange = () => {
           const rangeIds = lines().slice(fromIndex, toIndex + 1).filter((l) => l.id > 0).map((l) => l.id)
           if (!rangeIds.length) return

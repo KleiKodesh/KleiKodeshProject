@@ -1,13 +1,11 @@
 import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
 import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
+import { LinesTable } from './linesTable'
+import type { LineItem } from './linesTable'
 
-export interface LineItem {
-  id: number
-  lineIndex: number
-  /** null = not fetched yet. Never rendered: the scroller asks for a range before mounting it. */
-  content: string | null
-}
+export { LinesTable }
+export type { LineItem }
 
 // Lines are fetched ON DEMAND only — the windowed scroller asks for the range it is
 // about to mount (ensureLines), and a whole-book action (select-all copy, export)
@@ -58,9 +56,9 @@ function packCounts(counts: number[]): Uint16Array | Int32Array {
 }
 
 export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
-  // Shallow: 190k reactive proxies for a big book cost memory and every read; the
-  // lines are written here only, in chunks, and each write triggers once (triggerRef).
-  const lines = shallowRef<LineItem[]>([])
+  // Shallow: the table is written here only, in chunks, and each write triggers once
+  // (triggerRef). Readers go through its methods (at, idAt, contentAt, slice...).
+  const lines = shallowRef<LinesTable>(new LinesTable())
   // Bumped with every write to `lines`. The lines view reads it in its row slot, so
   // the mounted rows re-render when their text changes under the same index (a
   // version swap) — a shallow ref cannot tell them, and the scroller only re-fetches.
@@ -144,31 +142,16 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     return true
   }
 
-  // Write a completed chunk's rows into lines.value.
+  // Write a completed chunk's rows into the table.
   function writeRows(rows: { id: number; lineIndex: number; content: string }[]) {
-    // Grow ONCE to fit the whole chunk before writing. Growing per row re-copied the entire
-    // array for each of up to MAX_FETCH_LINES rows — and the opening window's
-    // prefetch can land before load() pre-sizes to totalLines.
+    // Grow ONCE to fit the whole chunk before writing: the opening window's prefetch
+    // can land before load() sizes the table to totalLines.
     let maxLineIndex = -1
     for (const row of rows) if (row.lineIndex > maxLineIndex) maxLineIndex = row.lineIndex
-    growTo(maxLineIndex + 1)
+    lines.value.growTo(maxLineIndex + 1)
 
-    for (const row of rows) {
-      lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content ?? '' }
-    }
+    for (const row of rows) lines.value.setText(row.lineIndex, row.id, row.content ?? '')
     linesWritten()
-  }
-
-  /** Extend `lines` with unfetched entries up to `count`. No-op if already that long. */
-  function growTo(count: number) {
-    const from = lines.value.length
-    if (count <= from) return
-    const extra = Array.from({ length: count - from }, (_, i) => ({
-      id: -(from + i + 1),
-      lineIndex: from + i,
-      content: null,
-    }))
-    lines.value = [...lines.value, ...extra]
   }
 
   /** Fetches a range and registers the fetch on its slots, so ensureLines can ride on it. */
@@ -233,15 +216,11 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   /** Releases one slot's text: content back to null, ids kept, slot back to unfetched. */
   function releaseSlot(slot: number) {
     slotState[slot] = SLOT_UNFETCHED
-    const all = lines.value
-    const end = Math.min(all.length, (slot + 1) * CHUNK_SIZE)
+    const table = lines.value
+    const end = Math.min(table.length, (slot + 1) * CHUNK_SIZE)
     const ids: number[] = []
     for (let index = slot * CHUNK_SIZE; index < end; index++) {
-      const line = all[index]
-      if (line && line.content !== null) {
-        line.content = null
-        ids.push(line.id)
-      }
+      if (table.clearText(index)) ids.push(table.idAt(index))
     }
     if (ids.length) options.onTextEvicted?.(ids)
   }
@@ -344,7 +323,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     if (waits.length) await Promise.all(waits)
     if (currentBookId !== id) return
     for (let index = start; index < Math.min(end, lines.value.length); index++) {
-      if (lines.value[index]?.content == null) throw new Error(`lines ${start}-${end} unavailable`)
+      if (!lines.value.hasText(index)) throw new Error(`lines ${start}-${end} unavailable`)
     }
   }
 
@@ -362,19 +341,16 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     end = Math.min(end, lines.value.length)
     if (end <= start) return
     let first = start
-    while (first < end && lines.value[first]!.id > 0) first++
+    while (first < end && lines.value.hasId(first)) first++
     let last = end
-    while (last > first && lines.value[last - 1]!.id > 0) last--
+    while (last > first && lines.value.hasId(last - 1)) last--
     if (first >= last) return
     const ids = await getLineIds(id, first, last)
     if (currentBookId !== id) return
-    for (let i = 0; i < ids.length; i++) {
-      const line = lines.value[first + i]
-      if (line && line.id <= 0 && ids[i]! > 0) line.id = ids[i]!
-    }
+    for (let i = 0; i < ids.length && first + i < lines.value.length; i++) lines.value.setId(first + i, ids[i]!)
     linesWritten()
     for (let index = start; index < end; index++) {
-      if (lines.value[index]!.id <= 0) throw new Error(`line ids ${start}-${end} unavailable`)
+      if (!lines.value.hasId(index)) throw new Error(`line ids ${start}-${end} unavailable`)
     }
   }
 
@@ -409,7 +385,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
    * Switch the text to an alternate version (or back to the merged text with null).
    *
    * Re-fetches every line's CONTENT while keeping the line skeleton — ids, lineIndex
-   * and the array's length — exactly as it is. That is what lets the reader stay put:
+   * and the table's length — exactly as it is. That is what lets the reader stay put:
    * the TOC, commentary anchors, highlights and the scroll position all key off line
    * ids and indices, none of which a version changes.
    *
@@ -432,7 +408,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
 
   async function load(id: number) {
     currentBookId = id
-    lines.value = []
+    lines.value = new LinesTable()
     slotState = new Uint8Array(0)
     slotFetches = new Map()
     // A new book's versions are its own; carrying the previous book's selection over
@@ -481,7 +457,8 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
       book?.hasCommentaryConnection
     )
 
-    growTo(totalLines)
+    lines.value.growTo(totalLines)
+    linesWritten()
 
     ensureSlotCapacity(slotOf(Math.max(totalLines - 1, 0)) + 1)
 

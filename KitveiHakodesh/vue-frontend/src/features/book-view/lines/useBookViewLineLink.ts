@@ -1,14 +1,14 @@
 import { t } from '@/i18n'
 import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 import { showToast } from '@/composables/useToast'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { buildLineLink } from '@/utils/appDeepLink'
 
 interface LineLinkOptions {
   scrollerEl: Ref<HTMLElement | null>
-  lines: () => LineItem[]
+  lines: () => LinesTable
   bookId: number
 }
 
@@ -38,8 +38,8 @@ export function useBookViewLineLink(options: LineLinkOptions): {
     const row = element?.closest('[data-index]') as HTMLElement | null
     const dataIndex = row?.dataset['index']
     if (dataIndex == null) return null
-    // data-index is the position in the lines array; the link wants the source lineIndex.
-    return options.lines()[parseInt(dataIndex, 10)]?.lineIndex ?? null
+    // data-index is the position in the lines table; the link wants the source lineIndex.
+    return options.lines().at(parseInt(dataIndex, 10))?.lineIndex ?? null
   }
 
   useEventListener(options.scrollerEl, 'pointerdown', (event: PointerEvent) => {

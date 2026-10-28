@@ -37,7 +37,7 @@ import {
   getAllAltTocEntries,
   getLinesPaged,
 } from '@/webview-host/seforimApi'
-import type { LineItem } from './lines/useBookViewLinesTable'
+import type { LinesTable } from './lines/linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { loadSectionTocEntries } from './lines/wordLinkSection'
 import { displayCommentaryLabel } from './commentary/commentaryLabelDisplay'
@@ -50,7 +50,7 @@ const props = defineProps<{
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   currentScrollLineIndex: number
-  lines: LineItem[]
+  lines: LinesTable
   onOpen?: () => void
 }>()
 
@@ -256,10 +256,9 @@ const BASE_LINE_PROBE_RADIUS = 30
 
 async function resolveBaseLine(topLineIndex: number, baseBookId: number): Promise<LinkedLine | undefined> {
   const typeIds = getBaseTextReverseConnectionTypeIds()
-  const byIndex = new Map(props.lines.map((line) => [line.lineIndex, line]))
   for (let distance = 0; distance <= BASE_LINE_PROBE_RADIUS; distance++) {
     for (const lineIndex of distance === 0 ? [topLineIndex] : [topLineIndex + distance, topLineIndex - distance]) {
-      const line = byIndex.get(lineIndex)
+      const line = props.lines.at(lineIndex)
       if (line == null) continue
       const rows = await getReverseLineData([line.id], typeIds)
       const hit = rows.find((row) => row.sourceBookId === baseBookId)
@@ -453,7 +452,7 @@ async function resolveLinkedTarget(book: RelatedBook): Promise<ResolvedTarget> {
   const top: ReaderPosition = { bookId: props.bookId, lineIndex: props.currentScrollLineIndex }
 
   // Find the line id for the current top visible line
-  const topLine = props.lines[props.currentScrollLineIndex]
+  const topLine = props.lines.at(props.currentScrollLineIndex)
   if (topLine == null) return { linked: undefined, positions: [top] }
 
   // A commentary of a source book has no direct link: hop through the source's line —
