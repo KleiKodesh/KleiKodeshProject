@@ -1,5 +1,5 @@
 # Keeps the shared Google Drive folder in sync with GitHub releases:
-#   folder root          = latest release (installers, portable zip, release notes)
+#   folder root          = latest release (installers, portable zip, release notes as a Google Doc)
 #   previous subfolder   = the release before it (fallback in case of bugs)
 # Anything older, or of a deleted release, goes to the Drive trash. Other files in the folder are untouched.
 # The run reads the current releases, so it is safe to start any number of times.
@@ -36,21 +36,30 @@ jobs:
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
                    --limit 2 --json tagName --jq '.[].tagName')
           [ -n "$tags" ] || { echo "No releases - nothing to sync."; exit 1; }
-          dir=mirror
+          sudo apt-get install -y -qq pandoc > /dev/null
+          sub=""
           for tag in $tags; do
-            mkdir -p "$dir"
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dir" \
+            mkdir -p "mirror/$sub" "notes/$sub"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "mirror/$sub" \
               --pattern 'KleiKodeshSetup-*.exe' --pattern 'KitveiHakodeshPortable-*.zip'
-            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$dir/ReleaseNotes-$tag.txt"
-            dir="mirror/$PREVIOUS_DIR"
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+              | pandoc -f gfm -t docx -M dir=rtl -M lang=he -o "notes/$sub/ReleaseNotes-$tag.docx"
+            sub="$PREVIOUS_DIR"
           done
-          find mirror -type f | sort
+          find mirror notes -type f | sort
 
       - name: Install rclone
         run: curl -fsSL https://rclone.org/install.sh | sudo bash
 
+      # Release notes are left out of the sync: they are Google Docs on Drive, re-created below.
       - name: Sync to Drive
         run: |
           rclone sync mirror gdrive: --drive-root-folder-id "$FOLDER_ID" -v \
+            --filter '- ReleaseNotes-*' \
             --filter '+ /KleiKodeshSetup-*.exe' --filter '+ /KitveiHakodeshPortable-*.zip' \
-            --filter '+ /ReleaseNotes-*.txt' --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
+            --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
+
+      - name: Release notes as Google Docs
+        run: |
+          rclone delete gdrive: --drive-root-folder-id "$FOLDER_ID" --include 'ReleaseNotes-*' -v
+          rclone copy notes gdrive: --drive-root-folder-id "$FOLDER_ID" --drive-import-formats docx -v
