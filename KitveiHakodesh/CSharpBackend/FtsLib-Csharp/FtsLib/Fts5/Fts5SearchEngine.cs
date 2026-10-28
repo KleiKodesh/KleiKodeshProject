@@ -175,23 +175,6 @@ namespace FtsLib.Fts5
             return found;
         }
 
-        /// <summary>
-        /// The given lines as matches of <paramref name="query"/> — the query parsed and
-        /// expanded, each line's text read, NO full-text MATCH run — for building snippets of
-        /// lines a search already returned (only the rows a page shows). Lines the query no
-        /// longer expands for are simply absent from the result.
-        /// </summary>
-        public List<SearchResult> MatchesForLines(string query, IReadOnlyList<int> lineIds, CancellationToken ct)
-        {
-            var results = new List<SearchResult>(lineIds.Count);
-            var plan = Plan(query, null, ct);
-            if (plan == null || lineIds.Count == 0) return results;
-            var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
-            using var corpus = _openCorpus();
-            results.AddRange(Fetch(corpus, new List<int>(lineIds), plan, prepared, withPlacement: false, ct));
-            return results;
-        }
-
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
         public IEnumerable<int> SearchIds(string query,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
@@ -338,7 +321,7 @@ namespace FtsLib.Fts5
             if (ids.Count == 0) yield break;
             // A corpus may return a batch in its own order (by id); results go out in the
             // index's order, which is the order of ids.
-            // A placed corpus gives each line's book / position / TOC entry in the same read,
+            // A placed corpus gives each line's book / position in the same read,
             // unless the caller reads placement itself (withPlacement: false).
             var byId = new Dictionary<int, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
             if (withPlacement && corpus is IFtsPlacedCorpus placed)

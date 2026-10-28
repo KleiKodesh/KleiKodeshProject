@@ -48,30 +48,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             bool hasSplitLineContent,
             bool hasCompressedContent,
             bool hasVersionLines,
-            string declaredBaseColumn,
-            bool hasLineTocTable,
-            bool hasLineTocEntryIdColumn)
+            string declaredBaseColumn)
         {
             HasSplitLineContent = hasSplitLineContent;
             HasCompressedContent = hasCompressedContent;
             HasVersionLines = hasVersionLines;
             DeclaredBaseColumn = declaredBaseColumn;
-            HasLineTocTable = hasLineTocTable;
-            HasLineTocEntryIdColumn = hasLineTocEntryIdColumn;
         }
-
-        /// <summary>
-        /// True when a line's own TOC entry lives in the `line_toc` table (lineId -> tocEntryId,
-        /// one row per line). Both shipped databases have it, and it is the authoritative
-        /// source: the `line.tocEntryId` column exists beside it but is NULL for most lines.
-        /// </summary>
-        public bool HasLineTocTable { get; }
-
-        /// <summary>
-        /// True when `line` has a `tocEntryId` column — the fallback for a line's TOC entry on
-        /// a database with no `line_toc` table.
-        /// </summary>
-        public bool HasLineTocEntryIdColumn { get; }
 
         /// <summary>
         /// Which column this database uses for the declared-base flag — see
@@ -177,9 +160,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 hasVersionLines: TableExists(connection, "version_line"),
                 declaredBaseColumn: ColumnExists(connection, "link", DeclaredBaseColumnOtzaria)
                     ? DeclaredBaseColumnOtzaria
-                    : DeclaredBaseColumnZayit,
-                hasLineTocTable: TableExists(connection, "line_toc"),
-                hasLineTocEntryIdColumn: ColumnExists(connection, "line", "tocEntryId"));
+                    : DeclaredBaseColumnZayit);
         }
 
         /// <summary>Forgets every cached probe. For tests, and for a database swapped at runtime.</summary>

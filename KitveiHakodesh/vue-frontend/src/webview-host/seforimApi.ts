@@ -60,32 +60,22 @@ export async function getLineIds(bookId: number, fromIndex: number, toIndex: num
   return (await seforimOp<{ ids: number[] }>('getLineIds', { bookId, fromIndex, toIndex })).ids
 }
 
-/**
- * Snippets for rows the search page shows: the stream carries a snippet for a search's
- * first hits only, and every later hit is numbers alone until the page asks here, with
- * the same query (as sent) and options. Each hit comes back with its snippet descriptor;
- * the snippet lines' texts ride along, and `terms` is the matched-term table the marks'
- * term ids index into — numbered for THIS response, so the caller maps them onto the
- * search's own table. A line that no longer matches is absent.
- */
-export async function ftsSnippets(
-  query: string, lineIds: number[], requireOrdered: boolean, contextWords: number,
-): Promise<{ hits: FullTextSearchHitRow[]; lineTexts: Record<string, string>; terms: string[] }> {
-  return serviceCall('ftsSnippets', { query, lineIds, requireOrdered, contextWords })
+/** A snippet's text (mirror of FtsSnippetText in SeforimDbFtsModels.cs): the matched line's
+ *  own text, and for a short window the same book's neighbour lines before / after it. */
+export interface FtsSnippetText {
+  lineId: number
+  text: string
+  before: string
+  after: string
 }
 
-/** One full-text hit as the service sends it (mirror of FtsHit in SeforimDbFtsModels.cs). */
-export interface FullTextSearchHitRow {
-  lineId: number
-  bookId: number
-  tocEntryId: number
-  score: number
-  wordDistance: number
-  snippetLineIds: number[]
-  snippetStart: number
-  snippetEnd: number
-  snippetMarks: number[]
-  snippetFlags: number
+/**
+ * Snippet texts for rows the search page shows — the hits already carry their snippet
+ * descriptors, so this is a plain text read: each line's text, and for `shortLineIds` also
+ * their neighbour context, in one statement. A line with no text is absent.
+ */
+export async function ftsSnippetTexts(lineIds: number[], shortLineIds: number[]): Promise<FtsSnippetText[]> {
+  return serviceCall('ftsSnippetTexts', { lineIds, shortLineIds })
 }
 
 /**

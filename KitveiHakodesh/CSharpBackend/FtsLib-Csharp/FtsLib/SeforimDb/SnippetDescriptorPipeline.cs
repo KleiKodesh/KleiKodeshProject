@@ -104,55 +104,6 @@ namespace FtsLib.SeforimDb
             return descriptor;
         }
 
-        /// <summary>
-        /// Locates over the matched line PLUS the given surrounding lines (already fetched,
-        /// in document order): the text is joined by <see cref="JoinWithNeighbourLines"/>,
-        /// then the normal single-pass locate runs — the match is found in the matched line
-        /// and <c>contextWords</c> naturally expands into the neighbour text. The returned
-        /// offsets are into that JOINED text.
-        ///
-        /// Used only for lines whose own window came out shorter than the requested context
-        /// (see <see cref="SnippetDescriptor.WindowWordCount"/>); every other line keeps the
-        /// plain single-line path with zero added cost.
-        /// </summary>
-        internal static SnippetDescriptor LocateOverNeighbourLines(
-            string              previousContent,
-            string              content,
-            string              nextContent,
-            PreparedQueryGroups prepared,
-            bool                requireOrdered     = false,
-            int                 originalGroupCount = 0,
-            int                 contextWords       = DefaultContextWords)
-        {
-            if (string.IsNullOrEmpty(content) || prepared == null || prepared.IsEmpty)
-                return SnippetDescriptor.NoMatch;
-
-            string joined = JoinWithNeighbourLines(previousContent, content, nextContent);
-            var descriptor = GetLocator(contextWords).Locate(joined, prepared, requireOrdered, originalGroupCount);
-            ReleaseLocatorIfOversized(joined);
-            return descriptor;
-        }
-
-        /// <summary>
-        /// previous + ' ' + content + ' ' + next, an empty side dropped together with its
-        /// space. The space keeps boundary words distinct (they must not fuse across a line
-        /// break) and renders as a normal gap. The page re-joins line texts the same way, so
-        /// a descriptor's offsets land on the same characters.
-        /// </summary>
-        internal static string JoinWithNeighbourLines(string previousContent, string content, string nextContent)
-        {
-            bool hasPrevious = !string.IsNullOrEmpty(previousContent);
-            bool hasNext     = !string.IsNullOrEmpty(nextContent);
-            if (!hasPrevious && !hasNext) return content;
-
-            var joined = new System.Text.StringBuilder(
-                (previousContent?.Length ?? 0) + content.Length + (nextContent?.Length ?? 0) + 2);
-            if (hasPrevious) joined.Append(previousContent).Append(' ');
-            joined.Append(content);
-            if (hasNext) joined.Append(' ').Append(nextContent);
-            return joined.ToString();
-        }
-
         internal static SnippetDescriptor Locate(
             string                content,
             IReadOnlyList<string> queryTerms,

@@ -842,11 +842,11 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
-                // Snippets for the rows a page shows (the stream sends them for the first hits only).
-                case "ftsSnippets":
+                // Snippet texts for the rows a page shows (the hits already carry their descriptors).
+                case "ftsSnippetTexts":
                 {
-                    var a = MsgPack.De<FtsSnippetsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(fts.Snippets(a.Query ?? "", a.LineIds ?? new(), a.RequireOrdered, a.ContextWords)));
+                    var a = MsgPack.De<FtsSnippetTextsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fts.SnippetTexts(a.LineIds ?? new(), a.ShortLineIds ?? new())));
                 }
 
                 // Scoped substring search (in-book, commentary panel): candidate lines from the index (Core).
