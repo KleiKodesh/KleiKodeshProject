@@ -69,7 +69,9 @@ const style = computed(() => {
   z-index: 3000;
   /* Never intercepts the pointer: the scrollbar it sits beside is being dragged. */
   pointer-events: none;
-  max-width: min(280px, 40vw);
+  width: max-content;
+  max-width: min(220px, 40vw);
+  box-sizing: border-box;
   /* DMScrollBar's info label: a dark rounded bubble with light text that fades and
      grows in beside the bar, inverted against the page in every theme. */
   padding: 2px 8px;
@@ -87,6 +89,7 @@ const style = computed(() => {
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 /* Dark theme: not inverted (a white bubble glares on a dark page) — a raised dark
    surface with light text and a hairline border, as browsers and VS Code do. */
