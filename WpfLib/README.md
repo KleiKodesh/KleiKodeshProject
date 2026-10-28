@@ -13,7 +13,7 @@ Referenced by: `KleiKodeshVsto`, `DocDesignLib`, `RegexFindLib`, `WebSitesLib`, 
 | `Converters/` | WPF value converters (FlowDirection, Bool, String, Array/List) | All WPF libs |
 | `Controls/` | Custom controls (UpDownTextBox, UpDownFloatTextBox) | DocDesignLib |
 | `AttachedProperties/` | Attached behaviors (ButtonStrip, GridSetup, PopupListBox, TextBoxBehaviours) | All WPF libs |
-| `ThemedWindow/` | Custom window chrome (ThemedWindowDictionary.xaml, WindowButtons.cs) | Installer, KitveiHakodesh standalone |
+| `ThemedWindow/` | Custom window chrome (ThemedWindowDictionary.xaml, WindowButtons.cs) | No direct external reference (used inside WpfLib) |
 | `Themes/` | Unified Office-theme style palette (OfficePalette.xaml merges Brushes, ScrollBar, ComboBox, Button, CheckBox styles) | All WPF libs |
 
 ## Key Files
