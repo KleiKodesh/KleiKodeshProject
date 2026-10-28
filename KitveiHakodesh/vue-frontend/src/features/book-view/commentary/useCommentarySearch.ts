@@ -90,6 +90,22 @@ export function useCommentarySearch(
   /** The last complete search on these groups: its needle and the flat indexes it matched. */
   let lastSearch: { needle: string; flatIndexes: number[] } | null = null
 
+  /**
+   * A full-panel answer still in flight when its query was extended: the next search waits
+   * for it and narrows from it instead of searching the panel again. The request itself is
+   * never cancelled — its answer is what the extended query needs.
+   */
+  let pendingSearch: { needle: string; answer: Promise<number[] | null> } | null = null
+
+  /** The previous search's matched lines, when the new needle can only match among them. */
+  async function narrowingFor(needle: string): Promise<number[] | null> {
+    const previous = lastSearch
+    if (previous && previous.needle.length >= 2 && needle.includes(previous.needle)) return previous.flatIndexes
+    const pending = pendingSearch
+    if (!pending || pending.needle.length < 2 || !needle.includes(pending.needle)) return null
+    return pending.answer
+  }
+
   /** Matches from an answer, placed in the panel and in panel order. */
   function matchesOf(answer: { bookIds: number[]; lineIndexes: number[]; counts: number[] }, flatIndexOf: Map<string, number[]>): CommentaryMatch[] {
     const found: CommentaryMatch[] = []
@@ -114,17 +130,27 @@ export function useCommentarySearch(
     }
 
     // The lines to search: the previous search's matches when the query only grew, else all.
-    const previous = lastSearch
-    const narrowing = previous && previous.needle.length >= 2 && needle.includes(previous.needle) ? previous.flatIndexes : null
+    const narrowing = await narrowingFor(needle)
+    if (isStale()) return
     const places = narrowing ? narrowing.map((flatIndex) => placeAt.get(flatIndex)!) : [...placeAt.values()]
-    const answer = places.length
-      ? await linesSubstringSearch(searchQuery, runsOf(places), 0).catch(() => null)
-      : { bookIds: [], lineIndexes: [], counts: [] }
+    const request = places.length
+      ? linesSubstringSearch(searchQuery, runsOf(places), 0).catch(() => null)
+      : Promise.resolve({ bookIds: [], lineIndexes: [], counts: [] })
+    // Whatever this search finds is what an extended query narrows from — keep it reachable
+    // for the next keystroke even if this one is superseded before it lands.
+    const matchedFlatOf = (answer: Awaited<typeof request>) => {
+      if (!answer) return null
+      const flat: number[] = []
+      for (const match of matchesOf(answer, flatIndexOf)) if (match.occurrenceInLine === 0) flat.push(match.flatIndex)
+      return flat
+    }
+    const pending = { needle, answer: request.then(matchedFlatOf) }
+    pendingSearch = pending
+    const answer = await request
+    if (pendingSearch === pending) pendingSearch = null
     if (isStale() || !answer) return
     const found = matchesOf(answer, flatIndexOf)
-    const matchedFlat: number[] = []
-    for (const match of found) if (match.occurrenceInLine === 0) matchedFlat.push(match.flatIndex)
-    lastSearch = { needle, flatIndexes: matchedFlat }
+    lastSearch = { needle, flatIndexes: matchedFlatOf(answer)! }
     publish(found)
   }
 
@@ -141,6 +167,7 @@ export function useCommentarySearch(
     () => groups().map((group) => `${group.bookId}:${group.lines.length}:${group.lines[0]?.lineId ?? 0}`).join('|'),
     () => {
       lastSearch = null
+      pendingSearch = null
       if (debouncedQuery.value) void runSearch(debouncedQuery.value)
       else matches.value = []
     },
@@ -182,6 +209,7 @@ export function useCommentarySearch(
     query.value = ''
     currentSearchToken++
     lastSearch = null
+    pendingSearch = null
     matches.value = []
     currentMatchIdx.value = 0
   }
