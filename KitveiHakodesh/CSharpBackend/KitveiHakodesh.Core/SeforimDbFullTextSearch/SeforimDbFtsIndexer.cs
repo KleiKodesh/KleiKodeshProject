@@ -63,7 +63,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // forms fold, and a term of 128 UTF-8 bytes or more (quotes included) is left out.
         // fts9 (2026-10-22): an unterminated '<' (no '>' after it) is a plain separator, as in
         // Otzaria; fts8 treated it as a tag and dropped the rest of the line.
-        public const string IndexFormatVersion = "fts9";
+        // fts10 (2026-10-28): a <sup> holding a vocalized Hebrew letter mid-word (letters + at least
+        // one mark, Hebrew letter or mark on both sides) is transparent; other sups still end the word.
+        public const string IndexFormatVersion = "fts10";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

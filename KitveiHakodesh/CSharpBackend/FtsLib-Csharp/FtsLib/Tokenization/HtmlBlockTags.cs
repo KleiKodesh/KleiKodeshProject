@@ -107,10 +107,52 @@ namespace FtsLib.Tokenization
             }
         }
 
+        /// <summary>True for a sup tag name (open or close; the scanner drops the '/').</summary>
+        internal static bool IsSup(char[] name, int len)
+        {
+            int start = (len > 0 && name[0] == '/') ? 1 : 0;
+            return len - start == 3
+                && (name[start] | 32) == 's' && (name[start + 1] | 32) == 'u' && (name[start + 2] | 32) == 'p';
+        }
+
+        static bool IsLetterOrMark(char c) =>
+            (c >= 'א' && c <= 'ת') || IsAttachedMark(c);
+
+        static bool IsAttachedMark(char c) =>
+            c >= '֑' && c <= 'ׇ' && c != '־' && c != '׀' && c != '׃' && c != '׆';
+
+        /// <summary>
+        /// A &lt;sup&gt; whose '&lt;' is at <paramref name="lt"/> and '&gt;' at
+        /// <paramref name="gt"/> is TRANSPARENT (the word continues through it, like
+        /// &lt;b&gt;) only when its content up to the next '&lt;' is non-empty, holds only
+        /// Hebrew letters and attached marks with at least one mark, that '&lt;' starts
+        /// &lt;/sup&gt;, and the chars right before &lt;sup and right after &lt;/sup&gt;
+        /// are Hebrew letters or marks (a vocalized letter set mid-word, e.g. in Tanach).
+        /// Every other &lt;sup&gt; (a footnote or letter marker) ends the word. Same rule
+        /// as hebrew-fts html_tags::is_transparent_sup.
+        /// </summary>
+        internal static bool IsTransparentSup(string text, int lt, int gt)
+        {
+            if (lt == 0 || !IsLetterOrMark(text[lt - 1])) return false;
+            int close = text.IndexOf('<', gt + 1);
+            if (close < 0 || close == gt + 1) return false;
+            bool mark = false;
+            for (int i = gt + 1; i < close; i++)
+            {
+                char c = text[i];
+                if (!IsLetterOrMark(c)) return false;
+                if (IsAttachedMark(c)) mark = true;
+            }
+            return mark
+                && string.Compare(text, close, "</sup>", 0, 6, System.StringComparison.OrdinalIgnoreCase) == 0
+                && close + 6 < text.Length && IsLetterOrMark(text[close + 6]);
+        }
+
         /// <summary>
         /// Tags that END the current word: every block-level element, plus sup/sub —
         /// their content (footnote and reference markers) is a separate logical token,
-        /// not part of the word they interrupt. All other tags are TRANSPARENT: inline
+        /// not part of the word they interrupt (the scanner makes a &lt;sup&gt; that
+        /// IsTransparentSup accepts transparent instead). All other tags are TRANSPARENT: inline
         /// formatting (&lt;b&gt;, &lt;i&gt;, &lt;small&gt;, &lt;span&gt;, …) interrupts
         /// words mid-letter in ~1% of corpus lines (emphasised letters, e.g.
         /// ורא&lt;b&gt;ה&lt;/b&gt;), and breaking the word there indexed unfindable
