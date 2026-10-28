@@ -53,8 +53,9 @@ if (window.IsMatch)
 | `word~2` | Fuzzy — edit distance 2 |
 | `word~3` | Fuzzy — edit distance 3 (max) |
 | `a \| b` | OR — lines matching `a` OR `b` satisfy this AND slot |
+| `"a b"` | Quoted phrase: `a b` adjacent and in order in the line, its words literal (no operators); `"`, gershayim or a typographic double quote, unless it stands between two Hebrew letters (an acronym) |
 
-Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. Wildcard/fuzzy tokens are expanded internally before intersection.
+Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. Wildcard/fuzzy tokens are expanded internally before intersection. A quoted phrase (Otzaria's rule, `QueryParser.QuotedPhrases`) adds its words as literal groups and a check of each candidate line's text (`SnippetWindowLocator.ContainsPhrase`) for the phrase; `SearchIds` returns the candidates unchecked. FtsLib has no cross-line matching, so a phrase must stand in one line.
 
 **Words** follow Otzaria's tokenizer (index, query and word distance alike; index format `fts8`):
 a word starts at a letter or digit of any script (no Hebrew/Latin split; terms lowercased in every

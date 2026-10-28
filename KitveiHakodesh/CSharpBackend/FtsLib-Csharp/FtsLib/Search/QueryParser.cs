@@ -34,6 +34,10 @@ namespace FtsLib.Search
     ///     = spelling variants for this word; '+' / '=' among its trailing signs ("word%+",
     ///     "word=", or leading) = inflections / synonyms, which the host rewrites before
     ///     parsing, so here they are only dropped.
+    ///   - Quoted phrases (Otzaria's smartSearchQuotedPhrases, see <see cref="QuotedPhrases"/>):
+    ///     the words of a quoted span are literal (their operators and markers dropped) and
+    ///     <see cref="ParsedQuery.Phrases"/> lists each phrase's groups, which a hit must
+    ///     carry adjacent and in order.
     /// </summary>
     internal static class QueryParser
     {
@@ -51,12 +55,23 @@ namespace FtsLib.Search
             // Otzaria's sanitizer: a paired reading keeps its second reading.
             query = WordRule.KeepSecondOfPairedReadings(query);
 
+            // Quoted phrases, as typed-word indexes (read before the '|' padding, which
+            // adds no typed word).
+            var quoted = QuotedPhrases(query);
+            var phraseOfTyped = new Dictionary<int, int>();
+            for (int p = 0; p < quoted.Count; p++)
+                foreach (int t in quoted[p]) phraseOfTyped[t] = p;
+            var phraseGroups = new List<List<int>>();
+            for (int p = 0; p < quoted.Count; p++) phraseGroups.Add(new List<int>());
+            bool wordOutsidePhrase = false;
+
             // Pad every '|' with spaces so that "a|b" and "a | b" are treated identically.
             query = query.Replace("|", " | ");
 
             // pendingGroup: the sub-patterns collected so far for the current OR group.
             var pendingGroup = new List<SubPattern>();
             bool lastWasPipe = false; // was the previous meaningful token a '|'?
+            int typed = -1;           // the typed word's index (pipes are not words)
 
             foreach (var raw in query.Split(new[] { ' ', '\t', '\r', '\n' },
                                             StringSplitOptions.RemoveEmptyEntries))
@@ -66,8 +81,10 @@ namespace FtsLib.Search
                     lastWasPipe = true;
                     continue;
                 }
+                typed++;
+                bool inPhrase = phraseOfTyped.TryGetValue(typed, out int phrase);
 
-                foreach (var sp in ParseToken(raw))
+                foreach (var sp in ParseToken(raw, inPhrase))
                 {
                     if (!lastWasPipe && pendingGroup.Count > 0)
                     {
@@ -78,13 +95,89 @@ namespace FtsLib.Search
 
                     pendingGroup.Add(sp);
                     lastWasPipe = false;
+                    // the group this sub-pattern is in (pendingGroup becomes groups[Count])
+                    if (inPhrase)
+                    {
+                        var list = phraseGroups[phrase];
+                        if (list.Count == 0 || list[list.Count - 1] != groups.Count) list.Add(groups.Count);
+                    }
+                    else wordOutsidePhrase = true;
                 }
             }
 
             if (pendingGroup.Count > 0)
                 groups.Add(new QueryGroup(pendingGroup));
 
-            return new ParsedQuery(groups);
+            var phrases = new List<IReadOnlyList<int>>();
+            foreach (var g in phraseGroups) if (g.Count > 0) phrases.Add(g);
+            // One phrase holding every word: Otzaria's literal phrase search.
+            bool wholePhrase = phrases.Count == 1 && !wordOutsidePhrase;
+            phrases.RemoveAll(g => g.Count < 2);   // one word: its literal group says it all
+            return new ParsedQuery(groups, phrases, wholePhrase);
+        }
+
+        /// <summary>A char that opens or closes a quoted phrase: '"', gershayim, and the
+        /// typographic double quotes (Otzaria's smartSearchQuotedPhrases).</summary>
+        private static bool IsPhraseQuote(char c)
+            => c == '"' || c == '\u05F4' || c == '\u201C' || c == '\u201D' || c == '\u201E';
+
+        private static bool IsHebrewLetter(char c) => c >= '\u05D0' && c <= '\u05EA';
+
+        /// <summary>
+        /// The quoted phrases of <paramref name="query"/> (Otzaria's smartSearchQuotedPhrases,
+        /// lib/search/utils/smart_lexical_in_book_search.dart), as the typed-word indexes each
+        /// covers. A quote char opens a phrase, the next one closes it, unless the quote's
+        /// previous char (nikud / te'amim skipped, a maqaf counts) and its next char are both
+        /// Hebrew letters: that quote is an acronym's gershayim and quotes nothing. An
+        /// unclosed quote and an empty phrase are ignored. A typed word (cut on space, tab,
+        /// CR, LF and '|') belongs to a phrase when it overlaps the quoted span.
+        /// </summary>
+        internal static List<List<int>> QuotedPhrases(string query)
+        {
+            var result = new List<List<int>>();
+            var spans = new List<(int Start, int End)>();
+            int open = -1;
+            char previous = '\0';
+            bool hasPrevious = false;
+            for (int i = 0; i < query.Length; i++)
+            {
+                char c = query[i];
+                bool nextLetter = i + 1 < query.Length && IsHebrewLetter(query[i + 1]);
+                if (IsPhraseQuote(c) && !(hasPrevious && IsHebrewLetter(previous) && nextLetter))
+                {
+                    if (open < 0) open = i + 1;
+                    else
+                    {
+                        if (query.Substring(open, i - open).Trim().Length > 0) spans.Add((open, i));
+                        open = -1;
+                    }
+                }
+                if (!((c >= '\u0591' && c <= '\u05BD') || (c >= '\u05BF' && c <= '\u05C7')))
+                {
+                    previous = c;
+                    hasPrevious = true;
+                }
+            }
+            if (spans.Count == 0) return result;
+
+            var words = new List<(int Start, int End)>();
+            int start = 0;
+            for (int i = 0; i <= query.Length; i++)
+            {
+                if (i == query.Length || query[i] == '|' || query[i] == ' ' || query[i] == '\t' || query[i] == '\r' || query[i] == '\n')
+                {
+                    if (i > start) words.Add((start, i));
+                    start = i + 1;
+                }
+            }
+            foreach (var (s, e) in spans)
+            {
+                var phrase = new List<int>();
+                for (int k = 0; k < words.Count; k++)
+                    if (words[k].Start < e && words[k].End > s) phrase.Add(k);
+                if (phrase.Count > 0) result.Add(phrase);
+            }
+            return result;
         }
 
         private static bool IsPipeToken(string raw)
@@ -100,7 +193,7 @@ namespace FtsLib.Search
             => HebrewChars.IsWordChar(c) || HebrewChars.IsQuote(c) || HebrewChars.IsTransparent(c) || c == '?' || c == '%';
 
         /// <summary>The words of one whitespace token, piece by piece.</summary>
-        private static List<SubPattern> ParseToken(string raw)
+        private static List<SubPattern> ParseToken(string raw, bool literal = false)
         {
             var result = new List<SubPattern>();
             int i = 0, n = raw.Length, pieceStart = 0;
@@ -118,7 +211,7 @@ namespace FtsLib.Search
                 }
                 if (c < 0 || !IsPieceChar(c))
                 {
-                    if (i > pieceStart) ParsePiece(raw.Substring(pieceStart, i - pieceStart), result);
+                    if (i > pieceStart) ParsePiece(raw.Substring(pieceStart, i - pieceStart), result, literal);
                     pieceStart = i + units;
                 }
                 i += units;
@@ -126,8 +219,10 @@ namespace FtsLib.Search
             return result;
         }
 
-        /// <summary>One piece: its operators, then its words by the word rule.</summary>
-        private static void ParsePiece(string raw, List<SubPattern> into)
+        /// <summary>One piece: its operators, then its words by the word rule.
+        /// <paramref name="literal"/> (a quoted phrase's word): the operators and markers are
+        /// dropped and every word is a plain literal.</summary>
+        private static void ParsePiece(string raw, List<SubPattern> into, bool literal = false)
         {
             WordMarkers.Split(raw, out bool expandKetiv, out _, out _, out raw);
 
@@ -170,6 +265,20 @@ namespace FtsLib.Search
                 bool prefixes = grammarPrefix && (!isWildcard || (starsOnly && !normalised.StartsWith("*", StringComparison.Ordinal)));
                 bool suffixes = grammarSuffix && (!isWildcard || (starsOnly && !normalised.EndsWith("*", StringComparison.Ordinal)));
 
+                if (literal)
+                {
+                    // A quoted phrase's word is searched as written.
+                    if (isWildcard)
+                    {
+                        normalised = normalised.Replace("*", "").Replace("?", "");
+                        if (normalised.Length == 0) continue;
+                        termBytes = System.Text.Encoding.UTF8.GetByteCount(normalised);
+                    }
+                    into.Add(new SubPattern(normalised, false,
+                                            isUnindexed: !HebrewChars.IsIndexableLength(termBytes)));
+                    continue;
+                }
+
                 // A literal whose term is too long has no index term: an unindexed slot.
                 bool unindexed = !isWildcard && !fuzzy && !prefixes && !suffixes
                     && !HebrewChars.IsIndexableLength(termBytes);
@@ -203,9 +312,22 @@ namespace FtsLib.Search
     {
         public readonly IReadOnlyList<QueryGroup> Groups;
 
+        /// <summary>Quoted phrases of two or more groups: each phrase's group indexes, in
+        /// order. A hit carries each phrase's groups adjacent and in order.</summary>
+        public readonly IReadOnlyList<IReadOnlyList<int>> Phrases;
+
+        /// <summary>The query is one quoted phrase holding every word (Otzaria's literal
+        /// phrase search).</summary>
+        public readonly bool IsWholePhrase;
+
         public ParsedQuery(List<QueryGroup> groups)
+            : this(groups, new List<IReadOnlyList<int>>(), false) { }
+
+        public ParsedQuery(List<QueryGroup> groups, List<IReadOnlyList<int>> phrases, bool wholePhrase)
         {
             Groups = groups;
+            Phrases = phrases;
+            IsWholePhrase = wholePhrase;
         }
 
         public bool IsEmpty => Groups.Count == 0;
