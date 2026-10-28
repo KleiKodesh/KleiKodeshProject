@@ -43,7 +43,7 @@ $blocks = foreach ($h in $hashes) {
     # Backfill: a note in refs/notes/release counts as the commit's own User-facing line
     # (git notes --ref=release add -m "User-facing: fixed - Area: sentence" <commit>).
     # NOTES_VARIANT (test runs only): nonotes = ignore the notes, nodiff = no interface texts.
-    $note = if ($env:NOTES_VARIANT -ne 'nonotes') { (git notes --ref=release show $h 2>$null | Out-String).Trim() }
+    $note = if ($env:NOTES_VARIANT -notmatch 'nonotes') { (git notes --ref=release show $h 2>$null | Out-String).Trim() }
     if ($note) { $msg = $msg -replace '(?im)^\s*User-facing:.*$', ''; $msg = "$msg`n$note".Trim() }
     if ($msg -match '(?im)^\s*User-facing:\s*none\b') { continue }
     $files = @(git diff-tree --no-commit-id --name-only -r $h)
@@ -59,7 +59,7 @@ $blocks = foreach ($h in $hashes) {
         ForEach-Object { $p = @($_ -split '/'); if ($p.Count -gt 1) { $p[0..([Math]::Min(4, $p.Count - 2))] -join '/' } else { $_ } } |
         Sort-Object -Unique | Select-Object -First 6)
     # The interface texts a commit adds are literally what the user sees.
-    $texts = if ($env:NOTES_VARIANT -eq 'nodiff') { @() } else { @(git show --format= -U0 $h -- '*i18n/locales/en/*' '*AddinText.cs' 2>$null |
+    $texts = if ($env:NOTES_VARIANT -match 'nodiff') { @() } else { @(git show --format= -U0 $h -- '*i18n/locales/en/*' '*AddinText.cs' 2>$null |
         Where-Object { $_ -match '^\+[^+]' } | ForEach-Object { $_.Substring(1).Trim() } |
         Where-Object { $_ -match '[A-Za-z]{3}' } | Select-Object -First 6 |
         ForEach-Object { if ($_.Length -gt 110) { $_.Substring(0, 110) } else { $_ } }) }
