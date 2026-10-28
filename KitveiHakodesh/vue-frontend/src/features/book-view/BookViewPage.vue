@@ -136,6 +136,16 @@ const commentarySharedProps = computed(() => ({
   commentaryTocPaths: commentaryTocPaths.value,
 }))
 
+/** A new bookmark's default name: the TOC path of the section the line sits in. */
+function bookmarkLabelForLine(lineIndex: number): string {
+  const entry = getActiveTocEntry(lineIndex)
+  return entry ? getTocPath(entry) : ''
+}
+
+function goToBookmark(lineId: number, lineIndex: number) {
+  linesContentRef.value?.scrollToLineId(lineId, lineIndex, { force: true })
+}
+
 // All toolbar props that do not depend on its position, so the three placements
 // (top / side / bottom) each spread one object instead of repeating the list.
 const toolbarProps = computed(() => ({
@@ -156,6 +166,7 @@ const toolbarProps = computed(() => ({
   currentScrollLineIndex: currentScrollLineIndex.value,
   lines: lines.value,
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
+  bookmarkLabelForLine,
   bottomCommentaryVisible: panels.bottom.visible.value,
   sideCommentaryVisible: sideCommentaryOpen.value,
   sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
@@ -465,6 +476,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
     />
@@ -483,6 +495,7 @@ function getSideEditionOutlineTarget(): string | undefined {
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+        @go-to-bookmark="goToBookmark"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
         @select-version="selectVersion"
       />
@@ -725,6 +738,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
     />

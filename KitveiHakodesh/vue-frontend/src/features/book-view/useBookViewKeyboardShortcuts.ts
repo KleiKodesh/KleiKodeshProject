@@ -7,6 +7,7 @@
  *   When focus is elsewhere (toolbar, etc.) we zoom both panels together.
  * - Ctrl+Left / Ctrl+Right: section navigation (RTL — Left = next, Right = previous).
  * - Ctrl+D: toggle clean text (the toolbar's eraser button).
+ * - Ctrl+Shift+D: create a bookmark at the top line (the toolbar's bookmarks dropdown).
  */
 import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -26,6 +27,7 @@ export function useBookViewKeyboardShortcuts(
   hasToc: () => boolean,
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
   toggleCleanText: () => void,
+  createBookmark: () => void,
 ) {
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
@@ -48,6 +50,12 @@ export function useBookViewKeyboardShortcuts(
     if (event.code === 'KeyD' && !event.shiftKey && !event.altKey) {
       event.preventDefault()
       toggleCleanText()
+      return
+    }
+
+    if (event.code === 'KeyD' && event.shiftKey && !event.altKey) {
+      event.preventDefault()
+      createBookmark()
       return
     }
 
