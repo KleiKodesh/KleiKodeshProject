@@ -3,7 +3,6 @@ import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import {
   getAllAltTocEntries,
   getAltTocStructures,
-  getBookIdByExactTitle,
   getTocEntryByTextPrefix,
 } from '@/webview-host/seforimApi'
 import type { HomeDailyLearningTarget } from './homeDailyLearningTypes'
@@ -24,20 +23,47 @@ async function findBookByName(target: HomeDailyLearningTarget): Promise<{ id: nu
   return null
 }
 
-async function findBookByQuery(bookQuery: string, matchTitleExactly: boolean): Promise<{ id: number; title: string } | null> {
+// Same query from several cycles (daf yomi + daf weekly, mishnah + perek) shares one lookup while in flight.
+const bookQueriesInFlight = new Map<string, Promise<{ id: number; title: string } | null>>()
+
+function findBookByQuery(bookQuery: string, matchTitleExactly: boolean): Promise<{ id: number; title: string } | null> {
+  const key = `${matchTitleExactly ? '=' : '~'}${bookQuery}`
+  const inFlight = bookQueriesInFlight.get(key)
+  if (inFlight) return inFlight
+  const promise = lookUpBook(bookQuery, matchTitleExactly)
+  bookQueriesInFlight.set(key, promise)
+  const forget = () => bookQueriesInFlight.delete(key)
+  promise.then(forget, forget)
+  return promise
+}
+
+async function lookUpBook(bookQuery: string, matchTitleExactly: boolean): Promise<{ id: number; title: string } | null> {
   const store = useBooksDataStore()
   await store.ensureLoaded()
 
   if (matchTitleExactly) {
-    const rows = await getBookIdByExactTitle(bookQuery)
-    const book = rows[0] ? store.allBooks.find((candidate) => candidate.id === rows[0]!.id) : undefined
+    // Local twin of `SELECT id FROM book WHERE title = @title` (first row = lowest id): no round-trip.
+    let book: { id: number; title: string } | undefined
+    for (const candidate of store.allBooks) {
+      if (candidate.title === bookQuery && (!book || candidate.id < book.id)) book = candidate
+    }
     return book ? { id: book.id, title: book.title } : null
   }
 
   if (!bookQuery.trim()) return null
-  const bookIds = await searchBookTitleIds(bookQuery.trim())
+  const bookIds = await searchTitleIdsOneAtATime(bookQuery.trim())
   const book = bookIds?.length ? store.allBooksMap.get(bookIds[0]!) : undefined
   return book ? { id: book.id, title: book.title } : null
+}
+
+// The catalog title search is single-flight: a newer search supersedes the running one,
+// so parallel cycles would cancel each other and retry-loop. Queue them instead.
+let titleSearchQueue: Promise<unknown> = Promise.resolve()
+
+function searchTitleIdsOneAtATime(query: string): Promise<number[] | null> {
+  const result = titleSearchQueue.then(() => searchBookTitleIds(query))
+  titleSearchQueue = result.catch(() => null)
+  return result
 }
 
 /**
