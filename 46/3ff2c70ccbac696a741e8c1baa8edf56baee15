@@ -1,0 +1,1 @@
+User-facing: fixed - PDF viewer: Escape in the zoom box restores the value, and the text no longer disappears when scrolling fast.
