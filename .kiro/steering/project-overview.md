@@ -53,6 +53,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
 - **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `FtsLib-Csharp`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **Release**: GitHub Actions `.github/workflows/release.yml` (manual or weekly auto, Gemini notes) runs `Build/scripts/build-installer.ps1`; locally `Build\build-menu.bat`. All workflows: `Build/README.md`.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -82,7 +83,7 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | README                                                                                                               | Covers                                                             |
 | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [`README.md`](../../README.md)                                                                                       | Root overview, architecture diagram, build instructions            |
-| [`Build/README.md`](../../Build/README.md)                                                                                                         | Build infrastructure: layouts, pre-build targets, variants        |
+| [`Build/README.md`](../../Build/README.md)                                                                                                         | Build infrastructure, release flow, GitHub Actions workflows       |
 | [`Build/Installer/README.md`](../../Build/Installer/README.md)                                                       | WPF installer: extraction, registry keys, version management       |
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
 | [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
