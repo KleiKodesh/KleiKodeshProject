@@ -5,12 +5,15 @@
 # The run reads the current releases, so it is safe to start any number of times.
 # Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
 # and by release events from manual edits/deletes.
+# Monthly it only lists the folder: Google expires a login unused for 6 months, and releases can pause that long.
 name: Drive sync
 
 on:
   workflow_dispatch:
   release:
     types: [published, edited, deleted, unpublished]
+  schedule:
+    - cron: '0 3 1 * *'
 
 concurrency:
   group: drive-sync
@@ -19,6 +22,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       FOLDER_ID: 16lBZzaLRjdz5aIG54Uanhmdk9EczwEKo   # the KleiKodesh folder in the shared Drive
       PREVIOUS_DIR: גרסה קודמת
@@ -31,7 +35,14 @@ jobs:
       RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_GDRIVE_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Keep the Google login alive
+        if: github.event_name == 'schedule'
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash > /dev/null
+          rclone lsf gdrive: --drive-root-folder-id "$FOLDER_ID" --max-depth 1
+
       - name: Download the latest two releases
+        if: github.event_name != 'schedule'
         run: |
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
                    --limit 2 --json tagName --jq '.[].tagName')
@@ -63,10 +74,12 @@ jobs:
           find mirror notes -type f | sort
 
       - name: Install rclone
+        if: github.event_name != 'schedule'
         run: curl -fsSL https://rclone.org/install.sh | sudo bash
 
       # Release notes are left out of the sync: they are Google Docs on Drive, re-created below.
       - name: Sync to Drive
+        if: github.event_name != 'schedule'
         run: |
           rclone sync mirror gdrive: --drive-root-folder-id "$FOLDER_ID" -v \
             --filter "- $NOTES_HE - *" --filter "- $NOTES_EN - *" \
@@ -74,6 +87,7 @@ jobs:
             --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
 
       - name: Release notes as Google Docs
+        if: github.event_name != 'schedule'
         run: |
           rclone delete gdrive: --drive-root-folder-id "$FOLDER_ID" --include 'ReleaseNotes-*' \
             --include "$NOTES_HE - *" --include "$NOTES_EN - *" -v
