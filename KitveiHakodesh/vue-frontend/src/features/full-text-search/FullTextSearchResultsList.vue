@@ -7,8 +7,9 @@ import { useEventListener } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import WindowedScroller from '@/components/WindowedScroller.vue'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi, WindowedScrollerScrollToOptions } from '@/components/windowedScrollerTypes'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
@@ -340,16 +341,122 @@ function captureScrollPos() {
  * them around the target and sets the scroll from the row's real position. The
  * position is not persisted while the landing is in flight.
  */
-async function landOn(index: number, offsetPx = 0) {
+async function landOn(index: number, landing: WindowedScrollerScrollToOptions = {}) {
   const api = scroller()
   if (!api) return
   programmaticScrolling = true
   try {
-    await api.scrollToIndex(index, { offsetPx })
+    await api.scrollToIndex(index, landing)
   } finally {
     // The landing's scroll event is dispatched at the next frame's start.
     requestAnimationFrame(() => { programmaticScrolling = false })
   }
+}
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+//
+// The combobox model every search list in the app uses (useInputListNavigation):
+// the arrows move a HIGHLIGHT rather than DOM focus, so the user can keep typing
+// mid-word while the field has the caret and ArrowLeft/ArrowRight stay the caret's.
+//
+// `onNavigationKeydown` is the one entry point, reached two ways (both through the
+// page): forwarded from the search field's own keydown, and — because focus is
+// usually NOT in that field by the time the reader wants the arrows — from the
+// page's window-level capture handler for everywhere else. See the handler in
+// FullTextSearchPage.vue for why the field alone was not enough.
+//
+// The highlight is an INDEX into `shownResults`, not an element: this list mounts
+// only the rows around the viewport, so an element reference would be dropped the
+// moment the row scrolled out. Revealing it therefore goes through the scroller
+// (`revealResult`), which fetches the row's snippet and lands on it exactly,
+// rather than scrollIntoView on an element that may not exist.
+//
+// Enter opens through the very same `resultClick` the mouse opens through, so the
+// book lands on the hit's line by the one path (useFullTextSearchFilters.handleResultClick).
+
+/**
+ * Brings the highlighted result into view with 'nearest' semantics: nothing while
+ * the row is already fully on screen, otherwise the shortest landing — its top at
+ * the viewport's top when it sits above, its bottom at the bottom when below.
+ */
+function revealResult(index: number) {
+  const api = scroller()
+  const viewport = scrollEl.value
+  if (!api || !viewport) return
+  if (api.isRowFullyVisible(index)) return
+  const row = api.isRowRendered(index) ? api.rowElement(index) : null
+  // A mounted row is placed by its own offset; an unmounted one is above the
+  // viewport exactly when its index is before the first row showing there.
+  const isAbove = row
+    ? row.offsetTop < viewport.scrollTop
+    : index < (api.readFirstVisible()?.index ?? api.renderedRange.start)
+  void landOn(index, { align: isAbove ? 'start' : 'end' })
+}
+
+const { activeIndex, onKeydown: moveHighlight } = useInputListNavigation({
+  // Live through the streaming appends (shownCount reads resultsVersion), so holding
+  // ArrowDown keeps going as results arrive. At the last result LOADED SO FAR the
+  // highlight stops — there is no row to show and nothing to open — and moves on by
+  // itself the moment the next flush lands.
+  getCount: () => shownCount.value,
+  onActivate: (index, openInNewTab) => openResult(index, openInNewTab),
+  scrollIntoView: revealResult,
+})
+
+/** The vertical movement keys, unmodified — the ones that ENTER the list. */
+const ENTERING_KEYS = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp']
+
+/**
+ * A keydown aimed at the results, from the field or from the page's window
+ * handler. Returns true when it was consumed.
+ *
+ * Entering the list is the one thing this list does not take from the shared
+ * handler. Its rule — the first press goes to result 1 — is right for a dropdown
+ * that opens at its top, but this list is a page the reader scrolls: they wheel
+ * down to result 300, or come Back from a book onto their restored position (a
+ * rebuild, which drops the highlight), and the first ArrowDown would then yank them
+ * to the top. So a movement key pressed with nothing highlighted enters at the row
+ * they are LOOKING at. At the top of the list there is nothing to preserve and the
+ * shared rule stands, ArrowUp entering at the last result included.
+ */
+function onNavigationKeydown(event: KeyboardEvent): boolean {
+  const isEnteringKey =
+    ENTERING_KEYS.includes(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey
+  if (isEnteringKey && activeIndex.value < 0) {
+    const firstVisible = scroller()?.readFirstVisible(0, true)?.index
+    if (firstVisible) {
+      event.preventDefault()
+      activeIndex.value = firstVisible
+      revealResult(firstVisible)
+      return true
+    }
+  }
+  return moveHighlight(event)
+}
+
+/** The one open path, for a click, a middle-click and Enter alike. */
+function openResult(index: number, openInNewTab: boolean) {
+  const result = shownResults.value[index]
+  if (!result) return
+  activeIndex.value = index
+  emit('resultClick', result, openInNewTab)
+}
+
+// Required by useInputListNavigation's contract: a REBUILT list (new search, sort or
+// filter change) addresses different results under the same indexes, so the old
+// highlight would point at an unrelated hit. Streamed appends leave it alone.
+watch(shownGeneration, () => { activeIndex.value = -1 })
+
+/**
+ * Drops the highlight. The page calls this on every edit of the query text, and
+ * this list — unlike every other the composable serves — genuinely needs telling:
+ * the others filter live, so a keystroke replaces their items and resets the
+ * highlight by itself, while these results stand still until the search is RUN.
+ * Without it the highlight outlives the text it was found for, and the Enter meant
+ * to search the newly typed query would reopen the old result instead.
+ */
+function clearHighlight() {
+  activeIndex.value = -1
 }
 
 // ── Restore ───────────────────────────────────────────────────────────────────
@@ -389,7 +496,7 @@ function tryRestore() {
   // Not mounted yet: the scroller will open on `openingIndex` itself.
   if (!api) return
   restored = true
-  void landOn(decision.index, props.initialScrollOffset ?? 0)
+  void landOn(decision.index, { offsetPx: props.initialScrollOffset ?? 0 })
 }
 
 /** Wired to the scroller's `opened` event: it opened on the restore target. */
@@ -453,6 +560,8 @@ defineExpose({
   scrollToBook,
   armRestore,
   cancelRestore,
+  onNavigationKeydown,
+  clearHighlight,
 })
 </script>
 
@@ -496,12 +605,17 @@ defineExpose({
         @opened="onScrollerOpened"
       >
         <template #row="{ index }">
-          <div v-if="shownResults[index]" class="result-item">
+          <div
+            v-if="shownResults[index]"
+            class="result-item"
+            data-nav-item
+            :class="{ 'is-focused': activeIndex === index }"
+          >
             <div
               class="result-header"
               :title="resultTitle(shownResults[index]!)"
-              @click="emit('resultClick', shownResults[index]!, wantsNewTab($event))"
-              @auxclick.middle="emit('resultClick', shownResults[index]!, wantsNewTab($event))"
+              @click="openResult(index, wantsNewTab($event))"
+              @auxclick.middle="openResult(index, wantsNewTab($event))"
             >
               <span class="book-title">{{ bookTitleOf(shownResults[index]!) }}</span>
               <span v-if="tocPathOf(shownResults[index]!)" class="sep">›</span>
@@ -588,6 +702,22 @@ defineExpose({
      Centering keeps the result block aligned under the same reading measure. */
   max-width: var(--lines-content-max-width, none);
   margin-inline: auto;
+  position: relative;
+  border-radius: 6px;
+}
+/* The keyboard highlight (useInputListNavigation). Its fill comes from the app-wide
+   `[data-nav-item].is-focused` rule; a result is a tall block of text rather than a
+   one-line row, so it also takes an accent edge at the reading start to be
+   unmistakable at a glance. A pseudo-element with logical offsets: no physical RTL
+   assumption, and the highlight moving never shifts a row's layout. */
+.result-item.is-focused::before {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-color);
 }
 /* On a wide pane give the results a bit more breathing room from the edges
    (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so it

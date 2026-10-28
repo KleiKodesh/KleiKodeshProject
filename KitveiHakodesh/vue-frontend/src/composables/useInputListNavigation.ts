@@ -47,6 +47,17 @@ export interface UseInputListNavigationOptions {
    * with position:fixed, or block:'nearest' may scroll the page instead.
    */
   containerElement?: Ref<HTMLElement | null>
+  /**
+   * Brings item `index` into view, REPLACING the containerElement lookup above.
+   *
+   * For a WINDOWED list, whose rows are not all in the DOM: there the nth matched
+   * element is not the nth item (the DOM holds only the rows around the viewport),
+   * and the highlighted item may have no element at all — so the list's own
+   * scroller has to do the landing, and a querySelectorAll index would silently
+   * scroll to the wrong row. Implement it with 'nearest' semantics (do nothing
+   * while the item is already fully visible), like the DOM path it stands in for.
+   */
+  scrollIntoView?: (index: number) => void
   /** Item selector inside containerElement (default '[data-nav-item]'). */
   itemSelector?: string
   /**
@@ -104,6 +115,10 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
   const activeIndex = ref(-1)
 
   function scrollItemIntoView(index: number) {
+    if (options.scrollIntoView) {
+      options.scrollIntoView(index)
+      return
+    }
     const items = options.containerElement?.value?.querySelectorAll<HTMLElement>(itemSelector)
     items?.[index]?.scrollIntoView({ block: 'nearest' })
   }

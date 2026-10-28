@@ -29,6 +29,12 @@ const props = defineProps<{
   showOptionsToggle?: boolean
   sortOrder: FullTextSearchSortOrder
   disabled?: boolean
+  /**
+   * The results list's combobox keydown handler, forwarded by the page (the list is
+   * this bar's sibling, so it cannot be reached from here). Returns true when it
+   * consumed the key — see onInputKeydown for where in the order it runs.
+   */
+  resultsKeydown?: (event: KeyboardEvent) => boolean
 }>()
 const emit = defineEmits<{
   search: [string]
@@ -129,11 +135,42 @@ function onNativeSearch() {
   if (!localQuery.value) handleClear()
 }
 
-// Recent-searches navigation runs first; if it consumed the key (accepted a suggestion,
-// or closed the dropdown on Esc) it preventDefaults and we don't act.
+// Three handlers want the arrows and Enter, in this order:
+//
+//   1. the recent-searches dropdown, while it is OPEN — the list the user can SEE
+//      under the field wins its own keys; it preventDefaults what it consumed.
+//      A plain Enter closes it and falls through, so running a search hands the
+//      arrows straight to the results.
+//   2. the results list (combobox model, useInputListNavigation): the arrows move
+//      its highlight without moving the caret, and Enter WITH a highlight opens
+//      that result. Left/Right are never taken — they are the caret's.
+//   3. this field's own Enter (run the search) and Esc (clear), for keys nobody
+//      above claimed.
+//
+// "While it is open" is the whole reason this is not one straight call chain.
+// CLOSED, the dropdown still claims ArrowDown — to open itself, which is right for a
+// bar with nothing under it. On a page of results it is not: the first ArrowDown
+// after a search would raise a list of past queries instead of stepping into the
+// results just found, and the Enter after it would re-run one of those queries
+// rather than open a result. The suggestions are a PREFIX match, so the field
+// holding the query that was searched usually hides them — the exact match is
+// excluded — and the dropdown stays silent; with history that shares the prefix it
+// does not, which is how this reached a user with a real search history and not the
+// browser tests. So closed, the results get first refusal and the dropdown keeps
+// whatever they leave.
 function onInputKeydown(e: KeyboardEvent) {
-  recents.onKeydown(e)
-  if (e.defaultPrevented) return
+  // Read before anything runs: the dropdown's own handler closes it as it goes, and
+  // the order must be decided by the state the key ARRIVED in.
+  const dropdownWasOpen = recents.open.value
+  if (dropdownWasOpen) {
+    recents.onKeydown(e)
+    if (e.defaultPrevented) return
+  }
+  if (props.resultsKeydown?.(e)) return
+  if (!dropdownWasOpen) {
+    recents.onKeydown(e)
+    if (e.defaultPrevented) return
+  }
   if (e.key === 'Enter') handleSearch()
   else if (e.key === 'Escape') handleClear()
 }
