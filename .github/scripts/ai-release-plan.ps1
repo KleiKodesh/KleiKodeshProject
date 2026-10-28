@@ -38,6 +38,12 @@ $range   = if ($previousTag) { "$previousTag..$end" } else { "-30" }
 # subject sounds user-facing. Commits marked "User-facing: none" are dropped here so
 # Gemini never sees them.
 $hashes = @(git log $range --no-merges --pretty=format:%H)
+# A commit reverted inside the range never reached users: drop it and its revert.
+$reverted = @(foreach ($h in $hashes) {
+    $b = git log -1 --pretty=format:%b $h
+    if ($b -match 'This reverts commit ([0-9a-f]{7,40})') { $h; (git rev-parse $Matches[1]) }
+})
+$hashes = @($hashes | Where-Object { $_ -notin $reverted })
 $blocks = foreach ($h in $hashes) {
     $msg = (git log -1 --pretty=format:"%s%n%b" $h | Out-String).Trim()
     # Backfill: a note in refs/notes/release counts as the commit's own User-facing line
@@ -259,13 +265,13 @@ Below are one-line summaries of every user-visible commit since the last release
 
 TASK 1 - the release notes:
 - EVERY line must end up in a change ("from") - nothing user-visible is dropped, not
-  even small polish. Group lines about the same feature into ONE change describing the
-  finished result (ten bookmark lines -> one bookmarks change); small polish of one
-  area becomes one change about that area. Never join unrelated features or areas
-  into one catch-all change.
+  even small polish.
+- One change = ONE fact a reader takes in at a glance (the notes group changes by area
+  themselves). Merge only lines that say the same thing or are steps of the same single
+  fact (five commits building the bookmarks menu -> one change about the bookmarks
+  menu). A fix, a speed-up and a new option of the same area stay separate changes.
 - Never merge a "fixed" line with non-fixed lines: fixes get their own changes.
-- One change = one idea a reader takes in at a glance (at most two related facts).
-- Cover BOTH products. Merge all speed-ups of one area into one change.
+- Cover BOTH products. All speed-ups of one area may be one change ("... is much faster").
 - en: one plain sentence, at most ~20 words.
 - rank: 1 = headline a reader cares about, 2 = notable, 3 = minor polish.
 - Never invent features or numbers.
