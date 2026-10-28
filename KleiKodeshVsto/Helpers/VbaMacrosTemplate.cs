@@ -97,6 +97,26 @@ namespace KleiKodesh.Helpers
         public static string FailedText(bool english) =>
             english ? "Installing the macros failed:" : "ההתקנה נכשלה:";
 
+        /// <summary>
+        /// Setup/update: when any of our templates is installed (current or retired),
+        /// replaces it with the shipped one, so users who opted in get new macros and
+        /// lose the retired Hebrew-names template. Never installs for users who did not
+        /// opt in. Best-effort: Word holding the file open just leaves the old one.
+        /// </summary>
+        public static void RefreshIfInstalled(string resourcesFolder)
+        {
+            try
+            {
+                foreach (string name in AllFileNames)
+                    if (File.Exists(Path.Combine(StartupFolder, name)))
+                    {
+                        Install(true, resourcesFolder);
+                        return;
+                    }
+            }
+            catch { }
+        }
+
         /// <summary>Deletes every flavour from Word's STARTUP folder (uninstall / repair).</summary>
         public static void Remove()
         {

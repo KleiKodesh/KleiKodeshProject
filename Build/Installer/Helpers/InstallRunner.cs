@@ -1,4 +1,5 @@
-﻿using KleiKodeshVstoInstallerWpf.Properties;
+﻿using KleiKodesh.Helpers;
+using KleiKodeshVstoInstallerWpf.Properties;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -51,6 +52,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             status?.Report(Strings.Install_Extracting);
             await AddinInstaller.ExtractAsync(progress);
+
+            // Opted-in users get the new macros template (and lose a retired one).
+            VbaMacrosTemplate.RefreshIfInstalled(AddinInstaller.MacrosResourcesFolder);
 
             status?.Report(Strings.Install_RegisteringAddin);
             await AddinInstaller.RegisterAddInAsync(progress);
