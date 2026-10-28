@@ -80,11 +80,14 @@ function trimPendingReports(reports: ErrorReportPayload[]): ErrorReportPayload[]
   return live.slice(-MAX_PENDING_REPORTS)
 }
 
-const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(readPendingReports()))
+const storedReports = readPendingReports()
+const pendingReports = ref<ErrorReportPayload[]>(trimPendingReports(storedReports))
 
 function savePendingReports(): void {
   lsSet(PENDING_REPORTS_KEY, pendingReports.value)
 }
+// The load trimmed something: write the trimmed queue back now, not on the next enqueue.
+if (pendingReports.value.length !== storedReports.length) savePendingReports()
 
 // localStorage is full: the older half of the queue goes — the newest reports stay.
 registerLocalStorageReclaimer(() => {
