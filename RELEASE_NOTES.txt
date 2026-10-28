@@ -1,0 +1,53 @@
+<div dir="rtl">
+
+### חדש
+- **סימניות** - בתצוגת ספר אפשר לשמור סימניות במקום המדויק בטקסט, לתת להן שם, לשנות ולמחוק, ולקפוץ אליהן מסרגל הכלים בספרים או מתפריט ההקשר (Ctrl+Shift+D).
+- **ספריית הספרים** - כשאין ספרייה מותקנת, התוכנה מורידה אותה בעצמה ומעדכנת אותה מעתה באופן אוטומטי.
+- **מילון** - סינון ההגדרות לפי מקור, והוספת כ-50 ראשי תיבות תורניים מתוך "יד מאיר".
+- **מציג PDF** - עריכות בתוכן העניינים של ה-PDF נשמרות לתוך הקובץ עצמו (Ctrl+S שומר במקום).
+- **כלי קודש (התוסף לוורד)** - ממשק באנגלית: רצועת הכלים, החלוניות וההודעות, עם בחירת שפת ממשק בהגדרות תוכנת ההתקנה.
+- **כלי קודש (התוסף לוורד)** - תבנית מאקרו (רשות), ודף "אודות" עדכני שנפתח בדפדפן.
+- **תוצאות חיפוש** - ניווט במקלדת: החצים עוברים בין התוצאות, Enter פותח, ורווח מציג תצוגה מקדימה.
+
+### שיפורים
+- **תצוגת ספר** - ספרים גדולים נפתחים ונגללים מהר יותר וצורכים פחות זיכרון; פס הגלילה מציג את פרק תוכן העניינים בעת הגלילה.
+- **חיפוש בטקסט וחיפוש במפרשים** - תוצאות מגיעות כמעט מיד גם בספרים גדולים, וההקלדה מצמצמת את התוצאות בלי להמתין.
+- **חיפוש** - התוצאות נשמרות ונטענות מחדש מהר, וחזור/קדימה מחזירים לאותו מקום ברשימה.
+- **דף הבית** - הלימוד היומי נטען מיד, וחיפוש ספר בקטלוג הספרים מהיר בהרבה.
+- **סרגל כלים בספרים** - כל כפתור יכול להתכווץ לתפריט "עוד", והתפריטים נפתחים לצדו.
+- **עדכונים** - במקום חלון קופץ, שורה שקטה בתפריט הראשי מציגה את מצב העדכון, ונקודה על כפתור התפריט מסמנת עדכון בתהליך.
+- **עיצוב תורני** - שורת "מתיחת אותיות" מרחיבה עכשיו את האותיות עצמן; השורה הקודמת נקראת "ריווח תווים".
+
+### תיקונים
+- **תצוגת ספר** - שינוי גודל החלון או הגדלה/הקטנה כבר לא מזיזים את הטקסט שקוראים.
+- **העתקה** - העתקה של מאות שורות כבר לא משבשת את סדר הטקסט.
+- **מציג PDF** - הדפסה של מסמך שעדיין לא נטען כולו עובדת.
+- **ממשק באנגלית** - חיפושים בעברית מוקלדים מימין לשמאל, וסרגל הכלים בספרים נשאר מימין לשמאל.
+
+</div>
+
+---
+
+### New
+- **Bookmarks** - in the book view, save bookmarks at the exact place in the text, name, rename and delete them, and jump back from the book toolbar or the context menu (Ctrl+Shift+D).
+- **Book library** - when no library is installed, the app downloads it itself and keeps it up to date.
+- **Dictionary** - filter definitions by source; about 50 Torah abbreviations added from "Yad Meir".
+- **PDF viewer** - edits to the PDF table of contents are saved into the file itself (Ctrl+S saves in place).
+- **Klei Kodesh (Word add-in)** - English interface for the ribbon, panes and messages, with an interface-language choice in the installer settings.
+- **Klei Kodesh (Word add-in)** - optional macros template, and an up-to-date About page that opens in the browser.
+- **Search results** - keyboard navigation: arrows move between results, Enter opens, Space shows a preview.
+
+### Improved
+- **Book view** - large books open and scroll faster and use less memory; the scrollbar shows the table-of-contents section as you scroll.
+- **Find in text and commentary search** - results arrive almost at once even in large books, and typing narrows them without waiting.
+- **Search** - results are kept and reload quickly, and Back/Forward return to the same place in the list.
+- **Home page** - daily learning loads instantly, and finding a book in the book catalog is much faster.
+- **Book toolbar** - every button can collapse into the "more" menu, and its dropdowns open beside it.
+- **Updates** - a quiet row in the main menu shows the update status instead of a pop-up, and a dot on the menu button marks an update in progress.
+- **Torani Design** - the letter stretch row now widens the letters themselves; the old row is now called character spacing.
+
+### Fixed
+- **Book view** - resizing the window or zooming no longer shifts the text you are reading.
+- **Copy** - copying hundreds of lines no longer scrambles the text.
+- **PDF viewer** - printing a document that has not fully loaded now works.
+- **English interface** - Hebrew searches are typed right-to-left, and the book toolbar stays right-to-left.
