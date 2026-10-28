@@ -18,7 +18,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import { getWordLinkTargetsForBook, wordLinkAnchorsSupported } from '@/webview-host/seforimApi'
 
 const props = defineProps<{
@@ -41,7 +41,7 @@ const toggleButtonRef = ref<HTMLElement | null>(null)
 const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
 })
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 function toggleOpen() {
   if (justClosed.value) return

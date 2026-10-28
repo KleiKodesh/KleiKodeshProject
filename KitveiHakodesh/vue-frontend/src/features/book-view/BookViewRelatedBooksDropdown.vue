@@ -20,7 +20,7 @@ import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import {
   getLinkTargetForSourceLineAndBook,
   getNextSectionWithCommentary,
@@ -111,7 +111,7 @@ interface RelatedBooksSection {
 const dropdownPositionClass = computed(() => {
   return `dropdown-${toolbarPosition.value}`
 })
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 const sections = computed<RelatedBooksSection[]>(() => {
   const sectionMap = new Map<string, RelatedBook[]>()

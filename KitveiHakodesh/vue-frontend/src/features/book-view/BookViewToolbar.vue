@@ -34,7 +34,7 @@ import {
   TOOLBAR_OVERFLOW_ORDER,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
-import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
+import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
@@ -243,7 +243,7 @@ useEventListener(window, 'resize', () => {
   isWindowResizing.value = true
   void endWindowResize()
 })
-const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
+const { isDragging, dropPreviewStyle } = useToolbarDrag(toolbarEl, toolbarPosition, '.book-view')
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
 )
