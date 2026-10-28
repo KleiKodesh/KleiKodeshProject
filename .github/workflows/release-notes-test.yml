@@ -18,6 +18,10 @@ on:
         description: Model tried first for merging and Hebrew (none = lite only)
         type: string
         required: false
+      variant:
+        description: Test variant - empty, nonotes (ignore refs/notes/release) or nodiff
+        type: string
+        required: false
       list_models:
         description: Print the model names the key can use
         type: boolean
@@ -33,6 +37,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Fetch release notes backfill (git notes)
+        run: git fetch origin refs/notes/release:refs/notes/release || true
       - name: List models
         if: inputs.list_models
         shell: pwsh
@@ -47,6 +53,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ inputs.model }}
           NOTES_MERGE_MODEL: ${{ inputs.merge_model }}
+          NOTES_VARIANT: ${{ inputs.variant }}
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
       - uses: actions/upload-artifact@v7

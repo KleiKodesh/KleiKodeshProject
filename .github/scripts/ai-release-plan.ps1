@@ -40,17 +40,31 @@ $range   = if ($previousTag) { "$previousTag..$end" } else { "-30" }
 $hashes = @(git log $range --no-merges --pretty=format:%H)
 $blocks = foreach ($h in $hashes) {
     $msg = (git log -1 --pretty=format:"%s%n%b" $h | Out-String).Trim()
+    # Backfill: a note in refs/notes/release counts as the commit's own User-facing line
+    # (git notes --ref=release add -m "User-facing: fixed - Area: sentence" <commit>).
+    # NOTES_VARIANT (test runs only): nonotes = ignore the notes, nodiff = no interface texts.
+    $note = if ($env:NOTES_VARIANT -ne 'nonotes') { (git notes --ref=release show $h 2>$null | Out-String).Trim() }
+    if ($note) { $msg = $msg -replace '(?im)^\s*User-facing:.*$', ''; $msg = "$msg`n$note".Trim() }
     if ($msg -match '(?im)^\s*User-facing:\s*none\b') { continue }
     $files = @(git diff-tree --no-commit-id --name-only -r $h)
     # Nothing a user runs: CI, build scripts, docs, notes, tests.
     $shipped = @($files | Where-Object { $_ -notmatch '^(\.github|\.kiro|\.claude|Build/scripts|docs?)/|\.md$|^suggestions\.txt$|^todo\.txt$|(^|/)tests?/|\.(test|spec)\.[jt]s$' })
     if ($files -and -not $shipped) { continue }
     # Long bodies are implementation detail; the subject and first lines carry the gist.
-    if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) + '...' }
+    if ($msg.Length -gt 400) {
+        $uf = @($msg -split "`n" | Where-Object { $_ -match '^\s*User-facing:' })
+        $msg = $msg.Substring(0, 400) + '...' + $(if ($uf) { "`n" + ($uf -join "`n") })
+    }
     $areas = @($shipped |
         ForEach-Object { $p = @($_ -split '/'); if ($p.Count -gt 1) { $p[0..([Math]::Min(4, $p.Count - 2))] -join '/' } else { $_ } } |
         Sort-Object -Unique | Select-Object -First 6)
-    "### $msg`nFiles: $($areas -join ', ')"
+    # The interface texts a commit adds are literally what the user sees.
+    $texts = if ($env:NOTES_VARIANT -eq 'nodiff') { @() } else { @(git show --format= -U0 $h -- '*i18n/locales/en/*' '*AddinText.cs' 2>$null |
+        Where-Object { $_ -match '^\+[^+]' } | ForEach-Object { $_.Substring(1).Trim() } |
+        Where-Object { $_ -match '[A-Za-z]{3}' } | Select-Object -First 6 |
+        ForEach-Object { if ($_.Length -gt 110) { $_.Substring(0, 110) } else { $_ } }) }
+    $stat = (git show --shortstat --format= $h | Out-String).Trim()
+    "### $msg`nFiles: $($areas -join ', ') ($stat)" + $(if ($texts) { "`nNew interface texts: " + ($texts -join ' | ') })
 }
 $blocks = @($blocks)
 if (-not $blocks) { throw "No commits since $previousTag - nothing to release." }
@@ -234,14 +248,14 @@ Below are one-line summaries of every user-visible commit since the last release
 ($previousTag), as "[number] section | area | summary". Many are steps of one feature.
 
 TASK 1 - the release notes:
-- Merge lines about the same feature into ONE change describing the finished result
-  (ten bookmark lines -> one bookmarks change); put their numbers in "from". Different
-  features stay separate - never drop a fix or a new feature because it is small, and
-  never join unrelated features or areas into one catch-all change.
+- EVERY line must end up in a change ("from") - nothing user-visible is dropped, not
+  even small polish. Group lines about the same feature into ONE change describing the
+  finished result (ten bookmark lines -> one bookmarks change); small polish of one
+  area becomes one change about that area. Never join unrelated features or areas
+  into one catch-all change.
 - Never merge a "fixed" line with non-fixed lines: fixes get their own changes.
 - One change = one idea a reader takes in at a glance (at most two related facts).
-- Cover BOTH products. Aim for 15-22 changes: merge all speed-ups of one area into one
-  change, and all steps of one feature into one change.
+- Cover BOTH products. Merge all speed-ups of one area into one change.
 - en: one plain sentence, at most ~20 words.
 - rank: 1 = headline a reader cares about, 2 = notable, 3 = minor polish.
 - Never invent features or numbers.
@@ -287,23 +301,19 @@ foreach ($g in ($lost | Group-Object { $found[$_].area_en })) {
         en = $f.en; rank = 2; section = 'fixed'; weight = $g.Count }
 }
 if ($lost) { Write-Host "Fixes brought back: $($lost.Count) lines" }
-# Short and focused: no cosmetic-only areas, at most 8 per section and 20 in all.
-# Order of preference: the best change of each area first (so no area vanishes behind
-# five speed-ups of another), then the rest; within that, rank, then most commits.
-$trivia = 'Theme', 'Status bar', 'Workspaces', 'Context menu', 'Book details', 'Back / Forward'
-$sorted = @($plan.changes | Where-Object { -not ($_.area_en -in $trivia -and $_.section -eq 'improved') } |
-    Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
-$seen = @{}
-$firsts = @(); $rest = @()
-foreach ($c in $sorted) { if ($seen[$c.area_en]) { $rest += $c } else { $seen[$c.area_en] = 1; $firsts += $c } }
-$pick = @(); $perSection = @{ new = 0; improved = 0; fixed = 0 }
-foreach ($c in $firsts + $rest) {
-    if ($pick.Count -ge 20 -or $perSection[$c.section] -ge 8) { continue }
-    $pick += $c; $perSection[$c.section]++
-}
-$kept = @($pick | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
-Write-Host "Step 2: $(@($plan.changes).Count) changes, $($kept.Count) kept"
+# Nothing user-visible is dropped: every change stays, headline first.
+$kept = @($plan.changes | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
+Write-Host "Step 2: $($kept.Count) changes"
 $plan.changes = $kept
+
+# Plain words for the few UI-builder terms the model keeps using (English and, through
+# it, the Hebrew).
+$plain = [ordered]@{
+    'tooltips?' = 'label'; 'flyout' = 'menu'; 'task panes?' = 'side pane'
+    'caret browsing' = 'keyboard reading'; '(text )?caret' = 'cursor'; 'TOC' = 'table of contents'
+    'pills?' = 'buttons'; 'thumb' = 'scrollbar handle'
+}
+foreach ($c in $kept) { foreach ($k in $plain.Keys) { $c.en = $c.en -replace $k, $plain[$k] } }
 
 # --- Step 3: the Hebrew, written from the final English list ---
 $heSchema = @{
@@ -324,6 +334,8 @@ sentences, in the same order - item [0] first.
   (plus PDF, Word, Ctrl and digits where needed).
 - Any app area, button or feature name MUST be the exact Hebrew glossary term.
 - Do not repeat the area name at the start of the sentence.
+- Keep the meaning of each English item exactly; its wording is usually the author's
+  own - stay close to it, just in natural Hebrew.
 
 GLOSSARY (English = Hebrew):
 $glossary
