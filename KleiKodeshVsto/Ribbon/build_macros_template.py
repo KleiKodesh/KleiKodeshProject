@@ -1,16 +1,18 @@
-"""Builds Resources\\KleiKodeshMacros.he.dotm and .en.dotm from VbaCommands.cs.
+"""Builds Resources\\KleiKodeshMacros.en.dotm from VbaCommands.cs.
 
 One macro per add-in command, so users can put any command on the Quick Access
-Toolbar or a keyboard shortcut. The .he template names the macros by their Hebrew
-ribbon labels, the .en one by the English ids. Neither is installed automatically:
-the user picks one in the installer's settings page or the add-in's settings pane
+Toolbar or a keyboard shortcut. Macros are named by the English (ASCII) ids only:
+Hebrew names failed with "Sub or Function not defined" from shortcuts and the Macros
+dialog on machines whose non-Unicode language is not Hebrew (issue #266). The file
+keeps its .en name so existing installs stay valid. Never installed automatically:
+the user opts in in the installer's settings page or the add-in's settings pane
 (KleiKodesh.Helpers.VbaMacrosTemplate), which copies it into Word's STARTUP folder.
 
 A .dotm is a zip; the macros live in word/vbaProject.bin, a compound file (MS-CFB)
 holding MS-OVBA-compressed streams. This script reads vbaProject.bin from
 Ribbon\\macros_template_base.dotm (not shipped), replaces the KleiKodesh module
 source, drops the compiled p-code (Word recompiles from source on load) and writes
-one zip per language. No Word, no VBA trust setting.
+the zip. No Word, no VBA trust setting.
 
     python KleiKodeshVsto\\Ribbon\\build_macros_template.py
 
@@ -25,13 +27,13 @@ import zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.join(HERE, 'VbaCommands.cs')
 BASE = os.path.join(HERE, 'macros_template_base.dotm')
-TARGET = os.path.join(HERE, '..', 'Resources', 'KleiKodeshMacros.%s.dotm')
+TARGET = os.path.join(HERE, '..', 'Resources', 'KleiKodeshMacros.en.dotm')
 MODULE = 'KleiKodesh'
 CODEPAGE = 'cp1255'   # VBA stores source in the ANSI code page; Hebrew names need 1255
 NOT_ACTIVE_HE = 'התוסף כלי קודש אינו פעיל'
 
 
-def module_source(lang):
+def module_source():
     code = io.open(SOURCE, encoding='utf-8-sig').read()
     lines = ['Attribute VB_Name = "%s"' % MODULE,
              "' Klei Kodesh add-in commands. Each macro runs the ribbon command of the same name.",
@@ -54,10 +56,10 @@ def module_source(lang):
              '    End If',
              'End Function']
     # "public void Nakdan() => AddinCommands.Run(...)" / "public void <Hebrew>() => Nakdan();"
-    # The Hebrew alias calls its English twin, so every macro calls an English member.
-    # English ids are ASCII and the Hebrew labels are not: that picks each template's names.
+    # The Hebrew aliases are skipped: VBA keeps names in the ANSI code page, so they only
+    # resolve where that is Hebrew. English ids are ASCII and the Hebrew labels are not.
     for name, twin in re.findall(r'public void (\w+)\(\) => (\w+)', code):
-        if name.isascii() != (lang == 'en'):
+        if not name.isascii():
             continue
         member = name if twin == 'AddinCommands' else twin
         lines += ['', 'Public Sub %s()' % name, '    KleiKodeshAddin.%s' % member, 'End Sub']
@@ -314,12 +316,7 @@ def zero_module_offsets(dir_data):
 
 
 def main():
-    for lang in ('he', 'en'):
-        build(lang)
-
-
-def build(lang):
-    target = TARGET % lang
+    target = TARGET
     with zipfile.ZipFile(BASE) as z:
         parts = [(i, z.read(i.filename)) for i in z.infolist()]
     vba = read_cfb(dict(parts_by_name(parts))['word/vbaProject.bin'])
@@ -330,7 +327,7 @@ def build(lang):
     new['VBA/_VBA_PROJECT'] = b'\xCC\x61\xFF\xFF\x00\x00\x00'   # no p-code cache: recompile on load
     for name in [k for k in vba if k.startswith('VBA/') and k not in ('VBA/dir', 'VBA/_VBA_PROJECT')
                  and not k.startswith('VBA/__SRP_')]:
-        source = module_source(lang) if name == 'VBA/' + MODULE else existing_source(vba, dir_data, name)
+        source = module_source() if name == 'VBA/' + MODULE else existing_source(vba, dir_data, name)
         new[name] = compress(source)
 
     bin_data = write_cfb(new)                           # build fully before touching the file

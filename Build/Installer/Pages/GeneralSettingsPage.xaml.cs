@@ -63,27 +63,24 @@ namespace KleiKodeshVstoInstallerWpf
             bool english = UiLanguage.Current == UiLanguage.English;
             MacrosHeader.Text          = VbaMacrosTemplate.HeaderText(english);
             MacrosNoneRadio.Content    = VbaMacrosTemplate.NoneText(english);
-            MacrosHebrewRadio.Content  = VbaMacrosTemplate.HebrewNamesText(english);
-            MacrosEnglishRadio.Content = VbaMacrosTemplate.EnglishNamesText(english);
+            MacrosInstallRadio.Content = VbaMacrosTemplate.InstallText(english);
             MacrosHint.Text            = VbaMacrosTemplate.HintText(english);
 
-            string installed = VbaMacrosTemplate.Installed;
-            MacrosNoneRadio.IsChecked    = installed == null;
-            MacrosHebrewRadio.IsChecked  = installed == VbaMacrosTemplate.Hebrew;
-            MacrosEnglishRadio.IsChecked = installed == VbaMacrosTemplate.English;
-            MacrosNoneRadio.Checked    += (s, e) => InstallMacros(null);
-            MacrosHebrewRadio.Checked  += (s, e) => InstallMacros(VbaMacrosTemplate.Hebrew);
-            MacrosEnglishRadio.Checked += (s, e) => InstallMacros(VbaMacrosTemplate.English);
+            bool installed = VbaMacrosTemplate.IsInstalled;
+            MacrosNoneRadio.IsChecked    = !installed;
+            MacrosInstallRadio.IsChecked = installed;
+            MacrosNoneRadio.Checked    += (s, e) => InstallMacros(false);
+            MacrosInstallRadio.Checked += (s, e) => InstallMacros(true);
         }
 
         // Word loads the template from STARTUP on its next start; a running Word has to
         // be reopened (and may hold the old one open, which makes the copy fail).
-        private void InstallMacros(string lang)
+        private void InstallMacros(bool install)
         {
             bool english = UiLanguage.Current == UiLanguage.English;
             try
             {
-                VbaMacrosTemplate.Install(lang, AddinInstaller.MacrosResourcesFolder);
+                VbaMacrosTemplate.Install(install, AddinInstaller.MacrosResourcesFolder);
                 if (WordHelper.IsWordRunning())
                     MessageBox.Show(VbaMacrosTemplate.ReopenWordText(english), Properties.Strings.Settings,
                         MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);

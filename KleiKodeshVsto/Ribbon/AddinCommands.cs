@@ -181,6 +181,19 @@ namespace KleiKodesh.Ribbon
             }
         }
 
+        // Macro shortcut: keyboard focus between the document and the open pane.
+        public static void TogglePaneFocus()
+        {
+            try
+            {
+                TaskPaneManager.ToggleFocus();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
         private static void RunCompare(string reference)
         {
             string message = TrackedCompare.ApplyReference(

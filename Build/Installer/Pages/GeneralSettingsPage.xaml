@@ -204,8 +204,7 @@
                         </Style>
                     </StackPanel.Resources>
                     <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
-                    <RadioButton x:Name="MacrosHebrewRadio"  GroupName="VbaMacros"/>
-                    <RadioButton x:Name="MacrosEnglishRadio" GroupName="VbaMacros"/>
+                    <RadioButton x:Name="MacrosInstallRadio" GroupName="VbaMacros"/>
                 </StackPanel>
                 <TextBlock x:Name="MacrosHint"
                            FontSize="11"
