@@ -34,6 +34,7 @@ bool treeOrderSelfTest = false;
 bool expanderSelfTest = false;
 string? treeOrderDump = null;
 string? exhaustiveOut = null;
+string? goldenDir = null, goldenTag = null, goldenCold = null;
 int exhLevels = 2, exhEvery = 1, exhShard = 0, exhShards = 1;
 for (int i = 0; i < args.Length; i++)
 {
@@ -53,6 +54,8 @@ for (int i = 0; i < args.Length; i++)
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
         case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
+        case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;
+        case "--golden-cold": goldenDir = args[++i]; goldenTag = args[++i]; goldenCold = args[++i]; break;
         case "--exhaustive": exhaustiveOut = args[++i]; break;
         case "--exh-levels": exhLevels = int.Parse(args[++i]); break;
         case "--exh-every": exhEvery = int.Parse(args[++i]); break;
@@ -105,6 +108,8 @@ if (treeOrderDump is not null)
 if (exhaustiveOut is not null)
     return ExhaustiveRecall.Run(dbPath, indexPath, exhaustiveOut, exhLevels, exhEvery, exhShard, exhShards);
 
+if (goldenDir is not null)
+    return goldenCold is null ? GoldenRig.Run(dbPath, goldenDir, goldenTag!) : GoldenRig.Cold(dbPath, goldenDir, goldenTag!, goldenCold);
 if (abbrevMode)
     return AbbrevVerify.Run(dbPath, indexPath);
 

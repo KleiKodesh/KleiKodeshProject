@@ -1,5 +1,7 @@
 using Lucene.Net.Index;
 using Lucene.Net.Search;
+using Lucene.Net.Search.Similarities;
+using Lucene.Net.Util;
 
 namespace KitveiHakodesh.Core.SeforimDbCatalog;
 
@@ -9,15 +11,20 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog;
 /// lookups). Level-0 docs only (one per book); every word must match (exact or spelling
 /// variant) in title, catalog path or authors; the LAST word may also match as a prefix. The
 /// ranking is the old frontend's: starts-with promotion for a one-word prefix, then title-hit
-/// words, then fewer title tokens, then tree order.
+/// words, then fewer title tokens, then tree order — all of it one Lucene query sorted on
+/// score and doc-values (see <see cref="RankedTitleQuery"/>).
 /// </summary>
 public sealed partial class SeforimDbCatalogIndex
 {
-    private (IndexReader Reader, Dictionary<long, (int BookId, List<string> TitleTokens)> Map)? _bookTitlesByRank;
-
     /// <summary>Cap on the partly typed multi-word abbreviation keys the last word is
     /// completed to (see <see cref="SeforimDbCatalogTextNormalizer.CompleteTrailingAbbreviationKeys"/>).</summary>
     private const int MaxKeyCompletions = 16;
+
+    /// <summary>Score of the starts-with promotion; above any count of title-hit words.</summary>
+    private const float StartsWithBoost = 1_000_000f;
+
+    /// <summary>Scores are exact clause counts: no query normalization.</summary>
+    private static readonly Similarity CountingSimilarity = new UnnormalizedSimilarity();
 
     /// <summary>Book ids in rank order; empty when nothing matched or no reader is open.
     /// Uncapped.</summary>
@@ -25,15 +32,16 @@ public sealed partial class SeforimDbCatalogIndex
     {
         var tokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
-        if (!TryAcquireSearcher(out var searcher, out var variants, out _))
+        if (!TryAcquireSearcher(out var shared))
         {
-            if (!TryOpenActive() || !TryAcquireSearcher(out searcher, out variants, out _)) return [];
+            if (!TryOpenActive() || !TryAcquireSearcher(out shared)) return [];
         }
         try
         {
-            var books = GetBookTitles(searcher.IndexReader);
-            var exact = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, lastPrefix: null), ct);
-            var matched = exact;
+            var reader = shared.IndexReader;
+            var searcher = new IndexSearcher(reader) { Similarity = CountingSimilarity };
+            var variants = new VariantLookup(reader);
+            Query matched = BuildTitleQuery(tokens, variants, lastPrefix: null);
             bool lastIsPrefixOnly = false;
 
             // The last typed word as a plain normalized word, for the prefix match.
@@ -44,9 +52,9 @@ public sealed partial class SeforimDbCatalogIndex
             // A partial last word that is also an abbreviation key "matches exactly" through its
             // expansion; that must not hide the books the word is the start of ("vayikr").
             bool lastIsKey = !tokens[^1].IsPlain && tokens[^1].PreferLiteral;
-            if (lastPrefix != null && (exact.Count == 0 || lastIsKey))
+            if (lastPrefix != null && (lastIsKey || !AnyMatch(searcher, matched)))
             {
-                matched = CollectTitleDocs(searcher, BuildTitleQuery(tokens, variants, lastPrefix), ct);
+                matched = BuildTitleQuery(tokens, variants, lastPrefix);
                 lastIsPrefixOnly = true;
             }
 
@@ -56,60 +64,70 @@ public sealed partial class SeforimDbCatalogIndex
             var completions = SeforimDbCatalogTextNormalizer.CompleteTrailingAbbreviationKeys(query, MaxKeyCompletions);
             if (completions.Count > 0)
             {
-                var seenDocs = new HashSet<int>();
-                foreach (var (doc, _) in matched) seenDocs.Add(doc);
-                matched = new List<(int Doc, long Order)>(matched);
+                var any = new BooleanQuery { { matched, Occur.SHOULD } };
                 foreach (var completed in completions)
-                {
-                    var completedTokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(completed);
-                    foreach (var hit in CollectTitleDocs(searcher, BuildTitleQuery(completedTokens, variants, lastPrefix: null), ct))
-                        if (seenDocs.Add(hit.Doc)) matched.Add(hit);
-                }
+                    any.Add(BuildTitleQuery(SeforimDbCatalogTextNormalizer.TokenizeQuery(completed), variants, lastPrefix: null), Occur.SHOULD);
+                matched = any;
             }
 
             var words = new List<string>();
             foreach (var t in tokens) words.AddRange(t.RankingWords);
-            return RankTitleMatches(matched, books, words, lastIsPrefixOnly && tokens.Count == 1 ? query.Trim() : null);
+            return RankedBookIds(searcher, RankedTitleQuery(matched, words, lastIsPrefixOnly && tokens.Count == 1 ? query.Trim() : null), ct);
         }
         finally
         {
-            searcher.IndexReader.DecRef();
+            shared.IndexReader.DecRef();
         }
     }
 
-    private static List<int> RankTitleMatches(
-        List<(int Doc, long Order)> matched, Dictionary<long, (int BookId, List<string> TitleTokens)> books,
-        List<string> words, string? startsWithPromotion)
+    /// <summary>
+    /// The match query, scored for the ranking: the match itself scores 0; each ranking word
+    /// that starts some title word adds 1 (one per word, repeats included); a title that
+    /// starts with <paramref name="startsWithPromotion"/> adds <see cref="StartsWithBoost"/>.
+    /// Sorted (<see cref="TitleRankSort"/>) by that score, then fewer distinct title words,
+    /// then tree order.
+    /// </summary>
+    private static Query RankedTitleQuery(Query matched, List<string> words, string? startsWithPromotion)
     {
-        var rows = new List<(int BookId, int TitleHits, int TitleCount, long Order, bool Starts)>(matched.Count);
-        foreach (var (_, order) in matched)
+        var ranked = new BooleanQuery(disableCoord: true) { { new ConstantScoreQuery(matched) { Boost = 0f }, Occur.MUST } };
+        foreach (var w in words)
+            ranked.Add(new ConstantScoreQuery(new PrefixQuery(new Term(FieldBookTitle, w))) { Boost = 1f }, Occur.SHOULD);
+        if (startsWithPromotion != null)
+            ranked.Add(new ConstantScoreQuery(new PrefixQuery(new Term(FieldBookTitleJoined, startsWithPromotion))) { Boost = StartsWithBoost }, Occur.SHOULD);
+        return ranked;
+    }
+
+    private static readonly Sort TitleRankSort = new(
+        SortField.FIELD_SCORE,
+        new SortField(FieldBookTitleWordsDv, SortFieldType.INT64),
+        new SortField(FieldTreeOrderDv, SortFieldType.INT64));
+
+    private static List<int> RankedBookIds(IndexSearcher searcher, Query query, CancellationToken ct)
+    {
+        var reader = searcher.IndexReader;
+        // Every book can match; the level-0 doc count bounds the queue (results stay uncapped).
+        var levelZero = new BytesRef();
+        NumericUtils.Int32ToPrefixCoded(0, 0, levelZero);
+        int books = Math.Max(1, reader.DocFreq(new Term(FieldLevel, levelZero)));
+        ct.ThrowIfCancellationRequested();
+        var top = searcher.Search(query, null, books, TitleRankSort, doDocScores: false, doMaxScore: false);
+        var leaves = reader.Leaves;
+        var ids = new List<int>(top.ScoreDocs.Length);
+        foreach (var sd in top.ScoreDocs)
         {
-            long rank = order >> 24;
-            if (!books.TryGetValue(rank, out var book)) continue;
-            int hits = 0;
-            foreach (var w in words)
-                foreach (var tok in book.TitleTokens)
-                    if (tok.StartsWith(w, StringComparison.Ordinal)) { hits++; break; }
-            bool starts = startsWithPromotion != null && book.TitleTokens.Count > 0
-                && string.Join(" ", book.TitleTokens).StartsWith(startsWithPromotion, StringComparison.Ordinal);
-            rows.Add((book.BookId, hits, new HashSet<string>(book.TitleTokens, StringComparer.Ordinal).Count, order, starts));
+            var leaf = leaves[ReaderUtil.SubIndex(sd.Doc, leaves)];
+            var bookIds = leaf.AtomicReader.GetNumericDocValues(FieldBookIdDv);
+            ids.Add((int)(bookIds?.Get(sd.Doc - leaf.DocBase) ?? 0));
         }
-        rows.Sort((a, b) =>
-        {
-            if (a.Starts != b.Starts) return a.Starts ? -1 : 1;
-            if (a.TitleHits != b.TitleHits) return b.TitleHits.CompareTo(a.TitleHits);
-            if (a.TitleCount != b.TitleCount) return a.TitleCount.CompareTo(b.TitleCount);
-            return a.Order.CompareTo(b.Order);
-        });
-        var ids = new List<int>(rows.Count);
-        foreach (var r in rows) ids.Add(r.BookId);
         return ids;
     }
+
+    private static bool AnyMatch(IndexSearcher searcher, Query query) => searcher.Search(query, 1).TotalHits > 0;
 
     /// <summary>The catalog query (<see cref="BuildQuery"/>, never fuzzy) restricted to level 0.
     /// With <paramref name="lastPrefix"/>, the last clause also accepts that word as a prefix on
     /// any field, he-prefixed both ways like the old frontend ("kuz" finds "ha-kuzari").</summary>
-    private static BooleanQuery BuildTitleQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants, string? lastPrefix)
+    private static BooleanQuery BuildTitleQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants, string? lastPrefix)
     {
         var bq = BuildQuery(tokens, fuzzy: false, variants);
         if (lastPrefix != null)
@@ -126,57 +144,10 @@ public sealed partial class SeforimDbCatalogIndex
         return bq;
     }
 
-    private static List<(int Doc, long Order)> CollectTitleDocs(IndexSearcher searcher, Query query, CancellationToken ct)
+    /// <summary>Default similarity without query normalization, so a constant-score clause
+    /// scores exactly its boost and a sum of them is an exact count.</summary>
+    private sealed class UnnormalizedSimilarity : DefaultSimilarity
     {
-        var c = new TitleDocCollector(ct);
-        searcher.Search(query, c);
-        return c.Docs;
-    }
-
-    private Dictionary<long, (int BookId, List<string> TitleTokens)> GetBookTitles(IndexReader reader)
-    {
-        lock (_lock)
-        {
-            if (_bookTitlesByRank is { } cached && ReferenceEquals(cached.Reader, reader)) return cached.Map;
-        }
-        var map = new Dictionary<long, (int, List<string>)>(16384);
-        foreach (var ctx in reader.Leaves)
-        {
-            var levels = ctx.AtomicReader.GetNumericDocValues(FieldLevelDv);
-            var orders = ctx.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
-            if (levels is null || orders is null) continue;
-            var live = ctx.AtomicReader.LiveDocs;
-            for (int d = 0; d < ctx.AtomicReader.MaxDoc; d++)
-            {
-                if (live is not null && !live.Get(d)) continue;
-                if (levels.Get(d) != 0) continue;
-                long rank = orders.Get(d) >> 24;
-                if (map.ContainsKey(rank)) continue;
-                var doc = ctx.AtomicReader.Document(d);
-                map[rank] = (doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
-                    SeforimDbCatalogTextNormalizer.Tokenize(doc.Get(FieldFullTocPath) ?? ""));
-            }
-        }
-        lock (_lock) _bookTitlesByRank = (reader, map);
-        return map;
-    }
-
-    private sealed class TitleDocCollector(CancellationToken ct) : ICollector
-    {
-        public readonly List<(int Doc, long Order)> Docs = [];
-        private int _docBase;
-        private NumericDocValues? _orders;
-        public void SetScorer(Scorer scorer) { }
-        public void SetNextReader(AtomicReaderContext context)
-        {
-            _docBase = context.DocBase;
-            _orders = context.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
-        }
-        public bool AcceptsDocsOutOfOrder => true;
-        public void Collect(int doc)
-        {
-            if ((Docs.Count & 1023) == 0) ct.ThrowIfCancellationRequested();
-            Docs.Add((_docBase + doc, _orders?.Get(doc) ?? long.MaxValue));
-        }
+        public override float QueryNorm(float sumOfSquaredWeights) => 1f;
     }
 }

@@ -82,71 +82,7 @@ public sealed partial class SeforimDbCatalogIndex
         _dir = dir;
         _reader = reader;
         _searcher = new IndexSearcher(reader);
-        _variants = null; // stale — rebuilt lazily off the new reader on next use
-        _titleTokensByRank = null;
         if (!ReferenceEquals(old, reader)) old?.Dispose();
-    }
-
-    /// <summary>
-    /// Every book's title tokens by its catalog rank (TreeOrder >> 24), read once per reader
-    /// generation from the level-0 documents. Lets a search know, for every matching doc
-    /// BEFORE the materialization cap, whether the query names its book — so a late-catalog
-    /// book the user typed by name is never cut off behind a thousand earlier hits that
-    /// merely share its words ("Biur Halacha seif 1" has every Shulchan Aruch commentary's
-    /// seif 1 ahead of it in catalog order).
-    /// </summary>
-    private Dictionary<long, List<string>>? GetTitleTokensLocked()
-    {
-        if (_titleTokensByRank is not null) return _titleTokensByRank;
-        if (_reader is null) return null;
-        try
-        {
-            var map = new Dictionary<long, List<string>>(8192);
-            foreach (var ctx in _reader.Leaves)
-            {
-                var levels = ctx.AtomicReader.GetNumericDocValues(FieldLevelDv);
-                var orders = ctx.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
-                if (levels is null || orders is null) continue;
-                var live = ctx.AtomicReader.LiveDocs;
-                int max = ctx.AtomicReader.MaxDoc;
-                for (int d = 0; d < max; d++)
-                {
-                    if (live is not null && !live.Get(d)) continue;
-                    if (levels.Get(d) != 0) continue;
-                    long rank = orders.Get(d) >> 24;
-                    if (map.ContainsKey(rank)) continue;
-                    var doc = ctx.AtomicReader.Document(d);
-                    map[rank] = SeforimDbCatalogTextNormalizer.Tokenize(doc.Get(FieldFullTocPath) ?? "");
-                }
-            }
-            _titleTokensByRank = map;
-        }
-        catch { /* best effort — without it the cap falls back to catalog order alone */ }
-        return _titleTokensByRank;
-    }
-
-    /// <summary>
-    /// ה-prefix and חסר/מלא skeleton variant lookup tables, built once per reader
-    /// generation from the actual indexed vocabulary (TOC path + catalog + author
-    /// fields) — the query-time-only port of the former Vue frontend book-catalog
-    /// normalizer: no index-time changes, no fuzzy/edit-distance
-    /// matching, just the two symmetric normalization rules. Rebuilding is a single
-    /// term-dictionary scan (cheap relative to a full build) and is skipped entirely
-    /// while a build is in flight — the NRT reader refreshes too often mid-build for
-    /// this to be worth redoing on every refresh tick, and the exact fallback still
-    /// finds everything on the first search after a build (which invalidates and
-    /// rebuilds it once).
-    /// </summary>
-    private VariantIndex? GetVariantsLocked()
-    {
-        if (_variants is not null) return _variants;
-        if (_reader is null) return null;
-        try
-        {
-            _variants = VariantIndex.Build(_reader, IndexedFields);
-        }
-        catch { /* best effort — searches still work via exact + fuzzy */ }
-        return _variants;
     }
 
     /// <summary>Total docs in the open index (0 when none is open).</summary>
@@ -160,7 +96,7 @@ public sealed partial class SeforimDbCatalogIndex
     public string DescribeResidentState()
     {
         lock (_lock)
-            return $"reader={(_reader is null ? "closed" : "open")} variants={(_variants is null ? "none" : "built")} writer={(_writer is null ? "none" : "open")}";
+            return $"reader={(_reader is null ? "closed" : "open")} writer={(_writer is null ? "none" : "open")}";
     }
 
     /// <summary>
@@ -187,13 +123,6 @@ public sealed partial class SeforimDbCatalogIndex
             _reader.Dispose();
             _reader = null;
             _searcher = null;
-            // The variant tables (vocab set + skeleton map, often the biggest survivor) are
-            // dropped too. Safe because Search takes searcher + variants together in ONE
-            // lock acquisition (TryAcquireSearcher): it can never see a live searcher with
-            // null variants. They are rebuilt lazily (one term-dictionary scan) by the first
-            // search after the reader reopens.
-            _variants = null;
-            _titleTokensByRank = null;
             return true;
         }
     }
@@ -245,17 +174,16 @@ public sealed partial class SeforimDbCatalogIndex
         var tokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
 
-        // Searcher AND variants are taken together, in ONE lock acquisition, with a
-        // reference held on the reader (see TryAcquireSearcher) — so an idle release or a
-        // reader swap landing mid-search can neither close the reader under us nor hand
-        // us a live searcher with mismatched/null variants.
-        if (!TryAcquireSearcher(out var searcher, out var variants, out var titles))
+        // A reference is held on the reader (see TryAcquireSearcher), so an idle release or
+        // a reader swap landing mid-search cannot close it under us. Variants are looked up
+        // in that same reader's term dictionary — nothing is built per reader.
+        if (!TryAcquireSearcher(out var searcher))
         {
-            if (!TryOpenActive() || !TryAcquireSearcher(out searcher, out variants, out titles)) return [];
+            if (!TryOpenActive() || !TryAcquireSearcher(out searcher)) return [];
         }
         try
         {
-            return SearchOnSearcher(searcher, variants, titles, tokens, query, ct);
+            return SearchOnSearcher(searcher, new VariantLookup(searcher.IndexReader), tokens, query, ct);
         }
         finally
         {
@@ -264,52 +192,37 @@ public sealed partial class SeforimDbCatalogIndex
     }
 
     /// <summary>
-    /// Snapshot the current searcher and its variant tables under one lock, and take a
-    /// reference on the reader (<see cref="IndexReader.TryIncRef"/>) so it stays open until
-    /// the caller's <see cref="IndexReader.DecRef"/> even if <see cref="ReleaseIdleReader"/>
-    /// or a reader swap disposes it meanwhile (Dispose only drops the owner's reference).
-    /// The variants are built from the SAME reader inside the same lock, so the pair is
-    /// always consistent. False when no reader is open.
+    /// Snapshot the current searcher under the lock and take a reference on the reader
+    /// (<see cref="IndexReader.TryIncRef"/>) so it stays open until the caller's
+    /// <see cref="IndexReader.DecRef"/> even if <see cref="ReleaseIdleReader"/> or a reader
+    /// swap disposes it meanwhile (Dispose only drops the owner's reference). False when no
+    /// reader is open.
     /// </summary>
-    private bool TryAcquireSearcher(out IndexSearcher searcher, out VariantIndex? variants, out Dictionary<long, List<string>>? titles)
+    private bool TryAcquireSearcher(out IndexSearcher searcher)
     {
         lock (_lock)
         {
             searcher = _searcher!;
-            variants = null;
-            titles = null;
-            if (_searcher is null || !_searcher.IndexReader.TryIncRef()) return false;
-            variants = GetVariantsLocked();
-            titles = GetTitleTokensLocked();
-            return true;
+            return _searcher is not null && _searcher.IndexReader.TryIncRef();
         }
     }
 
     private List<CatalogTocHit> SearchOnSearcher(
-        IndexSearcher searcher, VariantIndex? variants, Dictionary<long, List<string>>? titles,
+        IndexSearcher searcher, VariantLookup variants,
         List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, string query, CancellationToken ct)
     {
         // The words the ranking treats as typed, and the books those words name — both
         // decided once per search, the latter feeding the collector's pre-cap order.
         var queryWords = QueryWordSet(tokens, variants);
-        var coveredRanks = new HashSet<long>();
-        if (titles is not null)
-            foreach (var (rank, titleTokens) in titles)
-                if (IsCovered(titleTokens, queryWords)) coveredRanks.Add(rank);
+        var coveredRanks = CoveredBookRanks(searcher.IndexReader, queryWords);
 
         // Accuracy-first ranking (see SortKeyCollector): literal (exact / non-variant)
         // matches rank ahead of variant/fuzzy-only ones. To tag each hit BEFORE the
         // materialization cap, run the strict literal query (no variants, no fuzzy) into
-        // a doc-ID set; a hit is literal iff it is in that set. When variant expansion
-        // adds nothing (no variants available), the two queries are identical and every
-        // hit is literal, so the literal pass is skipped.
-        HashSet<int>? literalDocIds = null;
-        if (variants is not null)
-        {
-            var litCollector = new DocIdSetCollector(ct);
-            searcher.Search(BuildQuery(tokens, fuzzy: false, variants: null), litCollector);
-            literalDocIds = litCollector.Ids;
-        }
+        // a doc-ID set; a hit is literal iff it is in that set.
+        var litCollector = new DocIdSetCollector(ct, searcher.IndexReader.MaxDoc);
+        searcher.Search(BuildQuery(tokens, fuzzy: false, variants: null), litCollector);
+        FixedBitSet? literalDocIds = litCollector.Ids;
 
         // Word list for the query-token-order tiebreak (see RunPass).
         var orderWords = new List<string>(tokens.Count);
@@ -361,9 +274,9 @@ public sealed partial class SeforimDbCatalogIndex
     /// the fuzzy append pass.
     /// </summary>
     private List<CatalogTocHit> RunPass(
-        IndexSearcher searcher, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants,
+        IndexSearcher searcher, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants,
         HashSet<string> queryWords, HashSet<long> coveredRanks,
-        bool fuzzy, HashSet<int>? literalDocIds, List<string> orderWords, HashSet<string>? queryQuotedKeys,
+        bool fuzzy, FixedBitSet? literalDocIds, List<string> orderWords, HashSet<string>? queryQuotedKeys,
         CancellationToken ct)
     {
         var collector = new SortKeyCollector(ct, literalDocIds, coveredRanks);
@@ -529,7 +442,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// author (edit distance 1, or 2 for words longer than 5 chars) — never on the TOC
     /// path. Applies inside alternatives too.
     /// </summary>
-    private static BooleanQuery BuildQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, bool fuzzy, VariantIndex? variants)
+    private static BooleanQuery BuildQuery(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, bool fuzzy, VariantLookup? variants)
     {
         var bq = new BooleanQuery();
         foreach (var token in tokens)
@@ -559,10 +472,10 @@ public sealed partial class SeforimDbCatalogIndex
 
     /// <summary>One word matched on any indexed field: (path OR catalog OR author), plus
     /// ה-prefix and חסר/מלא skeleton variants found in the actual index vocabulary (see
-    /// <see cref="VariantIndex"/> — ported from the Vue frontend's book-catalog search,
+    /// <see cref="VariantLookup"/> — ported from the Vue frontend's book-catalog search,
     /// always active, not gated on the fuzzy fallback), plus fuzzy catalog/author when
     /// requested and the word is long enough.</summary>
-    private static BooleanQuery WordClause(string word, bool fuzzy, VariantIndex? variants)
+    private static BooleanQuery WordClause(string word, bool fuzzy, VariantLookup? variants)
     {
         var perWord = new BooleanQuery();
         foreach (var field in IndexedFields)
@@ -699,7 +612,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// (<see cref="SeforimDbCatalogTextNormalizer.QueryToken.PreferLiteral"/>): "bamidbar"
     /// must not make Bamidbar Rabbah's title look fully typed. Built once per pass;
     /// <see cref="IsCovered"/> tests each hit's title against it.</summary>
-    private static HashSet<string> QueryWordSet(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants)
+    private static HashSet<string> QueryWordSet(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants)
     {
         var queryWords = new HashSet<string>(StringComparer.Ordinal);
         foreach (var token in tokens)
@@ -730,7 +643,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// <summary>How many of the query's words, with repetition, <paramref name="pathTokens"/>
     /// holds: per query word, min(times in query, times in path), a path occurrence of any
     /// variant of the word counting for it.</summary>
-    private static int CountMatched(List<string> pathTokens, Dictionary<string, int> queryCounts, VariantIndex? variants)
+    private static int CountMatched(List<string> pathTokens, Dictionary<string, int> queryCounts, VariantLookup? variants)
     {
         if (queryCounts.Count == 0 || pathTokens.Count == 0) return 0;
         var pathCounts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -796,7 +709,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// abbreviation keys are ambiguous, and some carry their self-alternative in a later slot.
     /// </summary>
     private static bool MatchesOnTitleOrAuthor(
-        Document doc, List<string> pathTokens, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantIndex? variants)
+        Document doc, List<string> pathTokens, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants)
     {
         if (tokens.Count == 0) return false;
 
@@ -954,12 +867,13 @@ public sealed partial class SeforimDbCatalogIndex
     /// run the strict LITERAL query (no כתיב/ה-prefix variants, no fuzzy) alongside the
     /// full one, so each hit can be tagged literal-or-variant BEFORE the materialization
     /// cap is applied — see <see cref="SortKeyCollector"/> and the accuracy-first sort.</summary>
-    private sealed class DocIdSetCollector(CancellationToken ct) : ICollector
+    private sealed class DocIdSetCollector(CancellationToken ct, int maxDoc) : ICollector
     {
-        private readonly HashSet<int> _ids = [];
+        private readonly FixedBitSet _ids = new(maxDoc);
+        private int _count;
         private int _docBase;
 
-        public HashSet<int> Ids => _ids;
+        public FixedBitSet Ids => _ids;
 
         public void SetScorer(Scorer scorer) { }
         public void SetNextReader(AtomicReaderContext context) => _docBase = context.DocBase;
@@ -967,8 +881,8 @@ public sealed partial class SeforimDbCatalogIndex
 
         public void Collect(int doc)
         {
-            if ((_ids.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
-            _ids.Add(_docBase + doc);
+            if ((_count++ & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
+            _ids.Set(_docBase + doc);
         }
     }
 
@@ -983,7 +897,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// order is still promoted (and materialized) ahead of earlier variant hits. No cap
     /// on matching/ordering, no relevance scores.
     /// </summary>
-    private sealed class SortKeyCollector(CancellationToken ct, HashSet<int>? literalDocIds, HashSet<long> coveredRanks) : ICollector
+    private sealed class SortKeyCollector(CancellationToken ct, FixedBitSet? literalDocIds, HashSet<long> coveredRanks) : ICollector
     {
         public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral, int structureId, bool titleCovered)
         {
@@ -1025,7 +939,7 @@ public sealed partial class SeforimDbCatalogIndex
             long treeOrder = _treeOrders?.Get(doc) ?? long.MaxValue;
             // Literal when there is no literal set (variant search never ran, so every
             // hit is by definition literal) or the doc is in it.
-            bool isLiteral = literalDocIds is null || literalDocIds.Contains(globalDoc);
+            bool isLiteral = literalDocIds is null || literalDocIds.Get(globalDoc);
             int structureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId);
             bool titleCovered = coveredRanks.Count > 0 && coveredRanks.Contains(treeOrder >> 24);
             _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral, structureId, titleCovered));
@@ -1052,107 +966,112 @@ public sealed partial class SeforimDbCatalogIndex
     // ── Query-time variant lookup (ה-prefix + חסר/מלא skeleton) ──────────────────
 
     /// <summary>
-    /// Query-time-only port of the Vue frontend's book-catalog search normalization
-    /// (ported from the former frontend normalizer) — NOT fuzzy/edit-distance matching. Built once per
-    /// reader generation from the actual indexed vocabulary of <see cref="IndexedFields"/>:
+    /// The books <paramref name="queryWords"/> NAME: the catalog ranks (TreeOrder >> 24) of the
+    /// level-0 docs whose every distinct title word is a query word. Read straight off the
+    /// index — the title-only field's postings count each book's matched title words, and the
+    /// book's distinct-title-word doc-value says how many it needs — so nothing is built per
+    /// reader. Lets a search know, BEFORE the materialization cap, whether the query names a
+    /// hit's book: a late-catalog book typed by name is never cut off behind a thousand earlier
+    /// hits that merely share its words.
+    /// </summary>
+    private static HashSet<long> CoveredBookRanks(IndexReader reader, HashSet<string> queryWords)
+    {
+        var ranks = new HashSet<long>();
+        var counts = new Dictionary<int, int>();
+        foreach (var leaf in reader.Leaves)
+        {
+            var atomic = leaf.AtomicReader;
+            var terms = atomic.GetTerms(FieldBookTitle);
+            if (terms is null) continue;
+            counts.Clear();
+            var te = terms.GetEnumerator();
+            DocsEnum? docs = null;
+            foreach (var word in queryWords)
+            {
+                if (!te.SeekExact(new BytesRef(word))) continue;
+                docs = te.Docs(atomic.LiveDocs, docs, DocsFlags.NONE);
+                int d;
+                while ((d = docs.NextDoc()) != DocIdSetIterator.NO_MORE_DOCS)
+                    counts[d] = counts.GetValueOrDefault(d) + 1;
+            }
+            if (counts.Count == 0) continue;
+            var needed = atomic.GetNumericDocValues(FieldBookTitleWordsDv);
+            var orders = atomic.GetNumericDocValues(FieldTreeOrderDv);
+            if (needed is null || orders is null) continue;
+            foreach (var (doc, found) in counts)
+                if (found == needed.Get(doc)) ranks.Add(orders.Get(doc) >> 24);
+        }
+        return ranks;
+    }
+
+    /// <summary>
+    /// Query-time port of the Vue frontend's book-catalog search normalization (ported from
+    /// the former frontend normalizer) — NOT fuzzy/edit-distance matching. Answered from the
+    /// index's own term dictionary, per search, with nothing built per reader:
     ///
     ///   - ה-prefix: a query word starting with ה also probes its stripped form, and a
     ///     query word without ה also probes its ה-prefixed form — either direction fires
-    ///     as soon as THAT SPECIFIC indexed term exists (הרמבן ↔ רמבן; querying "רמבן"
-    ///     finds a book indexed as "הרמבן" even though "רמבן" itself is never indexed).
-    ///   - חסר/מלא skeleton: a query word's consonantal skeleton (mid-word י/ו stripped)
-    ///     is matched against every indexed word sharing that skeleton with a compatible
-    ///     (subset) vowel-set — נידה ↔ נדה, but not שבועות ↔ שביעית (incompatible vowel
-    ///     sets). The query word itself need not be indexed anywhere.
+    ///     as soon as THAT SPECIFIC indexed term exists in any of <see cref="IndexedFields"/>
+    ///     (הרמבן ↔ רמבן).
+    ///   - חסר/מלא skeleton: every indexed word sharing the query word's consonantal skeleton
+    ///     with a compatible (subset) vowel-set — נידה ↔ נדה, but not שבועות ↔ שביעית. The
+    ///     skeleton field indexes each word as "skeleton \u0001 word", so one term-range seek
+    ///     lists the skeleton's group. The query word itself need not be indexed anywhere.
     ///
     /// <see cref="Lookup"/> returns the extra literal terms (beyond the typed word itself)
-    /// that should also be probed — always applied, on every search, not gated behind the
-    /// fuzzy fallback (mirrors the frontend, where these are SCORE_EXACT tiers).
+    /// that should also be probed — always applied, not gated behind the fuzzy fallback.
+    /// Memoized for the one search it serves.
     /// </summary>
-    private sealed class VariantIndex
+    private sealed class VariantLookup(IndexReader reader)
     {
-        /// <summary>Every distinct indexed word (across the three indexed fields).</summary>
-        private readonly HashSet<string> _vocab;
-        /// <summary>skeleton → every distinct indexed word sharing it, pre-decomposed.
-        /// Mirrors the frontend's `skeleton` map, EXCEPT the frontend keys it by book —
-        /// here it's by literal word, since Lucene terms (not per-book token lists) are
-        /// what a TermQuery needs.</summary>
-        private readonly Dictionary<string, List<(string Word, SeforimDbCatalogTextNormalizer.DecomposedWord Decomp)>> _bySkeleton;
+        private readonly Dictionary<string, List<string>> _memo = new(StringComparer.Ordinal);
+        private TermsEnum? _skeletons;
 
-        private VariantIndex(
-            HashSet<string> vocab,
-            Dictionary<string, List<(string Word, SeforimDbCatalogTextNormalizer.DecomposedWord Decomp)>> bySkeleton)
+        public List<string> Lookup(string word)
         {
-            _vocab = vocab;
-            _bySkeleton = bySkeleton;
-        }
-
-        /// <summary>
-        /// Extra literal terms to also search for the given typed word (may be empty).
-        /// Computed live against the prebuilt vocabulary/skeleton tables — mirrors the
-        /// frontend's _lookupWord, which decomposes the QUERY word on every call and
-        /// matches it against whatever is indexed, rather than requiring both spellings
-        /// to already be paired up ahead of time (a word is reachable by its skeleton
-        /// even when no other indexed word happens to share it — the query word itself
-        /// supplies the other half of the pair).
-        /// </summary>
-        public IEnumerable<string> Lookup(string word)
-        {
-            HashSet<string>? extra = null;
+            if (_memo.TryGetValue(word, out var known)) return known;
+            var extra = new List<string>();
             void Add(string term)
             {
-                if (term == word) return;
-                extra ??= new HashSet<string>(StringComparer.Ordinal);
-                extra.Add(term);
+                if (term != word && !extra.Contains(term)) extra.Add(term);
             }
 
-            // ה-prefix: word itself might BE a stripped form (query "רמבן" should also
-            // probe "הרמבן" if that's indexed) — check every ה-prefixed vocab word whose
-            // stripped form equals the query word. And the reverse: if the query word
-            // itself starts with ה, its stripped form might be indexed directly.
             string? stripped = SeforimDbCatalogTextNormalizer.StripHePrefix(word);
-            if (stripped is not null && _vocab.Contains(stripped)) Add(stripped);
+            if (stripped is not null && IsIndexed(stripped)) Add(stripped);
             string withHe = "ה" + word;
-            if (_vocab.Contains(withHe)) Add(withHe);
+            if (IsIndexed(withHe)) Add(withHe);
 
-            // חסר/מלא skeleton: decompose the query word live (it need not itself be
-            // indexed) and match against every indexed word sharing its skeleton.
             var decomp = SeforimDbCatalogTextNormalizer.DecomposeSkeleton(word);
-            if (_bySkeleton.TryGetValue(decomp.Skeleton, out var group))
+            if (_skeletons is null)
             {
-                foreach (var (candidate, candidateDecomp) in group)
-                    if (SeforimDbCatalogTextNormalizer.AreSkeletonVariants(decomp, candidateDecomp))
-                        Add(candidate);
+                var terms = MultiFields.GetTerms(reader, FieldVariantSkeleton);
+                _skeletons = terms?.GetEnumerator();
+            }
+            if (_skeletons is not null)
+            {
+                string prefix = decomp.Skeleton + SkeletonSeparator;
+                var prefixBytes = new BytesRef(prefix);
+                if (_skeletons.SeekCeil(prefixBytes) != TermsEnum.SeekStatus.END)
+                {
+                    do
+                    {
+                        if (!StringHelper.StartsWith(_skeletons.Term, prefixBytes)) break;
+                        string candidate = _skeletons.Term.Utf8ToString().Substring(prefix.Length);
+                        if (SeforimDbCatalogTextNormalizer.AreSkeletonVariants(decomp, SeforimDbCatalogTextNormalizer.DecomposeSkeleton(candidate)))
+                            Add(candidate);
+                    } while (_skeletons.MoveNext());
+                }
             }
 
-            return (IEnumerable<string>?)extra ?? [];
+            _memo[word] = extra;
+            return extra;
         }
 
-        /// <summary>Scan the term dictionary of every field in <paramref name="fields"/> and
-        /// build the vocabulary + skeleton grouping. Cheap relative to a full index build
-        /// (a single pass over already-sorted per-field term enums).</summary>
-        public static VariantIndex Build(DirectoryReader reader, string[] fields)
+        private bool IsIndexed(string term)
         {
-            var vocab = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var field in fields)
-            {
-                var terms = MultiFields.GetTerms(reader, field);
-                if (terms is null) continue;
-                var te = terms.GetEnumerator();
-                while (te.MoveNext())
-                    vocab.Add(te.Term.Utf8ToString());
-            }
-
-            var bySkeleton = new Dictionary<string, List<(string Word, SeforimDbCatalogTextNormalizer.DecomposedWord Decomp)>>(StringComparer.Ordinal);
-            foreach (var word in vocab)
-            {
-                var decomp = SeforimDbCatalogTextNormalizer.DecomposeSkeleton(word);
-                if (!bySkeleton.TryGetValue(decomp.Skeleton, out var list))
-                    bySkeleton[decomp.Skeleton] = list = new List<(string, SeforimDbCatalogTextNormalizer.DecomposedWord)>();
-                list.Add((word, decomp));
-            }
-
-            return new VariantIndex(vocab, bySkeleton);
+            foreach (var field in IndexedFields)
+                if (reader.DocFreq(new Term(field, term)) > 0) return true;
+            return false;
         }
     }
 }

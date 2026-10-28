@@ -857,10 +857,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// the shipped library (idx_toc_line / idx_toc_book).</summary>
         internal const string CatalogIndexAltTocRowsAllStructures = @"
             SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex,
-                   EXISTS (SELECT 1 FROM tocEntry te
-                           WHERE te.bookId = s.bookId AND te.textId = ae.textId
-                             AND (te.lineId = ae.lineId OR ae.lineId IS NULL))
-                   AS dupOfRegular
+                   -- Same answer as one EXISTS on (bookId, textId, lineId-or-null), split so
+                   -- an entry with a line probes by line: probing by text scanned every
+                   -- entry sharing a common text (perek 1) and took minutes per build.
+                   CASE WHEN ae.lineId IS NOT NULL
+                        THEN EXISTS (SELECT 1 FROM tocEntry te
+                                     WHERE te.lineId = ae.lineId AND +te.textId = ae.textId AND +te.bookId = s.bookId)
+                        ELSE EXISTS (SELECT 1 FROM tocEntry te
+                                     WHERE te.bookId = s.bookId AND te.textId = ae.textId)
+                   END AS dupOfRegular
             FROM alt_toc_entry ae
             JOIN alt_toc_structure s ON s.id = ae.structureId
             JOIN tocText tt ON tt.id = ae.textId
