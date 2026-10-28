@@ -294,17 +294,27 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const wantEnd = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
     if (!isRowInWindow(target) || !options.rowElement(target)) {
       const start = Math.max(0, target - ROWS_ABOVE_ON_REBUILD)
+      // Fetching the rows can shrink the count (a list whose length was an estimate
+      // until its rows were read): a target now past the end lands on the new last
+      // row instead of mounting an empty window beyond it — a blank screen.
+      let isTargetPastEnd = false
       const applied = await prepareWindow(generation, start, wantEnd, () => {
+        if (target >= options.count()) { isTargetPastEnd = true; return }
         // Nothing to hold through the rebuild: the view is leaving wherever it was.
         anchor = null
         windowStart.value = start
-        windowEnd.value = wantEnd
+        windowEnd.value = Math.min(wantEnd, options.count())
       })
+      if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
       if (!applied) return
     } else if (windowEnd.value < wantEnd) {
+      let isTargetPastEnd = false
       const applied = await prepareWindow(generation, windowEnd.value, wantEnd, () => {
-        windowEnd.value = wantEnd
+        if (target >= options.count()) { isTargetPastEnd = true; clampToCount(); return }
+        windowEnd.value = Math.min(wantEnd, options.count())
+        clampToCount()
       })
+      if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
       if (!applied) return
     }
     const viewport = options.viewport()
