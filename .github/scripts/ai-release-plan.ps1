@@ -40,7 +40,7 @@ $range   = if ($previousTag) { "$previousTag..$end" } else { "-30" }
 $hashes = @(git log $range --no-merges --pretty=format:%H)
 # A commit reverted inside the range never reached users: drop it and its revert.
 $reverted = @(foreach ($h in $hashes) {
-    $b = git log -1 --pretty=format:%b $h
+    $b = (git log -1 --pretty=format:%b $h | Out-String)
     if ($b -match 'This reverts commit ([0-9a-f]{7,40})') { $h; (git rev-parse $Matches[1]) }
 })
 $hashes = @($hashes | Where-Object { $_ -notin $reverted })
