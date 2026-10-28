@@ -344,7 +344,9 @@ $draft
 "@
         Write-Host "Pass 4 (editor)"
         $n = @($plan.changes).Count
-        $edited = Invoke-Gemini $p4 $planSchema { param($o) @($o.changes).Count -eq $n -and $o.bump }
+        $edited = Invoke-Gemini $p4 $planSchema { param($o) @($o.changes).Count -eq $n -and $o.bump -and
+            # Lite sometimes slips an Arabic look-alike letter into Hebrew words.
+            -not (@($o.changes | ForEach-Object { $_.he + $_.area_he }) -match '[\u0600-\u06FF]') }
         if ($edited) { $plan = $edited }
     }
 } else {
