@@ -239,7 +239,8 @@ TASK 1 - the release notes:
   never join unrelated features or areas into one catch-all change.
 - Never merge a "fixed" line with non-fixed lines: fixes get their own changes.
 - One change = one idea a reader takes in at a glance (at most two related facts).
-- Cover BOTH products.
+- Cover BOTH products. Aim for 15-22 changes: merge all speed-ups of one area into one
+  change, and all steps of one feature into one change.
 - en: one plain sentence, at most ~20 words.
 - rank: 1 = headline a reader cares about, 2 = notable, 3 = minor polish.
 - Never invent features or numbers.
@@ -273,13 +274,21 @@ foreach ($c in $plan.changes) {
     $c | Add-Member area_he $(if ($t) { $t[1] } else { $c.area_en })
     if ($t) { $c.area_en = $t[0] }
 }
-# Short and focused: no cosmetic-only areas, at most 8 per section and 20 in all,
-# headline first and, within a rank, the features with the most work behind them.
+# Short and focused: no cosmetic-only areas, at most 8 per section and 20 in all.
+# Order of preference: the best change of each area first (so no area vanishes behind
+# five speed-ups of another), then the rest; within that, rank, then most commits.
 $trivia = 'Theme', 'Status bar', 'Workspaces', 'Context menu', 'Book details', 'Back / Forward'
-$kept = @($plan.changes | Where-Object { -not ($_.area_en -in $trivia -and $_.section -eq 'improved') } |
+$sorted = @($plan.changes | Where-Object { -not ($_.area_en -in $trivia -and $_.section -eq 'improved') } |
     Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
-$kept = @(foreach ($sec in 'new', 'improved', 'fixed') { $kept | Where-Object section -eq $sec | Select-Object -First 8 })
-$kept = @($kept | Sort-Object rank, @{ Expression = 'weight'; Descending = $true } | Select-Object -First 20)
+$seen = @{}
+$firsts = @(); $rest = @()
+foreach ($c in $sorted) { if ($seen[$c.area_en]) { $rest += $c } else { $seen[$c.area_en] = 1; $firsts += $c } }
+$pick = @(); $perSection = @{ new = 0; improved = 0; fixed = 0 }
+foreach ($c in $firsts + $rest) {
+    if ($pick.Count -ge 20 -or $perSection[$c.section] -ge 8) { continue }
+    $pick += $c; $perSection[$c.section]++
+}
+$kept = @($pick | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
 Write-Host "Step 2: $(@($plan.changes).Count) changes, $($kept.Count) kept"
 $plan.changes = $kept
 
