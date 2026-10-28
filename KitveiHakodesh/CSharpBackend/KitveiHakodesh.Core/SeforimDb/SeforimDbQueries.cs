@@ -229,6 +229,66 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
+        /// Hands each line of [firstLineIndex, lastLineIndex] (through a version's overlay when
+        /// versionId > 0) to <paramref name="onLine"/> as it is read — nothing is collected, so
+        /// a scan over a whole book holds one line at a time.
+        /// </summary>
+        public void ForEachLineInIndexRange(int bookId, int firstLineIndex, int lastLineIndex, int versionId, Action<int, int, string> onLine)
+        {
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            using var cmd = conn.CreateCommand();
+            var schema = SchemaOf(conn);
+            bool isVersionRead = versionId > 0;
+            cmd.CommandText = isVersionRead
+                ? SeforimDbSqlStrings.GetVersionLinesInIndexRange(schema)
+                : SeforimDbSqlStrings.GetLinesInIndexRange(schema);
+            if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@from", firstLineIndex);
+            cmd.Parameters.AddWithValue("@to", lastLineIndex);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                string content = isVersionRead ? ReadVersionLineContent(r, codec) : codec.DecodeColumnOrEmpty(r, 2);
+                onLine(r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), content);
+            }
+        }
+
+        /// <summary>
+        /// Like <see cref="ForEachLineInIndexRange"/> for a sparse set of line indexes — read in
+        /// batches of at most 900 (SQLite's bound-parameter limit), each in reading order.
+        /// </summary>
+        public void ForEachLineByIndexes(int bookId, IReadOnlyList<int> lineIndexes, int versionId, Action<int, int, string> onLine)
+        {
+            const int Batch = 900;
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            var schema = SchemaOf(conn);
+            bool isVersionRead = versionId > 0;
+            for (int at = 0; at < lineIndexes.Count; at += Batch)
+            {
+                int n = Math.Min(Batch, lineIndexes.Count - at);
+                var names = new string[n];
+                for (int i = 0; i < n; i++) names[i] = "@i" + i;
+                string list = string.Join(",", names);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = isVersionRead
+                    ? SeforimDbSqlStrings.GetVersionLinesByIndexList(schema, list)
+                    : SeforimDbSqlStrings.GetLinesByIndexList(schema, list);
+                if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                for (int i = 0; i < n; i++) cmd.Parameters.AddWithValue(names[i], lineIndexes[at + i]);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    string content = isVersionRead ? ReadVersionLineContent(r, codec) : codec.DecodeColumnOrEmpty(r, 2);
+                    onLine(r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), content);
+                }
+            }
+        }
+
+        /// <summary>
         /// The text of one row of <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/>.
         ///
         /// That statement hands back BOTH candidate columns plus a discriminator rather than

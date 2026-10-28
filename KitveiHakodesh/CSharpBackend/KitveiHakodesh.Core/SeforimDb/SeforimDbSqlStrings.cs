@@ -77,6 +77,48 @@ namespace KitveiHakodesh.Core.SeforimDb
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";
 
+        /// <summary>The lines of a book with lineIndex in [@from, @to] — a search scan reads them.</summary>
+        public static string GetLinesInIndexRange(SeforimDbSchema schema) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
+
+        /// <summary>The lines of a book whose lineIndex is in the list — a sparse scan reads them.</summary>
+        public static string GetLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary>Like <see cref="GetVersionLinesPaged"/>, for lineIndex in a list.</summary>
+        public static string GetVersionLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
+            SELECT l.id, l.lineIndex,
+                   {C_RawContentExpression(schema, "l")} AS baseContent,
+                   vl.content AS versionContent,
+                   CASE WHEN l.heRef IS NULL  THEN 0
+                        WHEN vl.lineId IS NULL THEN 1
+                        WHEN vl.content IS NULL THEN 0
+                        ELSE 2 END AS contentSource
+            FROM line l{C_ContentJoin(schema, "l")}
+            LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary>Like <see cref="GetVersionLinesPaged"/>, for lineIndex in [@from, @to].</summary>
+        public static string GetVersionLinesInIndexRange(SeforimDbSchema schema) => $@"
+            SELECT l.id, l.lineIndex,
+                   {C_RawContentExpression(schema, "l")} AS baseContent,
+                   vl.content AS versionContent,
+                   CASE WHEN l.heRef IS NULL  THEN 0
+                        WHEN vl.lineId IS NULL THEN 1
+                        WHEN vl.content IS NULL THEN 0
+                        ELSE 2 END AS contentSource
+            FROM line l{C_ContentJoin(schema, "l")}
+            LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
+
         // ── TOC ───────────────────────────────────────────────────────────────────
 
         /// <summary>All TOC entries for a book, flat — the frontend builds the tree in memory.</summary>
