@@ -24,7 +24,7 @@ Version choice includes **Auto** and notes choice includes **AI**: both run `.gi
 4. Creates a fresh 5-year self-signed add-in signing certificate
 5. Vue `npm run build` → service native-AOT publish → VSTO build (AnyCPU) → payload pack → WPF installer `dotnet build` → NSIS → `KleiKodeshSetup-vX.Y.Z.exe`
 6. Builds `KitveiHakodeshDemoApp` (Release|AnyCPU) via MSBuild → zips output → `KitveiHakodeshPortable-vX.Y.Z.zip`
-7. Unless `-NoRelease`: creates the GitHub release (deletes an existing same-tag release first), uploads EXE + ZIP, then dispatches the website update and `release-issue-check.yml`
+7. Unless `-NoRelease`: creates the GitHub release (deletes an existing same-tag release first), uploads EXE + ZIP, then dispatches the website update, `release-issue-check.yml` and `drive-upload.yml` (syncs Google Drive to the latest two releases)
 
 **`build-helpers.ps1`** — Shared path constants and utility functions used by other build scripts:
 - `$DemoAppProjectPath` — Path to `KitveiHakodeshDemoApp.csproj`
