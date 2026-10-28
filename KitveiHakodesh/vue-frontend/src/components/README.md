@@ -8,6 +8,8 @@ Shared reusable components used across multiple features. Only add a component h
 
 **SplitPane.vue** — resizable split pane. Divider is 1px visually with a 20px touch target via `::before`. Use this for any resizable two-panel layout.
 
+**SidePanel.vue** — the page side panel (table of contents) beside the content: inline column on a wide pane (`isOverlay` false; the parent owns width and the resize sash), floating overlay with backdrop and click-outside close on a narrow one. Used by the book view and FastDocView.
+
 **TopSearchBar.vue** — the search bar docked at the top of a page. It is transparent — no toolbar band and no divider — so the search field's pill is the only chrome. Every page search bar now uses this one; use it for new search bars, and note that popups opened from inside it (dropdowns, panels) must open downward.
 
 **FloatingSearchBar.vue** (`common/`) — floating search bar that overlays content. Supports match navigation, mode toggle, and auto-focus.

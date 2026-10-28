@@ -178,7 +178,7 @@ useDropdownClose(
     toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
     enabled: isOverlayMode,
     // A full-height side panel, not a popup: the viewport fit would cap it 8px short
-    // of the bottom edge (same opt-out as BookViewSidePanel).
+    // of the bottom edge (same opt-out as SidePanel).
     fitToViewport: false,
   },
 )

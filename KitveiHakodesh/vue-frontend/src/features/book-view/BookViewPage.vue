@@ -12,7 +12,7 @@ import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
 import BookViewSearchBar from './BookViewSearchBar.vue'
-import BookViewSidePanel from './BookViewSidePanel.vue'
+import SidePanel from '@/components/SidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
@@ -525,7 +525,7 @@ function getSideEditionOutlineTarget(): string | undefined {
           RTL: first child in a flex row = physical right, so the panel appears on the right.
         -->
         <template v-if="sidePanelVisible && !sidePanelIsOverlay">
-          <BookViewSidePanel
+          <SidePanel
             :toggle-button-el="sidePanelToggleButtonEl"
             :is-overlay="false"
             :style="sidePanelFraction !== null ? { width: `${sidePanelFraction * 100}%` } : undefined"
@@ -543,7 +543,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               @select="onTocSelect"
               @alt-select="onAltTocSelect"
             />
-          </BookViewSidePanel>
+          </SidePanel>
           <div class="sash sash-v" @pointerdown="onSidePanelDividerPointerDown" />
         </template>
 
@@ -690,7 +690,7 @@ function getSideEditionOutlineTarget(): string | undefined {
           />
 
           <!-- Overlay side panel: only rendered when screen is too narrow for inline mode -->
-          <BookViewSidePanel
+          <SidePanel
             v-if="sidePanelVisible && sidePanelIsOverlay"
             :toggle-button-el="sidePanelToggleButtonEl"
             :is-overlay="true"
@@ -708,7 +708,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               @select="onTocSelect"
               @alt-select="onAltTocSelect"
             />
-          </BookViewSidePanel>
+          </SidePanel>
 
           <!--
             The bottom panel's filter dropdown. Same behaviour as a side panel's,

@@ -65,7 +65,7 @@ useDropdownClose(
   display: flex;
   flex-direction: column;
   width: fit-content;
-  /* Same surface as the book-view toolbar beside it. */
+  /* Same surface as the page toolbar beside it. */
   background: var(--bg-toolbar);
   overflow: hidden;
   --tree-bg: var(--bg-toolbar);
