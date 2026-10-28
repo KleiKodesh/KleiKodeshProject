@@ -23,6 +23,10 @@ on:
         description: Notes mode - map (batched two-pass) or single
         type: string
         required: false
+      merge_model:
+        description: Model tried first for the merge pass (map mode)
+        type: string
+        required: false
       list_models:
         description: Print the model names the key can use
         type: boolean
@@ -53,6 +57,7 @@ jobs:
           GEMINI_MODEL: ${{ inputs.model }}
           NOTES_INPUT: ${{ inputs.input }}
           NOTES_MODE: ${{ inputs.mode }}
+          NOTES_MERGE_MODEL: ${{ inputs.merge_model }}
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
       - uses: actions/upload-artifact@v7
