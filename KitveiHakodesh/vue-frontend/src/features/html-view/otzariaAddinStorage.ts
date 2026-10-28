@@ -19,7 +19,20 @@ function approximateBytes(value: unknown): number {
   try { return (JSON.stringify(value)?.length ?? 0) * 2 } catch { return 0 }
 }
 
+/** One connection per addin for the session — an unclosed one per call blocked deleteDatabase. */
+const openDatabases = new Map<string, Promise<IDBDatabase>>()
+
 function openAddinDatabase(addinId: string): Promise<IDBDatabase> {
+  let open = openDatabases.get(addinId)
+  if (!open) {
+    open = openAddinDatabaseOnce(addinId)
+    openDatabases.set(addinId, open)
+    open.catch(() => openDatabases.delete(addinId))
+  }
+  return open
+}
+
+function openAddinDatabaseOnce(addinId: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(`app-addin-storage-${addinId}`, 2)
     request.onupgradeneeded = () => {
@@ -29,7 +42,15 @@ function openAddinDatabase(addinId: string): Promise<IDBDatabase> {
       if (!request.result.objectStoreNames.contains('sizes'))
         request.result.createObjectStore('sizes')
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      const database = request.result
+      // Someone else deletes or upgrades this database: let go, reopen on the next call.
+      database.onversionchange = () => {
+        database.close()
+        openDatabases.delete(addinId)
+      }
+      resolve(database)
+    }
     request.onerror = () => reject(request.error)
   })
 }
