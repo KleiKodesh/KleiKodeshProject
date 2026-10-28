@@ -309,17 +309,13 @@ $glossary
 $about
 
 You are the editor. Below is the draft English list of release-note changes, as
-"section | area | sentence". Return the final list:
-- Keep EVERY feature in the draft - remove an item only when another item says exactly
-  the same thing. Do not add features that are not in the draft.
-- Put each item in the right section using the rules below. When an item mixes a fix
-  with an improvement or a new feature, split it into two items in their sections.
-- An item that crams in more than two things: keep it one item but say it as one idea
-  (the overall effect), dropping the least important detail. Never join two items
-  about different areas or features. Two items about the same feature and section
-  become one. Aim for 15-22 items in total.
-- Rewrite any wording that names a mechanism or uses jargon (pills, panes, rendering,
-  native, index, cache, flyout, task pane, tooltip...) into what the reader sees.
+"section | area | sentence". Return EXACTLY the same $(@($plan.changes).Count) items in the same
+order - never merge, split, drop or add items. For each item you may only:
+- move it to the right section using the rules below;
+- rewrite the sentence so it says what the reader sees, in plain words: no mechanism or
+  jargon (pills, panes, rendering, native, index, cache, flyout, tooltip, task pane);
+  when it crams in more than two things, keep the overall effect and drop details;
+- keep area_en exactly as in the draft.
 - en: one plain sentence, at most ~20 words. he: the same in natural, fluent Hebrew as
   a native Israeli writer would phrase it - not a word-for-word translation, no
   anglicisms, correct spelling, exact glossary terms.
@@ -335,7 +331,8 @@ DRAFT:
 $draft
 "@
         Write-Host "Pass 4 (editor)"
-        $edited = Invoke-Gemini $p4 $planSchema { param($o) @($o.changes).Count -and $o.bump }
+        $n = @($plan.changes).Count
+        $edited = Invoke-Gemini $p4 $planSchema { param($o) @($o.changes).Count -eq $n -and $o.bump }
         if ($edited) { $plan = $edited }
     }
 } else {
