@@ -65,8 +65,27 @@ export function useBookViewSearch(options: {
 
   // ── The streamed book text (fallback source) ─────────────────────────────────
 
-  /** Stripped text by lineIndex, for one book and version; filled as it is streamed. */
-  let fallbackText: { key: string; lines: string[]; loaded: number } | null = null
+  /** Stripped text by lineIndex, for one book and version; filled chunk by chunk as it is streamed. */
+  let fallbackText: { key: string; lines: string[]; loadedChunks: Set<number> } | null = null
+
+  /**
+   * The order to read a book in: the part the reader is looking at first, then the rest
+   * from the top. Matches near the viewport show at once; the full pass follows.
+   */
+  function partsNearestFirst(partCount: number, cursorPart: number): number[] {
+    const order: number[] = []
+    const first = Math.min(Math.max(0, cursorPart), Math.max(0, partCount - 1))
+    if (partCount > 0) order.push(first)
+    for (let part = 0; part < partCount; part++) if (part !== first) order.push(part)
+    return order
+  }
+
+  /** The matches of every scanned part so far, in reading order. */
+  function flatten(parts: (BookViewMatch[] | undefined)[]): BookViewMatch[] {
+    const all: BookViewMatch[] = []
+    for (const part of parts) if (part) for (const match of part) all.push(match)
+    return all
+  }
 
   const dropFallbackTimer = useTimeoutFn(() => { fallbackText = null }, FALLBACK_TEXT_IDLE_MS, { immediate: false })
   onScopeDispose(() => {
@@ -155,21 +174,32 @@ export function useBookViewSearch(options: {
       return false
     }
     if (isStale() || !candidates.answered) return false
-    for (let i = 0; i < candidates.lineIds.length; i += CANDIDATE_TEXT_BATCH) {
+    // Candidates come in reading order; their text is fetched in batches, the batch
+    // holding the reader's position first.
+    const batchCount = Math.ceil(candidates.lineIds.length / CANDIDATE_TEXT_BATCH)
+    const cursor = options.currentLineIndex()
+    let cursorBatch = 0
+    while (cursorBatch + 1 < batchCount && candidates.lineIndexes[(cursorBatch + 1) * CANDIDATE_TEXT_BATCH]! <= cursor) cursorBatch++
+    const parts: (BookViewMatch[] | undefined)[] = new Array(batchCount)
+    for (const batch of partsNearestFirst(batchCount, cursorBatch)) {
+      const i = batch * CANDIDATE_TEXT_BATCH
       const ids = candidates.lineIds.slice(i, i + CANDIDATE_TEXT_BATCH)
       const rows = await getLineContents(ids)
       if (isStale()) return true
       const textById = new Map(rows.map((row) => [row.id, row.content ?? '']))
+      const found: BookViewMatch[] = []
       for (let j = 0; j < ids.length; j++) {
         const text = textById.get(ids[j]!)
         if (!text) continue
         const stripped = stripHtmlForSearch(text)
         if (!stripped.includes(needle)) continue
         matchedLines.set(candidates.lineIndexes[i + j]!, stripped)
-        collect(accumulated, candidates.lineIndexes[i + j]!, stripped, needle)
+        collect(found, candidates.lineIndexes[i + j]!, stripped, needle)
       }
-      publish(accumulated, false)
+      parts[batch] = found
+      publish(flatten(parts), false)
     }
+    accumulated.push(...flatten(parts))
     publish(accumulated, true)
     return true
   }
@@ -179,33 +209,41 @@ export function useBookViewSearch(options: {
     bookId: number, needle: string, accumulated: BookViewMatch[], matchedLines: Map<number, string>, isStale: () => boolean,
   ) {
     const key = fallbackKey(bookId)
-    if (fallbackText?.key !== key) fallbackText = { key, lines: [], loaded: 0 }
+    if (fallbackText?.key !== key) fallbackText = { key, lines: [], loadedChunks: new Set() }
     const text = fallbackText
     // Each search keeps the text alive; it goes FALLBACK_TEXT_IDLE_MS after the last one.
     dropFallbackTimer.stop()
 
     const total = options.lineCount()
-    let scanned = 0
-    while (scanned < total) {
-      if (scanned >= text.loaded) {
-        const rows = await getLinesPaged(bookId, STREAM_CHUNK_LINES, text.loaded, options.activeVersionId() ?? 0).catch(() => null)
+    const chunkCount = Math.ceil(total / STREAM_CHUNK_LINES)
+    const parts: (BookViewMatch[] | undefined)[] = new Array(chunkCount)
+    // The chunk under the reader first, then the book from the top.
+    for (const chunk of partsNearestFirst(chunkCount, Math.floor(options.currentLineIndex() / STREAM_CHUNK_LINES))) {
+      const start = chunk * STREAM_CHUNK_LINES
+      const end = Math.min(start + STREAM_CHUNK_LINES, total)
+      if (!text.loadedChunks.has(chunk)) {
+        const rows = await getLinesPaged(bookId, STREAM_CHUNK_LINES, start, options.activeVersionId() ?? 0).catch(() => null)
         if (isStale() || fallbackText !== text) break
         if (!rows || !rows.length) break
         for (const row of rows) text.lines[row.lineIndex] = stripHtmlForSearch(row.content ?? '')
-        text.loaded += rows.length
+        text.loadedChunks.add(chunk)
       }
-      const end = Math.min(text.loaded, total)
-      for (let lineIndex = scanned; lineIndex < end; lineIndex++) {
+      const found: BookViewMatch[] = []
+      for (let lineIndex = start; lineIndex < end; lineIndex++) {
         const stripped = text.lines[lineIndex]
         if (!stripped || !stripped.includes(needle)) continue
         matchedLines.set(lineIndex, stripped)
-        collect(accumulated, lineIndex, stripped, needle)
+        collect(found, lineIndex, stripped, needle)
       }
-      scanned = end
-      publish(accumulated, scanned >= total)
-      // Already-held text is scanned in one go; yield between streamed chunks.
-      if (scanned < total) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      parts[chunk] = found
+      publish(flatten(parts), false)
+      // Yield between chunks so the counter and the highlights paint.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
       if (isStale()) break
+    }
+    if (!isStale()) {
+      accumulated.push(...flatten(parts))
+      publish(accumulated, true)
     }
     dropFallbackTimer.start()
   }
