@@ -343,8 +343,8 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 4px;
+  padding: 6px 12px;
   font-size: 11.5px;
   color: var(--text-secondary);
   overflow: hidden;
