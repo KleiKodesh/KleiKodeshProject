@@ -75,12 +75,14 @@ HOW TO READ THE COMMITS
   Files only under .github, Build, docs, *.md, tests -> internal.
 - Speed-ups count only when a user would feel them; describe the effect ("search in a
   large book shows results almost at once"), never the technique.
-- "User-facing: new|improved|fixed" in a body = include it in that section.
+- A body line "User-facing: new|improved|fixed - <Area>: <sentence>" is the author's own
+  summary: use that section, area and wording (polish it, merge duplicates).
 - Many commits are steps of one feature (e.g. ten commits about bookmarks or the
   scrollbar). Merge them into ONE bullet describing the finished result.
 - Never mention internal names: WindowedScroller, TanStack, Lucene, FTS, FtsLib, Core,
   service, LinesTable, localStorage, IndexedDB, MessagePack, Vue, VSTO, COM, shallow
-  ref, flush, cache, quota, schema, op, API, hashes, file names, pixel/ms numbers.
+  ref, flush, cache, quota, schema, op, API, Fluent, pills, stream, chunk, index,
+  "TOC" (say table of contents), "lines pane", hashes, file names, pixel/ms numbers.
 
 TASK 1 - the semantic version bump:
 - "major": something users relied on was removed or works in a different way, or old
