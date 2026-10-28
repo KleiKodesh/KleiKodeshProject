@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, toRaw } from 'vue'
 import { useSearchCacheStore } from './searchCacheStore'
+import { deleteRecentLocations } from './recentLocations'
 import { lsGet, lsSet, lsDelete, idbTabsDeleteByPrefix } from '@/utils/persistence'
 import { t } from '@/i18n'
 
@@ -39,6 +40,7 @@ function deleteWorkspaceData(wsId: string): Promise<void> {
     idbTabsDeleteByPrefix(`book:${wsId}:`),
     // Its tabs' search-cache pins (owner = workspace:tab) go with them.
     useSearchCacheStore().unpinAllWithPrefix(`${wsId}:`),
+    deleteRecentLocations(wsId),
   ]).then(() => {})
 }
 
