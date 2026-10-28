@@ -10,21 +10,12 @@ on:
         description: Previous release tag (empty = latest release)
         type: string
         required: false
-      input:
-        description: Commit input - paths (subject, body, folders) or plain
-        type: choice
-        options: [paths, plain]
-        default: paths
       model:
         description: Gemini model (empty = default chain)
         type: string
         required: false
-      mode:
-        description: Notes mode - map (batched two-pass) or single
-        type: string
-        required: false
       merge_model:
-        description: Model tried first for the merge pass (map mode)
+        description: Model tried first for merging and Hebrew (none = lite only)
         type: string
         required: false
       list_models:
@@ -55,8 +46,6 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ inputs.model }}
-          NOTES_INPUT: ${{ inputs.input }}
-          NOTES_MODE: ${{ inputs.mode }}
           NOTES_MERGE_MODEL: ${{ inputs.merge_model }}
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
