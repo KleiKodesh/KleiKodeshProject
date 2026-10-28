@@ -18,6 +18,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 {
     private readonly SeforimDbQueries _queries = new();
 
+    /// <summary>The Core query object, for Core operations that take it together with another service's Core object.</summary>
+    public SeforimDbQueries Queries => _queries;
+
     /// <summary>Whether there is a database to read — false when the user has chosen none, or
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
@@ -117,10 +120,12 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0) =>
         Run(() => _queries.GetLinesPaged(bookId, limit, offset, versionId), new List<LineRow>(), "getLinesPaged");
 
-    public List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit> ScanLineText(
-        IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> ranges, int versionId, string query) =>
-        Run(() => global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.ScanRanges(_queries, ranges, versionId, query),
-            new List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit>(), "linesTextScan");
+    /// <summary>The in-book / commentary substring search, whole (Core decides index vs scan).</summary>
+    public List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit> SubstringSearch(
+        global::KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsIndexCoordinator index,
+        string query, IReadOnlyList<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange> ranges, int versionId) =>
+        Run(() => global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineSubstringSearch.Search(index, _queries, query, ranges, versionId),
+            new List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit>(), "linesSubstringSearch");
 
     public int[] GetLineIds(int bookId, int fromIndex, int toIndex) =>
         Run(() => _queries.GetLineIds(bookId, fromIndex, toIndex), Array.Empty<int>(), "getLineIds");

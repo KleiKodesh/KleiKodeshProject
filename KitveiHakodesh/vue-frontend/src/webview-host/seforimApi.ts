@@ -52,18 +52,25 @@ export async function getLinesPaged(
 }
 
 /**
- * The search's fallback, run natively by the service: every line inside the (book, first
- * lineIndex, last lineIndex) ranges that holds `query` as a substring — the same
- * normalization as stripHtmlForSearch/removeDiacriticsForSearch — and how many times, as
- * parallel arrays in range order then reading order. `versionId` reads through an alternate
- * version's overlay (0 = the merged text). Nothing is kept by the service afterwards.
+ * The in-book and commentary-panel search, whole, run by the service: every line inside the
+ * (book, first lineIndex, last lineIndex) ranges that holds `query` as a substring — the
+ * same normalization as stripHtmlForSearch/removeDiacriticsForSearch — and how many times,
+ * as parallel arrays by book then reading order. The service narrows with the full-text
+ * index when it can and confirms or scans the text natively; `versionId` reads through an
+ * alternate version's overlay (0 = the merged text). Numbers only; nothing is kept.
  */
-export async function linesTextScan(
+export async function linesSubstringSearch(
   query: string,
   ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
   versionId = 0,
 ): Promise<{ bookIds: number[]; lineIndexes: number[]; lineIds: number[]; counts: number[] }> {
-  return serviceCall('linesTextScan', { query, ranges, versionId })
+  const rangeTriples = new Array<number>(ranges.length * 3)
+  for (let i = 0; i < ranges.length; i++) {
+    rangeTriples[i * 3] = ranges[i]!.bookId
+    rangeTriples[i * 3 + 1] = ranges[i]!.firstLineIndex
+    rangeTriples[i * 3 + 2] = ranges[i]!.lastLineIndex
+  }
+  return serviceCall('linesSubstringSearch', { query, rangeTriples, versionId })
 }
 
 /**

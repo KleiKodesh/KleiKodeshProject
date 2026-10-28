@@ -631,16 +631,18 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset, a.VersionId) }));
                 }
 
-                // The search's fallback, natively: substring occurrences per line in the ranges.
-                case "linesTextScan":
+                // The in-book / commentary substring search, whole: index when it can, native scan otherwise (Core).
+                case "linesSubstringSearch":
                 {
-                    var a = MsgPack.De<LinesTextScanArgs>(req.Args);
-                    var ranges = new List<(int, int, int)>();
-                    foreach (var range in a.Ranges ?? new()) ranges.Add((range.BookId, range.FirstLineIndex, range.LastLineIndex));
-                    var hits = seforim.ScanLineText(ranges, a.VersionId, a.Query ?? "");
+                    var a = MsgPack.De<LinesSubstringSearchArgs>(req.Args);
+                    var triples = a.RangeTriples ?? Array.Empty<int>();
+                    var ranges = new List<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange>(triples.Length / 3);
+                    for (int i = 0; i + 2 < triples.Length; i += 3)
+                        ranges.Add(new global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange { BookId = triples[i], FirstLineIndex = triples[i + 1], LastLineIndex = triples[i + 2] });
+                    var hits = seforim.SubstringSearch(fts.Coordinator, a.Query ?? "", ranges, a.VersionId);
                     var bookIds = new int[hits.Count]; var lineIndexes = new int[hits.Count]; var lineIds = new int[hits.Count]; var counts = new int[hits.Count];
                     for (int i = 0; i < hits.Count; i++) { bookIds[i] = hits[i].BookId; lineIndexes[i] = hits[i].LineIndex; lineIds[i] = hits[i].LineId; counts[i] = hits[i].Count; }
-                    return RpcResponse.Ok(MsgPack.Ser(new LinesTextScanResult { BookIds = bookIds, LineIndexes = lineIndexes, LineIds = lineIds, Counts = counts }));
+                    return RpcResponse.Ok(MsgPack.Ser(new LinesSubstringSearchResult { BookIds = bookIds, LineIndexes = lineIndexes, LineIds = lineIds, Counts = counts }));
                 }
 
                 case "getLineIds":
