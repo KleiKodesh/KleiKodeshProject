@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
+import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
@@ -233,6 +234,15 @@ const sideLeftCommentaryTitle = computed(() =>
 // composable owns the fit arithmetic; what stays here is which of those controls this book
 // actually has, and the flyout's state.
 const toolbarEl = ref<HTMLElement | null>(null)
+
+// While the window is being resized, collapses happen at once: a 260ms slide under a
+// moving window edge reads as the toolbar lagging and wobbling behind the drag.
+const isWindowResizing = ref(false)
+const endWindowResize = useDebounceFn(() => { isWindowResizing.value = false }, 150)
+useEventListener(window, 'resize', () => {
+  isWindowResizing.value = true
+  void endWindowResize()
+})
 const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
@@ -304,7 +314,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" :dir="isVerticalToolbar ? 'rtl' : undefined" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar" :dir="isVerticalToolbar ? 'rtl' : undefined" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
@@ -864,6 +874,9 @@ button:disabled {
   .collapsible {
     transition: none;
   }
+}
+.window-resizing .collapsible {
+  transition: none;
 }
 
 /* Anchored, not laid out. The one control that must never move: buttons collapse into it as
