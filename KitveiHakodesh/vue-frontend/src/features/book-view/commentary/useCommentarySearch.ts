@@ -1,4 +1,4 @@
-import { ref, computed, watch, onScopeDispose } from 'vue'
+import { ref, shallowRef, computed, watch, onScopeDispose } from 'vue'
 import { refDebounced, useTimeoutFn } from '@vueuse/core'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { ftsLinesSearch, getLineContents } from '@/webview-host/seforimApi'
@@ -22,6 +22,10 @@ export interface CommentaryMatch {
  *     built, a fragment too common). That text is held for the next searches — typing
  *     refines a query keystroke by keystroke — and dropped after FALLBACK_TEXT_IDLE_MS
  *     without a search, when the panel's lines change, or when the panel goes away.
+ *
+ * Typing narrows: a query that CONTAINS the previous one can only match lines the
+ * previous one matched, so those lines' text (kept from the last search) is all that is
+ * checked — no index query, no fetch.
  */
 
 /** How long the fetched text of a panel's lines outlives the last search that used it. */
@@ -39,7 +43,7 @@ export function useCommentarySearch(
   const query = ref('')
   const debouncedQuery = refDebounced(query, 150)
   const currentMatchIdx = ref(0)
-  const matches = ref<CommentaryMatch[]>([])
+  const matches = shallowRef<CommentaryMatch[]>([])
 
   // ── Where each line sits in the panel ────────────────────────────────────────
 
@@ -115,6 +119,9 @@ export function useCommentarySearch(
 
   let currentSearchToken = 0
 
+  /** The last complete search on these groups: its needle and the stripped text of every matched line. */
+  let lastSearch: { needle: string; lines: Map<number, string> } | null = null
+
   function collect(into: CommentaryMatch[], flatIndex: number, stripped: string, needle: string) {
     let characterIndex = 0
     let occurrenceInLine = 0
@@ -133,6 +140,18 @@ export function useCommentarySearch(
     if (!needle || !lineIdAt.size) {
       matches.value = []
       currentMatchIdx.value = 0
+      return
+    }
+
+    const previous = lastSearch
+    if (previous && previous.needle.length >= 2 && needle.includes(previous.needle)) {
+      const found: CommentaryMatch[] = []
+      const matched = new Map<number, string>()
+      for (const [flatIndex, text] of previous.lines) {
+        if (text.includes(needle)) { matched.set(flatIndex, text); collect(found, flatIndex, text, needle) }
+      }
+      lastSearch = { needle, lines: matched }
+      publish(found)
       return
     }
 
@@ -165,10 +184,18 @@ export function useCommentarySearch(
     if (isStale()) return
 
     const found: CommentaryMatch[] = []
+    const matched = new Map<number, string>()
     for (const flatIndex of flatIndexes) {
       const text = texts.get(lineIdAt.get(flatIndex)!)
-      if (text) collect(found, flatIndex, text, needle)
+      if (!text || !text.includes(needle)) continue
+      matched.set(flatIndex, text)
+      collect(found, flatIndex, text, needle)
     }
+    lastSearch = { needle, lines: matched }
+    publish(found)
+  }
+
+  function publish(found: CommentaryMatch[]) {
     matches.value = found
     const cursor = currentFlatIndex()
     const nearestIdx = found.findIndex((m) => m.flatIndex >= cursor)
@@ -182,6 +209,7 @@ export function useCommentarySearch(
     () => groups().map((group) => `${group.bookId}:${group.lines.length}:${group.lines[0]?.lineId ?? 0}`).join('|'),
     () => {
       fallbackText = null
+      lastSearch = null
       if (debouncedQuery.value) void runSearch(debouncedQuery.value)
       else matches.value = []
     },
@@ -222,6 +250,7 @@ export function useCommentarySearch(
   function clear() {
     query.value = ''
     currentSearchToken++
+    lastSearch = null
     matches.value = []
     currentMatchIdx.value = 0
   }

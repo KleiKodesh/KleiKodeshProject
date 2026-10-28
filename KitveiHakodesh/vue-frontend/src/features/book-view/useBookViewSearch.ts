@@ -1,4 +1,4 @@
-import { ref, computed, watch, onScopeDispose } from 'vue'
+import { ref, shallowRef, computed, watch, onScopeDispose } from 'vue'
 import { refDebounced, useTimeoutFn } from '@vueuse/core'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { ftsLinesSearch, getLineContents, getLinesPaged } from '@/webview-host/seforimApi'
@@ -23,6 +23,10 @@ export interface BookViewMatch {
  *     holds the merged text only). The streamed text is held for the next searches —
  *     typing refines a query keystroke by keystroke — and dropped after
  *     FALLBACK_TEXT_IDLE_MS without a search, or at once when the view goes away.
+ *
+ * Typing narrows: a query that CONTAINS the previous one can only match lines the
+ * previous one matched, so those lines' text (kept from the last search) is all that is
+ * checked — no index query, no fetch, however large the book.
  */
 
 /** How long the streamed text of a book outlives the last search that used it. */
@@ -31,6 +35,8 @@ const FALLBACK_TEXT_IDLE_MS = 2 * 60 * 1000
 const STREAM_CHUNK_LINES = 2000
 /** Candidate lines per text request when the index answered. */
 const CANDIDATE_TEXT_BATCH = 500
+/** How often a running scan publishes its matches so far (the counter, the highlights). */
+const PUBLISH_MS = 250
 
 export function useBookViewSearch(options: {
   bookId: () => number | undefined
@@ -45,7 +51,17 @@ export function useBookViewSearch(options: {
   const debouncedQuery = refDebounced(query, 150)
 
   const currentMatchIdx = ref(0)
-  const matches = ref<BookViewMatch[]>([])
+  // Shallow: a scan can hold a million matches; wrapping each in a proxy is pure cost.
+  const matches = shallowRef<BookViewMatch[]>([])
+  let lastPublishedAt = 0
+
+  /** Publishes the scan so far, at most every PUBLISH_MS unless `final`. */
+  function publish(accumulated: BookViewMatch[], final: boolean) {
+    const now = performance.now()
+    if (!final && now - lastPublishedAt < PUBLISH_MS) return
+    lastPublishedAt = now
+    matches.value = accumulated.slice()
+  }
 
   // ── The streamed book text (fallback source) ─────────────────────────────────
 
@@ -66,6 +82,16 @@ export function useBookViewSearch(options: {
 
   // Token used to cancel an in-flight search when a new query arrives.
   let currentScanToken = 0
+
+  /** The last complete search: its needle and the stripped text of every line it matched. */
+  let lastSearch: { key: string; needle: string; lines: Map<number, string> } | null = null
+
+  /** The previous search's matched lines, when the new needle can only match among them. */
+  function narrowingFor(key: string, needle: string): Map<number, string> | null {
+    const previous = lastSearch
+    if (!previous || previous.key !== key || previous.needle.length < 2) return null
+    return needle.includes(previous.needle) ? previous.lines : null
+  }
 
   /** Occurrences of `needle` in one line's stripped text, appended in order. */
   function collect(into: BookViewMatch[], lineIndex: number, stripped: string, needle: string) {
@@ -91,13 +117,25 @@ export function useBookViewSearch(options: {
     }
 
     const accumulated: BookViewMatch[] = []
-    const answeredByIndex = options.activeVersionId() == null && await searchByIndex(bookId, needle, accumulated, isStale)
-    if (isStale()) return
-    if (!answeredByIndex) {
-      accumulated.length = 0
-      await searchByStreaming(bookId, needle, accumulated, isStale)
+    const matchedLines = new Map<number, string>()
+    const key = fallbackKey(bookId)
+    const narrowing = narrowingFor(key, needle)
+    if (narrowing) {
+      for (const [lineIndex, stripped] of narrowing) {
+        if (stripped.includes(needle)) { matchedLines.set(lineIndex, stripped); collect(accumulated, lineIndex, stripped, needle) }
+      }
+      publish(accumulated, true)
+    } else {
+      const answeredByIndex = options.activeVersionId() == null && await searchByIndex(bookId, needle, accumulated, matchedLines, isStale)
       if (isStale()) return
+      if (!answeredByIndex) {
+        accumulated.length = 0
+        matchedLines.clear()
+        await searchByStreaming(bookId, needle, accumulated, matchedLines, isStale)
+        if (isStale()) return
+      }
     }
+    lastSearch = { key, needle, lines: matchedLines }
 
     // Anchor the current match to the nearest line at or after the current position.
     const cursor = options.currentLineIndex()
@@ -107,7 +145,7 @@ export function useBookViewSearch(options: {
 
   /** Source 1: the index's candidate lines, confirmed on their text. False when it cannot answer. */
   async function searchByIndex(
-    bookId: number, needle: string, accumulated: BookViewMatch[], isStale: () => boolean,
+    bookId: number, needle: string, accumulated: BookViewMatch[], matchedLines: Map<number, string>, isStale: () => boolean,
   ): Promise<boolean> {
     let candidates: Awaited<ReturnType<typeof ftsLinesSearch>>
     try {
@@ -124,18 +162,21 @@ export function useBookViewSearch(options: {
       const textById = new Map(rows.map((row) => [row.id, row.content ?? '']))
       for (let j = 0; j < ids.length; j++) {
         const text = textById.get(ids[j]!)
-        if (text) collect(accumulated, candidates.lineIndexes[i + j]!, stripHtmlForSearch(text), needle)
+        if (!text) continue
+        const stripped = stripHtmlForSearch(text)
+        if (!stripped.includes(needle)) continue
+        matchedLines.set(candidates.lineIndexes[i + j]!, stripped)
+        collect(accumulated, candidates.lineIndexes[i + j]!, stripped, needle)
       }
-      // Publish partial results after each batch so the counter updates live.
-      matches.value = [...accumulated]
+      publish(accumulated, false)
     }
-    matches.value = [...accumulated]
+    publish(accumulated, true)
     return true
   }
 
   /** Source 2: the book's own lines, streamed (and kept for the next searches, see above). */
   async function searchByStreaming(
-    bookId: number, needle: string, accumulated: BookViewMatch[], isStale: () => boolean,
+    bookId: number, needle: string, accumulated: BookViewMatch[], matchedLines: Map<number, string>, isStale: () => boolean,
   ) {
     const key = fallbackKey(bookId)
     if (fallbackText?.key !== key) fallbackText = { key, lines: [], loaded: 0 }
@@ -156,11 +197,12 @@ export function useBookViewSearch(options: {
       const end = Math.min(text.loaded, total)
       for (let lineIndex = scanned; lineIndex < end; lineIndex++) {
         const stripped = text.lines[lineIndex]
-        if (stripped) collect(accumulated, lineIndex, stripped, needle)
+        if (!stripped || !stripped.includes(needle)) continue
+        matchedLines.set(lineIndex, stripped)
+        collect(accumulated, lineIndex, stripped, needle)
       }
       scanned = end
-      // Publish partial results after each chunk so the counter updates live.
-      matches.value = [...accumulated]
+      publish(accumulated, scanned >= total)
       // Already-held text is scanned in one go; yield between streamed chunks.
       if (scanned < total) await new Promise<void>((resolve) => setTimeout(resolve, 0))
       if (isStale()) break
@@ -173,10 +215,11 @@ export function useBookViewSearch(options: {
   watch(debouncedQuery, (newQuery) => { void runScan(newQuery) })
   watch(options.activeVersionId, () => {
     fallbackText = null
+    lastSearch = null
     if (debouncedQuery.value) void runScan(debouncedQuery.value)
   })
   // A new book: its predecessor's streamed text is useless.
-  watch(options.bookId, () => { fallbackText = null })
+  watch(options.bookId, () => { fallbackText = null; lastSearch = null })
 
   const matchCount = computed(() => matches.value.length)
   const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)
@@ -219,6 +262,7 @@ export function useBookViewSearch(options: {
   function clear() {
     query.value = ''
     currentScanToken++ // cancel any in-flight search
+    lastSearch = null
     matches.value = []
     currentMatchIdx.value = 0
   }
