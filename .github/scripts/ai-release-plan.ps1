@@ -75,12 +75,15 @@ SECTIONS:
 - "improved" = something that already existed now works better, faster, clearer, or a
   bit differently (e.g. a Torani Design row that now changes letters in another way is
   improved, not new; a faster home page is improved).
-- "fixed" = something that went wrong before (wrong text, lost position, scrambled copy,
-  failed print, wrong direction) and now does not.
+- "fixed" = something that went wrong before (wrong text, lost or shifted position,
+  scrambled copy, failed print, wrong text direction, blank screen) and now does not.
+  A commit whose subject says fix / no longer / now works / correctly is "fixed", even
+  if it also reads like an improvement.
+- Saving edits into the file, a new keyboard shortcut, a new download -> "new".
 
 WORDING:
 - Describe the effect a user sees, never the mechanism. Bad: "custom scrollbar",
-  "native indexing", "filter pills", "virtualized rendering", "character scaling",
+  "native indexing", "filter pills", "multi-select", "virtualized rendering", "character scaling",
   "cache", "lazy load". Good: "the scrollbar shows which section you are in", "results
   appear almost at once", "filter definitions by source", "letter stretch widens the
   letters themselves".
@@ -217,11 +220,15 @@ Below are one-line summaries of every user-visible commit since the last release
 TASK 1 - merge them into the final release notes:
 - Merge lines about the same feature into ONE change describing the finished result
   (e.g. ten bookmark lines -> one bookmarks change). Different features stay separate
-  changes - do NOT drop a feature because it is small; small polish of one area may be
-  combined into one change about that area.
-- Cover BOTH products. Expect roughly 12-25 changes for a release this size.
+  changes - do NOT drop a feature because it is small.
+- Never merge a fix with an improvement: a fixed line stays in "fixed" (its own change,
+  or merged only with other fixes of the same area); likewise "new" stays "new".
+- One change = one idea a reader can take in at a glance: at most two related facts,
+  never a list of four things. Leave out cosmetic trivia (slightly slimmer bars, row
+  heights, fading effects) unless nothing else covers that area.
+- Cover BOTH products. Aim for 14-20 changes.
 - Re-check the section of each merged change against the rules below.
-- area_en / area_he: exact glossary terms. en: one plain sentence, at most ~25 words.
+- area_en / area_he: exact glossary terms. en: one plain sentence, at most ~20 words.
   he: the same in natural, fluent Hebrew as a native Israeli writer would phrase it -
   not a word-for-word translation, no anglicisms, correct spelling, glossary terms.
 - rank: 1 = headline, 2 = notable, 3 = minor. Never invent features or numbers.
@@ -267,6 +274,19 @@ $commits
 if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
+# Area names straight from the glossary when the English one is a glossary term, so the
+# Hebrew area is always the app's own word (and the English casing matches).
+$terms = @{}
+foreach ($l in ($glossary -split "`r?`n")) {
+    if ($l -match '^\s*([^#=][^=]*?)\s*=\s*(.+?)\s*$') {
+        $en = ($Matches[1] -replace '\s*\(.*?\)', '').Trim()
+        $terms[$en.ToLowerInvariant()] = @($en, ($Matches[2] -replace '\s*\(.*?\)', '').Trim())
+    }
+}
+foreach ($c in $plan.changes) {
+    $t = $terms[(($c.area_en -replace '\s*\(.*?\)', '').Trim()).ToLowerInvariant()]
+    if ($t) { $c.area_en = $t[0]; $c.area_he = $t[1] }
+}
 # Markdown per language from the structured changes: sections in order, rank inside.
 function Format-Notes([string]$lang) {
     $heads = if ($lang -eq 'he') { @{ new = 'חדש'; improved = 'שיפורים'; fixed = 'תיקונים' } }
