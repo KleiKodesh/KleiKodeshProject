@@ -210,6 +210,8 @@ $($numbered -join "`n`n")
         $found += @($r.notes | Where-Object { $_.visible -and $_.section -ne 'none' -and $_.en })
         Start-Sleep -Seconds 5
     }
+    # Same area next to each other, so steps of one feature sit together.
+    $found = @($found | Sort-Object area_en, section)
     $lines = (0..($found.Count - 1) | ForEach-Object { "[$_] $($found[$_].section) | $($found[$_].area_en) | $($found[$_].en)" }) -join "`n"
     Write-Host "Pass 1: $($found.Count) visible commits`n$lines"
     $p2 = @"
@@ -218,7 +220,9 @@ $about
 Below are one-line summaries of every user-visible commit since the last release
 ($previousTag), as "[number] section | area | summary". Many are steps of the same
 feature. Account for EVERY number: each goes into "from" of the change that covers it,
-or into "omitted" when it is cosmetic trivia or fully repeated by another line.
+or into "omitted" ONLY when it is pure cosmetic trivia (a bar a few pixels slimmer, a
+row height, a colour fade). Speed-ups, fixes and anything a reader would notice are
+never omitted - merge them into a change instead.
 
 TASK 1 - merge them into the final release notes:
 - Merge lines about the same feature into ONE change describing the finished result
@@ -304,8 +308,8 @@ You are the editor. Below is the draft English list of release-note changes, as
   the same thing. Do not add features that are not in the draft.
 - Put each item in the right section using the rules below. When an item mixes a fix
   with an improvement or a new feature, split it into two items in their sections.
-- An item that lists more than two things: keep the two that matter most to a reader,
-  or split it into two items.
+- An item that lists more than two things: split it into separate items. Never join
+  two items about different areas or different features.
 - Rewrite any wording that names a mechanism or uses jargon (pills, panes, rendering,
   native, index, cache, flyout, task pane, tooltip...) into what the reader sees.
 - en: one plain sentence, at most ~20 words. he: the same in natural, fluent Hebrew as
