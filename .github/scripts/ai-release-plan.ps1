@@ -41,7 +41,7 @@ $blocks = foreach ($h in $hashes) {
     $areas = @(git diff-tree --no-commit-id --name-only -r $h |
         ForEach-Object { $p = @($_ -split '/'); if ($p.Count -gt 1) { $p[0..([Math]::Min(4, $p.Count - 2))] -join '/' } else { $_ } } |
         Sort-Object -Unique | Select-Object -First 6)
-    "### $msg`nFiles: $($areas -join ', ')"
+    if ($env:NOTES_INPUT -eq 'plain') { "### $msg" } else { "### $msg`nFiles: $($areas -join ', ')" }
 }
 $commits = ($blocks -join "`n`n").Trim()
 if (-not $commits) { throw "No commits since $previousTag - nothing to release." }
@@ -86,10 +86,12 @@ Pick the highest level any included change reaches.
 TASK 2 - the notes:
 - Sections, in this order, only when they have items: "### New", "### Improved",
   "### Fixed" (Hebrew: "### חדש", "### שיפורים", "### תיקונים").
-- Each bullet: "**Area** - what changed for the user." One sentence, at most ~20 words.
+- Each bullet: "- **Area** - what changed for the user." One sentence, at most ~20 words.
   Area = the place in the app the user would look for it, named exactly as in the
   glossary (e.g. "Book view", "Search", "Word add-in - Torani Design").
-- Order bullets by how much users will care; at most 6 per section; drop the trivia.
+- Cover every user-visible feature, in BOTH products - Word add-in changes count as
+  much as app changes. Order bullets by how much users will care; at most 7 per
+  section; drop the trivia.
 - Keep to what the commits say - never invent features or numbers.
 - notes_en in English. notes_he: the same items in natural, fluent Hebrew as a native
   Israeli writer would phrase it - not a word-for-word translation, no anglicisms,
@@ -129,7 +131,7 @@ $plan = $null
 :models foreach ($model in $models) {
     foreach ($attempt in 1..3) {
         try {
-            $resp = Invoke-RestMethod -Method Post -TimeoutSec 120 `
+            $resp = Invoke-RestMethod -Method Post -TimeoutSec 180 `
                 -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
                 -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
                 -ContentType 'application/json; charset=utf-8' `
