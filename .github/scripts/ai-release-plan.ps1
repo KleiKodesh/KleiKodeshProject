@@ -42,7 +42,7 @@ $blocks = foreach ($h in $hashes) {
     $msg = (git log -1 --pretty=format:"%s%n%b" $h | Out-String).Trim()
     # Backfill: a note in refs/notes/release counts as the commit's own User-facing line
     # (git notes --ref=release add -m "User-facing: fixed - Area: sentence" <commit>).
-    # NOTES_VARIANT (test runs only): nonotes = ignore the notes, nodiff = no interface texts.
+    # NOTES_VARIANT=nonotes (test runs only): ignore the notes.
     $note = if ($env:NOTES_VARIANT -notmatch 'nonotes') { (git notes --ref=release show $h 2>$null | Out-String).Trim() }
     if ($note) { $msg = $msg -replace '(?im)^\s*User-facing:.*$', ''; $msg = "$msg`n$note".Trim() }
     if ($msg -match '(?im)^\s*User-facing:\s*none\b') { continue }
@@ -58,13 +58,7 @@ $blocks = foreach ($h in $hashes) {
     $areas = @($shipped |
         ForEach-Object { $p = @($_ -split '/'); if ($p.Count -gt 1) { $p[0..([Math]::Min(4, $p.Count - 2))] -join '/' } else { $_ } } |
         Sort-Object -Unique | Select-Object -First 6)
-    # The interface texts a commit adds are literally what the user sees.
-    $texts = if ($env:NOTES_VARIANT -match 'nodiff') { @() } else { @(git show --format= -U0 $h -- '*i18n/locales/en/*' '*AddinText.cs' 2>$null |
-        Where-Object { $_ -match '^\+[^+]' } | ForEach-Object { $_.Substring(1).Trim() } |
-        Where-Object { $_ -match '[A-Za-z]{3}' } | Select-Object -First 6 |
-        ForEach-Object { if ($_.Length -gt 110) { $_.Substring(0, 110) } else { $_ } }) }
-    $stat = (git show --shortstat --format= $h | Out-String).Trim()
-    "### $msg`nFiles: $($areas -join ', ') ($stat)" + $(if ($texts) { "`nNew interface texts: " + ($texts -join ' | ') })
+    "### $msg`nFiles: $($areas -join ', ')"
 }
 $blocks = @($blocks)
 if (-not $blocks) { throw "No commits since $previousTag - nothing to release." }

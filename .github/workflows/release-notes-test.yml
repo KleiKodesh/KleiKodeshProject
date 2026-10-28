@@ -19,7 +19,7 @@ on:
         type: string
         required: false
       variant:
-        description: Test variant - empty, nonotes (ignore refs/notes/release) or nodiff
+        description: Test variant - empty or nonotes (ignore refs/notes/release)
         type: string
         required: false
       list_models:
