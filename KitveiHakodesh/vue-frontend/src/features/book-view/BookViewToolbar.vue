@@ -20,6 +20,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
+import BookViewBookmarksDropdown from './BookViewBookmarksDropdown.vue'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
 import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDropdown.vue'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
@@ -71,6 +72,8 @@ const props = defineProps<{
   currentScrollLineIndex: number
   lines: LinesTable
   onRelatedBooksOpen?: () => void
+  /** The default name for a bookmark on a line - its TOC path. */
+  bookmarkLabelForLine?: (lineIndex: number) => string
   bottomCommentaryVisible?: boolean
   sideCommentaryVisible?: boolean
   sideLeftCommentaryVisible?: boolean
@@ -78,7 +81,7 @@ const props = defineProps<{
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [lineId: number, lineIndex: number] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -149,6 +152,12 @@ function toggleEditionsSubmenu() {
 const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
 
 const tocBtnRef = ref<HTMLElement | null>(null)
+const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
+
+/** Ctrl+Shift+D: opens the bookmarks dropdown on a new bookmark, its name field focused. */
+function createBookmark() {
+  void bookmarksDropdownRef.value?.createBookmark()
+}
 
 // Continuous zoom — fires immediately on pointerdown, then waits 400ms before
 // repeating every 80ms. The delay prevents a normal tap from triggering more
@@ -291,7 +300,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
  * collapses one control too few, so a button is left overflowing the pane.
  */
 const pinnedButtonCount = computed(() => {
-  const alwaysOn = 3 // TOC, previous section, next section
+  const alwaysOn = 4 // TOC, previous section, next section, bookmarks
   const dropdowns =
     (props.hasRelatedBooks ? 1 : 0) +
     (hasVersions.value ? 1 : 0)
@@ -338,7 +347,7 @@ watch(overflowOpen, (open) => {
   hebrewBooksEditionsExpandedInOverflow.value = false
 })
 
-defineExpose({ tocBtnRef })
+defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
@@ -369,6 +378,14 @@ defineExpose({ tocBtnRef })
     >
       <IconChevronLeft20Regular class="dir-icon" />
     </button>
+    <BookViewBookmarksDropdown
+      ref="bookmarksDropdownRef"
+      :book-id="bookId"
+      :current-scroll-line-index="currentScrollLineIndex"
+      :lines="lines"
+      :label-for-line="bookmarkLabelForLine"
+      @go-to-bookmark="(lineId, lineIndex) => $emit('goToBookmark', lineId, lineIndex)"
+    />
     <BookViewRelatedBooksDropdown
       v-if="hasRelatedBooks"
       :book-id="bookId"

@@ -59,7 +59,7 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
-type ToolbarInstance = { tocBtnRef: HTMLElement | null }
+type ToolbarInstance = { tocBtnRef: HTMLElement | null; createBookmark: () => void }
 type LinesContentInstance = {
   scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
   scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
@@ -473,6 +473,7 @@ export function useBookView(
     () => hasToc.value,
     navigateToAdjacentTocSection,
     () => settingsStore.toggleCleanText(),
+    () => toolbarRef()?.createBookmark(),
   )
 
   // ── Commentary section navigation ─────────────────────────────────────────

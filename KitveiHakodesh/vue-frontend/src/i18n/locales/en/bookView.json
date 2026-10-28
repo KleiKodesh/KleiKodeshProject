@@ -86,6 +86,13 @@
     "placeholder": "Enter a note...",
     "updated": "Updated {time}"
   },
+  "bookmarks": {
+    "add": "Create bookmark",
+    "delete": "Delete bookmark",
+    "empty": "No bookmarks in this book",
+    "rename": "Rename bookmark",
+    "title": "Bookmarks"
+  },
   "related": {
     "commentariesOf": "Commentaries on {title}",
     "empty": "No related books",
