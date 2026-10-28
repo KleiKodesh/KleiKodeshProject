@@ -124,6 +124,22 @@ foreach ($l in ($glossary -split "`r?`n")) {
     }
 }
 
+# Area names the model uses that are not glossary terms -> the glossary area they belong to.
+$aliases = @{
+    'print' = 'PDF viewer'; 'zoom' = 'Book view'; 'split view' = 'Book view'; 'tabs' = 'Book view'
+    'interface language' = 'English interface'; 'settings' = 'Settings'; 'home page' = 'Home page'
+    'book library' = 'Book catalog'; 'library' = 'Book catalog'; 'word add-in' = 'Klei Kodesh'
+    'klei kodesh (word add-in)' = 'Klei Kodesh'; 'outline' = 'PDF table of contents'
+    'full-text search' = 'Search'; 'in-book search' = 'Find in text'; 'date bar' = 'Status bar'
+    'commentary search' = 'Search commentaries'; 'toolbar' = 'Book toolbar'; 'menu' = 'Title bar menu'
+}
+# @(English, Hebrew) for an area name, always from the glossary when it can be found.
+function Resolve-Area([string]$name) {
+    $key = ($name -replace '\s*\(.*?\)', '').Trim().ToLowerInvariant()
+    if (-not $terms[$key] -and $aliases[$key]) { $key = $aliases[$key].ToLowerInvariant() }
+    if ($terms[$key]) { $t = $terms[$key]; @(($t[0].Substring(0, 1).ToUpper() + $t[0].Substring(1)), $t[1]) } else { @($name, $name) }
+}
+
 # The whole run stays well inside the release job's timeout; past this budget the step
 # fails and Release retries by itself in an hour.
 $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -279,9 +295,8 @@ foreach ($c in $plan.changes) {
     $new   = @($secs | Where-Object { $_ -eq 'new' }).Count
     $c | Add-Member section $(if (-not $secs) { 'improved' } elseif ($fixed * 2 -ge $secs.Count) { 'fixed' } elseif ($new * 3 -ge $secs.Count) { 'new' } else { 'improved' })
     $c | Add-Member weight $secs.Count
-    $t = $terms[(($c.area_en -replace '\s*\(.*?\)', '').Trim()).ToLowerInvariant()]
-    $c | Add-Member area_he $(if ($t) { $t[1] } else { $c.area_en })
-    if ($t) { $c.area_en = $t[0] }
+    $t = Resolve-Area $c.area_en
+    $c.area_en = $t[0]; $c | Add-Member area_he $t[1]
 }
 # Fixes the merge folded into an improvement come back as their own items, one per
 # area, in step 1's wording - a fix is what a reader most needs to hear about.
@@ -289,9 +304,9 @@ $inFixed = @($plan.changes | Where-Object section -eq 'fixed' | ForEach-Object {
 $lost = @(0..($found.Count - 1) | Where-Object { $found[$_].section -eq 'fixed' -and $_ -notin $inFixed })
 foreach ($g in ($lost | Group-Object { $found[$_].area_en })) {
     $f = $found[$g.Group[0]]
-    $t = $terms[(($f.area_en -replace '\s*\(.*?\)', '').Trim()).ToLowerInvariant()]
+    $t = Resolve-Area $f.area_en
     $plan.changes = @($plan.changes) + [pscustomobject]@{
-        from = @($g.Group); area_en = $(if ($t) { $t[0] } else { $f.area_en }); area_he = $(if ($t) { $t[1] } else { $f.area_en })
+        from = @($g.Group); area_en = $t[0]; area_he = $t[1]
         en = $f.en; rank = 2; section = 'fixed'; weight = $g.Count }
 }
 if ($lost) { Write-Host "Fixes brought back: $($lost.Count) lines" }
@@ -309,27 +324,32 @@ $plain = [ordered]@{
 }
 foreach ($c in $kept) { foreach ($k in $plain.Keys) { $c.en = $c.en -replace $k, $plain[$k] } }
 
-# --- Step 3: the Hebrew, written from the final English list ---
+# --- Step 3: the Hebrew - written in batches, then one proofreading pass ---
 $heSchema = @{
     type       = 'OBJECT'
     properties = @{ he = @{ type = 'ARRAY'; items = @{ type = 'STRING' } } }
     required   = @('he')
 }
-$numbered = for ($k = 0; $k -lt $kept.Count; $k++) { "[$k] ($($kept[$k].area_he)) $($kept[$k].en)" }
-$prompt = @"
-Write the Hebrew release notes for KleiKodesh (a Torah-study app and Word add-in; readers
-are yeshiva students and Torah scholars). Below are $($kept.Count) English items, numbered,
-each with its area's Hebrew name in brackets. Return "he": exactly $($kept.Count) Hebrew
-sentences, in the same order - item [0] first.
-- Write as a native Israeli writer would phrase a short app update note: simple, direct,
-  natural Hebrew. Say what the user can do or notices. Not a word-for-word translation:
-  restructure freely, drop English filler ("easily", "now", "significantly").
-- No anglicisms, no invented words, correct spelling and grammar, Hebrew letters only
-  (plus PDF, Word, Ctrl and digits where needed).
-- Any app area, button or feature name MUST be the exact Hebrew glossary term.
-- Do not repeat the area name at the start of the sentence.
-- Keep the meaning of each English item exactly; its wording is usually the author's
-  own - stay close to it, just in natural Hebrew.
+# Lite sometimes slips an Arabic look-alike letter into Hebrew words.
+function Test-Hebrew($o, [int]$count) { @($o.he).Count -eq $count -and -not (@($o.he) -match '[\u0600-\u06FF]') }
+$heText = @()
+for ($i = 0; $i -lt $kept.Count; $i += 15) {
+    $batch = @($kept[$i..([Math]::Min($i + 15, $kept.Count) - 1)])
+    $numbered = for ($k = 0; $k -lt $batch.Count; $k++) { "[$k] ($($batch[$k].area_he)) $($batch[$k].en)" }
+    $prompt = @"
+Write Hebrew release-note lines for KleiKodesh (a Torah-study app and Word add-in; readers
+are yeshiva students and Torah scholars). Below are $($batch.Count) English items, numbered,
+each with its area's Hebrew name in brackets. Return "he": exactly $($batch.Count) Hebrew
+lines, in the same order - item [0] first.
+- Short, simple, natural Hebrew, as a native Israeli writer phrases an app update note.
+  Say what the user can do or notices. Not word-for-word: drop English filler ("easily",
+  "now", "significantly"), use Hebrew word order and idiom.
+- Keep the meaning exactly; the English is usually the author's own wording - stay close
+  to it.
+- Any app area, button or feature name MUST be the exact Hebrew glossary term, spelled
+  exactly as in the glossary. Do not repeat the area name at the start of the line.
+- No anglicisms, no invented words. Check gender and number agreement and the definite
+  article. Hebrew letters only (plus PDF, Word, Ctrl and digits).
 
 GLOSSARY (English = Hebrew):
 $glossary
@@ -337,23 +357,51 @@ $glossary
 ITEMS:
 $($numbered -join "`n")
 "@
-Write-Host "Step 3 (Hebrew)"
-$he = Invoke-Gemini $prompt $heSchema $mergeChain { param($o) @($o.he).Count -eq $kept.Count -and
-    # Lite sometimes slips an Arabic look-alike letter into Hebrew words.
-    -not (@($o.he) -match '[\u0600-\u06FF]') }
-if (-not $he) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
-for ($k = 0; $k -lt $kept.Count; $k++) { $kept[$k] | Add-Member he $he.he[$k] }
+    Write-Host "Step 3, Hebrew batch $([int]($i / 15) + 1)"
+    $r = Invoke-Gemini $prompt $heSchema $mergeChain { param($o) Test-Hebrew $o $batch.Count }
+    if (-not $r) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
+    $heText += @($r.he)
+}
+# Proofreading: may only correct, never add or remove lines (count checked).
+$numbered = for ($k = 0; $k -lt $heText.Count; $k++) { "[$k] $($heText[$k])" }
+$prompt = @"
+You are a Hebrew proofreader. Below are $($heText.Count) numbered Hebrew lines of software
+release notes. Return "he": the same $($heText.Count) lines, same order, corrected ONLY for:
+spelling mistakes, grammar, gender/number agreement, missing or wrong definite article,
+and literal calques from English (rephrase those into natural Hebrew with the same
+meaning). Keep glossary terms exactly as in the glossary. Do not add, remove, merge or
+reorder lines; leave a correct line unchanged.
+
+GLOSSARY (English = Hebrew):
+$glossary
+
+LINES:
+$($numbered -join "`n")
+"@
+Write-Host "Step 3, proofreading"
+$proof = Invoke-Gemini $prompt $heSchema $mergeChain { param($o) Test-Hebrew $o $heText.Count }
+if ($proof) { $heText = @($proof.he) } else { Write-Host "Proofreading failed - keeping the unproofed Hebrew" }
+for ($k = 0; $k -lt $kept.Count; $k++) { $kept[$k] | Add-Member he $heText[$k] }
 
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
-# Markdown per language from the structured changes: sections in order, rank inside.
+# Markdown per language: sections in order; inside each, ONE bullet per area (areas by
+# their best rank, then amount of work), its changes as short sub-points.
 function Format-Notes([string]$lang) {
     $heads = if ($lang -eq 'he') { @{ new = 'חדש'; improved = 'שיפורים'; fixed = 'תיקונים' } }
              else { @{ new = 'New'; improved = 'Improved'; fixed = 'Fixed' } }
     $out = foreach ($sec in 'new', 'improved', 'fixed') {
-        $items = @($plan.changes | Where-Object section -eq $sec | Sort-Object rank)
+        $items = @($plan.changes | Where-Object section -eq $sec)
         if (-not $items) { continue }
         "### $($heads[$sec])"
-        foreach ($c in $items) { "- **$($c."area_$lang")** - $($c.$lang)" }
+        $groups = $items | Group-Object area_en | Sort-Object `
+            @{ Expression = { ($_.Group | Measure-Object rank -Minimum).Minimum } },
+            @{ Expression = { ($_.Group | Measure-Object weight -Sum).Sum }; Descending = $true }
+        foreach ($g in $groups) {
+            $cs = @($g.Group | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
+            $area = $cs[0]."area_$lang"
+            if ($cs.Count -eq 1) { "- **$area** - $($cs[0].$lang)" }
+            else { "- **$area**"; foreach ($c in $cs) { "  - $($c.$lang)" } }
+        }
         ''
     }
     if ($Auto) {
