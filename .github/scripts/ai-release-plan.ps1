@@ -268,7 +268,10 @@ $lines
     # Coverage check: lines neither merged nor knowingly omitted get one more look.
     if ($plan) {
         # Fixes and new features are never trivia: omitting one counts as missing it.
-        $kept = @($plan.omitted | Where-Object { $_ -ge 0 -and $_ -lt $found.Count -and $found[$_].section -eq 'improved' })
+        # Neither is a whole area: an omitted line whose area no change mentions is missed.
+        $areasIn = @($plan.changes | ForEach-Object { $_.area_en.ToLowerInvariant() })
+        $kept = @($plan.omitted | Where-Object { $_ -ge 0 -and $_ -lt $found.Count -and
+            $found[$_].section -eq 'improved' -and $found[$_].area_en.ToLowerInvariant() -in $areasIn })
         $used = @($plan.changes | ForEach-Object { $_.from }) + $kept
         $missed = @(0..($found.Count - 1) | Where-Object { $_ -notin $used })
         Write-Host "Pass 2: $(@($plan.changes).Count) changes, $(@($plan.omitted).Count) omitted, $($missed.Count) unaccounted"
@@ -311,8 +314,10 @@ You are the editor. Below is the draft English list of release-note changes, as
   the same thing. Do not add features that are not in the draft.
 - Put each item in the right section using the rules below. When an item mixes a fix
   with an improvement or a new feature, split it into two items in their sections.
-- An item that lists more than two things: split it into separate items. Never join
-  two items about different areas or different features.
+- An item that crams in more than two things: keep it one item but say it as one idea
+  (the overall effect), dropping the least important detail. Never join two items
+  about different areas or features. Two items about the same feature and section
+  become one. Aim for 15-22 items in total.
 - Rewrite any wording that names a mechanism or uses jargon (pills, panes, rendering,
   native, index, cache, flyout, task pane, tooltip...) into what the reader sees.
 - en: one plain sentence, at most ~20 words. he: the same in natural, fluent Hebrew as
