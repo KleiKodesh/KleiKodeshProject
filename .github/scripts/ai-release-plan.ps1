@@ -288,9 +288,11 @@ These commit summaries are not covered yet (fixes and new features must appear u
 the notes above already say the same thing):
 $left
 
-Return ONLY additional changes for features the notes above do not already mention
-(same rules; put the numbers in "from"); numbers that are trivia or already covered go
-into "omitted". bump/reason: repeat "$($plan.bump)" and "covered".
+Return the COMPLETE updated list of changes: every change above (keep its feature),
+with each uncovered summary either merged into the change about the same feature or
+area (rewrite that sentence to include it, still one plain idea) or added as a new
+change. Numbers that are pure cosmetic trivia go into "omitted". Aim for 15-24
+changes in total. bump/reason: repeat "$($plan.bump)" and "covered".
 
 $rules
 
@@ -298,8 +300,9 @@ GLOSSARY (English = Hebrew):
 $glossary
 "@
             Write-Host "Pass 3 (coverage)"
-            $extra = Invoke-Gemini $p3 $mergeSchema { param($o) $null -ne $o.changes }
-            if ($extra) { $plan.changes = @($plan.changes) + @($extra.changes); Write-Host "Pass 3: +$(@($extra.changes).Count)" }
+            $before = @($plan.changes).Count
+            $extra = Invoke-Gemini $p3 $mergeSchema { param($o) @($o.changes).Count -ge $before }
+            if ($extra) { $plan.changes = @($extra.changes); Write-Host "Pass 3: $before -> $(@($extra.changes).Count) changes" }
         }
     }
     # Pass 4: an editor's read of the finished list - sections, jargon, one idea per item.
