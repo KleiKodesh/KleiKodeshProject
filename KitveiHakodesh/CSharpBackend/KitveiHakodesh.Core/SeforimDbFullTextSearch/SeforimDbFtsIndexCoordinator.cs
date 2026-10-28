@@ -830,9 +830,13 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>Run a search and push each built batch through <paramref name="emit"/>,
     /// ending with a <c>Done</c> frame. The connection is the stream: the caller passes
     /// an emit that writes one frame per chunk on the client's connection.</summary>
+    /// <param name="resumeAfterLineId">Resume: stream only the hits after this line — the
+    /// last one the caller already holds from an earlier, unfinished run of the same search.
+    /// 0 = from the start. A line that cannot be placed any more restarts the search
+    /// (<see cref="FtsStreamChunk.Restarted"/> on the first frame).</param>
     public async Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, int resumeAfterLineId = 0)
     {
         EnsureIndexing();
         if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
@@ -872,7 +876,15 @@ public sealed class SeforimDbFtsIndexCoordinator
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
             try
             {
-                await emit(new FtsStreamChunk { Stage = "validate" });
+                long afterPosition = 0;
+                bool restarted = false;
+                if (resumeAfterLineId > 0)
+                {
+                    long? position = GetEngine().PositionOfLine(resumeAfterLineId);
+                    if (position is long found) afterPosition = found;
+                    else restarted = true;
+                }
+                await emit(new FtsStreamChunk { Stage = "validate", Restarted = restarted });
                 // Stage changes ride alone only until the first results frame: before it they
                 // are all the client has to show. After it every batch would otherwise cost
                 // three stage-only frames (fetch, snippets, enrich) on top of its results
@@ -883,7 +895,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                 // this cannot deadlock.
                 bool resultsSent = false;
                 string? stageSinceLastResults = null;
-                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords,
+                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, afterPosition,
                     linked.Token,
                     (built, newTerms, snippetTexts) =>
                     {
@@ -929,7 +941,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords,
+        string query, int maxWordDistance, bool requireOrdered, int contextWords, long afterPosition,
         CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, Task> onBatch,
         Action<string>? onStage = null)
     {
@@ -940,7 +952,7 @@ public sealed class SeforimDbFtsIndexCoordinator
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition))
         {
             await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts);
         }

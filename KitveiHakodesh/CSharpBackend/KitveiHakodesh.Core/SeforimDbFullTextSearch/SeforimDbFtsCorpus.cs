@@ -259,6 +259,25 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             return placements;
         }
 
+        /// <summary>
+        /// The line's index position — where a search resumed after it continues
+        /// (<see cref="BookPositionRanges"/>: the book's first position plus the line's rank in
+        /// the book). Two primary-key / index reads. Null for a line that no longer exists or a
+        /// book the ranges do not hold.
+        /// </summary>
+        public long? PositionOfLine(int lineId, Dictionary<int, (long First, long Count)> books)
+        {
+            var placement = FetchPlacements(new[] { lineId });
+            if (!placement.TryGetValue(lineId, out var at) || !books.TryGetValue(at.BookId, out var book)) return null;
+            using var command = _connection.CreateCommand();
+            command.CommandText = SeforimDbSqlStrings.FtsLineRankInBook;
+            command.Parameters.AddWithValue("@b", at.BookId);
+            command.Parameters.AddWithValue("@li", at.LineIndex);
+            command.Parameters.AddWithValue("@id", lineId);
+            long rank = (long)command.ExecuteScalar()!;
+            return rank < book.Count ? book.First + rank : null;
+        }
+
         /// <summary>Search-result content plus each line's placement (book id, lineIndex),
         /// from the one `line` row the content fetch reads - what lets the
         /// searcher finish a hit without a second query. See

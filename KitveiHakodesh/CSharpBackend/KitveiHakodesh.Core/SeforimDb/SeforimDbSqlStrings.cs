@@ -661,6 +661,12 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.id > @after ORDER BY l.id" + (hasLimit ? " LIMIT @lim" : "");
 
+        /// <summary>A line's rank inside its book in the index's order (lineIndex; id breaks a
+        /// tie — exactly <see cref="FtsReadBookLines"/>'s order). Its index position is the
+        /// book's first position plus this. Served by idx_line_book_index.</summary>
+        internal const string FtsLineRankInBook =
+            "SELECT COUNT(*) FROM line WHERE bookId = @b AND (lineIndex < @li OR (lineIndex = @li AND id < @id))";
+
         /// <summary>Lines per book — lets the catalog-order feed skip whole books on resume.</summary>
         internal const string FtsLineCountsByBook = "SELECT bookId, COUNT(*) FROM line GROUP BY bookId";
 

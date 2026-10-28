@@ -81,6 +81,27 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         internal SeforimDbFtsCorpus OpenCorpus() => new SeforimDbFtsCorpus(_seforimDbPath);
 
         /// <summary>
+        /// The index position of a line — what a search resumes after
+        /// (<see cref="SeforimDbFtsCorpus.PositionOfLine"/>). Null when the line cannot be placed
+        /// (gone from the library, or a book this index does not hold): the caller then starts over.
+        /// </summary>
+        public long? PositionOfLine(int lineId)
+        {
+            Dictionary<int, (long First, long Count)> books;
+            lock (_lock)
+            {
+                if (_bookPositions == null)
+                {
+                    using var positions = OpenCorpus();
+                    _bookPositions = positions.BookPositionRanges();
+                }
+                books = _bookPositions;
+            }
+            using var corpus = OpenCorpus();
+            return corpus.PositionOfLine(lineId, books);
+        }
+
+        /// <summary>
         /// Whether an engine is currently open. False before the first use and after a
         /// <see cref="Invalidate"/>; asking does not open one.
         /// </summary>

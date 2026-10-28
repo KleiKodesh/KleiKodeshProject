@@ -222,6 +222,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public List<FtsSnippetText> SnippetTexts { get; set; } = new List<FtsSnippetText>();
         public bool Done { get; set; }
         public string? Error { get; set; }
+        /// <summary>A RESUMED search (ftsSearchStream's resumeAfterLineId) whose resume line could
+        /// not be placed any more, so the service runs it from the start instead: the receiver
+        /// drops the hits it had. Set on the first frame only.</summary>
+        public bool Restarted { get; set; }
         /// <summary>What the engine is doing right now (stable ASCII key: validate, rewrite,
         /// parse, expand, lookup, fetch, snippets, enrich). Until the first results frame, a
         /// stage change is a frame of its own carrying no results; after it, the latest stage

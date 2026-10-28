@@ -71,8 +71,8 @@ public sealed class FullTextSearchService
 
     public Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt) =>
-        _coordinator.StreamSearch(query, maxWordDistance, requireOrdered, contextWords, emit, clientCt);
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, int resumeAfterLineId = 0) =>
+        _coordinator.StreamSearch(query, maxWordDistance, requireOrdered, contextWords, emit, clientCt, resumeAfterLineId);
 
     public Task StreamIndexingProgress(Func<FtsIndexStatus, Task> emit, CancellationToken ct) =>
         _coordinator.StreamIndexingProgress(emit, ct);

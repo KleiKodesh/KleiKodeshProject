@@ -277,6 +277,8 @@ public sealed class FtsSearchStreamArgs
     public int MaxWordDistance { get; set; } = 10;
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
+    /// <summary>Resume after this line (the last hit the caller holds); 0 = from the start.</summary>
+    public int ResumeAfterLineId { get; set; }
     // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 
