@@ -83,25 +83,23 @@ TASK 1 - the semantic version bump:
 - "patch": only fixes, polish and speed.
 Pick the highest level any included change reaches.
 
-TASK 2 - the notes:
-- Sections, in this order, only when they have items: "### New", "### Improved",
-  "### Fixed" (Hebrew: "### חדש", "### שיפורים", "### תיקונים").
-- Each bullet: "- **Area** - what changed for the user." One sentence, at most ~20 words.
-  Area = the place in the app the user would look for it, named exactly as in the
-  glossary (e.g. "Book view", "Search", "Word add-in - Torani Design").
-- Cover every user-visible feature, in BOTH products - Word add-in changes count as
-  much as app changes. Order bullets by how much users will care; at most 7 per
-  section; drop the trivia.
+TASK 2 - the notes, as a list of "changes" (the script formats them):
+- First go through ALL the commits and note every change a user could see. Then merge
+  commits that belong to one feature into ONE change describing the finished result.
+- Cover BOTH products - Word add-in changes count as much as app changes.
+- section: "new" = something users could not do before (including new options and
+  keyboard shortcuts); "improved" = existing thing better/faster/clearer; "fixed" = a
+  bug that hurt users before.
+- area_en / area_he: where the user finds it, named exactly as in the glossary (e.g.
+  "Book view" / its Hebrew term). Word add-in tools: "Klei Kodesh - Torani Design".
+- en: one plain sentence, at most ~20 words, about what the user can now do or notices.
+  he: the same in natural, fluent Hebrew as a native Israeli writer would phrase it - not
+  a word-for-word translation, no anglicisms, no invented words, correct spelling.
+- rank: 1 = headline, 2 = notable, 3 = minor. Order the list by rank.
 - Keep to what the commits say - never invent features or numbers.
-- notes_en in English. notes_he: the same items in natural, fluent Hebrew as a native
-  Israeli writer would phrase it - not a word-for-word translation, no anglicisms,
-  no invented words, correct spelling. Address the user in plural or impersonal form.
 - TERMINOLOGY: every app-area, button and feature name MUST use the exact term from the
-  glossary below (Hebrew side for notes_he). If something is not in the glossary,
-  describe it in plain words rather than coining a name.
-- No title line, no version number, no intro or closing sentence.
-$(if ($Auto) { '- End BOTH notes_en and notes_he with a final italic line (own paragraph) saying this
-  version was published automatically by the weekly automatic release.' })
+  glossary below. If something is not in the glossary, describe it in plain words rather
+  than coining a name.
 
 GLOSSARY (English = Hebrew, as shown in the app):
 $glossary
@@ -119,10 +117,22 @@ $body = @{
             properties = @{
                 bump     = @{ type = 'STRING'; enum = @('major', 'minor', 'patch') }
                 reason   = @{ type = 'STRING' }
-                notes_en = @{ type = 'STRING' }
-                notes_he = @{ type = 'STRING' }
+                changes  = @{ type = 'ARRAY'; items = @{
+                    type       = 'OBJECT'
+                    properties = @{
+                        section = @{ type = 'STRING'; enum = @('new', 'improved', 'fixed') }
+                        area_en = @{ type = 'STRING' }
+                        area_he = @{ type = 'STRING' }
+                        en      = @{ type = 'STRING' }
+                        he      = @{ type = 'STRING' }
+                        rank    = @{ type = 'INTEGER' }
+                    }
+                    required   = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
+                    propertyOrdering = @('section', 'area_en', 'area_he', 'en', 'he', 'rank')
+                } }
             }
-            required   = @('bump', 'reason', 'notes_en', 'notes_he')
+            required   = @('changes', 'bump', 'reason')
+            propertyOrdering = @('changes', 'bump', 'reason')
         }
     }
 } | ConvertTo-Json -Depth 20
@@ -137,7 +147,7 @@ $plan = $null
                 -ContentType 'application/json; charset=utf-8' `
                 -Body ([Text.Encoding]::UTF8.GetBytes($body))
             $plan = $resp.candidates[0].content.parts[0].text | ConvertFrom-Json
-            if ($plan.notes_en -and $plan.notes_he) { Write-Host "Model: $model"; break models }
+            if (@($plan.changes).Count) { Write-Host "Model: $model"; break models }
             throw "incomplete answer"
         } catch {
             Write-Host "$model attempt $attempt failed: $($_.Exception.Message)"
@@ -149,9 +159,25 @@ $plan = $null
 if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
-if ($Auto -and $plan.notes_en -notmatch 'automatic') {
-    $plan.notes_en = $plan.notes_en.Trim() + "`n`n*This version was published automatically by the weekly automatic release.*"
+# Markdown per language from the structured changes: sections in order, rank inside.
+function Format-Notes([string]$lang) {
+    $heads = if ($lang -eq 'he') { @{ new = 'חדש'; improved = 'שיפורים'; fixed = 'תיקונים' } }
+             else { @{ new = 'New'; improved = 'Improved'; fixed = 'Fixed' } }
+    $out = foreach ($sec in 'new', 'improved', 'fixed') {
+        $items = @($plan.changes | Where-Object section -eq $sec | Sort-Object rank)
+        if (-not $items) { continue }
+        "### $($heads[$sec])"
+        foreach ($c in $items) { "- **$($c."area_$lang")** - $($c.$lang)" }
+        ''
+    }
+    if ($Auto) {
+        $out += if ($lang -eq 'he') { '*גרסה זו פורסמה אוטומטית במסגרת השחרור השבועי האוטומטי.*' }
+                else { '*This version was published automatically by the weekly automatic release.*' }
+    }
+    ($out -join "`n").Trim()
 }
+$plan | Add-Member notes_en (Format-Notes 'en')
+$plan | Add-Member notes_he (Format-Notes 'he')
 
 $notes = @"
 <div dir="rtl">
