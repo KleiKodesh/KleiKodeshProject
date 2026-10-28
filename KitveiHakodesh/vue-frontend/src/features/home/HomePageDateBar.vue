@@ -20,7 +20,7 @@ import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useH
 import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 
 const props = defineProps<{
-  /** Rendered by AppShell as the window's status bar (pinned) rather than under the home page. */
+  /** Rendered by App.vue as the window's status bar (pinned) rather than under the home page. */
   statusBar?: boolean
 }>()
 
@@ -340,7 +340,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
         </div>
       </Teleport>
     </template>
-    <!-- Shown on hover; pinned, the bar is rendered by AppShell under every page. -->
+    <!-- Shown on hover; pinned, the bar is rendered by App.vue under every page. -->
     <button
       class="pin-btn"
       :class="{ on: dateBarPinned }"

@@ -175,7 +175,7 @@ onMounted(focusSearchInput)
       </div>
     </div>
 
-    <!-- Pinned, AppShell renders it under every page instead. -->
+    <!-- Pinned, App.vue renders it under every page instead. -->
     <HomePageDateBar v-if="!settingsStore.dateBarPinned" />
   </div>
 </template>
