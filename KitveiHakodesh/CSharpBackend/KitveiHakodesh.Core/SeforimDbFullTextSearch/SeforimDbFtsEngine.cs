@@ -138,23 +138,71 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
                 books = _bookPositions;
             }
-            var ranges = new List<(long First, long Last)>(lineRanges.Count);
-            var owners = new List<(int BookId, long First)>(lineRanges.Count);
+            // One index query per BOOK, over the span of that book's ranges, and the rows
+            // filtered back to the exact ranges afterwards. Each FTS5 MATCH execution costs
+            // ~2 ms of planning however small its rowid range, and a commentary panel on a
+            // large section asked with tens of thousands of one-line ranges (42 s measured);
+            // per book the same set is a few hundred queries.
+            var spans = new Dictionary<int, (long First, long Last)>();
+            var wanted = new Dictionary<int, List<(long First, long Last)>>();
             foreach (var (bookId, firstLine, lastLine) in lineRanges)
             {
                 if (!books.TryGetValue(bookId, out var book) || book.Count == 0) continue;
                 long from = Math.Max(0, firstLine), to = Math.Min(book.Count - 1, lastLine);
                 if (to < from) continue;
-                ranges.Add((book.First + from, book.First + to));
-                owners.Add((bookId, book.First));
+                long first = book.First + from, last = book.First + to;
+                if (spans.TryGetValue(bookId, out var span))
+                    spans[bookId] = (Math.Min(span.First, first), Math.Max(span.Last, last));
+                else
+                {
+                    spans[bookId] = (first, last);
+                    wanted[bookId] = new List<(long, long)>();
+                }
+                wanted[bookId].Add((first, last));
             }
-            if (ranges.Count == 0) return new List<(int, int, int)>();
+            if (spans.Count == 0) return new List<(int, int, int)>();
+            var ranges = new List<(long First, long Last)>(spans.Count);
+            var owners = new List<(int BookId, long First, List<(long First, long Last)> Wanted)>(spans.Count);
+            foreach (var (bookId, span) in spans)
+            {
+                ranges.Add(span);
+                var list = wanted[bookId];
+                list.Sort((a, b) => a.First.CompareTo(b.First));
+                owners.Add((bookId, books[bookId].First, list));
+            }
             var found = Index.FindSubstringCandidates(query, ranges, MaxTermsPerSubstringFragment, ct);
             if (found == null) return null;
             var result = new List<(int, int, int)>(found.Count);
             foreach (var (range, position, lineId) in found)
-                result.Add((owners[range].BookId, (int)(position - owners[range].First), lineId));
+            {
+                var owner = owners[range];
+                if (!InsideAny(owner.Wanted, position)) continue;
+                result.Add((owner.BookId, (int)(position - owner.First), lineId));
+            }
             return result;
+        }
+
+        /// <summary>Whether <paramref name="position"/> falls inside one of the sorted,
+        /// non-overlapping-or-not ranges (binary search on the starts, then a short walk back
+        /// for a range that started earlier but reaches this far).</summary>
+        private static bool InsideAny(List<(long First, long Last)> sorted, long position)
+        {
+            int lo = 0, hi = sorted.Count - 1, at = -1;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (sorted[mid].First <= position) { at = mid; lo = mid + 1; } else hi = mid - 1;
+            }
+            for (int i = at; i >= 0; i--)
+            {
+                if (sorted[i].Last >= position) return true;
+                // Ranges come from runs of consecutive lines; a run that started earlier and
+                // ends before this position cannot reach it, and the same holds for all before
+                // it once their extents are below the one just checked. One step back covers
+                // an overlap from a duplicated range; stop after a few to stay O(log n).
+                if (at - i >= 4) break;
+            }
+            return false;
         }
 
         /// <summary>
