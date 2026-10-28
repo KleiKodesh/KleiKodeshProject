@@ -1,21 +1,26 @@
 # KitveiHakodesh.Core
 
-The single home for all non-UI logic shared by the two orchestrators.
+The single home for all non-UI logic. The service is transport only; Core owns everything.
 
 ```
-                    KitveiHakodesh.Core
-              (all logic — net48 + net10.0-windows)
-                    |                    |
-          KitveiHakodeshLib      KitveiHakodeshService
-        (direct WebView2 access)    (HTTP/IPC to dev)
-                    |                    |
-                    +---- vue-frontend --+
-                       ONE typed API surface
+     vue-frontend (hosted)                    vue-frontend (browser dev)
+  posts to http://kitvei-service             vite proxy /khs-endpoint
+             |                                        |
+   KitveiHakodeshLib (net48)                          |
+   Bridge/ServiceRpcRelay                             |
+             |  named pipe                            |  loopback HTTP (HttpHostServer)
+             +------------> KitveiHakodeshService <---+
+                            (net10.0-windows, Native AOT, Dispatcher)
+                                       |
+                             KitveiHakodesh.Core (all logic)
+                                       |
+                              FtsLib, DocConvertLib
 ```
 
-`KitveiHakodeshLib` and `KitveiHakodeshService` are **thin orchestrators**. They must behave
-identically; the only permitted difference is transport — Lib talks straight to WebView2,
-dev goes through the service.
+`KitveiHakodeshLib` has **no project reference to Core**. It is a net48 WebView2 host that
+relays the frontend's RPC calls to the service over a named pipe (`ServiceRpcRelay`). The
+service is the only Core consumer at runtime and adds nothing but transport. Any host must be
+able to do everything the service does through Core alone.
 
 Below Core sits **FtsLib**, the generic full-text engine. Core feeds it; it never opens the
 corpus.
@@ -26,11 +31,11 @@ corpus.
 
 ### ⚠ The Service ships as NATIVE AOT
 
-`KitveiHakodeshService` sets `PublishAot=true` and references this project, so Core's
-`net10.0-windows` leg is compiled by ILC. **No runtime code generation, no reflection-driven
+`KitveiHakodeshService` sets `PublishAot=true` and references this project, so Core is
+compiled by ILC. **No runtime code generation, no reflection-driven
 behaviour** — which in practice means **no Dapper** (raw ADO only), source-generated
-serialization, and no `Activator.CreateInstance` / `Expression.Compile` / `Emit`. Anything
-needing those lives on the net48 leg only.
+serialization, and no `Activator.CreateInstance` / `Expression.Compile` / `Emit`. Core has
+no other leg to put them on.
 
 ### ⚠ MessagePack is the only wire format
 
@@ -57,14 +62,12 @@ Core exists so each of those is written once.
 
 ## Targets
 
-`net48` **and** `net10.0-windows`.
+`net10.0-windows` only. Not plain `net10.0`, because registry access and Office COM need
+Windows. There is no net48 leg: the Word VSTO add-in reaches Core only through the service.
 
-net48 is non-negotiable: the Word VSTO add-in only supports it, and it consumes Core through
-`KitveiHakodeshLib`. `net10.0-windows` (not plain `net10.0`) because `DocumentLocator`'s net10
-leg is `-windows` and registry access needs Windows.
-
-Per-leg differences use `<Compile Remove>` or `#if NET10_0_OR_GREATER`, following the
-`DocumentLocator` / `DocConvertLib` pattern already established in this repo.
+`../KitveiHakodesh.Core.Portable` compiles a subset of Core's own source files (seforim DB
+reader, FTS wrapper, catalog) on plain `net10.0` for cross-platform tools; it adds no source
+of its own. Windows-only calls in those files sit behind `OperatingSystem.IsWindows()`.
 
 ---
 
