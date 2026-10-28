@@ -120,7 +120,63 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport) return
     const index = findRowIndexAt(viewport.scrollTop, false)
     const row = index != null ? options.rowElement(index) : null
-    if (row && index != null) anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
+    if (row && index != null) {
+      anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
+      textAnchor = findTextAnchor(viewport, row)
+    }
+  }
+
+  // ── Text anchor ───────────────────────────────────────────────────────────────
+  //
+  // The character at the top of the viewport, and how far below the viewport's top
+  // it sat. A reflow (zoom, width) re-wraps the row; holding that character's line
+  // in place keeps the very words the reader was on, where a row fraction drifts.
+
+  let textAnchor: { node: Text; offset: number; top: number } | null = null
+
+  function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+    const doc = document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+    }
+    if (doc.caretPositionFromPoint) {
+      const position = doc.caretPositionFromPoint(x, y)
+      return position ? { node: position.offsetNode, offset: position.offset } : null
+    }
+    const range = document.caretRangeFromPoint?.(x, y)
+    return range ? { node: range.startContainer, offset: range.startOffset } : null
+  }
+
+  function textTop(node: Text, offset: number): number | null {
+    if (!node.isConnected || node.length === 0) return null
+    const start = Math.min(offset, node.length - 1)
+    const range = document.createRange()
+    range.setStart(node, start)
+    range.setEnd(node, start + 1)
+    const rect = range.getClientRects()[0] ?? range.getBoundingClientRect()
+    return rect && (rect.height > 0 || rect.width > 0) ? rect.top : null
+  }
+
+  function findTextAnchor(viewport: HTMLElement, row: HTMLElement) {
+    const box = viewport.getBoundingClientRect()
+    const rowBox = row.getBoundingClientRect()
+    const y = Math.max(box.top, rowBox.top) + 2
+    if (y >= Math.min(box.bottom, rowBox.bottom)) return null
+    const caret = caretAt(box.left + box.width / 2, y)
+    if (!caret || caret.node.nodeType !== Node.TEXT_NODE || !row.contains(caret.node)) return null
+    const node = caret.node as Text
+    const top = textTop(node, caret.offset)
+    return top == null ? null : { node, offset: caret.offset, top: top - box.top }
+  }
+
+  /** Puts the anchored character back at its distance below the viewport's top. True when it could. */
+  function holdTextAnchor(viewport: HTMLElement, row: HTMLElement): boolean {
+    const text = textAnchor
+    if (!text || !row.contains(text.node)) return false
+    const top = textTop(text.node, text.offset)
+    if (top == null) return false
+    const delta = Math.round(top - viewport.getBoundingClientRect().top - text.top)
+    if (delta !== 0) viewport.scrollTop += delta
+    return true
   }
 
   /**
@@ -140,8 +196,15 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport || !anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
-    const offsetInto = anchor.scrollTop - anchor.offsetTop
     const height = row.offsetHeight
+    // A re-wrapped row: hold the reader's words, not a pixel offset into the row.
+    if (height !== anchor.offsetHeight && holdTextAnchor(viewport, row)) {
+      anchor.offsetTop = row.offsetTop
+      anchor.offsetHeight = height
+      anchor.scrollTop = viewport.scrollTop
+      return
+    }
+    const offsetInto = anchor.scrollTop - anchor.offsetTop
     const scaled = anchor.offsetHeight > 0 && height !== anchor.offsetHeight
       ? Math.round(offsetInto * (height / anchor.offsetHeight))
       : offsetInto
