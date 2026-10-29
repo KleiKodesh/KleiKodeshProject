@@ -355,7 +355,7 @@ public static unsafe partial class AotWordConverter
         if (started.Count == 0) return 0;
         string caption = "KitveiHakodesh conversion " + Guid.NewGuid().ToString("N");
         try { PropPut(app, "Caption", Bstr(caption)); } catch { return 0; }
-        for (int attempt = 0; attempt < 20; attempt++)
+        for (int attempt = 0; attempt < 200; attempt++)   // up to 5 s: a loaded machine can be slow to create the window
         {
             nint window = FindWindowW("OpusApp", caption);
             if (window != 0)
@@ -410,14 +410,14 @@ public static unsafe partial class AotWordConverter
         // Word. Best-effort, never allowed to fail the export.
         PurgeOldExports(exportDir);
 
-        bool opened = false;
+        bool opened = false, startedWord = false, terminated = false;
         try
         {
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
 
             HashSet<int> wordsBefore = WordProcessIds();
-            app = AcquireRunningOrNew(in clsid, out bool startedWord);
+            app = AcquireRunningOrNew(in clsid, out startedWord);
             if (startedWord)
             {
                 // Still hidden: the unique caption is set, its window found, and the caption put back
@@ -428,7 +428,7 @@ public static unsafe partial class AotWordConverter
                 if (ownProcess != 0)
                 {
                     nint processToEnd = ownProcess;
-                    cancelRegistration = cancellation.Register(() => TerminateProcess(processToEnd, 1));
+                    cancelRegistration = cancellation.Register(() => { terminated = true; TerminateProcess(processToEnd, 1); });
                 }
             }
             cancellation.ThrowIfCancellationRequested();
@@ -461,12 +461,18 @@ public static unsafe partial class AotWordConverter
         {
             cancelRegistration.Dispose();   // waits for a running terminate; none fires after this
             if (ownProcess != 0) CloseHandle(ownProcess);
-            // Only clean up if Word never got it open; otherwise leave it for the next run's
-            // PurgeOldExports — Word holds the file and deleting it would break the user's Save.
+            // A Word this call STARTED that never got to show the user anything (cancelled before
+            // it could be tagged and ended, or failed) is Quit: Word does not exit when its last
+            // automation reference is released, so it would linger as a hidden
+            // "WINWORD /Automation -Embedding". app came from our own CoCreateInstance, which
+            // always starts a new Word, so this is never the user's. One the cancel ended cannot answer.
+            if (startedWord && !opened && !terminated && app != 0) { try { InvokeMethodVoid(app, "Quit", [I4(0)]); } catch { } }   // wdDoNotSaveChanges
+            // Only clean up if Word never got it open (after the Quit, so Word no longer holds it);
+            // otherwise leave it for the next run's PurgeOldExports — deleting it would break the user's Save.
             if (!opened) { try { System.IO.Directory.Delete(exportDir, true); } catch { } }
             if (doc != 0) Release(doc);
             if (docs != 0) Release(docs);
-            // NEVER Quit — the user is left looking at the exported document.
+            // Quit (above) only before the export is open — after that the user is looking at it.
             if (app != 0) Release(app);
             if (coInit) CoUninitialize();
         }
@@ -532,6 +538,7 @@ public static unsafe partial class AotWordConverter
         bool coInit = hr >= 0;
         nint app = 0, docs = 0, doc = 0, window = 0, selection = 0, ownProcess = 0;
         CancellationTokenRegistration cancelRegistration = default;
+        bool pasted = false, startedWord = false, terminated = false;
         try
         {
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
@@ -539,7 +546,7 @@ public static unsafe partial class AotWordConverter
 
             // Prefer the instance the user already has open.
             HashSet<int> wordsBefore = WordProcessIds();
-            app = AcquireRunningOrNew(in clsid, out bool startedWord);
+            app = AcquireRunningOrNew(in clsid, out startedWord);
             if (startedWord)
             {
                 string? caption = CaptionOf(app);
@@ -548,7 +555,7 @@ public static unsafe partial class AotWordConverter
                 if (ownProcess != 0)
                 {
                     nint processToEnd = ownProcess;
-                    cancelRegistration = cancellation.Register(() => TerminateProcess(processToEnd, 1));
+                    cancelRegistration = cancellation.Register(() => { terminated = true; TerminateProcess(processToEnd, 1); });
                 }
             }
             cancellation.ThrowIfCancellationRequested();
@@ -574,6 +581,7 @@ public static unsafe partial class AotWordConverter
             cancellation.ThrowIfCancellationRequested();   // the last point a paste into the user's Word can be skipped
             try { InvokeMethodVoid(selection, "PasteAndFormat", [I4(20)]); }
             catch { InvokeMethodVoid(selection, "Paste", []); }
+            pasted = true;
             cancelRegistration.Dispose();   // done: a late cancel must not end the Word now showing the paste
 
             try { InvokeMethodVoid(app, "Activate", []); } catch { }
@@ -587,6 +595,9 @@ public static unsafe partial class AotWordConverter
         {
             cancelRegistration.Dispose();
             if (ownProcess != 0) CloseHandle(ownProcess);
+            // A Word this paste STARTED that never received the paste is Quit (see ExportHtml): it
+            // would otherwise linger hidden. Never the user's - app came from our own CoCreateInstance.
+            if (startedWord && !pasted && !terminated && app != 0) { try { InvokeMethodVoid(app, "Quit", [I4(0)]); } catch { } }   // wdDoNotSaveChanges
             if (selection != 0) Release(selection);
             if (window != 0) Release(window);
             if (doc != 0) Release(doc);
