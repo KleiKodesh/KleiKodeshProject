@@ -50,9 +50,51 @@ namespace KitveiHakodeshLib
         /// Returns null on success, or a message describing why it failed — NEVER throws and
         /// never leaves a partially-opened document or a stray invisible Word behind.
         /// </summary>
-        public static Task<string> ExportAsync(string html, string title = "")
+        public static Task<string> ExportAsync(string html, string title = "", string requestId = null)
+            => RunCancellableAsync(requestId, "khs-word-export", cancellation => ExportCore(html, title, cancellation), BusyExport);
+
+        /// <summary>Runs one Word action that <see cref="CancelExport"/> can stop by <paramref name="requestId"/> (none: not cancellable).</summary>
+        private static async Task<string> RunCancellableAsync(string requestId, string threadName, Action<CancellationToken> work, string busyMessage)
         {
-            return RunOnStaAsync("khs-word-export", () => ExportCore(html, title), BusyExport);
+            if (string.IsNullOrEmpty(requestId))
+                return await RunOnStaAsync(threadName, () => work(CancellationToken.None), CancellationToken.None, busyMessage).ConfigureAwait(false);
+            using (var cancellation = new CancellationTokenSource())
+            {
+                if (!RunningExports.TryAdd(requestId, cancellation)) return "A Word action with this request id is already running.";
+                try
+                {
+                    return await RunOnStaAsync(threadName, () => work(cancellation.Token), cancellation.Token, busyMessage).ConfigureAwait(false);
+                }
+                finally
+                {
+                    CancellationTokenSource removed;
+                    RunningExports.TryRemove(requestId, out removed);
+                }
+            }
+        }
+
+        /// <summary>What a cancelled export returns instead of an error message.</summary>
+        public const string CancelledResult = "cancelled";
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> RunningExports =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource>();
+
+        /// <summary>
+        /// Stops the running export or paste with this request id (the page's cancel button): its
+        /// ExportAsync / PasteAtCursorAsync answers <see cref="CancelledResult"/> at once.
+        /// Paste into the user's own Word: a cancel before the paste skips it; a paste Word has
+        /// already begun cannot be interrupted and is left as Word made it (their document is never
+        /// undone or closed). A Word that export started is ended (found by
+        /// a unique caption on its window); a Word the user already had open is never closed - the
+        /// export's own document is closed unsaved once Word finishes opening it. False when no export
+        /// with that id is running.
+        /// </summary>
+        public static bool CancelExport(string requestId)
+        {
+            CancellationTokenSource cancellation;
+            if (string.IsNullOrEmpty(requestId) || !RunningExports.TryGetValue(requestId, out cancellation)) return false;
+            try { cancellation.Cancel(); return true; }
+            catch (ObjectDisposedException) { return false; }
         }
 
         /// <summary>
@@ -66,10 +108,8 @@ namespace KitveiHakodeshLib
         ///
         /// Returns null on success, or a message describing why it failed — never throws.
         /// </summary>
-        public static Task<string> PasteAtCursorAsync()
-        {
-            return RunOnStaAsync("khs-word-paste", PasteAtCursorCore, BusyPaste);
-        }
+        public static Task<string> PasteAtCursorAsync(string requestId = null)
+            => RunCancellableAsync(requestId, "khs-word-paste", PasteAtCursorCore, BusyPaste);
 
         // ── Private implementation ────────────────────────────────────────────
 
@@ -85,39 +125,41 @@ namespace KitveiHakodeshLib
         /// open, and the gate is released in a finally so a crash inside <paramref name="work"/>
         /// leaves nothing blocked for the next attempt.
         /// </summary>
-        private static async Task<string> RunOnStaAsync(string threadName, Action work, string busyMessage)
+        private static async Task<string> RunOnStaAsync(string threadName, Action work, CancellationToken cancellation, string busyMessage)
         {
             if (!await Gate.WaitAsync(0).ConfigureAwait(false)) return busyMessage;
+            var completion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            // The gate is released by the thread when the work is really over: a cancel answers the
+            // caller at once while a Word that is not ours still finishes its open, and the next
+            // export must not drive Word re-entrantly meanwhile.
+            var thread = new Thread(() =>
+            {
+                string result = null;
+                try { work(); }
+                catch (OperationCanceledException) { result = CancelledResult; }
+                catch (Exception ex) { result = cancellation.IsCancellationRequested ? CancelledResult : Describe(ex); }
+                Gate.Release();                  // before answering: the caller's next call must find the gate free
+                completion.TrySetResult(result);
+            })
+            { IsBackground = true, Name = threadName };
+
+            // Start inside the try: if SetApartmentState or Start throws (a thread that never runs can
+            // never complete the TCS or release the gate), awaiting would hang FOREVER - turning one
+            // failure into a permanently dead feature. Releasing and answering here guarantees it returns.
             try
             {
-                var completion = new TaskCompletionSource<string>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-                var thread = new Thread(() =>
-                {
-                    try { work(); completion.TrySetResult(null); }
-                    catch (Exception ex) { completion.TrySetResult(Describe(ex)); }
-                })
-                { IsBackground = true, Name = threadName };
-
-                // Start inside the try: if SetApartmentState or Start throws (a thread that
-                // never runs can never complete the TCS), awaiting would hang FOREVER while
-                // holding the gate — turning one failure into a permanently dead feature, the
-                // exact behaviour this class exists to prevent. Completing it here guarantees
-                // the await always returns.
-                try
-                {
-                    thread.SetApartmentState(ApartmentState.STA);
-                    thread.Start();
-                }
-                catch (Exception ex)
-                {
-                    completion.TrySetResult(Describe(ex));
-                }
-
-                return await completion.Task.ConfigureAwait(false);
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.Start();
             }
-            finally { Gate.Release(); }
+            catch (Exception ex)
+            {
+                Gate.Release();
+                return Describe(ex);
+            }
+
+            using (cancellation.Register(() => completion.TrySetResult(CancelledResult)))
+                return await completion.Task.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -141,8 +183,9 @@ namespace KitveiHakodeshLib
             return ex.Message;
         }
 
-        private static void ExportCore(string html, string title)
+        private static void ExportCore(string html, string title, CancellationToken cancellation)
         {
+            cancellation.ThrowIfCancellationRequested();
             // A FRESH directory per export, so the file name can stay the book's title while the
             // path is still unique. BuildSafeFileName is deterministic, so exporting the same
             // book twice used to resolve to the same path — and the second WriteAllText threw a
@@ -164,9 +207,27 @@ namespace KitveiHakodeshLib
             using (var com = new ComScope())
             {
                 bool ownsApp;
+                var wordsBefore = WordProcessIds();
                 Word.Application app = com.Track(AcquireWordApplication(out ownsApp), ownsApp);
+                System.Diagnostics.Process ownProcess = null;
+                CancellationTokenRegistration cancelRegistration = default(CancellationTokenRegistration);
                 try
                 {
+                    if (ownsApp)
+                    {
+                        // Still hidden: tag our own Word so a cancel ends exactly it, never the user's.
+                        string caption = null;
+                        try { caption = app.Caption; } catch { }
+                        ownProcess = OwnWordProcess(app, wordsBefore);
+                        if (caption != null) { try { app.Caption = caption; } catch { } }   // its own caption back
+                        if (ownProcess != null)
+                        {
+                            var processToEnd = ownProcess;
+                            cancelRegistration = cancellation.Register(() => { try { processToEnd.Kill(); } catch { } });
+                        }
+                    }
+                    cancellation.ThrowIfCancellationRequested();
+
                     app.Visible = true;
 
                     Word.Documents documents = com.Track(app.Documents);
@@ -177,7 +238,16 @@ namespace KitveiHakodeshLib
                         AddToRecentFiles: false,
                         Visible: true));
 
+                    if (doc != null && cancellation.IsCancellationRequested)
+                    {
+                        // Cancelled while a Word that is not ours to end opened it: take back only this
+                        // export's document, unsaved. The user's Word and documents stay as they were.
+                        try { doc.Close(false); } catch { }
+                        throw new OperationCanceledException(cancellation);
+                    }
                     opened = doc != null;
+                    // Done: from here a late cancel must not end the Word now showing the result.
+                    cancelRegistration.Dispose();
 
                     // Activate is COSMETIC and must never fail the export. It sits AFTER the
                     // document is open and committed, so letting it throw would drop into the
@@ -186,15 +256,22 @@ namespace KitveiHakodeshLib
                     // A throw here (Word still finishing the HTML import) is routine.
                     try { app.Activate(); } catch { }
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Nothing half-open left behind: an invisible Word we started would linger as
-                    // a process the user cannot see or close. A reused instance is never quit.
-                    if (ownsApp) { try { app.Quit(); } catch { } }
+                    // a process the user cannot see or close. A reused instance is never quit; a
+                    // Word the cancel ended cannot answer, so it is not asked.
+                    cancelRegistration.Dispose();
+                    bool ended = ownProcess != null && cancellation.IsCancellationRequested;
+                    if (ownsApp && !ended) { try { app.Quit(); } catch { } }
+                    if (cancellation.IsCancellationRequested && !(ex is OperationCanceledException))
+                        throw new OperationCanceledException("Word export cancelled", ex, cancellation);
                     throw;
                 }
                 finally
                 {
+                    cancelRegistration.Dispose();
+                    if (ownProcess != null) ownProcess.Dispose();
                     // Only clean up if Word never got it open. On success Word holds the file,
                     // and deleting it out from under the user breaks Save — so the successful
                     // export's directory is left for the next run's PurgeOldExports to collect.
@@ -203,14 +280,32 @@ namespace KitveiHakodeshLib
             }
         }
 
-        private static void PasteAtCursorCore()
+        private static void PasteAtCursorCore(CancellationToken cancellation)
         {
+            cancellation.ThrowIfCancellationRequested();
             using (var com = new ComScope())
             {
                 bool ownsApp;
+                var wordsBefore = WordProcessIds();
                 Word.Application app = com.Track(AcquireWordApplication(out ownsApp), ownsApp);
+                System.Diagnostics.Process ownProcess = null;
+                CancellationTokenRegistration cancelRegistration = default(CancellationTokenRegistration);
                 try
                 {
+                    if (ownsApp)
+                    {
+                        // A Word started for this paste (none was running): a cancel ends exactly it.
+                        string caption = null;
+                        try { caption = app.Caption; } catch { }
+                        ownProcess = OwnWordProcess(app, wordsBefore);
+                        if (caption != null) { try { app.Caption = caption; } catch { } }
+                        if (ownProcess != null)
+                        {
+                            var processToEnd = ownProcess;
+                            cancelRegistration = cancellation.Register(() => { try { processToEnd.Kill(); } catch { } });
+                        }
+                    }
+                    cancellation.ThrowIfCancellationRequested();
                     app.Visible = true;
 
                     Word.Documents documents = com.Track(app.Documents);
@@ -236,6 +331,7 @@ namespace KitveiHakodeshLib
                     Word.Window window = com.Track(active.ActiveWindow);
                     Word.Selection selection = com.Track(window.Selection);
 
+                    cancellation.ThrowIfCancellationRequested();     // the last point a paste into the user's Word can be skipped
                     try
                     {
                         selection.PasteAndFormat(Word.WdRecoveryType.wdFormatSurroundingFormattingWithEmphasis);
@@ -248,20 +344,76 @@ namespace KitveiHakodeshLib
                         System.Diagnostics.Debug.WriteLine("[WordExporter] PasteAndFormat failed, falling back to Paste: " + pasteEx.Message);
                         selection.Paste();
                     }
+                    // Done: from here a late cancel must not end the Word now showing the result.
+                    cancelRegistration.Dispose();
 
                     // Cosmetic, and AFTER the paste has already committed into the document.
                     // Letting it throw would reach the catch below and Quit a spawned Word,
                     // discarding the content we just pasted. See ExportCore.
                     try { app.Activate(); } catch { }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // An instance we started only to paste into is useless once the paste failed;
-                    // leaving it running would strand an invisible Word process.
-                    if (ownsApp) { try { app.Quit(); } catch { } }
+                    // An invisible Word we started is not left behind; the user's Word is never quit;
+                    // a Word the cancel ended cannot answer, so it is not asked.
+                    cancelRegistration.Dispose();
+                    bool ended = ownProcess != null && cancellation.IsCancellationRequested;
+                    if (ownsApp && !ended) { try { app.Quit(); } catch { } }
+                    if (cancellation.IsCancellationRequested && !(ex is OperationCanceledException))
+                        throw new OperationCanceledException("Word paste cancelled", ex, cancellation);
                     throw;
                 }
+                finally
+                {
+                    cancelRegistration.Dispose();
+                    if (ownProcess != null) ownProcess.Dispose();
+                }
             }
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindowW(string lpClassName, string lpWindowName);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        private static System.Collections.Generic.HashSet<int> WordProcessIds()
+        {
+            var ids = new System.Collections.Generic.HashSet<int>();
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("WINWORD"))
+                using (process) ids.Add(process.Id);
+            return ids;
+        }
+
+        /// <summary>The WINWORD process behind <paramref name="app"/> when it started for this export
+        /// (new since <paramref name="wordsBefore"/>), found by a unique caption on its hidden main
+        /// window ("OpusApp"); its handle is held at once so a later Kill reaches THIS process, never a
+        /// reused id. Null when it cannot be told apart - then nothing is ever ended.</summary>
+        private static System.Diagnostics.Process OwnWordProcess(Word.Application app, System.Collections.Generic.HashSet<int> wordsBefore)
+        {
+            var started = WordProcessIds();
+            started.ExceptWith(wordsBefore);
+            if (started.Count == 0) return null;
+            string caption = "KitveiHakodesh export " + Guid.NewGuid().ToString("N");
+            try { app.Caption = caption; } catch { return null; }
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                IntPtr window = FindWindowW("OpusApp", caption);
+                if (window != IntPtr.Zero)
+                {
+                    uint processId;
+                    GetWindowThreadProcessId(window, out processId);
+                    if (processId == 0 || !started.Contains((int)processId)) return null;
+                    try
+                    {
+                        var process = System.Diagnostics.Process.GetProcessById((int)processId);
+                        var unused = process.Handle;
+                        return process;
+                    }
+                    catch { return null; }
+                }
+                Thread.Sleep(25);
+            }
+            return null;
         }
 
         /// <summary>
