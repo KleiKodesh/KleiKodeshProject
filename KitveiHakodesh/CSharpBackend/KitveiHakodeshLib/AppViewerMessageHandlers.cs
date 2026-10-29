@@ -283,7 +283,7 @@ namespace KitveiHakodeshLib
             {
                 string url = root.TryGetProperty("url", out var u) ? u.GetString() : null;
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeMailto))
                 {
                     _bridge.Reply(id, new { error = "invalid url" });
                     return;

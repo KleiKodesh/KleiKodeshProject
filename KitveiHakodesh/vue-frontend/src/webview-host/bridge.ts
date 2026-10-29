@@ -344,14 +344,15 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Open an http/https address in the user's default browser.
+ * Open an http/https address in the user's default browser, or a mailto: address in the
+ * default mail app.
  *
  * Hosted: the C# host shell-executes the URL (`openUrlInSystemBrowser`) - a plain
  * window.open inside WebView2 would open a WebView popup, not the system browser.
  * Dev: the page already runs in the system browser, so a new tab is the same thing.
  */
 export async function openUrlInSystemBrowser(url: string): Promise<boolean> {
-  if (!/^https?:\/\//i.test(url)) return false
+  if (!/^(?:https?:\/\/|mailto:)/i.test(url)) return false
   if (typeof window.__webviewAction !== 'function') {
     window.open(url, '_blank', 'noopener,noreferrer')
     return true
