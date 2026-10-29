@@ -11,9 +11,9 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useRecentSearches } from '@/composables/useRecentSearches'
-import BookViewSearchRecentsDropdown from './BookViewSearchRecentsDropdown.vue'
-import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
-import type { CommentarySlot, SearchMode } from './bookViewTypes'
+import ReadingSearchRecentsDropdown from './ReadingSearchRecentsDropdown.vue'
+import { searchModeForSlot, slotForSearchMode } from './readingSearchModes'
+import type { CommentarySlot, SearchMode } from './readingSearchModes'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -311,7 +311,7 @@ defineExpose({ focus: focusInput })
         <!-- Recent searches, as a combobox listbox belonging to the field: sized to
              the input and styled like the mode menu, not the search page's floating
              bubble. Rows carry an × to drop a single query. -->
-        <BookViewSearchRecentsDropdown
+        <ReadingSearchRecentsDropdown
           :controller="recents"
           :open-up="isBottomAnchored"
           :listbox-id="listboxId"

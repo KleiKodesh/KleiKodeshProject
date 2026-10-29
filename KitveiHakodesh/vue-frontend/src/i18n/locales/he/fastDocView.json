@@ -6,8 +6,8 @@
   "toc": "תוכן עניינים",
   "notes": "הערות",
   "noNotes": "אין הערות בתצוגה",
-  "zoomIn": "הגדלה (Ctrl+)\nאיפוס: Ctrl+0",
-  "zoomOut": "הקטנה (Ctrl-)\nאיפוס: Ctrl+0",
+  "zoomIn": "הגדל (Ctrl+)\nטקסט: {text}%\nאיפוס: Ctrl+0",
+  "zoomOut": "הקטן (Ctrl-)\nטקסט: {text}%\nאיפוס: Ctrl+0",
   "footnote": "הערת שוליים",
   "endnote": "הערת סוף",
   "openAsPdf": "פתח כ-PDF (דרך Word)",
@@ -21,9 +21,15 @@
   "goToFootnoteReference": "מעבר למקום ההערה בתקסט",
   "goToEndnoteReference": "מעבר למקום הערת הסוף בתקסט",
   "bookmarkNotFound": "יעד הקישור לא נמצא במסמך זה",
+  "linkNotSupported": "האפליקציה לא יכולה לפתוח קישור זה",
   "searchNext": "התואמה הבאה (Enter)",
   "searchPrevious": "התואמה הקודמת (Shift+Enter)",
   "searchClose": "סגירת החיפוש (Esc)",
   "search": "חיפוש במסמך (Ctrl+F)",
-  "closeNotes": "סגירת חלון ההערות"
+  "closeNotes": "סגירת חלון ההערות",
+  "syncNotesOffTitle": "סנכרן הערות\nההערות יעקבו אחר הטקסט שבתצוגה",
+  "syncNotesOnTitle": "סנכרן הערות\nלחץ לכיבוי הסנכרון האוטומטי",
+  "notesPlaceToRight": "העבר את חלונית ההערות לימין",
+  "notesPlaceToLeft": "העבר את חלונית ההערות לשמאל",
+  "notesPlaceToBottom": "העבר את חלונית ההערות למטה"
 }

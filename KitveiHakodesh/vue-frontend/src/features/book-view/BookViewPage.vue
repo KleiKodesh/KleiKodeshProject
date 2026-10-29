@@ -11,7 +11,7 @@ import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
-import BookViewSearchBar from './BookViewSearchBar.vue'
+import BookViewSearchBar from '@/components/ReadingSearchBar.vue'
 import SidePanel from '@/components/SidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
@@ -591,7 +591,7 @@ function getSideEditionOutlineTarget(): string | undefined {
             </template>
 
             <div class="side-lines">
-              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value">
+              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value" class="book-view-commentary-split">
                 <template #top>
                   <BookViewLinesContent
                     v-if="scrollStateReady"
@@ -864,4 +864,11 @@ function getSideEditionOutlineTarget(): string | undefined {
    band (::before), and a visible line (::after) that thickens and takes the accent
    colour only while hovered or dragged. The element is 1px and transparent so the
    ::after can grow without shifting the layout. */
+/* trial: the FastDocView notes separator - a border-coloured hairline plus a soft shadow cast onto the text */
+.book-view-commentary-split > :deep(.sash-h)::after {
+  height: 1px;
+  background: var(--border-color);
+  box-shadow: 0 -2px 6px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  z-index: 1;
+}
 </style>

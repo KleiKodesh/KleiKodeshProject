@@ -49,7 +49,7 @@ With the toggle row on top of the editions dropdown on (per pane, persisted, def
 
 **SidePanel** (`components/SidePanel.vue`, shared) - the side-panel shell, holding the table of contents. Commentary filters used to share it; they now live in their own panels (see above).
 
-**BookViewSearchBar.vue** - inline search bar. Query input, mode selection, and match navigation.
+**components/ReadingSearchBar.vue (shared with FastDocView)** - inline search bar. Query input, mode selection, and match navigation.
 
 **BookViewRelatedBooksDropdown.vue** - "ספרים קרובים" dropdown in the toolbar. Shows books linked to the current book (SOURCE / TARGUM / COMMENTARY / LINKED) and navigates on click.
 

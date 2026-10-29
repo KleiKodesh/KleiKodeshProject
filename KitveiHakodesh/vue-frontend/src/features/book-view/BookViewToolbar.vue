@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
+import { computed, ref, watch, nextTick, useId } from 'vue'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
@@ -27,7 +27,8 @@ import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDr
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
-import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
+import BookViewExportToWordGlyph from '@/components/WordDocumentGlyph.vue'
+import { usePressRepeat } from '@/composables/usePressRepeat'
 import ConversionActionButton from '@/components/ConversionActionButton.vue'
 import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
@@ -129,41 +130,17 @@ async function createBookmark() {
   void overflowBookmarksDropdownRef.value?.createBookmark(point)
 }
 
-// Continuous zoom — fires immediately on pointerdown, then waits 400ms before
-// repeating every 80ms. The delay prevents a normal tap from triggering more
-// than one step.
-let zoomInterval: ReturnType<typeof setInterval> | null = null
-let zoomDelayTimeout: ReturnType<typeof setTimeout> | null = null
-
+// Continuous zoom: the shared hold-to-repeat (usePressRepeat) - a step on pointerdown, then
+// every 80 ms after 400 ms held; stopped on release and on unmount.
 function zoomStep(direction: 'in' | 'out') {
   if (direction === 'in') bookViewStore.zoomIn(props.tabId, props.bookId)
   else bookViewStore.zoomOut(props.tabId, props.bookId)
 }
-
+const zoomRepeat = usePressRepeat()
 function startContinuousZoom(direction: 'in' | 'out') {
-  if (zoomInterval !== null || zoomDelayTimeout !== null) return
-  zoomStep(direction)
-  zoomDelayTimeout = setTimeout(() => {
-    zoomDelayTimeout = null
-    zoomInterval = setInterval(() => zoomStep(direction), 80)
-  }, 400)
+  zoomRepeat.start(() => zoomStep(direction))
 }
-
-function stopContinuousZoom() {
-  if (zoomDelayTimeout !== null) {
-    clearTimeout(zoomDelayTimeout)
-    zoomDelayTimeout = null
-  }
-  if (zoomInterval !== null) {
-    clearInterval(zoomInterval)
-    zoomInterval = null
-  }
-}
-
-// Only pointerup/leave/cancel stopped these, and none of them fire when the button
-// unmounts under the pointer — closing the tab while holding zoom left an 80ms interval
-// calling zoomIn/zoomOut on a dead tab for the life of the page.
-onBeforeUnmount(stopContinuousZoom)
+const stopContinuousZoom = zoomRepeat.stop
 
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
@@ -315,7 +292,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
@@ -715,87 +692,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </template>
 
 <style scoped>
-.book-view-toolbar {
-  /* How far the anchored more button sits from the edge it is pinned to, and therefore how
-     much room the button row must leave for it: its own size plus that inset, twice over so
-     the row stays centred on the toolbar rather than on the space left over. */
-  --toolbar-edge-inset: 2px;
-  --toolbar-reserved-edge: calc(var(--toolbar-button-size) + 2 * var(--toolbar-edge-inset));
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: var(--toolbar-horizontal-padding);
-  background: var(--bg-toolbar);
-  flex-shrink: 0;
-  cursor: grab;
-  touch-action: none;
-}
-.book-view-toolbar.dragging {
-  cursor: grabbing;
-}
-.toolbar-drop-preview {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: none;
-  background: #d0d0d0;
-  opacity: 0.5;
-}
-
-/* ── Orientation ── */
-.toolbar-top,
-.toolbar-bottom {
-  flex-direction: row;
-  height: var(--toolbar-horizontal-height);
-  justify-content: center;
-  /* Both sides, so the buttons stay centred on the toolbar itself and do not drift right as
-     the reserved edge is taken out of one side only. */
-  padding-inline: var(--toolbar-reserved-edge);
-}
-.toolbar-left,
-.toolbar-right {
-  flex-direction: column;
-  justify-content: flex-start;
-  width: var(--toolbar-vertical-width);
-  height: auto;
-  padding: var(--toolbar-vertical-padding);
-  /* The column's own end, where the anchored button sits. Only that end needs reserving -
-     a vertical toolbar starts its buttons at the top rather than centring them. */
-  padding-block-end: var(--toolbar-reserved-edge);
-}
-
-/* ── Borders ──
-   Drawn as an overlay line, not a CSS border: the overflow button is opaque, full button
-   size and stacked above the row (see .overflow-btn), so a real border would sit under its
-   fill. The line is painted above it instead. */
-.book-view-toolbar::after {
-  content: '';
-  position: absolute;
-  /* A border, not a 1px background: at fractional DPI (150%) Chromium snaps a 1px box to 1
-     or 2 device pixels depending on its offset, so the bottom/right line came out double.
-     Border widths are snapped consistently. */
-  border: 0 solid var(--border-color);
-  pointer-events: none;
-  z-index: 2;
-}
-.toolbar-top::after {
-  inset: auto 0 0 0;
-  border-top-width: 1px;
-}
-.toolbar-bottom::after {
-  inset: 0 0 auto 0;
-  border-top-width: 1px;
-}
-.toolbar-left::after {
-  inset: 0 0 0 auto;
-  border-inline-end-width: 1px;
-}
-.toolbar-right::after {
-  inset: 0 auto 0 0;
-  border-inline-end-width: 1px;
-}
-
+/* The shell, orientations, edge line and drag preview: assets/styles/readingToolbar.css (.reading-toolbar). */
 /* ── Buttons ── */
 button {
   display: flex;
