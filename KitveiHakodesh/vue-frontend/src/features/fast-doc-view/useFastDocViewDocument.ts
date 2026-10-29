@@ -14,8 +14,12 @@ import { FastDocViewBlockCache } from './fastDocViewBlockCache'
 export const FAST_DOC_VIEW_BLOCK_CACHE_CAPACITY = 400
 /** Largest single blocks request; a longer missing span is asked for in pieces. */
 export const FAST_DOC_VIEW_MAX_BLOCKS_PER_REQUEST = 100
-/** Index-building step on a first open: blocks indexed per fastDocViewScan call (tens of ms). */
+/** Index-building step on a first open: the most blocks one fastDocViewScan call may index.
+ * The service also stops each call after a few ms, so a block fetch never waits long behind it. */
 export const FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN = 5000
+/** A failed scan call is retried after these delays (ms); after the last one the index stops
+ * growing and `indexBuildFailed` is set. A changed file is not retried here (it reopens). */
+export const FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS: readonly number[] = [500, 1000, 2000, 4000, 8000]
 
 export interface FastDocViewDocumentOptions {
   api: FastDocViewApi
@@ -37,6 +41,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   const blockCount = ref(0)
   /** False while a first open is still building its index; the count only grows meanwhile. */
   const isIndexComplete = ref(true)
+  /** The background index build gave up after its retries: the count stops at what is known. */
+  const indexBuildFailed = ref(false)
   const headings = shallowRef<FastDocViewHeading[]>([])
   const weights = shallowRef<Int32Array | null>(null)
   const isLoading = ref(false)
@@ -49,6 +55,21 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   let openedPath: string | null = null
   let openGeneration = 0
   let reopening: Promise<void> | null = null
+  /** Block fetches in flight: the index scan waits while any is pending, so the screen comes first. */
+  let pendingFetches = 0
+  let fetchesIdle: Promise<void> | null = null
+  let resolveFetchesIdle: (() => void) | null = null
+
+  function beginFetch() {
+    if (pendingFetches++ === 0) fetchesIdle = new Promise((resolve) => (resolveFetchesIdle = resolve))
+  }
+  function endFetch() {
+    if (--pendingFetches === 0) {
+      resolveFetchesIdle?.()
+      fetchesIdle = null
+      resolveFetchesIdle = null
+    }
+  }
 
   /**
    * Opens `path`. `reachIndex` (a restored position): while the index is incomplete, scan
@@ -132,12 +153,27 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
 
   async function buildIndexInBackground(documentId: string, generation: number) {
     const isCurrent = () => generation === openGeneration && summary.value?.documentId === documentId
+    indexBuildFailed.value = false
+    let failures = 0
     while (isCurrent() && !isIndexComplete.value) {
+      // The screen first: never queue a scan call while a block fetch is waiting.
+      while (fetchesIdle) await fetchesIdle
+      if (!isCurrent()) return
       let state
       try {
         state = await api.scan(documentId, FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN)
-      } catch {
-        return
+        failures = 0
+      } catch (caught) {
+        // A changed file (or a forgotten id) reopens through the next blocks fetch, which
+        // starts a new build; anything else is retried with backoff, then reported.
+        if (isFastDocViewSourceChangedError(caught) || !isCurrent()) return
+        if (failures >= FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS.length) {
+          console.error('[FastDocView] index build stopped after retries', caught)
+          indexBuildFailed.value = true
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS[failures++]))
+        continue
       }
       if (!isCurrent()) return
       // The count only grows: never move it back for a stale answer. Note counts grow too.
@@ -181,7 +217,13 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       const count = Math.min(FAST_DOC_VIEW_MAX_BLOCKS_PER_REQUEST, end - start)
       const documentId = summary.value?.documentId
       if (!documentId) throw new Error('FastDocView: document closed')
-      const fetched = await api.blocks(documentId, start, count)
+      beginFetch()
+      let fetched
+      try {
+        fetched = await api.blocks(documentId, start, count)
+      } finally {
+        endFetch()
+      }
       // Reopened or closed meanwhile: these blocks belong to the old document. The
       // reopen bumps contentVersion, so the scroller asks for its window again.
       if (summary.value?.documentId !== documentId) throw new Error('FastDocView: document replaced')
@@ -253,6 +295,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     weights.value = null
     blockCount.value = 0
     isIndexComplete.value = true
+    indexBuildFailed.value = false
     cache.clear()
     if (documentId) await api.close(documentId).catch(() => {})
   }
@@ -266,6 +309,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     summary,
     blockCount,
     isIndexComplete,
+    indexBuildFailed,
     headings,
     isLoading,
     error,

@@ -189,6 +189,12 @@ const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.valu
       </SidePanel>
       <div class="fast-doc-view-main">
         <MessageBanner
+          v-if="fastDocument.indexBuildFailed.value"
+          severity="warning"
+          :message="$t('fastDocView.indexBuildFailed')"
+          :dismissible="true"
+        />
+        <MessageBanner
           v-if="!filePath"
           severity="info"
           :message="$t('fastDocView.noFileOpen')"
@@ -273,5 +279,12 @@ const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.valu
 }
 .fast-doc-view-scroller :deep(.windowed-scroller-content) {
   padding-block-end: 24px;
+}
+/* An empty paragraph keeps one line, as in Word (and an empty block is one line too): a
+   zero-height row could never be scrolled into view, so the document's last rows - often
+   empty - looked cut off at the end. */
+.fast-doc-view-block:empty::before,
+.fast-doc-view-block :deep(:is(p, h1, h2, h3, h4, h5, h6):empty::before) {
+  content: '\200b';
 }
 </style>
