@@ -2,7 +2,9 @@
 import {
   IconZoomIn20Regular,
   IconZoomOut20Regular,
-  IconNotepad20Regular,
+  IconLayoutRowTwo20Regular,
+  IconLayoutRowTwoFocusBottom20Filled,
+  IconSearch20Regular,
   IconDocumentPdf20Regular,
   IconOpen20Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -16,6 +18,7 @@ defineProps<{
   hasNotes: boolean
   zoom: number
   pdfState: ConversionActionState
+  searchVisible: boolean
   canOpenAsPdf: boolean
 }>()
 
@@ -28,6 +31,7 @@ const emit = defineEmits<{
   cancelOpenAsPdf: []
   openConvertedPdf: []
   openInDefaultApp: []
+  toggleSearch: []
 }>()
 
 function onToggleToc(event: MouseEvent) {
@@ -52,7 +56,12 @@ function onToggleToc(event: MouseEvent) {
       :title="$t('fastDocView.notes')"
       @click="emit('toggleNotes')"
     >
-      <IconNotepad20Regular />
+      <!-- the book view's bottom-commentary toggle: the notes pane sits in the same place -->
+      <IconLayoutRowTwoFocusBottom20Filled v-if="notesVisible" />
+      <IconLayoutRowTwo20Regular v-else />
+    </button>
+    <button :class="{ active: searchVisible }" :title="$t('fastDocView.search')" @click="emit('toggleSearch')">
+      <IconSearch20Regular />
     </button>
     <button :title="$t('fastDocView.zoomOut')" @click="emit('zoomOut')">
       <IconZoomOut20Regular />

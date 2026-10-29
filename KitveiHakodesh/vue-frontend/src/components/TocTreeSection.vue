@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import TreeView from '@/components/TreeView.vue'
-import type { TocEntry } from '@/webview-host/queries.types'
-import type { SearchableTree } from './tocSearchUtils'
+import TreeView from './TreeView.vue'
+import type { TreeNodeItem } from './treeTypes'
+import type { SegmentSearchTree } from '@/utils/segmentSearchTree'
+
+/**
+ * One table-of-contents tree (title row optional) - the book view's TOC and the FastDocView
+ * outline share it, so both look the same by construction. Nodes are TreeView rows.
+ */
 
 defineProps<{
   title: string | null
-  entries: TocEntry[]
+  entries: TreeNodeItem[]
   filter: string
   activeEntryId?: number
-  searchTree?: SearchableTree
+  searchTree?: SegmentSearchTree
 }>()
-defineEmits<{ select: [TocEntry] }>()
+defineEmits<{ select: [TreeNodeItem] }>()
 
 const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
 defineExpose({
@@ -30,7 +35,7 @@ defineExpose({
       :filter="filter"
       :active-node-id="activeEntryId"
       :search-tree="searchTree"
-      @select="$emit('select', $event as TocEntry)"
+      @select="$emit('select', $event)"
     />
   </div>
 </template>

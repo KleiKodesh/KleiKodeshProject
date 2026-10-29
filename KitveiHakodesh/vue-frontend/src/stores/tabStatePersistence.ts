@@ -31,6 +31,8 @@ export interface TabState {
   fastDocViewZoom?: number        // per-tab zoom level for /fast-doc-view tabs
   fastDocViewBlockIndex?: number  // first visible block of a /fast-doc-view tab (position restore)
   fastDocViewBlockOffset?: number // pixels the viewport sits below that block's top
+  fastDocViewNotesVisible?: boolean // the notes pane open / closed (like the bottom commentary)
+  fastDocViewNotesFraction?: number // the text pane's share of the split above the notes pane
 }
 
 export interface BookState {

@@ -75,6 +75,26 @@ public sealed class FastDocViewBookmarkArgs
     public string Name { get; set; } = "";
 }
 
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewSearchArgs
+{
+    public string DocumentId { get; set; } = "";
+    public string Query { get; set; } = "";
+    public bool MatchCase { get; set; }
+    public int FromBlock { get; set; }
+    public int MaxBlocks { get; set; }
+}
+
+/// <summary>One bounded search step: the hit blocks of the scanned range (ascending), where to continue
+/// (-1 at the end), and whether the whole document was scanned. Block indexes only - no text.</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewSearchResult
+{
+    public int[] HitBlocks { get; set; } = [];
+    public int NextBlock { get; set; }
+    public bool ReachedEnd { get; set; }
+}
+
 /// <summary>The block holding a bookmark (an internal link's target), or null when there is none.</summary>
 [MessagePackObject(keyAsPropertyName: true)]
 public sealed class FastDocViewBookmarkResult

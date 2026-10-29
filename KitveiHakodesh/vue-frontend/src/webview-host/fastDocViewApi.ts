@@ -52,6 +52,13 @@ export interface FastDocViewHeading {
   text: string
 }
 
+/** One bounded search step: hit blocks of the scanned range (ascending), where to continue (-1 = end). */
+export interface FastDocViewSearchStep {
+  hitBlocks: number[]
+  nextBlock: number
+  reachedEnd: boolean
+}
+
 /** A run of blocks at one page text width (a Word section); twips = 1/1440 inch. */
 export interface FastDocViewSection {
   firstBlockIndex: number
@@ -63,6 +70,8 @@ export interface FastDocViewApi {
   open(path: string): Promise<FastDocViewSummary>
   blocks(documentId: string, first: number, count: number): Promise<FastDocViewBlock[]>
   headings(documentId: string): Promise<FastDocViewHeading[]>
+  /** Searches up to `maxBlocks` blocks from `fromBlock` (block indexes only; book-view normalisation). */
+  search(documentId: string, query: string, matchCase: boolean, fromBlock: number, maxBlocks: number): Promise<FastDocViewSearchStep>
   /** The block holding bookmark `name` (an internal link's target), or null when there is none. */
   bookmark(documentId: string, name: string): Promise<number | null>
   /** Page text width per section, in block order (the known ones while the index builds). */
@@ -102,6 +111,9 @@ export const fastDocViewApi: FastDocViewApi = {
     (await serviceCall<FastDocViewBlock[]>('fastDocViewBlocks', { documentId, first, count })) ?? [],
   headings: async (documentId) =>
     (await serviceCall<FastDocViewHeading[]>('fastDocViewHeadings', { documentId })) ?? [],
+  search: async (documentId, query, matchCase, fromBlock, maxBlocks) =>
+    (await serviceCall<FastDocViewSearchStep>('fastDocViewSearch', { documentId, query, matchCase, fromBlock, maxBlocks })) ??
+    { hitBlocks: [], nextBlock: -1, reachedEnd: true },
   bookmark: async (documentId, name) =>
     (await serviceCall<{ blockIndex?: number | null }>('fastDocViewBookmark', { documentId, name }))?.blockIndex ?? null,
   sections: async (documentId) =>

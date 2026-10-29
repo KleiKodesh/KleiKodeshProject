@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useDebounceFn, useStyleTag } from '@vueuse/core'
+import { useDebounceFn, useStyleTag, useThrottleFn } from '@vueuse/core'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import SidePanel from '@/components/SidePanel.vue'
@@ -23,6 +23,9 @@ import { useFastDocViewDocument } from './useFastDocViewDocument'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
 import FastDocViewToolbar from './FastDocViewToolbar.vue'
 import FastDocViewToc from './FastDocViewToc.vue'
+import FastDocViewSearchBar from './FastDocViewSearchBar.vue'
+import { useFastDocViewSearch } from './useFastDocViewSearch'
+import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
 import type { FastDocViewPlacedNote } from './useFastDocViewDocument'
@@ -61,13 +64,24 @@ const initialOffsetPx = ref(0)
 const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
 const stateReady = ref(false)
 
+/**
+ * Tab view state writes, one at a time: each reads the stored state and writes it back with its
+ * fields, so two interleaved writers (position, zoom, notes layout) would drop each other's.
+ */
+let tabStateWrites: Promise<void> = Promise.resolve()
+function patchTabState(patch: Record<string, unknown>): Promise<void> {
+  tabStateWrites = tabStateWrites.then(async () => {
+    const existing = (await tabStore.getTabViewState(tabId)) ?? {}
+    tabStore.setTabViewState(tabId, { ...existing, ...patch })
+  }).catch(() => {})
+  return tabStateWrites
+}
+
 /** Saves where the reader is now (block + offset) into the tab's view state. */
 async function savePositionNow() {
   const first = windowedScroller.value?.readFirstVisible(0)
   if (!first) return
-  const existing = (await tabStore.getTabViewState(tabId)) ?? {}
-  tabStore.setTabViewState(tabId, {
-    ...existing,
+  await patchTabState({
     fastDocViewBlockIndex: first.index,
     fastDocViewBlockOffset: Math.round(first.offsetWithinRow),
   })
@@ -75,11 +89,7 @@ async function savePositionNow() {
 const savePosition = useDebounceFn(savePositionNow, 300)
 
 async function saveZoom() {
-  const existing = (await tabStore.getTabViewState(tabId)) ?? {}
-  tabStore.setTabViewState(tabId, {
-    ...existing,
-    fastDocViewZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
-  })
+  await patchTabState({ fastDocViewZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined })
 }
 function setZoom(value: number) {
   zoom.value = value
@@ -106,12 +116,49 @@ function blockColumnStyle(index: number): Record<string, string> | undefined {
   return { '--lines-content-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
 }
 
-useScopedKeys(scrollerElement)
+useScopedKeys(scrollerElement, { onCtrlF: () => openSearch() })
+
+// In-document search (Ctrl+F): the service finds hit blocks in bounded steps from the reader's
+// block, wrapping; matches are highlighted inside the rendered blocks only.
+const searchVisible = ref(false)
+const search = useFastDocViewSearch({
+  api: fastDocViewApi,
+  documentId: () => fastDocument.summary.value?.documentId,
+  startBlock: () => windowedScroller.value?.readFirstVisible(0)?.index ?? 0,
+  onFirstHit: (block) => void goToSearchHit(block),
+})
+function openSearch() {
+  searchVisible.value = true
+}
+function closeSearch() {
+  searchVisible.value = false
+  search.clear()
+  scrollerElement.value?.focus({ preventScroll: true })
+}
+/** Lands on a hit block and marks its first match as the current one. */
+async function goToSearchHit(block: number | undefined) {
+  if (block == null) return
+  await windowedScroller.value?.scrollToIndex(block)
+  const row = windowedScroller.value?.rowElement(block) as HTMLElement | null | undefined
+  scrollerElement.value?.querySelectorAll('mark.search-match.current').forEach((mark) => mark.classList.remove('current'))
+  const mark = row?.querySelector('mark.search-match')
+  if (mark) {
+    mark.classList.add('current')
+    mark.scrollIntoView({ block: 'nearest' })
+  }
+}
+/** A block's HTML with the search query's matches marked (only while searching, only rendered blocks). */
+function blockHtml(index: number): string {
+  const html = fastDocument.blockAt(index)?.html ?? ''
+  return search.query.value.trim() && searchVisible.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
+}
 
 onMounted(async () => {
   scrollerElement.value = windowedScroller.value?.scrollerElement ?? null
   const saved = await tabStore.getTabViewState(tabId)
   if (saved?.fastDocViewZoom != null) zoom.value = saved.fastDocViewZoom
+  if (saved?.fastDocViewNotesVisible === false) notesVisible.value = false
+  if (saved?.fastDocViewNotesFraction != null) notesFraction.value = saved.fastDocViewNotesFraction
   initialIndex.value = saved?.fastDocViewBlockIndex ?? 0
   initialOffsetPx.value = saved?.fastDocViewBlockOffset ?? 0
   stateReady.value = true
@@ -147,6 +194,27 @@ const {
 const tocVisible = ref(false)
 const tocToggleButton = ref<HTMLElement | null>(null)
 const outline = computed(() => buildFastDocViewOutline(fastDocument.headings.value))
+/** The block at the top of the view, followed while scrolling (throttled) - the TOC's current heading. */
+const firstVisibleIndex = ref(0)
+const trackFirstVisible = useThrottleFn(() => {
+  firstVisibleIndex.value = windowedScroller.value?.readFirstVisible(0)?.index ?? firstVisibleIndex.value
+}, 150, true)
+function onScrollerScroll() {
+  void savePosition()
+  void trackFirstVisible()
+}
+/** The last heading at or above the reader's position (headings are in block order). */
+const activeOutlineNodeId = computed(() => {
+  const nodes = outline.value
+  let low = 0
+  let high = nodes.length - 1
+  let found: number | undefined
+  while (low <= high) {
+    const middle = (low + high) >> 1
+    if (nodes[middle]!.blockIndex <= firstVisibleIndex.value) { found = nodes[middle]!.id; low = middle + 1 } else high = middle - 1
+  }
+  return found
+})
 function toggleToc(toggleButton: HTMLElement) {
   tocToggleButton.value = toggleButton
   tocVisible.value = !tocVisible.value
@@ -161,6 +229,19 @@ const hasNotes = computed(() => {
   return !!summary && summary.footnoteCount + summary.endnoteCount > 0
 })
 const notesVisible = ref(true)
+/** The text pane's share of the split above the notes pane (SplitPane's top fraction). */
+const notesFraction = ref<number | undefined>(undefined)
+/** The notes pane's text size: the commentary's (commentary font setting at the page zoom), as in the book view. */
+const notesFontPx = computed(() => (zoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15)
+async function saveNotesLayout() {
+  await patchTabState({
+    fastDocViewNotesVisible: notesVisible.value ? undefined : false,
+    fastDocViewNotesFraction: notesFraction.value,
+  })
+}
+// Debounced: dragging the split updates the fraction on every pointer move.
+const saveNotesLayoutSoon = useDebounceFn(saveNotesLayout, 300)
+watch([notesVisible, notesFraction], () => void saveNotesLayoutSoon())
 // "Open as PDF": the same file through the existing Word -> PDF conversion (an explicit
 // choice; FastDocView is the default). The tab becomes a PDF (or HTML fallback) tab.
 const { t } = useI18n()
@@ -345,6 +426,8 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
       @cancel-open-as-pdf="cancelOpenAsPdf"
       @open-converted-pdf="openConvertedPdf"
       @open-in-default-app="openInDefaultApp"
+      :search-visible="searchVisible"
+      @toggle-search="searchVisible ? closeSearch() : openSearch()"
     />
     <div
       ref="sidePanelResizeArea"
@@ -360,10 +443,21 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
         :style="sidePanelIsOverlay ? undefined : sidePanelStyle"
         @close="tocVisible = false"
       >
-        <FastDocViewToc :outline="outline" :is-right-to-left="isRightToLeft" @select="onOutlineSelect" />
+        <FastDocViewToc :outline="outline" :active-node-id="activeOutlineNodeId" :is-right-to-left="isRightToLeft" @select="onOutlineSelect" />
       </SidePanel>
       <div v-if="tocVisible && !sidePanelIsOverlay" class="sash sash-v" @pointerdown="onSidePanelDividerPointerDown" />
       <div class="fast-doc-view-main">
+        <FastDocViewSearchBar
+          v-if="searchVisible"
+          :initial-query="search.query.value"
+          :current-hit="search.currentHit.value"
+          :hit-count="search.hitCount.value"
+          :is-searching="search.isSearching.value"
+          @query="search.run"
+          @next="goToSearchHit(search.step(1))"
+          @prev="goToSearchHit(search.step(-1))"
+          @close="closeSearch"
+        />
         <MessageBanner
           v-if="fastDocument.indexBuildFailed.value"
           severity="warning"
@@ -384,7 +478,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
           :dismissible="false"
         />
         <LoadingAnimation v-else-if="fastDocument.isLoading.value || !stateReady" />
-        <SplitPane v-else-if="fastDocument.summary.value" :bottom-visible="notesVisible && hasNotes">
+        <SplitPane v-else-if="fastDocument.summary.value" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes">
           <template #top>
             <div
               class="fast-doc-view-content"
@@ -405,14 +499,14 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
                 :row-weights="fastDocument.rowWeights.value"
                 :style="{ fontSize: fontPx + 'px' }"
                 tabindex="0"
-                @scroll="savePosition"
+                @scroll="onScrollerScroll"
               >
                 <template #row="{ index }">
                   <div
                     v-if="fastDocument.blockAt(index)"
                     class="reading-column-line fast-doc-view-block"
                     :style="blockColumnStyle(index)"
-                    v-html="fastDocument.blockAt(index)!.html"
+                    v-html="blockHtml(index)"
                   />
                 </template>
               </WindowedScroller>
@@ -423,6 +517,8 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
               :notes="visibleNotes"
               :is-right-to-left="isRightToLeft"
               :active-key="activeNoteKey"
+              :font-px="notesFontPx"
+              @close="notesVisible = false"
               @go-to-reference="goToNoteReference"
             />
           </template>
