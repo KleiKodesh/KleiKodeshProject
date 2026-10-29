@@ -331,10 +331,30 @@ def main():
         new[name] = compress(source)
 
     bin_data = write_cfb(new)                           # build fully before touching the file
+    project = re.search(rb'Name="([^"]+)"', vba['PROJECT']).group(1).decode(CODEPAGE)
+    macros = re.findall(r'Public Sub (\w+)\(', module_source().decode(CODEPAGE))
+    built = {'word/vbaProject.bin': bin_data,
+             'word/vbaData.xml': vba_data_xml(dict(parts_by_name(parts))['word/vbaData.xml'], project, macros)}
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as z:
         for info, data in parts:
-            z.writestr(info, bin_data if info.filename == 'word/vbaProject.bin' else data)
+            z.writestr(info, built.get(info.filename, data))
     print('Wrote %s' % os.path.normpath(target))
+
+
+def vba_data_xml(base_xml, project, macros):
+    """word/vbaData.xml lists every macro as <project>.<module>.<macro>, and Word binds
+    keyboard shortcuts to exactly that name. The base file was made from Normal.dotm, so
+    its list said NORMAL.KLEIKODESH.* and every shortcut failed with "Sub or Function
+    not defined" (issue #331). Rebuild the list from the macros actually written."""
+    entries = ''.join(
+        '<wne:mcd wne:macroName="%s" wne:name="%s" wne:bEncrypt="00" wne:cmg="56"/>'
+        % (('%s.%s.%s' % (project, MODULE, m)).upper(), '%s.%s.%s' % (project, MODULE, m))
+        for m in macros)
+    xml = base_xml.decode('utf-8')
+    xml, n = re.subn(r'<wne:mcds>.*?</wne:mcds>', lambda _: '<wne:mcds>%s</wne:mcds>' % entries, xml, flags=re.S)
+    if n != 1:
+        raise SystemExit('No <wne:mcds> list in the base vbaData.xml')
+    return xml.encode('utf-8')
 
 
 def parts_by_name(parts):
