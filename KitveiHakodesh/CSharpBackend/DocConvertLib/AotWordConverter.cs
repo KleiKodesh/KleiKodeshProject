@@ -322,6 +322,19 @@ public static unsafe partial class AotWordConverter
         }
     }
 
+    /// <summary>Word's window caption before we tag it (null when it cannot be read: then it is not put back).</summary>
+    private static string? CaptionOf(nint app)
+    {
+        try
+        {
+            var v = InvokeNamed(app, "Caption", DISPATCH_PROPERTYGET, []);
+            string? caption = v.vt == VT_BSTR && v.ptr != 0 ? Marshal.PtrToStringBSTR(v.ptr) : null;
+            ClearVariant(ref v);
+            return caption;
+        }
+        catch { return null; }
+    }
+
     private static HashSet<int> WordProcessIds()
     {
         var ids = new HashSet<int>();
@@ -365,12 +378,21 @@ public static unsafe partial class AotWordConverter
     /// file is deliberately NOT deleted on success: Word has it open, and deleting it out from
     /// under the user breaks Save. Reuses a running Word when there is one, and never Quits —
     /// the document is left open and visible. Must run on an STA thread (see ExportAsync).
+    /// <para><paramref name="cancellation"/>: Documents.Open of a big export blocks and cannot be
+    /// interrupted over COM. When this call STARTED Word (none was running), a cancel ends that
+    /// WINWORD process - found exactly as <see cref="Convert"/> finds its own (new process since the
+    /// start + unique caption on its main window + a terminate handle) - and this throws
+    /// <see cref="OperationCanceledException"/>. When Word was already running (the user's), it is
+    /// never ended: the open runs to completion, then the exported document alone is closed
+    /// unsaved, so the user's Word and documents are left exactly as they were.</para>
     /// </summary>
-    public static void ExportHtml(string html, string title)
+    public static void ExportHtml(string html, string title, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
         bool coInit = hr >= 0;
-        nint app = 0, docs = 0, doc = 0;
+        nint app = 0, docs = 0, doc = 0, ownProcess = 0;
+        CancellationTokenRegistration cancelRegistration = default;
 
         // A FRESH directory per export, so the file name can stay the book's title while the path
         // is still unique. BuildSafeFileName is deterministic — and its no-title fallback is a
@@ -394,7 +416,22 @@ public static unsafe partial class AotWordConverter
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
 
-            app = AcquireRunningOrNew(in clsid);
+            HashSet<int> wordsBefore = WordProcessIds();
+            app = AcquireRunningOrNew(in clsid, out bool startedWord);
+            if (startedWord)
+            {
+                // Still hidden: the unique caption is set, its window found, and the caption put back
+                // ("" restores Word's own) before the user sees the window.
+                string? caption = CaptionOf(app);
+                ownProcess = OpenOwnWordProcess(app, wordsBefore);
+                if (caption is not null) { try { PropPut(app, "Caption", Bstr(caption)); } catch { } }
+                if (ownProcess != 0)
+                {
+                    nint processToEnd = ownProcess;
+                    cancelRegistration = cancellation.Register(() => TerminateProcess(processToEnd, 1));
+                }
+            }
+            cancellation.ThrowIfCancellationRequested();
 
             PropPut(app, "Visible", Bool(true));
 
@@ -403,12 +440,27 @@ public static unsafe partial class AotWordConverter
             // ReadOnly false and AddToRecentFiles false, matching the hosted call.
             doc = InvokeMethodDispatch(docs, "Open", [Bool(false), Bool(false), Bool(false), Bstr(tempFile)]);
             if (doc == 0) throw new COMException("Documents.Open returned no document.");
+            if (cancellation.IsCancellationRequested)
+            {
+                // Cancelled while Word was opening it (a Word that was not ours to end): take back
+                // only what this export added - its own document, unsaved.
+                try { InvokeMethodVoid(doc, "Close", [I4(0)]); } catch { }   // wdDoNotSaveChanges
+                throw new OperationCanceledException("Word export cancelled", cancellation);
+            }
             opened = true;
+            cancelRegistration.Dispose();   // done: a late cancel must not end the Word now showing the export
 
             try { InvokeMethodVoid(app, "Activate", []); } catch { }
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && cancellation.IsCancellationRequested)
+        {
+            // The blocked Open failed because the cancel ended our own Word.
+            throw new OperationCanceledException("Word export cancelled", ex, cancellation);
+        }
         finally
         {
+            cancelRegistration.Dispose();   // waits for a running terminate; none fires after this
+            if (ownProcess != 0) CloseHandle(ownProcess);
             // Only clean up if Word never got it open; otherwise leave it for the next run's
             // PurgeOldExports — Word holds the file and deleting it would break the user's Save.
             if (!opened) { try { System.IO.Directory.Delete(exportDir, true); } catch { } }
@@ -469,18 +521,37 @@ public static unsafe partial class AotWordConverter
     /// looking at. Only spawns Word when none is running, and never Quits: the window is left
     /// open and activated for the user. Must run on an STA thread (see PasteAsync).
     /// </summary>
-    public static void PasteAtCursor()
+    /// <para><paramref name="cancellation"/>: a Word this paste STARTED (none was running) is ended
+    /// on cancel, found as <see cref="Convert"/> finds its own. The user's running Word is never
+    /// ended: a cancel before the paste skips it; a paste Word has begun cannot be interrupted over
+    /// COM and is left as Word made it - their document is never undone or closed.</para>
+    public static void PasteAtCursor(CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
         bool coInit = hr >= 0;
-        nint app = 0, docs = 0, doc = 0, window = 0, selection = 0;
+        nint app = 0, docs = 0, doc = 0, window = 0, selection = 0, ownProcess = 0;
+        CancellationTokenRegistration cancelRegistration = default;
         try
         {
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
 
             // Prefer the instance the user already has open.
-            app = AcquireRunningOrNew(in clsid);
+            HashSet<int> wordsBefore = WordProcessIds();
+            app = AcquireRunningOrNew(in clsid, out bool startedWord);
+            if (startedWord)
+            {
+                string? caption = CaptionOf(app);
+                ownProcess = OpenOwnWordProcess(app, wordsBefore);
+                if (caption is not null) { try { PropPut(app, "Caption", Bstr(caption)); } catch { } }
+                if (ownProcess != 0)
+                {
+                    nint processToEnd = ownProcess;
+                    cancelRegistration = cancellation.Register(() => TerminateProcess(processToEnd, 1));
+                }
+            }
+            cancellation.ThrowIfCancellationRequested();
 
             // Visible always — the point is for the user to see the pasted text. A reused
             // instance is already visible; a spawned one would otherwise stay hidden.
@@ -500,13 +571,22 @@ public static unsafe partial class AotWordConverter
             // import as direct character formatting. Falls back to a plain Paste, exactly like
             // the hosted path — PasteAndFormat is format-sensitive and can reject a payload
             // plain Paste accepts, and dropping the user's paste entirely is worse.
+            cancellation.ThrowIfCancellationRequested();   // the last point a paste into the user's Word can be skipped
             try { InvokeMethodVoid(selection, "PasteAndFormat", [I4(20)]); }
             catch { InvokeMethodVoid(selection, "Paste", []); }
+            cancelRegistration.Dispose();   // done: a late cancel must not end the Word now showing the paste
 
             try { InvokeMethodVoid(app, "Activate", []); } catch { }
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && cancellation.IsCancellationRequested)
+        {
+            // A blocked call failed because the cancel ended our own Word.
+            throw new OperationCanceledException("Word paste cancelled", ex, cancellation);
+        }
         finally
         {
+            cancelRegistration.Dispose();
+            if (ownProcess != 0) CloseHandle(ownProcess);
             if (selection != 0) Release(selection);
             if (window != 0) Release(window);
             if (doc != 0) Release(doc);
@@ -531,9 +611,10 @@ public static unsafe partial class AotWordConverter
     /// Releases everything it takes on any failure path: a QueryInterface that fails must not
     /// leak the IUnknown GetActiveObject handed over.
     /// </summary>
-    private static nint AcquireRunningOrNew(in Guid clsid)
+    private static nint AcquireRunningOrNew(in Guid clsid, out bool startedWord)
     {
         nint app = 0;
+        startedWord = false;
 
         if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
         {
@@ -547,6 +628,9 @@ public static unsafe partial class AotWordConverter
             }
         }
 
+        // None running (or the running one is dead): CoCreateInstance starts one. Whether a NEW
+        // process really started is checked again by OpenOwnWordProcess before anything is ended.
+        startedWord = app == 0;
         if (app == 0 && (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0))
             throw new COMException("Failed to start Word (CoCreateInstance).");
 
@@ -638,52 +722,58 @@ public static class AotWordPaste
     /// marshaling proxy and is flaky for UI operations, so give it a real STA thread — the same
     /// reason NativeFolderPicker does this for shell dialogs. Never throws.</summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    public static Task<string?> PasteAsync()
-        => RunOnStaAsync("khs-word-paste", AotWordConverter.PasteAtCursor,
+    public static Task<string?> PasteAsync(CancellationToken cancellation = default)
+        => RunOnStaAsync("khs-word-paste", () => AotWordConverter.PasteAtCursor(cancellation), cancellation,
             "פעולת הדבקה אחרת מתבצעת כעת.");
 
     /// <summary>Open an HTML export in Word on a dedicated STA thread. Returns null on success or
     /// an error message; never throws. See PasteAsync for why STA.</summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    public static Task<string?> ExportAsync(string html, string title)
-        => RunOnStaAsync("khs-word-export", () => AotWordConverter.ExportHtml(html, title),
+    public static Task<string?> ExportAsync(string html, string title, CancellationToken cancellation = default)
+        => RunOnStaAsync("khs-word-export", () => AotWordConverter.ExportHtml(html, title, cancellation), cancellation,
             "פעולת ייצוא אחרת מתבצעת כעת.");
 
+    /// <summary>What a cancelled call returns instead of an error message.</summary>
+    public const string CancelledResult = "cancelled";
+
     /// <summary>Serializes Word automation onto one STA thread at a time. Rejects rather than
-    /// queues when busy — driving Word re-entrantly is fragile, and the caller is a UI action.</summary>
-    private static async Task<string?> RunOnStaAsync(string threadName, Action work, string busyMessage)
+    /// queues when busy — driving Word re-entrantly is fragile, and the caller is a UI action.
+    /// A cancel answers <see cref="CancelledResult"/> AT ONCE, even while the STA thread is still
+    /// blocked inside Word (a Word that is not ours to end finishes its open first, then the work
+    /// takes its document back); the gate stays held until that thread is really done, so the
+    /// next export never drives Word re-entrantly.</summary>
+    private static async Task<string?> RunOnStaAsync(string threadName, Action work, CancellationToken cancellation, string busyMessage)
     {
         if (!await Gate.WaitAsync(0)) return busyMessage;
+        var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            string? result = null;
+            try { work(); }
+            catch (OperationCanceledException) { result = CancelledResult; }
+            catch (Exception ex) { result = ex.Message; }
+            Gate.Release();                      // before answering: the caller's next call must find the gate free
+            completion.TrySetResult(result);
+        })
+        { IsBackground = true, Name = threadName };
+        // Start inside the try: a thread that never runs can never complete the TCS or release
+        // the gate, so a throw from SetApartmentState or Start would hang the await FOREVER and
+        // block every later call. Completing (and releasing) here guarantees the await returns.
         try
         {
-            var completion = new TaskCompletionSource<string?>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            var thread = new Thread(() =>
-            {
-                try { work(); completion.TrySetResult(null); }
-                catch (Exception ex) { completion.TrySetResult(ex.Message); }
-            })
-            { IsBackground = true, Name = threadName };
-            // Start inside the try: a thread that never runs can never complete the TCS, so a
-            // throw from SetApartmentState or Start would hang the await FOREVER while holding
-            // the gate, permanently blocking every later paste. Completing it here guarantees
-            // the await always returns.
-            try
-            {
-                // Word COM is Windows-only; this library never runs anywhere else.
+            // Word COM is Windows-only; this library never runs anywhere else.
 #pragma warning disable CA1416
-                thread.SetApartmentState(ApartmentState.STA);
+            thread.SetApartmentState(ApartmentState.STA);
 #pragma warning restore CA1416
-                thread.Start();
-            }
-            catch (Exception ex)
-            {
-                completion.TrySetResult(ex.Message);
-            }
-
-            return await completion.Task;
+            thread.Start();
         }
-        finally { Gate.Release(); }
+        catch (Exception ex)
+        {
+            Gate.Release();
+            return ex.Message;
+        }
+        using (cancellation.Register(() => completion.TrySetResult(CancelledResult)))
+            return await completion.Task;
     }
 }
 #endif
