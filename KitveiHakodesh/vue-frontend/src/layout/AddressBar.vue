@@ -24,7 +24,7 @@ import { opensInFastDocView } from '@/utils/fastDocViewFiles'
  */
 import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn, useResizeObserver } from '@vueuse/core'
-import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
@@ -114,7 +114,6 @@ const {
 
 // The wrapper is the inline bar; only the popup is fitted.
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl], fitToViewport: false })
-useDropdownViewportFit(dropdownEl)
 
 // ── Recents list (dropdown fallback content) ──────────────────────────────────
 // Shown whenever the search has nothing to display: empty/short query, or a query
@@ -221,18 +220,45 @@ const maxHeight = ref(300)
 // borderless field.
 const isPanelMerged = ref(false)
 
+// Narrow shell: the field itself takes over the whole shell width (pinned over the
+// title-bar buttons), and the panel merges under it exactly as on a wide shell.
+// fieldTop/Left/Right are its fixed position then; the root keeps the footprint.
+const isNarrowShell = ref(false)
+const fieldTop = ref(0)
+const fieldHeight = ref(0)
+const fieldLeft = ref(0)
+const fieldRight = ref(0)
+const rootRef = ref<HTMLElement | null>(null)
+
+// Not on a narrow shell: there the panel spans the shell edge to edge on purpose,
+// and the fit's viewport margin would shrink it back off the edges.
+useDropdownViewportFit(computed(() => (isNarrowShell.value ? null : dropdownEl.value)))
+
 // The shell this address bar lives in — it decides both the merge regime and the
 // panel's horizontal edges. Resolved once here and reused by computeAnchor and the
 // resize observer below.
-const shellEl = computed(() => wrapperRef.value?.closest<HTMLElement>('.app-shell') ?? null)
+const shellEl = computed(() => rootRef.value?.closest<HTMLElement>('.app-shell') ?? null)
+
+// Expanded, the field covers the whole title bar, top to bottom.
+function titleBarRect(slot: DOMRect) {
+  const bar = rootRef.value?.closest<HTMLElement>('.title-bar')?.getBoundingClientRect() ?? slot
+  return { top: bar.top, bottom: bar.bottom }
+}
 
 function computeAnchor() {
-  if (!wrapperRef.value) return
-  const rect = wrapperRef.value.getBoundingClientRect()
+  if (!rootRef.value) return
+  const slot = rootRef.value.getBoundingClientRect()
   const shellRect = shellEl.value?.getBoundingClientRect()
-  const isNarrowShell = !!shellRect && shellRect.width <= NARROW_SHELL_WIDTH
-  const anchor = isNarrowShell ? shellRect! : rect
-  isPanelMerged.value = !isNarrowShell
+  isNarrowShell.value = !!shellRect && shellRect.width <= NARROW_SHELL_WIDTH
+  const rect = isNarrowShell.value
+    ? { ...titleBarRect(slot), left: shellRect!.left, right: shellRect!.right }
+    : slot
+  fieldTop.value = rect.top
+  fieldHeight.value = rect.bottom - rect.top
+  fieldLeft.value = rect.left
+  fieldRight.value = window.innerWidth - rect.right
+  const anchor = rect
+  isPanelMerged.value = true
   // Merged: flush against the field's bottom edge, no gap and no overlap — the
   // field drops its bottom border, so there is no seam line left to cover and
   // the two backgrounds simply continue into each other. Floored because
@@ -266,7 +292,7 @@ function computeAnchor() {
 //
 // The field wrapper is observed too: the panel hangs off its bottom edge, so the
 // field moving or changing height has to re-anchor as well.
-useResizeObserver([shellEl, wrapperRef], () => {
+useResizeObserver([shellEl, rootRef], () => {
   if (isDropdownOpen.value) computeAnchor()
 })
 
@@ -455,10 +481,12 @@ nextTick(() => {
 </script>
 
 <template>
+  <div ref="rootRef" class="address-bar-slot">
   <div
     ref="wrapperRef"
     class="address-bar"
-    :class="{ 'is-merged': isPanelVisible && isPanelMerged }"
+    :class="{ 'is-merged': isPanelVisible && isPanelMerged, 'is-expanded': isNarrowShell }"
+    :style="isNarrowShell ? { top: fieldTop + 'px', height: fieldHeight + 'px', left: fieldLeft + 'px', right: fieldRight + 'px' } : undefined"
     @click.stop="inputRef?.focus()"
   >
     <input
@@ -474,13 +502,23 @@ nextTick(() => {
       @keydown="onKeydown"
     />
     <button
-      v-if="searchQuery.trim()"
+      v-if="searchQuery.trim() || isNarrowShell"
       class="address-bar__button"
       tabindex="-1"
       :title="t('layout.searchContent')"
       @click.stop="launchFullTextSearch()"
     >
       <IconSearch20Regular />
+    </button>
+    <!-- Expanded over the title-bar buttons, the bar needs its own way out. -->
+    <button
+      v-if="isNarrowShell"
+      class="address-bar__button"
+      tabindex="-1"
+      :title="t('components.close')"
+      @click.stop="close()"
+    >
+      <IconDismiss20Regular />
     </button>
     <GlobalSearchDropdown
       v-if="isPanelVisible"
@@ -511,9 +549,22 @@ nextTick(() => {
       @clear-all-tabs="onClearAllLocations"
     />
   </div>
+  </div>
 </template>
 
 <style scoped>
+.address-bar-slot {
+  display: flex;
+  min-width: 0;
+  height: 24px;
+}
+/* Narrow shell: the field leaves its slot and spans the shell (see isNarrowShell). */
+.address-bar.is-expanded {
+  position: fixed;
+  width: auto;
+  z-index: 1000;
+  background: var(--bg-secondary);
+}
 /* Windows Explorer address-bar look: a flat, near-rectangular field that fills
    the title area and blends into the title-bar chrome (--bg-secondary) with a
    subtle frame — not a stand-out filled search pill. On focus only the BOTTOM
