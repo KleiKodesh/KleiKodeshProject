@@ -35,6 +35,20 @@ public static unsafe partial class AotWordConverter
     [LibraryImport("oleaut32.dll")]
     private static partial int GetActiveObject(in Guid rclsid, nint pvReserved, out nint ppunk);
 
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial nint FindWindowW(string? lpClassName, string? lpWindowName);
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
+    [LibraryImport("kernel32.dll")]
+    private static partial nint OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool TerminateProcess(nint hProcess, uint uExitCode);
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint hObject);
+    private const uint PROCESS_TERMINATE = 0x0001;
+
     private const uint COINIT_APARTMENTTHREADED = 0x2;
     private const uint CLSCTX_LOCAL_SERVER = 0x4;
     private static Guid IID_IDispatch = new("00020400-0000-0000-C000-000000000046");
@@ -246,21 +260,40 @@ public static unsafe partial class AotWordConverter
 
     /// <summary>Convert <paramref name="sourcePath"/> to a PDF at <paramref name="outputPath"/> via
     /// Word. Throws COMException on failure (e.g. Word not installed). Releases every interface and
-    /// Quits Word, so no WINWORD process is orphaned.</summary>
-    public static void Convert(string sourcePath, string outputPath)
+    /// Quits Word, so no WINWORD process is orphaned.
+    /// <para><paramref name="cancellation"/>: Documents.Open / SaveAs2 of a big file block for minutes
+    /// and cannot be interrupted over COM, so a cancel ends the WINWORD process THIS call started -
+    /// found by a unique caption on its own main window, held by a process handle taken right after
+    /// it started, so no other Word (the user's) is ever touched. The blocked call then fails and
+    /// this throws <see cref="OperationCanceledException"/>.</para></summary>
+    public static void Convert(string sourcePath, string outputPath, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
         bool coInit = hr >= 0; // RPC_E_CHANGED_MODE (already MTA by the runtime) is fine — Word works via proxy
-        nint app = 0, docs = 0, doc = 0;
+        nint app = 0, docs = 0, doc = 0, ownProcess = 0;
+        CancellationTokenRegistration cancelRegistration = default;
         try
         {
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
+            HashSet<int>? wordsBefore = cancellation.CanBeCanceled ? WordProcessIds() : null;
             if (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0)
                 throw new COMException("Failed to start Word (CoCreateInstance).");
 
             PropPut(app, "Visible", Bool(false));
             PropPut(app, "DisplayAlerts", I4(0)); // wdAlertsNone
+
+            if (wordsBefore is not null)
+            {
+                ownProcess = OpenOwnWordProcess(app, wordsBefore);
+                if (ownProcess != 0)
+                {
+                    nint processToEnd = ownProcess;
+                    cancelRegistration = cancellation.Register(() => TerminateProcess(processToEnd, 1));
+                }
+            }
+            cancellation.ThrowIfCancellationRequested();
 
             docs = PropGetDispatch(app, "Documents");
             // Open(FileName, ConfirmConversions, ReadOnly, AddToRecentFiles) — reversed for rgvarg.
@@ -271,13 +304,55 @@ public static unsafe partial class AotWordConverter
             InvokeMethodVoid(doc, "Close", [I4(0)]);                       // wdDoNotSaveChanges
             Release(doc); doc = 0; // Close is NOT Release — drop the ref or Word never exits
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && cancellation.IsCancellationRequested)
+        {
+            // The blocked COM call failed because the cancel ended our Word.
+            throw new OperationCanceledException("Word conversion cancelled", ex, cancellation);
+        }
         finally
         {
-            if (doc != 0) { try { InvokeMethodVoid(doc, "Close", [I4(0)]); } catch { } Release(doc); }
+            cancelRegistration.Dispose();   // waits for a running terminate; none fires after this
+            bool ended = cancellation.IsCancellationRequested && ownProcess != 0;
+            // A terminated Word cannot answer: skip Close / Quit (each would only wait for the RPC to fail).
+            if (doc != 0) { if (!ended) { try { InvokeMethodVoid(doc, "Close", [I4(0)]); } catch { } } Release(doc); }
             if (docs != 0) Release(docs);
-            if (app != 0) { try { InvokeMethodVoid(app, "Quit", []); } catch { } Release(app); }
+            if (app != 0) { if (!ended) { try { InvokeMethodVoid(app, "Quit", []); } catch { } } Release(app); }
+            if (ownProcess != 0) CloseHandle(ownProcess);
             if (coInit) CoUninitialize();
         }
+    }
+
+    private static HashSet<int> WordProcessIds()
+    {
+        var ids = new HashSet<int>();
+        foreach (var process in System.Diagnostics.Process.GetProcessesByName("WINWORD"))
+            using (process) ids.Add(process.Id);
+        return ids;
+    }
+
+    /// <summary>A terminate handle on the WINWORD process behind <paramref name="app"/> (0 when it
+    /// cannot be found). Word has no process-id property: give the instance a unique caption and
+    /// find its hidden main window ("OpusApp") by that caption. Only a process that did not exist
+    /// before our CoCreateInstance qualifies; when none started (COM handed back a Word that was
+    /// already running - the user's), nothing is touched, not even its caption.</summary>
+    private static nint OpenOwnWordProcess(nint app, HashSet<int> wordsBefore)
+    {
+        var started = WordProcessIds();
+        started.ExceptWith(wordsBefore);
+        if (started.Count == 0) return 0;
+        string caption = "KitveiHakodesh conversion " + Guid.NewGuid().ToString("N");
+        try { PropPut(app, "Caption", Bstr(caption)); } catch { return 0; }
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            nint window = FindWindowW("OpusApp", caption);
+            if (window != 0)
+            {
+                GetWindowThreadProcessId(window, out uint processId);
+                return processId != 0 && started.Contains((int)processId) ? OpenProcess(PROCESS_TERMINATE, false, processId) : 0;
+            }
+            Thread.Sleep(25);
+        }
+        return 0;
     }
 
     /// <summary>
