@@ -57,6 +57,10 @@
     <!-- Word -> PDF (COM) and the Office-free OOXML -> HTML fallback (WordDocuments/).
          net10.0 leg, IsAotCompatible. -->
     <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
+    <!-- FastDocView/: Word-family, OpenDocument, RTF and text files read in windows of blocks.
+         Its own public repo, cloned next to KitveiHakodesh (it references ..\SeekableDeflate and
+         ..\TextEncodingDetection, also siblings). net10.0 leg, IsAotCompatible, no P/Invoke. -->
+    <ProjectReference Include="..\..\..\FastDocView\FastDocView\FastDocView.csproj" />
   </ItemGroup>
 
   <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db. -->

@@ -3,6 +3,7 @@ using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.HebrewBooks;
 using KitveiHakodesh.Core.LocalFiles;
 using KitveiHakodesh.Core.WordDocuments;
+using KitveiHakodesh.Core.FastDocView;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
@@ -27,6 +28,7 @@ public sealed class Dispatcher(
     UserSettingsService userSettings,
     HttpHostState httpState,
     LocalFileGrants localFileGrants,
+    global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments fastDocViewDocuments,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
@@ -154,6 +156,35 @@ public sealed class Dispatcher(
                         IsOtzariaAddin = isOtzariaAddin,
                     }));
                 }
+
+                // FastDocView: a Word-family / OpenDocument / RTF / text file read in windows of
+                // blocks (Core FastDocView/). Only rendered windows travel, never the whole file.
+                // A changed file or an unknown id throws FastDocViewSourceChangedException, whose
+                // message the page recognises and reopens on.
+                case "fastDocViewOpen":
+                {
+                    var a = MsgPack.De<FastDocViewOpenArgs>(req.Args);
+                    if (!localFileGrants.TryValidateFastDocViewSource(a.Path, out string full, out string error))
+                        return RpcResponse.Err(error);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Open(full)));
+                }
+                case "fastDocViewBlocks":
+                {
+                    var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Blocks(a.DocumentId, a.First, a.Count)));
+                }
+                case "fastDocViewHeadings":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewWeights":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Weights(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewScan":
+                {
+                    var a = MsgPack.De<FastDocViewScanArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Scan(a.DocumentId, a.Blocks)));
+                }
+                case "fastDocViewClose":
+                    fastDocViewDocuments.Close(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
 
                 // Show the NATIVE open-file dialog on the service's desktop (dev's replacement for
                 // the browser <input type=file>, which yields only a blob — no absolute path, so no

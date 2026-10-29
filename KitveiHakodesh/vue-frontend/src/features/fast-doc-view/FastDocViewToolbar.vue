@@ -3,6 +3,7 @@ import {
   IconZoomIn20Regular,
   IconZoomOut20Regular,
   IconNotepad20Regular,
+  IconDocumentPdf20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 
@@ -12,6 +13,8 @@ defineProps<{
   hasHeadings: boolean
   hasNotes: boolean
   zoom: number
+  openingAsPdf: boolean
+  canOpenAsPdf: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +22,7 @@ const emit = defineEmits<{
   toggleNotes: []
   zoomIn: []
   zoomOut: []
+  openAsPdf: []
 }>()
 
 function onToggleToc(event: MouseEvent) {
@@ -50,6 +54,16 @@ function onToggleToc(event: MouseEvent) {
     </button>
     <button :title="$t('fastDocView.zoomIn')" @click="emit('zoomIn')">
       <IconZoomIn20Regular />
+    </button>
+    <!-- The same file through the Word -> PDF conversion, on request only. -->
+    <button
+      v-if="canOpenAsPdf"
+      class="fast-doc-view-open-as-pdf"
+      :disabled="openingAsPdf"
+      :title="$t('fastDocView.openAsPdf')"
+      @click="emit('openAsPdf')"
+    >
+      <IconDocumentPdf20Regular />
     </button>
   </div>
 </template>

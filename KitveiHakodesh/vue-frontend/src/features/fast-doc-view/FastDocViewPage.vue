@@ -15,6 +15,8 @@ import { useZoomHandler, zoomIn, zoomOut, ZOOM_CONFIG } from '@/composables/useZ
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { fastDocViewApi } from '@/webview-host/fastDocViewApi'
+import { restoreLocalFile } from '@/webview-host/bridge'
+import { useI18n } from 'vue-i18n'
 import { useFastDocViewDocument } from './useFastDocViewDocument'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
 import FastDocViewToolbar from './FastDocViewToolbar.vue'
@@ -89,7 +91,7 @@ onMounted(async () => {
   initialIndex.value = saved?.fastDocViewBlockIndex ?? 0
   initialOffsetPx.value = saved?.fastDocViewBlockOffset ?? 0
   stateReady.value = true
-  if (filePath) await fastDocument.open(filePath)
+  if (filePath) await fastDocument.open(filePath, { reachIndex: initialIndex.value })
 })
 
 function onScrollerMounted(instance: unknown) {
@@ -128,6 +130,34 @@ const hasNotes = computed(() => {
   return !!summary && summary.footnoteCount + summary.endnoteCount > 0
 })
 const notesVisible = ref(true)
+// "Open as PDF": the same file through the existing Word -> PDF conversion (an explicit
+// choice; FastDocView is the default). The tab becomes a PDF (or HTML fallback) tab.
+const { t } = useI18n()
+const openingAsPdf = ref(false)
+/** Only the Word family converts to PDF (Word itself does the conversion); not .txt. */
+const canOpenAsPdf = !!filePath && !filePath.toLowerCase().endsWith('.txt')
+async function openAsPdf() {
+  if (!filePath || openingAsPdf.value) return
+  openingAsPdf.value = true
+  try {
+    const restored = await restoreLocalFile(filePath)
+    if (!restored?.url) {
+      window.alert(t('fastDocView.openAsPdfFailed'))
+      return
+    }
+    const fileName = filePath.substring(Math.max(filePath.lastIndexOf('\\'),filePath.lastIndexOf('/')) + 1)
+    tabStore.updateTab(tabId, {
+      route: restored.kind === 'html' ? '/html-view' : '/pdf-view',
+      localFileName: fileName,
+      localFilePath: filePath,
+      localFileVirtualUrl: restored.url,
+      isOtzariaAddin: false,
+    })
+  } finally {
+    openingAsPdf.value = false
+  }
+}
+
 const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.value.start, renderedRange.value.end))
 </script>
 
@@ -143,6 +173,9 @@ const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.valu
       @toggle-notes="notesVisible = !notesVisible"
       @zoom-in="setZoom(zoomIn(zoom))"
       @zoom-out="setZoom(zoomOut(zoom))"
+      :opening-as-pdf="openingAsPdf"
+      :can-open-as-pdf="canOpenAsPdf"
+      @open-as-pdf="openAsPdf"
     />
     <div class="fast-doc-view-body">
       <SidePanel

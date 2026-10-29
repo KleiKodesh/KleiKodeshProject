@@ -9,5 +9,7 @@
   "zoomIn": "הגדלה (Ctrl+)\nאיפוס: Ctrl+0",
   "zoomOut": "הקטנה (Ctrl-)\nאיפוס: Ctrl+0",
   "footnote": "הערת שוליים",
-  "endnote": "הערת סוף"
+  "endnote": "הערת סוף",
+  "openAsPdf": "פתח כ-PDF (דרך Word)",
+  "openAsPdfFailed": "הפתיחה כ-PDF נכשלה"
 }

@@ -43,6 +43,10 @@ function fakeApi(total: number) {
       { blockIndex: 20, level: 1, text: 'c' },
     ],
     weights: async () => Int32Array.from({ length: total }, () => 10),
+    scan: async (documentId, blocks) => {
+      calls.push({ op: 'scan', args: [documentId, blocks] })
+      return { knownBlockCount: total, isIndexComplete: true, footnoteCount: 1, endnoteCount: 0 }
+    },
     close: async (documentId) => { calls.push({ op: 'close', args: [documentId] }) },
   }
   return { api, calls, failSourceChanged: () => { failNextBlocksWithSourceChanged = true } }
@@ -102,15 +106,43 @@ describe('useFastDocViewDocument', () => {
     scope.stop()
   })
 
-  it('shrinks an over-estimated count when the document ends early', async () => {
-    const { api } = fakeApi(30)
+  it('builds the index in the background: the count only grows, then the outline reloads', async () => {
+    const { api, calls } = fakeApi(30)
     const originalOpen = api.open
-    api.open = async (path) => ({ ...(await originalOpen(path)), blockCount: 80, isIndexComplete: false })
+    api.open = async (path) => ({ ...(await originalOpen(path)), blockCount: 10, knownBlockCount: 10, isIndexComplete: false })
+    let known = 10
+    api.scan = async (documentId, blocks) => {
+      calls.push({ op: 'scan', args: [documentId, blocks] })
+      known = Math.min(30, known + 10)
+      return { knownBlockCount: known, isIndexComplete: known === 30, footnoteCount: known, endnoteCount: 0 }
+    }
     const scope = effectScope()
     const document = scope.run(() => useFastDocViewDocument({ api }))!
     await document.open('x')
-    await document.ensureBlocks(20, 60)
+    expect(document.blockCount.value).toBeLessThan(30)
+    for (let attempt = 0; attempt < 20 && !document.isIndexComplete.value; attempt++) await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(document.isIndexComplete.value).toBe(true)
     expect(document.blockCount.value).toBe(30)
+    expect(calls.filter((call) => call.op === 'scan').length).toBe(2)
+    expect(document.summary.value?.footnoteCount).toBe(30)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(document.rowWeights.value?.length).toBe(30)
+    scope.stop()
+  })
+
+  it('a restored position is known before the document shows', async () => {
+    const { api } = fakeApi(30)
+    const originalOpen = api.open
+    api.open = async (path) => ({ ...(await originalOpen(path)), blockCount: 5, knownBlockCount: 5, isIndexComplete: false })
+    let known = 5
+    api.scan = async () => {
+      known = Math.min(30, known + 5)
+      return { knownBlockCount: known, isIndexComplete: known === 30, footnoteCount: 0, endnoteCount: 0 }
+    }
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x', { reachIndex: 12 })
+    expect(document.blockCount.value).toBeGreaterThan(12)
     scope.stop()
   })
 

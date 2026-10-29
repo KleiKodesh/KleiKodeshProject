@@ -9,5 +9,7 @@
   "zoomIn": "Zoom in (Ctrl+)\nReset: Ctrl+0",
   "zoomOut": "Zoom out (Ctrl-)\nReset: Ctrl+0",
   "footnote": "Footnote",
-  "endnote": "Endnote"
+  "endnote": "Endnote",
+  "openAsPdf": "Open as PDF (through Word)",
+  "openAsPdfFailed": "The document could not be opened as PDF"
 }
