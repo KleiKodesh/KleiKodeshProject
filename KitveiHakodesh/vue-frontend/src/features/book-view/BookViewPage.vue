@@ -20,6 +20,7 @@ import BookViewHebrewBooksSideEdition from './BookViewHebrewBooksSideEdition.vue
 import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
 import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot, SideEditionPersistState } from './bookViewTypes'
 import { useI18n } from 'vue-i18n'
@@ -50,8 +51,16 @@ useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.content
 const isWideScreen = computed(() => shellWidth.value >= 650)
 /** Share of the split row the book text keeps when both side columns are open. */
 const MIN_LINES_FRACTION = 0.2
-const isSidePanelWideScreen = computed(() => shellWidth.value >= 520)
-const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)
+// The TOC / filter side panel: inline with a sash on a wide page, overlay on a narrow one
+// (shared with the FastDocView page). sidePanelResizeArea wraps panel + sash + content-area.
+const sidePanelResizeArea = ref<HTMLElement | null>(null)
+const {
+  isOverlay: sidePanelIsOverlay,
+  panelStyle: sidePanelStyle,
+  onDividerPointerDown: onSidePanelDividerPointerDown,
+  onResizePointerMove: onSidePanelResizePointerMove,
+  onResizePointerUp: onSidePanelResizePointerUp,
+} = useSidePanelLayout({ pageElement: bookViewRoot, resizeArea: sidePanelResizeArea })
 
 const {
   toolbarPosition, toolbarVisible,
@@ -294,25 +303,7 @@ function onSplitPointerUp() {
 }
 
 // ── Divider drag: TOC / filter side panel ────────────────────────────────────
-// sidePanelResizeArea wraps the side panel + divider + content-area so we can
-// measure the total available width for fraction calculations.
-const sidePanelResizeArea = ref<HTMLElement | null>(null)
-const isSidePanelDragging = ref(false)
-const sidePanelFraction = ref<number | null>(null)
-
-function onSidePanelDividerPointerDown(e: PointerEvent) {
-  isSidePanelDragging.value = true
-  ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-}
-function onSidePanelResizePointerMove(e: PointerEvent) {
-  if (!isSidePanelDragging.value || !sidePanelResizeArea.value) return
-  const rect = sidePanelResizeArea.value.getBoundingClientRect()
-  // Panel is on the physical right (RTL: inline-start = right), measure from right edge
-  sidePanelFraction.value = Math.min(0.5, Math.max(0.1, (rect.right - e.clientX) / rect.width))
-}
-function onSidePanelResizePointerUp() {
-  isSidePanelDragging.value = false
-}
+// (useSidePanelLayout above: drag, fraction 0.1..0.5, overlay below 520 px.)
 
 // ── Panel toggles ────────────────────────────────────────────────────────────
 
@@ -528,7 +519,7 @@ function getSideEditionOutlineTarget(): string | undefined {
           <SidePanel
             :toggle-button-el="sidePanelToggleButtonEl"
             :is-overlay="false"
-            :style="sidePanelFraction !== null ? { width: `${sidePanelFraction * 100}%` } : undefined"
+            :style="sidePanelStyle"
             @close="closeSidePanel"
           >
             <BookViewTocTree

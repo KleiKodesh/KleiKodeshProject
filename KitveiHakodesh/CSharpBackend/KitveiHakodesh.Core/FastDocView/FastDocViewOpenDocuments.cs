@@ -99,6 +99,21 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             return headings;
         });
 
+    /// <summary>The block holding bookmark <paramref name="name"/> (an internal link's target); an index
+    /// still building scans on only until it is found. Null when the document has no such bookmark.</summary>
+    public FastDocViewBookmarkResult Bookmark(string documentId, string name) =>
+        Use(documentId, document => new FastDocViewBookmarkResult { BlockIndex = string.IsNullOrEmpty(name) ? null : document.FindBookmark(name) });
+
+    /// <summary>Page text width per section (index-time data); the known ones while the index builds.</summary>
+    public List<FastDocViewSection> Sections(string documentId) =>
+        Use(documentId, document =>
+        {
+            var sections = new List<FastDocViewSection>(document.Sections.Count);
+            foreach (WordDocumentSection section in document.Sections)
+                sections.Add(new FastDocViewSection { FirstBlockIndex = section.FirstBlockIndex, TextWidthTwips = section.TextWidthTwips });
+            return sections;
+        });
+
     /// <summary>Int32 little-endian per known block: the estimated text length (index-time data, no file access).</summary>
     public byte[] Weights(string documentId) =>
         Use(documentId, document =>

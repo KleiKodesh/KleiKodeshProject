@@ -4,9 +4,10 @@ import {
   IconZoomOut20Regular,
   IconNotepad20Regular,
   IconDocumentPdf20Regular,
-  IconDismiss20Regular,
+  IconOpen20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
+import ConversionActionButton, { type ConversionActionState } from '@/components/ConversionActionButton.vue'
 
 defineProps<{
   tocVisible: boolean
@@ -14,7 +15,7 @@ defineProps<{
   hasHeadings: boolean
   hasNotes: boolean
   zoom: number
-  openingAsPdf: boolean
+  pdfState: ConversionActionState
   canOpenAsPdf: boolean
 }>()
 
@@ -25,6 +26,8 @@ const emit = defineEmits<{
   zoomOut: []
   openAsPdf: []
   cancelOpenAsPdf: []
+  openConvertedPdf: []
+  openInDefaultApp: []
 }>()
 
 function onToggleToc(event: MouseEvent) {
@@ -57,23 +60,28 @@ function onToggleToc(event: MouseEvent) {
     <button :title="$t('fastDocView.zoomIn')" @click="emit('zoomIn')">
       <IconZoomIn20Regular />
     </button>
-    <!-- The same file through the Word -> PDF conversion, on request only; while it runs the
-         same button cancels it (a big file can take minutes in Word). -->
-    <button
-      v-if="canOpenAsPdf && !openingAsPdf"
+    <!-- The same file through the Word -> PDF conversion, on request only: while it runs the
+         button is an animated X that cancels it; when done a check that opens the PDF. -->
+    <ConversionActionButton
+      v-if="canOpenAsPdf"
       class="fast-doc-view-open-as-pdf"
-      :title="$t('fastDocView.openAsPdf')"
-      @click="emit('openAsPdf')"
+      :state="pdfState"
+      :idle-title="$t('fastDocView.openAsPdf')"
+      :busy-title="$t('fastDocView.cancelOpenAsPdf')"
+      :done-title="$t('fastDocView.openConvertedPdf')"
+      @start="emit('openAsPdf')"
+      @cancel="emit('cancelOpenAsPdf')"
+      @open="emit('openConvertedPdf')"
     >
       <IconDocumentPdf20Regular />
-    </button>
+    </ConversionActionButton>
+    <!-- The file in whatever program the system opens it with (shell open, in the user's own process). -->
     <button
-      v-else-if="canOpenAsPdf"
-      class="fast-doc-view-cancel-open-as-pdf"
-      :title="$t('fastDocView.cancelOpenAsPdf')"
-      @click="emit('cancelOpenAsPdf')"
+      class="fast-doc-view-open-in-default-app"
+      :title="$t('fastDocView.openInDefaultApp')"
+      @click="emit('openInDefaultApp')"
     >
-      <IconDismiss20Regular />
+      <IconOpen20Regular />
     </button>
   </div>
 </template>

@@ -69,6 +69,29 @@ public sealed class FastDocViewBlock
 }
 
 [MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewBookmarkArgs
+{
+    public string DocumentId { get; set; } = "";
+    public string Name { get; set; } = "";
+}
+
+/// <summary>The block holding a bookmark (an internal link's target), or null when there is none.</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewBookmarkResult
+{
+    public int? BlockIndex { get; set; }
+}
+
+/// <summary>A run of blocks laid out at one page text width (a Word section): from
+/// <see cref="FirstBlockIndex"/> to the next section's first block. Twips = 1/1440 inch.</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewSection
+{
+    public int FirstBlockIndex { get; set; }
+    public int TextWidthTwips { get; set; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
 public sealed class FastDocViewHeading
 {
     public int BlockIndex { get; set; }

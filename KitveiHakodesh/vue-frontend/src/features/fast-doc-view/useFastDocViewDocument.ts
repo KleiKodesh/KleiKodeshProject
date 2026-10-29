@@ -6,6 +6,7 @@ import {
   type FastDocViewHeading,
   type FastDocViewNote,
   type FastDocViewScanState,
+  type FastDocViewSection,
   type FastDocViewSummary,
 } from '@/webview-host/fastDocViewApi'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
@@ -20,6 +21,9 @@ export const FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN = 5000
 /** A failed scan call is retried after these delays (ms); after the last one the index stops
  * growing and `indexBuildFailed` is set. A changed file is not retried here (it reopens). */
 export const FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS: readonly number[] = [500, 1000, 2000, 4000, 8000]
+
+/** A note with the block whose text references it - for jumping between reference and note. */
+export type FastDocViewPlacedNote = FastDocViewNote & { blockIndex: number }
 
 export interface FastDocViewDocumentOptions {
   api: FastDocViewApi
@@ -45,6 +49,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   const indexBuildFailed = ref(false)
   const headings = shallowRef<FastDocViewHeading[]>([])
   const weights = shallowRef<Int32Array | null>(null)
+  /** Page text width per section (block order); empty until loaded. */
+  const sections = shallowRef<FastDocViewSection[]>([])
   const isLoading = ref(false)
   const error = ref<unknown>(null)
   /** Bumped when cached content is replaced under the same indexes (a reopen) - the scroller's rowSourceVersion. */
@@ -122,13 +128,15 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
 
   async function loadOutline(documentId: string, generation: number) {
     try {
-      const [loadedHeadings, loadedWeights] = await Promise.all([
+      const [loadedHeadings, loadedWeights, loadedSections] = await Promise.all([
         api.headings(documentId),
         api.weights(documentId),
+        api.sections(documentId).catch(() => [] as FastDocViewSection[]),
       ])
       if (generation !== openGeneration || summary.value?.documentId !== documentId) return
       headings.value = loadedHeadings
       weights.value = loadedWeights
+      sections.value = loadedSections
     } catch {
       // The outline is a convenience: the text reads without it.
     }
@@ -259,13 +267,13 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     return cache.get(index)
   }
 
-  /** The notes of the cached blocks in [start, end), in block order. */
-  function notesInRange(start: number, end: number): FastDocViewNote[] {
+  /** The notes of the cached blocks in [start, end), in block order, each with the block holding its reference. */
+  function notesInRange(start: number, end: number): FastDocViewPlacedNote[] {
     void cacheRevision.value
-    const notes: FastDocViewNote[] = []
+    const notes: FastDocViewPlacedNote[] = []
     for (let index = start; index < end; index++) {
       const block = cache.get(index)
-      if (block?.notes.length) notes.push(...block.notes)
+      if (block?.notes.length) for (const note of block.notes) notes.push({ ...note, blockIndex: index })
     }
     return notes
   }
@@ -283,6 +291,20 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       .map(([, tier]) => tier.sort((first, second) => first - second))
   })
 
+  /** The page text width (twips) of the section holding block `index`, or undefined before sections load. */
+  function textWidthTwipsAt(index: number): number | undefined {
+    const list = sections.value
+    if (list.length === 0) return undefined
+    let low = 0
+    let high = list.length - 1
+    while (low < high) {
+      const middle = (low + high + 1) >> 1
+      if (list[middle]!.firstBlockIndex <= index) low = middle
+      else high = middle - 1
+    }
+    return list[low]!.textWidthTwips
+  }
+
   /** Row weights, only while they describe exactly the scroller's rows. */
   const rowWeights = computed(() =>
     weights.value && weights.value.length === blockCount.value ? weights.value : undefined,
@@ -293,6 +315,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     summary.value = null
     headings.value = []
     weights.value = null
+    sections.value = []
     blockCount.value = 0
     isIndexComplete.value = true
     indexBuildFailed.value = false
@@ -311,6 +334,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     isIndexComplete,
     indexBuildFailed,
     headings,
+    sections,
+    textWidthTwipsAt,
     isLoading,
     error,
     contentVersion,
@@ -320,6 +345,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     ensureBlocks,
     blockAt,
     notesInRange,
+    /** Opens the same file again (as after a change on disk) - diagnostics. */
+    reopen,
     /** For tests and diagnostics: how many blocks are held. */
     cachedBlockCount: () => cache.size,
   }
