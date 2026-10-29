@@ -17,14 +17,13 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     public static readonly TimeSpan IdleCloseAfter = TimeSpan.FromMinutes(10);
     public const int MaxBlocksPerRequest = 100;
     public const int MaxBlocksPerScan = 100_000;
-    /// <summary>One scan call holds the document's lock for about this long at most, so a block
-    /// fetch for the screen never waits noticeably behind index building. Measured on the 87 MB
-    /// .docx sample (123,007 blocks): 5000 blocks per call took median 83 ms, max 221 ms; this
-    /// budget with <see cref="ScanStepBlocks"/> steps: median 8 ms, p95 14-23 ms (one inflate chunk
-    /// can overshoot; the completing call, which saves the sidecar, takes ~100 ms once).</summary>
-    public static readonly TimeSpan ScanTimeBudget = TimeSpan.FromMilliseconds(5);
+    /// <summary>One scan call holds the document's lock for about this long at most; the page sends no
+    /// scan while a block fetch waits, so the screen never queues behind more than one call. Measured on
+    /// the 87 MB .docx sample (123,007 blocks): 5000 blocks per call took median 83-116 ms, max 221-237 ms;
+    /// this budget: calls median 23-27 ms, p95 33-43 ms, full build 2.5-4.2 s live (library alone ~3 s).</summary>
+    public static readonly TimeSpan ScanTimeBudget = TimeSpan.FromMilliseconds(20);
     /// <summary>Blocks scanned between two budget checks.</summary>
-    public const int ScanStepBlocks = 32;
+    public const int ScanStepBlocks = 64;
 
     /// <summary>Sidecar index cache under the app's per-user data root.</summary>
     public static string IndexCacheDirectory => Path.Combine(AppFileLocator.UserInstallRoot, "FastDocViewIndexCache");
