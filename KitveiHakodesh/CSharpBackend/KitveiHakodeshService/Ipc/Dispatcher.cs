@@ -175,6 +175,11 @@ public sealed class Dispatcher(
                 }
                 case "fastDocViewHeadings":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewSearch":
+                {
+                    var a = MsgPack.De<FastDocViewSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Search(a.DocumentId, a.Query, a.MatchCase, a.FromBlock, a.MaxBlocks)));
+                }
                 case "fastDocViewBookmark":
                 {
                     var a = MsgPack.De<FastDocViewBookmarkArgs>(req.Args);
@@ -293,10 +298,19 @@ public sealed class Dispatcher(
                 case "exportToWord":
                 {
                     var a = MsgPack.De<ExportToWordArgs>(req.Args);
-                    string? exportError = await WordDocumentExporter.ExportHtmlAsNewDocumentAsync(a.Html, a.Title);
-                    return RpcResponse.Ok(MsgPack.Ser(exportError is null
-                        ? new ExportToWordResult { Ok = true }
+                    string? exportError = await WordDocumentExporter.ExportHtmlAsNewDocumentAsync(a.Html, a.Title, a.RequestId);
+                    return RpcResponse.Ok(MsgPack.Ser(exportError is null ? new ExportToWordResult { Ok = true }
+                        : exportError == WordDocumentExporter.CancelledResult ? new ExportToWordResult { Cancelled = true }
                         : new ExportToWordResult { Error = exportError }));
+                }
+
+                // Stop a running exportToWord / pasteIntoWord by its request id: a Word that call started
+                // is ended; the user's own Word is never closed (an export's own document is closed once
+                // it opens; a paste not yet begun is skipped, one Word has begun is left as Word made it).
+                case "cancelWordExport":
+                {
+                    var a = MsgPack.De<CancelWordExportArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CancelWordExportResult { Ok = WordDocumentExporter.CancelExport(a.RequestId) }));
                 }
 
                 // Paste the Windows clipboard into Word at the cursor — the dev-mode equivalent
@@ -307,9 +321,10 @@ public sealed class Dispatcher(
                 // at their document. Runs on an STA thread inside PasteAsync.
                 case "pasteIntoWord":
                 {
-                    string? error = await WordDocumentExporter.PasteClipboardAtCursorAsync();
-                    return RpcResponse.Ok(MsgPack.Ser(error is null
-                        ? new PasteIntoWordResult { Ok = true }
+                    var a = req.Args is { Length: > 0 } ? MsgPack.De<PasteIntoWordArgs>(req.Args) : new PasteIntoWordArgs();
+                    string? error = await WordDocumentExporter.PasteClipboardAtCursorAsync(a.RequestId);
+                    return RpcResponse.Ok(MsgPack.Ser(error is null ? new PasteIntoWordResult { Ok = true }
+                        : error == WordDocumentExporter.CancelledResult ? new PasteIntoWordResult { Cancelled = true }
                         : new PasteIntoWordResult { Error = error }));
                 }
 

@@ -99,6 +99,20 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             return headings;
         });
 
+    /// <summary>Blocks searched per call at most - each call holds the document's lock, so a block fetch for
+    /// the screen waits at most one step.</summary>
+    public const int MaxBlocksPerSearch = 2000;
+
+    /// <summary>One bounded step of an in-document search (the library's windowed Search, the app's book-view
+    /// normalisation): scans up to <paramref name="maxBlocks"/> blocks from <paramref name="fromBlock"/>.</summary>
+    public FastDocViewSearchResult Search(string documentId, string query, bool matchCase, int fromBlock, int maxBlocks) =>
+        Use(documentId, document =>
+        {
+            WordDocumentSearchBatch batch = document.Search(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
+                                                            Math.Max(0, fromBlock), Math.Clamp(maxBlocks, 1, MaxBlocksPerSearch));
+            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
+        });
+
     /// <summary>The block holding bookmark <paramref name="name"/> (an internal link's target); an index
     /// still building scans on only until it is found. Null when the document has no such bookmark.</summary>
     public FastDocViewBookmarkResult Bookmark(string documentId, string name) =>

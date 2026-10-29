@@ -28,6 +28,7 @@ import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
 import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
+import ConversionActionButton from '@/components/ConversionActionButton.vue'
 import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
@@ -81,7 +82,7 @@ const props = defineProps<{
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; cancelExportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -485,17 +486,18 @@ defineExpose({ tocBtnRef, createBookmark })
 
     <BookViewCleanTextCombo v-bind="collapseAttrs('clean-text')" class="dropdown-host" />
 
-    <button
+    <!-- The shared conversion button: while the export runs it is an animated X that cancels it. -->
+    <ConversionActionButton
       v-if="!exportRestricted"
       v-bind="collapseAttrs('export-to-word')"
-      :title="EXPORT_TO_WORD_LABEL"
-      :disabled="exportingToWord"
-      :aria-busy="exportingToWord"
-      @click="$emit('exportToWord')"
+      :state="exportingToWord ? 'busy' : 'idle'"
+      :idle-title="EXPORT_TO_WORD_LABEL"
+      :busy-title="t('bookView.toolbar.cancelExportToWord')"
+      @start="$emit('exportToWord')"
+      @cancel="$emit('cancelExportToWord')"
     >
-      <span v-if="exportingToWord" class="export-spinner" />
-      <BookViewExportToWordGlyph v-else />
-    </button>
+      <BookViewExportToWordGlyph />
+    </ConversionActionButton>
     <!--
       Stands in for whatever the pane was too narrow to hold. It holds ONE place, at the
       toolbar's far end, and holds it at every width: it is out of the flex flow entirely
@@ -548,18 +550,19 @@ defineExpose({ tocBtnRef, createBookmark })
         @select="$emit('selectVersion', $event)"
       />
       <BookViewWordLinkMarkersDropdown v-if="isOverflowed('word-link-markers')" in-overflow :book-id="bookId" />
-      <button
+      <ConversionActionButton
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
         class="overflow-row"
-        :disabled="exportingToWord"
-        :aria-busy="exportingToWord"
-        @click="overflowOpen = false; $emit('exportToWord')"
+        :state="exportingToWord ? 'busy' : 'idle'"
+        :idle-title="EXPORT_TO_WORD_LABEL"
+        :busy-title="t('bookView.toolbar.cancelExportToWord')"
+        :label="EXPORT_TO_WORD_LABEL"
+        @start="overflowOpen = false; $emit('exportToWord')"
+        @cancel="overflowOpen = false; $emit('cancelExportToWord')"
       >
-        <span v-if="exportingToWord" class="export-spinner" />
-        <BookViewExportToWordGlyph v-else />
-        <span>{{ EXPORT_TO_WORD_LABEL }}</span>
-      </button>
+        <BookViewExportToWordGlyph />
+      </ConversionActionButton>
       <button
         v-if="isOverflowed('sync-commentaries')"
         role="menuitem"
@@ -919,16 +922,4 @@ button:disabled {
   overflow: visible;
 }
 
-.export-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: export-spin 0.8s linear infinite;
-}
-@keyframes export-spin {
-  to { transform: rotate(360deg); }
-}
 </style>

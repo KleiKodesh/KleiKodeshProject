@@ -20,5 +20,10 @@
   "openInDefaultAppFailed": "The file could not be opened in another program",
   "goToFootnoteReference": "Go to where this footnote is referenced in the text",
   "goToEndnoteReference": "Go to where this endnote is referenced in the text",
-  "bookmarkNotFound": "The link target was not found in this document"
+  "bookmarkNotFound": "The link target was not found in this document",
+  "searchNext": "Next match (Enter)",
+  "searchPrevious": "Previous match (Shift+Enter)",
+  "searchClose": "Close search (Esc)",
+  "search": "Search in the document (Ctrl+F)",
+  "closeNotes": "Close the notes pane"
 }

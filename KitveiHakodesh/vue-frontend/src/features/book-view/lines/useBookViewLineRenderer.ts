@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { highlightSearchMatches as highlightMatches } from '@/utils/searchMatchHighlight'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from './wordLinkAnchors'
@@ -35,81 +36,6 @@ interface LineRenderProps {
 export function isDiacriticChar(ch: string): boolean {
   const code = ch.charCodeAt(0)
   return code >= 0x0591 && code <= 0x05C7
-}
-
-function highlightMatches(
-  content: string,
-  query: string,
-): string {
-  const q = removeDiacriticsForSearch(query.trim())
-  if (!q) return content
-
-  const stripped = stripHtmlForSearch(content)
-
-  const matchStarts = new Set<number>()
-  let idx = 0
-  while ((idx = stripped.indexOf(q, idx)) !== -1) {
-    matchStarts.add(idx)
-    idx++
-  }
-  if (!matchStarts.size) return content
-
-  const out: string[] = []
-  let strippedPos = 0,
-    inTag2 = false,
-    inMatch = false,
-    matchStrippedCount = 0
-  let i = 0
-  while (i < content.length) {
-    const ch = content[i]!
-    if (ch === '<') { inTag2 = true; out.push(ch); i++; continue }
-    if (ch === '>') { inTag2 = false; out.push(ch); i++; continue }
-    if (inTag2) { out.push(ch); i++; continue }
-
-    // Mirror the entity lookahead from stripHtmlForSearch.
-    if (ch === '&') {
-      let entityEnd = -1
-      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
-        const c = content[j]!
-        if (c === ';') { entityEnd = j; break }
-        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
-      }
-      if (entityEnd !== -1) {
-        // Real entity — emit it atomically, never open/close a mark inside it.
-        if (!inMatch && matchStarts.has(strippedPos)) {
-          out.push('<mark class="search-match">')
-          inMatch = true
-          matchStrippedCount = 0
-        }
-        for (let j = i; j <= entityEnd; j++) out.push(content[j]!)
-        i = entityEnd + 1
-        if (inMatch && ++matchStrippedCount === q.length) {
-          out.push('</mark>')
-          inMatch = false
-        }
-        strippedPos++
-        continue
-      }
-      // Bare & — treat as regular character.
-    }
-
-    const isDiacritic = isSearchIgnoredMark(ch)
-    if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
-      out.push('<mark class="search-match">')
-      inMatch = true
-      matchStrippedCount = 0
-    }
-    out.push(ch)
-    if (!isDiacritic) {
-      if (inMatch && ++matchStrippedCount === q.length) {
-        out.push('</mark>')
-        inMatch = false
-      }
-      strippedPos++
-    }
-    i++
-  }
-  return out.join('')
 }
 
 /**

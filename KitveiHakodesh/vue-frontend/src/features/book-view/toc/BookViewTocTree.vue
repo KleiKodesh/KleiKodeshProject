@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { AltTocSection } from './useBookViewToc'
 import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
-import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
+import TocTreeSection from '@/components/TocTreeSection.vue'
+import TocTreeLayout from '@/components/TocTreeLayout.vue'
 import SplitPane from '@/components/SplitPane.vue'
-import MessageBanner from '@/components/MessageBanner.vue'
 
 const props = defineProps<{
   activeTocEntryId?: number
@@ -20,23 +20,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [TocEntry]; altSelect: [TocEntry] }>()
 
-const searchRef = ref<HTMLInputElement | null>(null)
-const tocSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
-const altSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
+const tocSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
+const altSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
 const searchQuery = ref('')
 
-// Component mounts fresh each time the panel opens (v-if), so onMounted handles the
-// initial focus. The loading watcher covers the case where TOC data arrives after mount.
-onMounted(() => {
-  if (!props.loading) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
-})
-
-watch(
-  () => props.loading,
-  (val) => {
-    if (!val) nextTick(() => searchRef.value?.focus({ preventScroll: true }))
-  },
-)
+// Focusing the search box on open / after loading lives in TocTreeLayout.
 
 function focusTocList() {
   const el = tocSectionRef.value?.containerRef?.()
@@ -160,107 +148,40 @@ defineExpose({ snapshotState, restoreState })
 </script>
 
 <template>
-  <div dir="rtl" class="toc-tree">
-    <div v-if="loading" class="toc-state ui-chrome">{{ $t('bookView.loading') }}</div>
-    <div v-else-if="error" class="toc-state ui-chrome">
-      <MessageBanner :message="error" :dismissible="false" />
-    </div>
-    <template v-else>
-      <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
-        <template #top>
-          <BookViewTocTreeSection
-            ref="tocSectionRef"
-            v-if="hasToc"
-            :title="null"
-            :entries="tocEntries"
-            :filter="searchQuery"
-            :active-entry-id="activeTocEntryId"
-            :search-tree="tocSearchTree"
-            @select="$emit('select', $event)"
-          />
-        </template>
-        <template #bottom>
-          <BookViewTocTreeSection
-            ref="altSectionRef"
-            v-if="selectedAltTocSection"
-            :key="selectedAltTocSection.structure.id"
-            :title="null"
-            :entries="selectedAltTocSection.entries"
-            :active-entry-id="activeAltTocEntryId"
-            :filter="searchQuery"
-            :search-tree="selectedAltTocSection.searchTree ?? undefined"
-            @select="$emit('altSelect', $event)"
-          />
-        </template>
-      </SplitPane>
-      <div class="toc-search">
-        <div class="search-inner">
-          <input
-            ref="searchRef"
-            v-model="searchQuery"
-            type="search"
-            class="search-input"
-            :placeholder="$t('components.searchPlaceholder')"
-            @keydown.up.prevent="focusTocList"
-            @keydown.down.prevent="focusTocList"
-            @keydown.tab.prevent="focusTocList"
-          />
-        </div>
-      </div>
-    </template>
-  </div>
+  <TocTreeLayout v-model:query="searchQuery" :loading="loading" :error="error" @focus-list="focusTocList">
+    <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
+      <template #top>
+        <TocTreeSection
+          ref="tocSectionRef"
+          v-if="hasToc"
+          :title="null"
+          :entries="tocEntries"
+          :filter="searchQuery"
+          :active-entry-id="activeTocEntryId"
+          :search-tree="tocSearchTree"
+          @select="$emit('select', $event as TocEntry)"
+        />
+      </template>
+      <template #bottom>
+        <TocTreeSection
+          ref="altSectionRef"
+          v-if="selectedAltTocSection"
+          :key="selectedAltTocSection.structure.id"
+          :title="null"
+          :entries="selectedAltTocSection.entries"
+          :active-entry-id="activeAltTocEntryId"
+          :filter="searchQuery"
+          :search-tree="selectedAltTocSection.searchTree ?? undefined"
+          @select="$emit('altSelect', $event as TocEntry)"
+        />
+      </template>
+    </SplitPane>
+  </TocTreeLayout>
 </template>
 
 <style scoped>
-.toc-tree {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
 .toc-body {
   flex: 1;
   min-height: 0;
-}
-
-.toc-search {
-  padding: 5px 6px 6px;
-  border-top: 1px solid var(--border-color);
-  flex-shrink: 0;
-  box-sizing: border-box;
-  background: var(--tree-bg, var(--bg-primary));
-}
-
-.search-inner {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-}
-
-.search-input {
-  flex: 1;
-  width: 0;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.search-input::-webkit-search-cancel-button {
-  filter: grayscale(1) opacity(0.4);
-}
-
-.toc-state {
-  padding: 32px 16px;
-  text-align: center;
-  font-size: 14px;
-  color: var(--text-secondary);
 }
 </style>

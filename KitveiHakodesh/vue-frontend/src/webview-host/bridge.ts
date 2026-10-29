@@ -806,11 +806,15 @@ export function localFileIndexStatus(): Promise<LocalFileIndexStatus> {
  * NOTE: guard on __webviewAction, NOT isHosted — isHosted is TRUE in dev while the bridge
  * channel is absent, so an isHosted check would send dev down the hosted path and reject.
  */
-export async function exportToWord(html: string, title: string = ''): Promise<{ ok?: boolean; error?: string }> {
+export async function exportToWord(
+  html: string,
+  title: string = '',
+  requestId?: string,
+): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
   if (typeof window.__webviewAction !== 'function') {
     try {
-      const r = await serviceCall<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
-      return { ok: !!r?.ok, error: r?.error }
+      const r = await serviceCall<{ ok?: boolean; error?: string; cancelled?: boolean }>('exportToWord', { html, title, requestId })
+      return { ok: !!r?.ok, error: r?.error, cancelled: !!r?.cancelled }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
@@ -819,9 +823,28 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
   // instead of replying ok=true immediately, so this can reject where it previously always
   // resolved. Callers get an { error } to inspect rather than an unhandled rejection.
   try {
-    return await action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
+    return await action<{ ok?: boolean; error?: string; cancelled?: boolean }>('exportToWord', { html, title, requestId })
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * Stop the running exportToWord started with the same `requestId`: its exportToWord call then
+ * resolves at once with `{ cancelled: true }`. A Word instance that export started is ended; a Word
+ * the user already had open is never closed - only the export's own document is closed (unsaved)
+ * once Word finishes opening it. Resolves true when an export was running, false otherwise.
+ */
+export async function cancelWordExport(requestId: string): Promise<boolean> {
+  try {
+    if (typeof window.__webviewAction !== 'function') {
+      const r = await serviceCall<{ ok?: boolean }>('cancelWordExport', { requestId })
+      return !!r?.ok
+    }
+    const r = await action<{ ok?: boolean }>('cancelWordExport', { requestId })
+    return !!r?.ok
+  } catch {
+    return false
   }
 }
 
@@ -841,8 +864,8 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
  * bridge channel is absent, so an isHosted check would send dev down the hosted path
  * and reject with 'bridge not available'.
  */
-export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
-  const result = await runPasteIntoWord()
+export async function pasteIntoWord(requestId?: string): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
+  const result = await runPasteIntoWord(requestId)
   // Reported HERE rather than at the call sites: all five of them fire this as
   // `pasteIntoWord().catch(() => {})` from inside a copy event, where there is no
   // sensible place to await an answer. Surfacing the failure centrally is what turns
@@ -852,17 +875,17 @@ export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }>
   return result
 }
 
-async function runPasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+async function runPasteIntoWord(requestId?: string): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
   if (typeof window.__webviewAction !== 'function') {
     try {
-      const r = await serviceCall<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
-      return { ok: !!r?.ok, error: r?.error }
+      const r = await serviceCall<{ ok?: boolean; error?: string; cancelled?: boolean }>('pasteIntoWord', { requestId })
+      return { ok: !!r?.ok, error: r?.error, cancelled: !!r?.cancelled }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
   }
   try {
-    return await action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+    return await action<{ ok?: boolean; error?: string; cancelled?: boolean }>('pasteIntoWord', { requestId })
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }
@@ -1096,12 +1119,17 @@ export function cancelHbDownload(bookId: string): void {
 }
 
 /**
- * Abort an in-flight Word/document conversion (the ביטול button). Dev only — trips the service's
- * per-source cancellation so it discards the result and deletes the partial cache file (Word
- * self-quits, no orphan). Fire-and-forget. Hosted mode has its own conversion-cancel path.
+ * Abort an in-flight Word/document conversion (the cancel button). Both legs end only the Word
+ * instance the converter itself started and delete the partial output: dev through the service's
+ * cancelConversion op, hosted through the C# host's cancelLocalFileConversion action
+ * (KitveiHakodeshLib WordToPdfConverter). Fire-and-forget.
  */
 export function cancelLocalFileConversion(sourcePath: string): void {
-  if (typeof window.__webviewAction === 'function' || !sourcePath) return
+  if (!sourcePath) return
+  if (typeof window.__webviewAction === 'function') {
+    void action('cancelLocalFileConversion', { filePath: sourcePath }).catch(() => {})
+    return
+  }
   serviceCallVoid('cancelConversion', { path: sourcePath })
 }
 

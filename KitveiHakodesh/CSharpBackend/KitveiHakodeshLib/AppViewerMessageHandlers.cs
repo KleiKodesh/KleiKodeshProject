@@ -74,6 +74,14 @@ namespace KitveiHakodeshLib
                         case "pickFile": _localFile.HandlePickFile(root, id, this); break;
                         case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
+                        // The conversion cancel button: ends only the Word instance the converter started.
+                        case "cancelLocalFileConversion":
+                            _bridge.Reply(id, new
+                            {
+                                cancelled = root.TryGetProperty("filePath", out var cancelPath)
+                                    && KitveiHakodeshLib.Pdf.WordToPdfConverter.Cancel(cancelPath.GetString()),
+                            });
+                            break;
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
                         case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
                         case "writePdfTail": _localFile.HandleWritePdfTail(root, id); break;
@@ -93,6 +101,7 @@ namespace KitveiHakodeshLib
                         case "getFonts": await HandleGetFonts(id); break;
                         case "exportToWord": await HandleExportToWord(root, id); break;
                         case "pasteIntoWord": await HandlePasteIntoWord(root, id); break;
+                        case "cancelWordExport": HandleCancelWordExport(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
                         case "tabsChanged": HandleTabsChanged(root, id); break;
@@ -340,14 +349,25 @@ namespace KitveiHakodeshLib
         {
             string html = root.TryGetProperty("html", out var h) ? h.GetString() ?? "" : "";
             string title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-            string error = await WordExporter.ExportAsync(html, title);
-            _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            string requestId = root.TryGetProperty("requestId", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+            string error = await WordExporter.ExportAsync(html, title, requestId);
+            _bridge.Reply(id, error == null ? (object)new { ok = true }
+                : error == WordExporter.CancelledResult ? (object)new { cancelled = true } : new { error });
         }
 
         private async Task HandlePasteIntoWord(JsonElement root, string id)
         {
-            string error = await WordExporter.PasteAtCursorAsync();
-            _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            string requestId = root.TryGetProperty("requestId", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+            string error = await WordExporter.PasteAtCursorAsync(requestId);
+            _bridge.Reply(id, error == null ? (object)new { ok = true }
+                : error == WordExporter.CancelledResult ? (object)new { cancelled = true } : new { error });
+        }
+
+        /// <summary>Stops the exportToWord / pasteIntoWord started with this requestId (see WordExporter.CancelExport).</summary>
+        private void HandleCancelWordExport(JsonElement root, string id)
+        {
+            string requestId = root.TryGetProperty("requestId", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+            _bridge.Reply(id, new { ok = WordExporter.CancelExport(requestId) });
         }
 
         /// <summary>

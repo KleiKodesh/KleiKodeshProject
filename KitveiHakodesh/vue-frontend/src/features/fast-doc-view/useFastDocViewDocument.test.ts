@@ -44,6 +44,7 @@ function fakeApi(total: number) {
     ],
     weights: async () => Int32Array.from({ length: total }, () => 10),
     bookmark: async () => null,
+    search: async () => ({ hitBlocks: [], nextBlock: -1, reachedEnd: true }),
     sections: async () => [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }],
     scan: async (documentId, blocks) => {
       calls.push({ op: 'scan', args: [documentId, blocks] })

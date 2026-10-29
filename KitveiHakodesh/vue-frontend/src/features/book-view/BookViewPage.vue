@@ -20,6 +20,7 @@ import BookViewHebrewBooksSideEdition from './BookViewHebrewBooksSideEdition.vue
 import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
 import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { cancelWordExport } from '@/webview-host/bridge'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot, SideEditionPersistState } from './bookViewTypes'
@@ -332,13 +333,31 @@ async function onExportToWord() {
     showToast(EXPORT_RESTRICTED_MESSAGE, { variant: 'error' })
     return
   }
-  if (exportingToWord.value) return
+  // A cancelled export may still be finishing (a paste Word already began): one at a time.
+  if (exportingToWord.value || exportInFlight) return
   exportingToWord.value = true
+  exportInFlight = true
+  const generation = ++exportGeneration
+  // One id for the whole export: the paste, or its fallback to a file for a large book.
+  exportRequestId = crypto.randomUUID()
   try {
-    await linesContentRef.value?.pasteAllIntoWord()
+    await linesContentRef.value?.pasteAllIntoWord(exportRequestId, () => generation !== exportGeneration)
   } finally {
-    exportingToWord.value = false
+    exportInFlight = false
+    if (generation === exportGeneration) exportingToWord.value = false
   }
+}
+/** Bumped by a cancel: the export that was running no longer drives the button. */
+let exportGeneration = 0
+let exportRequestId: string | null = null
+let exportInFlight = false
+/** The animated X: cancels the running export (paste or file) - the service / host ends only a
+ *  Word instance that export started - and the pending call resolves as cancelled. */
+function onCancelExportToWord() {
+  exportGeneration++
+  exportingToWord.value = false
+  if (exportRequestId) void cancelWordExport(exportRequestId)
+  exportRequestId = null
 }
 
 // Opening or closing EITHER side commentary column re-wraps the text, so the lines
@@ -475,6 +494,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
+      @cancel-export-to-word="onCancelExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
@@ -494,6 +514,7 @@ function getSideEditionOutlineTarget(): string | undefined {
         @toggle-search="toggleSearch"
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
+        @cancel-export-to-word="onCancelExportToWord"
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
         @go-to-bookmark="goToBookmark"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
@@ -738,6 +759,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
+      @cancel-export-to-word="onCancelExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"

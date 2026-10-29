@@ -166,7 +166,8 @@
     "syncOnTitle": "Sync commentaries\nClick to turn off auto-sync",
     "toc": "Table of contents (Ctrl+K)",
     "zoomInTitle": "Zoom in (Ctrl+)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0",
-    "zoomOutTitle": "Zoom out (Ctrl-)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0"
+    "zoomOutTitle": "Zoom out (Ctrl-)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0",
+    "cancelExportToWord": "Cancel sending to Word"
   },
   "versions": {
     "active": "Version: {name}",
@@ -196,5 +197,6 @@
     "rishonim": "Rishonim",
     "acharonim": "Acharonim",
     "other": "Other"
-  }
+  },
+  "exportLargeAsFile": "The book is large - opening it in Word as a file"
 }

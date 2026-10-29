@@ -41,7 +41,7 @@ import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip
 import { useWordLinkAnchors } from './useWordLinkAnchors'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { pasteIntoWord } from '@/webview-host/bridge'
+import { exportToWord, pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
 
@@ -423,16 +423,40 @@ onMounted(() => {
 // endnotes. If that outlasts the click's clipboard activation, execCommand('copy')
 // does nothing — the warm-up is cached by then, so a second click goes through
 // instantly; the toast says so. The select-all is dropped afterwards either way.
-async function pasteAllIntoWord(): Promise<void> {
+/**
+ * Above this much HTML on the clipboard the export goes to Word as a file (exportToWord) instead of
+ * a paste. Measured 2026-10-29 (Chromium copy event -> OS clipboard -> Word 16 Selection.Paste of
+ * CF_HTML, a private Word instance): the clipboard always held the whole payload (10 MB in, 10 MB
+ * on the clipboard - nothing is clipped there); Word pasted 1 / 3 / 6 / 8 MB whole (every paragraph
+ * arrived; 5 / 10 / 32 / 24 s) and died mid-paste at 10 MB (RPC 0x800706BE). 6 MB keeps a margin.
+ */
+const PASTE_INTO_WORD_MAX_HTML_CHARS = 6_000_000
+
+async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean = () => false): Promise<void> {
   // The whole book is exported, and lines are fetched only on demand: fetch it now.
   try { await props.ensureAllLines() } catch { /* export what is loaded */ }
+  // Cancelled while the book loaded: nothing reached Word yet, so nothing is sent.
+  if (isCancelled()) return
   selectAllInContainer()
   if (settingsStore.copyWithNotes) {
     try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
+  if (isCancelled()) {
+    window.getSelection()?.removeAllRanges()
+    return
+  }
   // Held so the caller's progress spinner lasts until Word has the paste.
   let pasting: Promise<unknown> = Promise.resolve()
-  const copied = triggerCopy(() => { pasting = pasteIntoWord().catch(() => {}) })
+  const copied = triggerCopy((html) => {
+    if (html.length > PASTE_INTO_WORD_MAX_HTML_CHARS) {
+      showToast(t('bookView.exportLargeAsFile'))
+      pasting = exportToWord(html, bookTitle, requestId)
+        .then((result) => { if (result.error) showToast(result.error, { variant: 'error' }) })
+        .catch(() => {})
+    } else {
+      pasting = pasteIntoWord(requestId).catch(() => {})
+    }
+  })
   window.getSelection()?.removeAllRanges()
   await pasting
   if (!copied) showToast(t('bookView.exportReady'))

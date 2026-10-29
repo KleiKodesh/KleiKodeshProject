@@ -20,5 +20,10 @@
   "openInDefaultAppFailed": "לא ניתן היה לפתוח את הקובץ בתוכנה אחרת",
   "goToFootnoteReference": "מעבר למקום ההערה בתקסט",
   "goToEndnoteReference": "מעבר למקום הערת הסוף בתקסט",
-  "bookmarkNotFound": "יעד הקישור לא נמצא במסמך זה"
+  "bookmarkNotFound": "יעד הקישור לא נמצא במסמך זה",
+  "searchNext": "התואמה הבאה (Enter)",
+  "searchPrevious": "התואמה הקודמת (Shift+Enter)",
+  "searchClose": "סגירת החיפוש (Esc)",
+  "search": "חיפוש במסמך (Ctrl+F)",
+  "closeNotes": "סגירת חלון ההערות"
 }
