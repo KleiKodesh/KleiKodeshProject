@@ -22,6 +22,7 @@ import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useToolbarDrag } from '@/composables/useToolbarDrag'
+import BookViewCleanTextCombo from '@/features/book-view/BookViewCleanTextCombo.vue'
 
 defineProps<{
   tocVisible: boolean
@@ -132,6 +133,8 @@ function onToggleToc(event: MouseEvent) {
     </button>
     <!-- hold to repeat, as in the book view (shared usePressRepeat) -->
     <button
+    <!-- the book view's clean-text combo (Ctrl+D): the same global setting and options dropdown -->
+    <BookViewCleanTextCombo class="dropdown-host" />
       :title="$t('fastDocView.zoomOut', { text: Math.round(zoom) })"
       :disabled="zoom <= ZOOM_CONFIG.MIN"
       @pointerdown="zoomRepeat.start(() => emit('zoomOut'))"
