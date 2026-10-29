@@ -328,8 +328,14 @@ const notesPlace = ref<NotesPlace>('bottom')
 const { width: pageWidth } = useElementSize(pageElement)
 const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
 const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
-function cycleNotesPlace() {
-  notesPlace.value = NOTES_PLACE_ORDER[(NOTES_PLACE_ORDER.indexOf(notesPlace.value) + 1) % NOTES_PLACE_ORDER.length]!
+/** The toolbar's notes button: closed -> bottom -> right -> left -> closed; on a narrow page (no side
+ *  places) it only opens and closes. */
+function stepNotes() {
+  if (!hasNotes.value) return
+  if (!notesVisible.value) { notesPlace.value = 'bottom'; notesVisible.value = true; return }
+  const next = NOTES_PLACE_ORDER.indexOf(notesPlace.value) + 1
+  if (!canPlaceNotesBeside.value || next >= NOTES_PLACE_ORDER.length) { notesVisible.value = false; return }
+  notesPlace.value = NOTES_PLACE_ORDER[next]!
 }
 /** The text pane's share of the split, per place (height below, width beside) - as the book view keeps one per slot. */
 const notesFractions = ref<Partial<Record<NotesPlace, number>>>({})
@@ -550,9 +556,8 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
       :has-notes="hasNotes"
       :zoom="zoom"
       @toggle-toc="toggleToc"
-      @toggle-notes="notesVisible = !notesVisible"
+      @step-notes="stepNotes"
       @toggle-notes-sync="notesSync = !notesSync"
-      @cycle-notes-place="cycleNotesPlace"
       @zoom-in="setZoom(zoomIn(zoom))"
       @zoom-out="setZoom(zoomOut(zoom))"
       :pdf-state="pdfState"
