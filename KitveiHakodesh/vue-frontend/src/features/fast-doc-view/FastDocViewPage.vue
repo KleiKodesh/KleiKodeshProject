@@ -30,6 +30,10 @@ import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useFastDocViewSearch } from './useFastDocViewSearch'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import ContextMenu from '@/components/ContextMenu.vue'
+import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
+import { useFastDocViewContextMenu } from './useFastDocViewContextMenu'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useNoteTooltip } from '@/features/book-view/lines/useNoteTooltip'
@@ -122,7 +126,15 @@ function blockColumnStyle(index: number): Record<string, string> | undefined {
   return { '--lines-content-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
 }
 
-useScopedKeys(scrollerElement, { onCtrlF: () => openSearch() })
+// The book view's text context menu, with the items a Word document can serve (useFastDocViewContextMenu).
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const contextMenu = useFastDocViewContextMenu({ selectAllInContainer: () => selectAllInContainer(), paneNavigation })
+const { selectAllInContainer } = useScopedKeys(scrollerElement, {
+  onCtrlF: () => openSearch(),
+  onCtrlV: () => contextMenu.onPasteIntoWord(),
+  onCtrlShiftC: () => contextMenu.onSearchInRepository(),
+})
+useContextMenuLongPress(scrollerElement, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
 
 // In-document search (Ctrl+F): the book view's own search bar (ReadingSearchBar, floating over
 // the text) and its behaviour; only the hit source differs - the service finds hit blocks in
@@ -170,7 +182,8 @@ async function onSearchStep(direction: 'forward' | 'backward') {
 }
 /** A block's HTML with the search query's matches marked (only while searching, only rendered blocks). */
 function blockHtml(index: number): string {
-  const html = fastDocument.blockAt(index)?.html ?? ''
+  // The book view's clean-text (Ctrl+D, global setting) first, then the search marks, as its line renderer.
+  const html = cleanHebrewText(fastDocument.blockAt(index)?.html ?? '', settingsStore.cleanTextFlags)
   return search.query.value.trim() && searchVisible.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
 }
 
@@ -325,6 +338,14 @@ const notesSync = ref(true)
 type NotesPlace = 'bottom' | 'right' | 'left'
 const NOTES_PLACE_ORDER: NotesPlace[] = ['bottom', 'right', 'left']
 const notesPlace = ref<NotesPlace>('bottom')
+// Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
+  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+  if (paneNavigation.activeTab.id !== tabId) return
+  event.preventDefault()
+  settingsStore.toggleCleanText()
+})
 const { width: pageWidth } = useElementSize(pageElement)
 const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
 const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
@@ -465,7 +486,8 @@ const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerElement, {
   htmlFor: (marker) => {
     const element = marker as HTMLElement
     const key = fastDocViewNoteKey(element.dataset.noteKind ?? '', Number(element.dataset.noteNumber ?? 0), (element.textContent ?? '').trim())
-    return visibleNotes.value.find((note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key)?.html ?? null
+    const html = visibleNotes.value.find((note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key)?.html
+    return html == null ? null : cleanHebrewText(html, settingsStore.cleanTextFlags)
   },
 })
 const REFERENCE_FLASH_MS = 2000
@@ -682,6 +704,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
     </div>
     </div>
   </div>
+              <ContextMenu ref="contextMenuRef" :items="contextMenu.items" />
 </template>
 
 <style scoped>
@@ -702,6 +725,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
 .fast-doc-view-frame.toolbar-at-bottom .fast-doc-view-frame-toolbar {
   order: 1;
 }
+                @contextmenu="contextMenuRef?.show($event)"
 .fast-doc-view-frame.toolbar-at-left,
 .fast-doc-view-frame.toolbar-at-right {
   flex-direction: row;

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 import type { FastDocViewPlacedNote } from './useFastDocViewDocument'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 
 /**
  * The footnotes / endnotes of the blocks mounted in the text pane above - laid out like the
@@ -89,10 +91,12 @@ watch(
  *  auto mark) as <span class="note-mark">; that number is the note's one back-link to its reference. */
 const NOTE_MARK = 'class="note-mark"'
 function hasOwnMark(note: FastDocViewPlacedNote): boolean {
+const settingsStore = useSettingsStore()
   return note.html.includes(NOTE_MARK)
 }
 function bodyHtml(note: FastDocViewPlacedNote, title: string): string {
-  return note.html.replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
+  // the book view's clean-text (Ctrl+D), as on its commentary
+  return cleanHebrewText(note.html, settingsStore.cleanTextFlags).replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
 }
 function onBodyActivate(event: Event, note: FastDocViewPlacedNote) {
   if (!(event.target as HTMLElement | null)?.closest?.('.note-mark')) return
