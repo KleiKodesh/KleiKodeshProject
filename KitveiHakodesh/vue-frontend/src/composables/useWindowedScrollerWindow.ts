@@ -109,6 +109,15 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   let anchor: { index: number; offsetTop: number; offsetHeight: number; scrollTop: number } | null = null
 
   /**
+   * The row's top in content coordinates, measured (fractional). offsetTop is rounded:
+   * holding an anchor in rounded offsets drifted a pixel whenever the rows above had
+   * fractional heights, and the row above showed as a 1 px sliver at the top.
+   */
+  function measuredTop(viewport: HTMLElement, row: HTMLElement): number {
+    return row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop
+  }
+
+  /**
    * The reader's row is wherever the viewport is now. Call before the DOM changes.
    *
    * Keeps the previous anchor when no row can be found: before a patch the window
@@ -125,7 +134,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
       // anchored, or each hold would hand the anchor to whichever character the
       // re-wrap left at the top, and the reader's words would walk a line per step.
       const isOwnHold = viewport.scrollTop === heldScrollTop && textAnchor != null && row.contains(textAnchor.node)
-      anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
+      anchor = { index, offsetTop: measuredTop(viewport, row), offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
       if (!isOwnHold) textAnchor = findTextAnchor(viewport, row)
     }
   }
@@ -216,7 +225,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const height = row.offsetHeight
     // A re-wrapped row: hold the reader's words, not a pixel offset into the row.
     if (height !== anchor.offsetHeight && holdTextAnchor(viewport, row)) {
-      anchor.offsetTop = row.offsetTop
+      anchor.offsetTop = measuredTop(viewport, row)
       anchor.offsetHeight = height
       anchor.scrollTop = viewport.scrollTop
       return
@@ -225,10 +234,11 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const scaled = anchor.offsetHeight > 0 && height !== anchor.offsetHeight
       ? Math.round(offsetInto * (height / anchor.offsetHeight))
       : offsetInto
-    const expected = row.offsetTop + scaled
+    const top = measuredTop(viewport, row)
+    const expected = Math.max(0, Math.round(top + scaled))
     if (viewport.scrollTop !== expected) viewport.scrollTop = expected
     heldScrollTop = viewport.scrollTop
-    anchor.offsetTop = row.offsetTop
+    anchor.offsetTop = measuredTop(viewport, row)
     anchor.offsetHeight = height
     anchor.scrollTop = viewport.scrollTop
   }
@@ -244,7 +254,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport || !anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
-    const delta = row.offsetTop - anchor.offsetTop
+    const delta = Math.round(measuredTop(viewport, row) - anchor.offsetTop)
     if (delta !== 0) viewport.scrollTop += delta
   }
 
@@ -327,10 +337,14 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const offset = requested > 0 && requested >= row.offsetHeight ? 0 : requested
     // offsetHeight is rounded down; a row of fractional height would be clipped by
     // that fraction at the bottom, so the end landing rounds the other way.
+    // offsetTop is rounded too, and rows of fractional height put the target's real
+    // top up to a pixel below it: the row above then showed as a 1 px sliver at the
+    // top (read as "first visible"). Land on the measured top, to the nearest pixel.
+    const viewportTop = viewport.getBoundingClientRect().top
     viewport.scrollTop =
       landing.align === 'end'
-        ? Math.ceil(row.getBoundingClientRect().bottom - viewport.getBoundingClientRect().top + viewport.scrollTop - viewport.clientHeight + offset)
-        : Math.max(0, row.offsetTop + offset)
+        ? Math.ceil(row.getBoundingClientRect().bottom - viewportTop + viewport.scrollTop - viewport.clientHeight + offset)
+        : Math.max(0, Math.round(row.getBoundingClientRect().top - viewportTop + viewport.scrollTop + offset))
     rememberAnchor()
     fill()
   }
