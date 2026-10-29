@@ -247,7 +247,7 @@ namespace KleiKodesh.Helpers
             if (!GetGUIThreadInfo(0, ref info) || info.hwndFocus == IntPtr.Zero) return false;
 
             var form = TaskPanePopOut.For(pane)?.PopOutForm;
-            Control root = form ?? pane.Control;
+            Control root = (Control)form ?? pane.Control;
             return root.IsHandleCreated
                 && (info.hwndFocus == root.Handle || IsChild(root.Handle, info.hwndFocus));
         }
