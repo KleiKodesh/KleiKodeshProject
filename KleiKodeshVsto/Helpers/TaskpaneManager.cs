@@ -235,7 +235,7 @@ namespace KleiKodesh.Helpers
 
             Reveal(pane);
             var popOut = TaskPanePopOut.For(pane);
-            FocusInto(popOut?.PopOutForm ?? pane.Control);
+            FocusInto((Control)popOut?.PopOutForm ?? pane.Control);
         }
 
         // Whether keyboard focus is inside the pane or its pop-out window. Read from
