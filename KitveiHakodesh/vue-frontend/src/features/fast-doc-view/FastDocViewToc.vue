@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import TocTreeLayout from '@/components/TocTreeLayout.vue'
 import TocTreeSection from '@/components/TocTreeSection.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
@@ -12,7 +12,19 @@ import type { FastDocViewOutlineNode } from './fastDocViewOutline'
  * is the book view TOC's own (TreeView filter over a SegmentSearchTree of the heading paths);
  * `activeNodeId` is the heading at the reader's position, highlighted as in the book view.
  */
-const props = defineProps<{ outline: FastDocViewOutlineNode[]; activeNodeId?: number; isRightToLeft: boolean }>()
+export interface FastDocViewTocState {
+  searchQuery?: string
+  expanded?: number[]
+  scrollTop?: number
+}
+
+const props = defineProps<{
+  outline: FastDocViewOutlineNode[]
+  activeNodeId?: number
+  isRightToLeft: boolean
+  /** The panel's state when it last closed / the tab was saved - applied on mount, as the book view's TOC restoreState. */
+  savedState?: FastDocViewTocState
+}>()
 const emit = defineEmits<{ select: [node: FastDocViewOutlineNode] }>()
 
 const query = ref('')
@@ -25,6 +37,41 @@ function focusList() {
 function onSelect(node: TreeNodeItem) {
   emit('select', node as FastDocViewOutlineNode)
 }
+
+// ── Persistence (as BookViewTocTree) ───────────────────────────────────────
+// The panel is v-if'd away on close and on tab switch, so the page snapshots this on close /
+// save and hands it back through savedState. Expanded ids land before the scroll offset:
+// expanding changes the scroll height.
+function snapshotState(): FastDocViewTocState {
+  return {
+    searchQuery: query.value || undefined,
+    expanded: sectionRef.value?.getExpanded() ?? [],
+    scrollTop: sectionRef.value?.containerRef()?.scrollTop ?? 0,
+  }
+}
+function applyState(saved: FastDocViewTocState) {
+  if (saved.searchQuery) query.value = saved.searchQuery
+  if (saved.expanded?.length) sectionRef.value?.setExpanded(saved.expanded)
+  nextTick(() => {
+    const list = sectionRef.value?.containerRef()
+    if (list && saved.scrollTop != null) list.scrollTop = saved.scrollTop
+  })
+}
+onMounted(() => {
+  const saved = props.savedState
+  if (!saved) return
+  // The headings can arrive after the panel opens (restored open on a fresh tab).
+  if (props.outline.length) return applyState(saved)
+  const stop = watch(
+    () => props.outline.length,
+    (count) => {
+      if (!count) return
+      stop()
+      nextTick(() => applyState(saved))
+    },
+  )
+})
+defineExpose({ snapshotState })
 </script>
 
 <template>
