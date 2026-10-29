@@ -40,6 +40,10 @@ import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import { useI18n } from 'vue-i18n'
+import { storeToRefs } from 'pinia'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useAppNavigation } from '@/composables/useAppNavigation'
+import { addressBarPath, isDiskPath, looksLikeFile, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
 
@@ -52,7 +56,15 @@ const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
 const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 
-const searchQuery = ref('')
+// Explorer behaviour: the field opens holding the full path of what the tab shows,
+// selected, so typing replaces it. While it still reads that path, the search sees
+// an empty query (the dropdown lists recents) and Enter just closes.
+const { ROOT: catalogRoot, allBooksMap } = storeToRefs(useBooksDataStore())
+const appNavigation = useAppNavigation()
+const initialPath = addressBarPath(pane.activeTab.value, catalogRoot.value, allBooksMap.value)
+const searchQuery = ref(initialPath)
+const searchTerm = ref('')
+watch(searchQuery, (v) => { searchTerm.value = v === initialPath ? '' : v })
 const wrapperRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const isDropdownOpen = ref(false)
@@ -81,7 +93,7 @@ const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
     charIdx = 0
   }
 }, 80)
-watch(searchQuery, (v) => (v ? pauseTyping() : resumeTyping()))
+watch(searchQuery, (v) => (v ? pauseTyping() : resumeTyping()), { immediate: true })
 
 const {
   catalogResults,
@@ -98,7 +110,7 @@ const {
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
-} = useGlobalSearch(searchQuery)
+} = useGlobalSearch(searchTerm)
 
 // The wrapper is the inline bar; only the popup is fitted.
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl], fitToViewport: false })
@@ -281,13 +293,43 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.code === 'Enter') {
     e.preventDefault()
-    launchFullTextSearch()
+    if (!openTypedPath()) launchFullTextSearch()
     return
   }
   if (e.code === 'Escape') {
     e.preventDefault()
     close()
   }
+}
+
+/**
+ * Enter on a path: a disk file opens, a disk folder opens the file picker there,
+ * a catalog path opens the book or category. False when the text is not a path,
+ * so the caller falls back to full-text search.
+ */
+function openTypedPath(): boolean {
+  const text = searchQuery.value.trim()
+  if (!text || text === initialPath) { close(); return true }
+  if (isDiskPath(text)) {
+    if (looksLikeFile(text)) {
+      const fileName = text.split(/[\\/]/).pop()!
+      void onSelectFile({ fullPath: text, fileName } as FileSearchResult)
+    } else {
+      void appNavigation.openFolderPicker(text)
+      close()
+    }
+    return true
+  }
+  const target = resolveCatalogPath(text, catalogRoot.value)
+  if (!target) return false
+  if (target.kind === 'book') {
+    onSelectCatalogBook(target.book.id, target.book.title)
+  } else {
+    pane.navigateToDestination('/books')
+    pane.updateActiveTab({ catalogCategoryId: target.node.id })
+    close()
+  }
+  return true
 }
 
 function launchFullTextSearch() {
@@ -406,6 +448,7 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
 // the dropdown right away — with an empty query it shows the tab list.
 nextTick(() => {
   inputRef.value?.focus()
+  inputRef.value?.select()
   computeAnchor()
   isDropdownOpen.value = true
 })
@@ -423,6 +466,7 @@ nextTick(() => {
       v-model="searchQuery"
       class="address-bar__field"
       type="search"
+      :dir="searchQuery ? 'auto' : 'rtl'"
       :placeholder="placeholder"
       autocomplete="off"
       @focus="onFocus"
