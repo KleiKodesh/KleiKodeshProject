@@ -12,5 +12,6 @@
   "endnote": "הערת סוף",
   "openAsPdf": "פתח כ-PDF (דרך Word)",
   "openAsPdfFailed": "הפתיחה כ-PDF נכשלה",
-  "indexBuildFailed": "רק חלק מהמסמך נטען. פתחו את הקובץ מחדש."
+  "indexBuildFailed": "רק חלק מהמסמך נטען. פתחו את הקובץ מחדש.",
+  "cancelOpenAsPdf": "ביטול ההמרה ל-PDF"
 }

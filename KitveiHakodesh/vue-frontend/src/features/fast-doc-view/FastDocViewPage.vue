@@ -15,7 +15,7 @@ import { useZoomHandler, zoomIn, zoomOut, ZOOM_CONFIG } from '@/composables/useZ
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { fastDocViewApi } from '@/webview-host/fastDocViewApi'
-import { restoreLocalFile } from '@/webview-host/bridge'
+import { cancelLocalFileConversion, restoreLocalFile } from '@/webview-host/bridge'
 import { useI18n } from 'vue-i18n'
 import { useFastDocViewDocument } from './useFastDocViewDocument'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
@@ -136,11 +136,15 @@ const { t } = useI18n()
 const openingAsPdf = ref(false)
 /** Only the Word family converts to PDF (Word itself does the conversion); not .txt. */
 const canOpenAsPdf = !!filePath && !filePath.toLowerCase().endsWith('.txt')
+/** Bumped by a cancel: the conversion that was running no longer opens or reports anything. */
+let openAsPdfGeneration = 0
 async function openAsPdf() {
   if (!filePath || openingAsPdf.value) return
   openingAsPdf.value = true
+  const generation = ++openAsPdfGeneration
   try {
     const restored = await restoreLocalFile(filePath)
+    if (generation !== openAsPdfGeneration) return
     if (!restored?.url) {
       window.alert(t('fastDocView.openAsPdfFailed'))
       return
@@ -154,8 +158,14 @@ async function openAsPdf() {
       isOtzariaAddin: false,
     })
   } finally {
-    openingAsPdf.value = false
+    if (generation === openAsPdfGeneration) openingAsPdf.value = false
   }
+}
+function cancelOpenAsPdf() {
+  if (!filePath || !openingAsPdf.value) return
+  openAsPdfGeneration++
+  openingAsPdf.value = false
+  cancelLocalFileConversion(filePath)
 }
 
 const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.value.start, renderedRange.value.end))
@@ -176,6 +186,7 @@ const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.valu
       :opening-as-pdf="openingAsPdf"
       :can-open-as-pdf="canOpenAsPdf"
       @open-as-pdf="openAsPdf"
+      @cancel-open-as-pdf="cancelOpenAsPdf"
     />
     <div class="fast-doc-view-body">
       <SidePanel
