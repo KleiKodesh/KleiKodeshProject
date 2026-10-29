@@ -591,7 +591,7 @@ function getSideEditionOutlineTarget(): string | undefined {
             </template>
 
             <div class="side-lines">
-              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value" class="book-view-commentary-split">
+              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value">
                 <template #top>
                   <BookViewLinesContent
                     v-if="scrollStateReady"
@@ -864,12 +864,4 @@ function getSideEditionOutlineTarget(): string | undefined {
    band (::before), and a visible line (::after) that thickens and takes the accent
    colour only while hovered or dragged. The element is 1px and transparent so the
    ::after can grow without shifting the layout. */
-/* The bottom commentary separator: the sash's own line plus a soft shadow cast onto the book text. */
-.book-view-commentary-split > :deep(.sash-h)::after {
-  box-shadow: 0 -2px 6px var(--commentary-separator-shadow);
-  z-index: 1;
-}
-.book-view {
-  --commentary-separator-shadow: color-mix(in srgb, var(--text-primary) 14%, transparent);
-}
 </style>
