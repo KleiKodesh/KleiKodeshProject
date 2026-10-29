@@ -36,9 +36,11 @@ public sealed class Dispatcher(
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
-    /// <summary>One id per process: a DB-path change restarts the service and the page waits
-    /// until a reply carries a DIFFERENT id before it reloads (see DbPathResult.InstanceId).</summary>
-    private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+    /// <summary>One id per DATA HOST (one per Dispatcher): a DB-path or library change rebuilds
+    /// the data host - in the same process when the service stays up - and the page waits until
+    /// a reply carries a DIFFERENT id before it reloads (see DbPathResult.InstanceId, and
+    /// PongResult.Instance, which tells a caller "the old host" from "the rebuilt one").</summary>
+    private readonly string InstanceId = Guid.NewGuid().ToString("N");
 
     /// <summary>Ops a host sends on a timer or to poll state, not because the user did
     /// something. They never touch the idle clock (see DispatchAsync).</summary>
@@ -78,7 +80,9 @@ public sealed class Dispatcher(
             switch (req.Op)
             {
                 case "ping":
-                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+                    // Instance: which data host answered. A reload (library change) builds a new
+                    // one, so a caller can tell "the old one" from "the rebuilt one".
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult { Instance = InstanceId }));
 
                 // The loopback HTTP host's port AND bearer token, handed to the spawner over
                 // this PRIVATE pipe (never a file). Awaits the bind so an early call doesn't
@@ -466,6 +470,94 @@ public sealed class Dispatcher(
                     {
                         InstanceId = InstanceId,
                         Path = p ?? "", IsCustom = false, Exists = p is not null, Restarting = true,
+                    }));
+                }
+
+                // Extra seforim-shaped libraries ATTACHed alongside the primary database (see
+                // KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries). Unlike the primary
+                // path above, there is no "custom vs default" distinction — every entry here is
+                // the user's own choice.
+                case "getAdditionalSeforimLibraries":
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                    }));
+
+                // Dev-mode native open-file dialog for an additional library, then persist —
+                // the dev equivalent of the hosted app's own native picker action, exactly like
+                // pickSeforimDbPath is to the primary path's picker above. Reuses the SAME file
+                // filter/title; the difference from pickSeforimDbPath is entirely in what happens
+                // to the chosen path afterwards (added to the list, not switched to).
+                case "pickAdditionalSeforimLibrary":
+                {
+                    string? picked = await NativeFilePicker.PickAsync(
+                        NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle);
+                    if (picked is null)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Cancelled = true,
+                        }));
+
+                    SeforimDbAdditionalLibraries.AddOutcome pickerOutcome;
+                    try { pickerOutcome = SeforimDbLocator.AddAdditionalLibrary(picked); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "pickAdditionalSeforimLibrary"); }
+                    if (pickerOutcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = AdditionalLibraryErrorMessage(pickerOutcome),
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
+                    }));
+                }
+
+                case "addAdditionalSeforimLibrary":
+                {
+                    var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
+                    string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
+                    SeforimDbAdditionalLibraries.AddOutcome outcome;
+                    try { outcome = SeforimDbLocator.AddAdditionalLibrary(p); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "addAdditionalSeforimLibrary"); }
+                    if (outcome != SeforimDbAdditionalLibraries.AddOutcome.Added)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = AdditionalLibraryErrorMessage(outcome),
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
+                    }));
+                }
+
+                case "removeAdditionalSeforimLibrary":
+                {
+                    var a = MsgPack.De<AdditionalLibraryArgs>(req.Args);
+                    string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
+                    bool removed;
+                    try { removed = SeforimDbLocator.RemoveAdditionalLibrary(p); }
+                    catch (Exception ex) { return AdditionalLibrariesFailure(ex, "removeAdditionalSeforimLibrary"); }
+                    if (!removed)
+                        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                        {
+                            Libraries = seforim.GetAdditionalLibraries(),
+                            Error = "not configured",
+                        }));
+
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+                    {
+                        Libraries = seforim.GetAdditionalLibraries(),
+                        Restarting = true,
                     }));
                 }
 
@@ -1064,7 +1156,9 @@ public sealed class Dispatcher(
             // If the stop request itself fails, the service keeps running against the OLD db path
             // while the frontend has already been told Restarting=true - so it must be logged, not
             // swallowed into an unobserved task fault.
-            try { lifetime.StopApplication(); }
+            // Installed service: only the data host stops and is rebuilt in-process (the service
+            // itself keeps running - see DataHostReload). Console instance: the process exits.
+            try { KitveiHakodeshService.Hosting.DataHostReload.RequestAndStop(lifetime); }
             catch (Exception ex) { logger.LogError(ex, "restart after DB path change failed"); }
         });
 
@@ -1077,6 +1171,37 @@ public sealed class Dispatcher(
                 logger.LogInformation("Copied user settings {Source} -> {Destination}", source, destination),
             onCarryOverFailed: ex =>
                 logger.LogWarning(ex, "Could not carry user settings over to the new library"));
+
+    /// <summary>A failed additional-library write is answered as a normal result carrying the
+    /// error (no restart is scheduled), never as a dropped connection the page waits on forever.</summary>
+    private byte[] AdditionalLibrariesFailure(Exception ex, string op)
+    {
+        logger.LogError(ex, "{Op} failed", op);
+        return RpcResponse.Ok(MsgPack.Ser(new AdditionalLibrariesResult
+        {
+            Libraries = SafeAdditionalLibraries(),
+            Error = "could not save the setting: " + ex.Message,
+        }));
+    }
+
+    private List<AdditionalLibraryRow> SafeAdditionalLibraries()
+    {
+        try { return seforim.GetAdditionalLibraries(); }
+        catch (Exception ex) { logger.LogError(ex, "listing additional libraries failed"); return new(); }
+    }
+
+    /// <summary>A stable, English, machine-readable reason string for an additional-library
+    /// op's <see cref="AdditionalLibrariesResult.Error"/> — the settings page maps this to its
+    /// own (Hebrew) wording, same convention as every other error string in this dispatcher.</summary>
+    private static string AdditionalLibraryErrorMessage(SeforimDbAdditionalLibraries.AddOutcome outcome) => outcome switch
+    {
+        SeforimDbAdditionalLibraries.AddOutcome.EmptyPath => "empty path",
+        SeforimDbAdditionalLibraries.AddOutcome.InvalidCharacters => "path contains ';' or '|'",
+        SeforimDbAdditionalLibraries.AddOutcome.AlreadyConfigured => "already configured",
+        SeforimDbAdditionalLibraries.AddOutcome.SlotsExhausted => "no more library slots available",
+        SeforimDbAdditionalLibraries.AddOutcome.SaveFailed => "could not save the setting (registry write failed)",
+        _ => "could not add library",
+    };
 
     private static UpdateStatusResult ReadUpdateStatus()
     {

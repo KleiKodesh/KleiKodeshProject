@@ -54,6 +54,7 @@ namespace KitveiHakodeshLib
                         // The page's "try again" after the service was unavailable: allow one more
                         // install / repair prompt and bring the service up.
                         case "retryService": await HandleRetryService(id); break;
+                        case "startService": await HandleStartService(id); break;
                         // The settings page's "install the service" row (shown while a console
                         // copy serves instead of the Windows service).
                         case "getServiceStatus":
@@ -194,6 +195,24 @@ namespace KitveiHakodeshLib
 
                 hostForm.FormBorderStyle = FormBorderStyle.None;
                 hostForm.WindowState = FormWindowState.Maximized;
+            }
+        }
+
+        /// <summary>
+        /// Starts the service WITHOUT any prompt (the settings dialog calls it when the service
+        /// did not come back after a library change). Unlike retryService it never elevates.
+        /// </summary>
+        private async Task HandleStartService(string id)
+        {
+            KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher.ForgetRecentStartFailure();
+            try
+            {
+                await Task.Run(() => _serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false));
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)
+            {
+                _bridge.Reply(id, new { ok = false, reason = ex.Reason.ToString(), detail = ex.Message });
             }
         }
 

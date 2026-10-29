@@ -10,8 +10,8 @@
   "copyIntoWord": "Copy into Word",
   "copyCleanText": "Copy clean text",
   "service": {
-    "notRunningTitle": "The Kitvei Hakodesh service is not responding",
-    "notRunningBody": "Books and search are unavailable right now. The service may be restarting - please click \"Try again\".",
+    "notRunningTitle": "The Kitvei Hakodesh service is restarting",
+    "notRunningBody": "Books and search are unavailable right now because the service is restarting or the index is being built. Please wait about half a minute and click \"Try again\".",
     "notInstalledTitle": "The Kitvei Hakodesh service is not installed",
     "notInstalledBody": "Books and search need this service, and it is not installed on this computer. You can install it now: clicking \"Install service\" installs it, and Windows will ask for administrator approval.",
     "installDeclinedTitle": "Service installation was not approved",

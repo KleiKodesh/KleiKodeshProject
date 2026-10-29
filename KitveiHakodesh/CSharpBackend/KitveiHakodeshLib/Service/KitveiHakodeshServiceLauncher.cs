@@ -66,6 +66,10 @@ namespace KitveiHakodeshLib.Service
             _pipeName = !string.IsNullOrEmpty(pipeName) ? pipeName : KitveiHakodeshServicePipeChannel.ResolvePipeName();
         }
 
+        /// <summary>Forgets that a start failed a moment ago, so the next call really tries
+        /// again (the dialog's own retry after a restart) - without allowing an elevation prompt.</summary>
+        public static void ForgetRecentStartFailure() => _lastStartFailureUtc = DateTime.MinValue;
+
         /// <summary>Lets the next failure ask for elevation again (the user pressed "try again").</summary>
         public static void AllowAnotherRepairAttempt()
         {
@@ -267,13 +271,33 @@ namespace KitveiHakodeshLib.Service
                         controller.Refresh();
                         ServiceControllerStatus status = controller.Status;
                         if (status == ServiceControllerStatus.Running) return true;
-                        if (status == ServiceControllerStatus.Stopped) controller.Start();
+                        if (status == ServiceControllerStatus.Stopped)
+                        {
+                            try { controller.Start(); }
+                            catch (Exception ex) when (IsTransientStartFailure(ex))
+                            {
+                                // "An instance of the service is already running" / "cannot accept
+                                // control messages at this time": the service is on its way up or
+                                // down. Not a refusal - look again instead of giving up at once.
+                                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
                         await Task.Delay(150, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is Win32Exception) { }
             return false;
+        }
+
+        // ERROR_SERVICE_ALREADY_RUNNING, ERROR_SERVICE_CANNOT_ACCEPT_CTRL, ERROR_SERVICE_DATABASE_LOCKED,
+        // ERROR_SERVICE_NOT_ACTIVE, ERROR_SERVICE_REQUEST_TIMEOUT.
+        private static bool IsTransientStartFailure(Exception ex)
+        {
+            Win32Exception win32 = ex as Win32Exception ?? ex.InnerException as Win32Exception;
+            if (win32 == null) return false;
+            int code = win32.NativeErrorCode;
+            return code == 1056 || code == 1061 || code == 1055 || code == 1062 || code == 1053;
         }
 
         private static bool IsInstalledServiceRunning()

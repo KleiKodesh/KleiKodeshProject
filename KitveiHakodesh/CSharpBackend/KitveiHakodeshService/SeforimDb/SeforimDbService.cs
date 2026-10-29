@@ -1,4 +1,11 @@
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
+using KitveiHakodeshService.Ipc;
+// Alias, not a plain `using KitveiHakodesh.Core.Settings`: this file's own namespace chain
+// (KitveiHakodeshService.KitveiHakodesh.*) already binds the simple name "KitveiHakodesh" to
+// itself, which would shadow the global root namespace of the same name at any unqualified
+// use below.
+using CoreSettings = KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodeshService.SeforimDb;
 
@@ -24,6 +31,59 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     /// <summary>Whether there is a database to read — false when the user has chosen none, or
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
+
+    /// <summary>Every additional library CONFIGURED (not just the ones live right now) with its
+    /// current status, for a settings page. <see cref="AdditionalLibraryRow.Attached"/> true
+    /// means Core actually ATTACHes it on the live connection today — see
+    /// <see cref="SeforimDbQueries.AttachedLibraries"/>.</summary>
+    public List<AdditionalLibraryRow> GetAdditionalLibraries()
+    {
+        var attached = _queries.AttachedLibraries;
+        var rows = new List<AdditionalLibraryRow>();
+        foreach (var status in SeforimDbAttachedLibraries.ResolveWithStatus(
+                     CoreSettings.SeforimDbAdditionalLibraries.GetAllEntriesRaw()))
+        {
+            string path = status.Entry.Path;
+            SeforimDbAttachedLibraries.Library? live = null;
+            foreach (var library in attached)
+            {
+                if (string.Equals(library.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    live = library;
+                    break;
+                }
+            }
+
+            // "Attached" must mean "its text can actually be read", not just "its tables exist":
+            // a library whose line text cannot be decoded is reported as not attached, with the
+            // reason, instead of looking healthy while every read of it fails.
+            string? reason = status.Rejection;
+            if (reason is null) reason = SeforimDbAttachedLibraries.CheckTextReadable(path);
+            if (reason is null && live is null) reason = "not loaded yet (restart pending)";
+            // Readable at the first row, but the full-text index read it end to end and found it
+            // damaged (a bad page in the middle, a truncated tail): searching skips it, say so.
+            if (reason is null && SeforimDbFtsLibraryHealth.TrySkipReason(path) is { } damaged)
+                reason = "full-text search skipped, library is damaged: " + damaged;
+            if (reason is not null)
+                logger.LogWarning("Additional library {Path} is not attached: {Reason}", path, reason);
+
+            rows.Add(new AdditionalLibraryRow
+            {
+                Path = path,
+                Exists = FileExists(path),
+                Attached = reason is null,
+                Label = live?.Label ?? System.IO.Path.GetFileNameWithoutExtension(path),
+                Reason = reason,
+            });
+        }
+        return rows;
+    }
+
+    private static bool FileExists(string path)
+    {
+        try { return System.IO.File.Exists(path); }
+        catch { return false; }
+    }
 
     public enum ReadState { Readable, Busy, Unreadable }
 

@@ -17,6 +17,17 @@ internal partial class KhsMsgPackResolver;
 
 internal static class MsgPack
 {
+    /// <summary>The source-generated resolvers, and nothing behind them. Kept apart from
+    /// <see cref="Options"/> so the tests can serialize through exactly the formatters native AOT
+    /// has (see SerializationVerify) instead of through StandardResolver's reflection fallback.</summary>
+    /// <remarks>Two resolvers, because MessagePack's generator only sees the assembly it runs in:
+    /// the Service's covers the Service DTOs, Core's covers Core's models (CatalogTocSearchResult,
+    /// every *Row, ...) which are the wire types themselves. Without Core's, the formatter for a
+    /// Core type is not registered anywhere the service can see, MessagePack falls back to
+    /// reflection and native AOT answers "Failed to serialize ... value" (catalogTocSearch).</remarks>
+    public static readonly IFormatterResolver Generated =
+        CompositeResolver.Create(KhsMsgPackResolver.Instance, global::KitveiHakodesh.Core.CoreMessagePackResolver.Instance);
+
     public static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithResolver(
             CompositeResolver.Create(KhsMsgPackResolver.Instance, global::KitveiHakodesh.Core.CoreMessagePackResolver.Instance, StandardResolver.Instance));
@@ -45,7 +56,7 @@ public sealed class RpcEnvelope
 }
 
 // ── Tiny status-flag result DTOs (preserve the current response shapes) ──────────
-[MessagePackObject(keyAsPropertyName: true)] public sealed class PongResult { public bool Pong { get; set; } = true; }
+[MessagePackObject(keyAsPropertyName: true)] public sealed class PongResult { public bool Pong { get; set; } = true; public string? Instance { get; set; } }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class ShuttingDownResult { public bool ShuttingDown { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class StartedResult { public bool Started { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class ResetResult { public bool Reset { get; set; } = true; }

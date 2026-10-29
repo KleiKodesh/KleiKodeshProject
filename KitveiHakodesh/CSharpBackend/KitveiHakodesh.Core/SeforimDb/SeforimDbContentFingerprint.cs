@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Common;
@@ -87,6 +88,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// </summary>
         public static string? DescribeChange(string? recorded, string current)
         {
+            if (recorded != null) current = Reconcile(recorded, current);
             if (string.Equals(recorded, current, StringComparison.OrdinalIgnoreCase)) return null;
             if (recorded == null) return "the existing index has no provenance stamp";
             if (IsLegacy(recorded)) return "the existing index has a pre-" + FormatTag + " stamp";
@@ -116,6 +118,131 @@ namespace KitveiHakodesh.Core.SeforimDb
                 : "seforim DB content changed (" + string.Join(", ", changed) + ")";
 
             static string KeyOf(string part) { int eq = part.IndexOf('='); return eq < 0 ? part : part.Substring(0, eq); }
+        }
+
+        /// <summary>The value an additional library contributes while it cannot be read right now.</summary>
+        private const string UnreadableTag = "unreadable|";
+        private const string LibrarySeparator = "||lib";
+
+        /// <summary>
+        /// True when <paramref name="current"/> is the same set of sources as <paramref name="recorded"/>,
+        /// where an additional library that cannot be read right now counts as UNKNOWN rather than
+        /// as changed (see <see cref="Reconcile"/>). Use this, not string equality, to decide
+        /// whether an index may be kept.
+        /// </summary>
+        public static bool Matches(string? recorded, string current) =>
+            recorded != null
+            && string.Equals(recorded, Reconcile(recorded, current), StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// <paramref name="current"/> with every additional library that is unreadable RIGHT NOW
+        /// replaced by what <paramref name="recorded"/> says about it (or dropped when the
+        /// recorded stamp does not mention it). A temporary lock is not evidence that the library
+        /// changed: the primary's design is "keep what is there and check again later"
+        /// (<see cref="SeforimDbUnreadableException"/>), and a library lock must not wipe a good
+        /// index and rebuild it again once the lock lifts. The reverse direction still counts as a
+        /// change: a recorded "unreadable" against a readable library means the index was built
+        /// WITHOUT it, so it is rebuilt to cover it. A library the recorded stamp does not mention
+        /// and that is unreadable now is dropped: it cannot be indexed yet, and the index never
+        /// claimed it.
+        /// </summary>
+        public static string Reconcile(string recorded, string current)
+        {
+            if (current.IndexOf(UnreadableTag, StringComparison.Ordinal) < 0) return current;
+
+            string[] now = current.Split(new[] { LibrarySeparator }, StringSplitOptions.None);
+            if (now.Length == 1) return current;
+            var was = new Dictionary<string, string>(StringComparer.Ordinal);
+            string[] before = recorded.Split(new[] { LibrarySeparator }, StringSplitOptions.None);
+            for (int i = 1; i < before.Length; i++)
+            {
+                int eq = before[i].IndexOf('=');
+                if (eq > 0) was[before[i].Substring(0, eq)] = before[i].Substring(eq + 1);
+            }
+
+            var sb = new System.Text.StringBuilder(now[0]);
+            for (int i = 1; i < now.Length; i++)
+            {
+                int eq = now[i].IndexOf('=');
+                string key = eq > 0 ? now[i].Substring(0, eq) : now[i];
+                string value = eq > 0 ? now[i].Substring(eq + 1) : "";
+                if (value.StartsWith(UnreadableTag, StringComparison.Ordinal))
+                {
+                    if (!was.TryGetValue(key, out var recordedValue)) continue;
+                    value = recordedValue;
+                }
+                sb.Append(LibrarySeparator).Append(key).Append('=').Append(value);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Fingerprints <paramref name="primaryPath"/> PLUS every additional library ATTACHed
+        /// alongside it (see <see cref="SeforimDbAttachedLibraries"/>), so an index built over
+        /// several sources rebuilds when ANY of them changes -- not just the primary database.
+        ///
+        /// Also changes whenever the SET of additional libraries changes (one added, removed, or
+        /// swapped for a different path at the same slot): each library's stamp is prefixed with
+        /// its persisted id-space index, so adding/removing one shifts the whole combined value
+        /// even if every individual file's content fingerprint is unchanged. That is
+        /// deliberate -- a changed library set changes what the index must cover, and the
+        /// service/hosted-app restart this feature already requires on add/remove (see
+        /// SeforimDbAdditionalLibraries' remarks) means the next build simply redoes the whole
+        /// thing from scratch, exactly like a changed primary database does today.
+        ///
+        /// Libraries are folded in by their PERSISTED index, sorted ascending, so the combined
+        /// stamp does not depend on the order <paramref name="additionalLibraries"/> happens to
+        /// be enumerated in.
+        /// </summary>
+        public static string ComputeAll(
+            string primaryPath,
+            IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries,
+            string prefix = "")
+        {
+            string combined = Compute(primaryPath, prefix);
+            if (additionalLibraries is null || additionalLibraries.Count == 0) return combined;
+
+            var ordered = new List<SeforimDbAttachedLibraries.Library>(additionalLibraries);
+            ordered.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+            var sb = new System.Text.StringBuilder(combined);
+            foreach (var library in ordered)
+                sb.Append("||lib").Append(library.Index).Append('=').Append(ComputeAdditional(library.Path));
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// An ADDITIONAL library's part of the combined stamp. Unlike the primary database, a
+        /// library that cannot be read right now (corrupt, not a database, locked) must never
+        /// make the whole stamp - and with it the primary's index - unavailable: it contributes
+        /// a stable "unreadable" value keyed on its size instead. Comparisons go through
+        /// <see cref="Matches"/>/<see cref="Reconcile"/>, which read that value as "unknown" (a
+        /// temporary lock must not wipe a good index) - while an index recorded as built WITHOUT
+        /// the library is rebuilt once it can be read - and the primary's own unreadability
+        /// still surfaces from <see cref="Compute"/>.
+        /// </summary>
+        private static string ComputeAdditional(string libraryPath)
+        {
+            try
+            {
+                string stamp = Compute(libraryPath);
+                // A library whose line / TOC ids are translated (SeforimDbIdMap) hands out ids that are
+                // POSITIONS in its layout: adding or removing a book in the middle shifts every later id
+                // while min / max / count may stay the same. The layout's signature goes into the stamp so
+                // an index built over the old layout is never trusted for the new one.
+                SeforimDbAttachedLibraries.Rejection(libraryPath);
+                var lineMap = SeforimDbAttachedLibraries.LineMapFor(libraryPath);
+                var tocMap = SeforimDbAttachedLibraries.TocMapFor(libraryPath);
+                if (lineMap is not null || tocMap is not null)
+                    stamp += "|ids=" + (lineMap?.Signature() ?? "-") + "," + (tocMap?.Signature() ?? "-");
+                return stamp;
+            }
+            catch (SeforimDbUnreadableException)
+            {
+                long length = -1;
+                try { length = new FileInfo(libraryPath).Length; } catch { /* size unknown: still stable */ }
+                return UnreadableTag + "len=" + length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         /// <summary>

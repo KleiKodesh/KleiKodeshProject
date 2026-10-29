@@ -25,9 +25,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         private const string CategorySiblingOrder = "CASE WHEN orderIndex < 0 THEN 1 ELSE 0 END, orderIndex";
 
         /// <summary>All categories flat — the frontend builds the tree in memory once.</summary>
-        public static string GetAllCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title, level FROM category ORDER BY level, " + CategorySiblingOrder
-            : "SELECT id, parentId, title, level FROM category ORDER BY level";
+        public static string GetAllCategories(bool hasOrderIndex) => GetAllCategories(hasOrderIndex, "main");
+
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>. <paramref name="schema"/> is "main" or one
+        /// of the "lib{N}" aliases.</summary>
+        public static string GetAllCategories(bool hasOrderIndex, string schema) => hasOrderIndex
+            ? $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level, " + CategorySiblingOrder
+            : $"SELECT id, parentId, title, level FROM {schema}.category ORDER BY level";
 
         // ── Books ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +46,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY b.id
             ORDER BY b.orderIndex";
 
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
+        public static string GetAllBooksIn(string schema, bool hasTeamim = true) => $@"
+            SELECT b.id, b.categoryId, b.title, {(hasTeamim ? "b.hasTeamim" : "NULL")},
+                   group_concat(a.name, ', ') AS authors
+            FROM {schema}.book b
+            LEFT JOIN {schema}.book_author ba ON ba.bookId = b.id
+            LEFT JOIN {schema}.author a ON a.id = ba.authorId
+            GROUP BY b.id
+            ORDER BY b.orderIndex";
+
         /// <summary>Single book by id — totalLines for virtual-scroll init + has* flags for the toolbar.</summary>
         public const string GetBookById = @"
             SELECT totalLines, hasTeamim,
@@ -48,6 +64,21 @@ namespace KitveiHakodesh.Core.SeforimDb
                    hasCommentaryConnection, hasOtherConnection
             FROM book
             WHERE id = @id";
+
+        /// <summary>Same query against an ATTACHed library's schema — see
+        /// <see cref="SeforimDbAttachedLibraries"/>.</summary>
+        public static string GetBookByIdIn(string schema, System.Func<string, bool>? hasColumn = null)
+        {
+            // A library built by another tool may lack the optional has* flags; those read as 0
+            // (flag off) rather than making the whole library unusable.
+            string Col(string name) => hasColumn is null || hasColumn(name) ? name : "0 AS " + name;
+            return $@"
+            SELECT totalLines, {Col("hasTeamim")},
+                   {Col("hasTargumConnection")}, {Col("hasReferenceConnection")}, {Col("hasSourceConnection")},
+                   {Col("hasCommentaryConnection")}, {Col("hasOtherConnection")}
+            FROM {schema}.book
+            WHERE id = @id";
+        }
 
         // ── Lines ─────────────────────────────────────────────────────────────────
 
@@ -77,12 +108,56 @@ namespace KitveiHakodesh.Core.SeforimDb
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";
 
+        /// <summary>
+        /// Same query against an ATTACHed library's schema, for the plain (non-split,
+        /// non-compressed) content shape only — the only shape additional libraries support
+        /// reading in this version, see <see cref="SeforimDbAttachedLibraries"/> and
+        /// <see cref="SeforimDbQueries.GetLinesPaged"/>. Callers must have already checked
+        /// <c>!schema.HasSplitLineContent</c>; there is no sidecar join here to qualify.
+        /// </summary>
+        public static string GetLinesPagedIn(string librarySchema) => $@"
+            SELECT l.id, l.lineIndex, l.content
+            FROM {librarySchema}.line l
+            WHERE l.bookId = @bookId
+            ORDER BY l.lineIndex
+            LIMIT @limit OFFSET @offset";
+
+        /// <summary>Shape-aware form of <see cref="GetLinesPagedIn(string)"/>: an attached library
+        /// in the split (line_content sidecar) shape joins ITS OWN sidecar, schema-qualified.
+        /// Compressed values are decoded by the caller's codec for that library.</summary>
+        public static string GetLinesPagedIn(string librarySchema, SeforimDbSchema shape) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId
+            ORDER BY l.lineIndex
+            LIMIT @limit OFFSET @offset";
         /// <summary>The lines of a book with lineIndex in [@from, @to] — a search scan reads them.</summary>
         public static string GetLinesInIndexRange(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
             FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
             WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
             ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLinesInIndexRange"/> on an attached library, with ITS OWN content shape.</summary>
+        public static string GetLinesInIndexRangeIn(string librarySchema, SeforimDbSchema shape) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLinesByIndexList"/> on an attached library, with ITS OWN content shape.</summary>
+        public static string GetLinesByIndexListIn(string librarySchema, SeforimDbSchema shape, string indexList) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLineIds"/> on an attached library's own table.</summary>
+        public static string GetLineIdsIn(string librarySchema) => $@"
+            SELECT lineIndex, id
+            FROM {librarySchema}.line
+            WHERE bookId = @bookId AND lineIndex >= @fromIndex AND lineIndex < @toIndex
+            ORDER BY lineIndex";
 
         /// <summary>The lines of a book whose lineIndex is in the list — a sparse scan reads them.</summary>
         public static string GetLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
@@ -131,6 +206,16 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE te.bookId = @bookId
             ORDER BY te.id";
 
+        /// <summary><see cref="GetAllTocEntries"/> on an attached library's own tables.</summary>
+        public static string GetAllTocEntriesIn(string librarySchema) => $@"
+            SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
+                   tt.text, l.lineIndex
+            FROM {librarySchema}.tocEntry te
+            JOIN {librarySchema}.tocText tt ON tt.id = te.textId
+            LEFT JOIN {librarySchema}.line l ON l.id = te.lineId
+            WHERE te.bookId = @bookId
+            ORDER BY te.id";
+
         /// <summary>All alt_toc structures for a book.</summary>
         public const string GetAltTocStructures = @"
             SELECT id, key, title, heTitle
@@ -154,6 +239,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             FROM tocEntry te
             JOIN tocText tt ON tt.id = te.textId
             LEFT JOIN line l ON l.id = te.lineId
+            WHERE te.bookId = @bookId
+              AND tt.text LIKE @pattern
+            ORDER BY te.id ASC
+            LIMIT 1";
+
+        /// <summary><see cref="GetTocEntryByTextPrefix"/> on an attached library's own tables.</summary>
+        public static string GetTocEntryByTextPrefixIn(string librarySchema) => $@"
+            SELECT te.id, l.lineIndex
+            FROM {librarySchema}.tocEntry te
+            JOIN {librarySchema}.tocText tt ON tt.id = te.textId
+            LEFT JOIN {librarySchema}.line l ON l.id = te.lineId
             WHERE te.bookId = @bookId
               AND tt.text LIKE @pattern
             ORDER BY te.id ASC
@@ -235,6 +331,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetLineContents(SeforimDbSchema schema, int count) =>
             $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
             $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
+            $" WHERE l.id IN ({InPlaceholders("p", count)})";
+
+        /// <summary>Same as <see cref="GetLineContents(SeforimDbSchema, int)"/>, against an ATTACHed
+        /// library's schema (its own sidecar, schema-qualified) - bind LOCAL line ids.</summary>
+        public static string GetLineContentsIn(string librarySchema, SeforimDbSchema schema, int count) =>
+            $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
+            $" FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(schema, "l", librarySchema)}" +
             $" WHERE l.id IN ({InPlaceholders("p", count)})";
 
         /// <summary>Word-level link anchors (link_anchor, SeforimLibrary schema v2+) for a batch of
@@ -517,9 +620,59 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
+        /// <summary>Same as <see cref="GetTocEntryForLines"/>, against an ATTACHed library's
+        /// schema (see <see cref="SeforimDbAttachedLibraries"/>) - bind LOCAL line ids; the caller
+        /// translates lineId/bookId/tocEntryId back to global ids on the way out.</summary>
+        public static string GetTocEntryForLinesIn(string schema, int count) => $@"
+            SELECT lt.lineId, te.bookId, lt.tocEntryId
+            FROM {schema}.line_toc lt
+            JOIN {schema}.tocEntry te ON te.id = lt.tocEntryId
+            WHERE lt.lineId IN ({InPlaceholders("p", count)})
+            ORDER BY lt.lineId, lt.tocEntryId";
+
+        /// <summary>Same as <see cref="GetTocPathsForTocEntries"/>, against an ATTACHed library's
+        /// schema - bind LOCAL toc entry ids.</summary>
+        public static string GetTocPathsForTocEntriesIn(string schema, int count) => $@"
+            WITH RECURSIVE ancestors(entryId, bookId, id, parentId, text, depth) AS (
+              SELECT te.id, te.bookId, te.id, te.parentId, tt.text, 0
+              FROM {schema}.tocEntry te
+              JOIN {schema}.tocText tt ON tt.id = te.textId
+              WHERE te.id IN ({InPlaceholders("e", count)})
+              UNION ALL
+              SELECT a.entryId, a.bookId, te.id, te.parentId, tt.text, a.depth + 1
+              FROM ancestors a
+              JOIN {schema}.tocEntry te ON te.id = a.parentId
+              JOIN {schema}.tocText tt ON tt.id = te.textId
+            ),
+            ordered AS (
+              SELECT a.entryId, a.text, a.depth,
+                     MAX(a.depth) OVER (PARTITION BY a.entryId) AS maxDepth,
+                     b.title AS bookTitle
+              FROM ancestors a
+              JOIN {schema}.book b ON b.id = a.bookId
+            )
+            SELECT entryId, group_concat(text, ' ') AS path
+            FROM (
+              SELECT entryId, text
+              FROM ordered
+              WHERE NOT (depth = maxDepth AND text = bookTitle)
+              ORDER BY entryId, depth DESC
+            )
+            GROUP BY entryId";
+
+        /// <summary>Same as <see cref="GetBookIdsForLines"/>, against an ATTACHed library's
+        /// schema — bind LOCAL line ids; the caller translates both columns back to global ids.</summary>
+        public static string GetBookIdsForLinesIn(string schema, int count) =>
+            $"SELECT id AS lineId, bookId FROM {schema}.line WHERE id IN ({InPlaceholders("p", count)})";
+
         /// <summary>lineIndex + bookId for a single line id (open book at position after FTS).</summary>
         public const string GetLineIndexFromLineId =
             "SELECT lineIndex, bookId FROM line WHERE id = @id LIMIT 1";
+
+        /// <summary>Same as <see cref="GetLineIndexFromLineId"/>, against an ATTACHed library's
+        /// schema — bind the LOCAL line id; the caller translates bookId back to global.</summary>
+        public static string GetLineIndexFromLineIdIn(string schema) =>
+            $"SELECT lineIndex, bookId FROM {schema}.line WHERE id = @id LIMIT 1";
 
         // ── Dictionary sources living in the seforim DB (מצודת ציון, מלבי״ם, מנחם, ערוך) ──
 
@@ -531,6 +684,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetLineByBookAndLineIndex(SeforimDbSchema schema) =>
             "SELECT l.id, l.lineIndex, " + C_ContentColumn(schema, "l")
             + " FROM line l" + C_ContentJoin(schema, "l")
+            + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
+
+        /// <summary><see cref="GetLineByBookAndLineIndex(SeforimDbSchema)"/> on an attached library, with ITS
+        /// OWN content shape (plain, split sidecar, compressed).</summary>
+        public static string GetLineByBookAndLineIndexIn(string librarySchema, SeforimDbSchema shape) =>
+            $"SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}"
+            + $" FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}"
             + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
 
         /// <summary>
@@ -814,21 +974,21 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// <summary>Same order the frontend loads categories in (level, then the sibling order
         /// above when the column exists) — the catalog tree-order computation depends on it.
         /// Distinct from GetAllCategories above: different SELECT list, different reader.</summary>
-        internal static string CatalogIndexCategories(bool hasOrderIndex) => hasOrderIndex
-            ? "SELECT id, parentId, title FROM category ORDER BY level, " + CategorySiblingOrder
-            : "SELECT id, parentId, title FROM category ORDER BY level";
+        internal static string CatalogIndexCategories(bool hasOrderIndex, string schema = "main") => hasOrderIndex
+            ? $"SELECT id, parentId, title FROM {schema}.category ORDER BY level, " + CategorySiblingOrder
+            : $"SELECT id, parentId, title FROM {schema}.category ORDER BY level";
 
         /// <summary>Distinct from GetAllBooks above: no hasTeamim, and the index consumes the
         /// columns positionally in this order. The last two columns feed the tree order
         /// (<see cref="SeforimDb.SeforimDbBookTreeOrder"/>): a library whose schema lacks them
         /// gets 0 / NULL, i.e. no base-text promotion.</summary>
-        internal static string CatalogIndexBooks(bool hasIsBaseBook, bool hasDependenceType) => $@"
+        internal static string CatalogIndexBooks(bool hasIsBaseBook, bool hasDependenceType, string schema = "main") => $@"
             SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors,
                    {(hasIsBaseBook ? "b.isBaseBook" : "0")} AS isBaseBook,
                    {(hasDependenceType ? "b.dependenceType" : "NULL")} AS dependenceType
-            FROM book b
-            LEFT JOIN book_author ba ON ba.bookId = b.id
-            LEFT JOIN author a ON a.id = ba.authorId
+            FROM {schema}.book b
+            LEFT JOIN {schema}.book_author ba ON ba.bookId = b.id
+            LEFT JOIN {schema}.author a ON a.id = ba.authorId
             GROUP BY b.id
             ORDER BY b.orderIndex";
 

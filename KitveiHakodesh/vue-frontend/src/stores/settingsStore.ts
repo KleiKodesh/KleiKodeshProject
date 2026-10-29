@@ -79,6 +79,7 @@ const KEYS = {
   SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2: 'app.hbEditionInSidePanel.pane2',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
+  SETTINGS_SHOW_LIBRARY_BADGE: 'books.showLibraryBadge',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
@@ -242,6 +243,8 @@ const DEFAULTS = {
   navSidebarVisible: hasNativeChromeTabs,
   showRecentlyOpened: true,
   showFrequentFolders: true,
+  // The small "which additional library is this from" tag on catalog cards.
+  showLibraryBadge: true,
 }
 
 /**
@@ -377,6 +380,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
+  const showLibraryBadge = ref(DEFAULTS.showLibraryBadge)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
   const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
@@ -543,6 +547,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
+    loadSetting(KEYS.SETTINGS_SHOW_LIBRARY_BADGE, showLibraryBadge)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
     const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
@@ -629,6 +634,7 @@ export const useSettingsStore = defineStore('settings', () => {
   )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
+  persistSetting(showLibraryBadge, KEYS.SETTINGS_SHOW_LIBRARY_BADGE)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
@@ -797,6 +803,7 @@ export const useSettingsStore = defineStore('settings', () => {
     hbEditionInSidePanelByPane.value = { 1: true, 2: true }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
+    showLibraryBadge.value = DEFAULTS.showLibraryBadge
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
@@ -837,6 +844,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setHbEditionInSidePanel,
     showRecentlyOpened,
     showFrequentFolders,
+    showLibraryBadge,
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,

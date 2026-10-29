@@ -7,6 +7,7 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
+import { libraryBadgeText } from './catalogCardLines'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -25,9 +26,25 @@ function getTitle(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : item.book.title
 }
 
+/**
+ * Set when this item came from an additional (attached) library rather than
+ * the main one. Tiles have no secondary text line (only an icon + short
+ * label), so the tooltip is the only surface left to carry this — without it
+ * a same-named folder/book from an attached library is indistinguishable
+ * from the main library's, and the user clicks the wrong one.
+ */
+function getLibraryLabel(item: FsItem): string | null | undefined {
+  return item.kind === 'folder' ? item.node.libraryLabel : item.book.libraryLabel
+}
+
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
+  const label = getLibraryLabel(item)
+  const title = getTitle(item)
+  const badge = libraryBadgeText(label)
+  const titledTooltip = badge ? `${title}
+ספרייה נוספת: ${badge}` : title
+  return item.kind === 'folder' ? titledTooltip : withNewTabHint(titledTooltip, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
 

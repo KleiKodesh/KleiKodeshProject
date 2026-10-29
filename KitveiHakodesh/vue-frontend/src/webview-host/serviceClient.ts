@@ -207,12 +207,47 @@ export async function serviceCall<T = unknown>(
   op: string,
   args: object = {},
   signal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<T> {
+  // `timeoutMs` bounds the WHOLE call, retry ladder and body read included. Without it a
+  // service that accepts the connection and never answers (or restarts mid-request) leaves
+  // the caller - and any "loading" state hanging off it - pending forever.
+  const { signal: effectiveSignal, dispose } = withCallTimeout(op, signal, timeoutMs)
   serviceCallStarted()
   try {
-    return await serviceCallCore<T>(op, args, signal)
+    return await serviceCallCore<T>(op, args, effectiveSignal)
   } finally {
+    dispose()
     serviceCallEnded()
+  }
+}
+
+/** Thrown by a call that exceeded its `timeoutMs`. */
+export class ServiceCallTimeoutError extends Error {
+  constructor(public readonly op: string, public readonly timeoutMs: number) {
+    super(`service '${op}' did not answer within ${Math.round(timeoutMs / 1000)}s`)
+    this.name = 'ServiceCallTimeoutError'
+  }
+}
+
+/** The caller's signal, additionally aborted (with a ServiceCallTimeoutError) after `timeoutMs`. */
+function withCallTimeout(
+  op: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+): { signal: AbortSignal | undefined; dispose: () => void } {
+  if (!timeoutMs || timeoutMs <= 0) return { signal, dispose: () => {} }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new ServiceCallTimeoutError(op, timeoutMs)), timeoutMs)
+  const onCallerAbort = () => controller.abort(signal?.reason ?? new Error('aborted'))
+  if (signal?.aborted) onCallerAbort()
+  else signal?.addEventListener('abort', onCallerAbort, { once: true })
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onCallerAbort)
+    },
   }
 }
 

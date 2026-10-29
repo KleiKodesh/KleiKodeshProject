@@ -43,16 +43,20 @@ namespace KitveiHakodesh.Core.SeforimDb
         public readonly record struct BookInput(int Id, int CategoryId, string Title, bool IsBaseBook, bool IsDependent);
 
         /// <summary>bookId → tree order (0-based), read from the database.</summary>
-        public static Dictionary<int, int> Load(SqliteConnection connection)
+        public static Dictionary<int, int> Load(SqliteConnection connection) => Load(connection, "main");
+
+        /// <summary>Same, for one ATTACHed library's schema (see <see cref="SeforimDbAttachedLibraries"/>):
+        /// the ids are that library's LOCAL ids and the order is 0-based within the library.</summary>
+        public static Dictionary<int, int> Load(SqliteConnection connection, string schema)
         {
-            bool hasOrderIndex = SeforimDbSchema.ColumnExists(connection, "category", "orderIndex");
-            bool hasIsBaseBook = SeforimDbSchema.ColumnExists(connection, "book", "isBaseBook");
-            bool hasDependenceType = SeforimDbSchema.ColumnExists(connection, "book", "dependenceType");
+            bool hasOrderIndex = SeforimDbSchema.ColumnExists(connection, "category", "orderIndex", schema);
+            bool hasIsBaseBook = SeforimDbSchema.ColumnExists(connection, "book", "isBaseBook", schema);
+            bool hasDependenceType = SeforimDbSchema.ColumnExists(connection, "book", "dependenceType", schema);
 
             var categories = new List<CategoryInput>();
             using (var cmd = connection.CreateCommand())
             {
-                cmd.CommandText = SeforimDbSqlStrings.CatalogIndexCategories(hasOrderIndex);
+                cmd.CommandText = SeforimDbSqlStrings.CatalogIndexCategories(hasOrderIndex, schema);
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
                     categories.Add(new CategoryInput(r.GetInt32(0), r.IsDBNull(1) ? null : r.GetInt32(1), r.IsDBNull(2) ? "" : r.GetString(2)));
@@ -61,7 +65,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             var books = new List<BookInput>();
             using (var cmd = connection.CreateCommand())
             {
-                cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBooks(hasIsBaseBook, hasDependenceType);
+                cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBooks(hasIsBaseBook, hasDependenceType, schema);
                 using var r = cmd.ExecuteReader();
                 while (r.Read()) books.Add(ReadBookInput(r));
             }

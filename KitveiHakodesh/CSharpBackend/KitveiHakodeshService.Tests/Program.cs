@@ -29,6 +29,8 @@ bool benchMode = false;
 bool watcherMode = false;
 bool variantMode = false;
 bool abbrevMode = false;
+bool multiLibMode = false;
+bool multiLibIndexMode = false;
 var ktivSimQueries = new List<string>();
 bool treeOrderSelfTest = false;
 bool expanderSelfTest = false;
@@ -50,6 +52,8 @@ for (int i = 0; i < args.Length; i++)
         case "--watcher": watcherMode = true; break;
         case "--variant": variantMode = true; break;
         case "--abbrev": abbrevMode = true; break;
+        case "--multilib": multiLibMode = true; break;
+        case "--multilibindex": multiLibIndexMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
         case "--expander-selftest": expanderSelfTest = true; break;
@@ -80,11 +84,28 @@ if (watcherMode)
 if (expanderSelfTest)
     return RelatedFormExpanderCheck.SelfTest() == 0 ? 0 : 1;
 if (treeOrderSelfTest)
-    return TreeOrderCheck.SelfTest() == 0 ? 0 : 1;
+    return TreeOrderCheck.SelfTest() + DafBareCheck.SelfTest() == 0 ? 0 : 1;
 if (variantMode)
     // Normalised to 0/1 like the line above: Run() returns a failure COUNT, and an
     // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
     return VariantVerify.Run() == 0 ? 0 : 1;
+if (multiLibMode)
+{
+    // Its Add()/Remove() concurrency block used to run against the REAL HKCU registry (with a
+    // backup/restore). An in-memory store makes it never touch a real user's settings.
+    KitveiHakodesh.Core.Settings.AppSettingsRegistry.InMemoryStore = new();
+    return MultiLibraryVerify.Run() == 0 ? 0 : 1;
+}
+if (args.Contains("--reload")) return ReloadVerify.Run() == 0 ? 0 : 1;
+if (args.Contains("--serialization")) return SerializationVerify.Run() == 0 ? 0 : 1;
+if (args.Contains("--personalshape")) return PersonalLibraryShapeVerify.Run() == 0 ? 0 : 1;
+if (Array.IndexOf(args, "--bigids-real") is int bigRealAt and >= 0 && bigRealAt + 1 < args.Length)
+    return BigLineIdRealVerify.Run(args[bigRealAt + 1]) == 0 ? 0 : 1;
+if (args.Contains("--bigids")) return BigLineIdVerify.Run() == 0 ? 0 : 1;
+if (args.Contains("--catalogcoverage")) return CatalogCoverageVerify.Run() == 0 ? 0 : 1;
+if (args.Contains("--hardening")) return HardeningVerify.Run() == 0 ? 0 : 1;
+if (multiLibIndexMode)
+    return MultiLibraryIndexVerify.Run() == 0 ? 0 : 1;
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))

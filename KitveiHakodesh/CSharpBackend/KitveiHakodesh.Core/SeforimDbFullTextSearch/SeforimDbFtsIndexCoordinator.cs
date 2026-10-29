@@ -3,9 +3,11 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.Settings;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
@@ -42,6 +44,23 @@ public sealed class SeforimDbFtsIndexCoordinator
     private readonly Action<FtsIndexLogLevel, string, Exception?> _log;
     /// <summary>The related-form query rewrite ('+' inflections, '=' synonyms). Null = queries pass through.</summary>
     private readonly SeforimDbFtsRelatedFormExpander? _expander;
+    /// <summary>Every additional library to fold into the index/search alongside the primary
+    /// database, resolved ONCE at construction — see <see cref="SeforimDbAttachedLibraries.Resolve"/>
+    /// and <see cref="CompositeFtsCorpus"/>. Matches the primary database's own "resolved once,
+    /// a restart re-resolves" lifetime (see the class remarks): the RPC flow that adds/removes an
+    /// additional library already restarts the service, so re-resolving here per-call would only
+    /// ever observe the SAME value a restart already refreshes.</summary>
+    private volatile IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
+
+    /// <summary>Every additional library that passed the cheap attach probe. <see cref="_additionalLibraries"/>
+    /// starts equal to this and is narrowed to the libraries that can be read END TO END before an
+    /// index is built (see <see cref="ValidateLibraries"/>): one damaged library must never fail,
+    /// or disable, the index of the primary library and of the healthy ones.</summary>
+    private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _allLibraries;
+
+    /// <summary>True once the libraries in <see cref="_additionalLibraries"/> are known good — either
+    /// read in full this process, or recorded in the stamp of an index an earlier build produced.</summary>
+    private volatile bool _librariesValidated;
 
     /// <param name="databasePath">The seforim DB to index and search; null when none was found.</param>
     /// <param name="indexPath">Where the index lives.</param>
@@ -50,16 +69,24 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <param name="log">The host's log sink.</param>
     /// <param name="relatedFormExpander">Rewrites a query with related forms when a search asks
     /// for '+' or '='-marked words; null leaves queries unexpanded.</param>
+    /// <param name="additionalLibraries">Extra seforim-shaped libraries to fold into this index
+    /// and its searches alongside the primary database — see
+    /// <see cref="SeforimDbAdditionalLibraries"/>. Null/empty keeps this type's exact
+    /// single-library behaviour (same stamp, same corpus, same cost).</param>
     public SeforimDbFtsIndexCoordinator(
         string? databasePath, string indexPath, bool indexIsExternal,
         Action<FtsIndexLogLevel, string, Exception?> log,
-        SeforimDbFtsRelatedFormExpander? relatedFormExpander = null)
+        SeforimDbFtsRelatedFormExpander? relatedFormExpander = null,
+        IReadOnlyList<SeforimDbAdditionalLibraries.Entry>? additionalLibraries = null)
     {
         _expander = relatedFormExpander;
         _dbPath = databasePath;
         _indexPath = indexPath;
         _external = indexIsExternal;
         _log = log;
+        _allLibraries = SeforimDbAttachedLibraries.Resolve(
+            additionalLibraries ?? Array.Empty<SeforimDbAdditionalLibraries.Entry>());
+        _additionalLibraries = _allLibraries;
     }
 
     /// <summary>The build mechanics — the at-start and at-completion stamps, resume state,
@@ -67,7 +94,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// so both legs stamp and resume an index identically. Only built once there is a database
     /// to index; RunBuild is never reached without one.</summary>
     private SeforimDbFtsIndexer Indexer =>
-        _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
+        _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!, _additionalLibraries);
     private SeforimDbFtsIndexer? _indexer;
 
     /// <summary>Snippeting, the word-distance filter and short-snippet flagging — all
@@ -207,9 +234,18 @@ public sealed class SeforimDbFtsIndexCoordinator
         catch { return false; }
     }
 
+    private int _skipLogged;   // log an unreadable additional library once, not per search
+
     private SeforimDbFtsEngine GetEngine()
     {
-        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(_indexPath, _dbPath!); }
+        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(
+            _indexPath, _dbPath!, _additionalLibraries,
+            onLibrarySkipped: (path, ex) =>
+            {
+                if (Interlocked.Exchange(ref _skipLogged, 1) == 0)
+                    _log(FtsIndexLogLevel.Warning,
+                $"FTS: additional library '{path}' is unreadable - skipped, the primary index is unaffected", ex);
+            }); }
     }
 
     /// <summary>
@@ -270,53 +306,211 @@ public sealed class SeforimDbFtsIndexCoordinator
             }
             catch (Exception ex) { _log(FtsIndexLogLevel.Debug, "FTS trial folder not removed yet", ex); }
 
-            SeforimDbFtsIndexPlan plan;
-            try
+            // Additional libraries are read END TO END before anything is stamped, wiped or built,
+            // and a damaged one is left out of this index (and out of its stamp). That has to
+            // come first: the stamp names the libraries the index covers, so validating after
+            // Prepare would wipe a good index for a library that was never going to be included.
+            // Skipped when an earlier build already recorded exactly this library set.
+            if (NeedsLibraryValidation())
             {
-                plan = Indexer.Prepare();
-            }
-            catch (Exception ex)
-            {
-                _log(FtsIndexLogLevel.Error, "FTS stale-index wipe failed", ex);
+                StartBuild(validateFirst: true);
                 return;
             }
+            if (_allLibraries.Count > 0) _librariesValidated = true;
 
-            if (plan.DbUnreadable)
-                _log(FtsIndexLogLevel.Warning,
-                    "FTS: seforim DB could not be read right now — keeping the existing index unverified", null);
-
-            if (plan.KeptUnverifiableCompletedIndex)
-                _log(FtsIndexLogLevel.Information,
-                    "FTS provenance stamp is an older format — keeping the completed index", null);
-
-            if (plan.WipedStaleState)
-                _engine?.Invalidate(); // never let an already-open engine answer over the wiped directory
-
-            // A completed service-owned build against the CURRENT DB → ready, no rebuild.
-            if (plan.IsReady)
-            {
-                _isReady = true;
-                _buildStarted = true;
-                return;
-            }
-
-            NoteBuildReason(_pendingBuildReason ?? plan.BuildReason ?? "build needed");
-            _pendingBuildReason = null;
-
-            _buildStarted = true;
-            _isIndexing = true;
-            _buildFailed = false;   // a fresh attempt clears the terminal failure state
-            _buildCts = new CancellationTokenSource();
-            var token = _buildCts.Token;
-            // Captured under _lock so the build carries the generation it was born into;
-            // a later reset bumps the counter and every write this build attempts is
-            // then recognised as stale. See _buildGeneration.
-            int generation = _buildGeneration;
-            _buildTask = Task.Run(() => RunBuild(token, generation));
+            if (!PrepareLocked()) return;
+            StartBuild(validateFirst: false);
         }
     }
 
-    private void RunBuild(CancellationToken ct, int generation)
+    /// <summary>Whether the additional libraries still have to be proven readable before the index
+    /// is prepared and built. Must be called with <see cref="_lock"/> held.</summary>
+    private bool NeedsLibraryValidation()
+    {
+        if (_allLibraries.Count == 0 || _librariesValidated) return false;
+        // An index whose stamp records exactly this library set was built from libraries that
+        // were read in full: nothing to prove again (and no multi-gigabyte read on every start).
+        return !Indexer.RecordedStampMatchesCurrent();
+    }
+
+    /// <summary>
+    /// Validates the on-disk index against the current database and library set, wiping what
+    /// cannot be trusted. Returns true when a build must run; false when the index is already
+    /// complete (flags updated) or the check itself failed (logged, retried on a later call).
+    /// Must be called with <see cref="_lock"/> held.
+    /// </summary>
+    private bool PrepareLocked()
+    {
+        SeforimDbFtsIndexPlan plan;
+        try
+        {
+            plan = Indexer.Prepare();
+        }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS stale-index wipe failed", ex);
+            return false;
+        }
+
+        if (plan.DbUnreadable)
+            _log(FtsIndexLogLevel.Warning,
+                "FTS: seforim DB could not be read right now — keeping the existing index unverified", null);
+
+        if (plan.KeptUnverifiableCompletedIndex)
+            _log(FtsIndexLogLevel.Information,
+                "FTS provenance stamp is an older format — keeping the completed index", null);
+
+        if (plan.WipedStaleState)
+            _engine?.Invalidate(); // never let an already-open engine answer over the wiped directory
+
+        // A completed service-owned build against the CURRENT DB → ready, no rebuild.
+        if (plan.IsReady)
+        {
+            _isReady = true;
+            _buildStarted = true;
+            return false;
+        }
+
+        NoteBuildReason(_pendingBuildReason ?? plan.BuildReason ?? "build needed");
+        _pendingBuildReason = null;
+        return true;
+    }
+
+    /// <summary>Starts the background build task. Must be called with <see cref="_lock"/> held.
+    /// With <paramref name="validateFirst"/> the task first proves the additional libraries readable
+    /// (a full read, potentially minutes for a large library, hence off the caller's thread), then
+    /// prepares and builds.</summary>
+    private void StartBuild(bool validateFirst)
+    {
+        _buildStarted = true;
+        _isIndexing = true;
+        _buildFailed = false;   // a fresh attempt clears the terminal failure state
+        _buildCts = new CancellationTokenSource();
+        var token = _buildCts.Token;
+        // Captured under _lock so the build carries the generation it was born into;
+        // a later reset bumps the counter and every write this build attempts is
+        // then recognised as stale. See _buildGeneration.
+        int generation = _buildGeneration;
+        _buildTask = Task.Run(() =>
+        {
+            if (validateFirst && !ValidateThenPrepare(token, generation)) return;
+            RunBuild(token, generation);
+        });
+    }
+
+    /// <summary>The validate-then-prepare front half of a build, on the build task. Returns true
+    /// when <see cref="RunBuild"/> should follow.</summary>
+    private bool ValidateThenPrepare(CancellationToken ct, int generation)
+    {
+        try
+        {
+            var good = ValidateLibraries(_allLibraries, ct, force: false);
+            lock (_lock)
+            {
+                if (!IsCurrentBuild(generation) || ct.IsCancellationRequested) return false;
+                ApplyLibraries(good);
+                _librariesValidated = true;
+                if (PrepareLocked()) return true;
+                // Nothing to build: either the index is complete for this library set (ready) or
+                // preparing it failed (retried on a later call).
+                if (!_isReady) _buildStarted = false;
+                _isIndexing = false;
+            }
+            NotifyProgress();
+            return false;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS library validation failed", ex);
+            lock (_lock)
+            {
+                if (IsCurrentBuild(generation)) { _buildStarted = false; _isIndexing = false; }
+            }
+            NotifyProgress();
+            return false;
+        }
+    }
+
+    /// <summary>Reads each library in <paramref name="libraries"/> end to end and returns those that
+    /// read cleanly. A damaged one is logged with its reason and recorded in
+    /// <see cref="SeforimDbFtsLibraryHealth"/> (surfaced by the settings page); it never throws.</summary>
+    private List<SeforimDbAttachedLibraries.Library> ValidateLibraries(
+        IReadOnlyList<SeforimDbAttachedLibraries.Library> libraries, CancellationToken ct, bool force)
+    {
+        var good = new List<SeforimDbAttachedLibraries.Library>(libraries.Count);
+        foreach (var library in libraries)
+        {
+            ct.ThrowIfCancellationRequested();
+            string? reason = SeforimDbFtsLibraryValidator.Check(library.Path, ct, force);
+            if (reason is null)
+            {
+                SeforimDbFtsLibraryHealth.MarkHealthy(library.Path);
+                good.Add(library);
+            }
+            else
+            {
+                SeforimDbFtsLibraryHealth.MarkSkipped(library.Path, reason);
+                _log(FtsIndexLogLevel.Warning,
+                    $"FTS: additional library '{library.Path}' is damaged ({reason}) - left out of the full-text index; the primary library and the healthy libraries are unaffected", null);
+            }
+        }
+        return good;
+    }
+
+    /// <summary>Makes <paramref name="libraries"/> the set the index, its stamp, the engine and the
+    /// searcher work over. Must be called with <see cref="_lock"/> held.</summary>
+    private void ApplyLibraries(IReadOnlyList<SeforimDbAttachedLibraries.Library> libraries)
+    {
+        bool same = libraries.Count == _additionalLibraries.Count;
+        for (int i = 0; same && i < libraries.Count; i++)
+            same = libraries[i].Index == _additionalLibraries[i].Index
+                && string.Equals(libraries[i].Path, _additionalLibraries[i].Path, StringComparison.OrdinalIgnoreCase);
+        if (same) return;
+
+        _additionalLibraries = libraries;
+        _indexer = null;
+        _searcher = null;
+        // The engine's corpus factory captured the old set; it must be rebuilt over the new one.
+        _engine?.Invalidate();
+        _engine = null;
+    }
+
+    /// <summary>After a build failed: re-reads every included library without trusting any cached
+    /// verdict. If some now fail (the file changed or rotted since it was validated), drops them,
+    /// wipes the partial index built over the old set and returns true so the caller rebuilds
+    /// without them. Returns false when no library is to blame - the failure stands.</summary>
+    private bool TryDropFailingLibraries(CancellationToken ct, int generation, Exception failure)
+    {
+        if (_additionalLibraries.Count == 0) return false;
+        try
+        {
+            _log(FtsIndexLogLevel.Warning,
+                "FTS build failed with additional libraries attached - re-checking them", failure);
+            var good = ValidateLibraries(_additionalLibraries, ct, force: true);
+            if (good.Count == _additionalLibraries.Count) return false;
+
+            lock (_lock)
+            {
+                if (!IsCurrentBuild(generation)) return false;
+                ApplyLibraries(good);
+                // The partial build's start stamp names the old set, so Prepare wipes it; a clean
+                // build then runs over the surviving libraries only.
+                _isReady = false;
+                _pct = 0; _processed = 0; _total = 0;
+                if (PrepareLocked()) return true;
+                return _isReady; // an already-complete matching index: nothing left to build
+            }
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS: could not rebuild without the failing libraries", ex);
+            return false;
+        }
+    }
+
+    private void RunBuild(CancellationToken ct, int generation, bool allowRecovery = true)
     {
         try
         {
@@ -427,6 +621,15 @@ public sealed class SeforimDbFtsIndexCoordinator
         }
         catch (Exception ex)
         {
+            // An additional library that read cleanly when validated can still fail mid-build (the
+            // file changed or rotted since). Leave it out, wipe the partial index and build once
+            // more over the primary and the surviving libraries instead of reporting a dead index.
+            if (allowRecovery && IsCurrentBuild(generation) && !ct.IsCancellationRequested
+                && TryDropFailingLibraries(ct, generation, ex))
+            {
+                RunBuild(ct, generation, allowRecovery: false);
+                return;
+            }
             _log(FtsIndexLogLevel.Error, "FTS index build failed", ex);
             // Terminal, unless a segment already made the index searchable: nothing retries
             // (the latch stays armed), so subscribers must be told this is the end rather
@@ -459,6 +662,9 @@ public sealed class SeforimDbFtsIndexCoordinator
     public bool RebuildIfDbChanged()
     {
         if (_external || !HasDb) return false;
+        // The library set is not settled until validation has run: comparing the stamp against
+        // a set that may still lose a damaged library would read as "changed" and wipe a good index.
+        if (_allLibraries.Count > 0 && !_librariesValidated) return false;
         // Not now: a file still being written reads as "changed". The watcher asks again.
         if (!SeforimDbReadiness.IsReadyToIndex(_dbPath!, out _)) return false;
 
@@ -522,6 +728,10 @@ public sealed class SeforimDbFtsIndexCoordinator
             _buildFailed = false;   // a reset is a fresh attempt, not the old failure
             _pct = 0; _processed = 0; _total = 0;
             _isMerging = false; _mergePassesDone = 0; _mergePassesExpected = 0;
+            // A reset is also the user's "try again": every library is re-read, so one that was
+            // left out and has since been repaired or replaced is picked up again.
+            _librariesValidated = false;
+            ApplyLibraries(_allLibraries);
         }
         NotifyProgress();
 
@@ -796,7 +1006,11 @@ public sealed class SeforimDbFtsIndexCoordinator
         if (!HasDb || (lineIds.Count == 0 && shortLineIds.Count == 0)) return new List<FtsSnippetText>();
         try
         {
-            using var corpus = new SeforimDbFtsCorpus(_dbPath!);
+            // The primary database plus every additional library: a hit of a library carries global ids.
+            var libraries = _additionalLibraries;
+            using ISeforimDbFtsPositionCorpus corpus = libraries.Count == 0
+                ? new SeforimDbFtsCorpus(_dbPath!)
+                : new CompositeFtsCorpus(_dbPath!, libraries);
             return corpus.FetchSnippetTexts(lineIds, shortLineIds);
         }
         catch (Exception ex)

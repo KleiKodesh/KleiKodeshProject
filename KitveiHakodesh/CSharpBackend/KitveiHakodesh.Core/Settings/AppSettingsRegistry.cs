@@ -21,6 +21,13 @@ namespace KitveiHakodesh.Core.Settings
     /// has to verify the file exists and fall back to probing, neither of which is a plain
     /// get/set. It uses Get/Set below for the storage half.
     /// </summary>
+    /// <summary>A setting could not be persisted (registry key locked, access denied, hive
+    /// unavailable). The inner exception has the cause.</summary>
+    public sealed class SettingsWriteException : Exception
+    {
+        public SettingsWriteException(string message, Exception? inner) : base(message, inner) { }
+    }
+
     public static class AppSettingsRegistry
     {
         private const string AppKitveiHakodesh = "KitveiHakodesh";
@@ -41,6 +48,8 @@ namespace KitveiHakodesh.Core.Settings
         /// missing or unreadable. Never throws — a settings read must not take the app down.</summary>
         public static string Get(string app, string section, string key, string fallback)
         {
+            if (InMemoryStore is { } store)
+                return store.TryGetValue(app + "\\" + section + "\\" + key, out var v) ? v : fallback;
             // No registry off Windows (portable build): every setting reads as its fallback.
 #if NET
             if (!OperatingSystem.IsWindows()) return fallback;
@@ -56,14 +65,46 @@ namespace KitveiHakodesh.Core.Settings
             }
         }
 
-        /// <summary>Writes a value, creating the key path if needed.</summary>
+        /// <summary>TEST SEAM: when non-null, every Get/Set goes to this dictionary instead of the
+        /// registry, so tests of the settings logic never touch a real user's registry.</summary>
+        internal static System.Collections.Concurrent.ConcurrentDictionary<string, string>? InMemoryStore;
+
+        /// <summary>TEST SEAM: makes every in-memory write fail like a locked/denied key would.</summary>
+        internal static bool FailWritesForTest;
+
+        /// <summary>Writes a value, creating the key path if needed. Throws
+        /// <see cref="SettingsWriteException"/> (never a raw registry exception) when the value
+        /// cannot be stored, so a caller can report it instead of faulting.</summary>
         public static void Set(string app, string section, string key, string value)
         {
+            if (!TrySet(app, section, key, value, out var error))
+                throw new SettingsWriteException($"Could not write setting {app}\\{section}\\{key}: {error}", error);
+        }
+
+        /// <summary>Same as <see cref="Set"/>, but reports failure instead of throwing.</summary>
+        public static bool TrySet(string app, string section, string key, string value, out Exception? error)
+        {
+            error = null;
+            try
+            {
+                if (InMemoryStore is { } store)
+                {
+                    if (FailWritesForTest) throw new UnauthorizedAccessException("simulated write failure");
+                    store[app + "\\" + section + "\\" + key] = value ?? "";
+                    return true;
+                }
 #if NET
-            if (!OperatingSystem.IsWindows()) return; // no registry off Windows: not persisted
+                if (!OperatingSystem.IsWindows()) return true; // no registry off Windows: not persisted
 #endif
-            using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
-            registryKey?.SetValue(key, value ?? "");
+                using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
+                registryKey?.SetValue(key, value ?? "");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+                return false;
+            }
         }
 
         // ── HebrewBooks ───────────────────────────────────────────────────────────────

@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodesh.Core.SeforimDbCatalog
@@ -57,6 +59,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         private readonly Func<string?> _resolveDatabasePath;
         private readonly string _indexPath;
         private readonly Action<CatalogIndexLogLevel, string, Exception?> _log;
+        /// <summary>Every additional library to fold into the index alongside the primary
+        /// database, resolved ONCE at construction — same "a restart re-resolves" lifetime as
+        /// the FTS coordinator's (see its remarks); empty for the common single-library case.</summary>
+        private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
         /// <summary>The in-flight <see cref="Search"/>'s cancellation source. A new search
         /// SUPERSEDES the previous one (latest-wins), and a RESET takes it to stop that search
         /// before disposing the index it is reading — otherwise the query faults instead of
@@ -108,10 +114,15 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         /// ordinary state, not an error.</param>
         /// <param name="indexPath">The index directory. Fixed for the process.</param>
         /// <param name="log">Where to report. Called from background threads.</param>
+        /// <param name="additionalLibraries">Extra seforim-shaped libraries to fold into this
+        /// index alongside the primary database — see <see cref="SeforimDbAdditionalLibraries"/>.
+        /// Null/empty keeps this type's exact single-library behaviour (same stamp, same
+        /// documents, same cost).</param>
         public SeforimDbCatalogIndexCoordinator(
             Func<string?> resolveDatabasePath,
             string indexPath,
-            Action<CatalogIndexLogLevel, string, Exception?> log)
+            Action<CatalogIndexLogLevel, string, Exception?> log,
+            IReadOnlyList<SeforimDbAdditionalLibraries.Entry>? additionalLibraries = null)
         {
             if (resolveDatabasePath == null) throw new ArgumentNullException(nameof(resolveDatabasePath));
             if (string.IsNullOrWhiteSpace(indexPath))
@@ -121,6 +132,8 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             _resolveDatabasePath = resolveDatabasePath;
             _indexPath = indexPath;
             _log = log;
+            _additionalLibraries = SeforimDbAttachedLibraries.Resolve(
+                additionalLibraries ?? Array.Empty<SeforimDbAdditionalLibraries.Entry>());
         }
 
         public bool IsReady => _isReady;
@@ -224,7 +237,11 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         {
             lock (_lock)
             {
-                return _index ?? (_index = new SeforimDbCatalogIndex(_indexPath, databasePath));
+                return _index ??= new SeforimDbCatalogIndex(_indexPath, databasePath, _additionalLibraries)
+                {
+                    SourceSkipped = (path, ex) => _log(CatalogIndexLogLevel.Warning,
+                        $"catalog TOC index: additional library '{path}' is unreadable - skipped, the primary index is unaffected", ex),
+                };
             }
         }
 
@@ -271,7 +288,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 // Hashing stays INSIDE the lock, after the latch: in the common already-built
                 // case this is never reached, so an EnsureIndex from a keystroke costs nothing.
                 string currentHash;
-                try { currentHash = SeforimDbCatalogIndex.ComputeDbHash(databasePath); }
+                try { currentHash = SeforimDbCatalogIndex.ComputeDbHash(databasePath, _additionalLibraries); }
                 catch (Exception ex)
                 {
                     _log(CatalogIndexLogLevel.Error, "catalog TOC index: could not hash seforim DB", ex);
@@ -282,7 +299,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 var index = GetIndex(databasePath);
                 bool opened = index.TryOpenActive();
                 if (opened) _isReady = true;
-                if (opened && string.Equals(index.ActiveHash, currentHash, StringComparison.OrdinalIgnoreCase))
+                if (opened && SeforimDb.SeforimDbContentFingerprint.Matches(index.ActiveHash, currentHash))
                 {
                     _buildStarted = true;
                     return;
@@ -432,7 +449,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             if (!SeforimDb.SeforimDbReadiness.IsReadyToIndex(databasePath, out _)) return false;
 
             string current;
-            try { current = SeforimDbCatalogIndex.ComputeDbHash(databasePath); }
+            try { current = SeforimDbCatalogIndex.ComputeDbHash(databasePath, _additionalLibraries); }
             catch { return false; }
 
             lock (_lock)
@@ -440,7 +457,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 // Already rebuilding for a change → don't stack another.
                 if (_isIndexing) return false;
                 string? active = GetIndex(databasePath).ActiveHash;
-                if (string.Equals(active, current, StringComparison.OrdinalIgnoreCase))
+                if (SeforimDb.SeforimDbContentFingerprint.Matches(active, current))
                     return false; // unchanged — nothing to do
 
                 // Re-arm EnsureIndex (it is latched to once-per-process), then let it do the

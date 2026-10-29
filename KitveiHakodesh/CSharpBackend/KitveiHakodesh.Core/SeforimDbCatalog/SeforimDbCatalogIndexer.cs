@@ -58,14 +58,29 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // not in scope in the other partial file, and both halves read these.
     private readonly string rootPath;
     private readonly string dbPath;
+    /// <summary>Every additional library to fold into this index alongside the primary
+    /// database — see <see cref="SeforimDbAttachedLibraries.Resolve"/>. Empty for the common
+    /// single-library case, which keeps this type's exact original behaviour (same documents,
+    /// same ids, same hash).</summary>
+    private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries;
 
     /// <param name="rootPath">The index directory.</param>
-    /// <param name="dbPath">The seforim database the index is built from.</param>
-    public SeforimDbCatalogIndex(string rootPath, string dbPath)
+    /// <param name="dbPath">The primary seforim database the index is built from.</param>
+    /// <param name="additionalLibraries">Extra libraries whose books/TOC also get indexed,
+    /// labeled with a GLOBAL book id (<see cref="SeforimDbLibraryId.ToGlobal"/>) so a hit
+    /// resolves to the exact same book id <c>getAllBooks</c> already returns for it.</param>
+    public SeforimDbCatalogIndex(
+        string rootPath, string dbPath,
+        IReadOnlyList<SeforimDbAttachedLibraries.Library>? additionalLibraries = null)
     {
         this.rootPath = rootPath;
         this.dbPath = dbPath;
+        this.additionalLibraries = additionalLibraries ?? Array.Empty<SeforimDbAttachedLibraries.Library>();
     }
+
+    /// <summary>Called (from the build thread) when an additional library had to be skipped
+    /// - or part of it - because it could not be read. The primary is never affected.</summary>
+    public Action<string, Exception>? SourceSkipped { get; set; }
 
     private const LuceneVersion Ver = LuceneVersion.LUCENE_48;
 
@@ -204,12 +219,17 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// (same text, same line) are no longer indexed; line-less alt parents take their first
     /// child's line; a numeral after a counter word (perek mb) is no longer expanded as an
     /// abbreviation; s"q expands to seif katan. Full rebuild.</summary>
-    // v23: root TOC entries are stripped only when they add no word beyond the title.
-    // v24: Lucene field names spelled out (were single letters). Full rebuild.
-    // v25: level indexed (Int32Field) so the book-title search can filter to level 0.
-    // v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
-    //      searches are pure index queries with no per-reader tables.
-    public const string IndexFormatVersion = "v26";
+    /// v23: root TOC entries are stripped only when they add no word beyond the title.
+    /// v24: Lucene field names spelled out (were single letters). Full rebuild.
+    /// v25: level indexed (Int32Field) so the book-title search can filter to level 0.
+    /// v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
+    ///      searches are pure index queries with no per-reader tables.
+    /// v27: additional libraries only (no change to the primary database's documents): a
+    /// library that names a tractate's pages "ד." / "ד:" (no word "דף") is indexed as pages
+    /// too, and every index built before the additional-library hardening is rebuilt once -
+    /// those builds dropped a library they could not read whole yet stamped the index with
+    /// the fingerprint of the FULL library set.</summary>
+    public const string IndexFormatVersion = "v27";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -224,6 +244,13 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// thereafter.</summary>
     public static string ComputeDbHash(string dbPath)
         => SeforimDbContentFingerprint.Compute(dbPath, IndexFormatVersion);
+
+    /// <summary>Same as <see cref="ComputeDbHash(string)"/>, but covering every additional
+    /// library too — see <see cref="SeforimDbContentFingerprint.ComputeAll"/>. Changes when ANY
+    /// source changes, or when the set of additional libraries itself changes, so the index
+    /// rebuilds rather than silently going stale for a source other than the primary database.</summary>
+    public static string ComputeDbHash(string dbPath, IReadOnlyList<SeforimDbAttachedLibraries.Library> additionalLibraries)
+        => SeforimDbContentFingerprint.ComputeAll(dbPath, additionalLibraries, IndexFormatVersion);
 
     private string VerFile => Path.Combine(rootPath, "catalogtoc.ver");
 
@@ -276,11 +303,22 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
         try
         {
-            int docCount = BuildInPlace(onProgress, ct);
+            var uncovered = new HashSet<int>();
+            int docCount = BuildInPlace(onProgress, ct, uncovered);
 
             // Build finished: publish the hash, then refresh once more so the final
             // documents (the Tanach verse pass) are visible on the NRT reader.
-            File.WriteAllText(VerFile, dbHash);
+            //
+            // The stamp must not certify a library this build did not cover. A library that
+            // could not be read right now (file busy, a table that fails mid-read) is skipped
+            // so it cannot take the primary down - but stamping the full set anyway would make
+            // that skip permanent: the next start sees a matching stamp and never retries. So
+            // the stamp names only the libraries actually indexed; the next start's comparison
+            // against the full set then fails and the build is retried.
+            string stamp = uncovered.Count == 0
+                ? dbHash
+                : ComputeDbHash(dbPath, additionalLibraries.Where(l => !uncovered.Contains(l.Index)).ToList());
+            File.WriteAllText(VerFile, stamp);
             lock (_lock) RefreshNrtLocked();
             return docCount;
         }
@@ -296,122 +334,244 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         }
     }
 
-    private int BuildInPlace(Action<int, int>? onProgress, CancellationToken ct)
+    /// <param name="uncovered">Receives the index of every additional library that was skipped
+    /// or only partly indexed by this build.</param>
+    private int BuildInPlace(Action<int, int>? onProgress, CancellationToken ct, HashSet<int> uncovered)
     {
-        using var conn = OpenDb();
-        var categoryList = LoadCategories(conn);
-        var books = LoadBooks(conn);
-        var firstLines = LoadFirstLines(conn);
-        // The ONE precedence order (also what GetAllBooks ships and the full-text index
-        // stores by). Re-reads the two catalog queries, milliseconds against the build.
-        var bookRank = SeforimDbBookTreeOrder.Load(conn);
-        var altStructures = LoadAltStructures(conn);
-
-        // Full catalog (category) path per book — part of SearchText so a query can
-        // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
-        // for a book like פרי מגדים whose title carries neither שלחן nor ערוך.
-        var catalogPathByBook = ComputeCatalogPaths(categoryList, books);
-
-        // Reuse the already-open directory handle if one exists (a committed reader may
-        // be serving off it); otherwise open one. A single handle per index path avoids
-        // write-lock contention from two FSDirectory instances on the same folder.
-        FSDirectory fsDir;
-        lock (_lock) fsDir = _dir ??= FSDirectory.Open(rootPath);
-
-        var analyzer = new SeforimDbCatalogAnalyzer();
-        var config = new IndexWriterConfig(Ver, analyzer)
+        // Every source to index: the primary seforim.db at library 0, plus every additional
+        // library configured and attachable right now (see SeforimDbAttachedLibraries.Resolve).
+        // A library whose file cannot be opened at this exact moment (moved, mid-rebuild) is
+        // skipped for THIS build — same "best effort, never fail the whole catalog" policy as
+        // everywhere else in this feature.
+        var sources = new List<(int Index, SqliteConnection Conn)> { (0, OpenDb()) };
+        foreach (var library in additionalLibraries)
         {
-            OpenMode = OpenMode.CREATE,
-            // Fewer, larger flushes: analysis dominates the build, and every flush of a
+            try { sources.Add((library.Index, SqliteConnectionFactory.OpenCorpusRead(library.Path))); }
+            catch (Exception ex)
+            {
+                // Unavailable right now — this build does not cover it. Said out loud and
+                // recorded, so the index is neither silently missing it nor stamped as complete.
+                uncovered.Add(library.Index);
+                SourceSkipped?.Invoke(library.Path, ex);
+            }
+        }
+
+        try
+        {
+            var categoryList = new List<(int Id, int? ParentId, string Title)>();
+            var books = new List<(int Id, string Title, int CategoryId, string? Authors)>();
+            var firstLines = new Dictionary<int, (int LineId, int LineIndex)>();
+            var altStructures = new Dictionary<int, (int BookId, string Title, string HeTitle)>();
+            // bookId (GLOBAL) -> precedence: the ONE order (SeforimDbBookTreeOrder, also what
+            // GetAllBooks ships and the full-text index stores by), computed per source and laid
+            // end to end - the primary keeps exactly its own order, each library follows it.
+            var bookRank = new Dictionary<int, int>();
+            int nextRank = 0;
+
+            // Every id read from a library above 0 is translated to its GLOBAL id right here, at
+            // the load boundary — everything below this point (tree order, catalog paths, the
+            // book-title docs, TOC streaming lookups) works in global ids exactly as it always
+            // worked in the single-library case, which is why none of that code needed to change.
+            // Each source loads into its OWN temporary lists and is merged only once it loaded
+            // completely. An additional library that passed the attach-time probe but fails at
+            // read time (corrupt page, missing table) is dropped whole and logged; it must never
+            // prevent the primary's catalog index from being built.
+            foreach (var (index, conn) in sources.ToList())
+            {
+                var srcCategories = new List<(int Id, int? ParentId, string Title)>();
+                var srcBooks = new List<(int Id, string Title, int CategoryId, string? Authors)>();
+                var srcFirstLines = new Dictionary<int, (int LineId, int LineIndex)>();
+                var srcAlt = new Dictionary<int, (int BookId, string Title, string HeTitle)>();
+                var srcRank = new Dictionary<int, int>();
+                try
+                {
+                    foreach (var c in LoadCategories(conn))
+                        srcCategories.Add((Global(index, c.Id), c.ParentId is { } pid ? Global(index, pid) : null, c.Title));
+                    foreach (var b in LoadBooks(conn))
+                        srcBooks.Add((Global(index, b.Id), b.Title, Global(index, b.CategoryId), b.Authors));
+                    foreach (var kv in LoadFirstLines(conn, index == 0 ? null : additionalLibraries.First(l => l.Index == index)))
+                        srcFirstLines[Global(index, kv.Key)] = (Global(index, kv.Value.LineId), kv.Value.LineIndex);
+                    // Structure ids are internal bookkeeping (never surfaced to the frontend),
+                    // but globalized so two libraries' alt-TOC structures cannot collide. 0 (the
+                    // "regular TOC" sentinel) is never a real id and stays untranslated.
+                    // alt_toc_structure/alt_toc_entry are OPTIONAL: a library built without
+                    // alternative TOCs is a perfectly good library, just with none to index.
+                    if (HasAltToc(conn))
+                        foreach (var kv in LoadAltStructures(conn))
+                            srcAlt[GlobalStructure(index, kv.Key)] = (Global(index, kv.Value.BookId), kv.Value.Title, kv.Value.HeTitle);
+                    foreach (var kv in SeforimDbBookTreeOrder.Load(conn))
+                        srcRank[Global(index, kv.Key)] = kv.Value;
+                }
+                catch (Exception ex) when (index != 0)
+                {
+                    uncovered.Add(index);
+                    SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+                    sources.RemoveAll(s => s.Index == index);
+                    conn.Dispose();
+                    continue;
+                }
+
+                categoryList.AddRange(srcCategories);
+                books.AddRange(srcBooks);
+                foreach (var kv in srcFirstLines) firstLines[kv.Key] = kv.Value;
+                foreach (var kv in srcAlt) altStructures[kv.Key] = kv.Value;
+                foreach (var kv in srcRank) bookRank[kv.Key] = nextRank + kv.Value;
+                if (srcRank.Count > 0) nextRank += srcRank.Values.Max() + 1;
+            }
+
+            // Full catalog (category) path per book — part of SearchText so a query can
+            // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
+            // for a book like פרי מגדים whose title carries neither שלחן nor ערוך.
+            var catalogPathByBook = ComputeCatalogPaths(categoryList, books);
+
+            // Reuse the already-open directory handle if one exists (a committed reader may
+            // be serving off it); otherwise open one. A single handle per index path avoids
+            // write-lock contention from two FSDirectory instances on the same folder.
+            FSDirectory fsDir;
+            lock (_lock) fsDir = _dir ??= FSDirectory.Open(rootPath);
+
+            var analyzer = new SeforimDbCatalogAnalyzer();
+            var config = new IndexWriterConfig(Ver, analyzer)
+            {
+                OpenMode = OpenMode.CREATE,
+                // Fewer, larger flushes: analysis dominates the build, and every flush of a
             // small segment feeds merges later. Bounded, well under the build's budget.
             RAMBufferSizeMB = 128,
-        };
-        var writer = new IndexWriter(fsDir, config);
-        // Publish the writer, drop any committed reader, and open the first NRT reader so
-        // searches hit the (empty, then filling) index immediately. OpenMode.CREATE has
-        // marked the old segments for deletion; disposing the old reader releases them.
-        lock (_lock)
-        {
-            _reader?.Dispose();
-            _reader = null;
-            _searcher = null;
-            _writer = writer;
-            RefreshNrtLocked();
+            };
+            var writer = new IndexWriter(fsDir, config);
+            // Publish the writer, drop any committed reader, and open the first NRT reader so
+            // searches hit the (empty, then filling) index immediately. OpenMode.CREATE has
+            // marked the old segments for deletion; disposing the old reader releases them.
+            lock (_lock)
+            {
+                _reader?.Dispose();
+                _reader = null;
+                _searcher = null;
+                _writer = writer;
+                RefreshNrtLocked();
+            }
+
+            // The NRT reader refreshes on the same cadence as the progress callback.
+            void Progress(int done, int total)
+            {
+                onProgress?.Invoke(done, total);
+                lock (_lock) RefreshNrtLocked();
+            }
+
+            var bookMeta = books.ToDictionary(b => b.Id, b => b);
+            // Per-book doc sequence: 0 = the book-title doc, then TOC entries in original
+            // order. TreeOrder = (catalog book rank << 24) | seq — one long that sorts by
+            // catalog position first, original TOC order within the book second.
+            var nextSeq = new Dictionary<int, int>(books.Count);
+            long TreeOrder(int bookId)
+            {
+                int seq = nextSeq.GetValueOrDefault(bookId);
+                nextSeq[bookId] = seq + 1;
+                return ((long)bookRank.GetValueOrDefault(bookId, int.MaxValue) << 24) | (uint)seq;
+            }
+
+            int docCount = 0, bookNo = 0;
+
+            // Book-title docs — Level 0, pointing at the book's first line.
+            foreach (var b in books)
+            {
+                ct.ThrowIfCancellationRequested();
+                writer.AddDocument(MakeDoc(
+                    catalogPath: catalogPathByBook.GetValueOrDefault(b.Id, ""),
+                    authors: b.Authors,
+                    bookId: b.Id,
+                    lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
+                    fullTocPath: b.Title,
+                    titleLength: b.Title.Length,
+                    level: 0,
+                    treeOrder: TreeOrder(b.Id),
+                    structureId: RegularTocStructureId));
+                docCount++;
+            }
+
+            // Regular + alt-TOC docs, per source — te.bookId/ae.structureId come back LOCAL to
+            // that source's own connection, so they are globalized right before the bookMeta/
+            // altStructures lookups (which are keyed globally); the rows themselves (and
+            // IndexTocTree's internal id bookkeeping) stay local, which is fine — each call
+            // processes one book's/structure's rows from one source at a time.
+            foreach (var (index, conn) in sources)
+            {
+              try
+              {
+                // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
+                if (HasRegularToc(conn))
+                foreach (var group in StreamTocRowsByBook(conn, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    int globalBookId = Global(index, group.BookId);
+                    if (!bookMeta.TryGetValue(globalBookId, out var book)) continue;
+                    docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
+                        catalogPathByBook.GetValueOrDefault(globalBookId, ""), RegularTocStructureId);
+                    if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
+                }
+
+                // Alt-TOC docs — alternative structures (parshiot/aliyot, dapim, …), same shape.
+                if (HasAltToc(conn))
+                foreach (var group in StreamAltTocRowsByStructure(conn))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    int globalStructureId = GlobalStructure(index, group.StructureId);
+                    if (!altStructures.TryGetValue(globalStructureId, out var st)) continue;
+                    if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
+                    docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
+                        catalogPathByBook.GetValueOrDefault(st.BookId, ""), globalStructureId);
+                }
+              }
+              catch (Exception ex) when (index != 0)
+              {
+                // This library's TOC tables are unreadable: its book-title docs are already in,
+                // only its TOC entries are lost. Primary and other libraries are unaffected.
+                uncovered.Add(index);
+                SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+              }
+            }
+
+            // 1+2. The normal index is complete — commit it before the slower verse pass,
+            // and refresh so every book/TOC entry is searchable before verses stream in.
+            writer.Commit();
+            Progress(books.Count, books.Count);
+
+            // 3-5. Second pass, Tanach only, per source: the seforim DB's Tanach TOCs stop at
+            // chapters, so verse-level entries are generated from the LINE TEXT and added as
+            // ordinary documents (same fields, analyzer, ordering). 6. Final commit here. The
+            // writer is left OPEN — the caller writes the ver file, does the final NRT refresh
+            // (so the verses become visible), then disposes it.
+            foreach (var (index, conn) in sources)
+            {
+                var libraryBooks = books.Where(b => SeforimDbLibraryId.Resolve(b.Id).LibraryIndex == index).ToList();
+                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds); }
+                catch (Exception ex) when (index != 0)
+                {
+                    uncovered.Add(index);
+                    SourceSkipped?.Invoke(additionalLibraries.First(l => l.Index == index).Path, ex);
+                }
+            }
+            writer.Commit();
+
+            return docCount;
         }
-
-        // The NRT reader refreshes on the same cadence as the progress callback.
-        void Progress(int done, int total)
+        finally
         {
-            onProgress?.Invoke(done, total);
-            lock (_lock) RefreshNrtLocked();
+            foreach (var (_, conn) in sources) conn.Dispose();
         }
-
-        var bookMeta = books.ToDictionary(b => b.Id, b => b);
-        // Per-book doc sequence: 0 = the book-title doc, then TOC entries in original
-        // order. TreeOrder = (catalog book rank << 24) | seq — one long that sorts by
-        // catalog position first, original TOC order within the book second.
-        var nextSeq = new Dictionary<int, int>(books.Count);
-        long TreeOrder(int bookId)
-        {
-            int seq = nextSeq.GetValueOrDefault(bookId);
-            nextSeq[bookId] = seq + 1;
-            return ((long)bookRank.GetValueOrDefault(bookId, int.MaxValue) << 24) | (uint)seq;
-        }
-
-        int docCount = 0, bookNo = 0;
-
-        // Book-title docs — Level 0, pointing at the book's first line.
-        foreach (var b in books)
-        {
-            ct.ThrowIfCancellationRequested();
-            writer.AddDocument(MakeDoc(
-                catalogPath: catalogPathByBook.GetValueOrDefault(b.Id, ""),
-                authors: b.Authors,
-                bookId: b.Id,
-                lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
-                fullTocPath: b.Title,
-                titleLength: b.Title.Length,
-                level: 0,
-                treeOrder: TreeOrder(b.Id),
-                structureId: RegularTocStructureId));
-            docCount++;
-        }
-
-        // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
-        foreach (var group in StreamTocRowsByBook(conn))
-        {
-            ct.ThrowIfCancellationRequested();
-            if (!bookMeta.TryGetValue(group.BookId, out var book)) continue;
-            docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(group.BookId, ""), RegularTocStructureId);
-            if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
-        }
-
-        // Alt-TOC docs — alternative structures (parshiot/aliyot, dapim, …), same shape.
-        foreach (var group in StreamAltTocRowsByStructure(conn))
-        {
-            ct.ThrowIfCancellationRequested();
-            if (!altStructures.TryGetValue(group.StructureId, out var st)) continue;
-            if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
-            docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(st.BookId, ""), group.StructureId);
-        }
-
-        // 1+2. The normal index is complete — commit it before the slower verse pass,
-        // and refresh so every book/TOC entry is searchable before verses stream in.
-        writer.Commit();
-        Progress(books.Count, books.Count);
-
-        // 3-5. Second pass, Tanach only: the seforim DB's Tanach TOCs stop at chapters,
-        // so verse-level entries are generated from the LINE TEXT and added as ordinary
-        // documents (same fields, analyzer, ordering). 6. Final commit here. The writer
-        // is left OPEN — the caller writes the ver file, does the final NRT refresh (so
-        // the verses become visible), then disposes it.
-        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ct);
-        writer.Commit();
-        return docCount;
     }
 
+    /// <summary>Maps a source's own local id to the global id every document field/lookup above
+    /// uses — identity for the primary database (index 0), exactly like
+    /// <see cref="SeforimDbLibraryId.ToGlobal"/> everywhere else in this feature.</summary>
+    private static int Global(int libraryIndex, int localId) => SeforimDbLibraryId.ToGlobal(libraryIndex, localId);
+
+    /// <summary>Same as <see cref="Global"/>, for an alt_toc_structure id — except the
+    /// <see cref="RegularTocStructureId"/> sentinel (0), which is never a real per-library id and
+    /// must stay 0 for every source so "the regular TOC" keeps meaning the same thing everywhere
+    /// it is compared.</summary>
+    private static int GlobalStructure(int libraryIndex, int structureId) =>
+        structureId == RegularTocStructureId ? RegularTocStructureId : SeforimDbLibraryId.ToGlobal(libraryIndex, structureId);
     // ── Tanach verse extraction (compensates for missing verse-level TOC) ─────────
 
     /// <summary>The Tanach base-text books, titled exactly as in the seforim DB — the
@@ -448,11 +608,13 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private static int IndexTanachVerses(
         IndexWriter writer, SqliteConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
-        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
+        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct,
+        SeforimDbIdMap? tocIds = null)
     {
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
         using var codec = SeforimDbLineContentCodec.Create(conn);
+        bool hasRegularToc = HasRegularToc(conn);
 
         int added = 0;
         foreach (var book in books)
@@ -461,8 +623,14 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             ct.ThrowIfCancellationRequested();
             string catalogPath = catalogPathByBook.GetValueOrDefault(book.Id, "");
 
+            // book.Id is GLOBAL (see BuildInPlace, which calls this once per source with that
+            // source's own books only); this source's own tables need the LOCAL id back —
+            // translated once here, at the only two points that touch SQL below.
+            int localBookId = SeforimDbLibraryId.Resolve(book.Id).LocalId;
+
             // The book's TOC entries (chapters), root-stripped, with resolved paths.
-            var rows = StripTitleRoots(LoadTocRowsForBook(conn, book.Id), book.Title, book.Id);
+            var rows = StripTitleRoots(
+                hasRegularToc ? LoadTocRowsForBook(conn, localBookId, tocIds) : new List<TocRow>(), book.Title, localBookId);
             var byId = rows.ToDictionary(r => r.Id);
             var chainCache = new Dictionary<int, (string Path, int Level)>();
             (string Path, int Level) GetChain(TocRow row)
@@ -486,7 +654,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBookLines(schema);
-            cmd.Parameters.AddWithValue("@b", book.Id);
+            cmd.Parameters.AddWithValue("@b", localBookId);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
@@ -531,7 +699,24 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         return added;
     }
 
-    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId)
+    /// <summary>True when the database has the regular TOC tables. A library without them is
+    /// indexed by its book titles only.</summary>
+    private static bool HasRegularToc(SqliteConnection conn) =>
+        SeforimDbSchema.TableExists(conn, "tocEntry") && SeforimDbSchema.TableExists(conn, "tocText");
+
+    /// <summary>True when the database has the alternative-TOC tables (all three needed by
+    /// the alt-TOC queries). Absent in many libraries; never a reason to drop one.</summary>
+    private static bool HasAltToc(SqliteConnection conn) =>
+        SeforimDbSchema.TableExists(conn, "alt_toc_structure")
+        && SeforimDbSchema.TableExists(conn, "alt_toc_entry")
+        && SeforimDbSchema.TableExists(conn, "tocText");
+
+    /// <summary>A TOC-entry id as stored in the file -> the local id the build works in (see
+    /// <see cref="SeforimDbIdMap"/>; stored ids can exceed int32, so they are read as 64-bit).</summary>
+    private static int LocalToc(SeforimDbIdMap? map, long stored) =>
+        map is null ? checked((int)stored) : map.ToLocal(stored);
+
+    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId, SeforimDbIdMap? tocIds = null)
     {
         var rows = new List<TocRow>();
         using var cmd = conn.CreateCommand();
@@ -541,8 +726,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         while (r.Read())
             rows.Add(new TocRow
             {
-                Id = r.GetInt32(0),
-                ParentId = r.IsDBNull(1) ? null : r.GetInt32(1),
+                Id = LocalToc(tocIds, r.GetInt64(0)),
+                ParentId = r.IsDBNull(1) ? null : LocalToc(tocIds, r.GetInt64(1)),
                 BookId = bookId,
                 Text = r.IsDBNull(2) ? "" : r.GetString(2),
                 LineIndex = r.IsDBNull(3) ? -1 : r.GetInt32(3),
@@ -775,8 +960,30 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// and sits a level above; amud hits can only rank below the daf level. The default
     /// navigation for "דף X" is עמוד א.
     /// </summary>
-    private static List<TocRow> ExpandDafAmudim(List<TocRow> rows)
+    internal static List<TocRow> ExpandDafAmudim(List<TocRow> rows)
     {
+        // Libraries that list a tractate's pages as bare "ד." / "ד:" entries are read as pages too, but only
+        // under a parent whose entries really are a page list: the same page appears with both marks. A lone
+        // "א." that is just a list item stays what it is.
+        // Keyed by the parent id, with int.MinValue standing for "no parent" (a dictionary key cannot be null).
+        HashSet<int>? bareListParents = null;
+        {
+            var dots = new Dictionary<int, HashSet<string>>();
+            var colons = new Dictionary<int, HashSet<string>>();
+            foreach (var row in rows)
+            {
+                if (SeforimDbCatalogTextNormalizer.TryParseDafText(row.Text, out _, out _)) continue;
+                if (!SeforimDbCatalogTextNormalizer.TryParseBareDafText(row.Text, out string c, out bool b)) continue;
+                var map = b ? colons : dots;
+                int parentKey = row.ParentId ?? int.MinValue;
+                if (!map.TryGetValue(parentKey, out var set)) map[parentKey] = set = new HashSet<string>(StringComparer.Ordinal);
+                set.Add(c);
+            }
+            foreach (var (parent, set) in dots)
+                if (colons.TryGetValue(parent, out var other) && set.Overlaps(other))
+                    (bareListParents ??= new HashSet<int>()).Add(parent);
+        }
+
         List<TocRow>? result = null;
         Dictionary<(int? ParentId, string Core), TocRow>? parents = null;
         int syntheticId = int.MinValue / 2;
@@ -784,7 +991,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         for (int i = 0; i < rows.Count; i++)
         {
             var r = rows[i];
-            if (!SeforimDbCatalogTextNormalizer.TryParseDafText(r.Text, out string core, out bool isAmudB))
+            if (!SeforimDbCatalogTextNormalizer.TryParseDafText(r.Text, out string core, out bool isAmudB)
+                && !(bareListParents is not null && bareListParents.Contains(r.ParentId ?? int.MinValue)
+                     && SeforimDbCatalogTextNormalizer.TryParseBareDafText(r.Text, out core, out isAmudB)))
             {
                 result?.Add(r);
                 continue;
@@ -832,7 +1041,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
     // ── DB loading ──────────────────────────────────────────────────────────────
 
-    private sealed class TocRow
+    internal sealed class TocRow
     {
         public int Id;
         public int? ParentId;
@@ -881,7 +1090,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         return list;
     }
 
-    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(SqliteConnection conn)
+    /// <summary>Each book's first line. The line id comes back as the id STORED in the file, which for
+    /// a library with translated line ids (<see cref="SeforimDbIdMap"/>) can exceed int32, so it
+    /// is read as 64-bit and translated to the local id the rest of the build works in.</summary>
+    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(
+        SqliteConnection conn, SeforimDbAttachedLibraries.Library? library = null)
     {
         // SQLite MIN() aggregate guarantees the bare columns come from the minimal row.
         var map = new Dictionary<int, (int, int)>();
@@ -889,7 +1102,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         cmd.CommandText = SeforimDbSqlStrings.CatalogIndexFirstLines;
         using var r = cmd.ExecuteReader();
         while (r.Read())
-            map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? -1 : r.GetInt32(2));
+            map[r.GetInt32(0)] = (library is { } lib ? lib.ToLocalLineId(r.GetInt64(1)) : checked((int)r.GetInt64(1)), r.IsDBNull(2) ? -1 : r.GetInt32(2));
         return map;
     }
 
@@ -918,7 +1131,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
     /// <summary>Stream all TOC entries ordered by book — one group per book so each
     /// book's tree is materialized (and released) in turn instead of all at once.</summary>
-    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn)
+    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn, SeforimDbIdMap? tocIds = null)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = SeforimDbSqlStrings.CatalogIndexTocRowsAllBooks;
@@ -935,8 +1148,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             }
             group.Rows.Add(new TocRow
             {
-                Id = r.GetInt32(1),
-                ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
+                Id = LocalToc(tocIds, r.GetInt64(1)),
+                ParentId = r.IsDBNull(2) ? null : LocalToc(tocIds, r.GetInt64(2)),
                 BookId = bookId,
                 Text = r.IsDBNull(3) ? "" : r.GetString(3),
                 LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),

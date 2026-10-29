@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using FtsLib.Indexing;
@@ -90,8 +91,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         private readonly string _indexPath;
         private readonly string _seforimDbPath;
+        /// <summary>Every additional library whose content also counts toward this index's
+        /// provenance stamp — see <see cref="ComputeStamp"/>. Empty for the common single-library
+        /// case, which keeps computing the exact same stamp this class always did.</summary>
+        private readonly IReadOnlyList<SeforimDbAttachedLibraries.Library> _additionalLibraries;
 
-        public SeforimDbFtsIndexer(string indexPath, string seforimDbPath)
+        public SeforimDbFtsIndexer(
+            string indexPath, string seforimDbPath,
+            IReadOnlyList<SeforimDbAttachedLibraries.Library>? additionalLibraries = null)
         {
             if (string.IsNullOrWhiteSpace(indexPath))
                 throw new ArgumentException("indexPath is required", nameof(indexPath));
@@ -100,7 +107,16 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             _indexPath = indexPath;
             _seforimDbPath = seforimDbPath;
+            _additionalLibraries = additionalLibraries ?? Array.Empty<SeforimDbAttachedLibraries.Library>();
         }
+
+        /// <summary>The provenance stamp for the CURRENT state of every source this index covers
+        /// — the primary database plus every additional library. Changes when ANY of them
+        /// changes, or when the SET of additional libraries itself changes (see
+        /// <see cref="SeforimDbContentFingerprint.ComputeAll"/>), so a stale index against any
+        /// one source — or a library added/removed since the index was built — is always caught.</summary>
+        private string ComputeStamp() =>
+            SeforimDbContentFingerprint.ComputeAll(_seforimDbPath, _additionalLibraries, IndexFormatVersion);
 
         public string IndexPath => _indexPath;
 
@@ -185,7 +201,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool completedBuild = File.Exists(completedStampPath) && SegmentsExist() && !hasResumeWatermark;
 
             string currentStamp;
-            try { currentStamp = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion); }
+            try { currentStamp = ComputeStamp(); }
             catch (SeforimDbUnreadableException)
             {
                 // Cannot tell whether the DB changed — a momentary lock is not evidence that it
@@ -203,7 +219,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 recordedStamp = currentStamp;   // unverifiable — but not evidence of a different DB
             }
 
-            if (hasIndexState && !string.Equals(recordedStamp, currentStamp, StringComparison.OrdinalIgnoreCase))
+            if (hasIndexState && !SeforimDbContentFingerprint.Matches(recordedStamp, currentStamp))
             {
                 Directory.Delete(_indexPath, recursive: true);
                 plan.WipedStaleState = true;
@@ -271,7 +287,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             // rewrites the same value; Prepare already proved it matches.
             File.WriteAllText(
                 Path.Combine(_indexPath, StartedStampFileName),
-                SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion));
+                ComputeStamp());
 
             // Resume state lives in the engine; the total is cached there from the prior
             // session so resuming never rescans the corpus just to size the progress bar.
@@ -330,7 +346,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 // this database, and any later database change invalidates them.
                 File.WriteAllText(
                     Path.Combine(_indexPath, CompletedStampFileName),
-                    SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion));
+                    ComputeStamp());
 
                 // The watermark has served its purpose. If this delete fails the leftover is
                 // benign — its stamp matches, so the next launch "resumes" past the last line
@@ -364,9 +380,23 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return null;
 
             string current;
-            try { current = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion); }
+            try { current = ComputeStamp(); }
             catch (SeforimDbUnreadableException) { return null; }   // cannot tell — not stale
             return SeforimDbContentFingerprint.DescribeChange(builtFrom, current);
+        }
+
+        /// <summary>
+        /// True when the index on disk (completed, or an interrupted build's start stamp) was
+        /// recorded for EXACTLY the sources this indexer was given. Read-only. The coordinator uses
+        /// it to skip re-validating additional libraries that an earlier build already read in
+        /// full: a stamp only ever records the libraries that were actually included.
+        /// </summary>
+        public bool RecordedStampMatchesCurrent()
+        {
+            string? recorded = ReadStamp(Path.Combine(_indexPath, CompletedStampFileName))
+                            ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
+            return recorded != null
+                && SeforimDbContentFingerprint.Matches(recorded, ComputeStamp());
         }
 
         /// <summary>

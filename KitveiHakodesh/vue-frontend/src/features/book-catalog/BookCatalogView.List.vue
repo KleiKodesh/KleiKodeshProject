@@ -7,10 +7,15 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
+import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { libraryBadgeText, libraryTooltipText } from './catalogCardLines'
 import { titleWithAuthor } from './titleWithAuthor'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+
+const { showLibraryBadge } = storeToRefs(useSettingsStore())
 
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -28,7 +33,20 @@ function getTitle(item: FsItem) {
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
-  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
+  const library = libraryTooltipText(getLibraryLabel(item))
+  const titled = library ? `${getTitle(item)}
+${library}` : getTitle(item)
+  return item.kind === 'folder' ? titled : withNewTabHint(titled, OPEN_IN_NEW_TAB_HINT_HE)
+}
+
+/**
+ * Set when this item came from an additional (attached) library rather than
+ * the main one. Shown as a badge next to the title so a folder or book that
+ * happens to share its name with one in the main library is distinguishable —
+ * otherwise the user clicks the wrong one and finds none of their content.
+ */
+function getLibraryLabel(item: FsItem): string | null | undefined {
+  return item.kind === 'folder' ? item.node.libraryLabel : item.book.libraryLabel
 }
 
 // Combobox model (see useInputListNavigation): DOM focus stays in the page's
@@ -84,6 +102,9 @@ function selectItem(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
+        <span v-if="showLibraryBadge && libraryBadgeText(getLibraryLabel(item))" class="author-tag library-tag" dir="auto">{{
+          libraryBadgeText(getLibraryLabel(item))
+        }}</span>
       </div>
     </div>
   </div>
@@ -142,5 +163,26 @@ function selectItem(index: number, event?: MouseEvent) {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+/* Same tag as BookCatalogSearch's .item-author-tag. */
+.author-tag {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+  flex-shrink: 0;
+  unicode-bidi: isolate;
+}
+/* Same pill, tinted with the warning color (already used for folder icons /
+   additional-library affordances elsewhere) so it reads as "other source"
+   rather than just another author tag. */
+.library-tag {
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
 }
 </style>

@@ -34,6 +34,7 @@ export interface BookRow {
   parentPath?: string // category path without the book title — used for display in search results
   period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
   rootCategory?: string // First-tier category title
+  libraryLabel?: string | null // set when this row came from an additional library, not the primary seforim.db
 }
 
 export interface CategoryRow {
@@ -41,6 +42,7 @@ export interface CategoryRow {
   parentId: number | null
   title: string
   level: number
+  libraryLabel?: string | null // see BookRow.libraryLabel
 }
 
 /** Per-book metadata plus the connection-kind flags the book-view toolbar switches on. */

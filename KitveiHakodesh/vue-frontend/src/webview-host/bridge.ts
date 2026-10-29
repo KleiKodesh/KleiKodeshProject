@@ -1432,6 +1432,116 @@ export async function clearDbPath(): Promise<string | null> {
   }
 }
 
+// ── Additional seforim libraries (settings page) ───────────────────────────────
+// Extra seforim-shaped databases ATTACHed ALONGSIDE the primary one above (see
+// KitveiHakodesh.Core.SeforimDb.SeforimDbAttachedLibraries) — a personal library built
+// offline, say. Same registry-owned, restart-to-apply contract as the primary path: every
+// add/remove persists and restarts the service so it re-resolves which libraries to attach.
+
+export interface AdditionalLibraryInfo {
+  path: string
+  /** The file is actually there right now. False usually means it moved or was deleted. */
+  exists: boolean
+  /** The service is actually ATTACHing this library today (exists, matches the required
+   *  seforim.db table shape, and its own ids fit the id-space it was given). False with
+   *  `exists` true means the file is there but failed that check. */
+  attached: boolean
+  /** Display label (the file name without its extension) — NOT an identifier. */
+  label: string
+  /** Why `attached` is false (short English reason from the service: file not visible to the
+   *  service account, missing tables, line text unreadable, restart pending...). */
+  reason?: string
+}
+
+/** Bounds for the additional-libraries calls: a listing is quick; add/remove persist a
+ *  setting (the restart happens AFTER the reply). A native picker has no bound — the user may
+ *  take as long as they like. */
+export const ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS = 20_000
+export const ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS = 60_000
+
+export interface AdditionalLibrariesResult {
+  libraries: AdditionalLibraryInfo[]
+  /** Set only when the op that produced this result did nothing — see the op's own doc. */
+  error?: string
+  /** The service is restarting to apply a change that was just persisted. */
+  restarting?: boolean
+  /** `pickAdditionalSeforimLibrary` only: the user dismissed the native dialog. */
+  cancelled?: boolean
+}
+
+/** Which data host answers: changes whenever the service rebuilds its data host (a library
+ *  change) or restarts. Undefined from a service build that predates the field. */
+export async function pingServiceInstance(): Promise<string | undefined> {
+  const result = await serviceCall<{ pong?: boolean; instance?: string }>(
+    'ping', {}, undefined, ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS)
+  return result?.instance
+}
+
+/**
+ * Ask the host app to START the service now (no admin prompt, no install/repair). True when it
+ * is listening. In the dev browser there is no host to ask - the dev server respawns the
+ * service - so it reports success and the caller just keeps probing.
+ */
+export async function startServiceNow(): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') return true
+  const reply = await action<{ ok?: boolean }>('startService')
+  return !!reply?.ok
+}
+
+/**
+ * Every configured additional library and its current status.
+ *
+ * REJECTS when the service cannot answer (timeout, unavailable, error). It used to return []
+ * in that case, which a settings page cannot tell apart from "no libraries configured" - the
+ * failure was shown as an empty list, or not at all.
+ */
+export async function getAdditionalSeforimLibraries(): Promise<AdditionalLibraryInfo[]> {
+  const result = await serviceCall<AdditionalLibrariesResult>(
+    'getAdditionalSeforimLibraries', {}, undefined, ADDITIONAL_LIBRARIES_LIST_TIMEOUT_MS)
+  return result?.libraries ?? []
+}
+
+/**
+ * Add a typed/pasted path. Does not require the file to exist yet (same as the primary path
+ * field) — `exists`/`attached` on the returned list say whether it works right now.
+ * `error` is set (and nothing persisted) when the path was empty, already configured, has a
+ * ';' or '|' in it, or this install has used up every id-space slot it can ever address.
+ */
+export async function addAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
+  return serviceCall<AdditionalLibrariesResult>(
+    'addAdditionalSeforimLibrary', { path }, undefined, ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS)
+}
+
+/** Remove a configured path. */
+export async function removeAdditionalSeforimLibrary(path: string): Promise<AdditionalLibrariesResult> {
+  return serviceCall<AdditionalLibrariesResult>(
+    'removeAdditionalSeforimLibrary', { path }, undefined, ADDITIONAL_LIBRARIES_WRITE_TIMEOUT_MS)
+}
+
+/**
+ * Show the native open-file dialog for an additional library and persist it if chosen.
+ * Null means the user CANCELLED - and only that. A failure (service down, timeout, a native
+ * dialog that errored) REJECTS: it used to return null too, which the page could not tell
+ * apart from a cancel, so a failed add looked like the user changing their mind.
+ * (An `error` result is different again: it still carries the current list.)
+ *
+ * Hosted: reuses the exact SAME native dialog action as the primary DB path picker — it only
+ * ever returns a filesystem path, persistence always goes through the RPC below, so there is
+ * nothing primary-path-specific to avoid reusing. Dev: the service shows the dialog on its own
+ * desktop and persists in one step, mirroring pickDbPath's dev branch above.
+ */
+export async function pickAdditionalSeforimLibrary(): Promise<AdditionalLibrariesResult | null> {
+  if (typeof window.__webviewAction === 'function') {
+    const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
+    if (picked?.error) throw new Error(picked.error)
+    if (picked?.cancelled || !picked?.path) return null
+    return await addAdditionalSeforimLibrary(picked.path)
+  }
+  const result = await serviceCall<AdditionalLibrariesResult>('pickAdditionalSeforimLibrary')
+  if (result?.cancelled) return null
+  return result
+}
+
 /**
  * Clear the persisted HebrewBooks local folder setting (saves an empty string to the registry).
  */
