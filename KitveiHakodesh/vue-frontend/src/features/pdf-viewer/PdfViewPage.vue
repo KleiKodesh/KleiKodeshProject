@@ -6,7 +6,7 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { syncPdfViewerTheme } from '@/theme/themes'
-import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import ConversionActionButton from '@/components/ConversionActionButton.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
@@ -248,10 +248,14 @@ function cancelConversion() {
         <LoadingAnimation />
         <div class="converting-name">{{ fileName }}</div>
         <div class="converting-sub">{{ loadingSubText }}</div>
-        <button class="cancel-btn" @click="cancelConversion">
-          <IconDismiss20Regular />
-          <span>{{ $t('pdfViewer.cancel') }}</span>
-        </button>
+        <ConversionActionButton
+          class="cancel-btn"
+          state="busy"
+          :idle-title="$t('pdfViewer.cancel')"
+          :busy-title="$t('pdfViewer.cancel')"
+          :label="$t('pdfViewer.cancel')"
+          @cancel="cancelConversion"
+        />
       </div>
     </div>
 

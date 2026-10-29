@@ -13,5 +13,12 @@
   "openAsPdf": "Open as PDF (through Word)",
   "openAsPdfFailed": "The document could not be opened as PDF",
   "indexBuildFailed": "Only part of the document could be loaded. Open the file again to load the rest.",
-  "cancelOpenAsPdf": "Cancel the conversion to PDF"
+  "cancelOpenAsPdf": "Cancel the conversion to PDF",
+  "convertingToast": "The document must first be converted to PDF through Word - please wait...",
+  "openConvertedPdf": "The PDF is ready - click to open it",
+  "openInDefaultApp": "Open in the default program",
+  "openInDefaultAppFailed": "The file could not be opened in another program",
+  "goToFootnoteReference": "Go to where this footnote is referenced in the text",
+  "goToEndnoteReference": "Go to where this endnote is referenced in the text",
+  "bookmarkNotFound": "The link target was not found in this document"
 }

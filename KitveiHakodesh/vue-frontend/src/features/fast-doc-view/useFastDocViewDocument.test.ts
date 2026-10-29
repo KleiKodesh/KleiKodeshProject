@@ -43,6 +43,8 @@ function fakeApi(total: number) {
       { blockIndex: 20, level: 1, text: 'c' },
     ],
     weights: async () => Int32Array.from({ length: total }, () => 10),
+    bookmark: async () => null,
+    sections: async () => [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }],
     scan: async (documentId, blocks) => {
       calls.push({ op: 'scan', args: [documentId, blocks] })
       return { knownBlockCount: total, isIndexComplete: true, footnoteCount: 1, endnoteCount: 0 }
@@ -240,6 +242,7 @@ describe('useFastDocViewDocument', () => {
     await flush()
     expect(document.landmarkTiers.value).toEqual([[0, 20], [50]])
     expect(document.rowWeights.value?.length).toBe(100)
+    expect([document.textWidthTwipsAt(0), document.textWidthTwipsAt(49), document.textWidthTwipsAt(50), document.textWidthTwipsAt(99)]).toEqual([9360, 9360, 13680, 13680])
     await document.ensureBlocks(0, 10)
     expect(document.notesInRange(0, 10).map((note) => note.label)).toEqual(['1'])
     scope.stop()

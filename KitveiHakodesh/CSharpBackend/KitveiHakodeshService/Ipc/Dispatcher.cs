@@ -175,6 +175,13 @@ public sealed class Dispatcher(
                 }
                 case "fastDocViewHeadings":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewBookmark":
+                {
+                    var a = MsgPack.De<FastDocViewBookmarkArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Bookmark(a.DocumentId, a.Name)));
+                }
+                case "fastDocViewSections":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewWeights":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Weights(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewScan":

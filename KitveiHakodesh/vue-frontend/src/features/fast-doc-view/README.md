@@ -29,6 +29,8 @@ Ops go through `serviceCall` (MessagePack envelope, camelCase keys) - see `webvi
 - `fastDocViewHeadings` `{ documentId }` -> array of `{ blockIndex: int, level: int, text: string }` (level 1 = top); the ones known so far while the index builds.
 - `fastDocViewWeights` `{ documentId }` -> bytes (MessagePack bin): Int32 little-endian per block, the estimated text length. Used only when the length equals `blockCount`.
 - `fastDocViewScan` `{ documentId, blocks: int }` -> `{ knownBlockCount: int, isIndexComplete: bool, footnoteCount: int, endnoteCount: int }`: builds up to `blocks` more of the index but stops after about 5 ms (Core `ScanTimeBudget`), so a block fetch never waits long for the document lock; renders and sends nothing else. Note counts grow with the index; the page updates its summary from every reply.
+- `fastDocViewSections` `{ documentId }` -> array of `{ firstBlockIndex: int, textWidthTwips: int }`: page text width per Word section (page width - margins - gutter), block order; the page sizes each block's column from it, scaled with zoom.
+- `fastDocViewBookmark` `{ documentId, name }` -> `{ blockIndex: int | null }`: the block of an internal link's target (`<a href="#bookmark-<escaped name>">`); the page jumps there windowed.
 - `fastDocViewClose` `{ documentId }` -> nothing.
 - Errors: the file changed on disk, or an unknown / idle-closed `documentId`, must fail with a message containing `FastDocViewSourceChanged`; the page reopens the path and retries once.
 - `stylesheet` is plain CSS for the rendered blocks; the page scopes it, so it must not rely on `html` / `body` selectors.

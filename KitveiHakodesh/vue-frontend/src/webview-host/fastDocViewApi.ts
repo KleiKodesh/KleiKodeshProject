@@ -52,11 +52,21 @@ export interface FastDocViewHeading {
   text: string
 }
 
+/** A run of blocks at one page text width (a Word section); twips = 1/1440 inch. */
+export interface FastDocViewSection {
+  firstBlockIndex: number
+  textWidthTwips: number
+}
+
 /** Everything the page needs from the service - injectable so the composable is testable. */
 export interface FastDocViewApi {
   open(path: string): Promise<FastDocViewSummary>
   blocks(documentId: string, first: number, count: number): Promise<FastDocViewBlock[]>
   headings(documentId: string): Promise<FastDocViewHeading[]>
+  /** The block holding bookmark `name` (an internal link's target), or null when there is none. */
+  bookmark(documentId: string, name: string): Promise<number | null>
+  /** Page text width per section, in block order (the known ones while the index builds). */
+  sections(documentId: string): Promise<FastDocViewSection[]>
   /** One weight (estimated text length) per block. */
   weights(documentId: string): Promise<Int32Array>
   /** Builds `blocks` more of the index (renders nothing) and returns the new state. */
@@ -92,6 +102,10 @@ export const fastDocViewApi: FastDocViewApi = {
     (await serviceCall<FastDocViewBlock[]>('fastDocViewBlocks', { documentId, first, count })) ?? [],
   headings: async (documentId) =>
     (await serviceCall<FastDocViewHeading[]>('fastDocViewHeadings', { documentId })) ?? [],
+  bookmark: async (documentId, name) =>
+    (await serviceCall<{ blockIndex?: number | null }>('fastDocViewBookmark', { documentId, name }))?.blockIndex ?? null,
+  sections: async (documentId) =>
+    (await serviceCall<FastDocViewSection[]>('fastDocViewSections', { documentId })) ?? [],
   weights: async (documentId) =>
     decodeFastDocViewWeights(await serviceCall<Uint8Array>('fastDocViewWeights', { documentId })),
   scan: (documentId, blocks) => serviceCall<FastDocViewScanState>('fastDocViewScan', { documentId, blocks }),
