@@ -488,7 +488,11 @@ export const useTabStore = defineStore('tabs', () => {
    */
   function recordNavigation(tab: Tab) {
     const stamp = nextRecentStamp()
-    const location = locationFromTab(tab, stamp, capturePosition(tab))
+    // A search keeps ONE scroll position per tab, not per query, and at this point it
+    // still holds the query being left. A new search's frame starts with none; a frame
+    // that restores a position gets it from the page when the tab leaves it.
+    const position = tab.route === '/search' ? undefined : capturePosition(tab)
+    const location = locationFromTab(tab, stamp, position)
 
     if (isHistoryWorthy(tab)) pushLocation(tab.id, location)
     if (isRecentsWorthy(tab)) {
@@ -577,7 +581,8 @@ export const useTabStore = defineStore('tabs', () => {
   function moveThroughHistory(tabId: string, move: () => NavLocation | null) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
-    captureCurrentPosition(tabId)
+    // The page still showing saves where the reader is NOW (see leaveLocation).
+    leaveLocation(tabId)
 
     const target = move()
     if (!target) return
@@ -1256,9 +1261,21 @@ export const useTabStore = defineStore('tabs', () => {
    * location first, then the new location is pushed onto that tab's history and
    * into recents.
    */
+  /**
+   * The tab is about to leave its location: its page saves where the reader is NOW,
+   * then that position is folded into the records describing the location. A page that
+   * stays mounted across the navigation (a search tab running a new search, the FTS page
+   * keyed by tab alone) has saved nothing since it last hid, so without the save the
+   * history entry would keep a stale position — or none, and Back would land at the top.
+   */
+  function leaveLocation(tabId: string) {
+    capturePositionsForTab(tabId)
+    captureCurrentPosition(tabId)
+  }
+
   function applyTabPatch(tab: Tab, patch: Partial<Omit<Tab, 'id'>>) {
     const navigating = isNavigationPatch(patch)
-    if (navigating) captureCurrentPosition(tab.id)
+    if (navigating) leaveLocation(tab.id)
 
     // Identity changed, so the outgoing document's position state is stale by
     // definition (see IDENTITY_FIELDS / POSITION_FIELDS). Clear it before the merge

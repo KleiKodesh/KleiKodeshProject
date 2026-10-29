@@ -9,18 +9,23 @@
  * Also derives selectedSectionLineIds — the ordered set of line IDs belonging to
  * the active TOC section. Manual multi-select takes priority over the TOC range.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { TocEntry } from '@/webview-host/queries.types'
 import type { CommentaryPinSnapshot } from './bookViewTypes'
-type Line = { id: number; lineIndex: number; content: string | null }
+import type { LinesTable } from './lines/linesTable'
 
 export function useBookViewLineSelection(
-  lines: () => Line[],
+  lines: () => LinesTable,
   tocEntries: () => TocEntry[],
   commentaryLineId: import('vue').Ref<number | null>,
   selectedLineId: import('vue').Ref<number | null>,
   captureActivePins: () => CommentaryPinSnapshot,
   applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
+  /**
+   * Fetches the IDS of the lines in [start, end) — no text. Lines load on demand, so a
+   * range may have nothing yet; a section or a shift-click range needs ids only.
+   */
+  ensureLineIds: (start: number, end: number) => Promise<void>,
 ) {
   const manualSelectionAnchorLineId = ref<number | null>(null)
   const manualSelectionLineIds = ref<number[] | null>(null)
@@ -43,13 +48,32 @@ export function useBookViewLineSelection(
       .find((e) => e.lineIndex != null && e.level <= tocEntry.level)
     const fromIndex = tocEntry.lineIndex
     const toIndex = nextEntry?.lineIndex ?? lines().length
-    // Exclude placeholder lines (content === null) — they haven't loaded from DB yet.
-    // Return null instead of a partial list so useCommentary waits for real IDs.
-    const ids = lines()
-      .filter((l) => l.lineIndex >= fromIndex && l.lineIndex < toIndex && l.content !== null)
-      .map((l) => l.id)
-    return ids.length > 0 ? ids : null
+    // Lines load on demand (an unloaded line has a negative id): until every line of
+    // the section has its id, return null — the watcher below fetches the ids — so
+    // useCommentary waits for the real ones.
+    const section = lines().slice(fromIndex, toIndex)
+    if (!section.length || section.some((l) => l.id <= 0)) return null
+    return section.map((l) => l.id)
   })
+
+  // The section's line ids, fetched (ids only) when a TOC section is selected.
+  watch(
+    () => {
+      // Nothing to fetch into before the line table is sized; reading its length here
+      // makes the watcher fire again when it arrives (restore can set the line first).
+      if (!lines().length || manualSelectionLineIds.value != null || commentaryLineId.value == null) return null
+      const tocEntry = tocEntries().find((e) => e.lineId === commentaryLineId.value)
+      if (!tocEntry || tocEntry.lineIndex == null) return null
+      const index = tocEntries().indexOf(tocEntry)
+      const nextEntry = tocEntries()
+        .slice(index + 1)
+        .find((e) => e.lineIndex != null && e.level <= tocEntry.level)
+      return [tocEntry.lineIndex, nextEntry?.lineIndex ?? lines().length] as const
+    },
+    (range) => {
+      if (range) void ensureLineIds(range[0], range[1]).catch(() => {})
+    },
+  )
 
   /** Returns false when the click changed nothing (plain re-click on the selected line). */
   function onLineSelected(lineId: number, isShiftClick: boolean): boolean {
@@ -73,22 +97,26 @@ export function useBookViewLineSelection(
 
     if (isShiftClick && manualSelectionAnchorLineId.value != null) {
       const anchorId = manualSelectionAnchorLineId.value
-      const anchorLine = lines().find((l) => l.id === anchorId)
-      const clickedLine = lines().find((l) => l.id === lineId)
-      if (anchorLine != null && clickedLine != null) {
-        const fromIndex = Math.min(anchorLine.lineIndex, clickedLine.lineIndex)
-        const toIndex = Math.max(anchorLine.lineIndex, clickedLine.lineIndex)
-        const rangeIds = lines()
-          .filter((l) => l.lineIndex >= fromIndex && l.lineIndex <= toIndex && l.content !== null)
-          .map((l) => l.id)
-        if (rangeIds.length > 0) {
+      const anchorIndex = lines().indexOfId(anchorId)
+      const clickedIndex = lines().indexOfId(lineId)
+      if (anchorIndex != null && clickedIndex != null) {
+        const fromIndex = Math.min(anchorIndex, clickedIndex)
+        const toIndex = Math.max(anchorIndex, clickedIndex)
+        const applyRange = () => {
+          const rangeIds = lines().slice(fromIndex, toIndex + 1).filter((l) => l.id > 0).map((l) => l.id)
+          if (!rangeIds.length) return
           manualSelectionLineIds.value = rangeIds
           // commentaryLineId drives which line commentary loads for — keep the anchor
           // so the first load always comes from the anchor end of the range.
           commentaryLineId.value = anchorId
           selectedLineId.value = lineId
-          return true
         }
+        // The lines between the two ends may never have been scrolled through: their
+        // ids (only) are fetched first.
+        const complete = lines().slice(fromIndex, toIndex + 1).every((l) => l.id > 0)
+        if (complete) applyRange()
+        else void ensureLineIds(fromIndex, toIndex + 1).then(applyRange, () => {})
+        return true
       }
     }
 

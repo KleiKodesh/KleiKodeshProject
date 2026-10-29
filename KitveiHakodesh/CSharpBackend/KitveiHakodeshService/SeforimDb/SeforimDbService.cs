@@ -25,6 +25,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 {
     private readonly SeforimDbQueries _queries = new();
 
+    /// <summary>The Core query object, for Core operations that take it together with another service's Core object.</summary>
+    public SeforimDbQueries Queries => _queries;
+
     /// <summary>Whether there is a database to read — false when the user has chosen none, or
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
@@ -177,6 +180,19 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0) =>
         Run(() => _queries.GetLinesPaged(bookId, limit, offset, versionId), new List<LineRow>(), "getLinesPaged");
 
+    /// <summary>The in-book / commentary substring search, whole (Core decides index vs scan).</summary>
+    public List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit> SubstringSearch(
+        global::KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsIndexCoordinator index,
+        string query, IReadOnlyList<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange> ranges, int versionId) =>
+        Run(() => global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineSubstringSearch.Search(index, _queries, query, ranges, versionId),
+            new List<global::KitveiHakodesh.Core.SeforimDb.SeforimDbLineTextScan.RangeHit>(), "linesSubstringSearch");
+
+    public int[] GetLineIds(int bookId, int fromIndex, int toIndex) =>
+        Run(() => _queries.GetLineIds(bookId, fromIndex, toIndex), Array.Empty<int>(), "getLineIds");
+
+    public int[]? GetLineCharCounts(int bookId) =>
+        Run(() => _queries.GetLineCharCounts(bookId), null, "getLineCharCounts");
+
     public List<TocEntryRow> GetAllTocEntries(int bookId) =>
         Run(() => _queries.GetAllTocEntries(bookId), new List<TocEntryRow>(), "getAllTocEntries");
 
@@ -194,6 +210,8 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds) =>
         Run(() => _queries.GetCommentaryLinksForSourceLineRange(lineIds), new List<CommentaryLinkRow>(), "getCommentaryLinksForSourceLineRange");
+    public List<CommentaryLinkGroupRow> GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds) =>
+        Run(() => _queries.GetCommentaryLinkGroupsForSourceLineRange(lineIds), new List<CommentaryLinkGroupRow>(), "getCommentaryLinkGroupsForSourceLineRange");
 
     // A failed or DB-less call answers Supported = true with no rows. Supported = false means
     // "this schema has no link_anchor", which the page caches until it reloads — a transient

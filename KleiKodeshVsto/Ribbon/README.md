@@ -51,3 +51,13 @@ Ribbon buttons respect user settings stored in registry:
 - Each component (except Settings) can be hidden via `SettingsManager`
 - Settings button is always visible
 - Visibility is checked in `GetVisible(IRibbonControl control)` callback in `KeliKodeshRibbon.cs`
+
+## Commands, text and VBA
+
+- `AddinCommands.cs` — every command the add-in runs (ribbon buttons, context-menu items). The ribbon callbacks and the VBA object both call in here.
+- `AddinText.cs` — every label/tip in Hebrew and English, keyed by control id. Ribbon (`getLabel`/`getSupertip`), context menus and pane titles read from it. `AddinText.English` follows `AddinUiLanguage` (General/UiLanguage).
+- `VbaCommands.cs` — the object VBA gets from `Application.COMAddIns("KleiKodesh").Object` (exposed by `ThisAddIn.RequestComAddInAutomationService`). One method per command, under its English id and its Hebrew label with `_` for spaces: `kk.Nakdan` or the Hebrew equivalent. Hebrew names need the Windows non-Unicode language set to Hebrew.
+- `build_macros_template.py` — builds `Resources\KleiKodeshMacros.he.dotm` (Hebrew macro names) and `.en.dotm` (English names) from `VbaCommands.cs`, writing the VBA straight into the zip (MS-CFB + MS-OVBA, no Word needed) on top of `macros_template_base.dotm` (not shipped). Each macro goes through a guard that shows a message, not a VBA error, when the add-in is missing or disabled.
+- Installing the macros is opt-in: None / Hebrew / English in the installer's SettingsPage and in this pane (`RibbonSettingsView`), both via `Helpers\VbaMacrosTemplate.cs` (linked into the installer). It copies the chosen .dotm into Word's STARTUP folder and tells the user to restart Word. Never installed by setup itself; repair (`FullSystemCleaner`) and the NSIS uninstaller remove every flavour.
+
+Adding a command: add the case to `AddinCommands.Run`, the row to `AddinText`, the two methods to `VbaCommands`, then rebuild the .dotm. Settings and DuplicatePane are deliberately left out of `VbaCommands` (they act on the add-in's own panes) - keep them out.

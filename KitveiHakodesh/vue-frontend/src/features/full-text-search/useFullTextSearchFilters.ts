@@ -1,12 +1,10 @@
 import { t } from '@/i18n'
-import { ref, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useTabStore } from '@/stores/tabStore'
-import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
+import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf } from './fullTextSearchReferences'
@@ -28,6 +26,9 @@ export function parseSearchQuery(raw: string): { term: string; atFilters: string
 
 export function useFullTextSearchFilters(
   results: () => FullTextSearchResult[],
+  /** useFullTextSearch.resultsVersion: bumped on every change to `results`, in-place
+   *  appends included — the array's identity alone does not change per flush. */
+  resultsVersion: () => number,
   executedQuery: () => string,
   /** The hit's concrete matched terms (useFullTextSearch.matchedTermsOf). */
   matchedTermsOf: (result: FullTextSearchResult) => string[],
@@ -47,10 +48,14 @@ export function useFullTextSearchFilters(
   const atFilters = ref<string[]>([])
 
   // Plain refs — never computeds. filteredResults is a shallowRef grown incrementally
-  // (see applyFilter): each streaming flush appends only the freshly-arrived tail rather
-  // than re-filtering the whole accumulated set.
+  // (see applyFilter): each streaming flush appends only the freshly-arrived tail, IN
+  // PLACE, rather than re-filtering (or copying) the whole accumulated set.
   const effectiveBookIds = ref<Set<number>>(new Set())
   const filteredResults = shallowRef<FullTextSearchResult[]>([])
+  /** Bumped on every change to filteredResults, in-place appends included: what the
+   *  count and the list react to (the array's identity only changes on a rebuild). */
+  const filteredVersion = ref(0)
+  const filteredCount = computed(() => { filteredVersion.value; return filteredResults.value.length })
   /**
    * Bumped every time filteredResults is REBUILT rather than appended to — i.e.
    * whenever a given row index comes to address a different result.
@@ -62,46 +67,46 @@ export function useFullTextSearchFilters(
    * otherwise leave them silently pointing at unrelated search hits.
    */
   const filteredGeneration = ref(0)
+  /** Per-book hit counts over the RAW results (the filter panel's tallies). Kept
+   *  incrementally: an append adds the new tail's books; a rebuild recounts. The ref is
+   *  reassigned to a fresh Map on each update so the panel's watch sees a change. */
   const resultCounts = ref<Map<number, number>>(new Map())
   const initialized = ref(false)
 
   // How many entries of the raw `results` array have already been folded into
-  // `filteredResults`. Streaming only ever APPENDS to `results`, so on each flush we
-  // filter just the new tail (results.slice(filteredThrough)) and append — O(batch),
-  // not O(total). A criteria change (checkboxes / @ tokens) or a non-append mutation
-  // (sort finalize reorders the whole array, cache restore replaces it) resets this to
-  // 0 and forces a single full rebuild. This is what keeps a high-frequency word from
+  // `filteredResults` (and into resultCounts). Streaming only ever APPENDS to `results`,
+  // so on each flush we filter just the new tail (results.slice(filteredThrough)) and
+  // push it — O(batch), not O(total). A criteria change (checkboxes / @ tokens) or a
+  // replacement of the raw array (sort finalize, new search, cache restore) resets this
+  // to 0 and forces a single full rebuild. This is what keeps a high-frequency word from
   // re-filtering hundreds of thousands of rows on every flush → O(n²) → freeze.
   let filteredThrough = 0
+  /** The raw array `filteredThrough` counts into — a different identity means a rebuild. */
+  let foldedRaw: FullTextSearchResult[] | null = null
 
   // ── Core filter logic ────────────────────────────────────────────────────────
 
-  /**
-   * Returns the subset of `checked` whose books match the query `q`.
-   * If q is too short to be meaningful, returns `checked` unchanged.
-   */
-  function matchBookIds(q: string, checked: Set<number>): Set<number> {
+  // The union of books matching any @ token, searched against the full catalog by the
+  // catalog index's title search (async). null = no tokens, no restriction. Resolved in the
+  // atFilters watch below; until a new set resolves, the previous one keeps filtering.
+  let atFilterBookIds: Set<number> | null = null
+  // Bumped on every atFilters change, BEFORE any early return, so a slower earlier
+  // resolution can never overwrite a newer one.
+  let atFilterGeneration = 0
+
+  /** Book ids matching one @ token, or null when stale / the index cannot answer. */
+  async function matchBookIds(q: string, isStale: () => boolean): Promise<number[] | null> {
     const trimmed = q.trim()
-    if (trimmed.length < 2) return checked
-    const words = normalizeBookPath(normalize(trimmed)).split(/\s+/).filter((w) => w.length > 0)
-    if (!words.length) return checked
-    const matching = new Set(filterBooksByWords(booksStore.allBooks, words).map((b) => b.id))
-    const result = new Set<number>()
-    for (const id of checked) if (matching.has(id)) result.add(id)
-    return result
+    if (trimmed.length < 2) return booksStore.allBooks.map((b) => b.id)
+    return searchBookTitleIds(trimmed, isStale)
   }
 
-  /**
-   * Computes the union of books matching any of the @ tokens, searched against
-   * the full book catalog. Returns null when there are no tokens (no restriction).
-   */
-  function atFilterIds(tokens: string[]): Set<number> | null {
-    if (!tokens.length) return null
-    const allIds = new Set(booksStore.allBooks.map((b) => b.id))
+  /** Union of the books matching any of the @ tokens; null when stale. */
+  async function resolveAtFilterIds(tokens: string[], isStale: () => boolean): Promise<Set<number> | null> {
+    const perToken = await Promise.all(tokens.map((token) => matchBookIds(token, isStale)))
+    if (isStale()) return null
     const union = new Set<number>()
-    for (const token of tokens) {
-      for (const id of matchBookIds(token, allIds)) union.add(id)
-    }
+    for (const ids of perToken) for (const id of ids ?? []) union.add(id)
     return union
   }
 
@@ -110,80 +115,91 @@ export function useFullTextSearchFilters(
    * 1. Start with checkedBookIds (user's manual checkbox selection)
    * 2. Intersect with the union of all @ token matches (if any tokens present)
    */
-  function computeEffectiveIds(checked: Set<number>, tokens: string[]): Set<number> {
-    const atIds = atFilterIds(tokens)
+  function computeEffectiveIds(checked: Set<number>): Set<number> {
+    const atIds = atFilterBookIds
     if (!atIds) return checked
     const result = new Set<number>()
     for (const id of checked) if (atIds.has(id)) result.add(id)
     return result
   }
 
-  function rebuildResultCounts(raw: FullTextSearchResult[]) {
-    const m = new Map<number, number>()
-    for (const r of raw) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
+  /** Adds the hits in raw[from..) to the per-book tallies (a fresh Map, counts carried over). */
+  function countInto(raw: FullTextSearchResult[], from: number) {
+    const m = from === 0 ? new Map<number, number>() : new Map(resultCounts.value)
+    for (let i = from; i < raw.length; i++) m.set(raw[i]!.bookId, (m.get(raw[i]!.bookId) ?? 0) + 1)
     resultCounts.value = m
   }
 
   // Fold raw results into filteredResults. Two modes:
-  //   • rebuild (criteria changed, or the raw array was reordered/replaced): filter the
-  //     whole set from scratch and assign a fresh array.
+  //   • rebuild (criteria changed, or the raw array was replaced): filter the whole set
+  //     from scratch and assign a fresh array.
   //   • append (streaming growth — the common hot path): filter only the newly-arrived
-  //     tail and extend, so a flush costs O(batch) regardless of how large the set is.
+  //     tail and push it onto the SAME array, so a flush costs O(batch) regardless of
+  //     how large the set is — no copy of what is already there.
   // `filteredThrough` records how far into `results` we've already folded.
   function applyFilter(ids: Set<number>, mode: 'rebuild' | 'append') {
     const raw = results()
     const isEffectivelyAll = atFilters.value.length === 0 && ids.size === booksStore.allBooks.length
     const keep = (r: FullTextSearchResult) => isEffectivelyAll || ids.has(r.bookId)
+    const from = mode === 'append' ? filteredThrough : 0
 
-    if (mode === 'append' && raw.length >= filteredThrough) {
-      const tail = raw.slice(filteredThrough)
-      const kept = isEffectivelyAll ? tail : tail.filter(keep)
-      // New array reference is required to trigger the shallowRef (and the downstream
-      // virtualizer measurement rebuild); reuse the existing entries, only the tail is new.
-      if (kept.length) filteredResults.value = [...filteredResults.value, ...kept]
+    if (mode === 'append') {
+      const list = filteredResults.value
+      for (let i = from; i < raw.length; i++) if (keep(raw[i]!)) list.push(raw[i]!)
     } else {
       filteredResults.value = isEffectivelyAll ? raw.slice() : raw.filter(keep)
       // A rebuild, not an append: every row index may now address a different result.
       filteredGeneration.value++
     }
+    filteredVersion.value++
     filteredThrough = raw.length
+    foldedRaw = raw
 
     // resultCounts (per-book/category tallies) drives ONLY the filter panel, which is
-    // rendered solely while it's open. Rebuilding the map is a full O(n) scan over every
-    // result; running it on each streaming flush of a high-frequency word (e.g. "כי",
-    // hundreds of thousands of hits) is O(n²) over the stream and freezes the page.
-    // Skip it while the panel is closed — the watch below recomputes once when it opens.
-    if (isFilterOpen.value) rebuildResultCounts(raw)
+    // rendered solely while it's open. An append tallies just the new tail; a rebuild
+    // recounts. Skipped while the panel is closed — the watch below counts once when it
+    // opens, from scratch.
+    if (isFilterOpen.value) countInto(raw, from)
   }
 
-  function updateFilter(checked: Set<number>, tokens: string[]) {
-    const ids = computeEffectiveIds(checked, tokens)
+  function updateFilter(checked: Set<number>) {
+    const ids = computeEffectiveIds(checked)
     effectiveBookIds.value = ids
-    filteredThrough = 0 // criteria changed → full rebuild
-    applyFilter(ids, 'rebuild')
+    applyFilter(ids, 'rebuild') // criteria changed → full rebuild
   }
 
   // Checkbox change → immediate
-  watch(checkedBookIds, (checked) => updateFilter(checked, atFilters.value))
+  watch(checkedBookIds, (checked) => updateFilter(checked))
 
-  // @ tokens change → immediate
-  watch(atFilters, (tokens) => updateFilter(checkedBookIds.value, tokens))
+  // @ tokens change → resolve their books in the catalog index, then refilter.
+  watch(atFilters, async (tokens) => {
+    const generation = ++atFilterGeneration
+    const isStale = () => generation !== atFilterGeneration
+    if (!tokens.length) {
+      atFilterBookIds = null
+      updateFilter(checkedBookIds.value)
+      return
+    }
+    const ids = await resolveAtFilterIds(tokens, isStale)
+    if (!ids) return
+    atFilterBookIds = ids
+    updateFilter(checkedBookIds.value)
+  })
 
-  // Results changed. During streaming this is a pure append (results only grows by a
-  // batch), so we fold just the new tail. A shrink or a same-length replacement means the
-  // array was reordered (sort finalize) or swapped (new search / cache restore) — that
-  // can't be reconciled incrementally, so rebuild from scratch.
-  watch(() => results(), (raw) => {
-    const mode = raw.length > filteredThrough ? 'append' : 'rebuild'
-    if (mode === 'rebuild') filteredThrough = 0
+  // Results changed. During streaming this is a pure append (the SAME array grew by a
+  // batch), so we fold just the new tail. A different array means a sort finalize, a new
+  // search or a cache restore — that can't be reconciled incrementally, so rebuild.
+  watch(resultsVersion, () => {
+    const raw = results()
+    const mode = raw === foldedRaw && raw.length >= filteredThrough ? 'append' : 'rebuild'
     applyFilter(effectiveBookIds.value, mode)
   })
 
   // Panel opened → its per-book counts were skipped while it was closed (see applyFilter).
-  // Compute them once now from the current result set; while it stays open, applyFilter
-  // keeps them live on each flush.
+  // Count the whole current set once now; while it stays open, applyFilter keeps the
+  // tallies live, incrementally, on each flush.
   watch(isFilterOpen, (open) => {
-    if (open) rebuildResultCounts(results())
+    if (open) countInto(results(), 0)
   })
 
   // ── Public mutations ─────────────────────────────────────────────────────────
@@ -198,7 +214,7 @@ export function useFullTextSearchFilters(
 
   function setCheckedBookIds(ids: Set<number>) {
     checkedBookIds.value = ids
-    effectiveBookIds.value = computeEffectiveIds(ids, atFilters.value)
+    effectiveBookIds.value = computeEffectiveIds(ids)
     initialized.value = true
   }
 
@@ -286,6 +302,8 @@ export function useFullTextSearchFilters(
     checkedBookIds,
     atFilters,
     filteredResults,
+    filteredVersion,
+    filteredCount,
     filteredGeneration,
     resultCounts,
     initCheckedBooks,

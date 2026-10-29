@@ -1,0 +1,158 @@
+# Keeps the shared Google Drive folder in sync with GitHub releases:
+#   folder root          = latest release (installers, portable zip, Hebrew and English release notes as Google Docs)
+#   previous subfolder   = the release before it (fallback in case of bugs)
+# Anything older, or of a deleted release, goes to the Drive trash. Other files in the folder are untouched.
+# The run reads the current releases, so it is safe to start any number of times.
+# Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
+# and by release events from manual edits/deletes.
+# Weekly it only compares Drive's installer names with the releases and syncs on a mismatch: a cheap
+# safety net that also keeps the Google login in use (Google expires one unused for 6 months).
+name: Drive sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: Sync only if Drive's installers differ from the releases (what the weekly run does)
+        type: boolean
+        default: false
+  release:
+    types: [published, edited, deleted, unpublished]
+  schedule:
+    - cron: '0 3 * * 0'
+
+concurrency:
+  group: drive-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      FOLDER_ID: 16lBZzaLRjdz5aIG54Uanhmdk9EczwEKo   # the KleiKodesh folder in the shared Drive
+      PREVIOUS_DIR: גרסה קודמת
+      NOTES_HE: מה חדש
+      NOTES_EN: Release notes
+      RCLONE_CONFIG_GDRIVE_TYPE: drive
+      RCLONE_CONFIG_GDRIVE_SCOPE: drive
+      RCLONE_CONFIG_GDRIVE_CLIENT_ID: ${{ secrets.RCLONE_GDRIVE_CLIENT_ID }}
+      RCLONE_CONFIG_GDRIVE_CLIENT_SECRET: ${{ secrets.RCLONE_GDRIVE_CLIENT_SECRET }}
+      RCLONE_CONFIG_GDRIVE_TOKEN: ${{ secrets.RCLONE_GDRIVE_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash > /dev/null
+
+      - name: Is Drive out of date?
+        id: check
+        env:
+          CHECK_ONLY: ${{ inputs.check_only }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != schedule ] && [ "$CHECK_ONLY" != true ]; then echo "sync=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+                   --limit 2 --json tagName --jq '.[].tagName')
+          sub=""
+          for tag in $tags; do
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+              | grep -E '^(KleiKodeshSetup-.*\.exe|KitveiHakodeshPortable-.*\.zip)$' | sed "s|^|$sub|"
+            sub="$PREVIOUS_DIR/"
+          done | sort > expected.txt
+          rclone lsf -R --files-only gdrive: --drive-root-folder-id "$FOLDER_ID" \
+            | grep -E '^(|.*/)(KleiKodeshSetup-.*\.exe|KitveiHakodeshPortable-.*\.zip)$' | sort > actual.txt || true
+          if diff expected.txt actual.txt; then echo "Drive is up to date."; else echo "sync=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Download the latest two releases
+        if: steps.check.outputs.sync == 'true'
+        run: |
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+                   --limit 2 --json tagName --jq '.[].tagName')
+          [ -n "$tags" ] || { echo "No releases - nothing to sync."; exit 1; }
+          sudo apt-get install -y -qq pandoc > /dev/null
+          sub=""
+          for tag in $tags; do
+            mkdir -p "mirror/$sub" "notes/$sub"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "mirror/$sub" \
+              --pattern 'KleiKodeshSetup-*.exe' --pattern 'KitveiHakodeshPortable-*.zip'
+            # The notes are Hebrew, a "---" line, then English: one doc each.
+            # Notes without Hebrew (e.g. a plain commit list) are English only.
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > body.md
+            if grep -qP '[\x{0590}-\x{05FF}]' body.md; then
+              awk '/^---[[:space:]]*$/ && !s { s=1; next } !s' body.md > he.md
+              awk 's; /^---[[:space:]]*$/ { s=1 }' body.md > en.md
+            else
+              : > he.md; cp body.md en.md
+            fi
+            if [ -s he.md ]; then
+              grep -v -i '^</\?div' he.md \
+                | pandoc -f gfm -t docx -M dir=rtl -M lang=he -o "notes/$sub/$NOTES_HE - $tag.docx"
+            fi
+            if grep -q '[^[:space:]]' en.md; then
+              pandoc -f gfm -t docx -M lang=en -o "notes/$sub/$NOTES_EN - $tag.docx" en.md
+            fi
+            sub="$PREVIOUS_DIR"
+          done
+          find mirror notes -type f | sort
+
+      # Release notes are left out of the sync: they are Google Docs on Drive, re-created below.
+      - name: Sync to Drive
+        if: steps.check.outputs.sync == 'true'
+        run: |
+          rclone sync mirror gdrive: --drive-root-folder-id "$FOLDER_ID" -v \
+            --filter "- $NOTES_HE - *" --filter "- $NOTES_EN - *" \
+            --filter '+ /KleiKodeshSetup-*.exe' --filter '+ /KitveiHakodeshPortable-*.zip' \
+            --filter "+ /$PREVIOUS_DIR/**" --filter '- *'
+
+      - name: Release notes as Google Docs
+        if: steps.check.outputs.sync == 'true'
+        run: |
+          rclone delete gdrive: --drive-root-folder-id "$FOLDER_ID" --include 'ReleaseNotes-*' \
+            --include "$NOTES_HE - *" --include "$NOTES_EN - *" -v
+          rclone copy notes gdrive: --drive-root-folder-id "$FOLDER_ID" --drive-import-formats docx -v
+
+      # GitHub's own failure email is generic: open an issue (emailed to the repo owner) with the fix steps.
+      - name: Open an issue with fix steps
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Drive sync failed - Google Drive is out of date"
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "An open issue already exists."; exit 0
+          fi
+          cat > body.md <<'MD'
+          The Drive sync failed, so the shared Google Drive folder may not have the latest release.
+
+          **First, try a rerun** (a temporary Google/GitHub hiccup fixes itself):
+          open the failed run below, click **Re-run jobs**. If it passes, close this issue.
+
+          **If it fails again with `invalid_grant`, `token expired` or `401`, the Google login expired. Fix (about 5 minutes), in Windows PowerShell:**
+
+          1. Install rclone:
+             `winget install Rclone.Rclone --source winget`
+             then close PowerShell and open a new one.
+          2. Get the Client ID and Client secret: https://console.cloud.google.com/auth/clients?project=kleikodesh-release-clone
+             (sign in as kleikodeshproject@gmail.com; open the client; the secret can be copied or a new one added there).
+          3. Log in (a browser opens; on "Google hasn't verified this app" click Advanced, then Go to kleikodesh-release):
+             `rclone config create gdrive drive scope=drive client_id=PASTE_ID client_secret=PASTE_SECRET`
+          4. Save the new login to GitHub:
+             ```powershell
+             $conf = Get-Content "$env:APPDATA\rclone\rclone.conf"
+             function Get-Val($k) { ($conf | Where-Object { $_ -like "$k = *" }) -replace "^$k = ", '' }
+             Get-Val token         | gh secret set RCLONE_GDRIVE_TOKEN         --repo KleiKodesh/KleiKodeshProject
+             Get-Val client_id     | gh secret set RCLONE_GDRIVE_CLIENT_ID     --repo KleiKodesh/KleiKodeshProject
+             Get-Val client_secret | gh secret set RCLONE_GDRIVE_CLIENT_SECRET --repo KleiKodesh/KleiKodeshProject
+             ```
+          5. Clean up:
+             `winget uninstall Rclone.Rclone` and `Remove-Item -Recurse "$env:APPDATA\rclone"`
+          6. Rerun the sync: `gh workflow run drive-upload.yml --repo KleiKodesh/KleiKodeshProject`
+             When it passes, close this issue.
+
+          **If the error mentions the folder (`not found`, `404`)**, the KleiKodesh Drive folder was moved or deleted:
+          update `FOLDER_ID` in `.github/workflows/drive-upload.yml`.
+          MD
+          printf '\nFailed run: %s\n' "$RUN_URL" >> body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md

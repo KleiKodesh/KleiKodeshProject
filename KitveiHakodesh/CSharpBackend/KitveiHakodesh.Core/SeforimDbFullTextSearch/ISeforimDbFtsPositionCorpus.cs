@@ -12,7 +12,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// </summary>
     internal interface ISeforimDbFtsPositionCorpus : IDisposable
     {
-        List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(IReadOnlyList<(int BookId, int LineIndex)> positions);
+        /// <summary>The snippet texts of the given lines (and, for the short ones, their same-book neighbours).</summary>
+        List<FtsSnippetText> FetchSnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyCollection<int> shortLineIds);
+
+        /// <summary>The index position of a line, from the books' blocks of positions; null when it cannot be placed.</summary>
+        long? PositionOfLine(int lineId, Dictionary<int, (long First, long Count)> books);
+
+        /// <summary>Each book's contiguous block of index positions: [First, First + Count - 1].</summary>
+        Dictionary<int, (long First, long Count)> BookPositionRanges();
 
         /// <summary>The placement (book id, lineIndex, own TOC entry) of each line, no text. An id with no line
         /// is absent. Ids, book ids and TOC entry ids are the corpus's own (global, for a composite).</summary>

@@ -161,23 +161,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public IEnumerable<(int Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default)
         {
-            var treeOrder = SeforimDbBookTreeOrder.Load(_connection);
-
-            var lineCounts = new Dictionary<int, long>();
-            using (var count = _connection.CreateCommand())
-            {
-                count.CommandText = SeforimDbSqlStrings.FtsLineCountsByBook;
-                using var r = count.ExecuteReader();
-                while (r.Read()) lineCounts[r.GetInt32(0)] = r.GetInt64(1);
-            }
-
-            var bookOrder = new List<int>(lineCounts.Keys);
-            bookOrder.Sort((a, b) =>
-            {
-                bool hasA = treeOrder.TryGetValue(a, out int rankA), hasB = treeOrder.TryGetValue(b, out int rankB);
-                if (hasA != hasB) return hasA ? -1 : 1;
-                return hasA ? rankA.CompareTo(rankB) : a.CompareTo(b);
-            });
+            var (bookOrder, lineCounts) = BooksInResultOrder();
 
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsReadBookLines(_schema);
@@ -197,6 +181,52 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1));
                 }
             }
+        }
+
+        /// <summary>
+        /// The books in result order with their line counts — THE definition of the index's
+        /// order, read by the build (<see cref="ReadDocumentsInResultOrder"/>) and by
+        /// <see cref="BookPositionRanges"/>, so the two can never disagree.
+        /// </summary>
+        private (List<int> BookOrder, Dictionary<int, long> LineCounts) BooksInResultOrder()
+        {
+            var treeOrder = SeforimDbBookTreeOrder.Load(_connection);
+
+            var lineCounts = new Dictionary<int, long>();
+            using (var count = _connection.CreateCommand())
+            {
+                count.CommandText = SeforimDbSqlStrings.FtsLineCountsByBook;
+                using var r = count.ExecuteReader();
+                while (r.Read()) lineCounts[r.GetInt32(0)] = r.GetInt64(1);
+            }
+
+            var bookOrder = new List<int>(lineCounts.Keys);
+            bookOrder.Sort((a, b) =>
+            {
+                bool hasA = treeOrder.TryGetValue(a, out int rankA), hasB = treeOrder.TryGetValue(b, out int rankB);
+                if (hasA != hasB) return hasA ? -1 : 1;
+                return hasA ? rankA.CompareTo(rankB) : a.CompareTo(b);
+            });
+            return (bookOrder, lineCounts);
+        }
+
+        /// <summary>
+        /// Each book's block of index positions: the build numbers lines 1, 2, 3… in result
+        /// order, a book's lines in reading order, so a book is the contiguous run
+        /// [First, First + Count - 1] and its line at lineIndex i is position First + i.
+        /// </summary>
+        public Dictionary<int, (long First, long Count)> BookPositionRanges()
+        {
+            var (bookOrder, lineCounts) = BooksInResultOrder();
+            var ranges = new Dictionary<int, (long First, long Count)>(bookOrder.Count);
+            long next = 1;
+            foreach (int bookId in bookOrder)
+            {
+                long count = lineCounts[bookId];
+                ranges[bookId] = (next, count);
+                next += count;
+            }
+            return ranges;
         }
 
         public IEnumerable<(int Id, string Text)> ReadDocumentsAfter(int afterId, int limit = 0, CancellationToken ct = default)
@@ -253,7 +283,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
-        /// The placement (book id, lineIndex, own TOC entry) of each line, no text - what the
+        /// The placement (book id, lineIndex) of each line, no text - what the
         /// searcher reads AFTER verification, for the hits that passed
         /// (<see cref="SeforimDbSqlStrings.FtsFetchPlacements"/>). An id with no line is absent.
         /// </summary>
@@ -275,14 +305,39 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 while (reader.Read())
                     placements[LocalId(reader.GetInt64(0))] = new FtsDocumentPlacement(
                         bookId: reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
-                        lineIndex: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
-                        tocEntryId: LocalTocId(reader.GetInt64(3)));
+                        lineIndex: reader.IsDBNull(2) ? 0 : reader.GetInt32(2));
             }
             return placements;
         }
 
-        /// <summary>Search-result content plus each line's placement (book id, lineIndex, own
-        /// TOC entry), from the one `line` row the content fetch reads - what lets the
+        /// <summary>
+        /// The line's index position — where a search resumed after it continues
+        /// (<see cref="BookPositionRanges"/>: the book's first position plus the line's rank in
+        /// the book). Two primary-key / index reads. Null for a line that no longer exists or a
+        /// book the ranges do not hold.
+        /// </summary>
+        public long? PositionOfLine(int lineId, Dictionary<int, (long First, long Count)> books)
+        {
+            var placement = FetchPlacements(new[] { lineId });
+            if (!placement.TryGetValue(lineId, out var at) || !books.TryGetValue(at.BookId, out var book)) return null;
+            long rank = LineRankInBook(at.BookId, at.LineIndex, lineId);
+            return rank < book.Count ? book.First + rank : null;
+        }
+
+        /// <summary>A line's 0-based rank among its book's lines (by lineIndex, id as the tie-break). The ids
+        /// are this corpus's own (local, for a translated library).</summary>
+        public long LineRankInBook(int bookId, int lineIndex, int lineId)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = SeforimDbSqlStrings.FtsLineRankInBook;
+            command.Parameters.AddWithValue("@b", bookId);
+            command.Parameters.AddWithValue("@li", lineIndex);
+            command.Parameters.AddWithValue("@id", StoredId(lineId));
+            return (long)command.ExecuteScalar()!;
+        }
+
+        /// <summary>Search-result content plus each line's placement (book id, lineIndex),
+        /// from the one `line` row the content fetch reads - what lets the
         /// searcher finish a hit without a second query. See
         /// <see cref="SeforimDbSqlStrings.FtsFetchPlacedLines"/>.</summary>
         public IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids)
@@ -318,50 +373,76 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             {
                 var placement = new FtsDocumentPlacement(
                     bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
-                    lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
-                    tocEntryId: LocalTocId(reader.GetInt64(4)));
+                    lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3));
                 yield return (LocalId(reader.GetInt64(0)), _codec.DecodeColumnOrEmpty(reader, 1), placement);
             }
         }
 
+        /// <summary>How many lines per side a SHORT snippet's context reaches (same book only).
+        /// Two fills the snippet's visual space (~4 clamped lines) and reaches about the
+        /// requested per-side word context for prose.</summary>
+        public const int SnippetNeighbourLineRadius = 2;
+
         /// <summary>
-        /// The lines at the given (bookId, lineIndex) positions: id, position and text. One
-        /// statement per 499 positions (two parameters each, under SQLite's 999 limit). What
-        /// the searcher asks for a batch's short hits' neighbours — the positions it could
-        /// not already serve from the batch's own fetched content. A position with no line
-        /// is absent; empty lines are returned (the caller skips them, as the self-join did).
+        /// The snippet texts of the given lines — ONE statement per chunk
+        /// (<see cref="SeforimDbSqlStrings.FtsFetchSnippetLines"/>): every line's own text, and
+        /// for the lines in <paramref name="shortLineIds"/> also their non-empty same-book
+        /// neighbours within <see cref="SnippetNeighbourLineRadius"/>, each side joined by
+        /// single spaces in document order. A line with no text row is absent. A short id
+        /// need not also appear in <paramref name="lineIds"/>.
         /// </summary>
-        public List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(
-            IReadOnlyList<(int BookId, int LineIndex)> positions)
+        public List<FtsSnippetText> FetchSnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyCollection<int> shortLineIds)
         {
-            var lines = new List<SeforimDbFtsLineAtPosition>(positions?.Count ?? 0);
-            if (positions == null || positions.Count == 0) return lines;
+            var shortSet = new HashSet<int>(shortLineIds);
+            var plain = new List<int>(lineIds.Count);
+            foreach (int id in lineIds) if (!shortSet.Contains(id)) plain.Add(id);
+            var shortIds = new List<int>(shortSet);
 
-            const int positionsPerStatement = SqliteInListChunkSize / 2;
-            using var command = _connection.CreateCommand();
-            string[] parameterNames = AddChunkParameters(command, positionsPerStatement * 2);
+            var texts = new Dictionary<int, string>(plain.Count + shortIds.Count);
+            var before = new Dictionary<int, SortedList<int, string>>();
+            var after = new Dictionary<int, SortedList<int, string>>();
 
-            for (int start = 0; start < positions.Count; start += positionsPerStatement)
+            // One chunk stays under SQLite's 999 variables (@radius is one more).
+            const int perStatement = SqliteInListChunkSize - 1;
+            int p = 0, q = 0;
+            while (p < plain.Count || q < shortIds.Count)
             {
-                int count = Math.Min(positionsPerStatement, positions.Count - start);
-                command.CommandText = SeforimDbSqlStrings.FtsFetchLinesAtBookPositions(_schema, count);
-                for (int i = 0; i < count; i++)
-                {
-                    command.Parameters[parameterNames[2 * i]].Value = positions[start + i].BookId;
-                    command.Parameters[parameterNames[2 * i + 1]].Value = positions[start + i].LineIndex;
-                }
+                int plainCount = Math.Min(perStatement, plain.Count - p);
+                int shortCount = Math.Min(perStatement - plainCount, shortIds.Count - q);
+                using var command = _connection.CreateCommand();
+                command.CommandText = SeforimDbSqlStrings.FtsFetchSnippetLines(_schema, plainCount, shortCount);
+                for (int i = 0; i < plainCount; i++) command.Parameters.AddWithValue("@p" + i, StoredId(plain[p + i]));
+                for (int i = 0; i < shortCount; i++) command.Parameters.AddWithValue("@s" + i, StoredId(shortIds[q + i]));
+                if (shortCount > 0) command.Parameters.AddWithValue("@radius", SnippetNeighbourLineRadius);
+                p += plainCount;
+                q += shortCount;
 
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    lines.Add(new SeforimDbFtsLineAtPosition(
-                        id: LocalId(reader.GetInt64(0)),
-                        bookId: reader.GetInt32(1),
-                        lineIndex: reader.GetInt32(2),
-                        text: _codec.DecodeColumnOrEmpty(reader, 3)));
+                    int id = LocalId(reader.GetInt64(0));
+                    int delta = reader.GetInt32(1);
+                    string text = _codec.DecodeColumnOrEmpty(reader, 2);
+                    if (delta == 0) { texts[id] = text; continue; }
+                    if (text.Length == 0) continue;   // empty neighbours are skipped, not joined
+                    var side = delta < 0 ? before : after;
+                    if (!side.TryGetValue(id, out var parts)) side[id] = parts = new SortedList<int, string>();
+                    parts[delta] = text;
                 }
             }
-            return lines;
+
+            var result = new List<FtsSnippetText>(texts.Count);
+            foreach (var entry in texts)
+            {
+                result.Add(new FtsSnippetText
+                {
+                    LineId = entry.Key,
+                    Text = entry.Value,
+                    Before = before.TryGetValue(entry.Key, out var b) ? string.Join(" ", b.Values) : "",
+                    After = after.TryGetValue(entry.Key, out var a) ? string.Join(" ", a.Values) : "",
+                });
+            }
+            return result;
         }
 
         public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(
@@ -377,9 +458,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <see cref="FetchNeighbourText"/> plus WHICH lines each side was joined from, in the
         /// same document order. Empty neighbour lines are skipped on both counts, so joining
         /// the ids' texts with single spaces reproduces <c>Previous</c> / <c>Next</c>. One
-        /// self-join per chunk of ids; the searcher no longer uses this — it serves its short
-        /// hits' neighbours from the batch's own content plus
-        /// <see cref="FetchLinesAtBookPositions"/> — so it only backs the plain corpus seam.
+        /// self-join per chunk of ids; the searcher does not use this (snippet context is
+        /// <see cref="FetchSnippetTexts"/>) — it only backs the plain corpus seam.
         /// </summary>
         private IDictionary<int, SeforimDbFtsNeighbourLines> FetchNeighbourLines(
             IReadOnlyList<int>? ids, int radius)
@@ -463,24 +543,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             _codec.Dispose();
             _connection.Dispose();
         }
-    }
-
-    /// <summary>One line of the library with its position: what
-    /// <see cref="SeforimDbFtsCorpus.FetchLinesAtBookPositions"/> returns.</summary>
-    public readonly struct SeforimDbFtsLineAtPosition
-    {
-        public SeforimDbFtsLineAtPosition(int id, int bookId, int lineIndex, string text)
-        {
-            Id = id;
-            BookId = bookId;
-            LineIndex = lineIndex;
-            Text = text;
-        }
-
-        public int Id { get; }
-        public int BookId { get; }
-        public int LineIndex { get; }
-        public string Text { get; }
     }
 
     /// <summary>One matched line's same-book neighbours: each side's joined text and the ids

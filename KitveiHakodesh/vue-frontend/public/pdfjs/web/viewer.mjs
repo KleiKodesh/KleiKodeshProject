@@ -1227,7 +1227,13 @@ class PDFLinkService {
     const ac = new AbortController();
     this.eventBus._on("textlayerrendered", evt => {
       if (evt.pageNumber === pageNumber) {
-        evt.source.textLayer.div.focus();
+        // [KleiKodesh] PATCH: never steal focus from an element being edited -
+        // this late focus blurred (and so cancelled) an outline rename started
+        // by a double-click whose first click navigated to another page.
+        const active = document.activeElement;
+        if (!active?.isContentEditable && active?.tagName !== "INPUT" && active?.tagName !== "TEXTAREA") {
+          evt.source.textLayer.div.focus();
+        }
         ac.abort();
       }
     }, {
@@ -9211,9 +9217,44 @@ class PDFPrintService {
   }
 }
 const print = window.print;
+// [KleiKodesh] disableAutoFetch leaves pageViewsReady false until every page was
+// displayed, so beforePrint refused ("not fully loaded"). Fetch the missing pdfPages
+// first (like PDFViewer.setDocument does without disableAutoFetch), then print.
+// A print before the document's pages exist is deferred until "pagesinit".
+let khPrintPreparing = false;
+async function khPreparePrintPages() {
+  const app = PDFViewerApplication;
+  const viewer = app.pdfViewer;
+  if (!viewer?.pdfDocument || !viewer.pagesCount) {
+    await new Promise(resolve => app.eventBus._on("pagesinit", resolve, { once: true }));
+  }
+  const pdfDocument = viewer.pdfDocument;
+  const pending = [];
+  for (let i = 0; i < viewer.pagesCount; i++) {
+    const pageView = viewer.getPageView(i);
+    if (pageView && !pageView.pdfPage) {
+      pending.push(pdfDocument.getPage(i + 1).then(pdfPage => {
+        if (pdfDocument === viewer.pdfDocument && !pageView.pdfPage) {
+          pageView.setPdfPage(pdfPage);
+        }
+      }, reason => console.error(`Unable to get page ${i + 1} for printing`, reason)));
+    }
+  }
+  await Promise.all(pending);
+}
 window.print = function () {
   if (activeService) {
     console.warn("Ignored window.print() because of a pending print job.");
+    return;
+  }
+  const khViewer = PDFViewerApplication.pdfViewer;
+  if (!khViewer?.pdfDocument || !khViewer.pagesCount || !khViewer.pageViewsReady) {
+    if (!khPrintPreparing) {
+      khPrintPreparing = true;
+      khPreparePrintPages().finally(() => {
+        khPrintPreparing = false;
+      }).then(() => window.print(), reason => console.error(reason));
+    }
     return;
   }
   ensureOverlay().then(function () {
@@ -15705,8 +15746,16 @@ class PDFViewer {
       // it does not touch renderingState, so the spinner stays forever.
       const wasRunning = pageView.renderingState === RenderingStates.RUNNING ||
                          pageView.renderingState === RenderingStates.PAUSED;
-      pageView.cancelRendering();
-      if (wasRunning) {
+      // [KleiKodesh] PATCH: keep a text layer that is already built (its div was
+      // appended by onAppend only after render() finished). Cancelling it threw
+      // away selectable text of pages whose canvas stays FINISHED, so nothing
+      // ever rebuilt it. A text layer still pending is cancelled as before, and
+      // its page goes back to INITIAL so the queue redraws it (and re-requests
+      // the text layer) once the page is visible again.
+      const textBuilt = !!pageView.textLayer?.div?.parentNode;
+      const textPending = !!pageView.textLayer && !textBuilt;
+      pageView.cancelRendering({ keepTextLayer: textBuilt });
+      if (wasRunning || (textPending && pageView.renderingState === RenderingStates.FINISHED)) {
         pageView.renderingState = RenderingStates.INITIAL;
       }
     }

@@ -266,6 +266,83 @@ namespace KitveiHakodesh.Core.SeforimDb
             };
         }
 
+        private bool? _lineHasCharCount;
+
+        /// <summary>
+        /// Every line's character count for one book, indexed by lineIndex, or null when
+        /// this library predates the <c>line.charCount</c> column. Feeds the reader's
+        /// scrollbar with a static per-line height estimate; no text is read.
+        /// </summary>
+        public int[]? GetLineCharCounts(int bookId)
+        {
+            // A book of an additional library has no weights here: the caller falls back to measuring text.
+            if (SeforimDbLibraryId.Resolve(bookId).LibraryIndex != 0) return null;
+            using var conn = Open();
+            _lineHasCharCount ??= ColumnExists(conn, "line", "charCount");
+            if (!_lineHasCharCount.Value) return null;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLineCharCounts;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            var counts = new List<int>();
+            while (r.Read())
+            {
+                // Placed by lineIndex, so a gap in the numbering leaves zero-weight rows
+                // rather than shifting every count after it onto the wrong line.
+                int lineIndex = r.IsDBNull(0) ? counts.Count : r.GetInt32(0);
+                while (counts.Count < lineIndex) counts.Add(0);
+                counts.Add(r.IsDBNull(1) ? 0 : r.GetInt32(1));
+            }
+            return counts.ToArray();
+        }
+
+        /// <summary>
+        /// The ids of the lines in [fromIndex, toIndex), placed by lineIndex (0 where a
+        /// lineIndex has no row), with no text. A TOC section's commentary needs its line
+        /// ids only; reading the section's text for them cost a whole section per click.
+        /// </summary>
+        public int[] GetLineIds(int bookId, int fromIndex, int toIndex)
+        {
+            if (toIndex <= fromIndex) return Array.Empty<int>();
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex != 0)
+            {
+                // A book of an additional library: its line ids, handed out as global ids.
+                var slots = new int[toIndex - fromIndex];
+                if (FindAttached(libraryIndex) is not { } library) return slots;
+                using var aconn = Open();
+                using var acmd = aconn.CreateCommand();
+                acmd.CommandText = SeforimDbSqlStrings.GetLineIdsIn(library.Alias);
+                acmd.Parameters.AddWithValue("@bookId", localBookId);
+                acmd.Parameters.AddWithValue("@fromIndex", fromIndex);
+                acmd.Parameters.AddWithValue("@toIndex", toIndex);
+                using var ar = acmd.ExecuteReader();
+                while (ar.Read())
+                {
+                    if (ar.IsDBNull(0)) continue;
+                    int slot = ar.GetInt32(0) - fromIndex;
+                    if (slot >= 0 && slot < slots.Length)
+                        slots[slot] = SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalLineId(ar.GetInt64(1)));
+                }
+                return slots;
+            }
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLineIds;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@fromIndex", fromIndex);
+            cmd.Parameters.AddWithValue("@toIndex", toIndex);
+            using var r = cmd.ExecuteReader();
+            var ids = new int[toIndex - fromIndex];
+            while (r.Read())
+            {
+                if (r.IsDBNull(0)) continue;
+                int slot = r.GetInt32(0) - fromIndex;
+                if (slot >= 0 && slot < ids.Length) ids[slot] = r.GetInt32(1);
+            }
+            return ids;
+        }
+
         /// <param name="versionId">0 for the book's own text; a book_version id to read the
         /// page through that version's overlay instead. See
         /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and
@@ -357,6 +434,109 @@ namespace KitveiHakodesh.Core.SeforimDb
             foreach (var library in _attachedLibraries)
                 if (library.Index == libraryIndex) return library;
             return null;
+        }
+
+        /// <summary>
+        /// Hands each line of [firstLineIndex, lastLineIndex] (through a version's overlay when
+        /// versionId > 0) to <paramref name="onLine"/> as it is read — nothing is collected, so
+        /// a scan over a whole book holds one line at a time.
+        /// </summary>
+        public void ForEachLineInIndexRange(int bookId, int firstLineIndex, int lastLineIndex, int versionId, Action<int, int, string> onLine)
+        {
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex != 0)
+            {
+                // A book of an additional library: read from THAT library (its content shape and dictionary),
+                // line ids handed out as global ids. Version overlays are a primary-database feature.
+                if (versionId > 0 || FindAttached(libraryIndex) is not { } library) return;
+                using var aconn = Open();
+                var shape = SeforimDbSchema.ForDatabase(aconn, library.Path, library.Alias);
+                using var acodec = SeforimDbLineContentCodec.Create(aconn, library.Alias, library.Path);
+                using var acmd = aconn.CreateCommand();
+                acmd.CommandText = SeforimDbSqlStrings.GetLinesInIndexRangeIn(library.Alias, shape);
+                acmd.Parameters.AddWithValue("@bookId", localBookId);
+                acmd.Parameters.AddWithValue("@from", firstLineIndex);
+                acmd.Parameters.AddWithValue("@to", lastLineIndex);
+                using var ar = acmd.ExecuteReader();
+                while (ar.Read())
+                    onLine(SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalLineId(ar.GetInt64(0))),
+                           ar.IsDBNull(1) ? 0 : ar.GetInt32(1), acodec.DecodeColumnOrEmpty(ar, 2));
+                return;
+            }
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            using var cmd = conn.CreateCommand();
+            var schema = SchemaOf(conn);
+            bool isVersionRead = versionId > 0;
+            cmd.CommandText = isVersionRead
+                ? SeforimDbSqlStrings.GetVersionLinesInIndexRange(schema)
+                : SeforimDbSqlStrings.GetLinesInIndexRange(schema);
+            if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@from", firstLineIndex);
+            cmd.Parameters.AddWithValue("@to", lastLineIndex);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                string content = isVersionRead ? ReadVersionLineContent(r, codec) : codec.DecodeColumnOrEmpty(r, 2);
+                onLine(r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), content);
+            }
+        }
+
+        /// <summary>
+        /// Like <see cref="ForEachLineInIndexRange"/> for a sparse set of line indexes — read in
+        /// batches of at most 900 (SQLite's bound-parameter limit), each in reading order.
+        /// </summary>
+        public void ForEachLineByIndexes(int bookId, IReadOnlyList<int> lineIndexes, int versionId, Action<int, int, string> onLine)
+        {
+            const int Batch = 900;
+            var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
+            if (libraryIndex != 0)
+            {
+                if (versionId > 0 || FindAttached(libraryIndex) is not { } library) return;
+                using var aconn = Open();
+                var shape = SeforimDbSchema.ForDatabase(aconn, library.Path, library.Alias);
+                using var acodec = SeforimDbLineContentCodec.Create(aconn, library.Alias, library.Path);
+                for (int at = 0; at < lineIndexes.Count; at += Batch)
+                {
+                    int n = Math.Min(Batch, lineIndexes.Count - at);
+                    var names = new string[n];
+                    for (int i = 0; i < n; i++) names[i] = "@i" + i;
+                    using var acmd = aconn.CreateCommand();
+                    acmd.CommandText = SeforimDbSqlStrings.GetLinesByIndexListIn(library.Alias, shape, string.Join(",", names));
+                    acmd.Parameters.AddWithValue("@bookId", localBookId);
+                    for (int i = 0; i < n; i++) acmd.Parameters.AddWithValue(names[i], lineIndexes[at + i]);
+                    using var ar = acmd.ExecuteReader();
+                    while (ar.Read())
+                        onLine(SeforimDbLibraryId.ToGlobal(libraryIndex, library.ToLocalLineId(ar.GetInt64(0))),
+                               ar.IsDBNull(1) ? 0 : ar.GetInt32(1), acodec.DecodeColumnOrEmpty(ar, 2));
+                }
+                return;
+            }
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            var schema = SchemaOf(conn);
+            bool isVersionRead = versionId > 0;
+            for (int at = 0; at < lineIndexes.Count; at += Batch)
+            {
+                int n = Math.Min(Batch, lineIndexes.Count - at);
+                var names = new string[n];
+                for (int i = 0; i < n; i++) names[i] = "@i" + i;
+                string list = string.Join(",", names);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = isVersionRead
+                    ? SeforimDbSqlStrings.GetVersionLinesByIndexList(schema, list)
+                    : SeforimDbSqlStrings.GetLinesByIndexList(schema, list);
+                if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                for (int i = 0; i < n; i++) cmd.Parameters.AddWithValue(names[i], lineIndexes[at + i]);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    string content = isVersionRead ? ReadVersionLineContent(r, codec) : codec.DecodeColumnOrEmpty(r, 2);
+                    onLine(r.GetInt32(0), r.IsDBNull(1) ? 0 : r.GetInt32(1), content);
+                }
+            }
         }
 
         /// <summary>
@@ -577,6 +757,46 @@ namespace KitveiHakodesh.Core.SeforimDb
                     LineIndex = r.IsDBNull(3) ? 0 : r.GetInt32(3),
                 });
             }
+            return list;
+        }
+
+        /// <summary>The same links as GetCommentaryLinksForSourceLineRange, de-duplicated and
+        /// grouped per (target book, connection type) — see CommentaryLinkGroupRow.</summary>
+        public List<CommentaryLinkGroupRow> GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds)
+        {
+            var list = new List<CommentaryLinkGroupRow>();
+            if (lineIds is null || lineIds.Count == 0) return list;
+            using var conn = Open();
+            _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
+            BindList(cmd, "p", lineIds);
+            using var r = cmd.ExecuteReader();
+            int curBook = int.MinValue, curType = int.MinValue;
+            var ids = new List<int>();
+            var indexes = new List<int>();
+            void Flush()
+            {
+                if (ids.Count == 0) return;
+                list.Add(new CommentaryLinkGroupRow
+                {
+                    TargetBookId = curBook,
+                    ConnectionTypeId = curType,
+                    LineIds = ids.ToArray(),
+                    LineIndexes = indexes.ToArray(),
+                });
+                ids.Clear();
+                indexes.Clear();
+            }
+            while (r.Read())
+            {
+                int book = r.IsDBNull(0) ? 0 : r.GetInt32(0);
+                int type = r.IsDBNull(1) ? 0 : r.GetInt32(1);
+                if (book != curBook || type != curType) { Flush(); curBook = book; curType = type; }
+                ids.Add(r.IsDBNull(2) ? 0 : r.GetInt32(2));
+                indexes.Add(r.IsDBNull(3) ? 0 : r.GetInt32(3));
+            }
+            Flush();
             return list;
         }
 

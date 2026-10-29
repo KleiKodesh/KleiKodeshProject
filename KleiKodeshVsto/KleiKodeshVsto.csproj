@@ -293,6 +293,8 @@
     <Compile Include="Helpers\TaskPanePopOut.cs" />
     <Compile Include="Helpers\TrackedCompare.cs" />
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
+    <Compile Include="Helpers\AddinUiLanguage.cs" />
+    <Compile Include="Helpers\VbaMacrosTemplate.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
     <Compile Include="Helpers\WdActionManager.cs" />
@@ -324,7 +326,10 @@
     <!-- RegexFind logic moved to RegexFindLib project reference -->
     <Compile Include="Ribbon\RibbonSettingsControl.cs" />
     <Compile Include="Ribbon\ContextMenuXmlBuilder.cs" />
+    <Compile Include="Ribbon\AddinCommands.cs" />
+    <Compile Include="Ribbon\AddinText.cs" />
     <Compile Include="Ribbon\KeliKodeshRibbon.cs" />
+    <Compile Include="Ribbon\VbaCommands.cs" />
     <Compile Include="Ribbon\RibbonSettingsView.xaml.cs">
       <DependentUpon>RibbonSettingsView.xaml</DependentUpon>
     </Compile>
@@ -377,9 +382,22 @@
     <Content Include="Resources\Kiwix.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\About.dotx">
+    <Content Include="Resources\About.he.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Resources\About.en.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Optional VBA macros (Hebrew / English names), built by Ribbon\build_macros_template.py.
+         Installed only on request - see Helpers\VbaMacrosTemplate.cs. -->
+    <Content Include="Resources\KleiKodeshMacros.he.dotm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\KleiKodeshMacros.en.dotm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Include="Ribbon\build_macros_template.py" />
+    <None Include="Ribbon\macros_template_base.dotm" />
   </ItemGroup>
   <ItemGroup>
     <Page Include="Ribbon\RibbonSettingsView.xaml">
@@ -433,7 +451,7 @@
     <ManifestKeyFile>KleiKodesh_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>248FB7586402B5FEA4B6FEFF20723CFBB6437082</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>1E1E8386DF21999BCD28810D21430C0FC1F88394</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>

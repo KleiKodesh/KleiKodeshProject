@@ -588,7 +588,50 @@
             // _bindLink assigns) — via a QUEUE per href, consumed in order, so
             // duplicate destinations map to distinct rows instead of the first
             // row swallowing every occurrence.
+            //
+            // Preferred: pair items with rows by TREE POSITION. PDF.js renders
+            // the outline 1:1 (same order, children in .treeItems), so walking
+            // both trees together maps every row to its own item even when
+            // several items share a destination. The href queue alone cannot:
+            // `flat` is BFS while the DOM is depth-first, so duplicates at
+            // different depths got each other's src (and on save each other's
+            // bold/italic/color/closed state). The queue stays as a fallback
+            // only if the DOM shape does not match the outline.
+            var srcIndex = new Map();
+            for (var f = 0; f < flat.length; f++) {
+              srcIndex.set(flat[f], f);
+            }
+            var pairs = [];
+            var shapeOk = (function pairWalk(items, container) {
+              var kids = container
+                ? container.querySelectorAll(':scope > .treeItem')
+                : [];
+              if (kids.length !== items.length) {
+                return false;
+              }
+              for (var k = 0; k < items.length; k++) {
+                pairs.push([srcIndex.get(items[k]), kids[k]]);
+                var sub = items[k].items || [];
+                var subContainer = kids[k].querySelector(':scope > .treeItems');
+                if ((sub.length > 0 || subContainer) && !pairWalk(sub, subContainer)) {
+                  return false;
+                }
+              }
+              return true;
+            })(outline, outlinesView);
             var stamped = 0;
+            if (shapeOk) {
+              for (var p = 0; p < pairs.length; p++) {
+                var si = pairs[p][0];
+                var pr = pairs[p][1];
+                pr.dataset.tocSrc = String(si);
+                if (pages[si] != null && !pr.dataset.tocPage) {
+                  pr.dataset.tocPage = String(pages[si]);
+                }
+                stamped++;
+              }
+              return stamped;
+            }
             for (var i = 0; i < flat.length; i++) {
               var key = null;
               if (flat[i].url) {
@@ -1397,6 +1440,22 @@
       return row;
     }
 
+    /** `row`, or its outermost ancestor whose children are collapsed (hidden). */
+    function visibleRowFor(row) {
+      var result = row;
+      var node = row && row.parentNode;
+      while (node && node !== outlinesView) {
+        if (node.classList && node.classList.contains('treeItem')) {
+          var toggler = node.querySelector(':scope > .treeItemToggler');
+          if (toggler && toggler.classList.contains('treeItemsHidden')) {
+            result = node;
+          }
+        }
+        node = node.parentNode;
+      }
+      return result;
+    }
+
     /**
      * Add an entry pointing at the CURRENT page (the Acrobat convention).
      * `reference` — insert after this row (same level); `asChild` — insert as
@@ -1416,6 +1475,12 @@
       var page = (app && app.page) || 1;
       var row = createRow('פריט חדש', page);
       var target = reference || focusedRow() || activeItem;
+      if (!reference) {
+        // The current-entry row may sit inside a collapsed branch — a row added
+        // next to it would land hidden INSIDE that branch. Go after the outermost
+        // collapsed ancestor instead, the row the user actually sees.
+        target = visibleRowFor(target);
+      }
       if (asChild && target) {
         ensureToggler(target);
         ensureItemsContainer(target).append(row);
@@ -2354,6 +2419,9 @@
       document.addEventListener('kh-save-complete', function () {
         outlineDirty = false;
         notifyHost();
+        // [KleiKodesh] Refresh the "* " dirty prefix: setTitle() last ran
+        // before the save dialog finished, so the title kept the asterisk.
+        if (typeof app.setTitle === 'function') app.setTitle();
       });
 
       app.eventBus._on('outlineloaded', function (evt) {

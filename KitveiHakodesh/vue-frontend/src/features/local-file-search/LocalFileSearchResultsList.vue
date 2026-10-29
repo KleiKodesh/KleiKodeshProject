@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import {
   IconDocument20Filled,
   IconDocumentPdf20Filled,
@@ -23,24 +22,13 @@ const emit = defineEmits<{ openFile: [LocalFileSearchResult, boolean?] }>()
 
 const scrollElement = ref<HTMLElement | null>(null)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.items.length,
-    getScrollElement: () => scrollElement.value,
-    estimateSize: () => 44,
-    overscan: 10,
-    measureElement: (element: Element) => element.getBoundingClientRect().height,
-  })),
-)
-
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
 // the results.
 const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: (index, openInNewTab) => onSelect(props.items[index]!, openInNewTab),
-  getVirtualizer: () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  containerElement: scrollElement,
 })
 
 // New results make the old highlight point at a different item — drop it.
@@ -106,55 +94,42 @@ defineExpose({
 
 <template>
   <div dir="rtl" ref="scrollElement" class="scroller">
-    <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-      <div
-        v-for="virtualRow in virtualizer.getVirtualItems()"
-        :key="String(virtualRow.key)"
-        :ref="(element) => element && virtualizer.measureElement(element as Element)"
-        :data-index="virtualRow.index"
-        :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          transform: `translateY(${virtualRow.start}px)`,
-        }"
+    <!-- A plain list: rows off screen are neither laid out nor painted (.file-item). -->
+    <div
+      v-for="(item, index) in items"
+      :key="item.path + index"
+      class="file-item"
+      data-nav-item
+      :class="{ 'is-focused': activeIndex === index }"
+      :title="getTooltip(item)"
+      @click="selectItem(index, $event)"
+      @auxclick.middle="selectItem(index, $event)"
+    >
+      <span class="icon" :style="{ color: getFileIcon(item).color }">
+        <component :is="getFileIcon(item).component" />
+      </span>
+      <span class="item-text">
+        <span class="item-title-row">
+          <span class="item-title">{{
+            item.addinName || item.fileName
+          }}</span>
+          <span
+            v-if="item.modifiedDate"
+            class="item-date-pill"
+          >{{ formatDate(item.modifiedDate) }}</span>
+        </span>
+        <span class="item-path" dir="ltr">{{ item.path }}</span>
+      </span>
+      <button
+        class="open-in-app-button"
+        type="button"
+        :title="$t('localFileSearch.openInDefaultApp')"
+        @click="openInDefaultApp(item, $event)"
+        @auxclick.stop
+        @mousedown.stop
       >
-        <div
-          class="file-item"
-          data-nav-item
-          :class="{ 'is-focused': activeIndex === virtualRow.index }"
-          :title="getTooltip(items[virtualRow.index]!)"
-          @click="selectItem(virtualRow.index, $event)"
-          @auxclick.middle="selectItem(virtualRow.index, $event)"
-        >
-          <span class="icon" :style="{ color: getFileIcon(items[virtualRow.index]!).color }">
-            <component :is="getFileIcon(items[virtualRow.index]!).component" />
-          </span>
-          <span class="item-text">
-            <span class="item-title-row">
-              <span class="item-title">{{
-                items[virtualRow.index]!.addinName || items[virtualRow.index]!.fileName
-              }}</span>
-              <span
-                v-if="items[virtualRow.index]!.modifiedDate"
-                class="item-date-pill"
-              >{{ formatDate(items[virtualRow.index]!.modifiedDate) }}</span>
-            </span>
-            <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
-          </span>
-          <button
-            class="open-in-app-button"
-            type="button"
-            :title="$t('localFileSearch.openInDefaultApp')"
-            @click="openInDefaultApp(items[virtualRow.index]!, $event)"
-            @auxclick.stop
-            @mousedown.stop
-          >
-            <IconWindowArrowUp20Regular />
-          </button>
-        </div>
-      </div>
+        <IconWindowArrowUp20Regular />
+      </button>
     </div>
   </div>
 </template>
@@ -165,6 +140,8 @@ defineExpose({
   overflow-y: auto;
 }
 .file-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
   display: flex;
   align-items: center;
   gap: 10px;

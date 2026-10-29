@@ -377,6 +377,10 @@ input:focus { background: none !important; }
 .search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); cursor: pointer; }
 .search-inner input::-webkit-search-cancel-button:hover { filter: grayscale(1) opacity(0.8); }
 .hover-bg { transition: background 120ms, color 120ms; }
+/* Set by applyTheme for one frame so a theme switch repaints at once instead of fading. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after { transition: none !important; }
 .hover-bg:hover { background: var(--hover-bg); }
 
 /* ── Static separators ───────────────────────────────────────────────────────
@@ -538,6 +542,13 @@ h1::after {
 :root.scrollbars-hidden :not(.scrollbars-scrolling) {
   scrollbar-color: transparent transparent !important;
 }
+/* The WindowedScroller draws its own bar beside its viewport; it follows the same
+   rule, keyed on the viewport that `scrollbars-scrolling` lands on. */
+:root.scrollbars-hidden
+  .windowed-scroller:not(:has(> .windowed-scroller-viewport.scrollbars-scrolling))
+  .windowed-scroller-bar {
+  opacity: 0;
+}
 
 /* Thin scrollbars — opt-in via the .toc-thin-scroll class. Named for the TOC, which
    was the first caller; the setup-wizard step cards use it too. Standard properties
@@ -572,4 +583,13 @@ h1::after {
    container follow the UI direction, not the content's. */
 :root[dir='ltr'] .ui-chrome {
   direction: ltr;
+}
+
+/* English UI: what's typed into any text box is usually Hebrew - let the typed text pick its
+   own direction (Hebrew runs RTL, an English placeholder stays LTR). */
+:root[dir='ltr'] input[type='search'],
+:root[dir='ltr'] input[type='text'],
+:root[dir='ltr'] input:not([type]),
+:root[dir='ltr'] textarea {
+  unicode-bidi: plaintext;
 }

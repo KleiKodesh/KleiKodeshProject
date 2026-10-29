@@ -6,29 +6,29 @@
  * name the target and whether they want a match centred afterwards, so those are
  * options on one function rather than separate scrollers.
  *
- * This used to be two functions. `scrollToLineId` resolved an id and did a crude
- * visible-check plus a bare `scrollToIndex`; `scrollToLineIndex` had the real
- * positioning — the rendered/estimated fast-slow split, the retry that re-corrects
- * as estimated heights become measured ones, and the generation guard. TOC clicks
- * took the weak path while Ctrl+Arrow section navigation — the same conceptual
- * jump — took the strong one, so the two disagreed about where a section starts.
- * There is now one path, and it is the strong one.
- *
  * Positioning, in order:
  *   1. Resolve the target to a line index (by id, or given directly).
- *   2. Fast path when the row is already in the DOM — its measured start is real,
- *      so the scroll lands in one step.
- *   3. Slow path otherwise — scrollToIndexWithRetry keeps correcting while
- *      estimated heights are replaced by measured ones.
- *   4. Optional refinement: apply the `.current` mark for a search occurrence and
- *      nudge it into view. The row renders a frame or two after the scroll, so
- *      this polls rather than assuming.
+ *   2. scroller.scrollToIndex — exact, because the scroller fetches and mounts the
+ *      target's rows before it sets the scroll from their real positions. No retry.
+ *   3. Optional refinement: apply the `.current` mark for a search occurrence and
+ *      nudge it into view.
  */
-import type { Ref } from 'vue'
-import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
-import { scrollToIndexWithRetry, SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { setCurrentMark } from './useBookViewLineRenderer'
-import type { LineItem } from './useBookViewLinesTable'
+import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
+import type { LinesTable } from './linesTable'
+
+/**
+ * Breathing room a programmatic landing leaves above its target: the scroll stops
+ * this many pixels before the line's start, so a section opens with a sliver of
+ * the previous line showing rather than text flush against the edge.
+ *
+ * Imported by the top-line derivation too (useBookViewLinesScroll), which must
+ * agree with it: the sliver means the line straddling the very top after a
+ * landing is the PREVIOUS line, and a derivation that counts slivers resolves to
+ * the previous TOC entry.
+ */
+export const SCROLL_LANDING_GAP_PX = 8
 
 /**
  * Height the search bar overlays at the top of the lines scroller. Landings
@@ -49,13 +49,12 @@ export interface ScrollToLineOptions {
   /**
    * Which search occurrence within the line to mark `.current` and centre.
    * Omit for a plain jump to the line — a TOC click or section navigation has no
-   * match to refine toward, and the mark polling is skipped entirely.
+   * match to refine toward, and no mark is applied.
    */
   occurrence?: number
   /**
-   * Scroll even when already within 2px of the target. Explicit section
-   * navigation needs this: sub-pixel rounding can put scrollTop a hair from the
-   * target while the view is not actually at the section start.
+   * Land the LINE at the top even when a match on it is already in view. Section
+   * navigation is about the line's position, not a match's visibility.
    */
   force?: boolean
   /**
@@ -81,77 +80,75 @@ export interface ScrollToLineOptions {
 }
 
 export function useBookViewLinesNavigation(
-  scrollerEl: Ref<HTMLElement | null>,
-  virtualizer: () => Virtualizer<Element, Element>,
-  virtualItems: () => VirtualItem[],
-  lines: () => LineItem[],
+  scroller: () => WindowedScrollerApi | null,
+  lines: () => LinesTable,
   searchBarVisible: () => boolean,
   suppressPositionSave: () => void,
-  /** Ends the session-restore correction window — a jump supersedes the restore. */
-  cancelRestoreCorrection: () => void,
-  prioritise: (lineIndex: number) => void,
+  /** Ends the opening's follow-ups — a jump supersedes them. */
+  cancelRestore: () => void,
 ) {
-  // Bumped at the start of every navigation so the multi-frame retry/poll of a
-  // previous call cancels instead of stomping the newer call's mark and scroll.
+  // Bumped at the start of every navigation so a previous call's work after its
+  // await (its mark and adjustment) is dropped instead of stomping the newer one.
   let scrollGeneration = 0
 
-  /** Resolve a line id to its index, falling back when the line is not loaded yet. */
-  function lineIndexForId(lineId: number, fallbackLineIndex?: number): number | undefined {
-    return lines().find((line) => line.id === lineId)?.lineIndex ?? fallbackLineIndex
+  /**
+   * Resolve a line id to its index: from the loaded lines, else the caller's own index,
+   * else the database (lines are fetched on demand, so most of a book is not loaded).
+   */
+  async function lineIndexForId(lineId: number, fallbackLineIndex?: number): Promise<number | undefined> {
+    const loaded = lines().indexOfId(lineId) ?? fallbackLineIndex
+    if (loaded != null) return loaded
+    try {
+      return (await getLineIndexFromLineId(lineId))[0]?.lineIndex
+    } catch {
+      return undefined
+    }
   }
 
-  function isFullyVisible(lineIndex: number): boolean {
-    const scroller = scrollerEl.value
-    const virtualItem = virtualItems().find((v) => v.index === lineIndex)
-    if (!virtualItem || !scroller) return false
-    const viewTop = scroller.scrollTop
-    const viewBottom = viewTop + scroller.clientHeight
-    return virtualItem.start >= viewTop && virtualItem.start + virtualItem.size <= viewBottom
-  }
-
-  function scrollToLine(lineIndex: number, options: ScrollToLineOptions = {}) {
-    const scroller = scrollerEl.value
-    if (!scroller) return
+  async function scrollToLine(lineIndex: number, options: ScrollToLineOptions = {}) {
+    const api = scroller()
+    const scrollerElement = api?.scrollerElement
+    if (!api || !scrollerElement) return
     const generation = ++scrollGeneration
     const isStale = () => generation !== scrollGeneration
-    prioritise(lineIndex)
 
-    if (options.skipIfVisible && isFullyVisible(lineIndex)) return
+    if (options.skipIfVisible && api.isRowFullyVisible(lineIndex)) return
 
-    // The reader is going somewhere else: session restore must stop re-anchoring
-    // its own target, or a late chunk load will yank the view back there.
-    cancelRestoreCorrection()
+    // The reader is going somewhere else: the opening's follow-ups (flash, mark)
+    // must not run against a view that has moved on.
+    cancelRestore()
 
     const { occurrence, force = false, direction = 'backward' } = options
     // No occurrence means no match to refine toward — a plain jump to the line.
     const wantsMark = occurrence != null
     const reserved = searchBarVisible() ? SEARCH_BAR_INSET_PX : 0
-    const virt = virtualizer()
 
-    // Applies the .current class and reports whether the mark actually exists in
-    // the DOM yet — the virtualizer renders the target row a frame or two after
-    // the scroll, so a single blind attempt can silently hit nothing.
+    // Applies the .current class and reports whether the mark exists in the DOM yet.
     function applyCurrentMark(): boolean {
-      const el = scrollerEl.value
-      if (!el) return false
-      setCurrentMark(el, lineIndex, occurrence ?? 0)
-      return el.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`) != null
+      setCurrentMark(scrollerElement!, lineIndex, occurrence ?? 0)
+      return currentMark() != null
     }
 
-    function adjustToMark(scroller: HTMLElement): boolean {
-      const mark = scroller.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`) as HTMLElement | null
+    function currentMark(): HTMLElement | null {
+      return scrollerElement!.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`)
+    }
+
+    /** Moves the view only if the mark is not comfortably on screen. False when there is no mark. */
+    function adjustToMark(): boolean {
+      const mark = currentMark()
       if (!mark) return false
       const markRect = mark.getBoundingClientRect()
-      const scrollerRect = scroller.getBoundingClientRect()
+      const scrollerRect = scrollerElement!.getBoundingClientRect()
       const relativeTop = markRect.top - scrollerRect.top
       const relativeBottom = markRect.bottom - scrollerRect.top
       const alreadyVisible =
         relativeTop >= reserved + 4 &&
         relativeBottom <= scrollerRect.height - BOTTOM_LANDING_CLEARANCE_PX
       if (!alreadyVisible) {
+        suppressPositionSave()
         // Land the mark at the edge the reader is travelling toward: bottom when
         // stepping forward, top when stepping back. See `direction` above.
-        scroller.scrollTop +=
+        scrollerElement!.scrollTop +=
           direction === 'forward'
             ? relativeBottom - scrollerRect.height + BOTTOM_LANDING_CLEARANCE_PX
             : relativeTop - reserved - SCROLL_LANDING_GAP_PX
@@ -159,208 +156,29 @@ export function useBookViewLinesNavigation(
       return true
     }
 
-    function isMarkInView(scroller: HTMLElement): boolean {
-      const mark = scroller.querySelector(`[data-index="${lineIndex}"] mark.search-match.current`)
-      if (!mark) return false
-      const markRect = mark.getBoundingClientRect()
-      const scrollerRect = scroller.getBoundingClientRect()
-      return markRect.top >= scrollerRect.top + reserved && markRect.bottom <= scrollerRect.bottom
-    }
-
-    // Verifies the landing after every match jump: the selected match must end up
-    // both marked `.current` AND on screen. Late chunk loads re-measure rows and
-    // slide content, and a row re-render drops the class — so keep re-checking,
-    // re-marking and re-scrolling until it has held for STILL_FRAMES frames.
-    // Reader input cancels — correcting under their hands would fight them.
-    function verifyMarkLanding() {
-      const el = scrollerEl.value
-      if (!el) return
-      const STILL_FRAMES = 20
-      const MAX_FRAMES = 240
-      let stillFrames = 0
-      let frames = 0
-      let cancelled = false
-      const events = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
-      function teardown() { events.forEach((e) => el!.removeEventListener(e, cancel)) }
-      function cancel() { cancelled = true; teardown() }
-      events.forEach((e) => el.addEventListener(e, cancel, { passive: true }))
-      function frame() {
-        if (cancelled) return
-        if (isStale() || !scrollerEl.value) { teardown(); return }
-        const scrollerNow = scrollerEl.value
-        if (applyCurrentMark() && isMarkInView(scrollerNow)) {
-          stillFrames++
-        } else {
-          stillFrames = 0
-          keepSuppressed()
-          if (!adjustToMark(scrollerNow)) {
-            // Row/mark not in the DOM — bring the line back first.
-            virtualizer().scrollToIndex(lineIndex, { align: 'start' })
-          }
-        }
-        if (stillFrames >= STILL_FRAMES || ++frames > MAX_FRAMES) { teardown(); return }
-        requestAnimationFrame(frame)
-      }
-      requestAnimationFrame(frame)
-    }
-
-    function keepSuppressed() {
-      if (isStale()) return
-      suppressPositionSave()
-    }
-
-    // Fast path — only when the target row is actually in the DOM, so its
-    // measured start is real. The measurements cache is NOT a rendered-check:
-    // tanstack fills it for every index (estimated sizes included), so a cache
-    // hit for an off-screen row lands the scroll at an estimated position that
-    // drifts as soon as the real rows render.
-    const rendered = scroller.querySelector(`[data-index="${lineIndex}"]`)
-    const measurement = virt.measurementsCache.find((cache) => cache.index === lineIndex)
-    if (rendered && measurement) {
-      suppressPositionSave()
-
-      // A match jump moves the view only if the match is not already on screen.
-      // The target here is the MARK, not the line: hauling the line to the top to
-      // reach a match the reader can already see throws away their position for
-      // nothing — stepping through matches within one screenful should leave the
-      // page still, exactly as a browser's find does. adjustToMark owns that
-      // decision (it repositions only when the mark is not comfortably in view),
-      // so hand it the mark and let it choose.
-      //
-      // Only the FAST path can do this: it means the row is really in the DOM, so
-      // the mark can be applied and measured right now. `force` still overrides —
-      // section navigation is about the line's position, not a match's visibility.
-      if (wantsMark && !force) {
-        applyCurrentMark()
-        if (adjustToMark(scroller)) { verifyMarkLanding(); return }
-        // The mark was not in the DOM after all (content still loading) — fall
-        // through to the line scroll and the rAF retry below.
-      }
-
-      const targetScrollTop = measurement.start - reserved - SCROLL_LANDING_GAP_PX
-      if (force || Math.abs(scroller.scrollTop - targetScrollTop) > 2) {
-        scroller.scrollTop = targetScrollTop
-      }
-      if (!wantsMark) return
-      requestAnimationFrame(() => {
-        if (isStale()) return
-        applyCurrentMark()
-        requestAnimationFrame(() => {
-          if (isStale()) return
-          adjustToMark(scroller)
-          verifyMarkLanding()
-        })
-      })
-      return
-    }
-
-    // Slow path — the row is not rendered yet. scrollToIndexWithRetry keeps
-    // correcting while estimated heights are replaced by measured ones; once it
-    // settles, poll for the mark (the row renders a frame or two later) before
-    // fine-adjusting to it.
-    //
-    // Suppression is re-armed on EVERY frame of this path rather than once at the
-    // start. Each suppressPositionSave() opens a fixed ~300ms window, and this
-    // path can easily outlast it: up to 5 retry rounds of two rAFs each, then up
-    // to 30 more frames waiting for the mark, which only appears once the line
-    // content loads. Any scroll landing in the gap would be misread as the reader
-    // moving the view — persisting a mid-flight position, and (since the search
-    // panel re-anchors on reader scrolls) making the next Enter jump to where the
-    // previous one landed instead of stepping on.
-
-    // Holds the landing in place while late content shifts it.
-    //
-    // scrollToIndexWithRetry settles in a handful of frames — on ESTIMATED heights
-    // when the target's region has not loaded yet. When the real content then
-    // arrives, every line above the target re-measures and the content slides
-    // under the unchanged scrollTop, leaving the view a few SECTIONS short of
-    // where the reader clicked (live-verified on הזוהר המתורגם: click daf 218b,
-    // land on 215a). The TOC then truthfully highlights the wrong section — the
-    // flicker was the report, this drift was the crime.
-    //
-    // So after the retry settles, keep re-anchoring the target to the top while
-    // its measured start keeps moving, and stop once it has been still for half a
-    // second (late chunks above can shift it repeatedly, not just once). Reader
-    // input cancels immediately — correcting under their hands would fight them.
-    function stabilizeLanding() {
-      const el = scrollerEl.value
-      if (!el) return
-      const STILL_FRAMES_TO_FINISH = 30 // ~0.5s of no movement
-      const MAX_FRAMES = 240 // ~4s hard stop if estimates never converge
-      let stillFrames = 0
-      let frames = 0
-      let cancelled = false
-      function teardown() {
-        el!.removeEventListener('wheel', cancel)
-        el!.removeEventListener('touchstart', cancel)
-        el!.removeEventListener('pointerdown', cancel)
-        el!.removeEventListener('keydown', cancel)
-      }
-      function cancel() {
-        cancelled = true
-        teardown()
-      }
-      el.addEventListener('wheel', cancel, { passive: true })
-      el.addEventListener('touchstart', cancel, { passive: true })
-      el.addEventListener('pointerdown', cancel, { passive: true })
-      el.addEventListener('keydown', cancel)
-      function frame() {
-        if (cancelled) return
-        if (isStale()) { teardown(); return }
-        const scrollerNow = scrollerEl.value
-        if (!scrollerNow) { teardown(); return }
-        const m = virtualizer().measurementsCache.find((c) => c.index === lineIndex)
-        if (m) {
-          // Re-read the inset each frame — the search bar can open or close during
-          // the seconds this loop may live, and anchoring to a stale inset would
-          // pin the landing 44px off.
-          const reservedNow = searchBarVisible() ? SEARCH_BAR_INSET_PX : 0
-          const want = Math.max(0, m.start - reservedNow - SCROLL_LANDING_GAP_PX)
-          if (Math.abs(scrollerNow.scrollTop - want) > 2) {
-            keepSuppressed()
-            scrollerNow.scrollTop = want
-            stillFrames = 0
-          } else {
-            stillFrames++
-          }
-        }
-        if (stillFrames >= STILL_FRAMES_TO_FINISH || ++frames > MAX_FRAMES) { teardown(); return }
-        requestAnimationFrame(frame)
-      }
-      requestAnimationFrame(frame)
-    }
-
-    keepSuppressed()
-    scrollToIndexWithRetry(virt, scroller, lineIndex, reserved, 5, () => {
-      keepSuppressed()
-      // A mark jump refines PAST the line anchor (adjustToMark centres the match,
-      // deliberately moving scrollTop off the section start) — anchoring the line
-      // back to the top would fight it. The mark poll below already re-finds and
-      // re-adjusts as content lands, so it is its own stabilisation.
-      if (!wantsMark) {
-        stabilizeLanding()
+    // A match jump moves the view only if the match is not already on screen. The
+    // target is the MARK, not the line: hauling the line to the top to reach a
+    // match the reader can already see throws away their position for nothing —
+    // stepping through matches within one screenful leaves the page still, as a
+    // browser's find does. `force` overrides: section navigation is about the
+    // line's position, not a match's visibility.
+    if (wantsMark && !force && api.isRowRendered(lineIndex)) {
+      if (applyCurrentMark()) {
+        adjustToMark()
         return
       }
-      let markAttempts = 0
-      function tryApplyMark() {
-        if (isStale()) return
-        const el = scrollerEl.value
-        if (!el) return
-        keepSuppressed()
-        if (applyCurrentMark()) {
-          requestAnimationFrame(() => {
-            if (isStale()) return
-            keepSuppressed()
-            adjustToMark(el)
-            verifyMarkLanding()
-          })
-          return
-        }
-        if (++markAttempts < 30) requestAnimationFrame(tryApplyMark)
-        else verifyMarkLanding()
-      }
-      tryApplyMark()
-    }, isStale)
+      // The mark is not in the DOM after all (text still loading) — fall through.
+    }
+
+    suppressPositionSave()
+    await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
+    if (isStale()) return
+    // Re-armed: the fetch may have outlasted the window armed before it, and the
+    // landing's scroll event is only dispatched in the next frame.
+    suppressPositionSave()
+    if (!wantsMark) return
+    // The row is mounted with its text, marks included — nothing to wait for.
+    if (applyCurrentMark()) adjustToMark()
   }
 
   /**
@@ -373,10 +191,19 @@ export function useBookViewLinesNavigation(
     fallbackLineIndex?: number,
     options: ScrollToLineOptions = {},
   ) {
-    const lineIndex = lineIndexForId(lineId, fallbackLineIndex)
-    if (lineIndex == null) return
-    scrollToLine(lineIndex, options)
+    void lineIndexForId(lineId, fallbackLineIndex).then((lineIndex) => {
+      if (lineIndex != null) void scrollToLine(lineIndex, options)
+    })
   }
 
-  return { scrollToLine, scrollToLineId }
+  /**
+   * Bumped by every scrollToLine. A caller that follows a landing up (a bookmark's nudge to
+   * its exact character) reads it right after starting the scroll and gives up once it moves:
+   * a later jump has taken the view.
+   */
+  function currentScrollGeneration() {
+    return scrollGeneration
+  }
+
+  return { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration }
 }

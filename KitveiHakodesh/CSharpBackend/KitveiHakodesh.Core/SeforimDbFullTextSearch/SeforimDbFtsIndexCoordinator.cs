@@ -97,10 +97,9 @@ public sealed class SeforimDbFtsIndexCoordinator
         _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!, _additionalLibraries);
     private SeforimDbFtsIndexer? _indexer;
 
-    /// <summary>Snippeting, the word-distance filter and short-snippet embellishment — all
+    /// <summary>Snippeting, the word-distance filter and short-snippet flagging — all
     /// Core's, and the same code the hosted app runs, so one query cannot come back ranked or
-    /// rendered differently in the two apps. Book id and TOC entry id ride on the engine's
-    /// content fetch, so the searcher needs no queries of its own.</summary>
+    /// rendered differently in the two apps.</summary>
     private SeforimDbFtsSearcher Searcher => _searcher ??= new SeforimDbFtsSearcher();
     private SeforimDbFtsSearcher? _searcher;
 
@@ -933,14 +932,14 @@ public sealed class SeforimDbFtsIndexCoordinator
         try
         {
             // Core's searcher yields finished batches; the one-shot path just collects them, so
-            // it gets exactly the same parallel snippeting, short-snippet embellishment and
+            // it gets exactly the same parallel snippeting, short-snippet flagging and
             // enrichment as the streaming path.
             var terms = new FtsTermTable();
             foreach (var batch in Searcher.SearchInBatches(
                          GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms))
             {
                 result.Results.AddRange(batch.Hits);
-                foreach (var entry in batch.LineTexts) result.LineTexts[entry.Key] = entry.Value;
+                result.SnippetTexts.AddRange(batch.SnippetTexts);
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
             if (cap > 0 && result.Results.Count > cap)
@@ -957,6 +956,68 @@ public sealed class SeforimDbFtsIndexCoordinator
             lock (_lock) _activeOneShotSearches--;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Scoped substring candidates (SeforimDbLineSubstringSearch narrows with it): the lines inside <paramref name="ranges"/>
+    /// that may hold <paramref name="query"/> as a substring, from the index — the book
+    /// view's in-book search (one range: the book) and the commentary panel's (one range
+    /// per commentator group). Not answered while the index is building or cannot answer
+    /// exactly — the caller then reads the lines itself.
+    /// </summary>
+    public FtsLinesSearchResult LinesSearch(string query, IReadOnlyList<FtsLineRange> ranges)
+    {
+        EnsureIndexing();
+        var result = new FtsLinesSearchResult();
+        if (!HasDb || !_isReady || string.IsNullOrWhiteSpace(query)) return result;
+        lock (_lock) _activeOneShotSearches++;
+        try
+        {
+            var lineRanges = new List<(int, int, int)>(ranges.Count);
+            foreach (var range in ranges) lineRanges.Add((range.BookId, range.FirstLineIndex, range.LastLineIndex));
+            var candidates = GetEngine().SubstringCandidates(query, lineRanges);
+            if (candidates == null) return result;
+            result.Answered = true;
+            result.BookIds = new int[candidates.Count];
+            result.LineIndexes = new int[candidates.Count];
+            result.LineIds = new int[candidates.Count];
+            for (int i = 0; i < candidates.Count; i++)
+                (result.BookIds[i], result.LineIndexes[i], result.LineIds[i]) = candidates[i];
+        }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS scoped search failed", ex);
+        }
+        finally
+        {
+            lock (_lock) _activeOneShotSearches--;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Snippet texts for the rows a page shows (ftsSnippetTexts): each line's own text, and
+    /// for the lines the hit flagged short also their neighbour context — one statement
+    /// (<see cref="SeforimDbFtsCorpus.FetchSnippetTexts"/>). No index, no query, no locate:
+    /// the descriptor already rode on the hit. Works while the index is still building.
+    /// </summary>
+    public List<FtsSnippetText> SnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyList<int> shortLineIds)
+    {
+        if (!HasDb || (lineIds.Count == 0 && shortLineIds.Count == 0)) return new List<FtsSnippetText>();
+        try
+        {
+            // The primary database plus every additional library: a hit of a library carries global ids.
+            var libraries = _additionalLibraries;
+            using ISeforimDbFtsPositionCorpus corpus = libraries.Count == 0
+                ? new SeforimDbFtsCorpus(_dbPath!)
+                : new CompositeFtsCorpus(_dbPath!, libraries);
+            return corpus.FetchSnippetTexts(lineIds, shortLineIds);
+        }
+        catch (Exception ex)
+        {
+            _log(FtsIndexLogLevel.Error, "FTS snippet texts failed", ex);
+            return new List<FtsSnippetText>();
+        }
     }
 
     private string RewriteRelated(string query) =>
@@ -983,9 +1044,13 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// <summary>Run a search and push each built batch through <paramref name="emit"/>,
     /// ending with a <c>Done</c> frame. The connection is the stream: the caller passes
     /// an emit that writes one frame per chunk on the client's connection.</summary>
+    /// <param name="resumeAfterLineId">Resume: stream only the hits after this line — the
+    /// last one the caller already holds from an earlier, unfinished run of the same search.
+    /// 0 = from the start. A line that cannot be placed any more restarts the search
+    /// (<see cref="FtsStreamChunk.Restarted"/> on the first frame).</param>
     public async Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, int resumeAfterLineId = 0)
     {
         EnsureIndexing();
         if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
@@ -1025,7 +1090,15 @@ public sealed class SeforimDbFtsIndexCoordinator
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
             try
             {
-                await emit(new FtsStreamChunk { Stage = "validate" });
+                long afterPosition = 0;
+                bool restarted = false;
+                if (resumeAfterLineId > 0)
+                {
+                    long? position = GetEngine().PositionOfLine(resumeAfterLineId);
+                    if (position is long found) afterPosition = found;
+                    else restarted = true;
+                }
+                await emit(new FtsStreamChunk { Stage = "validate", Restarted = restarted });
                 // Stage changes ride alone only until the first results frame: before it they
                 // are all the client has to show. After it every batch would otherwise cost
                 // three stage-only frames (fetch, snippets, enrich) on top of its results
@@ -1036,14 +1109,14 @@ public sealed class SeforimDbFtsIndexCoordinator
                 // this cannot deadlock.
                 bool resultsSent = false;
                 string? stageSinceLastResults = null;
-                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords,
+                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, afterPosition,
                     linked.Token,
-                    (built, newTerms, lineTexts) =>
+                    (built, newTerms, snippetTexts) =>
                     {
                         resultsSent = true;
                         string? stage = stageSinceLastResults;
                         stageSinceLastResults = null;
-                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts, Stage = stage });
+                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, SnippetTexts = snippetTexts, Stage = stage });
                     },
                     stage =>
                     {
@@ -1082,28 +1155,22 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
+        string query, int maxWordDistance, bool requireOrdered, int contextWords, long afterPosition,
+        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, Task> onBatch,
         Action<string>? onStage = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built. Each batch goes out with
         // the matched-term strings it introduced (hits carry ids into the search's table), and
-        // the leading SeedLineTextHitCount hits of the search with their snippet line texts,
+        // the leading SeedSnippetTextHitCount hits of the search with their snippet texts,
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition))
         {
-            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.LineTexts);
+            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts);
         }
     }
-
-    // How many lines of context to pull on each side when embellishing (same book). Two
-    // lines is enough to fill the snippet's visual space (~4 clamped lines) and reach about
-    // the requested per-side word context for prose; benchmarking showed radius 2 costs
-    // roughly half of radius 3 (it re-tokenizes fewer neighbor lines). See EmbellishBenchTest.
-    private const int NeighborLineRadius = 2;
 
     // ── Indexing-progress stream (ftsIndexProgressStream) ────────────────────────
     // Event-driven push: the build's progress callback signals every subscriber, and

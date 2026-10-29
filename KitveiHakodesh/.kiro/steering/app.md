@@ -179,12 +179,7 @@ Dropdown anchor depends on which physical side of the screen the toggle button s
 
 ## Virtual Scroller Keyboard Navigation
 
-Every component that uses `useVirtualizer` from `@tanstack/vue-virtual` must wire up `useVirtualScrollerKeys` from `@/composables/useVirtualScrollerKeys`, passing the scroller element ref, a virtualizer getter, and an item count getter.
-
-- The scroll container element must have `tabindex="0"` so it can receive keyboard focus
-- Ctrl+Home scrolls to the first item then sets `scrollTop = 0`
-- Ctrl+End scrolls to the last item then sets `scrollTop = scrollHeight`
-- The composable uses `useEventListener` from VueUse and cleans up automatically
+`WindowedScroller` owns `Ctrl+Home` / `Ctrl+End` (and Page keys) for the lists it renders. Plain lists paired with a text input get them from `useInputListNavigation` (`containerElement` + `[data-nav-item]` rows); standalone plain lists from `useListKeyNav`. The scroll container must have `tabindex="0"` where it owns focus.
 
 ## Virtual Scroller — Programmatic Scroll to a Specific DOM Element Within an Item
 

@@ -6,12 +6,15 @@ import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
+
+const settingsStore = useSettingsStore()
 
 const { navigate, openFolderPicker } = useAppNavigation()
 const { openCatalogCategory } = useBookCatalogCategoryNavigation()
@@ -172,7 +175,8 @@ onMounted(focusSearchInput)
       </div>
     </div>
 
-    <HomePageDateBar />
+    <!-- Pinned, App.vue renders it under every page instead. -->
+    <HomePageDateBar v-if="!settingsStore.dateBarPinned" />
   </div>
 </template>
 

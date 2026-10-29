@@ -12,9 +12,9 @@
  * shrink — it becomes nonsense.
  *
  * THE FIX
- * The two rows holding the selection's boundaries are PINNED into the virtualizer's
- * rendered range, via TanStack's rangeExtractor. They stay mounted at their real
- * offsets however far off-screen they scroll, so the native Range keeps both
+ * The two rows holding the selection's boundaries are PINNED into the rendered
+ * range — via WindowedScroller's `pinnedIndexes`. They
+ * stay mounted however far off-screen they scroll, so the native Range keeps both
  * boundaries in live text nodes and never breaks.
  *
  * Everything else then follows for free, which is the point of fixing it here rather
@@ -43,7 +43,6 @@
  */
 import { computed, ref, watch, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { defaultRangeExtractor, type Range as VirtualRange } from '@tanstack/vue-virtual'
 import {
   domPositionFromStrippedOffset,
   strippedLineText,
@@ -53,7 +52,7 @@ import {
 /**
  * A selection boundary in the coordinate space that survives a re-render: which row,
  * and how many stripped characters into it. Rows are addressed by virtual index
- * because that is what the virtualizer's rangeExtractor speaks.
+ * because that is what WindowedScroller's `pinnedIndexes` speaks.
  */
 interface SelectionBoundary {
   rowIndex: number
@@ -181,31 +180,16 @@ export function useVirtualizedTextSelection(
   // The list was rebuilt under the pins — see the rowListIdentity parameter.
   watch(rowListIdentity, clearPinnedRows)
 
-  /**
-   * The rows to render: whatever the virtualizer wanted, plus the pinned boundary
-   * rows. Sorted and de-duplicated because the virtualizer requires an ascending
-   * index list.
-   *
-   * A COMPUTED, not a plain function, and that is load-bearing. The virtualizer
-   * memoizes its rendered index list on the IDENTITY of this function (alongside
-   * overscan, count and the scroll range), so a stable closure reading the pins from
-   * refs would never invalidate that memo — the pins would take effect only on the
-   * next scroll, which is exactly too late. Rebuilding the function whenever the pins
-   * change gives it a new identity, which busts the memo and also re-triggers the
-   * options computed that feeds setOptions.
-   */
-  const rangeExtractor = computed(() => {
-    const anchorIndex = anchorBoundary.value?.rowIndex
-    const focusIndex = focusBoundary.value?.rowIndex
-    return (range: VirtualRange): number[] => {
-      const defaultIndexes = defaultRangeExtractor(range)
-      if (anchorIndex == null && focusIndex == null) return defaultIndexes
 
-      const indexes = new Set(defaultIndexes)
-      if (anchorIndex != null && anchorIndex >= 0 && anchorIndex < range.count) indexes.add(anchorIndex)
-      if (focusIndex != null && focusIndex >= 0 && focusIndex < range.count) indexes.add(focusIndex)
-      return Array.from(indexes).sort((first, second) => first - second)
-    }
+  /**
+   * The same two boundary rows for a WindowedScroller, which takes the indexes to
+   * keep mounted as a prop rather than a range extractor.
+   */
+  const pinnedRowIndexes = computed(() => {
+    const indexes: number[] = []
+    if (anchorBoundary.value) indexes.push(anchorBoundary.value.rowIndex)
+    if (focusBoundary.value) indexes.push(focusBoundary.value.rowIndex)
+    return indexes
   })
 
   /**
@@ -278,7 +262,7 @@ export function useVirtualizedTextSelection(
   }
 
   return {
-    rangeExtractor,
+    pinnedRowIndexes,
     selectedRowIndexRange,
     restoreSelectionFromPinnedRows,
     clearPinnedRows,

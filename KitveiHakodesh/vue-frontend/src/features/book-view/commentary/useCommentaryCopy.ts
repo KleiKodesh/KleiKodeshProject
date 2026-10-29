@@ -99,6 +99,14 @@ export function useCommentaryCopy(
      * an annotation reach the selected lines the virtualizer never mounted.
      */
     lineAtRowIndex: (rowIndex: number) => { lineId: number; offsetLength: number } | null
+    /**
+     * Fetches the text of the flat rows in an inclusive span: the model holds text
+     * only for the lines the scroller has shown, and the rows between a selection's
+     * ends may never have been.
+     */
+    ensureContentsForRange: (firstIndex: number, lastIndex: number) => Promise<void>
+    /** Fetches the text of every line in the document — the select-all copy. */
+    ensureAllContents: () => Promise<void>
   },
   /** Opens the "report a mistake" dialog for the pressed commentary line. */
   onReportError?: () => void,
@@ -610,6 +618,23 @@ export function useCommentaryCopy(
    * execCommand('copy') would quietly do nothing.
    */
   async function prepareAndCopy(afterCopy?: () => void): Promise<void> {
+    // The text itself first: a select-all or a selection that spans unmounted rows
+    // is built from the model, and the model has text only for lines the scroller
+    // fetched. Same activation budget as the notes warm-up below.
+    if (virtualizedSelection) {
+      try {
+        if (isSelectAll?.value) {
+          await awaitWithinActivationWindow(virtualizedSelection.ensureAllContents())
+        } else {
+          const rowIndexRange = virtualizedSelection.selectedRowIndexRange()
+          if (rowIndexRange && rowIndexRange.lastRowIndex - rowIndexRange.firstRowIndex > 1) {
+            await awaitWithinActivationWindow(
+              virtualizedSelection.ensureContentsForRange(rowIndexRange.firstRowIndex + 1, rowIndexRange.lastRowIndex - 1),
+            )
+          }
+        }
+      } catch { /* the copy goes ahead with the text that arrived */ }
+    }
     if (settingsStore.copyWithNotes && exportData) {
       // A failed warm-up costs endnotes, not the copy itself.
       try {
@@ -636,7 +661,10 @@ export function useCommentaryCopy(
   // into select-all (Ctrl+A and the menu item), since both set this flag.
   if (isSelectAll) {
     watch(isSelectAll, (on) => {
-      if (!on || !settingsStore.copyWithNotes || !exportData) return
+      if (!on) return
+      // The document's text, which the model holds only for the lines shown so far.
+      void virtualizedSelection?.ensureAllContents().catch(() => {})
+      if (!settingsStore.copyWithNotes || !exportData) return
       void exportData.prepareForLines(exportData.getAllLineIds())
     })
   }

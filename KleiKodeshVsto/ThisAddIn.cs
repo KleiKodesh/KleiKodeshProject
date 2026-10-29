@@ -13,6 +13,13 @@ namespace KleiKodesh
             return new KeliKodeshRibbon();
         }
 
+        // Exposes the add-in's commands to VBA as Application.COMAddIns("KleiKodesh").Object.
+        // Office asks for this at load: keep it a bare allocation, no work.
+        protected override object RequestComAddInAutomationService()
+        {
+            return new VbaCommands();
+        }
+
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
             WordToPdfConverter.HostApplication = this.Application;

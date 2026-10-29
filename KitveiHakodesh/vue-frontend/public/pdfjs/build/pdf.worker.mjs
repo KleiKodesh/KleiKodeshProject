@@ -62904,6 +62904,88 @@ class WorkerMessageHandler {
         }
       }
     });
+    // [KleiKodesh] Parse a trailing "%KH-TOC start=<S> prev=<P>" marker (see
+    // the SaveDocument patch). Null unless the marker PROVABLY describes our
+    // own last section — a forged/stale marker or another tool's in-place edit
+    // must never make the save truncate the file (it then just appends).
+    function khLatin1(bytes, from, to) {
+      let s = "";
+      for (let i = from; i < to; i += 8192) {
+        s += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(to, i + 8192)));
+      }
+      return s;
+    }
+    function khSha256Hex(bytes, from, to) {
+      const h = calculateSHA256(bytes.subarray(from, to), 0, to - from);
+      let hex = "";
+      for (const b of h) {
+        hex += b.toString(16).padStart(2, "0");
+      }
+      return hex;
+    }
+    function khReadTocMarker(bytes) {
+      const from = Math.max(0, bytes.length - 256);
+      const tail = khLatin1(bytes, from, bytes.length);
+      const m = /(?:^|[\r\n])%KH-TOC start=(\d+) prev=(\d+)(?: sha=([0-9a-f]{64}))?[ \t]*[\r\n]?[\0\t\n\f\r ]*$/.exec(tail);
+      if (!m) {
+        return null;
+      }
+      const start = Number(m[1]);
+      const prev = Number(m[2]);
+      const sha = m[3] || null;
+      // Marker line begins right after the optional leading EOL.
+      const markerPos = from + m.index + (m[0][0] === "%" ? 0 : 1);
+      if (!(Number.isSafeInteger(start) && Number.isSafeInteger(prev) && start > 0 && start < markerPos && prev >= 0 && prev < start)) {
+        return null;
+      }
+      // (b) prev is a real xref start: a table or an xref stream object.
+      const atPrev = khLatin1(bytes, prev, Math.min(start, prev + 512));
+      if (!/^xref\s/.test(atPrev) && !/^\d+\s+\d+\s+obj\s*<<[\s\S]*\/Type\s*\/XRef\b/.test(atPrev)) {
+        return null;
+      }
+      // The bytes before S end a previous revision.
+      if (!/%%EOF[\0\t\n\f\r ]*$/.test(khLatin1(bytes, Math.max(0, start - 64), start))) {
+        return null;
+      }
+      // (a) [S, marker) is exactly ONE incremental section chaining to prev.
+      const section = khLatin1(bytes, start, markerPos);
+      if (!/^\s*(?:\d+\s+\d+\s+obj\b|xref\s)/.test(section)) {
+        return null;
+      }
+      if (section.split("%%EOF").length !== 2 || section.split("startxref").length !== 2) {
+        return null;
+      }
+      const end = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(section);
+      if (!end) {
+        return null;
+      }
+      const xrefAt = Number(end[1]);
+      if (!(xrefAt >= start && xrefAt < start + end.index)) {
+        return null;
+      }
+      const xrefPart = section.slice(xrefAt - start, end.index);
+      let dict;
+      if (/^xref\s/.test(xrefPart)) {
+        const t = xrefPart.indexOf("trailer");
+        if (t < 0) {
+          return null;
+        }
+        dict = xrefPart.slice(t);
+      } else if (/^\d+\s+\d+\s+obj\s*<</.test(xrefPart) && /\/Type\s*\/XRef\b/.test(xrefPart)) {
+        dict = xrefPart.slice(0, Math.max(0, xrefPart.indexOf("stream")) || xrefPart.length);
+      } else {
+        return null;
+      }
+      const prevs = dict.match(/\/Prev\s+(\d+)/g);
+      if (!prevs || prevs.length !== 1 || Number(/\d+/.exec(prevs[0])[0]) !== prev) {
+        return null;
+      }
+      // (d) the section hash, when the marker carries one.
+      if (sha && khSha256Hex(bytes, start, markerPos) !== sha) {
+        return null;
+      }
+      return { start, prev };
+    }
     handler.on("SaveDocument", async function ({
       isPureXfa,
       numPages,
@@ -62978,6 +63060,10 @@ class WorkerMessageHandler {
         }
       }
       const refs = await Promise.all(promises);
+      // [KleiKodesh] PATCH: outline-only sections replace each other (see the
+      // "KH-TOC marker" block below) — remember whether anything but the outline
+      // changed.
+      const khOnlyOutline = changes.size === 0 && !isPureXfa;
       // PATCH: write a user-edited outline (תוכן עניינים) into the incremental
       // update. `editedOutline` is [{title, page, items}] serialized from the
       // sidebar editor (outline-search.js); null means no outline edits. New
@@ -63172,8 +63258,26 @@ class WorkerMessageHandler {
           filename
         };
       }
-      return incrementalUpdate({
-        originalData: stream.bytes,
+      // [KleiKodesh] PATCH: KH-TOC marker. A TOC autosave appends one
+      // incremental section and, when that section holds ONLY the outline,
+      // ends it with "%KH-TOC start=<S> prev=<P> sha=<H>" (S = where the
+      // section begins, P = the startxref it chains back to, H = SHA-256 hex
+      // of bytes [S, marker line)). When the loaded file ends with such a
+      // marker AND khReadTocMarker proves it is our intact last section, this save is built from the bytes BEFORE S
+      // and chains back to P, so it REPLACES the old outline section instead
+      // of stacking a new one on it — the file stops growing per session.
+      // Safe because the replaced section held only the outline + a catalog
+      // copy, both rewritten here from the parsed (cached) objects.
+      let khOriginalData = stream.bytes;
+      const khMarker = editedOutline != null ? khReadTocMarker(stream.bytes) : null;
+      if (khMarker && newXrefInfo.startXRef !== undefined) {
+        khOriginalData = stream.bytes.subarray(0, khMarker.start);
+        newXrefInfo.startXRef = khMarker.prev;
+      }
+      const khSectionStart = khOriginalData.length;
+      const khPrev = newXrefInfo.startXRef;
+      const khSaved = await incrementalUpdate({
+        originalData: khOriginalData,
         xrefInfo: newXrefInfo,
         changes,
         xref,
@@ -63188,6 +63292,15 @@ class WorkerMessageHandler {
       }).finally(() => {
         xref.resetNewTemporaryRef();
       });
+      if (!khOnlyOutline || editedOutline == null || !Number.isInteger(khPrev)) {
+        return khSaved;
+      }
+      const khSha = khSha256Hex(khSaved, khSectionStart, khSaved.length);
+      const khMarkerText = `%KH-TOC start=${khSectionStart} prev=${khPrev} sha=${khSha}\n`;
+      const khWithMarker = new Uint8Array(khSaved.length + khMarkerText.length);
+      khWithMarker.set(khSaved);
+      writeString(khMarkerText, khSaved.length, khWithMarker);
+      return khWithMarker;
     });
     handler.on("GetOperatorList", function (data, sink) {
       const {

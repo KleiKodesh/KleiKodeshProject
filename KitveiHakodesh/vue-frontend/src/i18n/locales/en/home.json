@@ -8,6 +8,8 @@
   },
   "searchButtonTitle": "Type to search a book title. Click here to search content in the library",
   "dateBar": {
+    "pin": "Pin: show this bar at the bottom of every page, not just the home page",
+    "unpin": "Unpin: show this bar on the home page only",
     "inMinutes": "in {n} min",
     "oneHour": "1 hour",
     "twoHours": "2 hours",

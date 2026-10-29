@@ -32,39 +32,39 @@ namespace KleiKodesh.Helpers
         public static string ApplyReference(Selection selection, string referenceText)
         {
             var range = selection?.Range?.Duplicate;
-            if (range == null) return "יש לסמן קטע להשוואה במסמך";
+            if (range == null) return AddinUiLanguage.T("יש לסמן קטע להשוואה במסמך", "Select a passage to compare in the document");
 
             TrimTrailingMarks(range);
             string source = range.Text;
-            if (string.IsNullOrWhiteSpace(source)) return "יש לסמן קטע להשוואה במסמך";
-            if (range.Paragraphs.Count > 1) return "ניתן להשוות פסקה אחת בלבד";
+            if (string.IsNullOrWhiteSpace(source)) return AddinUiLanguage.T("יש לסמן קטע להשוואה במסמך", "Select a passage to compare in the document");
+            if (range.Paragraphs.Count > 1) return AddinUiLanguage.T("ניתן להשוות פסקה אחת בלבד", "Only one paragraph can be compared");
 
             // Pending revisions poison the comparison: Range.Text still contains text
             // that is struck through but not yet accepted, so a second compare over the
             // same passage would diff run 1's deletions and insertions as live words.
             if (range.Revisions.Count > 0)
-                return "יש לאשר או לדחות תחילה את השינויים המסומנים בקטע";
+                return AddinUiLanguage.T("יש לאשר או לדחות תחילה את השינויים המסומנים בקטע", "First accept or reject the tracked changes in the passage");
 
             // Everything below maps character indexes in Text to document positions
             // one-to-one. Content the mapping cannot represent (fields, footnote
             // references and the like) makes the range longer than its text - refuse
             // rather than strike through the wrong words.
             if (range.End - range.Start != source.Length)
-                return "לא ניתן להשוות קטע עם תוכן מיוחד (שדות או הערות)";
+                return AddinUiLanguage.T("לא ניתן להשוות קטע עם תוכן מיוחד (שדות או הערות)", "A passage with special content (fields or comments) cannot be compared");
 
             // Footnote, endnote and comment reference marks and inline objects occupy
             // one character each, so the length identity above holds for them - but a
             // tracked delete would carry the mark, and its footnote, away with the word.
             if (source.IndexOf('\u0001') >= 0 || source.IndexOf('\u0002') >= 0 || source.IndexOf('\u0005') >= 0)
-                return "לא ניתן להשוות קטע עם תוכן מיוחד (שדות או הערות)";
+                return AddinUiLanguage.T("לא ניתן להשוות קטע עם תוכן מיוחד (שדות או הערות)", "A passage with special content (fields or comments) cannot be compared");
 
             var a = Tokenize(source);
             var b = Tokenize(referenceText);
-            if (b.Count == 0) return "לא נמצא טקסט מסומן בכתבי הקודש";
-            if ((long)a.Count * b.Count > 4_000_000) return "הקטעים ארוכים מדי להשוואה";
+            if (b.Count == 0) return AddinUiLanguage.T("לא נמצא טקסט מסומן בכתבי הקודש", "No text is selected in Kitvei Hakodesh");
+            if ((long)a.Count * b.Count > 4_000_000) return AddinUiLanguage.T("הקטעים ארוכים מדי להשוואה", "The passages are too long to compare");
 
             var hunks = Diff(a, b);
-            if (hunks.Count == 0) return "לא נמצאו הבדלים בין הקטעים";
+            if (hunks.Count == 0) return AddinUiLanguage.T("לא נמצאו הבדלים בין הקטעים", "No differences were found between the passages");
 
             var doc = range.Document;
             var app = doc.Application;
@@ -73,7 +73,7 @@ namespace KleiKodesh.Helpers
             // One custom undo record so a single Ctrl+Z reverts the whole comparison.
             // No Find/Replace in here: wdReplaceAll inside an open UndoRecord crashes
             // Word (see DocDesignLib) - all edits go through Range operations.
-            app.UndoRecord.StartCustomRecord("השוואה עם כתבי הקודש");
+            app.UndoRecord.StartCustomRecord(AddinUiLanguage.T("השוואה עם כתבי הקודש", "Compare with Kitvei Hakodesh"));
             try
             {
                 doc.TrackRevisions = true;

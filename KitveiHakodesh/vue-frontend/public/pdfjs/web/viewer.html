@@ -1290,10 +1290,22 @@ See https://github.com/adobe-type-tools/cmap-resources
             requestAnimationFrame(mirrorSelect);
           });
 
-          // Mirror on every scale change PDF.js fires.
-          window.addEventListener('scalechanging', function () {
-            requestAnimationFrame(mirrorSelect);
-          });
+          // Mirror on every scale change PDF.js fires (eventBus events are not
+          // DOM events — they never reach window). Covers Ctrl+0 and wheel/key
+          // zooms that land on a preset, which cause no select mutation.
+          let edited = false;
+          function hookEventBus() {
+            const app = window.PDFViewerApplication;
+            if (app && app.eventBus) {
+              app.eventBus.on('scalechanging', function () {
+                requestAnimationFrame(mirrorSelect);
+              });
+            } else {
+              setTimeout(hookEventBus, 100);
+            }
+          }
+          hookEventBus();
+          input.addEventListener('input', function () { edited = true; });
 
           input.addEventListener('focus', function () {
             // Switch to numeric edit mode.
@@ -1305,16 +1317,20 @@ See https://github.com/adobe-type-tools/cmap-resources
             input.readOnly = false;
             input.value = pct;
             input.style.cursor = 'text';
+            edited = false;
             input.select();
           });
 
           input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { applyZoom(); input.blur(); }
-            if (e.key === 'Escape') { input.blur(); }
+            if (e.key === 'Enter') { applyZoom(); edited = false; input.blur(); }
+            if (e.key === 'Escape') { edited = false; input.blur(); }
           });
 
           input.addEventListener('blur', function () {
-            applyZoom();
+            // Only apply text the user actually typed — focusing at "auto" and
+            // leaving must not pin the zoom to the rounded percentage.
+            if (edited) applyZoom();
+            edited = false;
             input.type = 'text';
             input.readOnly = true;
             input.style.cursor = 'default';

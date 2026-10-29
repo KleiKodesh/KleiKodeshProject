@@ -2,9 +2,9 @@
  * Builds the clipboard payload for a selection spanning full-text-search results.
  *
  * WHY THIS IS NOT JUST THE DOM SELECTION
- * The results list is virtualized, so a selection dragged over a hundred results
- * only has a screenful of them in the DOM — the rest were never mounted or were
- * recycled away. Serializing the live Range would silently drop them, so the rows
+ * The results list is windowed (only the rows around the viewport are mounted), so a
+ * selection dragged over a hundred results only has a screenful of them in the DOM —
+ * the rest were never mounted or were unmounted away. Serializing the live Range would silently drop them, so the rows
  * between the selection's two ends are rebuilt from the result model instead. The
  * two END rows come from the model too: a result is one search hit, and half a
  * citation is not a useful thing to paste.
@@ -75,7 +75,7 @@ function resultToHtml(
  * The selected results as HTML, or null when the selection covers no result rows.
  *
  * `firstRowIndex`/`lastRowIndex` come from the pinned-row tracker, which is what
- * makes this virtualization-independent: those two rows are held in the DOM for the
+ * makes this windowing-independent: those two rows are held in the DOM for the
  * life of the selection, so their indexes stay valid however far the list scrolls.
  */
 export function buildSelectedResultsHtml(

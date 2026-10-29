@@ -2,26 +2,21 @@ fts:
 ai search with api?
 symantic search
 aramaic to Hebrew?
-make sur the validation stage is not fetching any data it doesn't need any other data will be fetched when teh snippet is fetched
-also make sure of this in te new tantivy engine
 
-catlog:
-now that the search is lucene we need to stop loading teh whole catlog rther load it lziy
-in cases where the alt toc aprleles the same line ids as teh main toc its just diffent labeling
+bokview:
+search: option for side panel
+bookview create a flow mode now that we have windwoed rendering.
+bookmarks
 
-linesview:
-tr windowed loadeing 
-use teh fst index for eseaching and use in memory fts for fallback
-
-new fts:
-make srue otzria uses teh new mthods and not just the old mathods with teh same way they were done
-
+homepage tiles:
+some of teh descriptions are teriible some ar vrbose
 
 speculative
 ------------
-releases:
-automate releases
-ask teh bot to take care of ciommit notes
+catlog:
+now that the search is lucene we need to stop loading teh whole catlog rther load it lziy
+in cases where the alt toc aprleles the same line ids as teh main toc its just diffent labeling
+can teh bookview toc tree use this too?
 
 bot:
 the bot uses app tag chnge it to kitvie hakodsh tag

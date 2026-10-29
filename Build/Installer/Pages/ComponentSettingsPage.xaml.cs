@@ -50,7 +50,6 @@ namespace KleiKodeshVstoInstallerWpf
             ApplyVisibility();
             LoadDbPath();
             LoadHbLocalFolder();
-            LoadShellPreference();
         }
 
         private void ApplyVisibility()
@@ -83,29 +82,45 @@ namespace KleiKodeshVstoInstallerWpf
                 if (string.IsNullOrEmpty(existing))
                 {
                     string detected = ResolveDefaultDbPath();
-                    DbHintText.Text = File.Exists(detected)
+                    bool found = detected != null;
+                    DbHintText.Text = found
                         ? string.Format(Strings.DefaultWithValue, detected)
                         : Strings.Db_NotFound;
+                    ShowDownloadOption(!found);
+                    return;
                 }
-                else
-                {
-                    DbHintText.Text = Strings.ClickToChangePath;
-                }
+                DbHintText.Text = Strings.ClickToChangePath;
             }
+            ShowDownloadOption(false);
+        }
+
+        /// <summary>The download checkbox is offered only while there is no library at all; it
+        /// starts checked, since the app is unusable without one.</summary>
+        private void ShowDownloadOption(bool show)
+        {
+            if (show && DbDownloadCheckBox.Visibility != Visibility.Visible)
+                DbDownloadCheckBox.IsChecked = true;
+            DbDownloadCheckBox.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>
-        /// Resolves the default seforim DB path — ZayitApp first, Otzaria as fallback.
-        /// Mirrors AppSettings.ResolveDefaultDbPath() in KitveiHakodeshLib.
+        /// The first default seforim DB that exists, or null. Same order as Core's
+        /// SeforimDbPathResolver.DefaultLocations — Otzaria, Zayit, then the library the app
+        /// downloads itself (SeforimLibraryDownloadLocations) — change them together.
         /// </summary>
         private static string ResolveDefaultDbPath()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string zayit   = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
-            string otzaria = Path.Combine(appData, "otzaria", "books", "seforim.db");
-            if (File.Exists(zayit))   return zayit;
-            if (File.Exists(otzaria)) return otzaria;
-            return zayit;
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string[] candidates =
+            {
+                Path.Combine(appData, "otzaria", "books", "seforim.db"),
+                Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db"),
+                Path.Combine(localAppData, "KleiKodesh", "books", "seforim.db"),
+            };
+            foreach (string candidate in candidates)
+                if (File.Exists(candidate)) return candidate;
+            return null;
         }
 
         private void ZayitDbButton_Click(object sender, RoutedEventArgs e)
@@ -200,7 +215,7 @@ namespace KleiKodeshVstoInstallerWpf
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
             Commit();
-            _host.NavigateToSettings();
+            _host.NavigateToGeneralSettings();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -221,23 +236,12 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_pendingDbPath != null)
                 Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", _pendingDbPath);
+            // Read by Core's SeforimLibraryDownloadPendingFlag: the service downloads the library
+            // as soon as it sees this, now if it is running, else on its next start.
+            else if (DbDownloadCheckBox.Visibility == Visibility.Visible && DbDownloadCheckBox.IsChecked == true)
+                Interaction.SaveSetting("KitveiHakodesh", "Database", "DownloadPending", "1");
             if (_pendingHbLocalFolder != null)
                 Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", _pendingHbLocalFolder);
-        }
-
-        private void LoadShellPreference()
-        {
-            // Suppress the Changed handler while we set the initial value.
-            ShellRegisterCheckBox.Checked   -= ShellRegisterCheckBox_Changed;
-            ShellRegisterCheckBox.Unchecked -= ShellRegisterCheckBox_Changed;
-            ShellRegisterCheckBox.IsChecked  = ShellRegistrationHelper.LoadPreference();
-            ShellRegisterCheckBox.Checked   += ShellRegisterCheckBox_Changed;
-            ShellRegisterCheckBox.Unchecked += ShellRegisterCheckBox_Changed;
-        }
-
-        private void ShellRegisterCheckBox_Changed(object sender, RoutedEventArgs e)
-        {
-            ShellRegistrationHelper.Apply(ShellRegisterCheckBox.IsChecked == true);
         }
 
         // ── Whitelist helpers ─────────────────────────────────────────────────────

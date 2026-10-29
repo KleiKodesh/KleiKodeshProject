@@ -82,6 +82,24 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── Lines ─────────────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Every line's character count for one book, by lineIndex — the reader's
+        /// scrollbar estimates row heights from these without loading any text.
+        /// Only valid on libraries whose <c>line</c> table has the column.
+        /// </summary>
+        public const string GetLineCharCounts = @"
+            SELECT lineIndex, charCount
+            FROM line
+            WHERE bookId = @bookId
+            ORDER BY lineIndex";
+
+        /// <summary>The ids of a book's lines in [from, to) by lineIndex — no text.</summary>
+        public const string GetLineIds = @"
+            SELECT lineIndex, id
+            FROM line
+            WHERE bookId = @bookId AND lineIndex >= @fromIndex AND lineIndex < @toIndex
+            ORDER BY lineIndex";
+
         /// <summary>A page of lines for streaming load.</summary>
         public static string GetLinesPaged(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
@@ -113,6 +131,68 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE l.bookId = @bookId
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";
+        /// <summary>The lines of a book with lineIndex in [@from, @to] — a search scan reads them.</summary>
+        public static string GetLinesInIndexRange(SeforimDbSchema schema) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLinesInIndexRange"/> on an attached library, with ITS OWN content shape.</summary>
+        public static string GetLinesInIndexRangeIn(string librarySchema, SeforimDbSchema shape) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLinesByIndexList"/> on an attached library, with ITS OWN content shape.</summary>
+        public static string GetLinesByIndexListIn(string librarySchema, SeforimDbSchema shape, string indexList) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(shape, "l")}
+            FROM {librarySchema}.line l{SeforimDbLineContentSql.ContentJoin(shape, "l", librarySchema)}
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary><see cref="GetLineIds"/> on an attached library's own table.</summary>
+        public static string GetLineIdsIn(string librarySchema) => $@"
+            SELECT lineIndex, id
+            FROM {librarySchema}.line
+            WHERE bookId = @bookId AND lineIndex >= @fromIndex AND lineIndex < @toIndex
+            ORDER BY lineIndex";
+
+        /// <summary>The lines of a book whose lineIndex is in the list — a sparse scan reads them.</summary>
+        public static string GetLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
+            SELECT l.id, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary>Like <see cref="GetVersionLinesPaged"/>, for lineIndex in a list.</summary>
+        public static string GetVersionLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
+            SELECT l.id, l.lineIndex,
+                   {C_RawContentExpression(schema, "l")} AS baseContent,
+                   vl.content AS versionContent,
+                   CASE WHEN l.heRef IS NULL  THEN 0
+                        WHEN vl.lineId IS NULL THEN 1
+                        WHEN vl.content IS NULL THEN 0
+                        ELSE 2 END AS contentSource
+            FROM line l{C_ContentJoin(schema, "l")}
+            LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+            WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
+            ORDER BY l.lineIndex";
+
+        /// <summary>Like <see cref="GetVersionLinesPaged"/>, for lineIndex in [@from, @to].</summary>
+        public static string GetVersionLinesInIndexRange(SeforimDbSchema schema) => $@"
+            SELECT l.id, l.lineIndex,
+                   {C_RawContentExpression(schema, "l")} AS baseContent,
+                   vl.content AS versionContent,
+                   CASE WHEN l.heRef IS NULL  THEN 0
+                        WHEN vl.lineId IS NULL THEN 1
+                        WHEN vl.content IS NULL THEN 0
+                        ELSE 2 END AS contentSource
+            FROM line l{C_ContentJoin(schema, "l")}
+            LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+            WHERE l.bookId = @bookId AND l.lineIndex BETWEEN @from AND @to
+            ORDER BY l.lineIndex";
 
         // ── TOC ───────────────────────────────────────────────────────────────────
 
@@ -228,6 +308,24 @@ namespace KitveiHakodesh.Core.SeforimDb
             FROM link l
             JOIN line ln ON ln.id = l.targetLineId
             WHERE l.sourceLineId IN ({InPlaceholders("p", count)})";
+
+        /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange: ordered so
+        /// the reader can cut groups on a (book, type) change; DISTINCT because a range of source
+        /// lines links the same target line many times over.</summary>
+        public static string GetCommentaryLinkGroupsForSourceLineRange(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+            ? $@"
+            SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
+                   l.targetLineIndex AS lineIndex
+            FROM link l
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            ORDER BY l.targetBookId, l.connectionTypeId, lineIndex, l.targetLineId"
+            : $@"
+            SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
+                   ln.lineIndex
+            FROM link l
+            JOIN line ln ON ln.id = l.targetLineId
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            ORDER BY l.targetBookId, l.connectionTypeId, ln.lineIndex, l.targetLineId";
 
         /// <summary>Content backfill for a batch of line ids.</summary>
         public static string GetLineContents(SeforimDbSchema schema, int count) =>
@@ -765,6 +863,12 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.id > @after ORDER BY l.id" + (hasLimit ? " LIMIT @lim" : "");
 
+        /// <summary>A line's rank inside its book in the index's order (lineIndex; id breaks a
+        /// tie — exactly <see cref="FtsReadBookLines"/>'s order). Its index position is the
+        /// book's first position plus this. Served by idx_line_book_index.</summary>
+        internal const string FtsLineRankInBook =
+            "SELECT COUNT(*) FROM line WHERE bookId = @b AND (lineIndex < @li OR (lineIndex = @li AND id < @id))";
+
         /// <summary>Lines per book — lets the catalog-order feed skip whole books on resume.</summary>
         internal const string FtsLineCountsByBook = "SELECT bookId, COUNT(*) FROM line GROUP BY bookId";
 
@@ -785,51 +889,46 @@ namespace KitveiHakodesh.Core.SeforimDb
             (schema.HasSplitLineContent ? "SELECT id, content FROM line_content" : "SELECT id, content FROM line") +
             " WHERE id IN (" + InPlaceholders("p", count) + ")";
 
-        /// <summary>One chunk of PLACEMENTS: id, bookId, lineIndex and the line's own TOC entry
-        /// (0 when none; `line_toc` when the database has it, else `line.tocEntryId`). No text.
-        /// Read after verification, for the hits that passed.</summary>
+        /// <summary>One chunk of PLACEMENTS: id, bookId, lineIndex. No text, no TOC entry (the
+        /// page fetches TOC paths for the rows it renders). Read after verification, for the
+        /// hits that passed.</summary>
         internal static string FtsFetchPlacements(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, l.bookId, l.lineIndex, " +
-            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
-             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
-             : "0") +
-            " FROM line l" +
-            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
+            "SELECT l.id, l.bookId, l.lineIndex FROM line l" +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>One chunk of search-result rows: id, content, and the line's PLACEMENT -
-        /// bookId, lineIndex and its own TOC entry (0 when it has none) - read off the same
-        /// `line` row the content fetch visits anyway, so hits leave the searcher complete
-        /// without a second query per batch. No book title: the page resolves titles from the
-        /// book id. The TOC entry comes from `line_toc` when the database has it (the
-        /// authoritative source; `line.tocEntryId` is NULL for most lines), else from that
-        /// column, else 0. IN-list sized to the chunk.</summary>
+        /// bookId and lineIndex - read off the same `line` row the content fetch visits
+        /// anyway, so hits leave the searcher complete without a second query per batch. No
+        /// book title or TOC entry: the page resolves both for the rows it renders.
+        /// IN-list sized to the chunk.</summary>
         internal static string FtsFetchPlacedLines(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex, " +
-            (schema.HasLineTocTable ? "COALESCE(lt.tocEntryId, 0)"
-             : schema.HasLineTocEntryIdColumn ? "COALESCE(l.tocEntryId, 0)"
-             : "0") +
+            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", l.bookId, l.lineIndex" +
             " FROM line l" + C_ContentJoin(schema, "l") +
-            (schema.HasLineTocTable ? " LEFT JOIN line_toc lt ON lt.lineId = l.id" : "") +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>
-        /// The lines at a set of (bookId, lineIndex) positions — one row-value IN over the
-        /// (bookId, lineIndex) index, so a whole batch's neighbour lines cost one round-trip.
-        /// Parameters go in pairs: @p0,@p1 = first position, @p2,@p3 = second, and so on.
-        /// A position with no line is simply absent.
+        /// The texts of the snippets a page shows, in ONE statement: (matched id, lineIndex
+        /// delta, content). Rows @p* are plain lines, read by primary key from the table that
+        /// holds the text, exactly as <see cref="FtsFetchLines"/> (delta 0). Rows @s* are SHORT
+        /// lines: the line itself (delta 0) and every line of the SAME BOOK within
+        /// ±@radius by lineIndex, over the (bookId, lineIndex) index — the bookId bound keeps
+        /// context from bleeding across a book boundary. Either list may be empty.
         /// </summary>
-        internal static string FtsFetchLinesAtBookPositions(SeforimDbSchema schema, int positionCount)
+        internal static string FtsFetchSnippetLines(SeforimDbSchema schema, int plainCount, int shortCount)
         {
-            var values = new System.Text.StringBuilder(positionCount * 12);
-            for (int i = 0; i < positionCount; i++)
-            {
-                if (i > 0) values.Append(',');
-                values.Append("(@p").Append(2 * i).Append(",@p").Append(2 * i + 1).Append(')');
-            }
-            return "SELECT l.id, l.bookId, l.lineIndex, " + C_ContentColumn(schema, "l") +
-                   " FROM line l" + C_ContentJoin(schema, "l") +
-                   " WHERE (l.bookId, l.lineIndex) IN (VALUES " + values + ")";
+            string? plain = plainCount == 0 ? null :
+                (schema.HasSplitLineContent ? "SELECT id, 0, content FROM line_content" : "SELECT id, 0, content FROM line") +
+                " WHERE id IN (" + InPlaceholders("p", plainCount) + ")";
+            string? withNeighbours = shortCount == 0 ? null :
+                "SELECT m.id, n.lineIndex - m.lineIndex, " + C_ContentColumn(schema, "n") +
+                // The sidecar join must come AFTER this JOIN's own ON clause (see FtsFetchNeighborLines).
+                " FROM line m JOIN line n" +
+                " ON n.bookId = m.bookId" +
+                " AND n.lineIndex BETWEEN m.lineIndex - @radius AND m.lineIndex + @radius" +
+                " AND (n.lineIndex <> m.lineIndex OR n.id = m.id)" +
+                C_ContentJoin(schema, "n") +
+                " WHERE m.id IN (" + InPlaceholders("s", shortCount) + ")";
+            return plain == null ? withNeighbours! : withNeighbours == null ? plain : plain + " UNION ALL " + withNeighbours;
         }
 
         /// <summary>
@@ -918,10 +1017,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// the shipped library (idx_toc_line / idx_toc_book).</summary>
         internal const string CatalogIndexAltTocRowsAllStructures = @"
             SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex,
-                   EXISTS (SELECT 1 FROM tocEntry te
-                           WHERE te.bookId = s.bookId AND te.textId = ae.textId
-                             AND (te.lineId = ae.lineId OR ae.lineId IS NULL))
-                   AS dupOfRegular
+                   -- Same answer as one EXISTS on (bookId, textId, lineId-or-null), split so
+                   -- an entry with a line probes by line: probing by text scanned every
+                   -- entry sharing a common text (perek 1) and took minutes per build.
+                   CASE WHEN ae.lineId IS NOT NULL
+                        THEN EXISTS (SELECT 1 FROM tocEntry te
+                                     WHERE te.lineId = ae.lineId AND +te.textId = ae.textId AND +te.bookId = s.bookId)
+                        ELSE EXISTS (SELECT 1 FROM tocEntry te
+                                     WHERE te.bookId = s.bookId AND te.textId = ae.textId)
+                   END AS dupOfRegular
             FROM alt_toc_entry ae
             JOIN alt_toc_structure s ON s.id = ae.structureId
             JOIN tocText tt ON tt.id = ae.textId

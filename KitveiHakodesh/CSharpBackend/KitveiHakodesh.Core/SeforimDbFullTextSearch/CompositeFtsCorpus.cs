@@ -268,8 +268,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                         text,
                         new FtsDocumentPlacement(
                             placement.BookId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.BookId),
-                            placement.LineIndex,
-                            placement.TocEntryId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.TocEntryId)));
+                            placement.LineIndex));
                 }
             }
         }
@@ -286,39 +285,59 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 foreach (var (localId, placement) in source.Corpus.FetchPlacements(localIds))
                     result[SeforimDbLibraryId.ToGlobal(libraryIndex, localId)] = new FtsDocumentPlacement(
                         placement.BookId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.BookId),
-                        placement.LineIndex,
-                        placement.TocEntryId == 0 ? 0 : SeforimDbLibraryId.ToGlobal(libraryIndex, placement.TocEntryId));
+                        placement.LineIndex);
             }
             return result;
         }
 
-        /// <summary>Lines at (GLOBAL book id, lineIndex) positions: each library answers for its
-        /// own books, ids and book ids come back global.</summary>
-        public List<SeforimDbFtsLineAtPosition> FetchLinesAtBookPositions(IReadOnlyList<(int BookId, int LineIndex)> positions)
+        /// <summary>The snippet texts of GLOBAL line ids: each library answers for its own lines, and the ids
+        /// come back global.</summary>
+        public List<FtsSnippetText> FetchSnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyCollection<int> shortLineIds)
         {
-            var lines = new List<SeforimDbFtsLineAtPosition>(positions?.Count ?? 0);
-            if (positions == null || positions.Count == 0) return lines;
-
-            var byLibrary = new Dictionary<int, List<(int BookId, int LineIndex)>>();
-            foreach (var (bookId, lineIndex) in positions)
+            var result = new List<FtsSnippetText>();
+            var plain = GroupByLibrary(lineIds);
+            var shorts = GroupByLibrary(shortLineIds);
+            foreach (int libraryIndex in plain.Keys.Union(shorts.Keys).OrderBy(i => i))
             {
-                var (libraryIndex, localBookId) = SeforimDbLibraryId.Resolve(bookId);
-                if (!byLibrary.TryGetValue(libraryIndex, out var list))
-                    byLibrary[libraryIndex] = list = new List<(int, int)>();
-                list.Add((localBookId, lineIndex));
+                if (Find(libraryIndex) is not { } source) continue; // no longer attached
+                plain.TryGetValue(libraryIndex, out var p);
+                shorts.TryGetValue(libraryIndex, out var q);
+                foreach (var text in source.Corpus.FetchSnippetTexts(p ?? new List<int>(), q ?? new List<int>()))
+                {
+                    text.LineId = SeforimDbLibraryId.ToGlobal(libraryIndex, text.LineId);
+                    result.Add(text);
+                }
             }
+            return result;
+        }
 
-            foreach (var (libraryIndex, local) in byLibrary)
+        /// <summary>The index position of a GLOBAL line id: the book's first position (global ranges, offset
+        /// by the libraries before it) plus the line's rank in the book, read from the owning library.</summary>
+        public long? PositionOfLine(int lineId, Dictionary<int, (long First, long Count)> books)
+        {
+            var (libraryIndex, localId) = SeforimDbLibraryId.Resolve(lineId);
+            if (Find(libraryIndex) is not { } source) return null;
+            var placements = source.Corpus.FetchPlacements(new[] { localId });
+            if (!placements.TryGetValue(localId, out var at)) return null;
+            if (!books.TryGetValue(SeforimDbLibraryId.ToGlobal(libraryIndex, at.BookId), out var book)) return null;
+            long rank = source.Corpus.LineRankInBook(at.BookId, at.LineIndex, localId);
+            return rank < book.Count ? book.First + rank : null;
+        }
+
+        /// <summary>The books' blocks of index positions across every source: sources are concatenated in index
+        /// order, so a library's blocks start after all the documents of the libraries before it, and its book ids
+        /// are the GLOBAL ids.</summary>
+        public Dictionary<int, (long First, long Count)> BookPositionRanges()
+        {
+            var ranges = new Dictionary<int, (long First, long Count)>();
+            long offset = 0;
+            foreach (var source in _sources)
             {
-                if (Find(libraryIndex) is not { } source) continue;
-                foreach (var line in source.Corpus.FetchLinesAtBookPositions(local))
-                    lines.Add(new SeforimDbFtsLineAtPosition(
-                        SeforimDbLibraryId.ToGlobal(libraryIndex, line.Id),
-                        SeforimDbLibraryId.ToGlobal(libraryIndex, line.BookId),
-                        line.LineIndex,
-                        line.Text));
+                foreach (var (localBookId, range) in source.Corpus.BookPositionRanges())
+                    ranges[SeforimDbLibraryId.ToGlobal(source.Index, localBookId)] = (offset + range.First, range.Count);
+                offset += source.Corpus.CountDocuments();
             }
-            return lines;
+            return ranges;
         }
 
         private static Dictionary<int, List<int>> GroupByLibrary(IEnumerable<int> globalIds)

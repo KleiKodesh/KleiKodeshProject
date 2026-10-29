@@ -178,7 +178,10 @@ Close Word now?</value>
     <value>Default: {0}</value>
   </data>
   <data name="Db_NotFound" xml:space="preserve">
-    <value>No Zayit or Otzaria app found - set the path manually</value>
+    <value>No book library found - download it below, or set the path manually</value>
+  </data>
+  <data name="Db_DownloadLibrary" xml:space="preserve">
+    <value>Download the book library (about 1.9 GB)</value>
   </data>
   <data name="Db_PickTitle" xml:space="preserve">
     <value>Select a database file for Kitvei HaKodesh</value>
@@ -344,6 +347,12 @@ Continue?</value>
   <data name="Settings_Subtitle" xml:space="preserve">
     <value>Choose which components appear in the toolbar and which is the main button</value>
   </data>
+  <data name="Settings_General_Title" xml:space="preserve">
+    <value>General Settings</value>
+  </data>
+  <data name="Settings_General_Subtitle" xml:space="preserve">
+    <value>Interface language and optional Word macros</value>
+  </data>
   <data name="Settings_Available" xml:space="preserve">
     <value>Available Components</value>
   </data>
@@ -379,5 +388,14 @@ Continue?</value>
   </data>
   <data name="WhatsNew_Continue" xml:space="preserve">
     <value>Continue</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>Interface language</value>
+  </data>
+  <data name="Settings_LanguageHint" xml:space="preserve">
+    <value>Some settings may only take effect after Word is restarted.</value>
+  </data>
+  <data name="Settings_RestartWordNotice" xml:space="preserve">
+    <value>Some settings may only take effect after Word is restarted.</value>
   </data>
 </root>

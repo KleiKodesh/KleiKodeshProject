@@ -36,8 +36,10 @@ import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { documentIcon } from '@/utils/documentIcons'
 import { useI18n } from 'vue-i18n'
+import { useAppNavUpdateItem } from './appNavUpdateItem'
 
 const { t } = useI18n()
+const { item: updateItem } = useAppNavUpdateItem()
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -306,12 +308,18 @@ useAppTitleBarShortcuts({
     <header class="title-bar" @click="onTitleBarClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
+        <!-- The Firefox / Windows dot: while an update is downloading, ready, installing or failed the
+             hamburger wears a dot in the update's colour, and the menu's first row after the
+             divider is the one it points at. -->
         <button
           v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.getNavSidebarVisible(props.paneId)"
           ref="navBtnRef"
           class="bar-btn"
+          :class="{ 'bar-btn--dot': updateItem }"
+          :style="updateItem ? { '--update-color': updateItem.color } : undefined"
           tabindex="-1"
-          :title="t('layout.menu')"
+          :title="updateItem ? `${t('layout.menu')}
+${updateItem.text}` : t('layout.menu')"
           @click.stop="toggleNavDropdown"
         >
           <IconLineHorizontal320Regular />
@@ -507,6 +515,20 @@ useAppTitleBarShortcuts({
 }
 .nav-btn-wrap {
   position: relative;
+}
+.bar-btn--dot {
+  position: relative;
+}
+.bar-btn--dot::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  inset-inline-end: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--update-color);
+  box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 .bar-end {
   display: flex;

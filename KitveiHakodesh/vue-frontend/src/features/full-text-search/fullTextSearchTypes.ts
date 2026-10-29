@@ -4,8 +4,8 @@
  * NUMBERS ONLY — every field is an int or a list of ints. A high-frequency word is hundreds
  * of thousands of hits held for the life of the result set and cached on disk, so nothing
  * per hit may be a string. What a row DISPLAYS is resolved on demand, by id, for rendered
- * rows only: the book title from `booksDataStore.allBooksMap` and the TOC path from the
- * book's TOC (fullTextSearchReferences.ts), the snippet from its line texts
+ * rows only: the book title from `booksDataStore.allBooksMap` and the TOC path by line id
+ * (fullTextSearchReferences.ts), the snippet from its line's text
  * (fullTextSearchSnippets.ts), the matched terms from the search's term table via the
  * term id of each `snippetMarks` triple (useFullTextSearch's matchedTermsOf).
  *
@@ -14,25 +14,22 @@
 export interface FullTextSearchResult {
   lineId: number
   bookId: number
-  /** The line's own TOC entry id; 0 when it has none (custom books). */
-  tocEntryId: number
   /** Character span of the tightest window covering all query terms (smaller = closer). */
   score: number
   /** Word distance of the tightest window — number of tokens between the outermost matched
    *  words (0 = adjacent). This is the primary relevancy key. */
   wordDistance: number
   /**
-   * Snippet DESCRIPTOR (the service no longer sends snippet HTML). The texts of
-   * `snippetLineIds`, joined by single spaces, are the source; the snippet is its raw window
-   * [snippetStart, snippetEnd) with `snippetMarks` highlighted — flat (start, length, termId)
-   * triples (SNIPPET_MARK_STRIDE), the term id naming which term that mark matched.
+   * Snippet DESCRIPTOR over the MATCHED LINE's text, located once by the search: the raw
+   * window [snippetStart, snippetEnd) with `snippetMarks` highlighted — flat (start, length,
+   * termId) triples (SNIPPET_MARK_STRIDE), the term id naming which term that mark matched.
    * Rebuilt on demand for rendered rows by fullTextSearchSnippets.ts.
    */
-  snippetLineIds: number[]
   snippetStart: number
   snippetEnd: number
-  snippetMarks: number[]
-  /** Bit flags — see SNIPPET_FLAG_LEADING_ELLIPSIS / SNIPPET_FLAG_TRAILING_ELLIPSIS. */
+  /** A plain array off the wire; a view into its chunk's packed array when read from the cache. */
+  snippetMarks: number[] | Int32Array
+  /** Bit flags — see SNIPPET_FLAG_LEADING_ELLIPSIS / _TRAILING_ELLIPSIS / _SHORT. */
   snippetFlags: number
 }
 
@@ -40,6 +37,8 @@ export interface FullTextSearchResult {
 export const SNIPPET_FLAG_LEADING_ELLIPSIS = 1
 /** "…" after the snippet window — it ends before the text does. */
 export const SNIPPET_FLAG_TRAILING_ELLIPSIS = 2
+/** The window holds fewer words than the requested context: shown with its neighbour lines as plain context. */
+export const SNIPPET_FLAG_SHORT = 4
 /** Ints per entry of `snippetMarks`: start, length, termId. */
 export const SNIPPET_MARK_STRIDE = 3
 

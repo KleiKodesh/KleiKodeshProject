@@ -20,6 +20,7 @@ import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useOverflowSubmenu } from './useOverflowSubmenu'
 import {
   getLinkTargetForSourceLineAndBook,
   getNextSectionWithCommentary,
@@ -37,7 +38,7 @@ import {
   getAllAltTocEntries,
   getLinesPaged,
 } from '@/webview-host/seforimApi'
-import type { LineItem } from './lines/useBookViewLinesTable'
+import type { LinesTable } from './lines/linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { loadSectionTocEntries } from './lines/wordLinkSection'
 import { displayCommentaryLabel } from './commentary/commentaryLabelDisplay'
@@ -50,8 +51,10 @@ const props = defineProps<{
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   currentScrollLineIndex: number
-  lines: LineItem[]
+  lines: LinesTable
   onOpen?: () => void
+  /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
+  inOverflow?: boolean
 }>()
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
@@ -108,6 +111,7 @@ interface RelatedBooksSection {
 const dropdownPositionClass = computed(() => {
   return `dropdown-${toolbarPosition.value}`
 })
+const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 const sections = computed<RelatedBooksSection[]>(() => {
   const sectionMap = new Map<string, RelatedBook[]>()
@@ -256,10 +260,9 @@ const BASE_LINE_PROBE_RADIUS = 30
 
 async function resolveBaseLine(topLineIndex: number, baseBookId: number): Promise<LinkedLine | undefined> {
   const typeIds = getBaseTextReverseConnectionTypeIds()
-  const byIndex = new Map(props.lines.map((line) => [line.lineIndex, line]))
   for (let distance = 0; distance <= BASE_LINE_PROBE_RADIUS; distance++) {
     for (const lineIndex of distance === 0 ? [topLineIndex] : [topLineIndex + distance, topLineIndex - distance]) {
-      const line = byIndex.get(lineIndex)
+      const line = props.lines.at(lineIndex)
       if (line == null) continue
       const rows = await getReverseLineData([line.id], typeIds)
       const hit = rows.find((row) => row.sourceBookId === baseBookId)
@@ -453,7 +456,7 @@ async function resolveLinkedTarget(book: RelatedBook): Promise<ResolvedTarget> {
   const top: ReaderPosition = { bookId: props.bookId, lineIndex: props.currentScrollLineIndex }
 
   // Find the line id for the current top visible line
-  const topLine = props.lines.find((l) => l.lineIndex === props.currentScrollLineIndex)
+  const topLine = props.lines.at(props.currentScrollLineIndex)
   if (topLine == null) return { linked: undefined, positions: [top] }
 
   // A commentary of a source book has no direct link: hop through the source's line —
@@ -511,17 +514,19 @@ async function onBookClick(book: RelatedBook) {
 </script>
 
 <template>
-  <div class="related-books-wrapper">
+  <div class="related-books-wrapper" :class="{ 'overflow-host': inOverflow }">
     <button
       ref="toggleButtonRef"
-      :class="{ active: isOpen }"
+      :class="{ active: isOpen, 'overflow-row': inOverflow }"
+      :role="inOverflow ? 'menuitem' : undefined"
       :title="$t('bookView.related.title')"
       @click="toggleOpen"
     >
       <IconLibrary16Regular />
+      <span v-if="inOverflow">{{ $t('bookView.related.title') }}</span>
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="dropdownPositionClass">
+    <div v-if="isOpen" ref="dropdownRef" class="related-books-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <div v-if="!relatedBooksLoaded" class="loading-message">{{ $t('bookView.related.scanning') }}</div>
       <div v-else-if="sections.length === 0" class="empty-message">{{ $t('bookView.related.empty') }}</div>
       <template v-else v-for="section in sections" :key="section.label">

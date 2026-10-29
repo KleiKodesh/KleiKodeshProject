@@ -59,6 +59,13 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousSection') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideCommentaryMarkers') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.removeRestoreVowelsAndCantillation') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.createBookmark') }}</span></div>
+    <!-- Full-text search results -->
+    <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.searchResults') }}</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>↑</kbd><span class="kbd-plus">/</span><kbd>↓</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.moveBetweenResults') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Enter</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.openResult') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Enter</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.openResultInNewTab') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Space</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.toggleResultPreview') }}</span></div>
     <!-- Display -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.view') }}</div>
     <div class="shortcut-row" v-if="!isVstoEnvironment"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>|</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.splitView') }}</span></div>

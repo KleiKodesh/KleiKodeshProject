@@ -19,8 +19,13 @@ import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
 import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 
+const props = defineProps<{
+  /** Rendered by App.vue as the window's status bar (pinned) rather than under the home page. */
+  statusBar?: boolean
+}>()
+
 const paneNavigation = usePaneNavigation()
-const { showClock } = storeToRefs(useSettingsStore())
+const { showClock, dateBarPinned } = storeToRefs(useSettingsStore())
 
 // Current clock time. Hidden when the floating fullscreen ClockWidget (App.vue)
 // is already showing it — i.e. showClock && fullscreen — so the time is never
@@ -119,7 +124,8 @@ const zmanCloser = useDropdownClose(
   () => {
     isZmanPopupOpen.value = false
   },
-  { ignore: [zmanPopupEl] },
+  // The wrapper is the inline bar item; only the popup is fitted.
+  { ignore: [zmanPopupEl], fitToViewport: false },
 )
 
 function toggleZmanPopup() {
@@ -157,7 +163,8 @@ const calendarCloser = useDropdownClose(
   () => {
     isCalendarOpen.value = false
   },
-  { ignore: [calendarPopupRef] },
+  // The wrapper is the inline bar item; only the popup is fitted.
+  { ignore: [calendarPopupRef], fitToViewport: false },
 )
 
 function toggleCalendarPopup() {
@@ -199,7 +206,8 @@ const learningCloser = useDropdownClose(
   () => {
     isLearningOpen.value = false
   },
-  { ignore: [learningMenuRef] },
+  // The wrapper is the inline bar item; only the popup is fitted.
+  { ignore: [learningMenuRef], fitToViewport: false },
 )
 
 function toggleLearningMenu() {
@@ -241,7 +249,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div ref="dateBarRef" class="date-bar">
+  <div ref="dateBarRef" class="date-bar" :class="{ 'date-bar--status': props.statusBar }">
     <template v-if="showClockInBar">
       <HomeWorldClockDropdown :clock-time="clockTime" />
       <span class="bar-sep">·</span>
@@ -332,6 +340,19 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
         </div>
       </Teleport>
     </template>
+    <!-- Shown on hover; pinned, the bar is rendered by App.vue under every page. -->
+    <button
+      class="pin-btn"
+      :class="{ on: dateBarPinned }"
+      :title="dateBarPinned ? $t('home.dateBar.unpin') : $t('home.dateBar.pin')"
+      @click="dateBarPinned = !dateBarPinned"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 17v5" />
+        <path d="M9 10.76V5h6v5.76l2 2.24v2H7v-2z" :fill="dateBarPinned ? 'currentColor' : 'none'" />
+        <path d="M8 5h8" />
+      </svg>
+    </button>
   </div>
 </template>
 
@@ -343,12 +364,87 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 4px;
+  padding: 6px 12px;
   font-size: 11.5px;
   color: var(--text-secondary);
   overflow: hidden;
   white-space: nowrap;
+  position: relative;
+}
+.pin-btn {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.date-bar:hover .pin-btn,
+.pin-btn:focus-visible {
+  opacity: 1;
+}
+.pin-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+/* Status-bar mode, after classic Outlook / Office: full width, short, two groups at the
+   two edges (learning + date at the start, zman + clock + pin at the end), quiet grey
+   regular text, no colours, no separators - the chrome surface is the only edge. Reordered with `order` so the
+   home layout's markup stays as is. */
+.date-bar--status {
+  height: 20px;
+  padding: 0 4px;
+  gap: 0;
+  justify-content: flex-start;
+  font-size: 12px;
+  background: var(--bg-secondary);
+}
+.date-bar--status .bar-sep {
+  display: none;
+}
+.date-bar--status .learning-wrap { order: 1; }
+.date-bar--status .calendar-wrap { order: 2; }
+.date-bar--status .zman-wrap { order: 3; margin-inline-start: auto; }
+.date-bar--status :deep(.world-clock-wrap) { order: 4; }
+.date-bar--status:not(:has(.zman-wrap)) :deep(.world-clock-wrap) { margin-inline-start: auto; }
+.date-bar--status .pin-btn {
+  order: 5;
+  position: static;
+  transform: none;
+  margin-inline-start: 2px;
+}
+.date-bar--status:not(:has(.zman-wrap, :deep(.world-clock-wrap))) .pin-btn { margin-inline-start: auto; }
+.date-bar--status :deep(.bar-item--btn),
+.date-bar--status .bar-lbl {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.date-bar--status :deep(.bar-item--btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 3px;
+}
+.date-bar--status :deep(.bar-item--btn:hover) {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+}
+.date-bar--status .zman .bar-lbl {
+  color: inherit;
+}
+.date-bar--status .zman--flash {
+  animation: none;
 }
 .bar-sep {
   color: var(--text-secondary);

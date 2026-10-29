@@ -206,6 +206,9 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
         /// <summary>No Zayit or Otzaria app found - set the path manually</summary>
         public static string Db_NotFound => ResourceManager.GetString("Db_NotFound", resourceCulture);
 
+        /// <summary>Download the book library (about 1.9 GB)</summary>
+        public static string Db_DownloadLibrary => ResourceManager.GetString("Db_DownloadLibrary", resourceCulture);
+
         /// <summary>Select a database file for Kitvei HaKodesh</summary>
         public static string Db_PickTitle => ResourceManager.GetString("Db_PickTitle", resourceCulture);
 
@@ -362,6 +365,12 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
         /// <summary>Choose which components appear in the toolbar and which is the main button</summary>
         public static string Settings_Subtitle => ResourceManager.GetString("Settings_Subtitle", resourceCulture);
 
+        /// <summary>General Settings</summary>
+        public static string Settings_General_Title => ResourceManager.GetString("Settings_General_Title", resourceCulture);
+
+        /// <summary>Interface language and optional Word macros</summary>
+        public static string Settings_General_Subtitle => ResourceManager.GetString("Settings_General_Subtitle", resourceCulture);
+
         /// <summary>Available Components</summary>
         public static string Settings_Available => ResourceManager.GetString("Settings_Available", resourceCulture);
 
@@ -382,6 +391,13 @@ namespace KleiKodeshVstoInstallerWpf.Properties {
 
         /// <summary>Main Toolbar Button</summary>
         public static string Settings_MainButton => ResourceManager.GetString("Settings_MainButton", resourceCulture);
+
+        /// <summary>Interface language</summary>
+        public static string Settings_Language => ResourceManager.GetString("Settings_Language", resourceCulture);
+        /// <summary>Takes full effect after restarting Word.</summary>
+        public static string Settings_LanguageHint => ResourceManager.GetString("Settings_LanguageHint", resourceCulture);
+        /// <summary>Restart Word notice</summary>
+        public static string Settings_RestartWordNotice => ResourceManager.GetString("Settings_RestartWordNotice", resourceCulture);
 
         /// <summary>Settings</summary>
         public static string Settings => ResourceManager.GetString("Settings", resourceCulture);

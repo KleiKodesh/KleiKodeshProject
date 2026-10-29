@@ -11,6 +11,7 @@ namespace KleiKodeshVstoInstallerWpf
     /// Navigation flow:
     ///   "התקן"  → InstallPage (runs the actual install, then proceeds to SettingsPage)
     ///   "תיקון" → RepairPage
+    ///   "הגדרות" → SettingsPage directly (Back returns here)
     ///   "ביטול" → exit
     ///
     /// Auto-updates land here too — --silent no longer bypasses this page. That is
@@ -50,5 +51,6 @@ namespace KleiKodeshVstoInstallerWpf
 
         private void CancelButton_Click(object sender, RoutedEventArgs e) => Environment.Exit(1);
         private void RepairButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToRepair();
+        private void SettingsButton_Click(object sender, RoutedEventArgs e) => _host.NavigateToSettings(fromLanding: true);
     }
 }

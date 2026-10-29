@@ -86,6 +86,13 @@
     "placeholder": "הזן הערה...",
     "updated": "עודכן {time}"
   },
+  "bookmarks": {
+    "add": "צור סימניה",
+    "delete": "מחק סימניה",
+    "empty": "אין סימניות בספר זה",
+    "rename": "שנה שם סימניה",
+    "title": "סימניות"
+  },
   "related": {
     "commentariesOf": "מפרשי {title}",
     "empty": "אין ספרים קרובים",

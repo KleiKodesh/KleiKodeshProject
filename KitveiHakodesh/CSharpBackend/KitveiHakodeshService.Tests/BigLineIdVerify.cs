@@ -154,9 +154,14 @@ namespace KitveiHakodeshService.Tests
                         Check(placed.Count == 4 && placed.All(p => p.Placement.BookId == far.Id) &&
                               placed.OrderBy(p => p.Placement.LineIndex).Select(p => p.Placement.LineIndex).SequenceEqual(new[] { 0, 1, 2, 3 }),
                             "FetchPlacedDocuments reports the right book and line index", "placed: " + string.Join(",", placed.Select(p => p.Placement.BookId + "/" + p.Placement.LineIndex)));
-                        var positions = corpus.FetchLinesAtBookPositions(new[] { (far.Id, 2) });
-                        Check(positions.Count == 1 && positions[0].Text == "מדבר שומם" && positions[0].Id == linesFar[2].Id,
-                            "FetchLinesAtBookPositions returns line 2 of the far book with its local id", "positions: " + string.Join(",", positions.Select(p => p.Id + "=" + p.Text)));
+                        var snippets = corpus.FetchSnippetTexts(new[] { linesFar[0].Id }, new[] { linesFar[1].Id });
+                        var snippet = snippets.FirstOrDefault(x => x.LineId == linesFar[1].Id);
+                        Check(snippets.Any(x => x.LineId == linesFar[0].Id && x.Text == "ים סוער") &&
+                              snippet != null && snippet.Text == "יער עבות" && snippet.Before == "ים סוער" && snippet.After == "מדבר שומם עמק פורח",
+                            "FetchSnippetTexts returns a far-book line (and a short one with its neighbours) under global ids", "snippets: " + string.Join("|", snippets.Select(x => x.LineId + "=" + x.Before + "<" + x.Text + ">" + x.After)));
+                        var ranges = corpus.BookPositionRanges();
+                        Check(ranges.TryGetValue(far.Id, out var farRange) && farRange.Count == 4 && corpus.PositionOfLine(linesFar[2].Id, ranges) == farRange.First + 2,
+                            "BookPositionRanges and PositionOfLine place a far-book line at the book's first position plus its rank", "ranges: " + string.Join(",", ranges.Select(r => r.Key + ":" + r.Value.First + "+" + r.Value.Count)));
                         var neighbours = corpus.FetchNeighbourText(new[] { linesFar[1].Id }, 1);
                         Check(neighbours.TryGetValue(linesFar[1].Id, out var n) && n.Previous == "ים סוער" && n.Next == "מדבר שומם",
                             "neighbour text of a far-book line is its previous and next line", "neighbours: " + string.Join(",", neighbours.Select(k => k.Key + ":" + k.Value.Previous + "/" + k.Value.Next)));

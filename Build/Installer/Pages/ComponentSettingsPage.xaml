@@ -186,6 +186,15 @@
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"/>
 
+                    <!-- Shown only when no library was found. Checked = the service downloads
+                         Otzaria's library into the app folder (Database\DownloadPending). -->
+                    <CheckBox x:Name="DbDownloadCheckBox"
+                              Content="{x:Static p:Strings.Db_DownloadLibrary}"
+                              FontSize="11"
+                              Foreground="#5A5A5A"
+                              Margin="0,8,0,0"
+                              Visibility="Collapsed"/>
+
                 </StackPanel>
                 <!-- /KitveiHakodeshSection -->
 
@@ -352,26 +361,6 @@
 
                 </StackPanel>
                 <!-- /WebsitesSection -->
-
-                <!-- ── Shell integration section — always last ────────────────── -->
-                <TextBlock Text="{x:Static p:Strings.Adv_FileExplorer}"
-                           FontSize="11"
-                           Foreground="#5A5A5A"
-                           Margin="0,12,0,6"/>
-
-                <CheckBox x:Name="ShellRegisterCheckBox"
-                          Content="{x:Static p:Strings.Adv_OpenWith}"
-                          FontSize="13"
-                          Foreground="#1F1F1F"
-                          Margin="0,0,0,6"
-                          Checked="ShellRegisterCheckBox_Changed"
-                          Unchecked="ShellRegisterCheckBox_Changed"/>
-                <TextBlock Text="{x:Static p:Strings.Adv_OpenWithHint}"
-                           FontSize="11"
-                           Foreground="#5A5A5A"
-                           Opacity="0.7"
-                           Margin="20,0,0,0"
-                           TextWrapping="Wrap"/>
 
             </StackPanel>
         </ScrollViewer>

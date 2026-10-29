@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroupRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -49,6 +49,64 @@ export async function getLinesPaged(
   bookId: number, limit: number, offset: number, versionId = 0,
 ): Promise<LineRow[]> {
   return (await seforimOp<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset, versionId })).rows
+}
+
+/**
+ * The in-book and commentary-panel search, whole, run by the service: every line inside the
+ * (book, first lineIndex, last lineIndex) ranges that holds `query` as a substring — the
+ * same normalization as stripHtmlForSearch/removeDiacriticsForSearch — and how many times,
+ * as parallel arrays by book then reading order. The service narrows with the full-text
+ * index when it can and confirms or scans the text natively; `versionId` reads through an
+ * alternate version's overlay (0 = the merged text). Numbers only; nothing is kept.
+ */
+export async function linesSubstringSearch(
+  query: string,
+  ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
+  versionId = 0,
+): Promise<{ bookIds: number[]; lineIndexes: number[]; lineIds: number[]; counts: number[] }> {
+  const rangeTriples = new Array<number>(ranges.length * 3)
+  for (let i = 0; i < ranges.length; i++) {
+    rangeTriples[i * 3] = ranges[i]!.bookId
+    rangeTriples[i * 3 + 1] = ranges[i]!.firstLineIndex
+    rangeTriples[i * 3 + 2] = ranges[i]!.lastLineIndex
+  }
+  return serviceCall('linesSubstringSearch', { query, rangeTriples, versionId })
+}
+
+/**
+ * The ids of a book's lines in [fromIndex, toIndex), by lineIndex, with no text (0
+ * where a lineIndex has no row). A TOC section's commentary and a shift-click range
+ * need ids only; this is what lets them skip downloading the section's text.
+ */
+export async function getLineIds(bookId: number, fromIndex: number, toIndex: number): Promise<number[]> {
+  return (await seforimOp<{ ids: number[] }>('getLineIds', { bookId, fromIndex, toIndex })).ids
+}
+
+/** A snippet's text (mirror of FtsSnippetText in SeforimDbFtsModels.cs): the matched line's
+ *  own text, and for a short window the same book's neighbour lines before / after it. */
+export interface FtsSnippetText {
+  lineId: number
+  text: string
+  before: string
+  after: string
+}
+
+/**
+ * Snippet texts for rows the search page shows — the hits already carry their snippet
+ * descriptors, so this is a plain text read: each line's text, and for `shortLineIds` also
+ * their neighbour context, in one statement. A line with no text is absent.
+ */
+export async function ftsSnippetTexts(lineIds: number[], shortLineIds: number[]): Promise<FtsSnippetText[]> {
+  return serviceCall('ftsSnippetTexts', { lineIds, shortLineIds })
+}
+
+/**
+ * Every line's character count, by lineIndex, with no text — the reader's scrollbar
+ * estimates row heights from them. null when the library has no `line.charCount`
+ * column (older schemas), in which case the bar falls back to measured averages.
+ */
+export async function getLineCharCounts(bookId: number): Promise<number[] | null> {
+  return (await seforimOp<{ counts: number[] | null }>('getLineCharCounts', { bookId })).counts ?? null
 }
 
 // ── Versions (book_version / version_line, later schemas only) ────────────────
@@ -368,4 +426,13 @@ export async function getLineRefAndContent(
   if (bookId <= 0 || lineIndex < 0) return undefined
   type Row = { id: number; lineIndex: number; heRef: string | null; content: string }
   return (await seforimOp<{ rows: Row[] }>('getLineRefAndContent', { bookId, lineIndex })).rows[0]
+}
+
+/**
+ * Forward commentary links for a range of source lines, de-duplicated and grouped per
+ * (target book, connection type) in Core. Numbers only: a whole-book range is a few
+ * hundred KB where the per-row shape above was ~4 MB.
+ */
+export async function getCommentaryLinkGroupsForSourceLineRange(lineIds: number[]): Promise<CommentaryLinkGroupRow[]> {
+  return (await seforimOp<{ rows: CommentaryLinkGroupRow[] }>('getCommentaryLinkGroupsForSourceLineRange', { lineIds })).rows
 }

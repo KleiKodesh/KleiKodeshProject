@@ -1,5 +1,5 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { getCommentaryLinksForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import { getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
@@ -184,91 +184,150 @@ export function useCommentary(
     return ids != null && ids.length > 0 ? ids.join(',') : String(lineId)
   }
 
-  // Content backfill batch sizes. The first batch covers roughly what fits on
-  // screen so text paints as fast as possible after the structure; later batches
-  // are large so a full chumash-chapter section (~8k lines) completes in a
-  // handful of round trips.
-  const CONTENT_FIRST_BATCH = 100
-  const CONTENT_BACKFILL_BATCH = 1500
+  // Line text is fetched ON DEMAND only: the windowed scroller asks for the lines it is
+  // about to show (ensureLineContents). Nothing downloads the panel's text in the
+  // background — the panel's search has sources of its own (useCommentarySearch).
 
-  // lineIds whose content fetch is done or in flight for the CURRENT selection —
-  // shared bookkeeping between the display-order backfill and the viewport-driven
-  // priority fetch so no line is ever requested twice. Reset on every load().
-  const contentRequested = new Set<number>()
+  // The fetch each requested line rides on, so ensureLineContents can await a line
+  // that another window's fetch already has in flight. Reset on every load().
+  const contentFetches = new Map<number, Promise<void>>()
+  // Lines whose fetch has returned, with or without text: never waited for again
+  // (until trimLineContents releases them).
+  const contentSettled = new Set<number>()
+  // Every line object carrying a line id, for the CURRENT groups. The same line can
+  // sit in two groups (one book linked under two connection types), and each copy
+  // gets the text. Built once per load instead of scanning the groups per id.
+  let linesById = new Map<number, CommentaryLine[]>()
 
-  /** Lines from the links-only query that still need their text, in display order. */
-  function collectPendingLines(builtGroups: CommentaryGroup[]): CommentaryLine[] {
-    const pending: CommentaryLine[] = []
+  function indexLines(builtGroups: CommentaryGroup[]): Map<number, CommentaryLine[]> {
+    const byId = new Map<number, CommentaryLine[]>()
+    for (const group of builtGroups) {
+      for (const line of group.lines) {
+        if (line.lineId <= 0) continue
+        const list = byId.get(line.lineId)
+        if (list) list.push(line)
+        else byId.set(line.lineId, [line])
+      }
+    }
+    return byId
+  }
+
+  // ── Bounded text cache ──────────────────────────────────────────────────────
+  // The groups hold a line object for every linked line (a whole-book range has
+  // ~50k), but only the text NEAR the scroller's window is kept: settled fetches are
+  // remembered in arrival order, and once more than TEXT_BUDGET lines hold text the
+  // oldest are released (content back to '', not settled) unless the panel says it
+  // still shows them. A released line comes back through ensureLineContents like
+  // any line the scroller has not shown yet.
+  const TEXT_BUDGET = 3000
+  // The newest settled batches are never released: the landing a goal or restore
+  // just fetched is the newest batch, and it may still be a tick from mounting.
+  const PROTECTED_NEWEST_BATCHES = 2
+  let settledBatches: number[][] = []
+  let settledCount = 0
+  // What each panel still shows, by panel: the two panels share this instance, so a
+  // trim asked by one must not release the rows the other has on screen.
+  const keepByPanel = new Map<string, (lineId: number) => boolean>()
+
+  /** Fetches content for one batch of lines and writes it into every line object with that id. */
+  function fetchContentsInto(ids: number[]): Promise<void> {
+    const index = linesById
+    const fetching = (async () => {
+      const rows = await getLineContents(ids)
+      // A new load replaced the groups while this was in flight: its lines are gone,
+      // and marking the ids settled would leave the new load's rows without text.
+      if (linesById !== index) return
+      const contentById = new Map(rows.map((row) => [row.id, row.content ?? '']))
+      for (const id of ids) {
+        const content = contentById.get(id)
+        if (content === undefined) continue
+        for (const line of linesById.get(id) ?? []) if (line.content === '') line.content = content
+      }
+      for (const id of ids) contentSettled.add(id)
+      settledBatches.push(ids)
+      settledCount += ids.length
+    })()
+    for (const id of ids) {
+      contentFetches.set(id, fetching)
+    }
+    void fetching.catch(() => {}).finally(() => {
+      for (const id of ids) if (contentFetches.get(id) === fetching) contentFetches.delete(id)
+    })
+    return fetching
+  }
+
+  // One request per this many lines: a select-all copy asks for every line at once.
+  const FETCH_CHUNK = 500
+
+  /**
+   * Resolves once every one of these lines has its text (or is known to have
+   * none): the windowed scroller's row source. It asks for a range BEFORE mounting
+   * it, so a row is never on screen without its text. Lines another fetch already
+   * has in flight are awaited, not requested again. Rejects when a fetch fails, so
+   * the scroller mounts nothing rather than empty rows.
+   */
+  async function ensureLineContents(lineIds: number[]): Promise<void> {
+    if (!linesById.size) return
+    const waits: Promise<void>[] = []
+    const wanted: number[] = []
     const seen = new Set<number>()
-    for (const group of builtGroups) {
-      for (const line of group.lines) {
-        if (line.lineId > 0 && line.content === '' && !seen.has(line.lineId)) {
-          seen.add(line.lineId)
-          pending.push(line)
-        }
-      }
+    for (const id of lineIds) {
+      if (id <= 0 || contentSettled.has(id) || seen.has(id)) continue
+      seen.add(id)
+      const inFlight = contentFetches.get(id)
+      if (inFlight) waits.push(inFlight)
+      else if (linesById.has(id)) wanted.push(id)
     }
-    return pending
-  }
-
-  /** Fetches content for one batch of lines and writes it into every matching line object. */
-  async function fetchContentsInto(builtGroups: CommentaryGroup[], batch: CommentaryLine[]) {
-    for (const line of batch) contentRequested.add(line.lineId)
-    const rows = await getLineContents(batch.map((line) => line.lineId))
-    const contentById = new Map(rows.map((row) => [row.id, row.content ?? '']))
-    for (const group of builtGroups) {
-      for (const line of group.lines) {
-        const content = contentById.get(line.lineId)
-        if (content !== undefined && line.content === '') line.content = content
-      }
+    for (let i = 0; i < wanted.length; i += FETCH_CHUNK) {
+      waits.push(fetchContentsInto(wanted.slice(i, i + FETCH_CHUNK)))
     }
+    if (waits.length) await Promise.all(waits)
   }
 
   /**
-   * Viewport-driven priority fetch: called by CommentaryView whenever virtual items
-   * render lines whose content is still pending (scroll restore, fast scroll ahead
-   * of the backfill, jump-to-group). Fetches exactly those lines immediately so the
-   * viewport never waits for the display-order backfill to reach it.
+   * Records what `panel` still shows (its mounted and pinned rows; null when the
+   * panel unmounts), then releases the text of the lines fetched longest ago until
+   * the held text is within budget. A line either panel still shows is never
+   * released, whatever its age. Called by a panel after its window moves; a no-op
+   * while the held text is within budget.
    */
-  function requestContentPriority(lineIds: number[]) {
-    const currentGroups = groups.value
-    if (!currentGroups.length) return
-    const wanted = new Set(lineIds.filter((id) => id > 0 && !contentRequested.has(id)))
-    if (!wanted.size) return
-    const batch: CommentaryLine[] = []
-    for (const group of currentGroups) {
-      for (const line of group.lines) {
-        if (wanted.has(line.lineId) && line.content === '') {
-          wanted.delete(line.lineId)
-          batch.push(line)
-        }
+  function trimLineContents(panel: string, keep: ((lineId: number) => boolean) | null): void {
+    if (keep) keepByPanel.set(panel, keep)
+    else keepByPanel.delete(panel)
+    if (!keep || settledCount <= TEXT_BUDGET) return
+    const keeps = [...keepByPanel.values()]
+    const shown = (lineId: number) => keeps.some((k) => k(lineId))
+    const survivors: number[][] = []
+    let count = settledCount
+    const lastEvictable = settledBatches.length - PROTECTED_NEWEST_BATCHES
+    for (let b = 0; b < settledBatches.length; b++) {
+      const batch = settledBatches[b]!
+      if (count <= TEXT_BUDGET || b >= lastEvictable) {
+        survivors.push(batch)
+        continue
       }
+      const kept: number[] = []
+      for (const id of batch) {
+        if (shown(id)) {
+          kept.push(id)
+          continue
+        }
+        contentSettled.delete(id)
+        for (const line of linesById.get(id) ?? []) line.content = ''
+        count--
+      }
+      if (kept.length) survivors.push(kept)
     }
-    if (batch.length) void fetchContentsInto(currentGroups, batch).catch(() => {})
+    settledBatches = survivors
+    settledCount = count
   }
 
-  /**
-   * Fills line.content for groups built from the links-only range query.
-   * Batches run sequentially in display order so the top of the panel fills first
-   * and the bridge is never flooded. Mutates the (reactive) line objects in place —
-   * safe if the selection changes mid-flight because stale groups are not displayed.
-   */
-  async function backfillLineContents(builtGroups: CommentaryGroup[], forLineId: number) {
-    const pending = collectPendingLines(builtGroups)
-    for (let i = 0; i < pending.length; i += CONTENT_BACKFILL_BATCH) {
-      // Stop early if the user has moved on to a different selection.
-      if (loadedForLineId !== forLineId) return
-      // Skip lines a viewport-priority fetch already covered in the meantime.
-      const batch = pending
-        .slice(i, i + CONTENT_BACKFILL_BATCH)
-        .filter((line) => !contentRequested.has(line.lineId))
-      if (!batch.length) continue
-      try {
-        await fetchContentsInto(builtGroups, batch)
-      } catch {
-        return // DB error — leave remaining lines empty rather than retry-looping
-      }
-    }
+  function resetContents() {
+    contentFetches.clear()
+    contentSettled.clear()
+    settledBatches = []
+    settledCount = 0
+    linesById = new Map()
   }
 
   async function load(lineId: number) {
@@ -277,7 +336,7 @@ export function useCommentary(
     const isMulti = multiIds != null && multiIds.length > 0
     loadedIdsSignature = idsSignature(lineId, multiIds)
     groups.value = []
-    contentRequested.clear()
+    resetContents()
     loading.value = true
     loadError.value = false
     try {
@@ -287,14 +346,15 @@ export function useCommentary(
       // - the forward commentary query (needs no ID table — pure SQL with a fixed line param)
       // The reverse queries depend on connection type IDs so they start after that resolves,
       // but they run concurrently with each other and with the catalog awaits.
-      // Two-phase load for both single-line and section clicks: the links-only,
-      // JOIN-free query returns in milliseconds even for thousands of hits (the old
-      // content-joining query cost 150ms-1.4s and up to 10MB per click), so group
-      // structure renders immediately. Line text is backfilled below.
+      // Two-phase load for both single-line and section clicks: the links-only
+      // query returns ids and line indexes grouped per (book, type) — a whole-book
+      // range is a few hundred KB (the per-row shape was ~4 MB, the old
+      // content-joining query up to 10 MB per click) — so the group structure
+      // renders at once. Line text is fetched for the rows shown.
       const queryLineIds = isMulti ? multiIds : [lineId]
       const lineIdsForReverse = queryLineIds
 
-      const forwardQueryPromise = getCommentaryLinksForSourceLineRange(queryLineIds)
+      const forwardQueryPromise = getCommentaryLinkGroupsForSourceLineRange(queryLineIds)
 
       const [rows, sourceEntries] = await Promise.all([
         forwardQueryPromise,
@@ -315,25 +375,14 @@ export function useCommentary(
         booksDataStore.allBooksMap,
       )
 
-      // Fetch the first screenful of text BEFORE revealing the panel — one small
-      // query — so the panel appears once, with readable text, instead of showing
-      // empty rows that fill in later (the reveal also triggers highlights/notes/
-      // toc-path queries, and the first content batch would otherwise queue behind
-      // them). The rest backfills in display order after the reveal.
-      const pendingLines = collectPendingLines(built)
-      if (pendingLines.length) {
-        try {
-          await fetchContentsInto(built, pendingLines.slice(0, CONTENT_FIRST_BATCH))
-        } catch { /* reveal with empty text rather than blocking the panel */ }
-      }
       if (loadedForLineId !== lineId) return
 
+      // The structure (which commentators, which lines) is all the panel needs to
+      // open: the windowed scroller asks for exactly the lines it will show, before
+      // it shows them. The line index is built from the REACTIVE line objects, so a
+      // fetch writes text the rows see.
       groups.value = built
-
-      // Second phase: fill in the remaining text in display order, fire-and-forget.
-      // IMPORTANT: mutate through groups.value (the reactive proxy), not `built` —
-      // writes to the raw array would not trigger a re-render of already-built rows.
-      if (pendingLines.length > CONTENT_FIRST_BATCH) void backfillLineContents(groups.value, lineId)
+      linesById = indexLines(groups.value)
     } catch {
       // Link/content queries failed (older or mismatched seforim DB, service
       // error). Without this catch the rejection was unhandled and the panel
@@ -364,6 +413,7 @@ export function useCommentary(
         loadedForLineId = null
         loadedIdsSignature = null
         groups.value = []
+        resetContents()
         loadError.value = false
         return
       }
@@ -389,11 +439,8 @@ export function useCommentary(
     void load(lineId)
   })
 
-  // Stop the display-order content backfill when this instance's component
-  // unmounts (tab switch away): backfillLineContents checks loadedForLineId
-  // before every batch. Without this it kept fetching large batches for a dead
-  // panel, and the NEXT mount's restore queries queued behind that zombie
-  // traffic (dev: the browser's 6-connection limit; hosted: the shared bridge).
+  // A load still in flight when this instance's component unmounts (tab switch away)
+  // must not publish into a dead panel: load() checks loadedForLineId after its awaits.
   onScopeDispose(() => {
     loadedForLineId = null
   })
@@ -427,7 +474,8 @@ export function useCommentary(
     loadError,
     staticFilterGroupsLoaded,
     ensureStaticFilterGroupsLoaded,
-    requestContentPriority,
+    ensureLineContents,
+    trimLineContents,
   }
 }
 

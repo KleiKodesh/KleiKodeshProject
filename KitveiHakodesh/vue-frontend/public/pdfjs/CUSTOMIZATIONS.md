@@ -398,11 +398,11 @@ Inside the existing `<span id="scaleSelectContainer" class="dropdownToolbarButto
 The input is positioned absolutely over the text area of the select (covering the select's own rendered text), leaving the right 38px free so the select's native `::after` dropdown arrow remains fully visible and clickable. The select continues to work normally — clicking the arrow opens the dropdown as before.
 
 Behavior:
-- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `scalechanging` and `change` events.
+- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `change` and `PDFViewerApplication.eventBus` `scalechanging` (hooked once the app exists — eventBus events are not DOM events, so a `window` listener never fires). Without the eventBus hook, Ctrl+0 or a wheel/key zoom landing on an already-listed preset left a stale label.
 - **On focus:** switches to `type="number"`, shows the current scale as a plain integer percentage, selects all text.
 - **On Enter:** applies `PDFViewerApplication.pdfViewer.currentScaleValue = (value / 100).toString()`, blurs.
-- **On Escape or invalid input:** discards, reverts to resting state.
-- **On blur:** applies zoom, reverts to resting state.
+- **On Escape or invalid input:** discards, reverts to resting state. Escape clears the `edited` flag before blurring, so the blur handler applies nothing (it used to apply the typed value).
+- **On blur:** applies zoom only if the user typed (an `input` event since focus), then reverts to resting state. Focusing at "אוטומטי" and leaving must not pin the zoom to the rounded % (e.g. 118%).
 - Polls `waitForApp` until `PDFViewerApplication.pdfViewer` is ready and Fluent has translated the options before showing the first label.
 
 The init script is added as a `<script>` block immediately before `</body>`.
@@ -1738,6 +1738,13 @@ nearest previous row's page rather than being dropped.
    **Placement is critical: the block must run BEFORE the `changes.size === 0` early
    return**, or an outline-only save returns the original bytes unchanged.
 
+   **`src` follows item identity.** `outline-search.js` stamps `data-toc-src` by walking
+   the outline tree and the rendered rows together (PDF.js renders them 1:1), not by
+   destination: `flat` is BFS while the DOM is depth-first, so a per-href queue gave
+   items sharing a destination at different depths each other's `src`, and saving moved
+   bold/italic/color/closed state onto the other item. The href queue remains only as a
+   fallback when the DOM shape does not match the outline.
+
    **Attribute preservation (`src`).** Entries carry `src` — their index into the
    ORIGINAL outline flattened in the same BFS order the viewer uses — and the worker
    fetches `pdfManager.ensureCatalog("documentOutlineForEditor")` (whose items keep
@@ -1812,6 +1819,35 @@ teardown moment). Contract, all on the iframe `window`:
   fallback anchor download fired). A cancelled save picker dispatches nothing, so edits
   correctly stay dirty. Clears the editor's dirty flag and notifies the host.
 
+**TOC autosave (writable local `.pdf` only).** `usePdfViewPageTracking` writes every
+outline edit straight into the file, debounced 600 ms after each dirty notify: it runs
+`pdfDocument.saveDocument()` and sends ONLY the bytes past the loaded length to the
+`writePdfTail` op (service in dev, C# bridge action hosted; logic in Core
+`PdfIncrementalSaveWriter`), which writes them at that offset and truncates after. The
+loaded prefix never changes (the viewer keeps range-reading it safely), and each save of a
+session REPLACES the previous tail. Across sessions too: an outline-only section ends with
+a `%KH-TOC start=<S> prev=<P>` comment after `%%EOF` (patched `pdf.worker.mjs`
+SaveDocument, search "KH-TOC marker"). When the loaded file ends with one, the worker
+builds the save from the bytes before S and chains `/Prev` to P, and the host writes at S
+— the old section is overwritten, so repeated sessions do not grow the file. A section
+that also carries annotation changes gets no marker and is kept. The marker is now
+`%KH-TOC start=<S> prev=<P> sha=<H>` (H = lowercase SHA-256 hex of bytes [S, marker
+line)), and `khReadTocMarker` only lets the save truncate when it PROVES the marker is our
+intact last section: bytes before S end in `%%EOF`; [S, marker) is exactly one section
+(one `startxref`, one `%%EOF`) whose startxref points inside it at an xref table/stream
+with a single `/Prev` = P; bytes at P are `xref` or an `/XRef` stream object; only
+whitespace follows the marker line; H matches when present (old markers without `sha=`
+are accepted on the structural checks alone). Anything else — a forged/stale marker,
+another tool's append or same-length in-place edit — is a plain append on the full file,
+never a truncation (a forged `start=` at half the file used to drop the page tree). The
+host's `tocMarkerStart` only reads S as a hint; when the worker rejects the marker its
+save keeps every loaded byte, so writing `saved[S..]` at S is still correct. Re-apply this worker
+patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
+On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
+(capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
+it immediately — no picker. Word-rendered PDFs and HebrewBooks downloads have no writable
+source path and keep the stock save-as flow + parked-snapshot rehydrate.
+
 Vue side (not in this folder): `bookViewStore` (snapshots + `hasUnsavedPdfChanges` +
 dialog state), `tabStore` (synchronous close guards at the single chokepoint all close
 paths funnel through, including the native chrome-tabs mirror), `App.vue` (themed
@@ -1870,6 +1906,18 @@ Two patches in `web/viewer.mjs`, both marked `[KleiKodesh]`:
    `this.pdfOutlineViewer.render({ outline, pdfDocument })` — on the first document only
    (`this._khOutlineTargetDone`), find the item and call
    `this.pdfLinkService.goToDestination(item.dest)`. No match = nothing happens.
+
+---
+
+## Focus, title and text-layer fixes
+
+Four small `[KleiKodesh]` patches:
+
+1. **`web/viewer.mjs` `PDFLinkService.goToDestination`** — the `textlayerrendered` handler focuses the target page's text layer late. It now skips that when `document.activeElement` is contentEditable, an INPUT or a TEXTAREA: a double-click rename of an outline row on another page was blurred (and so cancelled) by it.
+2. **`web/outline-search.js` `kh-save-complete` listener** — calls `app.setTitle()` after clearing `outlineDirty`. `setTitle()` last ran before the save dialog finished, so the window title kept its `* ` prefix after a completed save.
+3. **`web/viewer.mjs` `PDFViewer._cancelRendering()`** (the big-jump cancel patch) — a text layer whose div is already appended (built) is kept: `cancelRendering({ keepTextLayer: true })`. A still-pending text layer is cancelled as before, and if the canvas is FINISHED the page goes back to INITIAL so the rendering queue redraws it and re-requests the text layer when visible. Before, three jumps on long.pdf left visible page 22 with 0 spans for good.
+
+4. **`web/viewer.mjs` `window.print` override (pdf_print_service)** — with `disableAutoFetch` the page views only get their `pdfPage` once displayed, so `pageViewsReady` stayed false and every print (button, Ctrl+P, the app's `contentWindow.print()`) only alerted `pdfjs-printing-not-ready`. Now `window.print()` first fetches the missing pages (`pdfDocument.getPage` → `pageView.setPdfPage`, like `PDFViewer.setDocument` without disableAutoFetch) and then prints. A print before the pages exist waits for `pagesinit` instead of throwing. `disableAutoFetch` stays on.
 
 ---
 

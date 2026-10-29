@@ -299,8 +299,7 @@
   "db": {
     "notFound": "The file was not found at that path",
     "saveFailed": "Saving the path failed",
-    "downloadOtzaria": "Download Otzaria",
-    "downloadZayit": "Download Zayit",
+    "downloadLibrary": "Download the book library (about 1.9 GB)",
     "pick": "Choose a database file",
     "devPlaceholder": "Full path to seforim.db"
   },
@@ -362,7 +361,13 @@
     "nextSection": "Next section",
     "previousSection": "Previous section",
     "showHideCommentaryMarkers": "Show / hide commentary markers",
+    "createBookmark": "Create bookmark",
     "removeRestoreVowelsAndCantillation": "Remove / restore vowels and cantillation",
+    "searchResults": "Search results",
+    "moveBetweenResults": "Move between results",
+    "openResult": "Open result",
+    "openResultInNewTab": "Open result in a new tab",
+    "toggleResultPreview": "Show / hide result preview",
     "view": "View",
     "splitView": "Split view",
     "showHideToolbar": "Show / hide toolbar",

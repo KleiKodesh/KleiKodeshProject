@@ -44,8 +44,6 @@ One trap worth knowing: `TocEntry`'s first five fields are identical to `TreeNod
 
 All three hold as of 2026-07-28. The last one was fixed by pointing `components/TreeView.vue` at `utils/segmentSearchTree` directly instead of at `features/book-view/toc/tocSearchUtils`, which merely re-exports that same class under the alias `SearchableTree`. Note the shape of that bug: nothing needed to move, because the generic code was already in the right place — the component was reaching it through a feature-folder alias. Check for that before relocating anything.
 
-**Still open (weaker, same family):** `features/book-catalog/bookCatalogSearchTocHeuristics.ts` imports `stripTocTitleRoots` from `../book-view/toc/tocSearchUtils` — a feature reaching into another feature's subfolder. Per the Feature-First rule above, a helper used by two features must move out. It can be shrunk first: that file also imports `SearchableTree`, which it should take from `utils/segmentSearchTree` like `TreeView` now does, leaving exactly one shared function to place.
-
 **Name a file after its contract, not its category.** A category name invites everything adjacent to accumulate: `persistence.ts` reached six jobs and 452 lines before anyone noticed, and the reset workflow inside it forced `utils/` to import two Pinia stores. "Storage driver" is a contract; "persistence" is a topic. The same applies to identifiers — do not name a function `idb*` if it also writes localStorage, and do not prefix a constant `SETTINGS_` if it is not a setting.
 
 **When refactoring a file that has drifted:** name its single job before deciding where anything goes ("where should this live?" is unanswerable while a file has several jobs), park everything undecided in one staging file with a manifest of candidate homes, land the direction fix separately from the ownership decisions, then delete the staging file. Treat an existing workaround comment as evidence of where the design is broken — but verify the claim, since the one reading "imported lazily to avoid a circular dependency" turned out to be guarding a type-only cycle that could not occur at runtime.
@@ -103,7 +101,7 @@ Keying (the `pageKey` computed) decides what remounts on tab switch:
 The step list is computed, so it varies by environment. Each step past `welcome` is its own `SetupWizardStep*.vue` component, mapped via a `stepComponents` record:
 
 1. `welcome` — always shown; app logo, intro text
-2. `db` — shown only when a database still needs to be chosen (in dev, when the service reports none); lets the user download Zayit/Otzaria or pick an existing `.db` file
+2. `db` — shown only when a database still needs to be chosen (in dev, when the service reports none); lets the user download the library (Otzaria's SeforimLibrary release, via the service — Core `SeforimLibraryDownload/`) or pick an existing `.db` file. The DB is probed in three default locations, in order: Otzaria (`%AppData%\otzaria\books`), Zayit (`%AppData%\io.github.kdroidfilter.seforimapp\databases`), then the app's own download (`%LocalAppData%\KleiKodesh\books`) — `SeforimDbPathResolver.DefaultLocations`, mirrored in the installer
 3. `theme` — theme picker + app zoom slider
 4. `general` — divine name censoring, resume-last-read, new-tab destination
 5. `book-display` — header/text fonts, font size, line padding; optional separate commentary settings
@@ -218,10 +216,10 @@ Book catalog browser. Supports list, tiles, and full tree views with search.
 - `BookCatalogBreadcrumb.vue`, `BookCatalogBreadcrumbChevronDropdown.vue` — navigation breadcrumb
 - `BookCatalogTitleBar.vue` — catalog-specific title bar row
 - `useBookCatalog.ts` — navigation and folder traversal
-- `useBookCatalogSearch.ts` — two-phase search orchestration
+- `useBookCatalogSearch.ts` — catalog search: one `catalogTocSearch` call to the service's Lucene catalog index (Core `SeforimDbCatalogIndex`)
+- `bookTitleSearch.ts` — book-title-only lookups (`catalogTitleSearch`, same index) for the FTS @ filter, daf yomi, daily learning
 - `bookCatalogTree.ts` — tree building and category metadata
-- Search stack: `bookCatalogSearch.ts`, `bookCatalogSearchNormalizer.ts`, `bookCatalogSearchMatcher.ts`, `bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`
-- `SEARCH.md` — authoritative design doc for the search stack; read before changing search behaviour
+- Normalization, abbreviations and ranking live in Core (`SeforimDbCatalog/`), not in the frontend
 
 ### book-view/
 
@@ -239,7 +237,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 
 **Main composables:**
 - `useBookView.ts` — central composable; owns data loading, state, event handlers, and watchers
-- `useBookViewSearch.ts` / `useBookViewSearchPanel.ts` — content search (line-based) and its panel state
+- `useBookViewSearch.ts` / `useBookViewSearchPanel.ts` — in-book substring search and its panel state. The search runs in the service (`linesSubstringSearch`, Core `SeforimDbLineSubstringSearch`): FTS index narrowing from two characters + native confirm, else a native scan of the lines — the frontend sends ranges and gets line ids and counts; no book text is held for search. Lines near the reader are asked first; typing narrows from the previous (or in-flight) answer
 - `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
 - `useBookViewSessionRestore.ts` — restores per-book view state on mount
 - `useBookViewPinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback
@@ -503,8 +501,6 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton()`, handles file picker, external links, and search navigation.
 
-**useVirtualScrollerKeys.ts** — keyboard nav for virtual scrollers (`Ctrl+Home`, `Ctrl+End`). Required on every component that uses `@tanstack/vue-virtual`. The scroll container must have `tabindex="0"`.
-
 **useZoom.ts** — zoom handler for keyboard (`Ctrl+±/0`), wheel (`Ctrl+scroll`), and pinch (2-finger touch). Config: MIN=50, MAX=200, DEFAULT=100, STEP=10.
 
 **useListKeyNav.ts** — arrow-key + Home/End navigation for plain DOM lists that own keyboard focus themselves (roving-focus model); tracks `focusedIndex` and scrolls the focused item into view. For standalone lists only — input-paired lists use `useInputListNavigation.ts`.
@@ -513,7 +509,7 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useTileGridKeys.ts** — 2D arrow-key navigation for tile grids; computes column count from container width to handle Up/Down correctly.
 
-**useInputListNavigation.ts** — combobox keyboard model (W3C APG): DOM focus stays in a text input while its keydown events move a highlight through the paired list. Handles arrows, PageUp/PageDown, `Ctrl+Home`/`Ctrl+End`, Enter (Ctrl+Enter = new tab); plain Home/End and Left/Right stay caret keys. Supports plain containers (`scrollIntoView` over `[data-nav-item]`), virtual lists (`getVirtualizer` → `scrollToIndex`), and tile grids (`getColumnsPerRow`). Used by every input-paired list: home search dropdown, address bar, book catalog search, HebrewBooks, local file search, full-text-search filter panel.
+**useInputListNavigation.ts** — combobox keyboard model (W3C APG): DOM focus stays in a text input while its keydown events move a highlight through the paired list. Handles arrows, PageUp/PageDown, `Ctrl+Home`/`Ctrl+End`, Enter (Ctrl+Enter = new tab); plain Home/End and Left/Right stay caret keys. Supports plain containers (`scrollIntoView` over `[data-nav-item]`) and tile grids (`getColumnsPerRow`). Used by every input-paired list: home search dropdown, address bar, book catalog search, HebrewBooks, local file search, full-text-search filter panel.
 
 **useLineCopy.ts** — intercepts the browser `copy` event on a scroller element; when the user has selected all, writes each line as a `<div>` in `text/html` and strips HTML tags for `text/plain`, so copied text has no inline line breaks.
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -52,7 +52,7 @@ namespace Nakdan.Core
             if (sel.Type == Word.WdSelectionType.wdSelectionIP ||
                 string.IsNullOrWhiteSpace(sel.Range.Text))
                 throw new InvalidOperationException(
-                    "אין טקסט מסומן.\nיש לסמן טקסט לפני הפעלת הניקוד.");
+                    Nakdan.Properties.Strings.Err_NoSelectionVowelize);
 
             string ooxml     = sel.Range.WordOpenXML;
             string vowelized = await _engine.VowelizeOoxmlAsync(ooxml, Options, cancellationToken);
@@ -75,11 +75,11 @@ namespace Nakdan.Core
             if (selection.Type == Word.WdSelectionType.wdSelectionIP ||
                 string.IsNullOrWhiteSpace(selection.Range.Text))
                 throw new InvalidOperationException(
-                    "אין טקסט מסומן.\nיש לסמן טקסט לפני ניקוי הטקסט.");
+                    Nakdan.Properties.Strings.Err_NoSelectionClean);
 
             if ((options & ~TextCleanOptions.KeepPunctuationAtParagraphEnd) == TextCleanOptions.None)
                 throw new InvalidOperationException(
-                    "לא נבחר מה להסיר.\nיש לסמן לפחות אפשרות אחת בתיבה הנפתחת.");
+                    Nakdan.Properties.Strings.Err_NothingToClean);
 
             var find = selection.Range.Find;
             find.MatchWildcards = true;
@@ -200,15 +200,15 @@ namespace Nakdan.Core
                 catch (InvalidOperationException ex)
                 {
                     // User errors (no selection, no footnotes, etc.)
-                    MessageBox.Show(ex.Message, "ניקוד",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(ex.Message, Nakdan.Properties.Strings.Msg_Title,
+                        MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, Nakdan.Properties.Strings.MessageBoxOptions);
                 }
                 catch (Exception ex)
                 {
                     // API / network errors
                     MessageBox.Show(
-                        "שגיאה בניקוד:\n" + ex.Message, "שגיאה",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                        Nakdan.Properties.Strings.Err_VowelizePrefix + ex.Message, Nakdan.Properties.Strings.Err_Title,
+                        MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, Nakdan.Properties.Strings.MessageBoxOptions);
                 }
                 finally
                 {

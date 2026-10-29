@@ -1,4 +1,4 @@
-# Asks Gemini to read the commits since the last release and decide
+﻿# Asks Gemini to read the commits since the last release and decide
 #   1. the version bump (major / minor / patch)
 #   2. user-facing release notes, in English and Hebrew
 # Writes the notes to RELEASE_NOTES.txt (build-installer.ps1 -ReleaseNotesSource file
@@ -13,9 +13,12 @@
 param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag, [switch]$Auto)
 
 $ErrorActionPreference = 'Stop'
+# Hebrew commit messages: read git's output as UTF-8 (Windows PowerShell 5.1 locally).
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 # Tried in order; each model has its own free-tier quota, so a maxed-out first one
-# still leaves the second. No AI notes = no release (the step fails, nothing is built).
-$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-pro-latest') }
+# still leaves the second (Pro has a zero free-tier quota - don't use it).
+# No AI notes = no release (the step fails, nothing is built).
+$models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL) } else { @('gemini-flash-latest', 'gemini-flash-lite-latest') }
 
 $tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
 $previousTag = if ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
@@ -34,9 +37,12 @@ Users are Torah scholars and students, not programmers.
 Below are the developer commit messages since the last release ($previousTag).
 
 Task 1 - pick the semantic version bump:
-- "major": a big user-visible overhaul or a breaking change in how users work.
-- "minor": at least one new user-facing feature or capability.
-- "patch": only fixes, polish, performance or internal work.
+- "major": any breaking change, in the code OR the UI - something that no longer works
+  the way it did, was removed or redesigned, or makes old settings/data/integrations
+  incompatible.
+- "minor": feature updates - a new feature, or a new option/capability in an existing one.
+- "patch": only bug fixes or minor tinkering (small tweaks, polish, performance, internal work).
+Pick the highest level that any single commit reaches.
 
 Task 2 - write polished release notes, like a professional app's "What's new":
 - Only what a user would notice. Drop CI, build, refactors, tests, code moves, docs.
@@ -45,6 +51,16 @@ Task 2 - write polished release notes, like a professional app's "What's new":
   "### New", "### Improved", "### Fixed". One short line per bullet.
 - notes_en in English. notes_he is the same content in natural Hebrew (not a word-for-word
   translation), with the section headings in Hebrew too.
+- Hebrew quality: write correct, fluent Israeli Hebrew with no misspellings or invented
+  words. Re-read every Hebrew line before answering. Use these exact terms:
+  Word add-in = תוסף לוורד, Kitvei Hakodesh app = תוכנת כתבי הקודש, book view = תצוגת ספר,
+  full-text search = חיפוש בטקסט מלא, catalog = קטלוג, dictionary = מילון,
+  Nakdan = נקדן, HebrewBooks = היברובוקס, PDF viewer = מציג PDF, installer = תוכנת ההתקנה,
+  settings = הגדרות, toolbar = סרגל כלים, commentaries = מפרשים, tab = לשונית.
+- Scope each item to the right part of the app. Commit subjects start with the area
+  ("Book view (lines):", "Word add-in:" ...) - keep that area in the note. A commit body
+  line "User-facing: none" means leave that commit out entirely; "User-facing: new/
+  improved/fixed" tells you the section.
 - No title line and no version number - those are added separately.
 $(if ($Auto) { '- End BOTH notes_en and notes_he with a final italic line (own paragraph) saying this
   version was published automatically by the weekly automatic release.' })
@@ -72,9 +88,9 @@ $body = @{
 
 $plan = $null
 :models foreach ($model in $models) {
-    foreach ($attempt in 1..6) {
+    foreach ($attempt in 1..3) {
         try {
-            $resp = Invoke-RestMethod -Method Post -TimeoutSec 300 `
+            $resp = Invoke-RestMethod -Method Post -TimeoutSec 120 `
                 -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
                 -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY } `
                 -ContentType 'application/json; charset=utf-8' `
@@ -85,7 +101,7 @@ $plan = $null
         } catch {
             Write-Host "$model attempt $attempt failed: $($_.Exception.Message)"
             $plan = $null
-            if ($attempt -lt 6) { Start-Sleep -Seconds (30 * $attempt) }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
         }
     }
 }

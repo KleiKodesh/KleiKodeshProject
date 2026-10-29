@@ -10,12 +10,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <PublishAot Condition="'$(GoldenAot)' == 'true'">true</PublishAot>
+    <InvariantGlobalization Condition="'$(GoldenAot)' == 'true'">true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
+  </ItemGroup>
+
+  <!-- AOT publish of this harness (golden-cold latency as the native service sees it). -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Lucene.Net" />
   </ItemGroup>
 
   <ItemGroup>

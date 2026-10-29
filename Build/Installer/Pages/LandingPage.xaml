@@ -163,6 +163,11 @@
                             MinWidth="72"
                             ToolTip="{x:Static p:Strings.Repair_Tooltip}"
                             Click="RepairButton_Click"/>
+                    <Button x:Name="SettingsButton"
+                            Content="{x:Static p:Strings.Settings}"
+                            Style="{StaticResource GhostButton}"
+                            MinWidth="72"
+                            Click="SettingsButton_Click"/>
                 </StackPanel>
 
                 <Button x:Name="LanguageButton"

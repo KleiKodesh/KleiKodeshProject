@@ -103,6 +103,28 @@ function Set-Version {
     }
 }
 
+# -- Add-in signing certificate ---------------------------------------------
+# The VSTO manifests must be signed, but any key will do: the installer registers the
+# manifest's own public key as trusted on every install. The key is a self-signed
+# temporary one (VS "Create Test Certificate"), made fresh on EVERY build, locally and
+# in CI: a release's certificate then always expires 5 years after the release, which
+# the release workflow's gate relies on to publish a renewal release in time.
+# Updates the pfx (gitignored) and the thumbprint in KleiKodeshVsto.csproj.
+function Update-SigningCertificate {
+    $pfx  = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx"
+    $proj = Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodeshVsto.csproj"
+
+    $cert = New-SelfSignedCertificate -Subject "CN=KleiKodesh" -Type CodeSigningCert `
+        -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)
+    Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (New-Object System.Security.SecureString) | Out-Null
+
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $c = [System.IO.File]::ReadAllText($proj, $utf8)
+    $c = $c -replace '<ManifestCertificateThumbprint>[^<]*<', "<ManifestCertificateThumbprint>$($cert.Thumbprint)<"
+    [System.IO.File]::WriteAllText($proj, $c, $utf8)
+    Write-Host "New signing certificate $($cert.Thumbprint), valid until $($cert.NotAfter.ToString('yyyy-MM-dd'))" -ForegroundColor Green
+}
+
 # -- Locate MSBuild -----------------------------------------------------------
 function Find-MSBuild {
     # foreach statement, not ForEach-Object: `return` inside a ForEach-Object block only

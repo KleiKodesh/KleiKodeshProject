@@ -6,7 +6,7 @@
  * service's loopback HTTP host; in the hosted app it is the C# relay in front of the service's
  * named pipe. Aborting the stream is the cancel signal, and the service itself supersedes the
  * previous search when a new one starts. Hits are NUMBERS ONLY (see FullTextSearchResult):
- * book id + TOC entry id, a snippet descriptor, and ids into the search's matched-term
+ * book id, a snippet descriptor, and ids into the search's matched-term
  * table, which streams once per search (`newTerms` per frame) and is resolved here
  * (matchedTermsOf, from the term id of each snippet mark). Titles, TOC paths and snippet
  * HTML are built per rendered row.
@@ -16,29 +16,22 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { serviceStream } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
+import type { SearchCacheEntry } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
-import { bookTitleOf } from './fullTextSearchReferences'
-import { seedLineTexts } from './fullTextSearchSnippets'
-import { matchedTermIdsOf } from './fullTextSearchTypes'
+import { seedSnippetTexts, setSnippetContextWords } from './fullTextSearchSnippets'
+import type { FtsSnippetText } from '@/webview-host/seforimApi'
+import { SNIPPET_MARK_STRIDE, matchedTermIdsOf } from './fullTextSearchTypes'
 import { WORD_OPTIONS, applyWordOptions } from './queryWordSyntax'
 import type { AllWords, PerWord, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
-// Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
-// O(n) for the array copy AND makes @tanstack/vue-virtual rebuild its ENTIRE measurements
-// array (memoized on `count`; when the viewport is at the top `min` is 0, so it recomputes
-// every row 0..count — see virtual-core getMeasurements). Flushing every 150ms while the
-// set grows into the hundreds-of-thousands (a high-frequency word) makes that O(n²) and
-// freezes the page. So: flush fast while the list is small (snappy first paint), then back
-// off sharply so the expensive rebuilds happen only a handful of times.
-// Results are never capped — everything still streams in; only the paint cadence changes.
-function _flushDelayFor(count: number): number {
-  if (count < 5_000) return 150
-  if (count < 50_000) return 600
-  return 2000
-}
+// Flush cadence. A flush publishes the hits appended since the last one: the result
+// array is ONE array grown in place for the whole stream, and `resultsVersion` is what
+// consumers react to — so a flush costs O(batch), not O(n), and the cadence can stay
+// constant however large the set grows. Results are never capped.
+const FLUSH_INTERVAL_MS = 150
 
 /** One frame of the `ftsSearchStream` op. */
 interface SearchStreamChunk {
@@ -47,10 +40,13 @@ interface SearchStreamChunk {
   /** Matched-term strings first seen in this frame, in id order — appended to the
    *  search's term table, which the hits' mark term ids index into. */
   newTerms?: string[]
-  /** Snippet line texts (line id -> text) for the search's first hits, riding on the frame
-   *  (not on the hits): seeded into the snippet cache so the first screen paints without a
-   *  fetch. Later frames carry none. Int map keys arrive as strings from MessagePack. */
-  lineTexts?: Record<string, string>
+  /** First frame of a resumed search whose resume line could not be placed: the service
+   *  runs it from the start, so the hits already held are dropped. */
+  restarted?: boolean
+  /** Snippet texts for the search's first hits, riding on the frame (not on the hits):
+   *  seeded into the snippet cache so the first screen paints without a fetch. Later frames
+   *  carry none. */
+  snippetTexts?: FtsSnippetText[]
   done: boolean
   error?: string
   /** What the engine is doing right now (stable ASCII key). A frame of its own before the
@@ -69,7 +65,8 @@ export const SEARCH_STAGE_LABELS: Record<string, string> = {
   enrich: t('fullTextSearch.stage.enrich'),
 }
 
-export function useFullTextSearch(isIndexing?: () => boolean) {
+/** `pinOwner` (workspace:tab) pins the entry this tab shows, so the cache budget never evicts it. */
+export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
@@ -115,7 +112,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Results stream in catalog order since the FTS5 index; entries cached before that are
       // in line-id order (and from the old index), so they must not match.
       'catalog',
-      // Hits are numbers only (snippet descriptor, tocEntryId) since the on-demand
+      // Hits are numbers only (snippet descriptor) since the on-demand
       // snippets/references. Entries cached in the earlier shapes (snippet HTML, or the
       // descriptor with per-hit strings) must not match — they are discarded by LRU
       // eviction, never migrated.
@@ -123,14 +120,31 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Marks are (start, length, termId) triples and the hit's matched term ids are read
       // off them (no per-hit termIds field any more; stride-2 entries would render wrong).
       'mk3t',
+      // Hits carry no tocEntryId (the row's TOC path is fetched by line id), and every hit
+      // carries its descriptor over the matched line alone (no snippetLineIds, short flag).
+      'notoc',
+      'desc1',
+      // Packed chunks addressed by a numeric id (searchCacheStore); older metas have none.
+      'pk1',
     ]
       .filter(Boolean)
       .join('|')
   }
 
+  /**
+   * The result set. While a search streams, this is ONE array appended to in place —
+   * its identity does not change per flush, only `resultsVersion` does. A rebuild (new
+   * search, sort, cache restore) assigns a NEW array and bumps the version too, so the
+   * identity tells an append from a rebuild and the version tells that anything changed.
+   */
   const results = shallowRef<FullTextSearchResult[]>([])
+  /** Bumped on every change to `results` — in-place appends included. Consumers that
+   *  read `results.value.length` or iterate it must depend on this, not on the ref. */
+  const resultsVersion = ref(0)
+  const resultCount = computed(() => { resultsVersion.value; return results.value.length })
   /** The current result set's matched-term table (the hits' mark term ids index into it). */
   let searchTerms: string[] = []
+
   /** The concrete index terms that matched a hit — what the book view highlights. */
   function matchedTermsOf(hit: FullTextSearchResult): string[] {
     const out: string[] = []
@@ -189,14 +203,30 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // breaks ties by it. Kept apart from `results`, which a re-sort reorders.
   let streamedOrder: FullTextSearchResult[] = []
 
+  /**
+   * A rank per DISTINCT book of the result set under `compare` (a book-level order:
+   * title collation, author, chronology). The distinct books — a few thousand at most —
+   * are sorted once with the string comparator; the hits then compare integer ranks,
+   * so the O(n log n) hit sort never calls localeCompare.
+   */
+  function bookRanks(compare: (a: number, b: number) => number): Map<number, number> {
+    const distinct = new Set<number>()
+    for (const r of streamedOrder) distinct.add(r.bookId)
+    const ids = [...distinct].sort(compare)
+    const ranks = new Map<number, number>()
+    ids.forEach((id, rank) => ranks.set(id, rank))
+    return ranks
+  }
+
   // Apply the current relevancy sort to the fully-collected result set. Called only
   // once the search has completed — sorting mid-stream would fight the incremental
-  // append (results paint in catalog order as they arrive). 'catalogOrder' is the streamed
-  // order itself; 'relevance' orders by word-distance score (smaller = closer) with the
-  // streamed order as a stable tiebreaker. results is a shallowRef, so we always assign a
-  // fresh array to trigger reactivity.
+  // append (results paint in catalog order as they arrive). Every order sorts a COPY of
+  // the streamed order with a stable sort (Array.prototype.sort is stable since ES2019),
+  // so ties keep the streamed (catalog) order with no tiebreak lookup per comparison.
+  // 'catalogOrder' is the streamed order itself. The result is always a NEW array (a
+  // rebuild — consumers re-index), with the version bumped.
   async function finalizeSort() {
-    if (results.value.length < 2) return
+    if (streamedOrder.length < 2) return
 
     // chronological/authorName need per-book metadata (period / authors) that
     // booksDataStore derives from the catalog lazily. Load it before sorting; guard
@@ -207,10 +237,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       if (sortOrder.value !== picked) return
     }
 
-    const sorted = [...results.value]
-    const streamedPosition = new Map(streamedOrder.map((r, i) => [r, i]))
-    const byStream = (a: FullTextSearchResult, b: FullTextSearchResult) =>
-      (streamedPosition.get(a) ?? 0) - (streamedPosition.get(b) ?? 0)
+    const sorted = streamedOrder.slice()
+    const bookMap = booksStore.allBooksMap
+    const titleOf = (id: number) => bookMap.get(id)?.title ?? ''
+    const byTitle = (a: number, b: number) => titleOf(a).localeCompare(titleOf(b), 'he')
+    const byRank = (ranks: Map<number, number>) =>
+      (a: FullTextSearchResult, b: FullTextSearchResult) => ranks.get(a.bookId)! - ranks.get(b.bookId)!
     if (sortOrder.value === 'relevance') {
       // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
       // Ties keep their original streamed (catalog) order. We deliberately do NOT tiebreak on
@@ -219,24 +251,21 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // `?? 0` guards results restored from a cache written before wordDistance existed on
       // the wire — treat a missing distance as "closest" rather than sorting to NaN.
       const wd = (r: FullTextSearchResult) => r.wordDistance ?? 0
-      sorted.sort((a, b) => wd(a) - wd(b) || byStream(a, b))
+      sorted.sort((a, b) => wd(a) - wd(b))
     } else if (sortOrder.value === 'bookName') {
       // Alphabetical by book title (Hebrew collation), then streamed order so lines within the
       // same book stay in document order.
-      sorted.sort((a, b) => bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') || byStream(a, b))
+      sorted.sort(byRank(bookRanks(byTitle)))
     } else if (sortOrder.value === 'authorName') {
       // Alphabetical by author name (Hebrew collation), then book name, then streamed order.
       // Authorless books (empty author string) sort last. book.authors is the comma-joined
       // author list; we collate on it as-is (its natural first author leads the string).
-      const bookMap = booksStore.allBooksMap
-      const authorOf = (r: FullTextSearchResult) => bookMap.get(r.bookId)?.authors || ''
-      sorted.sort((a, b) => {
+      const authorOf = (id: number) => bookMap.get(id)?.authors || ''
+      sorted.sort(byRank(bookRanks((a, b) => {
         const aa = authorOf(a), ab = authorOf(b)
         if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
-        return aa.localeCompare(ab, 'he') ||
-          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
-          byStream(a, b)
-      })
+        return aa.localeCompare(ab, 'he') || byTitle(a, b)
+      })))
     } else if (sortOrder.value === 'chronological') {
       // Author death-year (primary) → precision tier (an exact author year leads an era
       // estimate landing on the same year) → catalog tree order → book name → streamed order.
@@ -244,39 +273,36 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // year = Infinity and sort LAST — an honest "unknown" at the end rather than a
       // fabricated position mid-list. Tree order keeps same-key books in their curated
       // catalog sequence (Tanach in canonical book order, Mishna in seder order) instead of
-      // alphabetical. Keys are cached per bookId because the comparator runs O(n log n)
-      // times and the author-year lookup normalizes name strings.
-      const bookMap = booksStore.allBooksMap
+      // alphabetical. Keys are cached per book because the author-year lookup normalizes
+      // name strings.
       const keyCache = new Map<number, { year: number; precision: number; treeOrder: number }>()
-      const keyOf = (r: FullTextSearchResult) => {
-        let key = keyCache.get(r.bookId)
+      const keyOf = (id: number) => {
+        let key = keyCache.get(id)
         if (!key) {
-          const book = bookMap.get(r.bookId)
+          const book = bookMap.get(id)
           const { year, precision } = chronologicalKey(book ?? { title: '' })
           // Finite fallback, not Infinity — the comparator subtracts these and
           // Infinity-Infinity is NaN (see YEAR_UNKNOWN in chronology/index.ts).
           key = { year, precision, treeOrder: book?.treeOrder ?? Number.MAX_SAFE_INTEGER }
-          keyCache.set(r.bookId, key)
+          keyCache.set(id, key)
         }
         return key
       }
-      sorted.sort((a, b) => {
+      sorted.sort(byRank(bookRanks((a, b) => {
         const keyA = keyOf(a)
         const keyB = keyOf(b)
         return (
           keyA.year - keyB.year ||
           keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
-          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
-          byStream(a, b)
+          byTitle(a, b)
         )
-      })
-    } else {
-      // 'catalogOrder' — restore the streamed order. A no-op right after streaming, but
-      // matters when the user switches back from another order on an already-sorted set.
-      sorted.sort(byStream)
+      })))
     }
+    // else 'catalogOrder': the streamed order itself. A no-op right after streaming, but
+    // matters when the user switches back from another order on an already-sorted set.
     results.value = sorted
+    resultsVersion.value++
   }
 
   // Re-sort an already-completed result set when the user changes the sort order.
@@ -298,59 +324,95 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     clearStageLabel()
   }
 
-  async function executeSearch(q: string) {
+  /**
+   * Runs the search for `q`, saving every streamed batch to the IndexedDB cache as it
+   * arrives. With `resumeFrom` (an unfinished cached run of the same search) the cached hits
+   * are the start of the result set and the stream continues after the last of them —
+   * nothing already received is fetched again.
+   */
+  async function executeSearch(q: string, resumeFrom?: SearchCacheEntry) {
     if (!q.trim()) return
     await cancelSearch()
+    rerunWhenIndexed = null
 
     isSearching.value = true
     hasSearched.value = true
-    results.value = []
-    streamedOrder = []
-    searchTerms = []
+    // The stream's accumulator IS the published array: hits are pushed into it in place
+    // and each flush only bumps the version. Published now (empty, or the resumed hits),
+    // so the first flush is already an append (same identity) and not a rebuild.
+    const acc: FullTextSearchResult[] = resumeFrom ? resumeFrom.results : []
+    results.value = acc
+    resultsVersion.value++
+    streamedOrder = acc
+    searchTerms = resumeFrom ? resumeFrom.terms : []
     sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
     executedQuery.value = q
 
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
-    // The IndexedDB cache serves session restore and tab switching (see loadCachedResults),
-    // never a user-initiated search. Only a search run against a fully built index is
-    // cached — partial results from a mid-build search would be served as complete and stale.
-    const cacheable = !isIndexing?.()
-    if (cacheable) await cache.init(cacheKey, q, false).catch(() => {/* best-effort */})
+    if (pinOwner) await cache.pin(pinOwner, cacheKey).catch(() => {/* non-fatal */})
+    setSnippetContextWords(settings.searchContextMarginWords)
+    // Every run is cached, batch by batch. One run while the index is still building is
+    // marked so: a later visit shows it, then runs it again once the index is ready.
+    const indexingComplete = !isIndexing?.()
+    let terms = searchTerms
+    const resumeAfter = resumeFrom ? acc[acc.length - 1]?.lineId ?? 0 : 0
+    const resumed = resumeAfter > 0 && await cache.resume(cacheKey, terms).catch(() => false)
+    if (executedQuery.value !== q) return // superseded while the cache answered
+    if (!resumed && acc.length) {
+      // Nothing to continue (the entry went meanwhile): start over, or every hit would show twice.
+      acc.length = 0
+      terms = searchTerms = []
+      resultsVersion.value++
+    }
+    if (!resumed) await cache.init(cacheKey, q, indexingComplete, terms).catch(() => {/* best-effort */})
+    if (executedQuery.value !== q) return // superseded while the cache answered
 
     const abort = new AbortController()
     _streamAbort = abort
+    // A resumed stream numbers its matched terms from 0 again: each frame's new terms are
+    // mapped onto this search's table, and the hits' mark term ids rewritten to match.
+    const streamTermToLocal: number[] = []
     try {
-      const acc: FullTextSearchResult[] = []
-      const terms = searchTerms
       const stream = serviceStream<SearchStreamChunk>('ftsSearchStream', {
         query: _buildQueryToSend(normalizedQuery),
         maxWordDistance: settings.searchMaxWordDistance,
         requireOrdered: settings.searchRequireOrdered,
         contextWords: settings.searchContextMarginWords,
+        resumeAfterLineId: resumed ? resumeAfter : 0,
       }, abort.signal)
 
-      // Flush the accumulator into the reactive ref on the adaptive cadence
-      // (_flushDelayFor). Each flush copies the whole accumulator (a new array is
-      // required to trigger reactivity) and forces a full virtualizer measurement
-      // rebuild, so flushing on every pushed frame is O(n²) over the stream and
-      // freezes the page for high-frequency words. Backing off as the set grows bounds
-      // those rebuilds; `dirty` tracks pending hits so the last isn't lost.
+      // Publish the pushed hits every FLUSH_INTERVAL_MS: the array is already the one
+      // consumers hold, so a flush is a version bump and they fold in only the new tail.
+      // `dirty` tracks pending hits so the last ones are not lost.
       let lastFlushAt = 0
       let dirty = false
       const flush = () => {
-        results.value = acc.slice()
-        streamedOrder = acc
+        resultsVersion.value++
         dirty = false
         lastFlushAt = performance.now()
       }
 
       for await (const chunk of stream) {
         if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+        if (chunk.restarted && acc.length) {
+          // The resume line could not be placed (the library changed): the service runs the
+          // search from the start, so the cached hits go.
+          acc.length = 0
+          terms = searchTerms = []
+          flush()
+          await cache.init(cacheKey, q, indexingComplete, terms).catch(() => {/* best-effort */})
+          if (executedQuery.value !== q) { abort.abort(); return } // superseded meanwhile
+        }
         if (chunk.stage) enterStage(chunk.stage)
-        if (chunk.newTerms?.length) for (const t of chunk.newTerms) terms.push(t)
-        seedLineTexts(chunk.lineTexts) // before the hits reach the list: its first render finds them
+        if (chunk.newTerms?.length) {
+          for (const term of chunk.newTerms) {
+            const known = terms.indexOf(term)
+            streamTermToLocal.push(known >= 0 ? known : terms.push(term) - 1)
+          }
+        }
+        seedSnippetTexts(chunk.snippetTexts) // before the hits reach the list: its first render finds them
         if (chunk.ready === false) {
           searchError.value = 'indexNotReady'
           return
@@ -358,17 +420,18 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         const hits = chunk.results ?? []
         if (hits.length) {
           enterResultsStage()
+          if (resumed) for (const hit of hits) remapMarkTerms(hit, streamTermToLocal)
           for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
           dirty = true
-          if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
-          if (cacheable) cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
+          if (performance.now() - lastFlushAt >= FLUSH_INTERVAL_MS) flush()
+          cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
         }
         if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
         if (chunk.error) {
           if (dirty) flush() // surface whatever streamed before the error
           if (!acc.length) searchError.value = 'searchFailed'
-          // The stream did not complete: whatever was appended is an incomplete snapshot.
-          if (cacheable) cache.remove(cacheKey).catch(() => {/* non-fatal */})
+          // Keep what arrived: a later visit resumes after it.
+          cache.flush(cacheKey)
           break
         }
         if (chunk.done) {
@@ -377,7 +440,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           // Done here rather than in `finally` so it runs only on genuine completion,
           // not when the loop exits early via supersession/error.
           await finalizeSort()
-          if (cacheable) await cache.markComplete(cacheKey, false, terms).catch(() => {/* non-fatal */})
+          await cache.markComplete(cacheKey).catch(() => {/* non-fatal */})
           break
         }
       }
@@ -388,10 +451,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // An aborted stream is a cancel (new search / navigation), not a failure.
       if (!abort.signal.aborted) {
         console.error('[useFullTextSearch] FTS stream failed:', err)
-        searchError.value = 'searchFailed'
-        if (cacheable) cache.remove(cacheKey).catch(() => {/* non-fatal */})
+        if (!acc.length) searchError.value = 'searchFailed'
       }
     } finally {
+      // Whatever arrived and is still buffered is written, so the next visit resumes after it.
+      cache.flush(cacheKey)
       if (_streamAbort === abort) _streamAbort = null
       if (executedQuery.value === q) {
         isSearching.value = false
@@ -401,13 +465,24 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
   }
 
+  /** Rewrites a resumed hit's mark term ids (stream-local) onto the search's table. */
+  function remapMarkTerms(hit: FullTextSearchResult, streamTermToLocal: number[]) {
+    const marks = hit.snippetMarks
+    if (!marks) return
+    for (let i = SNIPPET_MARK_STRIDE - 1; i < marks.length; i += SNIPPET_MARK_STRIDE) {
+      marks[i] = streamTermToLocal[marks[i]!] ?? marks[i]!
+    }
+  }
+
   function clearSearch() {
     results.value = []
+    resultsVersion.value++
     streamedOrder = []
     searchTerms = []
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
+    rerunWhenIndexed = null
   }
 
   function clearCachedResults(q: string): void {
@@ -415,31 +490,56 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     cache.remove(_buildCacheKey(normalizedQuery)).catch(() => {/* non-fatal */})
   }
 
+  /** A search shown from a cache entry made while the index was building: run again, from
+   *  the start, the moment the index is ready. */
+  let rerunWhenIndexed: string | null = null
+  watch(
+    () => isIndexing?.() ?? false,
+    (indexing, wasIndexing) => {
+      if (wasIndexing && !indexing && rerunWhenIndexed && rerunWhenIndexed === executedQuery.value) {
+        const q = rerunWhenIndexed
+        rerunWhenIndexed = null
+        executeSearch(q).catch((err) => console.error('[useFullTextSearch] re-run after indexing failed:', err))
+      }
+    },
+  )
+
   /**
-   * Session restore / tab switch: show the cached result set when one exists. A cache
-   * entry that never completed cannot be resumed mid-stream (the service streams a whole
-   * search or nothing), so it is re-run from the start instead.
+   * Session restore / tab switch: show the cached hits AT ONCE — finished or not — and then
+   * bring them up to date:
+   *  - run while the index was building: run again from the start once it is ready (now,
+   *    or when the build finishes);
+   *  - unfinished: resume the stream after the last cached hit;
+   *  - finished on a built index: nothing more to do.
+   * False when there is nothing cached (the caller searches).
    */
   async function loadCachedResults(q: string): Promise<boolean> {
-    if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
-    const cached = await cache.get(cacheKey, q)
-    if (!cached || cached.results.length === 0) return false
-    if (!cached.complete) {
-      executeSearch(q).catch((err) => console.error('[useFullTextSearch] re-run after tab restore failed:', err))
-      return true
-    }
+    if (pinOwner) await cache.pin(pinOwner, cacheKey).catch(() => {/* non-fatal */})
+    const cached = await cache.get(cacheKey, q).catch(() => null)
+    if (!cached || (cached.results.length === 0 && cached.complete === false)) return false
     results.value = cached.results
+    resultsVersion.value++
     streamedOrder = cached.results   // cached in the order it streamed
     searchTerms = cached.terms
+    setSnippetContextWords(settings.searchContextMarginWords)
     executedQuery.value = q
     hasSearched.value = true
+    searchError.value = null
+    if (!cached.indexingComplete) {
+      if (isIndexing?.()) rerunWhenIndexed = q
+      else executeSearch(q).catch((err) => console.error('[useFullTextSearch] re-run of a mid-build search failed:', err))
+    } else if (!cached.complete) {
+      executeSearch(q, cached).catch((err) => console.error('[useFullTextSearch] resume after tab restore failed:', err))
+    }
     return true
   }
 
   return {
     results,
+    resultsVersion,
+    resultCount,
     matchedTermsOf,
     isSearching,
     currentStage,

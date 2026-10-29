@@ -58,9 +58,55 @@ export function sealLocalStorageKeys(prefix: string): void {
   _sealedLsPrefixes.push(prefix)
 }
 
+// ── Quota pressure ───────────────────────────────────────────────────────────
+// localStorage is ~5 MB per profile, shared by every key. A write refused for space
+// asks the registered reclaimers (owners of data they can afford to lose) to free some,
+// and is tried once more. One that still fails is logged once per key — never thrown.
+
+const _reclaimers: (() => void)[] = []
+const _warnedLsKeys = new Set<string>()
+let _reclaiming = false
+
+/** `reclaim` frees localStorage space its owner can spare. Run when a write hits the quota. */
+export function registerLocalStorageReclaimer(reclaim: () => void): void {
+  _reclaimers.push(reclaim)
+}
+
+function isQuotaError(err: unknown): boolean {
+  return err instanceof DOMException
+    && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+}
+
+/** setItem with one reclaim-and-retry on a full quota, and a once-per-key warning on failure. */
+function setItemOrReclaim(fullKey: string, raw: string): void {
+  try {
+    localStorage.setItem(fullKey, raw)
+    return
+  } catch (err) {
+    // A reclaimer's own write can hit the quota too: it must not start another round.
+    if (isQuotaError(err) && !_reclaiming) {
+      _reclaiming = true
+      for (const reclaim of _reclaimers) {
+        try { reclaim() } catch { /* a failing reclaimer must not stop the others */ }
+      }
+      _reclaiming = false
+      try {
+        localStorage.setItem(fullKey, raw)
+        return
+      } catch (retryErr) { err = retryErr }
+    }
+    if (!_warnedLsKeys.has(fullKey)) {
+      _warnedLsKeys.add(fullKey)
+      console.warn(`[persistence] localStorage write failed for "${fullKey}" (${raw.length} chars):`, err)
+    }
+  }
+}
+
 export function lsSet<T>(key: string, value: T): void {
   if (_sealedLsPrefixes.some((prefix) => key.startsWith(prefix))) return
-  try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
+  let raw: string
+  try { raw = JSON.stringify(value) } catch { return }
+  setItemOrReclaim(LS_PREFIX + key, raw)
 }
 
 export function lsDelete(key: string): void {
@@ -93,7 +139,7 @@ export function lsGetRaw(key: string): string | null {
 }
 
 export function lsSetRaw(key: string, value: string): void {
-  try { localStorage.setItem(key, value) } catch {}
+  setItemOrReclaim(key, value)
 }
 
 export function lsDeleteRaw(key: string): void {
@@ -112,6 +158,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-search-cache': null,
   'app-dict-cache': null,
   'app-frequent-folders': null,
+  'app-bookmarks': null,
 }
 
 // In-flight opens, keyed by database name. The handle is only set in `onsuccess`, so two

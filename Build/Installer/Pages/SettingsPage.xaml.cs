@@ -18,9 +18,9 @@ namespace KleiKodeshVstoInstallerWpf
     ///   - Which component is the default/primary ribbon button
     ///
     /// Navigation:
-    ///   "הבא"  → ComponentSettingsPage (only if KitveiHakodesh or WebSites is enabled — those have
-    ///            component-specific settings like DB path and website whitelist)
-    ///   "סגור" → exit (if neither KitveiHakodesh nor WebSites is enabled, "הבא" also exits)
+    ///   "next"  → GeneralSettingsPage (language, macros), then ComponentSettingsPage / exit
+    ///   "back"  → LandingPage (only when opened straight from the landing page)
+    ///   "close" → exit
     ///
     /// NOTE: control x:Names in the XAML (e.g. "KitveiHakodesh_Visible", "WebSites_Option") are
     /// used directly as registry setting keys — do not rename them to follow UI conventions.
@@ -31,11 +31,15 @@ namespace KleiKodeshVstoInstallerWpf
 
         private readonly Dictionary<string, bool> _visibleFlags = new Dictionary<string, bool>();
         private string _defaultButton;
+        private readonly bool _fromLanding;
 
-        public SettingsPage(MainWindow host)
+        // fromLanding: opened straight from the landing page, so Back returns there.
+        public SettingsPage(MainWindow host, bool fromLanding = false)
         {
             InitializeComponent();
             _host = host;
+            _fromLanding = fromLanding;
+            BackButton.Visibility = fromLanding ? Visibility.Visible : Visibility.Collapsed;
             LoadSettings();
         }
 
@@ -61,6 +65,7 @@ namespace KleiKodeshVstoInstallerWpf
                 rb.Checked += (s, e) =>
                     _defaultButton = rb.Name.Replace("_Option", "");
             }
+
         }
 
         private void CommitSettings()
@@ -74,15 +79,13 @@ namespace KleiKodeshVstoInstallerWpf
         private void NextButton_Click(object sender, RoutedEventArgs e)
         {
             CommitSettings();
-            bool KitveiHakodesh  = _visibleFlags.TryGetValue("KitveiHakodesh_Visible",  out bool k) && k;
-            bool webSites = _visibleFlags.TryGetValue("WebSites_Visible", out bool w) && w;
+            _host.NavigateToGeneralSettings(_fromLanding);
+        }
 
-            // Only KitveiHakodesh and WebSites have component-specific settings (DB path, whitelist).
-            // If neither is enabled there's nothing more to configure — exit immediately.
-            if (KitveiHakodesh || webSites)
-                _host.NavigateToComponentSettings(KitveiHakodesh, webSites);
-            else
-                WordHelper.ExitAfterInstall();
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            CommitSettings();
+            _host.NavigateToLanding();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)

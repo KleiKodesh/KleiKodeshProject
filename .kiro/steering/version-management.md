@@ -44,6 +44,8 @@ That file is UTF-8 **with BOM**, unlike the two above, and the BOM must be prese
 without it the compiler reads the file's Hebrew `AssemblyTitle`/`AssemblyProduct`
 literals as ANSI and mangles them.
 
+Releases normally run on GitHub Actions (`.github/workflows/release.yml`), which calls the same script; with `version_increment: auto` (the default) Gemini picks the bump via `.github/scripts/ai-release-plan.ps1`. Auto-increment bases the new version on the latest GitHub tag, and `build-installer.ps1` aborts if the stamp left an already-released version in place. See `Build/README.md` → GitHub Actions Workflows.
+
 The NSIS script (`Build/nsis/KleiKodeshWrapper.nsi`) receives `${PRODUCT_VERSION}` as a command-line define from `build-installer.ps1` — it does **not** need to be edited manually.
 
 ## Version Flow at Runtime

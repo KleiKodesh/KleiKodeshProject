@@ -2,12 +2,13 @@ import { t } from '@/i18n'
 import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
+import BookViewAddNoteMenuRow from './BookViewAddNoteMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
@@ -32,7 +33,7 @@ type TabStore = ReturnType<typeof useTabStore>
 
 interface CopyMenuOptions {
   scrollerEl: Ref<HTMLElement | null>
-  lines: () => LineItem[]
+  lines: () => LinesTable
   isSelectAll: Ref<boolean>
   selectAllInContainer: () => void
   /**
@@ -48,7 +49,8 @@ interface CopyMenuOptions {
   paneNavigation?: PaneNavigation
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
-  getNotesForLine?: (lineId: number) => Note[]
+  /** A note by its id, for the endnotes of a copy with notes. */
+  getNoteById?: (noteId: number) => Note | undefined
   getRenderedLineContent?: (raw: string, lineIndex: number, lineId: number) => string
   onHighlight?: (colorArgb: number) => void
   onClearHighlight?: () => void
@@ -60,12 +62,19 @@ interface CopyMenuOptions {
    * them alive after the menu closes.
    */
   onReportError?: () => void
+  /** Bookmarks the selection, or the top of the view with none. */
+  onCreateBookmark?: () => void
   /**
    * Warms the lazily-loaded notes and citations for a set of lines before an export
    * reads them. Awaited by the copy actions — see prepareAndCopy for why the
    * select-all case is additionally warmed the moment the selection is made.
    */
   prepareForLines?: (lineIds: number[]) => Promise<void>
+  /**
+   * Fetches every line of the book. Select-all copies the whole book, and lines are
+   * only ever fetched on demand, so the copy asks for them when the user selects all.
+   */
+  ensureAllLines: () => Promise<void>
   /** Resolves only the citations already rendered in a fragment — the selection path. */
   prepareForRenderedHtml?: (html: string) => Promise<void>
   /** Resolves one point citation's target for its endnote. Synchronous by necessity. */
@@ -147,7 +156,7 @@ interface SelectionResult {
  * if a line scrolled out of the virtualized DOM, the browser would have clamped the
  * selection at that boundary. So `range.startContainer` reliably belongs to the true
  * first line of the *current* selection. We walk up from it to the nearest
- * [data-index] row and map that array index to lines[idx].lineIndex.
+ * [data-index] row and map that row index to the table's lineIndex.
  *
  * Falls back to the old intersect-scan over rendered .line nodes only if the walk-up
  * fails (e.g. the start boundary sits on the scroller container itself, not a row).
@@ -155,14 +164,14 @@ interface SelectionResult {
 function resolveFirstLineIndex(
   scrollerEl: HTMLElement | null,
   range: Range,
-  lines: LineItem[],
+  lines: LinesTable,
 ): number | null {
   const indexFromNode = (node: Node | null): number | null => {
     const el = node instanceof Element ? node : node?.parentElement ?? null
     const row = el?.closest('[data-index]') as HTMLElement | null
     const dataIndex = row?.dataset['index']
     if (dataIndex == null) return null
-    return lines[parseInt(dataIndex, 10)]?.lineIndex ?? null
+    return lines.at(parseInt(dataIndex, 10))?.lineIndex ?? null
   }
 
   const fromStart = indexFromNode(range.startContainer)
@@ -178,7 +187,7 @@ function resolveFirstLineIndex(
 
 function extractSelection(
   scrollerEl: HTMLElement | null,
-  lines: LineItem[],
+  lines: LinesTable,
   isSelectAll: boolean,
   renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
 ): SelectionResult | null {
@@ -188,12 +197,13 @@ function extractSelection(
     // paste (matching a normal selection), and with it ON the flatten step strips
     // the <div>s to one continuous run. Callers that want flat text (search query,
     // quotation re-collect) strip all tags anyway, so the wrappers don't affect them.
-    const joined = lines
-      .filter((l) => l.content != null)
-      .map((l) => `<div class="line">${renderLine ? renderLine(l.content!, l.lineIndex, l.id) : l.content!}</div>`)
-      .join('')
-    const firstLineIndex = lines.find((l) => l.content != null)?.lineIndex ?? null
-    return { joined, firstLineIndex }
+    const parts: string[] = []
+    let firstLineIndex: number | null = null
+    lines.forEachLoaded((l) => {
+      firstLineIndex ??= l.lineIndex
+      parts.push(`<div class="line">${renderLine ? renderLine(l.content, l.lineIndex, l.id) : l.content}</div>`)
+    })
+    return { joined: parts.join(''), firstLineIndex }
   }
 
   const sel = window.getSelection()
@@ -228,7 +238,7 @@ function extractSelection(
  */
 function extractSelectionWithUnmountedLines(
   scrollerEl: HTMLElement | null,
-  lines: LineItem[],
+  lines: LinesTable,
   rowIndexRange: { firstRowIndex: number; lastRowIndex: number } | null,
   perLineHtml: boolean,
   renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
@@ -255,7 +265,7 @@ function extractSelectionWithUnmountedLines(
 
   const htmlParts: string[] = [serializeRangeBalanced(firstRowRange, scrollerEl)]
   for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
-    const line = lines[rowIndex]
+    const line = lines.at(rowIndex)
     if (!line || line.content == null) continue
     const lineHtml = renderLine ? renderLine(line.content, line.lineIndex, line.id) : line.content
     htmlParts.push(perLineHtml ? lineHtml : `<div class="line">${lineHtml}</div>`)
@@ -265,7 +275,7 @@ function extractSelectionWithUnmountedLines(
   const joined = htmlParts.filter((part) => part.trim()).join(perLineHtml ? ' ' : '')
   if (!joined.trim()) return null
 
-  return { joined, firstLineIndex: lines[firstRowIndex]?.lineIndex ?? null }
+  return { joined, firstLineIndex: lines.at(firstRowIndex)?.lineIndex ?? null }
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -274,25 +284,21 @@ function extractSelectionWithUnmountedLines(
  * Builds the full RTL HTML for exporting a book to Word.
  */
 export function buildBookExportHtml(
-  lines: LineItem[],
+  lines: LinesTable,
   bookTitle: string,
   renderLine: (raw: string, lineIndex: number, lineId: number) => string,
-  getNotesForLine: (lineId: number) => Note[],
+  getNoteById: (noteId: number) => Note | undefined,
 ): string {
   function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-    for (const lineItem of lines) {
-      const found = getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-      if (found) return { noteText: found.note, quote: found.quote }
-    }
-    return undefined
+    const found = getNoteById(noteId)
+    return found ? { noteText: found.note, quote: found.quote } : undefined
   }
 
-  const renderedLines = lines
-    .filter((l) => l.content != null)
-    .map((l) => `<div class="book-line">${renderLine(l.content!, l.lineIndex, l.id)}</div>`)
-    .join('\n')
+  const renderedLines: string[] = []
+  lines.forEachLoaded((l) => renderedLines.push(`<div class="book-line">${renderLine(l.content, l.lineIndex, l.id)}</div>`))
+  const renderedBody = renderedLines.join('\n')
 
-  const { html: bodyHtml, endnotes } = extractEndnotes(renderedLines, resolveNote)
+  const { html: bodyHtml, endnotes } = extractEndnotes(renderedBody, resolveNote)
   const endnotesHtml = buildEndnotesHtml(endnotes)
 
   return (
@@ -470,17 +476,11 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     let html: string
     let endnotesHtml = ''
     if (settingsStore.copyWithNotes) {
-      // Resolve a note by its (globally-unique) id by scanning the lines model, not
-      // the DOM. Note markers in `joined` only ever come from rendered lines, but the
-      // note *data* lives in the model — so scanning lines() works identically whether
-      // the owning row is currently virtualized in or out, and needs no DOM round-trip.
+      // Resolve a note by its (globally-unique) id from the notes model, not the
+      // DOM: it works identically whether the owning row is mounted or not.
       function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-        if (!options.getNotesForLine) return undefined
-        for (const lineItem of lines()) {
-          const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-          if (found) return { noteText: found.note, quote: found.quote }
-        }
-        return undefined
+        const found = options.getNoteById?.(noteId)
+        return found ? { noteText: found.note, quote: found.quote } : undefined
       }
       const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
       // The DB's own citations travel with the user's notes: a range citation
@@ -607,20 +607,31 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         // the budget the copy goes ahead with whatever has arrived; the load keeps running
         // and the next copy has it all.
         const prepared = isSelectAll.value
-          ? options.prepareForLines?.(lines().map((l) => l.id))
+          ? wholeBookReady().then(() => options.prepareForLines?.(lines().map((l) => l.id)))
           : options.prepareForRenderedHtml?.(selectionHtml())
         if (prepared) await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
+    } else if (isSelectAll.value) {
+      try { await awaitWithinActivationWindow(wholeBookReady()) } catch { /* copy what is loaded */ }
     }
     triggerCopy(afterCopy)
+  }
+
+  // The whole book's text, fetched once per select-all (started the moment the user
+  // selects all, below, so the copy rarely has to wait for it).
+  let wholeBook: Promise<void> | null = null
+  function wholeBookReady(): Promise<void> {
+    return (wholeBook ??= options.ensureAllLines().finally(() => { wholeBook = null }))
   }
 
   // Select-all is the one case whose warm-up can be big, so it runs here — outside
   // any clipboard gesture — rather than inside the copy action. Covers both routes
   // into select-all (Ctrl+A and the menu item), since both set this flag.
   watch(isSelectAll, (on) => {
-    if (!on || !settingsStore.copyWithNotes || !options.prepareForLines) return
-    void options.prepareForLines(lines().map((l) => l.id))
+    if (!on) return
+    const loading = wholeBookReady()
+    if (!settingsStore.copyWithNotes || !options.prepareForLines) return
+    void loading.then(() => options.prepareForLines?.(lines().map((l) => l.id)))
   })
 
   function onCopy(): void {
@@ -653,8 +664,13 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     props: {
       onHighlight: options.onHighlight ?? (() => {}),
       onClearHighlight: options.onClearHighlight ?? (() => {}),
-      onAddNote: options.onAddNote ?? (() => {}),
     },
+  }
+
+  const addNoteRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAddNoteMenuRow,
+    props: { onAddNote: options.onAddNote ?? (() => {}) },
   }
 
   return {
@@ -664,6 +680,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
       { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: t('bookView.copy.link'), action: options.onCopyLineLink ?? (() => {}) },
+      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      addNoteRow,
+      { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       {
         type: 'submenu',
@@ -711,8 +730,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
           },
         ],
       },
-      { type: 'separator' },
-      { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       annotationRow,
     ],

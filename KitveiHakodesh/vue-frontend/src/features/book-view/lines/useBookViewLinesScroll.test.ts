@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { LinesTable } from './linesTable'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, ref, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -44,19 +45,32 @@ import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 const BOOK_ID = 7
 
 /** Mounts the composable the way BookViewLinesContent does, on a scroller sitting at line 3. */
-function mountScroll(tabId: string) {
-  const scroller = document.createElement('div')
+function mountScroll(
+  tabId: string,
+  props: Parameters<typeof useBookViewLinesScroll>[2] = {},
+  rowElement: (index: number) => HTMLElement | null = () => null,
+) {
+  const scrollerElement = document.createElement('div')
+  document.body.appendChild(scrollerElement)
+  const scroller = {
+    scrollerElement,
+    scrollbarElement: null,
+    renderedRange: { start: 0, end: 10 },
+    scrollToIndex: vi.fn(async () => undefined),
+    readFirstVisible: () => ({ index: 3, offsetWithinRow: 0 }),
+    isRowRendered: () => true,
+    isRowFullyVisible: () => true,
+    rowElement,
+    barTargetAt: () => null,
+  }
   let scroll!: ReturnType<typeof useBookViewLinesScroll>
   const app = createApp({
     setup() {
       scroll = useBookViewLinesScroll(
-        ref(scroller),
-        () => ({ scrollToIndex: vi.fn(), scrollToOffset: vi.fn() }) as never,
-        () => [{ index: 3, start: 0, size: 20, end: 20, key: 3, lane: 0 }],
-        () => [],
-        {},
+        () => scroller,
+        () => new LinesTable(),
+        props,
         { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
-        () => undefined,
         () => undefined,
       )
       return () => null
@@ -116,5 +130,62 @@ describe('useBookViewLinesScroll position save on unmount', () => {
     await nextTick()
     expect(idb.lastReadPuts).toEqual([`lastread:${BOOK_ID}`])
     expect(idb.tabPuts).toContain(`book:default:${tab.id}:${BOOK_ID}`)
+  })
+})
+
+/**
+ * The keyboard caret after an opening. Caret browsing (F7) navigates from the
+ * document's collapsed selection, and an opening that only focused the viewport left
+ * it wherever the browser chose — the top of the mounted window, rows above the
+ * landing — so the first arrow key moved away from the line that had just been opened
+ * (the locate bar and a search result both open this way). See lineCaret.ts.
+ */
+describe('useBookViewLinesScroll opening caret', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    document.body.innerHTML = ''
+    window.getSelection()?.removeAllRanges()
+  })
+
+  /**
+   * A scroller row with rendered line text, as the landing mounts it. Rows are put in
+   * the document because a Range only becomes the document's selection there.
+   */
+  function lineRow(text: string): HTMLElement {
+    const row = document.createElement('div')
+    const line = document.createElement('div')
+    line.className = 'line'
+    line.textContent = text
+    row.appendChild(line)
+    document.body.appendChild(row)
+    return row
+  }
+
+  it('puts the caret on the line it opened on, not wherever the browser would start', () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const above = lineRow('ויצא יעקב מבאר שבע')
+    const opened = lineRow('וישלח יעקב מלאכים לפניו')
+    const { app, scroll } = mountScroll(tab.id, { initialLineIndex: 1200 }, (index) =>
+      index === 1200 ? opened : above,
+    )
+
+    scroll.onScrollerOpened()
+
+    const selection = window.getSelection()!
+    expect(selection.isCollapsed).toBe(true)
+    expect(opened.contains(selection.anchorNode)).toBe(true)
+    app.unmount()
+  })
+
+  it('an opening with no landing target leaves the document selection alone', () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const { app, scroll } = mountScroll(tab.id, {}, () => lineRow('בראשית ברא'))
+
+    scroll.onScrollerOpened()
+
+    expect(window.getSelection()!.rangeCount).toBe(0)
+    app.unmount()
   })
 })

@@ -66,6 +66,7 @@ const KEYS = {
   SETTINGS_APP_ZOOM: 'app.zoom',
   SETTINGS_NEW_TAB_PAGE: 'app.newTabPage',
   SETTINGS_SHOW_CLOCK: 'app.showClock',
+  SETTINGS_DATE_BAR_PINNED: 'app.dateBarPinned',
   SETTINGS_SETUP_DONE: 'app.setupDone',
   SETTINGS_ADDRESS_BAR_HINT_DONE: 'app.addressBarHintDone',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
@@ -96,6 +97,7 @@ const KEYS = {
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
+  SETTINGS_DICTIONARY_SOURCE_FILTER: 'dictionary.sourceFilter',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
   SETTINGS_TERMS_ACCEPTED: 'app.termsAccepted',
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
@@ -178,6 +180,8 @@ const DEFAULTS = {
   wordLinkTooltipFontSize: 100,
   appZoom: 1.0,
   dictionaryZoom: 100,
+  /** Dictionary source pills the user picked; empty = all sources. */
+  dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'tiles' as BooksView,
   fileSearchSortOrder:
@@ -188,6 +192,7 @@ const DEFAULTS = {
   pdfPageFilters: false,
   resumeLastRead: true,
   showClock: false,
+  dateBarPinned: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
   searchContextMarginWords: 30,
@@ -308,10 +313,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const wordLinkTooltipFontSize = ref(DEFAULTS.wordLinkTooltipFontSize)
   const appZoom = ref(DEFAULTS.appZoom)
   const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
+  const dictionarySourceFilter = ref<string[]>([...DEFAULTS.dictionarySourceFilter])
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
   const showClock = ref(DEFAULTS.showClock)
+  const dateBarPinned = ref(DEFAULTS.dateBarPinned)
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
@@ -464,11 +471,13 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE, wordLinkTooltipFontSize)
     loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
     loadSetting(KEYS.SETTINGS_DICTIONARY_ZOOM, dictionaryZoom)
+    loadSetting(KEYS.SETTINGS_DICTIONARY_SOURCE_FILTER, dictionarySourceFilter)
     const storedNewTabPage = normalizeNewTabPage(lsGet<LegacyNewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE))
     if (storedNewTabPage != null) newTabPage.value = storedNewTabPage
     loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
     loadSetting(KEYS.SETTINGS_RESUME_LAST_READ, resumeLastRead)
     loadSetting(KEYS.SETTINGS_SHOW_CLOCK, showClock)
+    loadSetting(KEYS.SETTINGS_DATE_BAR_PINNED, dateBarPinned)
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
@@ -569,10 +578,12 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(wordLinkTooltipFontSize, KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
+  persistSetting(dictionarySourceFilter, KEYS.SETTINGS_DICTIONARY_SOURCE_FILTER)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
   persistSetting(showClock, KEYS.SETTINGS_SHOW_CLOCK)
+  persistSetting(dateBarPinned, KEYS.SETTINGS_DATE_BAR_PINNED)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
   persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
@@ -745,6 +756,7 @@ export const useSettingsStore = defineStore('settings', () => {
     wordLinkTooltipFontSize.value = DEFAULTS.wordLinkTooltipFontSize
     appZoom.value = DEFAULTS.appZoom
     dictionaryZoom.value = DEFAULTS.dictionaryZoom
+    dictionarySourceFilter.value = [...DEFAULTS.dictionarySourceFilter]
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
@@ -753,6 +765,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // life of the process. (Callers reload today, which would hide the mismatch.)
     addressBarHintDone.value = false
     showClock.value = DEFAULTS.showClock
+    dateBarPinned.value = DEFAULTS.dateBarPinned
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
@@ -808,8 +821,9 @@ export const useSettingsStore = defineStore('settings', () => {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
     cleanTextFlags, cleanTextActive, cleanTextOptions, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
-    appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
+    appZoom, dictionaryZoom, dictionarySourceFilter, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
+    dateBarPinned,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,

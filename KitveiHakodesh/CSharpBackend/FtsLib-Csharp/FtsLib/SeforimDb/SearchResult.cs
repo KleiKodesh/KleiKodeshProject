@@ -40,7 +40,7 @@ namespace FtsLib.SeforimDb
         internal Snippets.PreparedQueryGroups Prepared { get; }
 
         /// <summary>
-        /// Where the line sits (book, position, TOC entry) when the corpus is an
+        /// Where the line sits (book, position) when the corpus is an
         /// <see cref="IFtsPlacedCorpus"/>; all zero otherwise.
         /// </summary>
         public FtsDocumentPlacement Placement { get; }

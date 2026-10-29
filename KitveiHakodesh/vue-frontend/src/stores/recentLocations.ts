@@ -1,5 +1,5 @@
 import { toRaw } from 'vue'
-import { dbGet, dbSet } from '@/utils/persistence'
+import { dbDelete, dbGet, dbSet } from '@/utils/persistence'
 import { locationKey, type NavLocation } from './navLocation'
 
 /**
@@ -49,6 +49,11 @@ export function saveRecentLocations(wsId: string, locations: NavLocation[]): Pro
   // IndexedDB structured-clones what it stores and cannot clone a Vue reactive
   // proxy, so unwrap to plain objects here rather than at each call site.
   return dbSet<PersistedRecentLocations>(RECENT_DB, key(wsId), { tabs: toPlain(locations) })
+}
+
+/** A deleted workspace's recents go with it. */
+export function deleteRecentLocations(wsId: string): Promise<void> {
+  return dbDelete(RECENT_DB, key(wsId)).catch(() => {/* non-fatal */})
 }
 
 /**

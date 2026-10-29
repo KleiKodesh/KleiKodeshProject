@@ -103,8 +103,8 @@ Push events (e.g. `ftsIndexProgress`, `ftsIndexInvalidated`) use `WebBridge.Push
 ## Startup Sequence
 
 1. `AppViewer` creates WebView2 environment with user data folder in the install directory.
-2. Maps virtual host `KitveiHakodesh-vue-app` → `KitveiHakodesh/` folder (the built Vue app).
+2. Maps virtual host `kitveihakodesh-app` → `KitveiHakodesh/` folder (the built Vue app).
 3. Injects `JsBridge.Script` so the page has `window.__webviewAction` available before any JS runs.
-4. Navigates to `https://KitveiHakodesh-vue-app/index.html`.
+4. Navigates to `https://kitveihakodesh-app/index.html`.
 5. On `DOMContentLoaded`, `DbHandler` checks for a previously selected DB path and fires `dbReady` if found.
 6. `SearchHandler.OnDbReady()` triggers FtsLib index build if no valid index exists.

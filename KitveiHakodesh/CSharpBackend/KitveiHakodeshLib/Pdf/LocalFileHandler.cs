@@ -28,7 +28,7 @@ namespace KitveiHakodeshLib.LocalFile
         private static readonly string WordCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "word-cache");
 
-        private const string WordCacheUrl = "http://KitveiHakodesh-vue-app/word-cache/";
+        private const string WordCacheUrl = "http://kitveihakodesh-app/word-cache/";
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
@@ -158,6 +158,8 @@ namespace KitveiHakodeshLib.LocalFile
                     return;
                 }
 
+                WindowsRecentDocuments.Add(filePath);
+
                 string fileName = Path.GetFileName(filePath);
 
                 if (LocalFileOpenRules.IsText(filePath))
@@ -261,7 +263,7 @@ namespace KitveiHakodeshLib.LocalFile
                 string cached = GetCachePath(filePath);
                 if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
                 if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
-                _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached) });
+                _bridge.Reply(id, new { url = "http://kitveihakodesh-app/word-cache/" + Path.GetFileName(cached) });
             }
             catch (Exception ex)
             {
@@ -286,6 +288,22 @@ namespace KitveiHakodeshLib.LocalFile
                 }
 
                 string error = LocalFileOpenRules.OpenInDefaultApp(filePath);
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>PDF viewer TOC autosave: write an incremental-save tail back into the file
+        /// (rules in PdfIncrementalSaveWriter). Bytes arrive base64 over the JSON bridge.</summary>
+        public void HandleWritePdfTail(JsonElement root, string id)
+        {
+            try
+            {
+                string error = PdfIncrementalSaveWriter.WriteTail(
+                    root.GetProperty("filePath").GetString(),
+                    root.GetProperty("offset").GetInt64(),
+                    Convert.FromBase64String(root.GetProperty("tail").GetString() ?? ""),
+                    Convert.FromBase64String(root.GetProperty("anchor").GetString() ?? ""));
                 _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }

@@ -10,6 +10,7 @@ import {
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { APP_NAV_UPDATE_KEY, useAppNavUpdateItem } from './appNavUpdateItem'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -65,9 +66,13 @@ interface OverflowRow {
   icon: Component
   color?: string
   shortcut?: string
+  /** A fuller tooltip than the label; the update row uses it. */
+  title?: string
+  disabled?: boolean
 }
 
 const bookViewStore = useBookViewStore()
+const { item: updateItem } = useAppNavUpdateItem()
 
 const rows = computed<OverflowRow[]>(() => props.collapsedKeys.map(overflowRow))
 
@@ -84,12 +89,17 @@ function overflowRow(key: string): OverflowRow {
     }
   }
   if (key === 'pop-out') return { key, label: t('layout.popOutLabel'), icon: IconOpen28Regular }
+  if (key === APP_NAV_UPDATE_KEY && updateItem.value) {
+    const u = updateItem.value
+    return { key, label: u.text, icon: u.icon, color: u.color, title: u.title, disabled: u.disabled }
+  }
   // A destination, keyed by its label - settings included.
   const item = APP_NAV_ITEMS.value.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
   return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color }
 }
 
 function rowTitle(row: OverflowRow) {
+  if (row.title) return row.title
   return row.shortcut ? `${row.label} (${row.shortcut})` : row.label
 }
 
@@ -105,6 +115,7 @@ function close() {
 }
 
 function onRowClick(row: OverflowRow) {
+  if (row.disabled) return
   close()
   emit('select', row.key)
 }
@@ -184,7 +195,9 @@ watch(
         v-for="row in rows"
         :key="row.key"
         class="menu-row"
+        :class="{ 'menu-row--disabled': row.disabled }"
         role="menuitem"
+        :aria-disabled="row.disabled || undefined"
         :title="rowTitle(row)"
         @click="onRowClick(row)"
       >
@@ -234,6 +247,14 @@ watch(
 }
 .menu-row:active {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.menu-row--disabled,
+.menu-row--disabled:hover {
+  cursor: default;
+  background: none;
+}
+.menu-row--disabled .menu-label {
+  color: var(--text-secondary);
 }
 
 .menu-icon {

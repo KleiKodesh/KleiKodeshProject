@@ -14,8 +14,8 @@
  *      backend expands (ט"ז → its full title) — the same query answered
  *      differently here and on the catalog page. Routing both through one
  *      engine is what keeps them consistent; do not reintroduce a parallel
- *      frontend matcher. The old pieces are still exported from
- *      bookCatalogSearch / bookCatalogSearchTocHeuristics if ever needed.
+ *      frontend matcher. The old in-memory index is deleted; title-only
+ *      lookups use the index's title search (book-catalog/bookTitleSearch.ts).
  *   2. Document Locator (file system) — async; hosted via C#, dev via the service
  *   3. HebrewBooks  — async; hosted via C#, dev via the service
  *

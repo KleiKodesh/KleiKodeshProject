@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>10.2.4</Version>
+    <Version>4.4.4</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -43,6 +43,10 @@
     <DefineConstants>$(DefineConstants);FORCE_CLEAN_INSTALL</DefineConstants>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Shared with the Word add-in: install/remove the optional VBA macros template -->
+    <Compile Include="..\..\KleiKodeshVsto\Helpers\VbaMacrosTemplate.cs" Link="Helpers\VbaMacrosTemplate.cs" />
+  </ItemGroup>
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />

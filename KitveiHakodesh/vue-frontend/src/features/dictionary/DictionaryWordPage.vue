@@ -34,6 +34,7 @@ interface SenseItem {
   sourceLabel:  string
   bookLocation: BookLocation | null  // non-null for seforim sources — enables Ctrl+click
   isSpecialSource?: boolean  // true for מחברת מנחם and הערוך entries
+  family:       string  // source pill this entry belongs to
 }
 
 interface SenseGroup {
@@ -58,12 +59,12 @@ const senseGroups = computed((): SenseGroup[] => {
   // Dictionary senses — group key is nikud form or plain headword
   for (const row of sorted) {
     const key = row.nikud ?? row.headword
-    addItem(key, { text: row.text, sourceLabel: row.source ?? '', bookLocation: null })
+    addItem(key, { text: row.text, sourceLabel: row.source ?? '', bookLocation: null, family: row.source ?? '' })
   }
 
   // Radak — group key is the headword (no nikud in Radak entries)
   for (const row of props.data.radak) {
-    addItem(row.headword, { text: row.text, sourceLabel: 'רד"ק', bookLocation: null })
+    addItem(row.headword, { text: row.text, sourceLabel: 'רד"ק', bookLocation: null, family: 'רד"ק' })
   }
 
   // מצודת ציון — group key is the matched word from the bold tag
@@ -77,6 +78,7 @@ const senseGroups = computed((): SenseGroup[] => {
       text: clean,
       sourceLabel: row.bookTitle,
       bookLocation: { bookId: row.bookId, bookTitle: row.bookTitle, lineIndex: row.lineIndex },
+      family: 'מצודת ציון',
     })
   }
 
@@ -91,15 +93,11 @@ const senseGroups = computed((): SenseGroup[] => {
       text: clean,
       sourceLabel: row.bookTitle,
       bookLocation: { bookId: row.bookId, bookTitle: row.bookTitle, lineIndex: row.lineIndex },
+      family: 'מלבי"ם',
     })
   }
 
-  // Show headings only when there are multiple distinct word forms
-  const showHeadings = map.size > 1
-  return [...map.entries()].map(([heading, items]) => ({
-    heading: showHeadings ? heading : null,
-    items,
-  }))
+  return [...map.entries()].map(([heading, items]) => ({ heading, items }))
 })
 
 // ── Special sources (מחברת מנחם, מיקרופדיה, הערוך) — shown after all definitions ──
@@ -117,6 +115,7 @@ const specialEntries = computed((): SenseItem[] => {
       sourceLabel: `מחברת מנחם — ${row.word}`,
       bookLocation: { bookId: row.bookId, bookTitle: 'מחברת מנחם', lineIndex: row.lineIndex },
       isSpecialSource: true,
+      family: 'מחברת מנחם',
     })
   }
 
@@ -130,6 +129,7 @@ const specialEntries = computed((): SenseItem[] => {
       sourceLabel: `מיקרופדיה — ${row.word}`,
       bookLocation: { bookId: row.bookId, bookTitle: 'מיקרופדיה', lineIndex: row.lineIndex },
       isSpecialSource: true,
+      family: 'מיקרופדיה',
     })
   }
 
@@ -143,11 +143,58 @@ const specialEntries = computed((): SenseItem[] => {
       sourceLabel: `הערוך — ${row.word}`,
       bookLocation: { bookId: row.bookId, bookTitle: 'ספר הערוך', lineIndex: row.lineIndex },
       isSpecialSource: true,
+      family: 'הערוך',
     })
   }
 
   return items
 })
+
+// ── Source pills ─────────────────────────────────────────────────────────────
+
+const sourcePills = computed(() => {
+  const families = new Set<string>()
+  for (const group of senseGroups.value)
+    for (const item of group.items) families.add(item.family)
+  for (const item of specialEntries.value) families.add(item.family)
+  families.delete('')  // a row with no source label gets no pill
+  return [...families].map(family => ({ family }))
+})
+
+// The saved pick narrowed to sources this word has; none of them here = show everything.
+const activeFamilies = computed(() => {
+  const present = new Set(sourcePills.value.map(p => p.family))
+  return new Set(settings.dictionarySourceFilter.filter(f => present.has(f)))
+})
+
+function isShown(family: string): boolean {
+  return activeFamilies.value.size === 0 || activeFamilies.value.has(family)
+}
+
+function toggleFamily(family: string) {
+  // Built from the saved pick, not activeFamilies, so sources this word lacks stay picked.
+  const current = settings.dictionarySourceFilter
+  settings.dictionarySourceFilter = current.includes(family)
+    ? current.filter(f => f !== family)
+    : [...current, family]
+}
+
+// "All" clears only this word's sources, so picks for other sources survive.
+function showAllFamilies() {
+  const present = new Set(sourcePills.value.map(p => p.family))
+  settings.dictionarySourceFilter = settings.dictionarySourceFilter.filter(f => !present.has(f))
+}
+
+const visibleSenseGroups = computed((): SenseGroup[] => {
+  const groups = senseGroups.value
+    .map(g => ({ heading: g.heading, items: g.items.filter(i => isShown(i.family)) }))
+    .filter(g => g.items.length)
+  // Show headings only when there are multiple distinct word forms
+  const showHeadings = groups.length > 1
+  return groups.map(g => ({ heading: showHeadings ? g.heading : null, items: g.items }))
+})
+
+const visibleSpecialEntries = computed(() => specialEntries.value.filter(i => isShown(i.family)))
 
 function onSourceClick(event: MouseEvent, location: BookLocation | null) {
   if (!event.ctrlKey || !location) return
@@ -185,9 +232,24 @@ const allRelated = computed(() => [
 
     <h1 class="word-title">{{ data.headword }}</h1>
 
+    <div v-if="sourcePills.length > 1" class="source-pills ui-chrome">
+      <button
+        class="source-pill"
+        :class="{ 'source-pill--active': activeFamilies.size === 0 }"
+        @click="showAllFamilies"
+      >{{ $t('dictionary.allSources') }}</button>
+      <button
+        v-for="pill in sourcePills"
+        :key="pill.family"
+        class="source-pill"
+        :class="{ 'source-pill--active': activeFamilies.has(pill.family) }"
+        @click="toggleFamily(pill.family)"
+      >{{ pill.family }}</button>
+    </div>
+
     <!-- All definitions grouped by word form, followed by מחברת מנחם and הערוך -->
     <section v-if="senseGroups.length || specialEntries.length" class="defs-section">
-      <div v-for="(group, groupIndex) in senseGroups" :key="groupIndex" class="def-group">
+      <div v-for="(group, groupIndex) in visibleSenseGroups" :key="groupIndex" class="def-group">
         <span v-if="group.heading" class="def-group-heading">{{ group.heading }}</span>
         <ol class="def-list">
           <li v-for="(item, itemIndex) in group.items" :key="itemIndex" class="def-item">
@@ -201,7 +263,7 @@ const allRelated = computed(() => [
         </ol>
       </div>
       <div
-        v-for="(item, itemIndex) in specialEntries"
+        v-for="(item, itemIndex) in visibleSpecialEntries"
         :key="`special-${itemIndex}`"
         class="special-entry"
         @click="onSourceClick($event, item.bookLocation)"
@@ -251,6 +313,38 @@ const allRelated = computed(() => [
   padding-inline: 16px;
   line-height: 1.2;
   flex-shrink: 0;
+}
+
+.source-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-inline: 16px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.source-pill:hover { background: var(--hover-bg); color: var(--text-primary); }
+/* Same active look as the toolbar / commentary-nav toggle buttons. */
+.source-pill--active,
+.source-pill--active:hover {
+  background: var(--active-bg);
+  color: var(--text-primary);
 }
 
 .section-title {

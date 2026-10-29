@@ -62,7 +62,7 @@ DB names map to canonical types as follows:
 
 **useCommentaryNavigation.ts** - next/prev section navigation for a commentary panel. One instance per panel (see `useCommentaryPanelSlot.ts`), so navigating reopens and re-pins only the panel whose header button was pressed.
 
-**useCommentarySearch.ts** - commentary search against a flat index.
+**useCommentarySearch.ts** - the panel's substring search, run by the service over exactly the panel's lines (`linesSubstringSearch`: index narrowing + native confirm, else native scan; numbers only). Typing narrows: an extended query searches only the previous matches, waiting for an in-flight answer rather than discarding it.
 
 **useCommentaryTreeSearch.ts** - search logic for the commentary filter tree. Matches query words across the full path using `SegmentSearchTree`.
 

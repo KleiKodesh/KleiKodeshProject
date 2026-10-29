@@ -14,7 +14,7 @@ import type { Ref } from 'vue'
 import { useBookViewHighlights } from './useBookViewHighlights'
 import { useBookViewNotes } from './useBookViewNotes'
 import type { Note } from './useBookViewNotes'
-import type { LineItem } from './useBookViewLinesTable'
+import type { LinesTable } from './linesTable'
 
 // ── Internal selection types ──────────────────────────────────────────────────
 
@@ -39,8 +39,9 @@ interface MultiLineSelection {
 export function useBookViewAnnotations(
   bookId: number,
   scrollerEl: Ref<HTMLElement | null>,
-  lines: () => LineItem[],
-  virtualItemsViewportIds: () => number[],
+  lines: () => LinesTable,
+  /** Ids of the lines mounted in the scroller's window — what the lazy note loader watches. */
+  renderedLineIds: () => number[],
   /**
    * Re-creates the selection after an annotation re-renders the lines it landed on.
    * Applying a highlight or a note replaces those lines' markup, which destroys the
@@ -50,7 +51,7 @@ export function useBookViewAnnotations(
   restoreSelectionFromPinnedRows: () => void,
   /**
    * The row index span of the current selection, from the pinned-row tracker. Lets an
-   * annotation reach the selected lines the virtualizer never mounted.
+   * annotation reach the selected lines the scroller never mounted.
    */
   selectedRowIndexRange: () => { firstRowIndex: number; lastRowIndex: number } | null,
   /**
@@ -66,8 +67,8 @@ export function useBookViewAnnotations(
 
   // ── Notes ───────────────────────────────────────────────────────────────────
 
-  const { notesByLine, getNotesForLine, loadNotesForLines, createNote, updateNote, deleteNote } =
-    useBookViewNotes(bookId, virtualItemsViewportIds)
+  const { notesByLine, getNotesForLine, getNoteById, loadNotesForLines, createNote, updateNote, deleteNote } =
+    useBookViewNotes(bookId, renderedLineIds)
 
   // ── Note bubble state ───────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export function useBookViewAnnotations(
       const virtualItemElement = lineElement.closest('[data-index]') as HTMLElement | null
       if (!virtualItemElement) continue
       const virtualIndex = parseInt(virtualItemElement.dataset['index'] ?? '', 10)
-      const lineItem = lines()[virtualIndex]
+      const lineItem = lines().at(virtualIndex)
       if (!lineItem || lineItem.content == null) continue
 
       const strippedText = (lineElement.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
@@ -167,7 +168,7 @@ export function useBookViewAnnotations(
     const allLines = lines()
 
     for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
-      const line = allLines[rowIndex]
+      const line = allLines.at(rowIndex)
       if (!line || line.content == null) continue
       if (alreadyCollectedLineIds.has(line.id)) continue
       const strippedLength = annotationOffsetLengthOf(line.content)
@@ -236,13 +237,8 @@ export function useBookViewAnnotations(
     const noteId = parseInt(markerElement.dataset['noteId'] ?? '', 10)
     if (isNaN(noteId)) return
     event.stopPropagation()
-    for (const notes of notesByLine.value.values()) {
-      const found = notes.find((note) => note.id === noteId)
-      if (found) {
-        openNoteBubble(found, markerElement)
-        return
-      }
-    }
+    const found = getNoteById(noteId)
+    if (found) openNoteBubble(found, markerElement)
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -260,6 +256,7 @@ export function useBookViewAnnotations(
     // Notes
     notesByLine,
     getNotesForLine,
+    getNoteById,
     loadNotesForLines,
     createNote,
     updateNote,

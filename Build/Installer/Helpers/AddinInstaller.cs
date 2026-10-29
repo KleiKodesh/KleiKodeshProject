@@ -20,7 +20,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v10.2.4";
+        public const string Version         = "v4.4.4";
         public const string InstallFolderName = "KleiKodesh";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
@@ -349,6 +349,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             }
             catch { }
         }
+
+        // ── VBA macros template ──────────────────────────────────────────────────
+
+        // Never installed here: the user opts in on SettingsPage (or in the add-in's
+        // settings pane). See KleiKodesh.Helpers.VbaMacrosTemplate.
+        public static string MacrosResourcesFolder => Path.Combine(InstallPath, "Resources");
 
         // ── VSTO trust ───────────────────────────────────────────────────────────
 

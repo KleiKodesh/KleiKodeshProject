@@ -16,6 +16,7 @@
 import { onBeforeUnmount } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { writePdfTail } from '@/webview-host/bridge'
 import type { PdfOutlineEntry, PdfOutlineEditEntry, PdfBridge } from '@/stores/bookViewStore'
 
 // PDF.js types — just enough for what we access at runtime.
@@ -35,6 +36,10 @@ interface PdfDocument {
   getOutline(): Promise<PdfOutlineItem[] | null>
   getDestination(dest: string): Promise<PdfDestination | null>
   getPageIndex(ref: PdfDestinationRef): Promise<number>
+  /** The bytes the viewer loaded. */
+  getData(): Promise<Uint8Array>
+  /** Loaded bytes + one incremental section (annotations + the edited outline). */
+  saveDocument(): Promise<Uint8Array>
 }
 
 interface PdfViewerApplication {
@@ -169,6 +174,22 @@ async function buildOutlineIndex(
 // `normalizeOutlineTitle` above is still needed here for the breadcrumb, which
 // is built from the outline data rather than from the sidebar DOM.
 
+/**
+ * Start of the trailing outline-only section written by a TOC autosave, read from
+ * its "%KH-TOC start=<S> prev=<P> [sha=<H>]" marker (patched pdf.worker.mjs
+ * SaveDocument). Only a hint: the worker does the full proof (khReadTocMarker); when it
+ * rejects the marker its save keeps every loaded byte, so writing saved[S..] at S
+ * still reproduces the full file + appended section. Null when the file has none.
+ */
+function tocMarkerStart(bytes: Uint8Array): number | null {
+  const tail = String.fromCharCode(...bytes.subarray(Math.max(0, bytes.length - 256)))
+  const m = /%KH-TOC start=(\d+) prev=(\d+)(?: sha=[0-9a-f]{64})?\s*$/.exec(tail)
+  if (!m) return null
+  const start = Number(m[1])
+  const prev = Number(m[2])
+  return start > 0 && start < bytes.length && prev >= 0 && prev < start ? start : null
+}
+
 function findActiveOutlineEntry(
   entries: OutlineEntry[],
   currentPage: number,
@@ -201,6 +222,88 @@ export function usePdfViewPageTracking() {
   let pagechangingHandler: ((data: unknown) => void) | null = null
   let documentloadedHandler: ((data: unknown) => void) | null = null
   let applicationRef: PdfViewerApplication | null = null
+
+  // ── TOC autosave: every outline edit is written straight into the PDF file ──
+  // Only for a real local .pdf (not a Word file rendered to PDF, not a HebrewBooks
+  // download, which have no writable source path). PDF.js's saveDocument() returns
+  // the LOADED bytes + one incremental section; only that section is sent and it is
+  // written at the loaded length, so each autosave of a session replaces the
+  // previous one instead of appending (rules: Core PdfIncrementalSaveWriter).
+  const AUTOSAVE_DELAY_MS = 600
+  const ANCHOR_BYTES = 1024
+  let autosavePath: string | null = null
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+  let autosaveRunning = false
+  let autosaveAgain = false
+  // Bumped on every dirty notify — a save only clears the dirty state when no
+  // edit landed while it ran.
+  let editGeneration = 0
+  // Loaded length + its last bytes, read once per document (getData copies the file).
+  let loadedTail: { offset: number; anchor: Uint8Array } | null = null
+  let keydownHandler: ((e: KeyboardEvent) => void) | null = null
+
+  function scheduleAutosave() {
+    if (!autosavePath) return
+    if (autosaveTimer) clearTimeout(autosaveTimer)
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = null
+      void runAutosave()
+    }, AUTOSAVE_DELAY_MS)
+  }
+
+  /** Write the current edits into the file now. True when written. */
+  async function runAutosave(): Promise<boolean> {
+    if (autosaveTimer) {
+      clearTimeout(autosaveTimer)
+      autosaveTimer = null
+    }
+    if (autosaveRunning) {
+      autosaveAgain = true
+      return false
+    }
+    const app = applicationRef
+    const win = contentWindowRef
+    const path = autosavePath
+    const pdfDocument = app?.pdfDocument
+    if (!app || !win || !path || !pdfDocument) return false
+    autosaveRunning = true
+    const startedGeneration = editGeneration
+    try {
+      if (!loadedTail) {
+        const loaded = await pdfDocument.getData()
+        // A file ending in our own outline-only section: the worker rebuilds the
+        // save from the bytes before it, so the tail is written over it.
+        const offset = tocMarkerStart(loaded) ?? loaded.length
+        if (offset < ANCHOR_BYTES) return false
+        loadedTail = { offset, anchor: loaded.slice(offset - ANCHOR_BYTES, offset) }
+      }
+      const { offset, anchor } = loadedTail
+      const saved = await pdfDocument.saveDocument()
+      // Sanity: the save must be the loaded bytes plus a tail.
+      if (saved.length <= offset) return false
+      const savedAnchor = saved.subarray(offset - ANCHOR_BYTES, offset)
+      if (!savedAnchor.every((b, i) => b === anchor[i])) return false
+      const error = await writePdfTail(path, offset, saved.subarray(offset), anchor)
+      if (error) {
+        console.warn('[pdf] TOC autosave failed:', error)
+        return false
+      }
+      // Clears the viewer's dirty flag and the parked snapshot (notify dirty:false).
+      if (app === applicationRef && startedGeneration === editGeneration) {
+        win.document.dispatchEvent(new CustomEvent('kh-save-complete'))
+      }
+      return true
+    } catch (e) {
+      console.warn('[pdf] TOC autosave failed:', e)
+      return false
+    } finally {
+      autosaveRunning = false
+      if (autosaveAgain) {
+        autosaveAgain = false
+        scheduleAutosave()
+      }
+    }
+  }
 
   function buildPdfOutlineEntries(entries: OutlineEntry[]): PdfOutlineEntry[] {
     // Deduplicate by path — keep first occurrence (lowest page number due to sort order).
@@ -264,8 +367,9 @@ export function usePdfViewPageTracking() {
         // dispatched by the patched _triggerDownload only for bytes that came
         // out of a successful saveDocument()); a cancelled picker emits
         // nothing and falls to the timeout.
+        // A writable local PDF saves in place (the autosave, flushed now).
         saveAs: () =>
-          new Promise<boolean>((resolve) => {
+          autosavePath ? runAutosave() : new Promise<boolean>((resolve) => {
             const win = contentWindowRef
             const app = applicationRef
             if (!win || !app?.downloadOrSave) {
@@ -338,6 +442,9 @@ export function usePdfViewPageTracking() {
     const notifyFilePath =
       activeTab?.localFilePath ??
       (activeTab?.localFileHbBookId ? `hb:${activeTab.localFileHbBookId}` : '')
+    const sourcePath = activeTab?.localFilePath
+    autosavePath = sourcePath && /\.pdf$/i.test(sourcePath) && !activeTab?.localFileHbBookId ? sourcePath : null
+    loadedTail = null
     khWindow.__khOutlineHostNotify = (state) => {
       if (!notifyTabId) return
       bookViewStore.setPdfEditState(notifyTabId, {
@@ -345,6 +452,22 @@ export function usePdfViewPageTracking() {
         dirty: state.dirty,
         outline: state.outline,
       })
+      if (state.dirty) {
+        editGeneration++
+        scheduleAutosave()
+      }
+    }
+
+    // Ctrl+S on a writable PDF saves in place (no save-as picker). Capture phase
+    // on the iframe window runs before PDF.js's own Ctrl+S handler.
+    if (autosavePath) {
+      keydownHandler = (e: KeyboardEvent) => {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyS') return
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        if (applicationRef?._hasChanges?.()) void runAutosave()
+      }
+      contentWindow.addEventListener('keydown', keydownHandler, true)
     }
 
     // Rehydrate parked edits once the viewer's outline processing settles.
@@ -366,6 +489,9 @@ export function usePdfViewPageTracking() {
           khWindow.__khOutlineEditor != null
         if (settled) {
           khWindow.__khOutlineEditor!.setState({ outline: parked.outline })
+          // The parked edits never reached the file (the tab left mid-debounce) — write them now.
+          editGeneration++
+          scheduleAutosave()
           return
         }
         if (attempt < 100) setTimeout(() => tryRehydrate(attempt + 1), 100)
@@ -407,7 +533,22 @@ export function usePdfViewPageTracking() {
         if (pagechangingHandler) application.eventBus._off('pagechanging', pagechangingHandler)
         if (documentloadedHandler) application.eventBus._off('documentloaded', documentloadedHandler)
       }
+      if (keydownHandler) {
+        try {
+          contentWindowRef.removeEventListener('keydown', keydownHandler, true)
+        } catch {
+          // window already gone
+        }
+      }
     }
+    // A pending debounce cannot finish once the iframe goes — the parked snapshot
+    // (still dirty) carries those edits back and the next attach writes them.
+    if (autosaveTimer) clearTimeout(autosaveTimer)
+    autosaveTimer = null
+    autosaveAgain = false
+    autosavePath = null
+    loadedTail = null
+    keydownHandler = null
 
     contentWindowRef = null
     applicationRef = null

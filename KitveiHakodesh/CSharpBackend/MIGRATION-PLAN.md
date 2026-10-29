@@ -21,8 +21,8 @@ Status: **the Service is now wired to Core** (2026-10-07). Baseline branch: `pre
 > **The raw-SQL bridge is retired too (2026-10-07).** `KitveiHakodeshLib/Db/SeforimQueryHandler`
 > answers the SAME 33 operation names the dev service does, through the same Core methods, so
 > `seforimApi.ts` is one call per capability instead of a dev branch and a hosted branch.
-> `queries.sql.ts` is off every live path — the only file still importing it is
-> `bookCatalogSearchTocHeuristics.ts`, a retained fallback that nothing imports.
+> `queries.sql.ts` is off every live path — the only file that imported it,
+> `bookCatalogSearchTocHeuristics.ts` (an unreferenced fallback), was deleted 2026-10-26.
 >
 > ⚠ **Two traps that bridge hit, worth knowing before adding another typed action:**
 > - **Casing.** `WebBridge.Reply` serializes with no naming policy, so a typed C# model goes out
@@ -50,7 +50,7 @@ Status: **the Service is now wired to Core** (2026-10-07). Baseline branch: `pre
 > **What is left, and why it is not a migration task:**
 > - `dict-sql` has NO frontend caller — dead, not pending.
 > - `sql` has ONE caller, `seforimDb.query()`, reached only from
->   `bookCatalogSearchTocHeuristics.ts`, a retained fallback nothing imports.
+>   `bookCatalogSearchTocHeuristics.ts`, deleted 2026-10-26.
 > - `HandleWikiDictSql` is routed from no action in the message switch.
 > - `queries.sql.ts` / `dictionaryDb.sql.ts` are off every live path.
 >

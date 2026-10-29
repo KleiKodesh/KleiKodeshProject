@@ -1,0 +1,262 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Undo_ReplaceAll" xml:space="preserve">
+    <value>Replace all</value>
+  </data>
+  <data name="Replace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="RegexPalette" xml:space="preserve">
+    <value>Regex character palette</value>
+  </data>
+  <data name="WordBuiltInSearch" xml:space="preserve">
+    <value>Word built-in search</value>
+  </data>
+  <data name="SearchDirection" xml:space="preserve">
+    <value>Search direction</value>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="SearchHistory" xml:space="preserve">
+    <value>Search history</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Search...</value>
+  </data>
+  <data name="FindTip_Next" xml:space="preserve">
+    <value>Enter: next result</value>
+  </data>
+  <data name="FindTip_Previous" xml:space="preserve">
+    <value>Shift+Enter: previous result</value>
+  </data>
+  <data name="ChooseStyle" xml:space="preserve">
+    <value>Choose style</value>
+  </data>
+  <data name="ChooseFont" xml:space="preserve">
+    <value>Choose font</value>
+  </data>
+  <data name="ReplaceOne" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="ReplaceAllButton" xml:space="preserve">
+    <value>Replace all</value>
+  </data>
+  <data name="ReplaceHistory" xml:space="preserve">
+    <value>Replace history</value>
+  </data>
+  <data name="ReplaceWithPlaceholder" xml:space="preserve">
+    <value>Replace with...</value>
+  </data>
+  <data name="NoResults" xml:space="preserve">
+    <value>No results match the search</value>
+  </data>
+  <data name="Mode_All" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Mode_Down" xml:space="preserve">
+    <value>Down</value>
+  </data>
+  <data name="Mode_Up" xml:space="preserve">
+    <value>Up</value>
+  </data>
+  <data name="Mode_Selection" xml:space="preserve">
+    <value>In selection</value>
+  </data>
+  <data name="UseWordWildcards" xml:space="preserve">
+    <value>Use Word wildcards</value>
+  </data>
+  <data name="UseRegex" xml:space="preserve">
+    <value>Use regular expressions</value>
+  </data>
+  <data name="Color_Automatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="Color_None" xml:space="preserve">
+    <value>No color</value>
+  </data>
+  <data name="Color_Theme" xml:space="preserve">
+    <value>Theme colors</value>
+  </data>
+  <data name="Color_Standard" xml:space="preserve">
+    <value>Standard colors</value>
+  </data>
+  <data name="Color_More" xml:space="preserve">
+    <value>More colors...</value>
+  </data>
+  <data name="FontSizePoints" xml:space="preserve">
+    <value>Font size (points)</value>
+  </data>
+  <data name="Bold" xml:space="preserve">
+    <value>Bold</value>
+  </data>
+  <data name="Italic" xml:space="preserve">
+    <value>Italic</value>
+  </data>
+  <data name="Underline" xml:space="preserve">
+    <value>Underline</value>
+  </data>
+  <data name="Superscript" xml:space="preserve">
+    <value>Superscript</value>
+  </data>
+  <data name="Subscript" xml:space="preserve">
+    <value>Subscript</value>
+  </data>
+  <data name="FontColor" xml:space="preserve">
+    <value>Font color</value>
+  </data>
+  <data name="ClearFormatting" xml:space="preserve">
+    <value>Clear formatting</value>
+  </data>
+  <data name="PickFormatting" xml:space="preserve">
+    <value>Copy formatting from selection</value>
+  </data>
+  <data name="Tip_ReplaceOnly" xml:space="preserve">
+    <value>Replace only</value>
+  </data>
+  <data name="Tip_AnyChar" xml:space="preserve">
+    <value>Any single character</value>
+  </data>
+  <data name="Tip_ZeroOrMore" xml:space="preserve">
+    <value>Zero or more of previous</value>
+  </data>
+  <data name="Tip_OneOrMore" xml:space="preserve">
+    <value>One or more of previous</value>
+  </data>
+  <data name="Tip_ZeroOrOne" xml:space="preserve">
+    <value>Zero or one of previous</value>
+  </data>
+  <data name="Tip_Digit" xml:space="preserve">
+    <value>Digit (0-9)</value>
+  </data>
+  <data name="Tip_WordChar" xml:space="preserve">
+    <value>Word character (letter/digit/_)</value>
+  </data>
+  <data name="Tip_Whitespace" xml:space="preserve">
+    <value>Whitespace</value>
+  </data>
+  <data name="Tip_CharSet" xml:space="preserve">
+    <value>Character set</value>
+  </data>
+  <data name="Tip_NegatedSet" xml:space="preserve">
+    <value>Negated set</value>
+  </data>
+  <data name="Tip_CharRange" xml:space="preserve">
+    <value>Character range</value>
+  </data>
+  <data name="Tip_LineStart" xml:space="preserve">
+    <value>Start of line</value>
+  </data>
+  <data name="Tip_LineEnd" xml:space="preserve">
+    <value>End of line</value>
+  </data>
+  <data name="Tip_Or" xml:space="preserve">
+    <value>Or</value>
+  </data>
+  <data name="Tip_CaptureGroup" xml:space="preserve">
+    <value>Capturing group</value>
+  </data>
+  <data name="Tip_NonCaptureGroup" xml:space="preserve">
+    <value>Non-capturing group</value>
+  </data>
+  <data name="Tip_WordBoundary" xml:space="preserve">
+    <value>Word boundary</value>
+  </data>
+  <data name="Tip_PositiveLookahead" xml:space="preserve">
+    <value>Positive lookahead</value>
+  </data>
+  <data name="Tip_NegativeLookahead" xml:space="preserve">
+    <value>Negative lookahead</value>
+  </data>
+  <data name="Tip_ExactlyN" xml:space="preserve">
+    <value>Exactly n repetitions</value>
+  </data>
+  <data name="Tip_NtoM" xml:space="preserve">
+    <value>Between n and m repetitions</value>
+  </data>
+  <data name="Tip_Lazy" xml:space="preserve">
+    <value>Lazy match</value>
+  </data>
+  <data name="Tip_WholeMatch" xml:space="preserve">
+    <value>Entire matched text</value>
+  </data>
+  <data name="Tip_Group1" xml:space="preserve">
+    <value>First group</value>
+  </data>
+  <data name="Tip_Group2" xml:space="preserve">
+    <value>Second group</value>
+  </data>
+  <data name="Tip_NamedGroup" xml:space="preserve">
+    <value>Named group</value>
+  </data>
+  <data name="Tip_BeforeMatch" xml:space="preserve">
+    <value>Text before the match</value>
+  </data>
+  <data name="Tip_AfterMatch" xml:space="preserve">
+    <value>Text after the match</value>
+  </data>
+  <data name="Tip_Paragraph" xml:space="preserve">
+    <value>Paragraph mark</value>
+  </data>
+  <data name="Tip_Tab" xml:space="preserve">
+    <value>Tab</value>
+  </data>
+  <data name="Tip_LineBreakShift" xml:space="preserve">
+    <value>Line break (Shift+Enter)</value>
+  </data>
+  <data name="Tip_LineBreak" xml:space="preserve">
+    <value>Line break</value>
+  </data>
+  <data name="Tip_PageBreak" xml:space="preserve">
+    <value>Manual page break</value>
+  </data>
+  <data name="Tip_ColumnBreak" xml:space="preserve">
+    <value>Column break</value>
+  </data>
+  <data name="Tip_NbSpace" xml:space="preserve">
+    <value>Nonbreaking space</value>
+  </data>
+  <data name="Tip_NbHyphen" xml:space="preserve">
+    <value>Nonbreaking hyphen</value>
+  </data>
+  <data name="Tip_OptHyphen" xml:space="preserve">
+    <value>Optional hyphen</value>
+  </data>
+  <data name="Tip_Caret" xml:space="preserve">
+    <value>Caret character ^</value>
+  </data>
+  <data name="Tip_AnyDigit" xml:space="preserve">
+    <value>Any digit</value>
+  </data>
+  <data name="Tip_AnyLetter" xml:space="preserve">
+    <value>Any letter</value>
+  </data>
+  <data name="Tip_AnyWhitespace" xml:space="preserve">
+    <value>Any whitespace</value>
+  </data>
+  <data name="Tip_FoundText" xml:space="preserve">
+    <value>Found text</value>
+  </data>
+  <data name="Tip_Clipboard" xml:space="preserve">
+    <value>Clipboard contents</value>
+  </data>
+  <data name="Tip_ZeroOrMoreChars" xml:space="preserve">
+    <value>Zero or more characters</value>
+  </data>
+  <data name="Tip_WordStart" xml:space="preserve">
+    <value>Start of word</value>
+  </data>
+  <data name="Tip_WordEnd" xml:space="preserve">
+    <value>End of word</value>
+  </data>
+  <data name="Status_Replaced" xml:space="preserve">
+    <value>Replaced {0} results</value>
+  </data>
+  <data name="Status_Found" xml:space="preserve">
+    <value>Found {0} results</value>
+  </data>
+</root>

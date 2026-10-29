@@ -1,4 +1,5 @@
-﻿using KleiKodeshVstoInstallerWpf.Properties;
+﻿using KleiKodesh.Helpers;
+using KleiKodeshVstoInstallerWpf.Properties;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -160,6 +161,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 foreach (string folder in foldersToDelete)
                     DeleteFolder(folder, result, log);
 
+                // VBA macros template the user may have installed into Word's STARTUP folder
+                foreach (string name in VbaMacrosTemplate.AllFileNames)
+                {
+                    string macros = Path.Combine(VbaMacrosTemplate.StartupFolder, name);
+                    if (File.Exists(macros))
+                        DeleteFile(macros, result, log);
+                }
+
                 // ClickOnce cache — scan %LocalAppData%\Apps\2.0\ for KleiKodesh content
                 CleanClickOnceFolders(result, log);
             });
@@ -290,6 +299,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     Registry.CurrentUser,
                     $@"{vbBase}\KleiKodesh",
                     result, log);
+                // The UI language is the user's choice, not leftover state: keep it.
+                UiLanguage.Persist();
 
                 // ZayitApp — delete the entire subtree.
                 // Written by our installer (Database\Path) and by the KitveiHakodesh app

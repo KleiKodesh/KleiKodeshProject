@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="KleiKodesh.Ribbon.RibbonSettingsView"
+<UserControl x:Class="KleiKodesh.Ribbon.RibbonSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:kk="http://schemas.kleikodesh.org/wpf"
@@ -49,7 +49,7 @@
             <Border Style="{StaticResource Card}">
                 <Expander>
                     <Expander.Header>
-                        <TextBlock Style="{StaticResource GroupHeader}" Text="רכיבים זמינים"/>
+                        <TextBlock x:Name="VisibleHeader" Style="{StaticResource GroupHeader}"/>
                     </Expander.Header>
                     <StackPanel x:Name="VisibleSettingsPanel">
                         <Separator/>
@@ -60,12 +60,12 @@
                         Do NOT rename these — the name IS the key.
                         Format: {ComponentId}_Visible
                     -->
-                        <CheckBox x:Name="KitveiHakodesh_Visible"    Content="כתבי הקודש"/>
-                        <CheckBox x:Name="Kiwix_Visible"      Content="קיוויקס"/>
-                        <CheckBox x:Name="WebSites_Visible"   Content="דרך האתרים"/>
-                        <CheckBox x:Name="KleiKodesh_Visible" Content="עיצוב תורני"/>
-                        <CheckBox x:Name="Nakdan_Visible" Content="נקדן דיקטה"/>
-                        <CheckBox x:Name="RegexFind_Visible"  Content="חיפוש רגקס" Margin="0"/>
+                        <CheckBox x:Name="KitveiHakodesh_Visible"   />
+                        <CheckBox x:Name="Kiwix_Visible"     />
+                        <CheckBox x:Name="WebSites_Visible"  />
+                        <CheckBox x:Name="KleiKodesh_Visible"/>
+                        <CheckBox x:Name="Nakdan_Visible"/>
+                        <CheckBox x:Name="RegexFind_Visible"  Margin="0"/>
                     </StackPanel>
                 </Expander>
             </Border>
@@ -73,7 +73,7 @@
             <Border Style="{StaticResource Card}">
                 <Expander>
                     <Expander.Header>
-                        <TextBlock Style="{StaticResource GroupHeader}" Text="לחצן ראשי"/>
+                        <TextBlock x:Name="OptionsHeader" Style="{StaticResource GroupHeader}"/>
                     </Expander.Header>
                     <StackPanel x:Name="OptionsSettingsPanel">
                         <Separator/>
@@ -85,22 +85,44 @@
                         Format: {ComponentId}_Option  (ComponentId must match the one used in _Visible above)
                         Settings_Option is the fallback and is not tied to a visibility checkbox.
                     -->
-                        <RadioButton x:Name="KitveiHakodesh_Option"    Content="כתבי הקודש"        IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
-                        <RadioButton x:Name="Kiwix_Option"      Content="קיוויקס"     IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
-                        <RadioButton x:Name="WebSites_Option"   Content="דרך האתרים"  IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
-                        <RadioButton x:Name="KleiKodesh_Option" Content="עיצוב תורני" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
-                        <RadioButton x:Name="Nakdan_Option" Content="נקדן דיקטה" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
-                        <RadioButton x:Name="RegexFind_Option"  Content="חיפוש רגקס"  IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
-                        <RadioButton x:Name="Settings_Option"   Content="הגדרות"      Margin="0"/>
+                        <RadioButton x:Name="KitveiHakodesh_Option"           IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
+                        <RadioButton x:Name="Kiwix_Option"          IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
+                        <RadioButton x:Name="WebSites_Option"    IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
+                        <RadioButton x:Name="KleiKodesh_Option" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                        <RadioButton x:Name="Nakdan_Option" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                        <RadioButton x:Name="RegexFind_Option"   IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
+                        <RadioButton x:Name="Settings_Option"        Margin="0"/>
                     </StackPanel>
                 </Expander>
             </Border>
 
             <CheckBox x:Name="ChkTurnOffUpdates"
-                      Content="כבה בדיקת עדכונים אוטומטית"
                       Margin="0,0,0,8"/>
 
-            <Button x:Name="BtnReset" Content="איפוס התוכנה"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock x:Name="LanguageHeader" Style="{StaticResource GroupHeader}"/>
+                    <Separator/>
+                    <!-- General/UiLanguage, shared with the installer (Helpers/AddinUiLanguage.cs). -->
+                    <RadioButton x:Name="HebrewLanguageRadio"  GroupName="UiLanguage" Content="&#x05E2;&#x05D1;&#x05E8;&#x05D9;&#x05EA;"/>
+                    <RadioButton x:Name="EnglishLanguageRadio" GroupName="UiLanguage" Content="English"/>
+                    <TextBlock x:Name="LanguageHint" TextWrapping="Wrap" Opacity="0.7" FontSize="12"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Optional VBA macros template (Helpers/VbaMacrosTemplate.cs) -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock x:Name="MacrosHeader" Style="{StaticResource GroupHeader}"/>
+                    <Separator/>
+                    <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
+                    <RadioButton x:Name="MacrosHebrewRadio"  GroupName="VbaMacros"/>
+                    <RadioButton x:Name="MacrosEnglishRadio" GroupName="VbaMacros"/>
+                    <TextBlock x:Name="MacrosHint" TextWrapping="Wrap" Opacity="0.7" FontSize="12"/>
+                </StackPanel>
+            </Border>
+
+            <Button x:Name="BtnReset"/>
 
         </StackPanel>
     </ScrollViewer>

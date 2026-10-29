@@ -68,6 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.check.outputs.go }}
+      renew: ${{ steps.check.outputs.renew }}
     steps:
       - id: check
         env:
@@ -93,6 +94,13 @@ jobs:
           tag=$(jq -r .tagName <<<"$last")
           age=$(( ( $(date +%s) - $(date -d "$(jq -r .publishedAt <<<"$last")" +%s) ) / 86400 ))
           new=$(gh api "repos/$GITHUB_REPOSITORY/compare/$tag...${{ github.sha }}" --jq .ahead_by)
+          # Every build signs with a fresh 5-year certificate, so the last release's
+          # expires 5 years after it was published. 60 days before that, release again
+          # (patch, no Gemini) even with no new commits.
+          if [ "$age" -ge $(( 5 * 365 - 60 )) ]; then
+            echo "renew=true" >> "$GITHUB_OUTPUT"
+            go true "$tag signing certificate expires soon ($age days old) - renewal release"
+          fi
           if [ "$new" -eq 0 ]; then go false "no commits since $tag"; fi
           if [ "$SCHEDULED" = true ] && [ "$age" -lt 7 ]; then go false "$tag is only $age day(s) old"; fi
           go true "$new new commit(s) since $tag ($age days)"
@@ -113,7 +121,7 @@ jobs:
 
       - name: Gemini - version bump + release notes
         id: ai
-        if: env.NOTES == 'ai' || (env.BUMP == 'auto' && !inputs.manual_version)
+        if: needs.gate.outputs.renew != 'true' && (env.NOTES == 'ai' || (env.BUMP == 'auto' && !inputs.manual_version))
         shell: pwsh
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -149,7 +157,7 @@ jobs:
             -f attempt=$(( ATTEMPT + 1 ))             -f auto=$AUTO
 
   release:
-    needs: plan
+    needs: [gate, plan]
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -169,45 +177,33 @@ jobs:
       - name: Install VSTO runtime + NSIS
         run: choco install vstor2010 nsis -y --no-progress
 
-      - name: Restore packages
-        shell: pwsh
-        run: |
-          msbuild KleiKodeshProject.slnx -t:restore -v:minimal -nologo
-          # packages.config projects each use their own ..\packages folder.
-          git ls-files '*packages.config' | % {
-            nuget restore $_ -PackagesDirectory (Join-Path (Split-Path $_) '..\packages') -NonInteractive
-          }
-
-      - name: npm ci (vue-frontend)
-        working-directory: KitveiHakodesh/vue-frontend
-        run: npm ci
-
-      - name: Secrets -> files (signing cert, hb-mirror.json)
+      # The signing certificate is made by build-installer.ps1 (fresh every build).
+      - name: hb-mirror.json
         shell: pwsh
         env:
-          VSTO_PFX_BASE64: ${{ secrets.VSTO_PFX_BASE64 }}
           HB_MIRROR_JSON: ${{ secrets.HB_MIRROR_JSON }}
         run: |
-          $pfx = 'KleiKodeshVsto\KleiKodesh_TemporaryKey.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:VSTO_PFX_BASE64))
-          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My | Out-Null
           [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
       - uses: actions/download-artifact@v8
-        if: needs.plan.outputs.bump != '' || env.NOTES == 'ai'
+        if: needs.gate.outputs.renew != 'true' && (needs.plan.outputs.bump != '' || env.NOTES == 'ai')
         with:
           name: release-notes
 
+      # build-installer.ps1 also restores packages (msbuild, nuget, npm ci) and, after
+      # releasing, pings the website and starts release-issue-check.yml - same as locally.
       - name: Build (and release)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         run: |
           $notes = $env:NOTES
           $bump  = $env:BUMP
           if ($notes -eq 'ai') { $notes = 'file' }               # Gemini wrote RELEASE_NOTES.txt
           if ($bump -eq 'auto') { $bump = '${{ needs.plan.outputs.bump }}' }
+          if ('${{ needs.gate.outputs.renew }}' -eq 'true') { $notes = 'commits'; $bump = 'patch' }   # certificate renewal
           $a = @{ ReleaseNotesSource = $notes; NoClean = $true }
           if ('${{ inputs.manual_version }}') { $a.ManualVersion = '${{ inputs.manual_version }}' }
           else { $a.VersionIncrement = $bump }
@@ -223,20 +219,3 @@ jobs:
         with:
           name: release-files
           path: Build/releases/*
-
-      # A release made with github.token does not fire notify-website.yml,
-      # so ping the website from here.
-      - name: Update the website download link
-        if: ${{ !inputs.dry_run }}
-        env:
-          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
-        run: gh api repos/KleiKodesh/kleikodesh.github.io/dispatches -f event_type=release-changed
-
-      # Same reason: release-issue-check.yml would not see this release, so start it here.
-      - name: Tell open issues about this release
-        if: ${{ !inputs.dry_run }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag=$(gh release list --repo ${{ github.repository }} --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName')
-          gh workflow run release-issue-check.yml --repo ${{ github.repository }} -f tag=$tag

@@ -1,42 +1,84 @@
-import { onScopeDispose, ref, watch } from 'vue'
-import { getBookById, getBookVersions, getHebrewBooksEditions, getLinesPaged } from '@/webview-host/seforimApi'
+import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
+import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
+import { LinesTable } from './linesTable'
+import type { LineItem } from './linesTable'
 
-export interface LineItem {
-  id: number
-  lineIndex: number
-  content: string | null // null = placeholder, not yet loaded
-}
+export { LinesTable }
+export type { LineItem }
 
-// Chunk size for user-facing fetches (first paint, scroll target, TOC jump).
-// Small so the visible window arrives fast.
+// Lines are fetched ON DEMAND only — the windowed scroller asks for the range it is
+// about to mount (ensureLines), and a whole-book action (select-all copy, export)
+// asks for everything (ensureAllLines). Nothing downloads the book in the background:
+// in-book search has its own source (useBookViewSearch: the full-text index, or a
+// short-lived scan of its own).
+
+// Slot granularity: what the bookkeeping tracks as fetched or in flight.
 const CHUNK_SIZE = 200
 
-// Chunk size for the background backfill that loads the rest of the book
-// (needed for in-book search and instant scrolling). Large so a 190k-line
-// book takes ~100 round trips instead of ~1000 — per-query transport
-// overhead dominated the old 200-line backfill.
-const BACKFILL_CHUNK_SIZE = 2000
+// The most lines one request asks for: consecutive missing slots are fetched together
+// up to this, so a large range costs a handful of round trips, not one per slot.
+const MAX_FETCH_LINES = 2000
 
-// Maximum number of chunk queries that run concurrently.
-// 3 is the sweet spot: enough to saturate the WebView2 bridge without
-// overwhelming it. The prioritised chunk always gets one of these slots
-// immediately because prioritise() pushes it to the front of the queue
-// before any worker picks the next item.
-const CONCURRENT_CHUNKS = 3
+// Whole-book fetches in flight at once (ensureAllLines). Enough to keep the bridge busy
+// without flooding it ahead of the reader's own window requests.
+const CONCURRENT_WHOLE_BOOK_FETCHES = 3
+
+// Text kept in memory, in lines: the slots nearest the reader's window stay, the rest
+// go back to unfetched (content null, ids kept) and are fetched again when the reader
+// returns. A slot that is mounted, pinned, selected or being fetched for is never
+// evicted, so the budget is a target, not a cap.
+const TEXT_BUDGET_LINES = 15000
 
 // Slot states for 200-line-aligned windows (CHUNK_SIZE granularity).
 const SLOT_UNFETCHED = 0
+// In flight.
 const SLOT_PENDING = 1
+// Text is in `lines`: the only state eviction releases.
+const SLOT_FETCHED = 2
 
-export function useLines(bookId: () => number | undefined) {
-  const lines = ref<LineItem[]>([])
+export interface UseLinesOptions {
+  /**
+   * [start, end) line ranges whose text must stay in memory whatever the budget: the
+   * scroller's mounted window, its pinned rows and the text selection. Read on every
+   * eviction pass.
+   */
+  retainedRanges?: () => ReadonlyArray<readonly [number, number]>
+  /** The ids of lines whose text was just released — for per-line stores keyed by line id. */
+  onTextEvicted?: (lineIds: number[]) => void
+}
+
+/** Uint16 when every count fits (the usual case), Int32 for a line longer than 65535 characters. */
+function packCounts(counts: number[]): Uint16Array | Int32Array {
+  let max = 0
+  for (let i = 0; i < counts.length; i++) if (counts[i]! > max) max = counts[i]!
+  return max <= 0xffff ? Uint16Array.from(counts) : Int32Array.from(counts)
+}
+
+export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
+  // Shallow: the table is written here only, in chunks, and each write triggers once
+  // (triggerRef). Readers go through its methods (at, idAt, contentAt, slice...).
+  const lines = shallowRef<LinesTable>(new LinesTable())
+  // Bumped with every write to `lines`. The lines view reads it in its row slot, so
+  // the mounted rows re-render when their text changes under the same index (a
+  // version swap) — a shallow ref cannot tell them, and the scroller only re-fetches.
+  const linesRevision = shallowRef(0)
+  function linesWritten() {
+    linesRevision.value++
+    triggerRef(lines)
+  }
   // Start OPEN: the toolbar hides these controls when false, and metadata only
   // arrives after an await. Starting false would render the toolbar without them
   // for the first frames, then pop them in and shift every icon in the centred
   // row. False is set once metadata says the book genuinely has no connections.
   const hasCommentaries = ref(true)
   const hasRelatedBooks = ref(true)
+  // Every line's character count, by lineIndex: the scrollbar's static per-row height
+  // estimate, fetched once per book with no text. null until it arrives, and stays
+  // null on a library whose line table has no charCount column — the bar then
+  // estimates from the heights it measures. A typed array: 2 or 4 bytes per line
+  // instead of a boxed number each, for a value that is only ever read by index.
+  const lineCharacterCounts = ref<Uint16Array | Int32Array | null>(null)
   const hasTeamim = ref(false)
 
   // ── Alternate versions ──────────────────────────────────────────────────────
@@ -58,18 +100,21 @@ export function useLines(bookId: () => number | undefined) {
   // fails closed, because only some books have editions and the control must not flash in.
   const hebrewBooksEditions = ref<HebrewBooksEdition[]>([])
 
-  // Queue of backfill ranges: [offset, limit] pairs.
-  let fetchQueue: Array<{ offset: number; limit: number }> = []
-  let activeWorkers = 0
   let currentBookId: number | undefined
-  // While true, spawnWorkers() is a no-op — queued backfill ranges wait until
-  // releaseBackfill(). Held during session restore (useBookViewLinesBackfillGate)
-  // so the restored commentary panel's queries never queue behind full-book
-  // chunk fetches. prefetch()/prioritise() bypass the queue and still run.
-  let backfillHeld = false
-  // Per-CHUNK_SIZE-slot state — SLOT_PENDING means fetched or in flight.
-  // Prevents duplicate fetches between prioritise()/prefetch() and backfill.
+  // Per-CHUNK_SIZE-slot state — SLOT_PENDING while in flight, SLOT_FETCHED with text.
+  // Prevents duplicate fetches between ensureLines(), prefetch() and ensureAllLines().
   let slotState: Uint8Array = new Uint8Array(0)
+  // The fetch each in-flight slot is riding on, so ensureLines can await a range
+  // that someone else (a prefetch, another window) is already loading.
+  let slotFetches = new Map<number, Promise<boolean>>()
+  // Where the reader is: the middle of the latest range the scroller asked for.
+  // Eviction keeps the fetched slots nearest to it.
+  let focusLineIndex = 0
+  // Ranges an ensureLines is working on right now — never evicted mid-ensure, or the
+  // check at its end would find the text it just fetched gone.
+  const activeEnsures = new Set<{ start: number; end: number }>()
+  // Whole-book fetches in progress: nothing is evicted until they are done.
+  let wholeBookFetches = 0
 
   function slotOf(lineIndex: number): number {
     return Math.floor(lineIndex / CHUNK_SIZE)
@@ -97,33 +142,33 @@ export function useLines(bookId: () => number | undefined) {
     return true
   }
 
-  // Write a completed chunk's rows into lines.value.
+  // Write a completed chunk's rows into the table.
   function writeRows(rows: { id: number; lineIndex: number; content: string }[]) {
-    // Grow ONCE to fit the whole chunk before writing. Growing per row re-copied the entire
-    // array for each of up to CHUNK_SIZE/BACKFILL_CHUNK_SIZE rows — and since the first chunk
-    // is fetched before load() pre-sizes to totalLines, that path runs on every book open.
+    // Grow ONCE to fit the whole chunk before writing: the opening window's prefetch
+    // can land before load() sizes the table to totalLines.
     let maxLineIndex = -1
     for (const row of rows) if (row.lineIndex > maxLineIndex) maxLineIndex = row.lineIndex
-    growTo(maxLineIndex + 1)
+    lines.value.growTo(maxLineIndex + 1)
 
-    for (const row of rows) {
-      lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content ?? '' }
-    }
+    for (const row of rows) lines.value.setText(row.lineIndex, row.id, row.content ?? '')
+    linesWritten()
   }
 
-  /** Extend `lines` with placeholders up to `count` entries. No-op if already that long. */
-  function growTo(count: number) {
-    const from = lines.value.length
-    if (count <= from) return
-    const extra = Array.from({ length: count - from }, (_, i) => ({
-      id: -(from + i + 1),
-      lineIndex: from + i,
-      content: null,
-    }))
-    lines.value = [...lines.value, ...extra]
+  /** Fetches a range and registers the fetch on its slots, so ensureLines can ride on it. */
+  function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
+    const fetching = fetchAndWriteRange(bookIdAtStart, offset, limit)
+    const first = slotOf(offset)
+    const last = slotOf(offset + limit - 1)
+    for (let slot = first; slot <= last; slot++) slotFetches.set(slot, fetching)
+    void fetching.finally(() => {
+      for (let slot = first; slot <= last; slot++) {
+        if (slotFetches.get(slot) === fetching) slotFetches.delete(slot)
+      }
+    })
+    return fetching
   }
 
-  async function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
+  async function fetchAndWriteRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
     // Captured with the book id: a version swap keeps currentBookId the same, so the
     // book guard alone would let a chunk fetched under the OLD version write its text
     // into the new one — the two versions differ line for line, which would show as a
@@ -133,22 +178,17 @@ export function useLines(bookId: () => number | undefined) {
       const rows = await getLinesPaged(bookIdAtStart, limit, offset, versionAtStart ?? 0)
       if (currentBookId !== bookIdAtStart) return false
       if (activeVersionId.value !== versionAtStart) {
-        // Fetched under the version we just switched away from. The rows are discarded,
-        // but the slots MUST be released: setVersion cleared slotState and re-queued the
-        // book, so this range was re-marked SLOT_PENDING by the new pass. Returning
-        // without releasing leaves it marked-but-empty forever — nothing retries a
-        // pending slot — and that region keeps showing the previous version's text.
+        // Fetched under the version just switched away from: discarded, and the slots
+        // released (setVersion reset them; whoever asks next fetches the new text).
         markRange(offset, limit, SLOT_UNFETCHED)
-        // Released slots need an owner: the worker already shifted this range off the
-        // queue, so without re-queuing it nothing would ever come back for it.
-        fetchQueue.push({ offset, limit })
-        spawnWorkers()
         return false
       }
       writeRows(rows)
+      markRange(offset, limit, SLOT_FETCHED)
+      evictFarText()
       return true
     } catch {
-      // DB error — release the slots so a later prioritise/backfill can retry.
+      // DB error — release the slots so a later request can retry.
       if (currentBookId === bookIdAtStart && activeVersionId.value === versionAtStart) {
         markRange(offset, limit, SLOT_UNFETCHED)
       }
@@ -156,86 +196,69 @@ export function useLines(bookId: () => number | undefined) {
     }
   }
 
-  // A single worker: pulls ranges off the shared queue and fetches them until
-  // the queue is empty or the book changes. Multiple workers run concurrently.
-  //
-  // Fenced by version as well as book. A version swap leaves the book id alone but
-  // replaces the queue, so a worker started under the old version would otherwise
-  // keep draining the NEW queue, mark each range fetched, and then have every result
-  // thrown away by fetchRange's version guard — leaving those slots permanently
-  // marked as loaded and the old text on screen for good.
-  async function runWorker(bookIdAtStart: number, versionAtStart: number | null) {
-    activeWorkers++
-    try {
-      while (fetchQueue.length > 0) {
-        if (currentBookId !== bookIdAtStart || activeVersionId.value !== versionAtStart) break
-        if (backfillHeld) break
-        const range = fetchQueue.shift()!
-        // Skip ranges whose every slot was already fetched out-of-band.
-        if (rangeFullyPending(range.offset, range.limit)) continue
-        markRange(range.offset, range.limit, SLOT_PENDING)
-        await fetchRange(bookIdAtStart, range.offset, range.limit)
-      }
-    } finally {
-      activeWorkers--
-      // A worker that stopped on the version fence leaves the ranges it had not
-      // reached still queued, while spawnWorkers() — which ran during the swap, when
-      // the pool was still at its cap — had no slot to start a replacement in. Without
-      // this the queue stalls with the pool half empty and the tail of the book never
-      // refills. Guarded on the fence so a genuinely finished book does not respawn.
-      if (currentBookId != null && fetchQueue.length > 0) spawnWorkers()
-    }
-  }
-
-  // Spawn workers up to the CONCURRENT_CHUNKS cap.
-  function spawnWorkers() {
-    const id = currentBookId
-    if (id == null || backfillHeld) return
-    const version = activeVersionId.value
-    while (activeWorkers < CONCURRENT_CHUNKS && fetchQueue.length > 0) {
-      void runWorker(id, version)
-    }
-  }
-
-  /** Pauses the backfill queue: no new ranges are dequeued (in-flight chunk
-   *  fetches — at most CONCURRENT_CHUNKS — still complete). */
-  function holdBackfill() {
-    backfillHeld = true
-  }
-
-  /** Resumes the backfill queue. Safe to call multiple times. */
-  function releaseBackfill() {
-    if (!backfillHeld) return
-    backfillHeld = false
-    spawnWorkers()
-  }
-
-  // The backfill exists for THIS mounted view (in-book search, instant scroll).
-  // Without this, workers of an unmounted book view kept draining their queue —
-  // tens of MB for a large book — and every query of the NEXT mount (tab switch
-  // back: session restore, commentary load) competed with that zombie flood.
-  // Clearing currentBookId also stops in-flight chunks from writing their rows.
+  // The data exists for THIS mounted view. Clearing currentBookId stops in-flight
+  // fetches of an unmounted view from writing their rows.
   onScopeDispose(() => {
     currentBookId = undefined
-    fetchQueue = []
   })
 
-  // Moves the chunk containing lineIndex to the front of the queue so it loads next.
-  // Fires an out-of-band fetch for the CHUNK_SIZE window containing lineIndex if that
-  // window has not been fetched yet — critical when navigating to a mid-book position
-  // from a TOC entry, where the target may be far behind the backfill frontier.
-  function prioritise(lineIndex: number) {
-    prefetch(lineIndex)
+  // ── Eviction ────────────────────────────────────────────────────────────────
+
+  function slotRetained(slot: number): boolean {
+    const start = slot * CHUNK_SIZE
+    const end = start + CHUNK_SIZE
+    for (const range of activeEnsures) if (range.start < end && range.end > start) return true
+    const retained = options.retainedRanges?.()
+    if (retained) for (const [s, e] of retained) if (s < end && e > start) return true
+    return false
   }
 
-  // Out-of-band fast-path for a known scroll target (e.g. from IDB restore).
-  // Fires an immediate CHUNK_SIZE query for the window containing lineIndex,
-  // independent of the backfill worker pool. Slot tracking prevents duplicate
-  // fetches for windows already loaded or in flight.
+  /** Releases one slot's text: content back to null, ids kept, slot back to unfetched. */
+  function releaseSlot(slot: number) {
+    slotState[slot] = SLOT_UNFETCHED
+    const table = lines.value
+    const end = Math.min(table.length, (slot + 1) * CHUNK_SIZE)
+    const ids: number[] = []
+    for (let index = slot * CHUNK_SIZE; index < end; index++) {
+      if (table.clearText(index)) ids.push(table.idAt(index))
+    }
+    if (ids.length) options.onTextEvicted?.(ids)
+  }
+
+  /**
+   * Brings the fetched text back under TEXT_BUDGET_LINES, releasing the slots farthest
+   * from the reader first. Runs when a fetch lands and when the scroller asks for a
+   * range, so text left behind by a jump or a whole-book action goes once the reader
+   * moves on.
+   */
+  function evictFarText() {
+    if (wholeBookFetches > 0) return
+    const budgetSlots = TEXT_BUDGET_LINES / CHUNK_SIZE
+    const fetched: number[] = []
+    for (let slot = 0; slot < slotState.length; slot++) if (slotState[slot] === SLOT_FETCHED) fetched.push(slot)
+    let excess = fetched.length - budgetSlots
+    if (excess <= 0) return
+    const focusSlot = slotOf(focusLineIndex)
+    fetched.sort((a, b) => Math.abs(b - focusSlot) - Math.abs(a - focusSlot))
+    let released = false
+    for (const slot of fetched) {
+      if (excess <= 0) break
+      if (slotRetained(slot)) continue
+      releaseSlot(slot)
+      released = true
+      excess--
+    }
+    if (released) linesWritten()
+  }
+
+  // Fast path for a known scroll target (the restored position): fires the query for
+  // the slot containing lineIndex the moment the target is known, before the view has
+  // mounted and asked. Slot tracking makes the view's own request ride on it.
   function prefetch(lineIndex: number) {
     const id = currentBookId
     if (id == null) return
     const offset = Math.floor(lineIndex / CHUNK_SIZE) * CHUNK_SIZE
+    focusLineIndex = lineIndex
 
     const slot = slotOf(offset)
     ensureSlotCapacity(slot + 1)
@@ -246,79 +269,159 @@ export function useLines(bookId: () => number | undefined) {
   }
 
   /**
+   * Resolves once every line in [start, end) has its text — fetching whatever is
+   * not loaded or in flight yet. The windowed scroller calls this BEFORE it mounts a
+   * range, so a row is never on screen without its text. REJECTS when a line is
+   * still without text afterwards (a failed query; the slots are released for a
+   * retry), so the scroller mounts nothing rather than empty rows.
+   */
+  async function ensureLines(start: number, end: number): Promise<void> {
+    if (end <= start) return
+    focusLineIndex = (start + end) >> 1
+    evictFarText()
+    await ensureRange(start, end)
+  }
+
+  /** ensureLines without moving the reader's focus — whole-book fetches use it. */
+  async function ensureRange(start: number, end: number): Promise<void> {
+    const id = currentBookId
+    if (id == null || end <= start) return
+    const active = { start, end }
+    activeEnsures.add(active)
+    try {
+      await fetchMissing(id, start, end)
+    } finally {
+      activeEnsures.delete(active)
+    }
+  }
+
+  async function fetchMissing(id: number, start: number, end: number): Promise<void> {
+    const waits: Promise<boolean>[] = []
+    const lastSlot = slotOf(Math.max(start, end - 1))
+    ensureSlotCapacity(lastSlot + 1)
+    const maxSlotsPerFetch = MAX_FETCH_LINES / CHUNK_SIZE
+    let runStart = -1
+    const flushRun = (runEnd: number) => {
+      if (runStart < 0) return
+      const offset = runStart * CHUNK_SIZE
+      const limit = (runEnd - runStart) * CHUNK_SIZE
+      markRange(offset, limit, SLOT_PENDING)
+      waits.push(fetchRange(id, offset, limit))
+      runStart = -1
+    }
+    for (let slot = slotOf(start); slot <= lastSlot; slot++) {
+      const inFlight = slotFetches.get(slot)
+      if (inFlight || slotState[slot] !== SLOT_UNFETCHED) {
+        flushRun(slot)
+        if (inFlight) waits.push(inFlight)
+        continue
+      }
+      if (runStart < 0) runStart = slot
+      else if (slot - runStart >= maxSlotsPerFetch) { flushRun(slot); runStart = slot }
+    }
+    flushRun(lastSlot + 1)
+    if (waits.length) await Promise.all(waits)
+    if (currentBookId !== id) return
+    for (let index = start; index < Math.min(end, lines.value.length); index++) {
+      if (!lines.value.hasText(index)) throw new Error(`lines ${start}-${end} unavailable`)
+    }
+  }
+
+  /**
+   * Resolves once every line in [start, end) has its ID — fetching ids alone (no text)
+   * for whatever is not loaded. A TOC section's commentary and a shift-click range
+   * need the ids only; a section can be tens of thousands of lines, and reading its
+   * text for the ids was a whole section downloaded per TOC click. Lines that get an
+   * id this way stay unfetched for the scroller (content null) and are fetched with
+   * their text later as usual. Rejects when ids are still missing afterwards.
+   */
+  async function ensureLineIds(start: number, end: number): Promise<void> {
+    const id = currentBookId
+    if (id == null) return
+    end = Math.min(end, lines.value.length)
+    if (end <= start) return
+    let first = start
+    while (first < end && lines.value.hasId(first)) first++
+    let last = end
+    while (last > first && lines.value.hasId(last - 1)) last--
+    if (first >= last) return
+    const ids = await getLineIds(id, first, last)
+    if (currentBookId !== id) return
+    for (let i = 0; i < ids.length && first + i < lines.value.length; i++) lines.value.setId(first + i, ids[i]!)
+    linesWritten()
+    for (let index = start; index < end; index++) {
+      if (!lines.value.hasId(index)) throw new Error(`line ids ${start}-${end} unavailable`)
+    }
+  }
+
+  /**
+   * Resolves once EVERY line of the book has its text — for the actions that work on
+   * the whole book (select-all copy, export to Word), and only when one is used.
+   * Fetched in MAX_FETCH_LINES requests, a few at a time. Nothing is evicted while it
+   * runs; afterwards the text stays as long as the caller's selection retains it
+   * (select-all covers the whole book) and goes once the reader moves on.
+   */
+  async function ensureAllLines(): Promise<void> {
+    const id = currentBookId
+    const total = lines.value.length
+    if (id == null || !total) return
+    let next = 0
+    const worker = async () => {
+      while (next < total && currentBookId === id) {
+        const start = next
+        next = Math.min(total, next + MAX_FETCH_LINES)
+        await ensureRange(start, next).catch(() => {})
+      }
+    }
+    wholeBookFetches++
+    try {
+      await Promise.all(Array.from({ length: CONCURRENT_WHOLE_BOOK_FETCHES }, worker))
+    } finally {
+      wholeBookFetches--
+    }
+  }
+
+  /**
    * Switch the text to an alternate version (or back to the merged text with null).
    *
    * Re-fetches every line's CONTENT while keeping the line skeleton — ids, lineIndex
-   * and the array's length — exactly as it is. That is what lets the reader stay put:
+   * and the table's length — exactly as it is. That is what lets the reader stay put:
    * the TOC, commentary anchors, highlights and the scroll position all key off line
    * ids and indices, none of which a version changes.
    *
-   * Content is blanked rather than the array emptied, for the same reason. Dropping to
-   * [] would collapse the virtualiser's total height to zero and lose the scroll
-   * position before the first chunk arrived; placeholders keep the document its full
-   * height and simply re-fill in place, exactly as an unfetched region does.
-   *
-   * `visibleLineIndex` is where the reader is actually looking. It matters on a long
-   * book: refilling from line 0 would leave someone mid-tractate watching blank lines
-   * until the backfill crawled all the way down to them.
+   * The old text STAYS in place until the new text replaces it, line by line. The
+   * mounted rows keep their height and the reader's row stays under their eyes; a
+   * row that went blank would collapse, and with it the scroll position. Every slot
+   * is marked unfetched, so whoever asks for a range next — the scroller re-asking for
+   * the window it shows (its `rowSourceVersion`), first of all — gets the new text.
    */
-  function setVersion(versionId: number | null, visibleLineIndex = 0) {
+  function setVersion(versionId: number | null) {
     if (activeVersionId.value === versionId) return
-    const id = currentBookId
-    // Set BEFORE clearing the queue: workers and in-flight fetches fence on this
-    // value, so they must see the new version the moment the old queue is dropped.
+    // Set BEFORE resetting the slots: in-flight fetches fence on this value, so one
+    // that returns under the old version is discarded instead of written.
     activeVersionId.value = versionId
-    if (id == null) return
-
-    // Live workers are NOT reset to zero here — they decrement on their own way out,
-    // and zeroing the count while they run would drive it negative and let spawnWorkers
-    // exceed the concurrency cap for the rest of the book. They exit on their next
-    // iteration via the version fence in runWorker.
-    fetchQueue = []
+    if (currentBookId == null) return
     slotState = new Uint8Array(0)
-
-    const total = lines.value.length
-    lines.value = lines.value.map((line) => ({ ...line, content: null }))
-    ensureSlotCapacity(slotOf(Math.max(total - 1, 0)) + 1)
-
-    // The reader's own window first, so the new text appears where they are looking.
-    const visibleOffset = Math.floor(visibleLineIndex / CHUNK_SIZE) * CHUNK_SIZE
-    markRange(visibleOffset, CHUNK_SIZE, SLOT_PENDING)
-    void fetchRange(id, visibleOffset, CHUNK_SIZE)
-    if (visibleOffset !== 0) {
-      markRange(0, CHUNK_SIZE, SLOT_PENDING)
-      void fetchRange(id, 0, CHUNK_SIZE)
-    }
-
-    queueBackfill(total)
-    spawnWorkers()
-  }
-
-  /** Queue everything past the first chunk as BACKFILL_CHUNK_SIZE-aligned ranges. */
-  function queueBackfill(totalLines: number) {
-    for (let offset = CHUNK_SIZE; offset < totalLines; ) {
-      // Align the first backfill range so subsequent ranges start on
-      // BACKFILL_CHUNK_SIZE boundaries.
-      const limit = Math.min(
-        BACKFILL_CHUNK_SIZE - (offset % BACKFILL_CHUNK_SIZE),
-        totalLines - offset,
-      )
-      fetchQueue.push({ offset, limit })
-      offset += limit
-    }
+    slotFetches = new Map()
+    ensureSlotCapacity(slotOf(Math.max(lines.value.length - 1, 0)) + 1)
   }
 
   async function load(id: number) {
     currentBookId = id
-    lines.value = []
-    fetchQueue = []
-    activeWorkers = 0
+    lines.value = new LinesTable()
     slotState = new Uint8Array(0)
+    slotFetches = new Map()
     // A new book's versions are its own; carrying the previous book's selection over
     // would read its text through an id belonging to a different book entirely.
     versions.value = []
     activeVersionId.value = null
     hebrewBooksEditions.value = []
+    // Alongside the metadata, never gating it: the bar estimates from measured rows
+    // until the counts land, and keeps doing so if the library has none.
+    lineCharacterCounts.value = null
+    void getLineCharCounts(id)
+      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? packCounts(counts) : null })
+      .catch(() => { /* the bar's measured fallback stands */ })
 
     let metadataFailed = false
     const metadataPromise = getBookById(id).catch(() => {
@@ -326,10 +429,10 @@ export function useLines(bookId: () => number | undefined) {
       return undefined
     })
 
-    // Kick off the first chunk immediately alongside metadata — don't wait.
-    markRange(0, CHUNK_SIZE, SLOT_PENDING)
-    void fetchRange(id, 0, CHUNK_SIZE)
-
+    // No text is fetched here: the view asks for the window it opens on (the
+    // restored position, a TOC target, or the start) through ensureLines, and
+    // useBookView prefetches that same window as soon as it is known — so the
+    // first fetch is always the right one, and never line 0 on spec.
     const book = await metadataPromise
     if (currentBookId !== id) return
 
@@ -354,13 +457,10 @@ export function useLines(bookId: () => number | undefined) {
       book?.hasCommentaryConnection
     )
 
-    growTo(totalLines)
+    lines.value.growTo(totalLines)
+    linesWritten()
 
-    // Queue the rest of the book as large backfill ranges (needed for in-book
-    // search and instant scrolling) and fill up to CONCURRENT_CHUNKS workers.
     ensureSlotCapacity(slotOf(Math.max(totalLines - 1, 0)) + 1)
-    queueBackfill(totalLines)
-    spawnWorkers()
 
     // Versions are toolbar-only and most books have none, so this trails the text
     // rather than gating first paint. Failure leaves the list empty and simply hides
@@ -386,8 +486,8 @@ export function useLines(bookId: () => number | undefined) {
   )
 
   return {
-    lines, prioritise, prefetch, holdBackfill, releaseBackfill,
-    hasCommentaries, hasRelatedBooks, hasTeamim,
+    lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
+    hasCommentaries, hasRelatedBooks, hasTeamim, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
   }

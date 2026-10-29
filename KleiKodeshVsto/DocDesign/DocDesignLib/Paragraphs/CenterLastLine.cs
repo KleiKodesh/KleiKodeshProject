@@ -17,10 +17,10 @@ namespace DocDesign.Paragraphs
 
             Remove();
 
-            using (new UndoRecordHelper("איפוס טאבים"))
+            using (new UndoRecordHelper(Properties.Strings.UndoResetTabs))
                 Vsto.ActiveDocument.DefaultTabStop = 0;
 
-            using (new UndoRecordHelper("מירכוז שורה אחרונה"))
+            using (new UndoRecordHelper(Properties.Strings.UndoCenterLastLine))
             {
                 var paragraphs = ValidParagraphs(Vsto.Selection.Range, styles, minLineCount);
                 counter = 0;
@@ -44,7 +44,7 @@ namespace DocDesign.Paragraphs
         {
             RemoveAlternative();
 
-            using (new UndoRecordHelper("מירכוז שורה אחרונה"))
+            using (new UndoRecordHelper(Properties.Strings.UndoCenterLastLine))
             {
                 var paragraphs = ValidParagraphs(Vsto.Selection.Range, styles, minLineCount);
                 counter = 0;

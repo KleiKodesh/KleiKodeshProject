@@ -242,11 +242,18 @@
                     <ColumnDefinition Width="auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button x:Name="CloseButton"
-                        Grid.Column="0"
-                        Content="{x:Static p:Strings.Close}"
-                        Style="{StaticResource GhostButton}"
-                        Click="CloseButton_Click"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button x:Name="BackButton"
+                            Content="{x:Static p:Strings.Back}"
+                            Style="{StaticResource SecondaryButton}"
+                            Margin="0,0,4,0"
+                            Visibility="Collapsed"
+                            Click="BackButton_Click"/>
+                    <Button x:Name="CloseButton"
+                            Content="{x:Static p:Strings.Close}"
+                            Style="{StaticResource GhostButton}"
+                            Click="CloseButton_Click"/>
+                </StackPanel>
 
                 <Button x:Name="NextButton"
                         Grid.Column="2"

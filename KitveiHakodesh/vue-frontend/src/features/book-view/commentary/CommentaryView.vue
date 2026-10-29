@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useZoomHandler } from '@/composables/useZoom'
@@ -13,10 +14,9 @@ import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import type { CommentaryGroup } from './useCommentary'
+import type { CommentaryGroup, CommentaryLine } from './useCommentary'
 import { commentaryGroupKey } from './useCommentary'
 import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
 import { useCommentaryErrorReport } from '../errorReport/useCommentaryErrorReport'
@@ -31,6 +31,8 @@ import { useNoteTooltip } from '../lines/useNoteTooltip'
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
+import BookViewScrollbarTocTooltip from '../lines/BookViewScrollbarTocTooltip.vue'
+import { useBookViewScrollbarTocTooltip } from '../lines/useBookViewScrollbarTocTooltip'
 import { useBookViewAbbrevTooltip } from '../lines/useBookViewAbbrevTooltip'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
@@ -74,9 +76,16 @@ const props = defineProps<{
   prepareExportData?: (lineIds: number[]) => Promise<void>
   prepareExportTargets?: (html: string) => Promise<void>
   resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
-  // Viewport-driven content priority for the two-phase commentary loader —
-  // lines can render before their text arrives; visible ones are fetched first.
-  requestContentPriority?: (lineIds: number[]) => void
+  /**
+   * Resolves once these lines have their text. The windowed scroller asks for a
+   * range's lines before mounting it, so a line is never on screen without its text.
+   */
+  ensureLineContents: (lineIds: number[]) => Promise<void>
+  /**
+   * Releases the text of lines far from the window, keeping the ones `keep` names
+   * (see useCommentary's bounded text cache). Called after the window moves.
+   */
+  trimLineContents?: (panel: CommentarySlot, keep: ((lineId: number) => boolean) | null) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
@@ -135,9 +144,17 @@ type FlatItem =
       firstLineIndex?: number
       tocPath?: string
     }
-  | { type: 'line'; content: string; lineId: number }
+  // The line object itself, not a copy of its text: the list is STRUCTURAL and is
+  // rebuilt only when the groups or the TOC paths change. Text arriving in (or
+  // released from) a line re-renders that row alone, not the whole list.
+  | { type: 'line'; line: CommentaryLine }
 
-const scrollerEl = ref<HTMLElement | null>(null)
+// The windowed scroller mounts only the rows around the viewport, fetched before
+// they are mounted. Its viewport is the scroll element every listener below uses;
+// it exists only while the list does (the v-if chain in the template).
+const windowedScroller = ref<InstanceType<typeof WindowedScroller> | null>(null)
+const scroller = (): WindowedScrollerApi | null => windowedScroller.value
+const scrollerEl = computed<HTMLElement | null>(() => windowedScroller.value?.scrollerElement ?? null)
 const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
 
 // Zoom handler scoped to this scroller — Ctrl+scroll and pinch affect only the
@@ -170,12 +187,34 @@ const flatItems = computed<FlatItem[]>(() => {
       firstLineIndex: g.lines[0]?.lineIndex,
       tocPath: tocPaths.get(commentaryGroupKey(g)),
     })
-    for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
+    for (const l of g.lines) items.push({ type: 'line', line: l })
   }
   return items
 })
 
-// ── Virtualizer ───────────────────────────────────────────────────────────────
+/** Row index of every group header, ascending — the bar's landmarks and the label's lookup. */
+const headerIndexes = computed(() => {
+  const indexes: number[] = []
+  flatItems.value.forEach((item, index) => { if (item.type === 'header') indexes.push(index) })
+  return indexes
+})
+const headerLandmarkTiers = computed(() => [headerIndexes.value])
+
+/** The group a row belongs to: the last header at or above it. */
+function headerAt(index: number): Extract<FlatItem, { type: 'header' }> | null {
+  const headers = headerIndexes.value
+  let low = 0
+  let high = headers.length - 1
+  let found = -1
+  while (low <= high) {
+    const mid = (low + high) >> 1
+    if (headers[mid]! <= index) { found = mid; low = mid + 1 } else high = mid - 1
+  }
+  const item = found < 0 ? null : flatItems.value[headers[found]!]
+  return item?.type === 'header' ? item : null
+}
+
+// ── Scroller ──────────────────────────────────────────────────────────────────
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
@@ -188,23 +227,16 @@ const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
+// The scrollbar is the scroller's own element beside its viewport, so a press on it
+// never reaches the viewport's listeners: nothing to filter out here.
 useContextMenuLongPress(scrollerEl, (event) => {
-  if (!scrollerEl.value) return
-  // In RTL layout the scrollbar is on the physical LEFT side of the container.
-  // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
-  // between the element's left edge and (left + offsetWidth - clientWidth).
-  // Any pointer position to the left of (rect.left + scrollbarWidth) hit the scrollbar.
-  const el = scrollerEl.value
-  const rect = el.getBoundingClientRect()
-  const scrollbarWidth = el.offsetWidth - el.clientWidth
-  if (event.clientX <= rect.left + scrollbarWidth) return
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
 })
 
 // Keeps the rows holding a selection's two ends mounted however far they scroll
 // away, so a drag past the viewport edge cannot break the selection.
 const {
-  rangeExtractor: selectionRangeExtractor,
+  pinnedRowIndexes,
   selectedRowIndexRange,
   restoreSelectionFromPinnedRows,
 } = useVirtualizedTextSelection(
@@ -215,39 +247,57 @@ const {
   () => visibleGroups.value.map(commentaryGroupKey).join('|'),
 )
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: flatItems.value.length,
-    getScrollElement: () => scrollerEl.value,
-    estimateSize: (i) => (flatItems.value[i]?.type === 'header' ? 40 : 48),
-    overscan: 10,
-    rangeExtractor: selectionRangeExtractor.value,
-  })),
+/** Ids of the real lines (not headers, not the no-text rows) among flat items [start, end). */
+function lineIdsIn(start: number, end: number): number[] {
+  const ids: number[] = []
+  const items = flatItems.value
+  for (let index = Math.max(0, start); index < Math.min(end, items.length); index++) {
+    const item = items[index]
+    if (item?.type === 'line' && item.line.lineId > 0) ids.push(item.line.lineId)
+  }
+  return ids
+}
+
+/** The scroller's row source: the text of a range's lines, fetched before the range mounts. */
+function ensureRows(start: number, end: number): Promise<void> {
+  return props.ensureLineContents(lineIdsIn(start, end))
+}
+
+/** Every real line id the panel shows, in reading order: the select-all copy scope. */
+function allLineIds(): number[] {
+  return lineIdsIn(0, flatItems.value.length)
+}
+
+// After the window moves, text far from it is released — never a mounted or pinned
+// row's. The goal a landing is fetching for is covered by the cache's own rule (its
+// newest batches are never released).
+watch(
+  () => [windowedScroller.value?.renderedRange, pinnedRowIndexes.value] as const,
+  ([range, pinned]) => {
+    if (!range || !props.trimLineContents) return
+    const keep = new Set(lineIdsIn(range.start, range.end))
+    const items = flatItems.value
+    for (const index of pinned) {
+      const item = items[index]
+      if (item?.type === 'line') keep.add(item.line.lineId)
+    }
+    props.trimLineContents(props.slotName, (lineId) => keep.has(lineId))
+  },
+  { flush: 'post' },
 )
+onBeforeUnmount(() => props.trimLineContents?.(props.slotName, null))
 
-const virtualItems = computed(() => virtualizer.value.getVirtualItems())
-const totalSize = computed(() => virtualizer.value.getTotalSize())
-
-// ── Notes — viewport-driven lazy load trigger ─────────────────────────────────
-// The notes data layer lives in useBookView (hoisted). We only trigger loading
-// for lines that enter the viewport.
+// ── Notes and word links — loaded for the mounted rows ────────────────────────
+// The data layers live in useBookView (hoisted). Only the rows the scroller has
+// mounted ask for theirs.
 
 watch(
-  virtualItems,
-  (items) => {
-    const lineItems = items
-      .map((v) => flatItems.value[v.index])
-      .filter((item): item is { type: 'line'; content: string; lineId: number } =>
-        item?.type === 'line',
-      )
-      .filter((item) => item.lineId > 0)
-    props.scheduleNotesLoad(lineItems.map((item) => item.lineId))
-    props.scheduleWordLinkAnchorsLoad?.(lineItems.map((item) => item.lineId))
-    // Two-phase loader: lines in the viewport whose text hasn't arrived yet get
-    // priority over the display-order backfill (scroll restore, jump-to-group,
-    // fast scroll ahead of the backfill).
-    const missingContent = lineItems.filter((item) => item.content === '').map((item) => item.lineId)
-    if (missingContent.length) props.requestContentPriority?.(missingContent)
+  () => windowedScroller.value?.renderedRange,
+  (range) => {
+    if (!range) return
+    const ids = lineIdsIn(range.start, range.end)
+    props.scheduleNotesLoad(ids)
+    props.scheduleWordLinkAnchorsLoad?.(ids)
   },
   { immediate: true },
 )
@@ -277,6 +327,8 @@ const {
   cancelPositioning,
   markUserAdjusted,
   isPositioning,
+  openingTarget,
+  scrollerOpened,
   onScroll: handleScroll,
   scrollToGroup,
   scrollToFlatIndex,
@@ -288,8 +340,8 @@ const {
 } = useCommentaryScroll(
   () => flatItems.value,
   () => visibleGroups.value,
-  () => virtualizer.value,
-  () => scrollerEl.value,
+  () => headerIndexes.value,
+  scroller,
   props.slotName,
 )
 
@@ -303,18 +355,11 @@ setupGroupReloadScroll(
   () => props.selectedLineId,
 )
 
-useVirtualScrollerKeys(
-  scrollerEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => flatItems.value.length,
-)
-
 // ── Context menu ──────────────────────────────────────────────────────────────
 
 // Whole-document copy source for "בחר הכל" → copy. Built from the model (every
 // visible group's lines), NOT the DOM, so a copy-all is not truncated to the
-// virtualized-in lines. Each line is a <div class="line" data-line-id> block with
+// mounted window's lines. Each line is a <div class="line" data-line-id> block with
 // note markers rendered in; the copy builder strips markers when notes are off and
 // flattens blocks when copyJoinLines is on.
 function buildAllCommentaryContentHtml(): string {
@@ -396,7 +441,7 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
   buildAllCommentaryContentHtml,
   props.prepareExportData && props.prepareExportTargets && props.resolveWordLinkTarget
     ? {
-        getAllLineIds: () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.lineId)),
+        getAllLineIds: allLineIds,
         prepareForLines: props.prepareExportData,
         prepareForRenderedHtml: props.prepareExportTargets,
         resolveWordLinkTarget: props.resolveWordLinkTarget,
@@ -409,8 +454,13 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
     lineAtRowIndex: (rowIndex) => {
       const item = flatItems.value[rowIndex]
       if (!item || item.type !== 'line') return null
-      return { lineId: item.lineId, offsetLength: props.annotationOffsetLengthOf(item.content) }
+      return { lineId: item.line.lineId, offsetLength: props.annotationOffsetLengthOf(item.line.content) }
     },
+    // The rows a selection spans beyond the window, and the whole document for a
+    // select-all, are built from the model — which only holds the text the scroller
+    // has fetched. Fetch the rest before the copy reads it.
+    ensureContentsForRange: (firstIndex, lastIndex) => props.ensureLineContents(lineIdsIn(firstIndex, lastIndex + 1)),
+    ensureAllContents: () => props.ensureLineContents(allLineIds()),
   },
   () => openCommentaryErrorReport(),
 )
@@ -450,6 +500,7 @@ useScopedCopy(
 )
 
 function onScroll() {
+  refreshScrollbarTocTooltip()
   handleScroll((scrollIndex, scrollOffset) => {
     emit('scroll', scrollIndex, scrollOffset)
   })
@@ -528,6 +579,22 @@ const {
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
+
+// Hovering the scrollbar names the commentary and section there, as the lines view
+// does: on the thumb where the reader is, elsewhere where a drag there would land.
+const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
+const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
+  getCurrentLineIndex: () => null,
+  getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
+  viewportElement: scrollerEl,
+  getBookTitle: () => '',
+  getLabelAt: (index) => {
+    const header = headerAt(index)
+    if (!header) return { bookTitle: '', path: '' }
+    const path = header.tocPath || [header.sectionLabel, header.subSectionLabel].filter(Boolean).join(' ')
+    return { bookTitle: header.bookTitle, path }
+  },
+})
 </script>
 
 <template>
@@ -583,6 +650,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
       :key="abbrevTooltip.id"
       :data="abbrevTooltip"
     />
+    <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
     <div class="body">
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
         <CommentaryHeaderNav
@@ -616,67 +684,58 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
             </div>
           </div>
         </div>
-        <div
-          v-else
-          ref="scrollerEl"
-          class="scroller"
-          dir="rtl"
-          tabindex="0"
-          data-ctrlf-enabled
-          @scroll="onScroll"
-          @click="onMarkerClick"
-          @contextmenu="contextMenuRef?.show($event)"
-          @wheel.passive="markUserAdjusted"
-          @touchstart.passive="markUserAdjusted"
-          @pointerdown.passive="markUserAdjusted"
-          @keydown="markUserAdjusted"
-        >
-          <div :style="{ height: `${totalSize}px`, position: 'relative' }">
-            <div
-              v-for="vItem in virtualItems"
-              :key="String(vItem.key)"
-              :ref="(el) => el && virtualizer.measureElement(el as Element)"
-              :data-index="vItem.index"
-              :style="{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                left: 0,
-                transform: `translateY(${vItem.start}px)`,
-              }"
-            >
+        <div v-else class="scroller-host" dir="rtl">
+          <WindowedScroller
+            ref="windowedScroller"
+            class="scroller"
+            :count="flatItems.length"
+            :initial-index="openingTarget?.index"
+            :initial-offset-px="openingTarget?.offsetPx"
+            :ensure-rows="ensureRows"
+            :pinned-indexes="pinnedRowIndexes"
+            :landmark-tiers="headerLandmarkTiers"
+            tabindex="0"
+            data-ctrlf-enabled
+            @opened="scrollerOpened"
+            @scroll="onScroll"
+            @click="onMarkerClick"
+            @contextmenu="contextMenuRef?.show($event)"
+            @wheel.passive="markUserAdjusted"
+            @touchstart.passive="markUserAdjusted"
+            @pointerdown.passive="markUserAdjusted"
+            @keydown="markUserAdjusted"
+          >
+            <template #row="{ index }">
               <CommentaryHeader
-                v-if="flatItems[vItem.index]?.type === 'header'"
-                :book-id="(flatItems[vItem.index] as any).bookId"
-                :book-title="(flatItems[vItem.index] as any).bookTitle"
-                :first-line-index="(flatItems[vItem.index] as any).firstLineIndex"
-                :section-label="(flatItems[vItem.index] as any).sectionLabel"
-                :sub-section-label="(flatItems[vItem.index] as any).subSectionLabel"
-                :own-toc-path="(flatItems[vItem.index] as any).tocPath"
+                v-if="flatItems[index]?.type === 'header'"
+                :book-id="(flatItems[index] as any).bookId"
+                :book-title="(flatItems[index] as any).bookTitle"
+                :first-line-index="(flatItems[index] as any).firstLineIndex"
+                :section-label="(flatItems[index] as any).sectionLabel"
+                :sub-section-label="(flatItems[index] as any).subSectionLabel"
+                :own-toc-path="(flatItems[index] as any).tocPath"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
               />
+              <!-- Never a placeholder: the scroller fetched these lines' text before mounting them. -->
               <div
-                v-else
+                v-else-if="flatItems[index]"
                 class="line"
-                :class="{ 'line-no-text': (flatItems[vItem.index] as any).lineId === -1 }"
-                :data-line-id="(flatItems[vItem.index] as any).lineId"
-                :style="teamimFontStyle((flatItems[vItem.index] as any).content)"
-                v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index, (flatItems[vItem.index] as any).lineId, props.searchQuery)"
+                :class="{ 'line-no-text': (flatItems[index] as any).line.lineId === -1 }"
+                :data-line-id="(flatItems[index] as any).line.lineId"
+                :style="teamimFontStyle((flatItems[index] as any).line.content)"
+                v-html="renderContent((flatItems[index] as any).line.content, index, (flatItems[index] as any).line.lineId, props.searchQuery)"
               />
-            </div>
-          </div>
+            </template>
+          </WindowedScroller>
         </div>
         <!--
-          Positioning mask. While the positioner is still driving the panel toward
-          its target (a restore or a pinned-group scroll), the content underneath is
-          mid-flight: the two-phase backfill keeps reshaping the list and the
-          viewport visibly jumps as corrections land. Cover it until the panel first
-          ARRIVES at its target.
+          Positioning mask. While a goal (a restore, a pinned-group scroll) waits for
+          its target - its group still arriving, its rows being fetched - the panel
+          would otherwise show whatever it opened on. Cover it until the goal lands.
           Deliberately OUTSIDE the v-if chain above, as an absolute overlay: putting
           it in the chain would unmount the scroller, and then there is nothing left
-          to position - the mask would deadlock the goal it is masking. The spinner
-          keeps its usual delay so fast loads never flash it.
+          to position. The spinner keeps its usual delay so fast loads never flash it.
         -->
         <div v-if="!props.loading && isPositioning && flatItems.length" class="positioning-mask">
           <LoadingAnimation v-if="showLoadingSpinner" />
@@ -792,9 +851,11 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 .hint-row:last-child {
   border-block-end: none;
 }
-.scroller {
+/* The scroller's root fills this; its viewport (`.scroller`, attributes fall
+   through) scrolls, with the drawn scrollbar beside it. */
+.scroller-host {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
 }
 .line {
   padding-inline: var(--commentary-pad-inline, 12px);

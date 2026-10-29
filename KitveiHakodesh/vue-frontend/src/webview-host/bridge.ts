@@ -298,6 +298,50 @@ export async function openFileInDefaultApp(filePath: string): Promise<boolean> {
 }
 
 /**
+ * PDF viewer TOC autosave: write an incremental-save `tail` back into the PDF at `offset`
+ * (the length the viewer loaded). `anchor` = the loaded bytes just before `offset`; the
+ * write is refused when they no longer match the disk (rules: Core PdfIncrementalSaveWriter).
+ * Hosted: the C# host writes (`writePdfTail`, bytes as base64). Dev: the service op.
+ * Returns an error message, or null when written.
+ */
+export async function writePdfTail(
+  filePath: string,
+  offset: number,
+  tail: Uint8Array,
+  anchor: Uint8Array,
+): Promise<string | null> {
+  try {
+    const r =
+      typeof window.__webviewAction !== 'function'
+        ? // Copied into THIS realm: the viewer's arrays come from the PDF.js iframe, and a
+          // cross-realm Uint8Array fails `instanceof` in the encoder and goes out as a map.
+          await serviceCall<{ ok?: boolean; error?: string }>('writePdfTail', {
+            path: filePath,
+            offset,
+            tail: new Uint8Array(tail),
+            anchor: new Uint8Array(anchor),
+          })
+        : await action<{ ok?: boolean; error?: string }>('writePdfTail', {
+            filePath,
+            offset,
+            tail: bytesToBase64(tail),
+            anchor: bytesToBase64(anchor),
+          })
+    return r?.ok ? null : r?.error || 'write failed'
+  } catch (e) {
+    return String(e)
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/**
  * Open an http/https address in the user's default browser.
  *
  * Hosted: the C# host shell-executes the URL (`openUrlInSystemBrowser`) - a plain
@@ -560,6 +604,31 @@ export async function catalogTocSearch(query: string): Promise<CatalogTocSearchR
   return serviceCall<CatalogTocSearchResult>('catalogTocSearch', { query })
 }
 
+/** Result of a book-title search (catalogTitleSearch wire shape, camelCased). The not-ready
+ *  fields mean what they mean on CatalogTocSearchResult. */
+export type CatalogTitleSearchResult = {
+  ready: boolean
+  /** Matching book ids, best first. Uncapped. */
+  bookIds: number[]
+  /** The index was reset under this search — discard and retry. */
+  superseded?: boolean
+  error?: string | null
+  dbMissing?: boolean
+  builtBooks?: number
+  totalBooks?: number
+  buildFailure?: string | null
+  retryingAfterBuildFailure?: boolean
+  waiting?: boolean
+}
+
+/**
+ * Search book titles (with catalog path and authors) in the catalog index — level-0 docs
+ * only, the last word also matched as a prefix. Same index and transport as catalogTocSearch.
+ */
+export async function catalogTitleSearch(query: string): Promise<CatalogTitleSearchResult> {
+  return serviceCall<CatalogTitleSearchResult>('catalogTitleSearch', { query })
+}
+
 /**
  * Wipe the catalog TOC (Lucene) index so it is rebuilt from the seforim DB.
  *
@@ -800,7 +869,7 @@ async function runPasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
 /**
  * Place a PNG image on the Windows clipboard via the C# host (hosted only).
  *
- * Needed because the host serves the app from http://KitveiHakodesh-vue-app/ — plain http on a
+ * Needed because the host serves the app from http://kitveihakodesh-app/ — plain http on a
  * non-localhost hostname, which Chromium treats as an INSECURE context, so navigator.clipboard
  * is not exposed there and C# must do it with System.Windows.Forms.Clipboard instead.
  *

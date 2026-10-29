@@ -19,7 +19,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { isSideCommentarySlot } from '../bookViewTypes'
 import type { CommentaryPanel } from './useCommentaryPanelSlot'
 import type { CommentaryGroup } from './useCommentary'
-import type { PinnedCommentaryGroup } from '../bookViewTypes'
+import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
@@ -56,7 +56,10 @@ const props = defineProps<{
   prepareExportData?: (lineIds: number[]) => Promise<void>
   prepareExportTargets?: (html: string) => Promise<void>
   resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
-  requestContentPriority?: (lineIds: number[]) => void
+  /** Resolves once these lines have their text: the windowed scroller's row source. */
+  ensureLineContents: (lineIds: number[]) => Promise<void>
+  /** Releases held text far from the panel's window (useCommentary's bounded text cache). */
+  trimLineContents?: (panel: CommentarySlot, keep: ((lineId: number) => boolean) | null) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
@@ -142,7 +145,8 @@ defineExpose({ view })
       :prepare-export-data="prepareExportData"
       :prepare-export-targets="prepareExportTargets"
       :resolve-word-link-target="resolveWordLinkTarget"
-      :request-content-priority="requestContentPriority"
+      :ensure-line-contents="ensureLineContents"
+      :trim-line-contents="trimLineContents"
       :has-saved-scroll-pos="panel.scrollIndex.value != null"
       :create-note="createNote"
       :update-note="updateNote"

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.HebrewBooks;
@@ -31,6 +30,7 @@ public sealed class Dispatcher(
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
+    SeforimLibraryDownloadService libraryDownload,
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
@@ -46,7 +46,7 @@ public sealed class Dispatcher(
         "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
         or "getSeforimDbPath" or "getUpdateStatus"
         or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress"
-        or "indexBuildReasons";
+        or "indexBuildReasons" or "seforimLibraryDownloadStatus";
 
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
@@ -237,6 +237,19 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(openError is null
                         ? new OpenInDefaultAppResult { Ok = true }
                         : new OpenInDefaultAppResult { Error = openError }));
+                }
+
+                // PDF viewer TOC autosave — the dev-mode equivalent of the hosted "writePdfTail"
+                // bridge action. Same path checks as a shell-open, then Core's tail writer.
+                case "writePdfTail":
+                {
+                    var a = MsgPack.De<WritePdfTailArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    string? writeError = PdfIncrementalSaveWriter.WriteTail(full, a.Offset, a.Tail, a.Anchor);
+                    return RpcResponse.Ok(MsgPack.Ser(writeError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = writeError }));
                 }
 
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
@@ -558,6 +571,24 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed", Detail = r.Detail }));
                 }
 
+                // Download Otzaria's library into the app's own folder (no DB installed). Returns at
+                // once; progress arrives on seforimLibraryDownloadStream. Resumes from bytes on disk.
+                case "startSeforimLibraryDownload":
+                {
+                    libraryDownload.Start();
+                    return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+                }
+
+                // Stop it and drop the request; downloaded bytes stay for a later resume.
+                case "cancelSeforimLibraryDownload":
+                {
+                    bool cancelled = libraryDownload.Cancel();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = cancelled }));
+                }
+
+                case "seforimLibraryDownloadStatus":
+                    return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
                 // The frontend calls this every ~300ms while a book tab is in the downloading state
                 // and updates the loading text; Active=false means the download already finished.
@@ -705,6 +736,32 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset, a.VersionId) }));
                 }
 
+                // The in-book / commentary substring search, whole: index when it can, native scan otherwise (Core).
+                case "linesSubstringSearch":
+                {
+                    var a = MsgPack.De<LinesSubstringSearchArgs>(req.Args);
+                    var triples = a.RangeTriples ?? Array.Empty<int>();
+                    var ranges = new List<global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange>(triples.Length / 3);
+                    for (int i = 0; i + 2 < triples.Length; i += 3)
+                        ranges.Add(new global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange { BookId = triples[i], FirstLineIndex = triples[i + 1], LastLineIndex = triples[i + 2] });
+                    var hits = seforim.SubstringSearch(fts.Coordinator, a.Query ?? "", ranges, a.VersionId);
+                    var bookIds = new int[hits.Count]; var lineIndexes = new int[hits.Count]; var lineIds = new int[hits.Count]; var counts = new int[hits.Count];
+                    for (int i = 0; i < hits.Count; i++) { bookIds[i] = hits[i].BookId; lineIndexes[i] = hits[i].LineIndex; lineIds[i] = hits[i].LineId; counts[i] = hits[i].Count; }
+                    return RpcResponse.Ok(MsgPack.Ser(new LinesSubstringSearchResult { BookIds = bookIds, LineIndexes = lineIndexes, LineIds = lineIds, Counts = counts }));
+                }
+
+                case "getLineIds":
+                {
+                    var a = MsgPack.De<LineIdsByRangeArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineIdsByRangeResult { Ids = seforim.GetLineIds(a.BookId, a.FromIndex, a.ToIndex) }));
+                }
+
+                case "getLineCharCounts":
+                {
+                    var a = MsgPack.De<LineCharCountsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineCharCountsResult { Counts = seforim.GetLineCharCounts(a.BookId) }));
+                }
+
                 case "getBookMetadata":
                 {
                     var a = MsgPack.De<BookMetadataArgs>(req.Args);
@@ -753,6 +810,11 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinksResult { Rows = seforim.GetCommentaryLinksForSourceLineRange(a.LineIds) }));
+                }
+                case "getCommentaryLinkGroupsForSourceLineRange":
+                {
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinkGroupsResult { Rows = seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds) }));
                 }
 
                 case "getLineContents":
@@ -881,16 +943,13 @@ public sealed class Dispatcher(
                 case "userSettingsQuery":
                 {
                     var a = MsgPack.De<RawSqlArgs>(req.Args);
-                    using var pd = ParseParams(a.ParamsJson);
-                    string rowsJson = userSettings.QueryRowsJson(a.Sql ?? "", pd.Elements);
-                    return RpcResponse.Ok(MsgPack.Ser(new RawRowsResult { RowsJson = rowsJson }));
+                    return RpcResponse.Ok(MsgPack.Ser(new RawRowsResult { Rows = userSettings.QueryRows(a.Sql ?? "", a.Params ?? []) }));
                 }
 
                 case "userSettingsExecute":
                 {
                     var a = MsgPack.De<RawSqlArgs>(req.Args);
-                    using var pd = ParseParams(a.ParamsJson);
-                    long id = userSettings.Execute(a.Sql ?? "", pd.Elements);
+                    long id = userSettings.Execute(a.Sql ?? "", a.Params ?? []);
                     return RpcResponse.Ok(MsgPack.Ser(new ExecuteResult { LastInsertId = id }));
                 }
 
@@ -900,6 +959,13 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FtsSearchArgs>(req.Args);
                     var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords);
                     return RpcResponse.Ok(MsgPack.Ser(res));
+                }
+
+                // Snippet texts for the rows a page shows (the hits already carry their descriptors).
+                case "ftsSnippetTexts":
+                {
+                    var a = MsgPack.De<FtsSnippetTextsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fts.SnippetTexts(a.LineIds ?? new(), a.ShortLineIds ?? new())));
                 }
 
                 case "ftsIndexingStatus":
@@ -914,6 +980,13 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<CatalogTocSearchArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Search(a.Query ?? "")));
+                }
+
+                // Book-title search over the same index (level-0 docs only), book ids in rank order.
+                case "catalogTitleSearch":
+                {
+                    var a = MsgPack.De<CatalogTitleSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.SearchTitles(a.Query ?? "")));
                 }
 
                 case "catalogTocStatus":
@@ -984,7 +1057,7 @@ public sealed class Dispatcher(
                 var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
                 await fts.StreamSearch(
                     a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords,
-                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct, a.ResumeAfterLineId);
                 return true;
             }
 
@@ -1003,6 +1076,14 @@ public sealed class Dispatcher(
             {
                 await updater.StreamProgressAsync(
                     f => writeFrame(RpcResponse.Ok(MsgPack.Ser(f))), ct);
+                return true;
+            }
+
+            // Library download: a snapshot per change, open for the app's session.
+            case "seforimLibraryDownloadStream":
+            {
+                await libraryDownload.StreamProgressAsync(
+                    p => writeFrame(RpcResponse.Ok(MsgPack.Ser(p))), ct);
                 return true;
             }
 
@@ -1083,23 +1164,4 @@ public sealed class Dispatcher(
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 
     private static List<string> Candidates(byte[]? args) => MsgPack.De<DictCandidatesArgs>(args).Candidates ?? [];
-
-    /// <summary>Parse the user-settings <c>paramsJson</c> (a JSON array string carried inside
-    /// the msgpack envelope) into JsonElement bind values. The values reference the returned
-    /// document's memory, so the caller must keep it alive (a <c>using</c>) until the SQL runs.</summary>
-    private static ParsedParams ParseParams(string? json)
-    {
-        if (string.IsNullOrEmpty(json)) return new ParsedParams(null, []);
-        var doc = JsonDocument.Parse(json);
-        var arr = doc.RootElement.ValueKind == JsonValueKind.Array
-            ? doc.RootElement.EnumerateArray().ToArray()
-            : [];
-        return new ParsedParams(doc, arr);
-    }
-
-    private sealed class ParsedParams(JsonDocument? doc, JsonElement[] elements) : IDisposable
-    {
-        public JsonElement[] Elements { get; } = elements;
-        public void Dispose() => doc?.Dispose();
-    }
 }

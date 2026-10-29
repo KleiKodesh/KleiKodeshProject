@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
 import PageCard from '@/components/PageCard.vue'
-import { ref, computed, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
-import { useElementSize, useMediaQuery } from '@vueuse/core'
+import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
+import { useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -11,7 +11,9 @@ import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchF
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
+import { searchCachePinOwner } from '@/stores/tabStatePersistence'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
@@ -22,6 +24,10 @@ import { WORD_OPTIONS } from './queryWordSyntax'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
 const paneNavigation = usePaneNavigation()
+// For the page's own keyboard shortcuts: which pane this is, and whether it is the
+// focused one while split view is open (see the window handler below).
+const paneId = inject<1 | 2>('paneId', 1)
+const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
 const settings = useSettingsStore()
@@ -64,6 +70,8 @@ watch(
 
 const {
   results,
+  resultsVersion,
+  resultCount,
   matchedTermsOf,
   isSearching,
   stageLabel,
@@ -81,7 +89,7 @@ const {
   clearSearch,
   loadCachedResults,
   clearCachedResults,
-} = useFullTextSearch(() => indexingState.value.isIndexing)
+} = useFullTextSearch(() => indexingState.value.isIndexing, searchCachePinOwner(tabId))
 
 const {
   searchQuery,
@@ -89,6 +97,8 @@ const {
   checkedBookIds,
   atFilters,
   filteredResults,
+  filteredVersion,
+  filteredCount,
   filteredGeneration,
   resultCounts,
   initCheckedBooks,
@@ -104,6 +114,7 @@ const {
   handleResultClick,
 } = useFullTextSearchFilters(
   () => results.value,
+  () => resultsVersion.value,
   () => executedQuery.value,
   matchedTermsOf,
   executeSearch,
@@ -314,9 +325,107 @@ watch(
     // Consume it, like openTocLineIndex: the field describes ONE navigation, and leaving it
     // set would make an unrelated later patch (a title refresh) re-trigger this restore.
     paneNavigation.updateActiveTab({ searchRestore: undefined })
-    resultsListRef.value?.armRestore()
+    // The query this navigation shows — the term the list's `searchQuery` will carry.
+    const tabQuery = paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery ?? ''
+    resultsListRef.value?.armRestore(parseSearchQuery(tabQuery).term || tabQuery)
   },
 )
+
+// Combobox model: the arrows move the results highlight and Enter opens the
+// highlighted result — through the same handleResultClick a click goes through. The
+// bar forwards its keydown here, and the window handler below covers the rest of the
+// page; the bar is a sibling of the list, so either hop goes through this parent.
+function onResultsKeydown(event: KeyboardEvent): boolean {
+  return resultsListRef.value?.onNavigationKeydown(event) ?? false
+}
+
+/**
+ * A focused field that owns EVERY one of these keys: the search field, where the
+ * forwarding above runs anyway with the recent-searches dropdown ahead of it, any
+ * other text input on the page, and `select`, whose options the arrows pick.
+ */
+function focusedElementOwnsTheseKeys(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false
+  return element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName)
+}
+
+/**
+ * A focused control that Enter ACTIVATES: taking Enter there would open a result
+ * instead of pressing the filter button. The arrows mean nothing to these, so they
+ * keep only the one key — deliberately, and not as tidiness.
+ *
+ * Caret browsing is the reason. With it on, Chromium moves DOM focus to focusable
+ * elements as the caret travels through the text, and every result row carries two
+ * icon buttons. Were these to keep the arrows too, the list would stop responding
+ * to them for as long as the caret happened to rest on a button: the bug this whole
+ * change is about, back intermittently and nearly impossible to describe.
+ */
+function focusedElementOwnsEnter(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false
+  return element.getAttribute('role') === 'button' || ['BUTTON', 'A'].includes(element.tagName)
+}
+
+// The same keys from ANYWHERE on this page, not only from the search field.
+//
+// Bound to the field alone the feature was unreachable in practice, because focus is
+// usually not in the field by the time the reader wants the arrows:
+//
+//   · Running the first search teleports the bar out of the empty page's card into
+//     the dock. A Teleport MOVES the DOM node, and Chromium blurs a focused element
+//     that leaves the document even for an instant — so focus is on <body> exactly
+//     when the results appear.
+//   · The results scroller carries tabindex="0", so a click anywhere in the list —
+//     to scroll it, to select a word — focuses the scroller.
+//
+// From either state the field's keydown never fired and the arrows fell through to
+// whatever Chromium does with them on the focused scroller. For this app's readers
+// that is usually CARET BROWSING (F7): it is their normal working mode, not an edge
+// case — it is how they walk a book line by line — so with it on the arrows drag the
+// document caret through the result text while the highlight never moves and Enter
+// never arrives. That is the Word task pane's normal state, which is where it was
+// reported.
+//
+// Guarded like the title bar's and the book view's shortcuts: this pane focused, and
+// this pane's active tab actually being the search page. That guard IS the rule for
+// where the caret keeps the arrows and where the list takes them: the book view's
+// lines pane is another route, where this page is not mounted at all and the caret
+// goes on being driven by the arrows exactly as before. Caret browsing is never
+// turned off and no key is taken outside this page.
+//
+// CAPTURE phase, as those two also use: arrow scrolling, the caret-browsing caret
+// move and the scroller's own Home/End are all DEFAULT actions, which Blink runs
+// after dispatch and only for a key nobody cancelled — so preventDefault settles
+// the precedence, and capture gets there before any of the page's own handlers.
+// stopPropagation as well, so a key taken here never reaches the scroller's
+// viewport: a keydown there is what marks a scroll as the reader's own for the
+// scrollbar's position label, and the landing this handler performs would otherwise
+// raise that label's bubble over the bar for a keystroke that scrolled nothing by
+// hand. (The label is upstream's and is untouched; it still shows for real
+// scrolling — wheel, drag, hover.)
+useEventListener(
+  window,
+  'keydown',
+  (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+    if (!isSearchActive.value) return
+    if (focusedElementOwnsTheseKeys(document.activeElement)) return
+    // Space activates a focused button just as Enter does.
+    if ((event.code === 'Enter' || event.code === 'Space') && focusedElementOwnsEnter(document.activeElement)) return
+    // A dialog sits above the whole page: its own Enter must not open a result too.
+    if (document.querySelector('.confirm-backdrop, .alert-backdrop')) return
+    if (!onResultsKeydown(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+  },
+  { capture: true },
+)
+
+// `searchQuery` is the field's LIVE text (v-model), so this fires on every keystroke:
+// the results on screen are the previous query's until a search is actually run, and a
+// highlight left over from them would swallow the Enter meant to search what was just
+// typed. Editing the query therefore drops the highlight, and Enter searches again.
+watch(searchQuery, () => resultsListRef.value?.clearHighlight())
 
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
   lastScrollIndex = pos.scrollIndex
@@ -395,8 +504,8 @@ onMounted(async () => {
     setAtFilters(saved.searchAtFilters)
   }
 
-  // Restore zoom BEFORE restoring scroll — zoom affects item height estimates in the
-  // virtualizer, so if zoom is applied after results populate the scroll lands in the wrong place.
+  // Restore zoom BEFORE restoring scroll — zoom changes the rows' heights, so a scroll
+  // restored before the zoom applies lands the list in the wrong place.
   if (saved?.searchZoom != null) {
     zoom.value = saved.searchZoom
   }
@@ -472,13 +581,14 @@ onBeforeUnmount(() => {
         ref="searchBarRef"
         v-model:search-query="searchQuery"
         :is-searching="isSearching"
-        :result-count="filteredResults.length"
-        :total-result-count="results.length"
+        :result-count="filteredCount"
+        :total-result-count="resultCount"
         :filter-count="checkedBookIds.size"
         :at-filter-count="atFilters.length"
         :is-options-open="isOptionsOpen"
         :is-options-active="isOptionsActive"
         :show-options-toggle="!showOptionsCard"
+        :results-keydown="onResultsKeydown"
         v-model:sort-order="sortOrder"
         @search="onSearch"
         @cancel="cancelSearch"
@@ -531,18 +641,18 @@ onBeforeUnmount(() => {
         <div class="search-stage-row" aria-live="polite">
           <template v-if="isSearching">
             {{ stageLabel }}
-            <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
+            <span v-if="filteredCount" class="search-stage-count">{{ filteredCount.toLocaleString() }}</span>
           </template>
-          <span v-else-if="results.length" dir="auto">
-            <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
+          <span v-else-if="resultCount" dir="auto">
+            <span class="search-stage-count">{{ filteredCount.toLocaleString() }}<template v-if="filteredCount < resultCount"> / {{ resultCount.toLocaleString() }}</template></span>
             {{ $t('fullTextSearch.results') }}
           </span>
         </div>
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
+          :results-version="filteredVersion"
           :results-generation="filteredGeneration"
-          :total-results="results.length"
           :search-query="executedQuery"
           :is-searching="isSearching"
           :has-searched="hasSearched"

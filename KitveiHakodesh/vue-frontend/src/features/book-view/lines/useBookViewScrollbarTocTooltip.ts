@@ -1,36 +1,35 @@
 /**
- * Shows the book title and the CURRENT TOC path — where the reader is right now —
- * while the pointer hovers the scroller's own scrollbar track. Reaching for the
- * scrollbar is the moment "where am I?" gets asked, and the answer is the same
- * wherever on the track the pointer happens to sit: this deliberately does NOT read
- * the position under the pointer.
+ * Shows the book title and a TOC path while the pointer hovers the lines scroller's
+ * scrollbar. On the thumb (or an arrow) it is the CURRENT path — where the reader is
+ * right now, "where am I?". Anywhere else on the track it is the path of the line a
+ * drag of the thumb to that point would land on — "where would this take me?" — so
+ * the bar can be read like an index before committing to a jump. The bar itself
+ * says which it is (`getTargetLineIndex`).
  *
- * The position comes from the first visible row, and `getActiveTocEntry` +
- * `getTocPath` turn that index into the displayed path — the same pair the
- * copy-with-source menu and the breadcrumb use. Title and path are kept as separate
- * fields rather than one joined string so the label can weight them differently;
- * with no path resolved the title alone still answers the question, which is how
- * the commentary header and the copy-with-source line both degrade.
+ * `getActiveTocEntry` + `getTocPath` turn a line index into the displayed path — the
+ * same pair the copy-with-source menu and the breadcrumb use. When the selected
+ * alternate TOC (daf, parasha…) has an entry covering that line, its label joins the
+ * same path line rather than standing as a separate line. Title and path are kept as
+ * separate fields so the label can weight them differently; with no path resolved
+ * the title alone still answers the question, which is how the commentary header
+ * and the copy-with-source line both degrade.
  *
- * Hovering the track also reveals the bar itself when the hidden-scrollbars mode is
- * on (`revealScrollbarOnHover`) — that mode only tints the bar transparent and always
- * keeps the gutter, so the bar is still there to be hovered and dragged, just unseen.
- * Labelling a position beside an invisible bar would be the worse half of the answer.
- *
- * Deliberately simple where the other tooltips are not: it never accepts the pointer
- * (that would fight the scrollbar drag underneath it), it has no gap bridge, and it
- * closes on the first pointer move off the track. No fixed timing windows — the only
- * timer is the standard hover-intent delay before the first show, and no state
- * transition is sequenced behind it.
+ * The track is the WindowedScroller's own bar element, so hovering it is a plain
+ * mouse event — no hit-testing against a native gutter. The bar reveals itself in
+ * hidden-scrollbars mode. Deliberately simple where the other tooltips are not: it
+ * never accepts the pointer (that would fight the thumb drag underneath it), it has
+ * no gap bridge, and it closes when the pointer leaves the track. No fixed timing
+ * windows — the only timer is the standard hover-intent delay before the first show.
  */
-import { onScopeDispose, ref, type Ref } from 'vue'
-import { useEventListener, useResizeObserver } from '@vueuse/core'
-import { revealScrollbarOnHover } from '@/composables/useUiChromeVisibility'
+import { nextTick, onScopeDispose, ref, type Ref } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import type { TocEntry } from '@/webview-host/queries.types'
 
 export interface ScrollbarTocTooltipData {
   /** Viewport Y of the pointer, so the label sits beside the pointer on the track. */
   pointerY: number
+  /** Set while the label follows the thumb through a scroll: it glides with it. */
+  followsThumb?: boolean
   /** Physical side the scrollbar is on — the label goes on its inner side. */
   side: 'left' | 'right'
   /** Viewport X of the scrollbar's inner edge. */
@@ -41,15 +40,44 @@ export interface ScrollbarTocTooltipData {
 }
 
 const HOVER_DELAY_MS = 120
+/** A scroll this soon after wheel/touch/key input is the reader's own. */
+const USER_SCROLL_WINDOW_MS = 400
+/** How long the scroll-follow label stays after the scrolling stops. */
+const SCROLL_LINGER_MS = 800
+/** Scroll-follow needs this much travel (in screens) within JOURNEY_WINDOW_MS. */
+const JOURNEY_SCREENS = 2
+const JOURNEY_WINDOW_MS = 300
+/** Books shorter than this many screens never get the scroll-follow label. */
+const MIN_SCREENS = 4
 
 export function useBookViewScrollbarTocTooltip(
-  scrollerEl: Ref<HTMLElement | null>,
+  scrollbarElement: Ref<HTMLElement | null>,
   options: {
     /** The first visible row index — the reader's current position in the book. */
     getCurrentLineIndex: () => number | null
+    /** What the bar has under a viewport Y: the thumb, or the line a seek there lands on. */
+    getTargetLineIndex: (clientY: number) => { index: number; onThumb: boolean } | null
     getBookTitle: () => string
     getActiveTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
+    getActiveAltTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getTocPath?: () => ((entry: TocEntry) => string) | undefined
+    /**
+     * Title and path for a row, for a list whose rows each belong to their own book
+     * (the commentary panel's groups). Given, it replaces getBookTitle and the TOC
+     * lookups.
+     */
+    getLabelAt?: (index: number) => { bookTitle: string; path: string }
+    /**
+     * While true the label is not shown: the list is growing under the bar (search
+     * results streaming in), so the thumb moves without the reader moving it.
+     */
+    isSuspended?: () => boolean
+    /**
+     * The scroller's viewport. Given, the label also shows beside the thumb while the
+     * reader scrolls (wheel, touch, keys) and fades shortly after — DMScrollBar's
+     * info label. Programmatic scrolls (a TOC jump, a restore) do not show it.
+     */
+    viewportElement?: Ref<HTMLElement | null>
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -62,197 +90,147 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  /**
-   * Holds the bar visible while the pointer rests on the track. The reveal lingers
-   * ~1s from its last call and `mousemove` stops firing the moment the pointer
-   * stops, so without this the bar would fade out from under a stationary pointer.
-   * Re-arms itself; stopped whenever the pointer leaves the track.
-   */
-  let revealKeepalive: ReturnType<typeof setInterval> | null = null
-  const REVEAL_KEEPALIVE_MS = 400
-
-  function startRevealKeepalive(el: HTMLElement) {
-    if (revealKeepalive !== null) return
-    revealKeepalive = setInterval(() => revealScrollbarOnHover(el), REVEAL_KEEPALIVE_MS)
-  }
-
-  function stopRevealKeepalive() {
-    if (revealKeepalive !== null) {
-      clearInterval(revealKeepalive)
-      revealKeepalive = null
-    }
-  }
-
   function closeScrollbarTocTooltip() {
     clearHoverTimer()
-    stopRevealKeepalive()
+    clearScrollLinger()
+    isScrollFollow = false
     scrollbarTocTooltip.value = null
   }
 
-  type ScrollbarGeometry = {
-    side: 'left' | 'right'
-    trackStart: number
-    trackEnd: number
-    edgeX: number
-    rect: DOMRect
+  /** The bar's physical side and inner edge — the label hangs off that edge. */
+  function barPlacement(bar: HTMLElement): { side: 'left' | 'right'; edgeX: number } {
+    // In RTL the bar sits on the physical left.
+    const onLeft = getComputedStyle(bar).direction === 'rtl'
+    const rect = bar.getBoundingClientRect()
+    return { side: onLeft ? 'left' : 'right', edgeX: onLeft ? rect.right : rect.left }
   }
 
-  /**
-   * Only the POSITION-INDEPENDENT half is cached: the bar's width, and which side it
-   * sits on. That is the expensive half — `getComputedStyle` forces a style
-   * resolution — and it is the half that genuinely only changes on resize.
-   *
-   * The rect is deliberately NOT cached. A cached rect has to be invalidated on every
-   * way the scroller can move, and a ResizeObserver does not see them all: flipping
-   * the toolbar between left and right (BookViewPage's `toolbar-order-end`) reorders
-   * equal-width flex siblings, which translates this scroller by the toolbar's width
-   * with its size unchanged, so no observer entry fires. Rather than enumerate such
-   * triggers and be wrong again, the rect is read fresh — but only on the rare path
-   * where the pointer is plausibly on the track, never on the reading moves this
-   * cache exists to keep cheap. See the hit test for how that ordering works.
-   */
-  let widthAndSideCache: { width: number; onLeft: boolean } | null = null
-  let widthAndSideMeasured = false
+  // ── Scroll-follow: shown beside the thumb while the reader scrolls ─────────────
 
-  /**
-   * The generously-widened X band the track was last seen in, used to reject reading
-   * moves without touching layout. Null until the first fresh measurement, which
-   * makes the first move on each side fall through to stage 2 — exactly right, since
-   * there is nothing yet to reject against.
-   */
-  let lastTrackBand: { start: number; end: number } | null = null
+  /** True while the label is the scroll-follow one, not the hover one. */
+  let isScrollFollow = false
+  let lastUserInputAt = -Infinity
+  let scrollLingerTimer: ReturnType<typeof setTimeout> | null = null
 
-  function invalidateGeometry() {
-    widthAndSideCache = null
-    widthAndSideMeasured = false
-    lastTrackBand = null
-  }
-
-  /**
-   * The bar's width and side, or null when there is no bar. `clientWidth` excludes
-   * the track, so the difference from `offsetWidth` is its width; which side it falls
-   * on follows the container's resolved direction (RTL here puts it on the physical
-   * left). Overlay scrollbars report zero width — nothing to hover, so nothing to show.
-   */
-  function scrollbarWidthAndSide(el: HTMLElement) {
-    if (widthAndSideMeasured) return widthAndSideCache
-    widthAndSideMeasured = true
-    const width = el.offsetWidth - el.clientWidth
-    widthAndSideCache =
-      width > 0 ? { width, onLeft: getComputedStyle(el).direction === 'rtl' } : null
-    return widthAndSideCache
-  }
-
-  /** Full geometry, reading the rect fresh so it can never be stale. */
-  function scrollbarGeometry(el: HTMLElement): ScrollbarGeometry | null {
-    const base = scrollbarWidthAndSide(el)
-    if (!base) return null
-    const { width, onLeft } = base
-    const rect = el.getBoundingClientRect()
-    return {
-      side: onLeft ? 'left' : 'right',
-      // Track bounds in viewport X, and the inner edge the label hangs off.
-      trackStart: onLeft ? rect.left : rect.right - width,
-      trackEnd: onLeft ? rect.left + width : rect.right,
-      edgeX: onLeft ? rect.left + width : rect.right - width,
-      rect,
+  function clearScrollLinger() {
+    if (scrollLingerTimer !== null) {
+      clearTimeout(scrollLingerTimer)
+      scrollLingerTimer = null
     }
   }
 
-  /** The current path, or '' when the book has no TOC or none covers this line. */
-  function currentPath(): string {
+  if (options.viewportElement) {
+    // Zoom (Ctrl+wheel, Ctrl+key) moves the thumb too, but it is not the reader travelling.
+    useEventListener(options.viewportElement, ['wheel', 'touchmove', 'keydown'], (event: Event) => {
+      if ((event as WheelEvent | KeyboardEvent).ctrlKey) {
+        lastUserInputAt = -Infinity
+        thumbSamples.length = 0
+        return
+      }
+      lastUserInputAt = performance.now()
+    }, { passive: true })
+  }
+
+  /** Recent thumb tops, to tell a real journey from a nudge. */
+  const thumbSamples: { at: number; top: number }[] = []
+
+  /**
+   * Worth labelling only when the book is long (thumb under a quarter of the track)
+   * and the reader travelled far fast (thumb moved two of its own heights — about two
+   * screens — within the window). Once shown, it keeps following until it lingers out.
+   */
+  function isJourney(thumbTop: number, thumbHeight: number, trackHeight: number): boolean {
+    const now = performance.now()
+    thumbSamples.push({ at: now, top: thumbTop })
+    while (thumbSamples.length && now - thumbSamples[0]!.at > JOURNEY_WINDOW_MS) thumbSamples.shift()
+    if (isScrollFollow) return true
+    if (!thumbHeight || thumbHeight * MIN_SCREENS > trackHeight) return false
+    const tops = thumbSamples.map((sample) => sample.top)
+    return Math.max(...tops) - Math.min(...tops) >= thumbHeight * JOURNEY_SCREENS
+  }
+
+  function followScroll() {
+    const bar = scrollbarElement.value
+    const thumb = bar?.querySelector<HTMLElement>('.windowed-scroller-thumb')
+    if (!bar || !thumb || options.isSuspended?.()) return
+    // Where the thumb is GOING, not where its glide has got to: its inline top and
+    // height are the target, inside the track (its offset parent).
+    const track = (thumb.offsetParent as HTMLElement | null) ?? bar
+    const trackRect = track.getBoundingClientRect()
+    const thumbTop = parseFloat(thumb.style.top) || 0
+    const thumbHeight = parseFloat(thumb.style.height) || 0
+    if (!isJourney(thumbTop, thumbHeight, trackRect.height)) return
+    const thumbCenterY = trackRect.top + thumbTop + thumbHeight / 2
+    const index = lineIndexForPointer(thumbCenterY)
+    const bookTitle = titleAt(index)
+    const path = index == null ? '' : pathAtLine(index)
+    if (!bookTitle && !path) return
+    isScrollFollow = true
+    scrollbarTocTooltip.value = { pointerY: thumbCenterY, followsThumb: true, ...barPlacement(bar), bookTitle, path }
+    clearScrollLinger()
+    scrollLingerTimer = setTimeout(() => {
+      scrollLingerTimer = null
+      if (isScrollFollow) closeScrollbarTocTooltip()
+    }, SCROLL_LINGER_MS)
+  }
+
+  /** The path at a line, or '' when the book has no TOC or none covers it. */
+  function pathAtLine(index: number): string {
+    if (options.getLabelAt) return options.getLabelAt(index).path
     const getEntry = options.getActiveTocEntry?.()
     const getPath = options.getTocPath?.()
-    if (!getEntry || !getPath) return ''
-
-    const index = options.getCurrentLineIndex()
-    if (index == null) return ''
-
-    const entry = getEntry(index)
-    if (!entry) return ''
-    return getPath(entry) || entry.text || ''
+    const entry = getEntry && getPath ? getEntry(index) : null
+    const path = entry ? getPath!(entry) || entry.text || '' : ''
+    // The alternate TOC's label for the same line joins the path (not a line of its
+    // own), unless the path already says it.
+    const altLabel = options.getActiveAltTocEntry?.()?.(index)?.text ?? ''
+    if (!altLabel || path.includes(altLabel)) return path
+    return path ? `${path} · ${altLabel}` : altLabel
   }
 
-  /** Nothing open and nothing pending — the state every reading move is already in. */
-  function isIdle() {
-    return !scrollbarTocTooltip.value && hoverTimer === null && revealKeepalive === null
+  function titleAt(index: number | null): string {
+    if (!options.getLabelAt) return options.getBookTitle()
+    return index == null ? '' : options.getLabelAt(index).bookTitle
   }
 
-  useEventListener(scrollerEl, 'mousemove', (event: MouseEvent) => {
-    const el = scrollerEl.value
-    if (!el) return
-    // The scroller's own track is bare: a move over it targets the scroller itself.
-    // `mousemove` bubbles, so without this a descendant's event would be hit-tested
-    // against the scroller's rect — and line HTML is arbitrary seforim-DB markup,
-    // so a future inner scrollable at the pane's edge would read as "on the track".
-    // This is also the cheapest possible exit for a move over a line: one reference
-    // comparison, before any measurement or hit test.
-    if (event.target !== el) {
-      if (!isIdle()) closeScrollbarTocTooltip()
-      return
-    }
-    // Two-stage hit test, so the reading path almost never reads the rect.
-    //
-    // Stage 1 rejects on the LAST known track band, kept from the previous fresh
-    // measurement. It costs nothing, and a move over text is rejected here — which
-    // is every move made while reading. When the band is stale (the scroller was
-    // translated without resizing, e.g. the toolbar flipping sides) this can only
-    // mis-reject a pointer that IS on the track, never accept one that is not: stage
-    // 2 re-measures and confirms. The band is widened by the scroller's own width so
-    // a translation up to a full pane cannot hide the track from stage 1.
-    const base = scrollbarWidthAndSide(el)
-    if (!base) {
-      if (!isIdle()) closeScrollbarTocTooltip()
-      return
-    }
-    if (
-      lastTrackBand !== null &&
-      (event.clientX < lastTrackBand.start || event.clientX > lastTrackBand.end)
-    ) {
-      if (!isIdle()) closeScrollbarTocTooltip()
-      return
-    }
+  /** The line the label describes for a pointer at `clientY`. */
+  function lineIndexForPointer(clientY: number): number | null {
+    const target = options.getTargetLineIndex(clientY)
+    if (target && !target.onThumb) return target.index
+    // On the resting thumb the exact current line wins (a drag is a target above).
+    return options.getCurrentLineIndex() ?? target?.index ?? null
+  }
 
-    // Stage 2 reads the rect fresh, so the decision is never made on stale geometry.
-    const geometry = scrollbarGeometry(el)
-    if (geometry) {
-      lastTrackBand = {
-        start: geometry.trackStart - el.offsetWidth,
-        end: geometry.trackEnd + el.offsetWidth,
-      }
-    }
-    const onTrack =
-      geometry != null &&
-      event.clientX >= geometry.trackStart &&
-      event.clientX <= geometry.trackEnd &&
-      event.clientY >= geometry.rect.top &&
-      event.clientY <= geometry.rect.bottom
-    if (!onTrack) {
-      if (!isIdle()) closeScrollbarTocTooltip()
-      return
-    }
+  // Where the pointer last was on the bar, so a refresh during a drag re-reads the
+  // same spot.
+  let lastPointerY = 0
 
-    // Immediately, NOT behind the hover-intent delay below: when bars are hidden
-    // the reader is pointing at something invisible, and making it appear is the
-    // response to the pointer arriving, not to the intent to read a label.
-    revealScrollbarOnHover(el)
-    startRevealKeepalive(el)
+  // pointermove, not mousemove: while the thumb is dragged it holds pointer capture,
+  // and Chromium then stops delivering the compat mouse events to the bar — the
+  // label would freeze at the drag's first position.
+  useEventListener(scrollbarElement, 'pointermove', (event: PointerEvent) => {
+    const bar = scrollbarElement.value
+    if (!bar) return
+    const { side, edgeX } = barPlacement(bar)
+    // The pointer on the bar takes the label over from scroll-follow.
+    isScrollFollow = false
+    clearScrollLinger()
 
+    lastPointerY = event.clientY
     const show = () => {
-      const bookTitle = options.getBookTitle()
-      const path = currentPath()
+      if (options.isSuspended?.()) {
+        scrollbarTocTooltip.value = null
+        return
+      }
+      const index = lineIndexForPointer(event.clientY)
+      const bookTitle = titleAt(index)
+      const path = index == null ? '' : pathAtLine(index)
       // Nothing to say at all — no title and no path.
       if (!bookTitle && !path) {
         scrollbarTocTooltip.value = null
         return
       }
-      scrollbarTocTooltip.value = {
-        pointerY: event.clientY,
-        side: geometry!.side,
-        edgeX: geometry!.edgeX,
-        bookTitle,
-        path,
-      }
+      scrollbarTocTooltip.value = { pointerY: event.clientY, side, edgeX, bookTitle, path }
     }
 
     // Already open: follow the pointer immediately, so it reads as one continuous
@@ -268,22 +246,14 @@ export function useBookViewScrollbarTocTooltip(
     }, HOVER_DELAY_MS)
   })
 
-  useEventListener(scrollerEl, 'mouseleave', closeScrollbarTocTooltip)
+  useEventListener(scrollbarElement, 'mouseleave', closeScrollbarTocTooltip)
 
-  // Re-measure the bar's width and side when the scroller resizes — including the bar
-  // appearing as the first chunks load, which is a clientWidth change. This does NOT
-  // have to catch every way the scroller can move: position is read fresh on the rare
-  // possibly-on-track path, precisely so a translation the observer cannot see (the
-  // toolbar flipping sides reorders equal-width siblings) cannot leave stale bounds.
-  useResizeObserver(scrollerEl, invalidateGeometry)
-
-  // A tab switch or book change is a real unmount (nothing here is kept alive), and
-  // it can land while the pointer is on the track — the pending hover timer would
-  // read position off a detached scroller, and the keepalive would go on reviving a
-  // bar that no longer exists. Same guard as useNoteTooltip and useWordLinkTooltip.
+  // A tab switch or book change is a real unmount, and it can land while the pointer
+  // is on the track — the pending hover timer would read position off a detached
+  // scroller. Same guard as useNoteTooltip and useWordLinkTooltip.
   onScopeDispose(() => {
     clearHoverTimer()
-    stopRevealKeepalive()
+    clearScrollLinger()
   })
 
   /**
@@ -292,9 +262,23 @@ export function useBookViewScrollbarTocTooltip(
    * would sit frozen on a stale section for the whole drag.
    */
   function refreshScrollbarTocTooltip() {
+    if (options.viewportElement && (isScrollFollow || !scrollbarTocTooltip.value)) {
+      // After the flush: the thumb's inline top/height are this scroll's only then.
+      if (performance.now() - lastUserInputAt <= USER_SCROLL_WINDOW_MS) void nextTick(followScroll)
+      return
+    }
     if (!scrollbarTocTooltip.value) return
-    // Only the path moves with the scroll — the book does not change under it.
-    scrollbarTocTooltip.value = { ...scrollbarTocTooltip.value, path: currentPath() }
+    if (options.isSuspended?.()) {
+      scrollbarTocTooltip.value = null
+      return
+    }
+    // The path moves with the scroll; the book too, where each row has its own.
+    const index = lineIndexForPointer(lastPointerY)
+    scrollbarTocTooltip.value = {
+      ...scrollbarTocTooltip.value,
+      bookTitle: titleAt(index),
+      path: index == null ? '' : pathAtLine(index),
+    }
   }
 
   return { scrollbarTocTooltip, closeScrollbarTocTooltip, refreshScrollbarTocTooltip }

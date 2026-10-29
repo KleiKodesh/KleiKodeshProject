@@ -34,7 +34,21 @@ Everything in the app must feel instant. Speed is a top-priority requirement, no
 
 ## Virtual Scroller Rules
 
-`@tanstack/vue-virtual` is a virtualizer — it owns the scroll position and all position calculations. Never bypass its internal API by setting `scrollTop` directly, manipulating `measurementsCache`, or computing item positions manually. Always use `virtualizer.scrollToIndex()` for programmatic navigation. Any workaround that directly sets `scrollTop` to a calculated offset (e.g. `lineIndex * estimateSize`) is forbidden — it will break when item heights vary from the estimate and will fight the virtualizer's own scroll management.
+`WindowedScroller.vue` (`src/components`) is the only virtual scroller: the book-view lines pane, the commentary panels and the full-text-search results use it. `@tanstack/vue-virtual` is gone — do not bring it back. Short lists that fit in memory (HebrewBooks, local file search, the FTS filter book list) are plain `v-for` lists whose rows carry `content-visibility: auto` + `contain-intrinsic-size`, so off-screen rows cost no layout or paint; keyboard highlight uses `useInputListNavigation` with `containerElement` + `data-nav-item`.
+
+### WindowedScroller (`src/components/WindowedScroller.vue`)
+
+Mounts a sliding window of REAL rows in normal flow — no estimated positions, no placeholders, no retries. Rules:
+
+- Rows are fetched before they are mounted: give it `ensureRows(start, end)` that resolves when the range has its content and REJECTS when it cannot be had. Never render a placeholder row in the slot; a row is either absent or complete.
+- Open where the reader was: pass `initialIndex`/`initialOffsetPx` so the FIRST render is the saved window. Do not land afterwards from a composable — the scroller is the one owner of the opening landing; do follow-ups on its `opened` event.
+- Navigate only through `scrollToIndex(index, { offsetPx, align })`. It is exact and resolves when the scroll is set. Never set `scrollTop` to a computed offset, never poll for the row — after the await, the row and its content are in the DOM.
+- Never write a settle loop, a correction window or a retry around it. A landing that is wrong is a bug in the scroller; fix it there.
+- The scroller owns scroll anchoring (`overflow-anchor: none` on its viewport). After a patch the hold is ABSOLUTE (row offset + remembered distance), because the browser may clamp `scrollTop` while the content is shorter mid-patch; through a reader's scroll event it is relative. Keep that split.
+- The drawn scrollbar (`WindowedScrollerBar.vue`) reads its state through refs (`WindowedScrollerBarState`). Never unwrap those refs in the scroller's template — every row would re-render on every scroll tick and resize frame.
+- Keep the window small: it is what every reflow (resize, zoom) lays out. Extend by small steps, trim with a margin that EXCEEDS the extension edge (or the two sides extend and trim each other forever).
+- When the row CONTENT changes under the same indexes (a text version swap), keep the old content in place and bump `rowSourceVersion`; the scroller re-asks its window and each row re-renders held in place. Blanking content collapses the rows and loses the position. Any per-row render cache must key on the content, not only on the index and version.
+- Rows outside the window that must stay mounted (text-selection ends) go in `pinnedIndexes`; they render out of flow.
 
 ## Code Philosophy
 
@@ -121,14 +135,11 @@ Composables, stores and other feature modules (hard limit 300):
 | `stores/settingsStore.ts` | 425 |
 | `features/home/useHomeSearch.ts` | 404 |
 | `features/book-view/commentary/commentaryGroupBuilder.ts` | 394 |
-| `features/book-catalog/bookCatalogSearchTocHeuristics.ts` | 386 |
 | `stores/bookViewStore.ts` | 378 |
 | `features/html-view/useOtzariaAddinBridge.ts` | 372 |
 | `webview-host/seforimApi.ts` | 369 |
 | `webview-host/dictionarySeforimDb.ts` | 339 |
 | `features/pdf-viewer/usePdfViewPageTracking.ts` | 322 |
-| `features/book-catalog/useBookCatalogSearch.ts` | 311 |
-| `features/book-catalog/bookCatalogSearch.ts` | 303 |
 
 Utilities (hard limit 250):
 
@@ -251,6 +262,16 @@ The UI is bilingual (Hebrew default, English option) via vue-i18n. Hebrew mode: 
 
 - Never use git commands unless explicitly asked by the user
 
+### Commit messages feed the release notes
+
+The release workflow's Gemini agent writes the user-facing release notes from commit subjects/bodies alone. Vague or internal-only messages produce wrong or generic notes (v10.3.0: "Lines view: drawn scrollbar…" became "smoother scrolling without jumpy jumps"; scroller internals were reported as features). So every commit message must let an outsider place it and describe it correctly:
+
+- **Subject starts with the user-visible area**, named as the user sees it: `Book view (lines):`, `Book view toolbar:`, `PDF viewer:`, `Catalog search:`, `Full-text search:`, `Word add-in:`, `Installer:`, `Settings:`, `Home:`. Not component/file names (`WindowedScroller:`, `useBookViewLinesScroll:`).
+- **Say what the user notices**, not the mechanism: "Book view (lines): scrollbar thumb no longer jumps while dragging in long books" — not "anchor through scroll events".
+- **Body: one line `User-facing:` + kind** — `new` / `improved` / `fixed` / `none` — and the concrete effect. Internal-only work (refactors, cleanup, CI, licensing, build signing, tests) gets `User-facing: none` so the agent drops it.
+- One area per commit where possible; if a commit spans areas, list each area's effect on its own line.
+- Name the exact control/feature ("HebrewBooks editions dropdown", "Nakdan clean-text options"), never "UI tweaks" / "fixes".
+
 ## Prettier Compatibility
 
 This project uses Prettier with `printWidth: 100`. The Vue template compiler rejects multiline expressions inside attribute quote strings — Prettier causes this by wrapping long inline handlers across lines. When this happens the compiler embeds a literal newline character (visible as `` `n `` in the attribute value) and throws `InvalidCharacterError: Failed to execute 'setAttribute' on 'Element': '`n' is not a valid attribute name` at runtime, producing a blank component with no rendered output.
@@ -275,20 +296,19 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. It lives entirely in `src/features/book-catalog/`, not in `src/utils/`.
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. It lives entirely in Core, not in the frontend.
 
-**`src/features/book-catalog/SEARCH.md` is the authoritative design document** — read it before changing anything about catalog search. The stack is four layers:
+Catalog search runs in the Lucene catalog index owned by Core (`CSharpBackend/KitveiHakodesh.Core/SeforimDbCatalog/`), reached from the frontend via `serviceCall` in both modes:
 
-- `bookCatalogSearchNormalizer.ts` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), Hebrew word decomposition into consonantal skeleton + vowel-letter set for חסר/מלא matching, and definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed tokens at build time and query words at search time.
-- `bookCatalogSearchMatcher.ts` — the score tiers (`SCORE_EXACT` 3, `SCORE_PREFIX` 2, `SCORE_NONE` 0) and per-token scoring. Knows nothing about the index or catalog.
-- `bookCatalogSearch.ts` — the inverted index and query execution: `buildSearchIndex` and `filterBooksByWords`.
-- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`).
+- `SeforimDbCatalogTextNormalizer.cs` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), חסר/מלא matching, definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed and query text.
+- `SeforimDbCatalogSearcher.cs` — the catalog TOC search (op `catalogTocSearch`): book titles and full TOC paths in one ranked query; consumed by `useBookCatalogSearch.ts`.
+- `SeforimDbCatalogTitleSearch.cs` — book-title-only search (op `catalogTitleSearch`); consumed by `bookTitleSearch.ts` (FTS @ filter, daf yomi, daily learning).
 
 `bookCatalogTree.ts` owns tree building and category metadata (`buildTree`, `assignSubtreeBookIds`, `assignFullPaths`, `findCategoryMeta`) — it is not part of the search stack.
 
 חסר/מלא behaviour: נידה matches נדה and ליקוטי matches לקוטי, but שבועות does NOT match שביעית (incompatible vowel-letter sets at the same skeleton positions).
 
-When adding a new normalization rule — a new abbreviation, spelling variant, or title alias — add it only to `bookCatalogSearchNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+When adding a new normalization rule — a new abbreviation, spelling variant, or title alias — add it only to `SeforimDbCatalogTextNormalizer.cs` (bump the catalog index version if indexed text changes). Never add book-search-specific normalization to `normalizeText.ts` or to the frontend.
 
 ## Tests
 

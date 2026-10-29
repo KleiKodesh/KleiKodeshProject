@@ -1,11 +1,12 @@
 /**
  * Pure decision logic for FTS results scroll restore, extracted from
- * FullTextSearchResultsList.vue so it can be unit-tested without a real DOM/virtualizer
+ * FullTextSearchResultsList.vue so it can be unit-tested without a real DOM/scroller
  * (jsdom has no layout, so measurement/scrollTop can't be exercised faithfully there).
  *
- * The component wires these to Vue reactivity and the TanStack virtualizer; the tricky,
- * race-prone part — "given what has loaded so far, should we restore now, keep waiting,
- * or give up?" — lives here as plain functions.
+ * The component wires this to Vue reactivity and the WindowedScroller; the race-prone
+ * part — "given what has loaded so far, should we restore now, keep waiting, or give
+ * up?" — lives here as a plain function. Landing itself is exact (the scroller mounts
+ * the target's rows before it scrolls), so there is no retry logic left to decide.
  */
 
 export interface RestoreInputs {
@@ -48,38 +49,4 @@ export function decideRestore({ target, loaded, isSearching }: RestoreInputs): R
   if (target >= loaded && isSearching) return { action: 'wait' }
   const index = Math.min(target, loaded - 1)
   return { action: 'restore', index }
-}
-
-/**
- * Decide, on each retry tick of the offset-application loop, whether to apply, retry, or
- * give up. `measured` is whether the target row is present in the virtualizer's
- * measurementsCache yet. The loop re-issues scrollToIndex between ticks to pull the target
- * range into measurement.
- *
- * We keep retrying while the target *should* still be about to appear:
- *  - not measured yet but results are still streaming (row not loaded), OR
- *  - not measured yet but we're under the attempt budget.
- * Only give up once we've exhausted the budget AND the stream has settled — so a slow, heavy
- * reload (deep row measured late) no longer silently gives up near the top, which was the
- * remaining "works sometimes" flakiness.
- */
-export function decideApplyOffset(opts: {
-  measured: boolean
-  attempts: number
-  maxAttempts: number
-  isSearching: boolean
-}): 'apply' | 'retry' | 'giveup' {
-  const { measured, attempts, maxAttempts, isSearching } = opts
-  if (measured) return 'apply'
-  if (isSearching) return 'retry' // more results / measurements still incoming
-  if (attempts < maxAttempts) return 'retry'
-  return 'giveup'
-}
-
-/**
- * How wide the render window must be to contain a target index (plus a page of headroom),
- * so the virtualizer actually has a row there to scroll to.
- */
-export function windowNeededFor(index: number, renderPage: number): number {
-  return index + renderPage
 }

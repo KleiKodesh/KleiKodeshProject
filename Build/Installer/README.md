@@ -239,3 +239,7 @@ name, and it re-runs on every update, so a moved install folder is corrected the
 | `HKCU\SOFTWARE\Microsoft\VSTO\Security\TrustedPaths\{base64}` | `Path` | Trusted folder |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh` | `DisplayVersion` etc. | Windows Installed Apps (written by NSIS wrapper) |
 | `HKCU\Software\Classes\kitveihakodeshapp` | `URL Protocol`, `shell\open\command` | Opens `kitveihakodeshapp://` deep links in the app (see above) |
+
+## VBA macros template
+
+Opt-in only — setup never installs it. SettingsPage has a None / Hebrew names / English names choice; picking one copies `Resources\KleiKodeshMacros.<he|en>.dotm` from the install folder into Word's STARTUP folder (the user's custom STARTUP-PATH if set, else `%AppData%\Microsoft\Word\STARTUP`) and, if Word is running, asks to restart it. The same choice is in the add-in's settings pane. Logic and texts: `KleiKodeshVsto\Helpers\VbaMacrosTemplate.cs`, linked into this project. `FullSystemCleaner` (repair) and the NSIS uninstaller delete every flavour. Templates are built by `KleiKodeshVsto\Ribbon\build_macros_template.py`.

@@ -124,6 +124,26 @@ elseif (-not $ManualVersion -and $version -eq $versionBefore -and
     exit 1
 }
 
+# ── 2b. Restore packages (same as the GitHub Actions release) ─────────────────
+Start-BuildStep "Restore packages (msbuild, nuget, npm)"
+& (Find-MSBuild) (Join-Path $ProjectRoot "KleiKodeshProject.slnx") -t:restore -v:minimal -nologo
+if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: msbuild restore failed." -ForegroundColor Red; exit 1 }
+# packages.config projects each use their own ..\packages folder.
+Push-Location $ProjectRoot
+try {
+    foreach ($cfg in git ls-files '*packages.config') {
+        nuget restore $cfg -PackagesDirectory (Join-Path (Split-Path $cfg) '..\packages') -NonInteractive
+        if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: nuget restore failed for $cfg." -ForegroundColor Red; exit 1 }
+    }
+} finally { Pop-Location }
+Push-Location (Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend")
+# npm ci deletes node_modules first, which fails half-way (leaving it gutted) while a
+# local dev server holds esbuild.exe. So npm ci only in CI; locally the same lock file
+# is installed in place, without rewriting package.json / package-lock.json.
+$npmArgs = @(if ($env:CI) { "ci" } else { "install", "--no-save", "--no-audit", "--no-fund" })
+try { & "C:\Program Files\nodejs\npm.cmd" @npmArgs } finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: npm ci failed." -ForegroundColor Red; exit 1 }
+
 # ── 3. Clean ──────────────────────────────────────────────────────────────────
 if (-not $NoClean) {
     Start-BuildStep "Clean solution"
@@ -230,6 +250,9 @@ function Build-Variant {
     $script:LastBuiltInstaller = $outFile
 }
 
+Start-BuildStep "Add-in signing certificate"
+Update-SigningCertificate
+
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
@@ -328,3 +351,16 @@ if ($LASTEXITCODE -ne 0) {
 Complete-BuildSteps
 Write-Host ""
 Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green
+
+# gh release create does not fire notify-website.yml / release-issue-check.yml / drive-upload.yml
+# (not with the Actions token), so start them here - for local and CI releases alike.
+# The website repo needs its own token: WEBSITE_DISPATCH_TOKEN when set (CI), else gh's login.
+$ghToken = $env:GH_TOKEN
+if ($env:WEBSITE_DISPATCH_TOKEN) { $env:GH_TOKEN = $env:WEBSITE_DISPATCH_TOKEN }
+gh api repos/KleiKodesh/kleikodesh.github.io/dispatches -f event_type=release-changed
+if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: website update dispatch failed." -ForegroundColor Yellow }
+$env:GH_TOKEN = $ghToken
+gh workflow run release-issue-check.yml --repo KleiKodesh/KleiKodeshProject -f tag=$version
+if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: release-issue-check dispatch failed." -ForegroundColor Yellow }
+gh workflow run drive-upload.yml --repo KleiKodesh/KleiKodeshProject
+if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: Drive sync dispatch failed." -ForegroundColor Yellow }

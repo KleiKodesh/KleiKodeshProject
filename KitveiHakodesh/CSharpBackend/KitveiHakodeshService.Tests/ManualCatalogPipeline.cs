@@ -6,7 +6,8 @@ namespace KitveiHakodeshService.Tests;
 /// Faithful C# port of the frontend's MANUAL catalog search pipeline — the ground truth
 /// the Lucene catalog TOC index is tested against.
 ///
-/// Ported modules (vue-frontend/src):
+/// Ported modules (vue-frontend/src; the book-catalog search modules below were deleted
+/// 2026-10-26 when the frontend moved to the Lucene title search — this port is now the only copy):
 ///   - utils/normalizeText.ts + features/book-catalog/bookCatalogSearchNormalizer.ts
 ///     (via CatalogTocTextRules, plus the vowel-set decomposition here)
 ///   - features/book-catalog/bookCatalogTree.ts        → BuildTree/AssignFullPaths

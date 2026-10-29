@@ -7,6 +7,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
 import { isExportRestricted } from './exportRestriction'
+import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -61,11 +62,11 @@ const {
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
-  tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  tabId, bookId, lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions,
-  filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
+  filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
@@ -84,7 +85,7 @@ const {
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
-  getActiveTocEntry, getTocPath,
+  getActiveTocEntry, getActiveAltTocEntry, getTocPath,
   bookTitle,
 } = useBookView(
   () => toolbarRef.value,
@@ -128,12 +129,30 @@ const commentarySharedProps = computed(() => ({
   prepareExportData: prepareCommentaryExportData,
   prepareExportTargets: prepareCommentaryExportTargets,
   resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
-  requestContentPriority,
+  ensureLineContents,
+  trimLineContents,
   createNote,
   updateNote,
   deleteNote,
   commentaryTocPaths: commentaryTocPaths.value,
 }))
+
+/** A new bookmark's default name: the TOC path of the section the line sits in. */
+function bookmarkLabelForLine(lineIndex: number): string {
+  const entry = getActiveTocEntry(lineIndex)
+  return entry ? getTocPath(entry) : ''
+}
+
+/** Lands the bookmark's exact point - and reselects its text when it was made from a selection. */
+function goToBookmark(bookmark: BookBookmark) {
+  void linesContentRef.value?.scrollToBookmarkPoint(
+    bookmark.lineId, bookmark.lineIndex, bookmark.letterOffset ?? 0, bookmark.selectionLetterCount ?? 0)
+}
+
+/** The lines' context menu: the toolbar's bookmarks dropdown opens on the new bookmark. */
+function createBookmark() {
+  void toolbarRef.value?.createBookmark()
+}
 
 // All toolbar props that do not depend on its position, so the three placements
 // (top / side / bottom) each spread one object instead of repeating the list.
@@ -155,6 +174,8 @@ const toolbarProps = computed(() => ({
   currentScrollLineIndex: currentScrollLineIndex.value,
   lines: lines.value,
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
+  bookmarkLabelForLine,
+  readBookmarkPoint: () => linesContentRef.value?.readBookmarkPoint() ?? null,
   bottomCommentaryVisible: panels.bottom.visible.value,
   sideCommentaryVisible: sideCommentaryOpen.value,
   sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
@@ -464,6 +485,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
     />
@@ -482,6 +504,7 @@ function getSideEditionOutlineTarget(): string | undefined {
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+        @go-to-bookmark="goToBookmark"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
         @select-version="selectVersion"
       />
@@ -562,8 +585,12 @@ function getSideEditionOutlineTarget(): string | undefined {
                     v-if="scrollStateReady"
                     :key="sideColumnsKey"
                     ref="linesContentRef"
+                    @create-bookmark="createBookmark"
                     :lines="lines"
-                    :prioritise="prioritise"
+                    :lines-revision="linesRevision"
+                    :ensure-lines="ensureLines"
+                    :ensure-all-lines="ensureAllLines"
+                    :line-character-counts="lineCharacterCounts"
                     :alt-toc-label-map="altTocLabelMap"
                     :selected-line-id="selectedLineId"
                     :commentary-visible="anyCommentaryVisible"
@@ -586,7 +613,9 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :current-match-line-index="searchVisible && searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
                     :current-match-occurrence="searchVisible && searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
                     :get-active-toc-entry="getActiveTocEntry"
+                    :get-active-alt-toc-entry="getActiveAltTocEntry"
                     :get-toc-path="getTocPath"
+                    :toc-entries="tocEntries"
                     :selected-section-line-ids="selectedSectionLineIds"
                     :multi-select-line-ids="manualSelectionLineIds"
                     :book-has-teamim="bookHasTeamim"
@@ -719,6 +748,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
     />

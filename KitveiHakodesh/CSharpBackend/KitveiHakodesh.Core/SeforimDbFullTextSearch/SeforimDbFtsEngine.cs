@@ -108,10 +108,129 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 : new CompositeFtsCorpus(_seforimDbPath, _additionalLibraries, _onLibrarySkipped);
 
         /// <summary>
+        /// The index position of a line — what a search resumes after
+        /// (<see cref="SeforimDbFtsCorpus.PositionOfLine"/>). Null when the line cannot be placed
+        /// (gone from the library, or a book this index does not hold): the caller then starts over.
+        /// </summary>
+        public long? PositionOfLine(int lineId)
+        {
+            Dictionary<int, (long First, long Count)> books;
+            lock (_lock)
+            {
+                if (_bookPositions == null)
+                {
+                    using var positions = OpenCorpus();
+                    _bookPositions = positions.BookPositionRanges();
+                }
+                books = _bookPositions;
+            }
+            using var corpus = OpenCorpus();
+            return corpus.PositionOfLine(lineId, books);
+        }
+
+        /// <summary>
         /// Whether an engine is currently open. False before the first use and after a
         /// <see cref="Invalidate"/>; asking does not open one.
         /// </summary>
         public bool IsOpen { get { lock (_lock) return _index != null; } }
+
+        /// <summary>
+        /// A fragment contained in more dictionary terms than this is too common for the
+        /// index to be the cheap answer: the caller reads the book instead.
+        /// </summary>
+        public const int MaxTermsPerSubstringFragment = 4000;
+
+        // Each book's block of index positions — read once per engine (one index build), as
+        // it takes a pass over the whole line table. Dropped with the engine on Invalidate.
+        private Dictionary<int, (long First, long Count)>? _bookPositions;
+
+        /// <summary>
+        /// The lines inside the given (book, first lineIndex, last lineIndex) ranges whose
+        /// text may hold <paramref name="query"/> as a substring (a superset — the caller
+        /// confirms on the text): as (book, lineIndex, line id), in range order then reading
+        /// order. Null when the index cannot answer exactly (still building, or a fragment
+        /// too common): the caller reads the lines itself. A book the index does not hold
+        /// contributes nothing.
+        /// </summary>
+        public List<(int BookId, int LineIndex, int LineId)>? SubstringCandidates(
+            string query, IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> lineRanges, CancellationToken ct = default)
+        {
+            Dictionary<int, (long First, long Count)> books;
+            lock (_lock)
+            {
+                if (_bookPositions == null)
+                {
+                    using var corpus = OpenCorpus();
+                    _bookPositions = corpus.BookPositionRanges();
+                }
+                books = _bookPositions;
+            }
+            // One index query per BOOK, over the span of that book's ranges, and the rows
+            // filtered back to the exact ranges afterwards. Each FTS5 MATCH execution costs
+            // ~2 ms of planning however small its rowid range, and a commentary panel on a
+            // large section asked with tens of thousands of one-line ranges (42 s measured);
+            // per book the same set is a few hundred queries.
+            var spans = new Dictionary<int, (long First, long Last)>();
+            var wanted = new Dictionary<int, List<(long First, long Last)>>();
+            foreach (var (bookId, firstLine, lastLine) in lineRanges)
+            {
+                if (!books.TryGetValue(bookId, out var book) || book.Count == 0) continue;
+                long from = Math.Max(0, firstLine), to = Math.Min(book.Count - 1, lastLine);
+                if (to < from) continue;
+                long first = book.First + from, last = book.First + to;
+                if (spans.TryGetValue(bookId, out var span))
+                    spans[bookId] = (Math.Min(span.First, first), Math.Max(span.Last, last));
+                else
+                {
+                    spans[bookId] = (first, last);
+                    wanted[bookId] = new List<(long, long)>();
+                }
+                wanted[bookId].Add((first, last));
+            }
+            if (spans.Count == 0) return new List<(int, int, int)>();
+            var ranges = new List<(long First, long Last)>(spans.Count);
+            var owners = new List<(int BookId, long First, List<(long First, long Last)> Wanted)>(spans.Count);
+            foreach (var (bookId, span) in spans)
+            {
+                ranges.Add(span);
+                var list = wanted[bookId];
+                list.Sort((a, b) => a.First.CompareTo(b.First));
+                owners.Add((bookId, books[bookId].First, list));
+            }
+            var found = Index.FindSubstringCandidates(query, ranges, MaxTermsPerSubstringFragment, ct);
+            if (found == null) return null;
+            var result = new List<(int, int, int)>(found.Count);
+            foreach (var (range, position, lineId) in found)
+            {
+                var owner = owners[range];
+                if (!InsideAny(owner.Wanted, position)) continue;
+                result.Add((owner.BookId, (int)(position - owner.First), lineId));
+            }
+            return result;
+        }
+
+        /// <summary>Whether <paramref name="position"/> falls inside one of the sorted,
+        /// non-overlapping-or-not ranges (binary search on the starts, then a short walk back
+        /// for a range that started earlier but reaches this far).</summary>
+        private static bool InsideAny(List<(long First, long Last)> sorted, long position)
+        {
+            int lo = 0, hi = sorted.Count - 1, at = -1;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (sorted[mid].First <= position) { at = mid; lo = mid + 1; } else hi = mid - 1;
+            }
+            for (int i = at; i >= 0; i--)
+            {
+                if (sorted[i].Last >= position) return true;
+                // Ranges come from runs of consecutive lines; a run that started earlier and
+                // ends before this position cannot reach it, and the same holds for all before
+                // it once their extents are below the one just checked. One step back covers
+                // an overlap from a duplicated range; stop after a few to stay O(log n).
+                if (at - i >= 4) break;
+            }
+            return false;
+        }
 
         /// <summary>
         /// Where an interrupted build left off, read from the index's own progress file.
@@ -164,7 +283,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public void Invalidate()
         {
-            lock (_lock) _index = null;
+            lock (_lock) { _index = null; _bookPositions = null; }
         }
 
         public void Dispose()

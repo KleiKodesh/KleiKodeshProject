@@ -4,9 +4,9 @@ import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
 import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
-import UpdateAvailablePrompt from '@/components/UpdateAvailablePrompt.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
+import HomePageDateBar from '@/features/home/HomePageDateBar.vue'
 import { ref, computed, watch } from 'vue'
 import { useResizeObserver, useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -168,36 +168,40 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    class="app-layout"
-    :class="{ 'split-active': bookViewStore.splitViewEnabled }"
-    :style="bookViewStore.splitViewEnabled
-      ? { gridTemplateColumns: `1fr 1px ${bookViewStore.splitViewFraction * 100}%` }
-      : undefined"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-  >
-    <!-- Pane 1 — always present -->
-    <AppShell :pane-id="1" />
-
-    <!-- Resize divider — only in split view -->
+  <!-- The pinned date bar is the WINDOW's status bar: one strip under both panes in split
+       view, so it lives here and not in AppShell. -->
+  <div class="app-frame">
     <div
-      v-if="bookViewStore.splitViewEnabled"
-      class="sash sash-v"
-      data-split-divider
-      @pointerdown="onDividerPointerDown"
-    />
+      ref="containerRef"
+      class="app-layout"
+      :class="{ 'split-active': bookViewStore.splitViewEnabled }"
+      :style="bookViewStore.splitViewEnabled
+        ? { gridTemplateColumns: `1fr 1px ${bookViewStore.splitViewFraction * 100}%` }
+        : undefined"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+    >
+      <!-- Pane 1 — always present -->
+      <AppShell :pane-id="1" />
 
-    <!-- Pane 2 — only in split view -->
-    <AppShell v-if="bookViewStore.splitViewEnabled" :pane-id="2" />
+      <!-- Resize divider — only in split view -->
+      <div
+        v-if="bookViewStore.splitViewEnabled"
+        class="sash sash-v"
+        data-split-divider
+        @pointerdown="onDividerPointerDown"
+      />
+
+      <!-- Pane 2 — only in split view -->
+      <AppShell v-if="bookViewStore.splitViewEnabled" :pane-id="2" />
+    </div>
+    <HomePageDateBar v-if="settingsStore.dateBarPinned" status-bar class="app-status-bar" />
 
     <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone || !termsAccepted" />
     <GlobalContextMenu />
     <ToastBanner />
     <ServiceUnavailableBanner />
-    <UpdateAvailablePrompt />
     <ConfirmDialog
       v-if="pdfClosePending"
       :title="t('app.unsavedTitle')"
@@ -212,10 +216,19 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
 </template>
 
 <style scoped>
-.app-layout {
+.app-frame {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.app-status-bar {
+  flex-shrink: 0;
 }
 
 .app-layout.split-active {

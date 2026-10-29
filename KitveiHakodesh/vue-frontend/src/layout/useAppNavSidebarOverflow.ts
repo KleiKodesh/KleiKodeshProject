@@ -2,6 +2,7 @@ import { computed, type ComputedRef, type Ref } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { showPopOutButton } from '@/webview-host/bridge'
+import { APP_NAV_UPDATE_KEY } from './appNavUpdateItem'
 
 /**
  * Geometry the fit arithmetic mirrors from the rail's CSS (AppNavSidebar) - a 32px button
@@ -38,6 +39,7 @@ const NAV_PANEL_VERTICAL_CHROME = 2 * 6
 export function useAppNavSidebarOverflow(
   navPanelEl: Ref<HTMLElement | null>,
   isSplitViewButtonVisible: ComputedRef<boolean>,
+  isUpdateButtonVisible: ComputedRef<boolean>,
 ) {
   // Measured as the BORDER box, then the panel's own chrome is taken off, rather than
   // asking for the content box directly. Both give the same steady-state number, but
@@ -62,8 +64,13 @@ export function useAppNavSidebarOverflow(
   // simply absent when unavailable, so visible and collapsed are always read off one list.
   // Destinations - settings included - are keyed by their labels, because the label IS the
   // routing key; the buttons that are not destinations get names of their own.
+  //
+  // The update row leads the controls group: collapse runs bottom-up, so first there means
+  // it outlives every other control, and the row that says "an update is waiting" is the
+  // last thing a cramped rail should fold away.
   const railButtonKeys = computed<string[]>(() => [
     ...APP_NAV_ITEMS.value.map((item) => item.label),
+    ...(isUpdateButtonVisible.value ? [APP_NAV_UPDATE_KEY] : []),
     ...(isSplitViewButtonVisible.value ? ['split-view'] : []),
     ...(showPopOutButton ? ['pop-out'] : []),
     APP_NAV_SETTINGS_ITEM.label,

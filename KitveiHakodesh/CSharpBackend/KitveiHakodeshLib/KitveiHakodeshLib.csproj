@@ -172,6 +172,9 @@
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileOpenRules.cs">
       <Link>Core\LocalFiles\LocalFileOpenRules.cs</Link>
     </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\PdfIncrementalSaveWriter.cs">
+      <Link>Core\LocalFiles\PdfIncrementalSaveWriter.cs</Link>
+    </Compile>
     <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileContentTypes.cs">
       <Link>Core\LocalFiles\LocalFileContentTypes.cs</Link>
     </Compile>
@@ -211,6 +214,7 @@
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
+    <Compile Include="Pdf\WindowsRecentDocuments.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />

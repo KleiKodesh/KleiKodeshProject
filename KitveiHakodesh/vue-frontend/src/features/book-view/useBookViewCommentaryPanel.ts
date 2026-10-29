@@ -29,7 +29,7 @@ export function useBookViewCommentaryPanel(
   pinnedCommentaryGroup: import('vue').Ref<PinnedCommentaryGroup | null>,
   selectedLineId: import('vue').Ref<number | null>,
   commentaryLineId: import('vue').Ref<number | null>,
-  lines: () => { content: string | null }[],
+  lines: () => { loadedCount: number },
   hasCommentaries: import('vue').Ref<boolean>,
   ensureStaticFilterGroupsLoaded: () => void,
 ) {
@@ -99,7 +99,7 @@ export function useBookViewCommentaryPanel(
       let stop: (() => void) | undefined
       stop = trackDetachedWatch(
         watch(
-          () => lines().some((l) => l.content !== null),
+          () => lines().loadedCount > 0,
           (hasContent) => {
             if (!hasContent) return
             stop?.()
