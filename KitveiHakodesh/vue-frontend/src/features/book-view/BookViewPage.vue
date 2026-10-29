@@ -864,11 +864,12 @@ function getSideEditionOutlineTarget(): string | undefined {
    band (::before), and a visible line (::after) that thickens and takes the accent
    colour only while hovered or dragged. The element is 1px and transparent so the
    ::after can grow without shifting the layout. */
-/* trial: the FastDocView notes separator - a border-coloured hairline plus a soft shadow cast onto the text */
+/* The bottom commentary separator: the sash's own line plus a soft shadow cast onto the book text. */
 .book-view-commentary-split > :deep(.sash-h)::after {
-  height: 1px;
-  background: var(--border-color);
-  box-shadow: 0 -2px 6px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  box-shadow: 0 -2px 6px var(--commentary-separator-shadow);
   z-index: 1;
+}
+.book-view {
+  --commentary-separator-shadow: color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 </style>
