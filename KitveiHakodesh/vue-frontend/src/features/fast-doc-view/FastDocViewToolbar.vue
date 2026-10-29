@@ -40,9 +40,8 @@ defineProps<{
 
 const emit = defineEmits<{
   toggleToc: [toggleButton: HTMLElement]
-  toggleNotes: []
+  stepNotes: []
   toggleNotesSync: []
-  cycleNotesPlace: []
   zoomIn: []
   zoomOut: []
   openAsPdf: []
@@ -103,24 +102,18 @@ function onToggleToc(event: MouseEvent) {
     >
       <IconChevronLeft20Regular class="dir-icon" />
     </button>
+    <!-- One button steps the notes pane: closed -> bottom -> right -> left -> closed (the side places
+         only on a wide page). The icon is the current state (the book view's bottom / side / side-left
+         commentary icons), the tooltip names the next step. -->
     <button
       :class="{ active: notesVisible }"
       :disabled="!hasNotes"
-      :title="$t('fastDocView.notes')"
-      @click="emit('toggleNotes')"
+      :title="$t(!notesVisible || !canPlaceNotesBeside || notesPlace === 'left' ? 'fastDocView.notes'
+        : notesPlace === 'bottom' ? 'fastDocView.notesPlaceToRight' : 'fastDocView.notesPlaceToLeft')"
+      @click="emit('stepNotes')"
     >
-      <!-- the book view's bottom-commentary toggle: the notes pane sits in the same place -->
-      <IconLayoutRowTwoFocusBottom20Filled v-if="notesVisible" />
-      <IconLayoutRowTwo20Regular v-else />
-    </button>
-    <!-- The notes pane's place, cycled bottom -> right -> left: the icon is the current place (the
-         book view's bottom / side / side-left commentary icons), the tooltip names the next. -->
-    <button
-      v-if="hasNotes && canPlaceNotesBeside"
-      :title="$t(notesPlace === 'bottom' ? 'fastDocView.notesPlaceToRight' : notesPlace === 'right' ? 'fastDocView.notesPlaceToLeft' : 'fastDocView.notesPlaceToBottom')"
-      @click="emit('cycleNotesPlace')"
-    >
-      <IconLayoutColumnTwoFocusRight20Filled v-if="notesPlace === 'right'" />
+      <IconLayoutRowTwo20Regular v-if="!notesVisible" />
+      <IconLayoutColumnTwoFocusRight20Filled v-else-if="notesPlace === 'right'" />
       <IconLayoutColumnTwoFocusLeft20Filled v-else-if="notesPlace === 'left'" />
       <IconLayoutRowTwoFocusBottom20Filled v-else />
     </button>
