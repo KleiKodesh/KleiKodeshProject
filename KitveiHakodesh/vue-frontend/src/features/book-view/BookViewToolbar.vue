@@ -822,29 +822,9 @@ button:disabled {
    that width at the same moment - two jolts from one change, on a toolbar the user is
    actively dragging the edge of.
 
-   So it stays in the flow and shrinks: width and padding to zero, the glyph fading as it
-   goes. Its neighbours slide into the space it gives up rather than teleporting past it,
-   and the same animation run backwards is the button reappearing when the room comes back.
-
-   Width is animatable here precisely because these are fixed-size icon buttons - there is
-   no intrinsic width to discover, so there is no `auto` to interpolate to and none of the
-   usual reasons this does not work apply. */
+   So it stays in the flow and collapses to zero width and padding, at once - no animation. */
 .collapsible {
   overflow: hidden;
-  /* Slow enough to read as one control leaving rather than a row rearranging itself, on an
-     ease-in-out so it starts and ends at rest - the sharper decelerating curve used for
-     presses made the neighbours look flung into place.
-
-     The glyph fades FASTER than the width closes, and out of step with it on purpose: the
-     button is already faint by the time the space it holds starts to go, so the eye follows
-     one thing disappearing instead of watching a shrinking icon get squeezed. Reappearing
-     runs the same way round - the space opens first and the glyph arrives into it. */
-  transition:
-    width 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    height 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    margin 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    padding 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 140ms ease;
 }
 .toolbar-top .collapsible.collapsed,
 .toolbar-bottom .collapsible.collapsed {
@@ -868,16 +848,6 @@ button:disabled {
   pointer-events: none;
 }
 
-/* The whole effect is motion for its own sake as far as a reader who has asked for less of
-   it is concerned - the control still goes, it just goes at once. */
-@media (prefers-reduced-motion: reduce) {
-  .collapsible {
-    transition: none;
-  }
-}
-.window-resizing .collapsible {
-  transition: none;
-}
 
 /* Anchored, not laid out. The one control that must never move: buttons collapse into it as
    the pane narrows, and a target that slid along the bar as they went - or appeared out of
@@ -903,9 +873,7 @@ button:disabled {
      naming any property here replaces that declaration wholesale rather than adding to it. */
   transition:
     background 120ms,
-    color 120ms,
-    opacity 260ms ease,
-    visibility 260ms;
+    color 120ms;
 }
 /* The hover tint is a wash over the toolbar's surface, so it has to be composited onto that
    surface rather than replacing it - the global `button:hover` background would otherwise
