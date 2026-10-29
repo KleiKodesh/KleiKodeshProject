@@ -13,7 +13,8 @@
  * one on the end edge. Both are only reachable on a wide pane (see isWideScreen
  * in BookViewPage); 'bottom' works at any width.
  */
-export type CommentarySlot = 'bottom' | 'side' | 'side-left'
+export type { CommentarySlot } from '@/components/readingSearchModes'
+import type { CommentarySlot } from '@/components/readingSearchModes'
 
 export const COMMENTARY_SLOTS = ['bottom', 'side', 'side-left'] as const
 
@@ -24,18 +25,8 @@ export function isSideCommentarySlot(slot: CommentarySlot): boolean {
   return slot === 'side' || slot === 'side-left'
 }
 
-/** Which view the search bar is searching: the book text, or one of the panels. */
-export type SearchMode = 'content' | `commentary-${CommentarySlot}`
-
-export function searchModeForSlot(slot: CommentarySlot): SearchMode {
-  return `commentary-${slot}`
-}
-
-/** The panel a search mode targets, or null when it targets the book text. */
-export function slotForSearchMode(mode: SearchMode): CommentarySlot | null {
-  if (mode === 'content') return null
-  return mode.slice('commentary-'.length) as CommentarySlot
-}
+export { searchModeForSlot, slotForSearchMode } from '@/components/readingSearchModes'
+export type { SearchMode } from '@/components/readingSearchModes'
 
 /**
  * Visibility state for one commentary entry in the tree panel.

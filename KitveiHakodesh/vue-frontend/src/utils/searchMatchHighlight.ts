@@ -86,3 +86,28 @@ export function highlightSearchMatches(
   return out.join('')
 }
 
+/**
+ * Move the `.current` class to the nth `<mark class="search-match">` inside
+ * the rendered line at `lineIndex` within `container`. Scopes the query to
+ * the scroller's row element with `data-index` so `occurrence` is per-line,
+ * matching `occurrenceInLine` from the search scan.
+ *
+ * Pass `lineIndex = -1` to clear all `.current` marks across the container.
+ *
+ * @param container  The scroller element
+ * @param lineIndex  The row's data-index (its line index), or -1 to clear all
+ * @param occurrence 0-based per-line occurrence index
+ */
+export function setCurrentMark(container: HTMLElement, lineIndex: number, occurrence: number): void {
+  // Clear any existing .current marks across the whole scroller first.
+  container.querySelectorAll<HTMLElement>('mark.search-match.current').forEach((mark) => {
+    mark.classList.remove('current')
+  })
+  if (lineIndex === -1) return
+
+  const row = container.querySelector<HTMLElement>(`[data-index="${lineIndex}"]`)
+  if (!row) return
+
+  const marks = row.querySelectorAll<HTMLElement>('mark.search-match')
+  marks[occurrence]?.classList.add('current')
+}

@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
+import { sendFastDocViewCommand } from '@/composables/fastDocViewCommands'
 import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -65,6 +66,7 @@ export function useAppTitleBarShortcuts(options: {
   const activeTab = computed(() => pane.activeTab.value)
   const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
   const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
+  const isFastDocViewActive = computed(() => activeTab.value?.route === '/fast-doc-view')
   const isThisPaneFocused = computed(
     () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === paneId,
   )
@@ -191,6 +193,7 @@ export function useAppTitleBarShortcuts(options: {
         return true
       case 'KeyB':
         if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
+        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToolbar')
         else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
         return true
       case 'KeyJ':
@@ -199,10 +202,14 @@ export function useAppTitleBarShortcuts(options: {
         if (isBookViewActive.value) {
           const slot = e.altKey ? 'side-left' : e.shiftKey ? 'side' : 'bottom'
           bookViewStore.toggleCommentaryPanel(paneId, slot)
+        } else if (isFastDocViewActive.value && !e.altKey && !e.shiftKey) {
+          // The notes pane sits where the book view's bottom commentary does: Ctrl+J.
+          sendFastDocViewCommand(paneId, 'toggleNotes')
         }
         return true
       case 'KeyK':
         if (isBookViewActive.value) bookViewStore.toggleTocPanel(paneId)
+        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
         return true
       case 'KeyU':
         // Ctrl+U — toggle the current book's word-link marker signs (all visible →
@@ -215,6 +222,7 @@ export function useAppTitleBarShortcuts(options: {
         // Let a focused search input keep its own Ctrl+F.
         if (document.activeElement?.closest('[data-ctrlf-enabled]')) return false
         if (isBookViewActive.value) bookViewStore.openSearch(paneId)
+        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'openSearch')
         else if (isTxtViewActive.value) bookViewStore.txtViewToggleSearch(paneId)
         return true
       case 'KeyN':

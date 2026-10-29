@@ -20,7 +20,28 @@ import type { WordLinkTooltipData } from './useWordLinkTooltip'
 
 const HOVER_DELAY_MS = 250
 
-export function useNoteTooltip(scrollerEl: Ref<HTMLElement | null>) {
+/**
+ * The default reads a user note marker; FastDocView passes its footnote/endnote references
+ * (`.note-reference`) and returns the note's rendered HTML (already in the block, no fetch).
+ */
+export interface NoteTooltipSource {
+  selector: string
+  /** The panel's HTML for a hovered marker, or null for nothing to preview. */
+  htmlFor: (marker: Element) => string | null
+}
+
+const USER_NOTE_SOURCE: NoteTooltipSource = {
+  selector: '.user-note-marker',
+  htmlFor: (el) => {
+    const text = el.getAttribute('data-note-text') ?? ''
+    // An empty note is one just created and not yet written — nothing to preview.
+    // Plain text into an HTML panel: escape it, and keep the author's own line
+    // breaks, which are the only structure a note has.
+    return text.trim() ? escapeHtml(text).replace(/\r?\n/g, '<br>') : null
+  },
+}
+
+export function useNoteTooltip(scrollerEl: Ref<HTMLElement | null>, source: NoteTooltipSource = USER_NOTE_SOURCE) {
   const noteTooltip = ref<WordLinkTooltipData | null>(null)
   let hoverEl: Element | null = null
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
@@ -42,23 +63,20 @@ export function useNoteTooltip(scrollerEl: Ref<HTMLElement | null>) {
 
   function findMarker(event: Event): Element | null {
     const target = event.target as HTMLElement | null
-    const el = target?.closest?.('.user-note-marker')
+    const el = target?.closest?.(source.selector)
     return el && scrollerEl.value?.contains(el) ? el : null
   }
 
   function show(el: Element, forToken: number) {
     if (forToken !== token) return
-    const text = el.getAttribute('data-note-text') ?? ''
-    // An empty note is one just created and not yet written — nothing to preview.
-    if (!text.trim()) return
+    const html = source.htmlFor(el)
+    if (!html) return
     noteTooltip.value = {
       id: forToken,
       // The panel's heading is for citing another book; a note has no source to cite.
       bookTitle: '',
       tocPath: '',
-      // Plain text into an HTML panel: escape it, and keep the author's own line
-      // breaks, which are the only structure a note has.
-      html: escapeHtml(text).replace(/\r?\n/g, '<br>'),
+      html,
       anchorRect: el.getBoundingClientRect(),
     }
   }

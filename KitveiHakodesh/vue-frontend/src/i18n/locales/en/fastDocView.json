@@ -6,8 +6,8 @@
   "toc": "Table of contents",
   "notes": "Notes",
   "noNotes": "No notes in view",
-  "zoomIn": "Zoom in (Ctrl+)\nReset: Ctrl+0",
-  "zoomOut": "Zoom out (Ctrl-)\nReset: Ctrl+0",
+  "zoomIn": "Zoom in (Ctrl+)\nText: {text}%\nReset: Ctrl+0",
+  "zoomOut": "Zoom out (Ctrl-)\nText: {text}%\nReset: Ctrl+0",
   "footnote": "Footnote",
   "endnote": "Endnote",
   "openAsPdf": "Open as PDF (through Word)",
@@ -21,9 +21,15 @@
   "goToFootnoteReference": "Go to where this footnote is referenced in the text",
   "goToEndnoteReference": "Go to where this endnote is referenced in the text",
   "bookmarkNotFound": "The link target was not found in this document",
+  "linkNotSupported": "The app cannot open this link",
   "searchNext": "Next match (Enter)",
   "searchPrevious": "Previous match (Shift+Enter)",
   "searchClose": "Close search (Esc)",
   "search": "Search in the document (Ctrl+F)",
-  "closeNotes": "Close the notes pane"
+  "closeNotes": "Close the notes pane",
+  "syncNotesOffTitle": "Sync notes\nThe notes pane will follow the text in view",
+  "syncNotesOnTitle": "Sync notes\nClick to turn off auto-sync",
+  "notesPlaceToRight": "Move the notes pane to the right",
+  "notesPlaceToLeft": "Move the notes pane to the left",
+  "notesPlaceToBottom": "Move the notes pane to the bottom"
 }

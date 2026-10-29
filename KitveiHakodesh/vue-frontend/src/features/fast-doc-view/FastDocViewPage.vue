@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useDebounceFn, useStyleTag, useThrottleFn } from '@vueuse/core'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useDebounceFn, useElementSize, useEventListener, useStyleTag, useThrottleFn } from '@vueuse/core'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import SidePanel from '@/components/SidePanel.vue'
@@ -11,9 +11,11 @@ import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { useZoomHandler, zoomIn, zoomOut, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
+import { useFastDocViewCommands } from '@/composables/fastDocViewCommands'
 import { useTabStore } from '@/stores/tabStore'
 import { fastDocViewApi } from '@/webview-host/fastDocViewApi'
-import { cancelLocalFileConversion, openFileInDefaultApp, restoreLocalFile } from '@/webview-host/bridge'
+import { cancelLocalFileConversion, openFileInDefaultApp, openUrlInSystemBrowser, restoreLocalFile } from '@/webview-host/bridge'
 import { useI18n } from 'vue-i18n'
 import { showToast } from '@/composables/useToast'
 import { parseBookLink } from '@/utils/appDeepLink'
@@ -22,11 +24,15 @@ import type { ConversionActionState } from '@/components/ConversionActionButton.
 import { useFastDocViewDocument } from './useFastDocViewDocument'
 import { buildFastDocViewOutline, type FastDocViewOutlineNode } from './fastDocViewOutline'
 import FastDocViewToolbar from './FastDocViewToolbar.vue'
-import FastDocViewToc from './FastDocViewToc.vue'
-import FastDocViewSearchBar from './FastDocViewSearchBar.vue'
+import FastDocViewToc, { type FastDocViewTocState } from './FastDocViewToc.vue'
+import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
+import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useFastDocViewSearch } from './useFastDocViewSearch'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
+import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
+import { useNoteTooltip } from '@/features/book-view/lines/useNoteTooltip'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
 import type { FastDocViewPlacedNote } from './useFastDocViewDocument'
 
@@ -118,34 +124,49 @@ function blockColumnStyle(index: number): Record<string, string> | undefined {
 
 useScopedKeys(scrollerElement, { onCtrlF: () => openSearch() })
 
-// In-document search (Ctrl+F): the service finds hit blocks in bounded steps from the reader's
-// block, wrapping; matches are highlighted inside the rendered blocks only.
+// In-document search (Ctrl+F): the book view's own search bar (ReadingSearchBar, floating over
+// the text) and its behaviour; only the hit source differs - the service finds hit blocks in
+// bounded steps. Matches are highlighted inside the rendered blocks only. Closing the bar keeps
+// the query for the next open, as in the book view.
 const searchVisible = ref(false)
 const search = useFastDocViewSearch({
   api: fastDocViewApi,
   documentId: () => fastDocument.summary.value?.documentId,
-  startBlock: () => windowedScroller.value?.readFirstVisible(0)?.index ?? 0,
-  onFirstHit: (block) => void goToSearchHit(block),
+  currentBlock: () => windowedScroller.value?.readFirstVisible(0)?.index ?? 0,
 })
 function openSearch() {
   searchVisible.value = true
 }
 function closeSearch() {
   searchVisible.value = false
-  search.clear()
   scrollerElement.value?.focus({ preventScroll: true })
 }
-/** Lands on a hit block and marks its first match as the current one. */
-async function goToSearchHit(block: number | undefined) {
+// The reader moving the view (wheel, keyboard, a press on the text or its scrollbar) re-arms
+// the search's first step, as a reader scroll does in the book view. Told by its source - the
+// input that causes it - so the search's own landing scroll never counts, whatever its timing.
+function onReaderInput() {
+  search.onReaderScroll()
+  lastNavigatedHeadingId = null
+}
+useEventListener(scrollerElement, 'wheel', onReaderInput, { passive: true })
+useEventListener(scrollerElement, 'pointerdown', onReaderInput)
+// the scroller's drawn scrollbar sits beside the viewport
+useEventListener(computed(() => (windowedScroller.value?.scrollbarElement as HTMLElement | null | undefined) ?? null), 'pointerdown', onReaderInput)
+useEventListener(scrollerElement, 'keydown', (event: KeyboardEvent) => {
+  if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) onReaderInput()
+})
+// The book view's own landing (shared useWindowedRowLanding): a match never rests under the
+// floating search bar, and lands at the edge the step travels toward.
+const { scrollToLine: landOnRow } = useWindowedRowLanding(
+  () => windowedScroller.value as unknown as WindowedScrollerApi | null,
+  () => searchVisible.value,
+  () => {},
+  () => {},
+)
+async function onSearchStep(direction: 'forward' | 'backward') {
+  const block = search.step(direction)
   if (block == null) return
-  await windowedScroller.value?.scrollToIndex(block)
-  const row = windowedScroller.value?.rowElement(block) as HTMLElement | null | undefined
-  scrollerElement.value?.querySelectorAll('mark.search-match.current').forEach((mark) => mark.classList.remove('current'))
-  const mark = row?.querySelector('mark.search-match')
-  if (mark) {
-    mark.classList.add('current')
-    mark.scrollIntoView({ block: 'nearest' })
-  }
+  await landOnRow(block, { occurrence: 0, direction })
 }
 /** A block's HTML with the search query's matches marked (only while searching, only rendered blocks). */
 function blockHtml(index: number): string {
@@ -157,8 +178,12 @@ onMounted(async () => {
   scrollerElement.value = windowedScroller.value?.scrollerElement ?? null
   const saved = await tabStore.getTabViewState(tabId)
   if (saved?.fastDocViewZoom != null) zoom.value = saved.fastDocViewZoom
-  if (saved?.fastDocViewNotesVisible === false) notesVisible.value = false
-  if (saved?.fastDocViewNotesFraction != null) notesFraction.value = saved.fastDocViewNotesFraction
+  tocState.value = saved?.fastDocViewToc
+  if (saved?.fastDocViewTocVisible) tocVisible.value = true
+  if (saved?.fastDocViewNotesVisible != null) notesVisible.value = saved.fastDocViewNotesVisible
+  if (saved?.fastDocViewNotesSync != null) notesSync.value = saved.fastDocViewNotesSync
+  if (saved?.fastDocViewNotesPlace) notesPlace.value = saved.fastDocViewNotesPlace
+  if (saved?.fastDocViewNotesFractions) notesFractions.value = { ...saved.fastDocViewNotesFractions }
   initialIndex.value = saved?.fastDocViewBlockIndex ?? 0
   initialOffsetPx.value = saved?.fastDocViewBlockOffset ?? 0
   stateReady.value = true
@@ -192,6 +217,19 @@ const {
   onResizePointerUp: onSidePanelResizePointerUp,
 } = useSidePanelLayout({ pageElement, resizeArea: sidePanelResizeArea })
 const tocVisible = ref(false)
+// Kept per tab, as the book view keeps its TOC panel open across tab switches and restarts.
+watch(tocVisible, (visible) => void patchTabState({ fastDocViewTocVisible: visible || undefined }))
+// The TOC's search text, expanded headings and scroll, kept per tab as the book view's
+// TocPersistState: snapshotted on close and on leaving the tab (the panel is v-if'd away).
+const tocRef = ref<InstanceType<typeof FastDocViewToc> | null>(null)
+const tocState = ref<FastDocViewTocState | undefined>()
+function snapshotTocState() {
+  if (!tocRef.value) return
+  tocState.value = tocRef.value.snapshotState()
+  void patchTabState({ fastDocViewToc: tocState.value })
+}
+watch(tocVisible, (visible, wasVisible) => { if (wasVisible && !visible) snapshotTocState() }, { flush: 'sync' })
+onBeforeUnmount(snapshotTocState)
 const tocToggleButton = ref<HTMLElement | null>(null)
 const outline = computed(() => buildFastDocViewOutline(fastDocument.headings.value))
 /** The block at the top of the view, followed while scrolling (throttled) - the TOC's current heading. */
@@ -215,33 +253,103 @@ const activeOutlineNodeId = computed(() => {
   }
   return found
 })
-function toggleToc(toggleButton: HTMLElement) {
-  tocToggleButton.value = toggleButton
+function toggleToc(toggleButton?: HTMLElement | null) {
+  if (toggleButton) tocToggleButton.value = toggleButton
   tocVisible.value = !tocVisible.value
 }
+
+// The book view's app-level keys, routed to this pane's page (useAppTitleBarShortcuts):
+// Ctrl+K table of contents, Ctrl+J notes pane, Ctrl+F search, Ctrl+B toolbar (the same
+// per-pane toolbar setting the book view uses).
+const paneId = inject<1 | 2>('paneId', 1)
+const bookViewStore = useBookViewStore()
+const toolbarVisible = computed(() => bookViewStore.getToolbarVisible(paneId))
+/** Which edge the toolbar is docked to: the book view's app-wide setting (dragging either toolbar moves both). */
+const toolbarPosition = computed(() => bookViewStore.toolbarPosition)
+useFastDocViewCommands(paneId, {
+  toggleToc: () => toggleToc(),
+  toggleNotes: () => { if (hasNotes.value) notesVisible.value = !notesVisible.value },
+  openSearch: () => openSearch(),
+  toggleToolbar: () => bookViewStore.toggleToolbar(paneId),
+})
+
+// Previous / next section (toolbar chevrons, Ctrl+Arrow): the book view's
+// navigateToAdjacentTocSection over the headings - step from the current heading (or the one
+// the last step landed on, until the reader moves the view), the previous one skipping headings
+// at the same block, landed like the book view (force: the heading at the top).
+let lastNavigatedHeadingId: number | null = null
+function navigateToAdjacentHeading(direction: 'next' | 'previous') {
+  const nodes = outline.value
+  if (nodes.length === 0) return
+  const effectiveId = lastNavigatedHeadingId ?? activeOutlineNodeId.value
+  const currentIndex = nodes.findIndex((node) => node.id === effectiveId)
+  let target: (typeof nodes)[number] | undefined
+  if (direction === 'next') target = nodes[currentIndex + 1]
+  else {
+    const currentBlock = currentIndex >= 0 ? nodes[currentIndex]!.blockIndex : null
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (currentBlock == null || nodes[i]!.blockIndex < currentBlock) { target = nodes[i]; break }
+    }
+  }
+  if (!target) return
+  lastNavigatedHeadingId = target.id
+  void landOnRow(target.blockIndex, { force: true })
+}
+// Ctrl+Arrow, as in the book view (RTL: Ctrl+Left = next). On the text, outside inputs.
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
+  if (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight') return
+  if (!pageElement.value?.contains(document.activeElement) || (document.activeElement as HTMLElement | null)?.closest('input, textarea')) return
+  if (outline.value.length === 0) return
+  event.preventDefault()
+  navigateToAdjacentHeading((event.code === 'ArrowLeft') === isRightToLeft.value ? 'next' : 'previous')
+})
 function onOutlineSelect(node: FastDocViewOutlineNode) {
+  // The overlay stays open on a click, as the book view's (an outside click closes it).
   void windowedScroller.value?.scrollToIndex(node.blockIndex)
-  if (sidePanelIsOverlay.value) tocVisible.value = false
 }
 
 const hasNotes = computed(() => {
   const summary = fastDocument.summary.value
   return !!summary && summary.footnoteCount + summary.endnoteCount > 0
 })
-const notesVisible = ref(true)
-/** The text pane's share of the split above the notes pane (SplitPane's top fraction). */
-const notesFraction = ref<number | undefined>(undefined)
+// Closed by default, as the book view's commentary panel (useBookViewCommentaryPanel: ref(false)).
+const notesVisible = ref(false)
+/** Keep the notes pane in sync with the text (the book view's sync-commentaries toggle); on by default here. */
+const notesSync = ref(true)
+/**
+ * Where the notes pane sits, cycled bottom -> right -> left by one toolbar toggle. The side
+ * places need a wide page, as the book view's side commentary slots (BookViewPage isWideScreen,
+ * 650 px); on a narrow one the pane falls back to the bottom without losing the choice.
+ */
+type NotesPlace = 'bottom' | 'right' | 'left'
+const NOTES_PLACE_ORDER: NotesPlace[] = ['bottom', 'right', 'left']
+const notesPlace = ref<NotesPlace>('bottom')
+const { width: pageWidth } = useElementSize(pageElement)
+const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
+const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
+function cycleNotesPlace() {
+  notesPlace.value = NOTES_PLACE_ORDER[(NOTES_PLACE_ORDER.indexOf(notesPlace.value) + 1) % NOTES_PLACE_ORDER.length]!
+}
+/** The text pane's share of the split, per place (height below, width beside) - as the book view keeps one per slot. */
+const notesFractions = ref<Partial<Record<NotesPlace, number>>>({})
+const notesFraction = computed<number | undefined>({
+  get: () => notesFractions.value[effectiveNotesPlace.value],
+  set: (value) => { notesFractions.value = { ...notesFractions.value, [effectiveNotesPlace.value]: value } },
+})
 /** The notes pane's text size: the commentary's (commentary font setting at the page zoom), as in the book view. */
 const notesFontPx = computed(() => (zoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15)
 async function saveNotesLayout() {
   await patchTabState({
-    fastDocViewNotesVisible: notesVisible.value ? undefined : false,
-    fastDocViewNotesFraction: notesFraction.value,
+    fastDocViewNotesVisible: notesVisible.value,
+    fastDocViewNotesSync: notesSync.value,
+    fastDocViewNotesPlace: notesPlace.value,
+    fastDocViewNotesFractions: { ...notesFractions.value },
   })
 }
 // Debounced: dragging the split updates the fraction on every pointer move.
 const saveNotesLayoutSoon = useDebounceFn(saveNotesLayout, 300)
-watch([notesVisible, notesFraction], () => void saveNotesLayoutSoon())
+watch([notesVisible, notesFractions, notesSync, notesPlace], () => void saveNotesLayoutSoon())
 // "Open as PDF": the same file through the existing Word -> PDF conversion (an explicit
 // choice; FastDocView is the default). The tab becomes a PDF (or HTML fallback) tab.
 const { t } = useI18n()
@@ -335,13 +443,25 @@ const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.valu
 // data-note-kind data-note-number>, rendered by the library) opens the notes pane on its note;
 // a note's label jumps the text to the block holding its reference and flashes it.
 const activeNoteKey = ref<string | null>(null)
+const noteLandingNonce = ref(0)
 function onContentClick(event: MouseEvent) {
   if (onLinkClick(event)) return
   const reference = (event.target as HTMLElement | null)?.closest<HTMLElement>('.note-reference[data-note-kind]')
   if (!reference) return
   activeNoteKey.value = fastDocViewNoteKey(reference.dataset.noteKind ?? '', Number(reference.dataset.noteNumber ?? 0), (reference.textContent ?? '').trim())
+  noteLandingNonce.value++
   notesVisible.value = true
 }
+// Hovering a reference previews its note in the book view's note tooltip (WordLinkTooltip,
+// not interactive). The note HTML is already in the rendered block's notes - no service call.
+const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerElement, {
+  selector: '.note-reference[data-note-kind]',
+  htmlFor: (marker) => {
+    const element = marker as HTMLElement
+    const key = fastDocViewNoteKey(element.dataset.noteKind ?? '', Number(element.dataset.noteNumber ?? 0), (element.textContent ?? '').trim())
+    return visibleNotes.value.find((note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key)?.html ?? null
+  },
+})
 const REFERENCE_FLASH_MS = 2000
 
 /** Briefly marks an element the reader was jumped to (a note reference, a bookmark target). */
@@ -373,7 +493,12 @@ function onLinkClick(event: MouseEvent): boolean {
     void hostSearchStore.openBookLink(bookLink)
     return true
   }
-  return false
+  if (href.startsWith('#')) return false
+  event.preventDefault()
+  // An app link the app cannot place (no index): never hand it to the shell.
+  if (anchor.dataset.appLink) showToast(t('fastDocView.linkNotSupported'))
+  else void openUrlInSystemBrowser(href)
+  return true
 }
 async function goToBookmark(href: string) {
   const documentId = fastDocument.summary.value?.documentId
@@ -410,14 +535,24 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
 
 <template>
   <div ref="pageElement" class="fast-doc-view">
+    <!-- The toolbar docks to the edge the reader dragged it to (the book view's toolbar position
+         setting): one toolbar element, placed by the frame's orientation class. -->
+    <div class="fast-doc-view-frame" :class="`toolbar-at-${toolbarPosition}`">
     <FastDocViewToolbar
+      v-if="toolbarVisible"
+      class="fast-doc-view-frame-toolbar"
       :toc-visible="tocVisible"
       :notes-visible="notesVisible && hasNotes"
+      :notes-sync="notesSync"
+      :notes-place="notesPlace"
+      :can-place-notes-beside="canPlaceNotesBeside"
       :has-headings="outline.length > 0"
       :has-notes="hasNotes"
       :zoom="zoom"
       @toggle-toc="toggleToc"
       @toggle-notes="notesVisible = !notesVisible"
+      @toggle-notes-sync="notesSync = !notesSync"
+      @cycle-notes-place="cycleNotesPlace"
       @zoom-in="setZoom(zoomIn(zoom))"
       @zoom-out="setZoom(zoomOut(zoom))"
       :pdf-state="pdfState"
@@ -428,6 +563,8 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
       @open-in-default-app="openInDefaultApp"
       :search-visible="searchVisible"
       @toggle-search="searchVisible ? closeSearch() : openSearch()"
+      @navigate-to-next-section="navigateToAdjacentHeading('next')"
+      @navigate-to-previous-section="navigateToAdjacentHeading('previous')"
     />
     <div
       ref="sidePanelResizeArea"
@@ -443,20 +580,24 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
         :style="sidePanelIsOverlay ? undefined : sidePanelStyle"
         @close="tocVisible = false"
       >
-        <FastDocViewToc :outline="outline" :active-node-id="activeOutlineNodeId" :is-right-to-left="isRightToLeft" @select="onOutlineSelect" />
+        <FastDocViewToc ref="tocRef" :saved-state="tocState" :outline="outline" :active-node-id="activeOutlineNodeId" :is-right-to-left="isRightToLeft" @select="onOutlineSelect" />
       </SidePanel>
       <div v-if="tocVisible && !sidePanelIsOverlay" class="sash sash-v" @pointerdown="onSidePanelDividerPointerDown" />
       <div class="fast-doc-view-main">
-        <FastDocViewSearchBar
-          v-if="searchVisible"
-          :initial-query="search.query.value"
-          :current-hit="search.currentHit.value"
-          :hit-count="search.hitCount.value"
-          :is-searching="search.isSearching.value"
-          @query="search.run"
-          @next="goToSearchHit(search.step(1))"
-          @prev="goToSearchHit(search.step(-1))"
+        <!-- the book view's floating search bar (same component, same behaviour) -->
+        <ReadingSearchBar
+          :visible="searchVisible"
+          toolbar-position="top"
+          :match-count="search.query.value.trim() && !search.isSearching.value && search.hitCount.value === 0 ? 0 : search.hitCount.value || -1"
+          :current-match="search.currentHit.value"
+          :commentary-visible="false"
+          :open-commentary-slots="[]"
+          mode="content"
+          :query="search.query.value"
           @close="closeSearch"
+          @query-change="search.query.value = $event"
+          @next="onSearchStep('forward')"
+          @prev="onSearchStep('backward')"
         />
         <MessageBanner
           v-if="fastDocument.indexBuildFailed.value"
@@ -478,7 +619,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
           :dismissible="false"
         />
         <LoadingAnimation v-else-if="fastDocument.isLoading.value || !stateReady" />
-        <SplitPane v-else-if="fastDocument.summary.value" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes">
+        <SplitPane v-else-if="fastDocument.summary.value" class="fast-doc-view-notes-split" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes" :second-place="effectiveNotesPlace">
           <template #top>
             <div
               class="fast-doc-view-content"
@@ -486,6 +627,13 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
               :data-fast-doc-view-root="contentRootId"
               @click="onContentClick"
             >
+              <WordLinkTooltip
+                v-if="noteTooltip"
+                :key="`note-${noteTooltip.id}`"
+                :data="noteTooltip"
+                :interactive="false"
+                @close="closeNoteTooltip"
+              />
               <WindowedScroller
                 :ref="onScrollerMounted"
                 class="fast-doc-view-scroller"
@@ -517,6 +665,8 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
               :notes="visibleNotes"
               :is-right-to-left="isRightToLeft"
               :active-key="activeNoteKey"
+              :landing-nonce="noteLandingNonce"
+              :follow-index="notesSync ? firstVisibleIndex : null"
               :font-px="notesFontPx"
               @close="notesVisible = false"
               @go-to-reference="goToNoteReference"
@@ -524,6 +674,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
           </template>
         </SplitPane>
       </div>
+    </div>
     </div>
   </div>
 </template>
@@ -536,16 +687,37 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
   height: 100%;
   background: var(--bg-primary);
 }
+/* The frame places the toolbar at its edge (physical sides, whatever the page direction). */
+.fast-doc-view-frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.fast-doc-view-frame.toolbar-at-bottom .fast-doc-view-frame-toolbar {
+  order: 1;
+}
+.fast-doc-view-frame.toolbar-at-left,
+.fast-doc-view-frame.toolbar-at-right {
+  flex-direction: row;
+}
+.fast-doc-view-frame.toolbar-at-right:dir(ltr) .fast-doc-view-frame-toolbar,
+.fast-doc-view-frame.toolbar-at-left:dir(rtl) .fast-doc-view-frame-toolbar {
+  order: 1;
+}
 .fast-doc-view-body {
   position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 .fast-doc-view-toc {
   min-width: 0;
 }
 .fast-doc-view-main {
+  /* the search bar floats inside it, as in the book view's content-area */
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -586,5 +758,37 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
    nothing to a line that has text. */
 .fast-doc-view-block :deep(.text-line::after) {
   content: '\200b';
+}
+/* The separator between the text and its notes: hairline + soft shadow cast onto the text
+   (user-approved). The notes start 6px under it. The app sash's 8px grab band, hover / drag
+   accent and cursor are unchanged. */
+.fast-doc-view-notes-split > :deep(.sash-h) {
+  height: 2px;
+}
+.fast-doc-view-notes-split > :deep(.sash-v) {
+  width: 2px;
+}
+/* a border-coloured hairline plus a soft shadow falling from the notes onto the text */
+.fast-doc-view-notes-split > :deep(.sash-h)::after {
+  height: 1px;
+  background: var(--border-color);
+  box-shadow: 0 -2px 6px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  z-index: 1;
+}
+.fast-doc-view-notes-split > :deep(.sash-v)::after {
+  width: 1px;
+  background: var(--border-color);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--text-primary) 14%, transparent);
+  z-index: 1;
+}
+.fast-doc-view-notes-split > :deep(.sash-h:hover)::after,
+.fast-doc-view-notes-split > :deep(.sash-h:active)::after {
+  height: 4px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
+.fast-doc-view-notes-split > :deep(.sash-v:hover)::after,
+.fast-doc-view-notes-split > :deep(.sash-v:active)::after {
+  width: 4px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 </style>

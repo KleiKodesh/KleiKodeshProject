@@ -32,7 +32,11 @@ export interface TabState {
   fastDocViewBlockIndex?: number  // first visible block of a /fast-doc-view tab (position restore)
   fastDocViewBlockOffset?: number // pixels the viewport sits below that block's top
   fastDocViewNotesVisible?: boolean // the notes pane open / closed (like the bottom commentary)
-  fastDocViewNotesFraction?: number // the text pane's share of the split above the notes pane
+  fastDocViewNotesSync?: boolean // the notes pane follows the text (FastDocView default: on)
+  fastDocViewNotesPlace?: 'bottom' | 'right' | 'left' // the notes pane's place (toolbar toggle; sides on a wide page)
+  fastDocViewNotesFractions?: Partial<Record<'bottom' | 'right' | 'left', number>> // the text pane's share per place
+  fastDocViewTocVisible?: boolean   // the TOC panel open (book view: TocPersistState.visible)
+  fastDocViewToc?: { searchQuery?: string; expanded?: number[]; scrollTop?: number } // TOC search, expanded headings, scroll
 }
 
 export interface BookState {
