@@ -46,8 +46,8 @@ export function useSidePanelLayout(options: {
     isDragging.value = false
   }
 
-  /** The inline panel's width style (none until the reader drags the sash). */
-  const panelStyle = computed(() => (fraction.value !== null ? { width: `${fraction.value * 100}%` } : undefined))
+  /** The inline panel's width style (none until the reader drags the sash; a dragged width lifts the panel's 30% default cap). */
+  const panelStyle = computed(() => (fraction.value !== null ? { width: `${fraction.value * 100}%`, maxWidth: 'none' } : undefined))
 
   return { pageWidth, isInline, isOverlay, fraction, isDragging, panelStyle, onDividerPointerDown, onResizePointerMove, onResizePointerUp }
 }
