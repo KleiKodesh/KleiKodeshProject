@@ -83,6 +83,7 @@ internal static partial class Program
         builder.Services.AddSingleton<UserSettingsService>();
         builder.Services.AddSingleton<HttpHostState>();
         builder.Services.AddSingleton<LocalFileGrants>();
+        builder.Services.AddSingleton<global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments>();
         builder.Services.AddSingleton<KitveiHakodeshService.Pdf.WordConversionService>();
         builder.Services.AddSingleton<OwnerRegistry>();
         builder.Services.AddSingleton<Dispatcher>();

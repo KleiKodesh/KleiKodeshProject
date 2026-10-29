@@ -67,6 +67,16 @@ public sealed class LocalFileGrants
         return true;
     }
 
+    /// <summary>Validate a path the FastDocView page asked to read: the same traversal-safe checks
+    /// as <see cref="TryValidateSource"/>, restricted to the types FastDocView reads. Nothing is
+    /// served over GET /file - the page receives rendered windows of blocks only.</summary>
+    public bool TryValidateFastDocViewSource(string? rawPath, out string full, out string error)
+    {
+        if (!TryValidateForShellOpen(rawPath, out full, out error)) return false;
+        if (!global::KitveiHakodesh.Core.FastDocView.FastDocViewFileTypes.IsSupported(full)) { error = "file type not allowed"; return false; }
+        return true;
+    }
+
     /// <summary>
     /// Validate a path the app asked to hand off to the OS's default program. Applies the same
     /// traversal-safe checks as <see cref="TryValidateSource"/> (absolute, canonical, no

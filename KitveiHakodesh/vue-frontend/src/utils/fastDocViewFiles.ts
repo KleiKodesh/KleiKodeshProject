@@ -2,11 +2,11 @@
    search results, address bar, recents, push events) asks opensInFastDocView. */
 
 /**
- * THE switch for FastDocView routing. Off until the service's fastDocView* ops exist:
- * Word-family files keep opening as PDF (Word -> PDF conversion) and .txt in /txt-view.
- * Turning it on routes them to /fast-doc-view (see features/fast-doc-view/README.md).
+ * THE switch for FastDocView routing. On: the Word family, OpenDocument text, RTF and .txt
+ * open in /fast-doc-view (see features/fast-doc-view/README.md); "open as PDF" on that page
+ * is the explicit Word -> PDF choice. Off: Word-family files open as PDF and .txt in /txt-view.
  */
-export const OPEN_DOCUMENTS_IN_FAST_DOC_VIEW = false
+export const OPEN_DOCUMENTS_IN_FAST_DOC_VIEW = true
 
 /** Extensions FastDocView reads - Word family, OpenDocument text, RTF and plain text. */
 const FAST_DOC_VIEW_EXTENSIONS = new Set([

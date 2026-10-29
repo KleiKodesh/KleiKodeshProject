@@ -5,6 +5,7 @@ import {
   type FastDocViewBlock,
   type FastDocViewHeading,
   type FastDocViewNote,
+  type FastDocViewScanState,
   type FastDocViewSummary,
 } from '@/webview-host/fastDocViewApi'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
@@ -13,6 +14,8 @@ import { FastDocViewBlockCache } from './fastDocViewBlockCache'
 export const FAST_DOC_VIEW_BLOCK_CACHE_CAPACITY = 400
 /** Largest single blocks request; a longer missing span is asked for in pieces. */
 export const FAST_DOC_VIEW_MAX_BLOCKS_PER_REQUEST = 100
+/** Index-building step on a first open: blocks indexed per fastDocViewScan call (tens of ms). */
+export const FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN = 5000
 
 export interface FastDocViewDocumentOptions {
   api: FastDocViewApi
@@ -32,6 +35,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
 
   const summary = shallowRef<FastDocViewSummary | null>(null)
   const blockCount = ref(0)
+  /** False while a first open is still building its index; the count only grows meanwhile. */
+  const isIndexComplete = ref(true)
   const headings = shallowRef<FastDocViewHeading[]>([])
   const weights = shallowRef<Int32Array | null>(null)
   const isLoading = ref(false)
@@ -45,7 +50,11 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   let openGeneration = 0
   let reopening: Promise<void> | null = null
 
-  async function open(path: string): Promise<void> {
+  /**
+   * Opens `path`. `reachIndex` (a restored position): while the index is incomplete, scan
+   * until that block is known BEFORE the document is shown, or the reader lands elsewhere.
+   */
+  async function open(path: string, openOptions: { reachIndex?: number } = {}): Promise<void> {
     const generation = ++openGeneration
     await closeCurrent()
     if (generation !== openGeneration) return
@@ -58,8 +67,23 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
         void api.close(opened.documentId).catch(() => {})
         return
       }
-      applySummary(opened)
+      let summaryToShow = opened
+      const reachIndex = openOptions.reachIndex ?? 0
+      let complete = opened.isIndexComplete
+      let known = opened.blockCount
+      while (!complete && known <= reachIndex) {
+        const state = await api.scan(opened.documentId, FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN)
+        if (generation !== openGeneration) {
+          void api.close(opened.documentId).catch(() => {})
+          return
+        }
+        complete = state.isIndexComplete
+        known = Math.max(known, state.knownBlockCount)
+        summaryToShow = withScanState(summaryToShow, state)
+      }
+      applySummary(summaryToShow)
       void loadOutline(opened.documentId, generation)
+      if (!summaryToShow.isIndexComplete) void buildIndexInBackground(opened.documentId, generation)
     } catch (caught) {
       if (generation === openGeneration) error.value = caught
     } finally {
@@ -70,6 +94,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   function applySummary(opened: FastDocViewSummary) {
     summary.value = opened
     blockCount.value = opened.blockCount
+    isIndexComplete.value = opened.isIndexComplete
     cache.clear()
     cacheRevision.value++
   }
@@ -80,11 +105,48 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
         api.headings(documentId),
         api.weights(documentId),
       ])
-      if (generation !== openGeneration) return
+      if (generation !== openGeneration || summary.value?.documentId !== documentId) return
       headings.value = loadedHeadings
       weights.value = loadedWeights
     } catch {
       // The outline is a convenience: the text reads without it.
+    }
+  }
+
+  /**
+   * A first open returns after its first blocks: keep building the index, one scan call at a
+   * time, until it is complete. Stops when the document is replaced, closed or a call fails
+   * (a changed file reopens through the next blocks fetch). On completion the outline and
+   * weights are fetched again in full.
+   */
+  function withScanState(current: FastDocViewSummary, state: FastDocViewScanState): FastDocViewSummary {
+    return {
+      ...current,
+      blockCount: Math.max(current.blockCount, state.knownBlockCount),
+      knownBlockCount: Math.max(current.knownBlockCount, state.knownBlockCount),
+      isIndexComplete: state.isIndexComplete,
+      footnoteCount: state.footnoteCount,
+      endnoteCount: state.endnoteCount,
+    }
+  }
+
+  async function buildIndexInBackground(documentId: string, generation: number) {
+    const isCurrent = () => generation === openGeneration && summary.value?.documentId === documentId
+    while (isCurrent() && !isIndexComplete.value) {
+      let state
+      try {
+        state = await api.scan(documentId, FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN)
+      } catch {
+        return
+      }
+      if (!isCurrent()) return
+      // The count only grows: never move it back for a stale answer. Note counts grow too.
+      if (state.knownBlockCount > blockCount.value) blockCount.value = state.knownBlockCount
+      if (summary.value) summary.value = withScanState(summary.value, state)
+      if (state.isIndexComplete) {
+        isIndexComplete.value = true
+        await loadOutline(documentId, generation)
+      }
     }
   }
 
@@ -106,6 +168,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
         applySummary(opened)
         contentVersion.value++
         void loadOutline(opened.documentId, generation)
+        if (!opened.isIndexComplete) void buildIndexInBackground(opened.documentId, generation)
       } finally {
         reopening = null
       }
@@ -124,11 +187,6 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       if (summary.value?.documentId !== documentId) throw new Error('FastDocView: document replaced')
       cache.store(fetched, focus, options.retainedRanges?.() ?? [])
       cacheRevision.value++
-      // Fewer blocks than asked = the document ends sooner than the estimate said.
-      if (fetched.length < count && start + fetched.length < blockCount.value) {
-        blockCount.value = start + fetched.length
-        return
-      }
     }
   }
 
@@ -194,6 +252,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     headings.value = []
     weights.value = null
     blockCount.value = 0
+    isIndexComplete.value = true
     cache.clear()
     if (documentId) await api.close(documentId).catch(() => {})
   }
@@ -206,6 +265,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   return {
     summary,
     blockCount,
+    isIndexComplete,
     headings,
     isLoading,
     error,

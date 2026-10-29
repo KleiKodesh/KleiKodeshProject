@@ -8,9 +8,10 @@ import { serviceCall } from './serviceClient'
 /** What `fastDocViewOpen` returns: the document's identity for every later call, and its shape. */
 export interface FastDocViewSummary {
   documentId: string
-  /** The scroller's row count. While the index is incomplete this is an ESTIMATE. */
+  /** The scroller's row count: the blocks known so far. While the index is still being
+   *  built (first open of a big file) it only grows - it is never an estimate. */
   blockCount: number
-  /** Blocks the index has actually found so far (= blockCount once complete). */
+  /** Blocks the index has found so far (= blockCount). */
   knownBlockCount: number
   isIndexComplete: boolean
   isRightToLeft: boolean
@@ -36,6 +37,15 @@ export interface FastDocViewBlock {
   notes: FastDocViewNote[]
 }
 
+/** What `fastDocViewScan` returns: the index state after one more building step. */
+export interface FastDocViewScanState {
+  knownBlockCount: number
+  isIndexComplete: boolean
+  /** Note counts grow with the index, like the block count. */
+  footnoteCount: number
+  endnoteCount: number
+}
+
 export interface FastDocViewHeading {
   blockIndex: number
   level: number
@@ -49,6 +59,8 @@ export interface FastDocViewApi {
   headings(documentId: string): Promise<FastDocViewHeading[]>
   /** One weight (estimated text length) per block. */
   weights(documentId: string): Promise<Int32Array>
+  /** Builds `blocks` more of the index (renders nothing) and returns the new state. */
+  scan(documentId: string, blocks: number): Promise<FastDocViewScanState>
   close(documentId: string): Promise<void>
 }
 
@@ -82,6 +94,7 @@ export const fastDocViewApi: FastDocViewApi = {
     (await serviceCall<FastDocViewHeading[]>('fastDocViewHeadings', { documentId })) ?? [],
   weights: async (documentId) =>
     decodeFastDocViewWeights(await serviceCall<Uint8Array>('fastDocViewWeights', { documentId })),
+  scan: (documentId, blocks) => serviceCall<FastDocViewScanState>('fastDocViewScan', { documentId, blocks }),
   close: async (documentId) => {
     await serviceCall('fastDocViewClose', { documentId })
   },
