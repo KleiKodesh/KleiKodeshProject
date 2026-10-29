@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { effectScope } from 'vue'
-import { useFastDocViewDocument } from './useFastDocViewDocument'
+import { useFastDocViewDocument, FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS } from './useFastDocViewDocument'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
 import {
   FAST_DOC_VIEW_SOURCE_CHANGED,
@@ -158,6 +158,77 @@ describe('useFastDocViewDocument', () => {
     expect(document.summary.value?.documentId).toBe('doc2')
     expect(document.contentVersion.value).toBe(versionBefore + 1)
     expect(document.blockAt(3)).toBeDefined()
+    scope.stop()
+  })
+
+  it('a failing scan is retried with backoff, then reported - never a silent stall', async () => {
+    vi.useFakeTimers()
+    try {
+      const { api } = fakeApi(100)
+      api.open = async () => ({
+        documentId: 'doc1', blockCount: 10, knownBlockCount: 10, isIndexComplete: false,
+        isRightToLeft: true, stylesheet: '', headingCount: 0, footnoteCount: 0, endnoteCount: 0,
+      })
+      let scans = 0
+      let failuresLeft = 2
+      api.scan = async () => {
+        scans++
+        if (failuresLeft > 0) { failuresLeft--; throw new Error('transient') }
+        return { knownBlockCount: 100, isIndexComplete: true, footnoteCount: 0, endnoteCount: 0 }
+      }
+      const scope = effectScope()
+      const document = scope.run(() => useFastDocViewDocument({ api }))!
+      await document.open('x')
+      await vi.runAllTimersAsync()
+      expect(scans).toBe(3)
+      expect(document.blockCount.value).toBe(100)
+      expect(document.indexBuildFailed.value).toBe(false)
+
+      failuresLeft = Infinity
+      scans = 0
+      await document.open('y')
+      await vi.runAllTimersAsync()
+      expect(scans).toBe(FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS.length + 1)
+      expect(document.indexBuildFailed.value).toBe(true)
+      expect(document.blockCount.value).toBe(10)
+      scope.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('the index scan waits while a block fetch is pending', async () => {
+    const { api, calls } = fakeApi(100)
+    api.open = async () => ({
+      documentId: 'doc1', blockCount: 50, knownBlockCount: 50, isIndexComplete: false,
+      isRightToLeft: true, stylesheet: '', headingCount: 0, footnoteCount: 0, endnoteCount: 0,
+    })
+    let releaseBlocks: () => void = () => {}
+    const blocksGate = new Promise<void>((resolve) => (releaseBlocks = resolve))
+    let releaseFirstScan: () => void = () => {}
+    const firstScanGate = new Promise<void>((resolve) => (releaseFirstScan = resolve))
+    const fetchBlocks = api.blocks
+    api.blocks = async (...args) => { await blocksGate; return fetchBlocks(...args) }
+    api.scan = async (documentId, blocks) => {
+      calls.push({ op: 'scan', args: [documentId, blocks] })
+      const first = calls.filter((call) => call.op === 'scan').length === 1
+      if (first) await firstScanGate
+      return { knownBlockCount: first ? 60 : 100, isIndexComplete: !first, footnoteCount: 0, endnoteCount: 0 }
+    }
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x')                      // the first scan call is now in flight
+    const fetching = document.ensureBlocks(0, 10) // a block fetch starts meanwhile
+    releaseFirstScan()
+    await flush()
+    await flush()
+    expect(calls.filter((call) => call.op === 'scan').length).toBe(1)
+    expect(document.blockCount.value).toBe(60)
+    releaseBlocks()
+    await fetching
+    await flush()
+    expect(calls.filter((call) => call.op === 'scan').length).toBe(2)
+    expect(document.blockCount.value).toBe(100)
     scope.stop()
   })
 

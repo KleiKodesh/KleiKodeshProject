@@ -11,5 +11,6 @@
   "footnote": "Footnote",
   "endnote": "Endnote",
   "openAsPdf": "Open as PDF (through Word)",
-  "openAsPdfFailed": "The document could not be opened as PDF"
+  "openAsPdfFailed": "The document could not be opened as PDF",
+  "indexBuildFailed": "Only part of the document could be loaded. Open the file again to load the rest."
 }

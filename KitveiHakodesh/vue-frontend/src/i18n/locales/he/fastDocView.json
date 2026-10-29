@@ -11,5 +11,6 @@
   "footnote": "הערת שוליים",
   "endnote": "הערת סוף",
   "openAsPdf": "פתח כ-PDF (דרך Word)",
-  "openAsPdfFailed": "הפתיחה כ-PDF נכשלה"
+  "openAsPdfFailed": "הפתיחה כ-PDF נכשלה",
+  "indexBuildFailed": "רק חלק מהמסמך נטען. פתחו את הקובץ מחדש."
 }
