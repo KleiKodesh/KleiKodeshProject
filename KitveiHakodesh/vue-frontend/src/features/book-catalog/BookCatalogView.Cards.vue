@@ -10,6 +10,7 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
+import { stripCommentaryTarget } from './stripCommentaryTarget'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
@@ -39,7 +40,7 @@ function getSecondaryLine(item: FsItem): string {
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
-    title: item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors),
+    title: item.kind === 'folder' ? item.node.title : titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors),
     path: getSecondaryLine(item),
     icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
     color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
@@ -129,9 +130,10 @@ defineExpose({
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
 }
-/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
-.catalog-cards :deep(.card-title) {
-  white-space: normal;
-  overflow-wrap: anywhere;
+/* One line each, title and path: ellipsis, never wrap. The full text is in the tooltip. */
+.catalog-cards :deep(.card-path) {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 </style>
