@@ -324,6 +324,9 @@ function onRemove() {
 .layout-cards .card {
   padding-inline: max(12px, 10%);
 }
+.layout-cards .card-icon {
+  font-size: 26px;
+}
 
 /* ── List layout: a flat 38px row, the title only. ─────────────────────────────────────────────────────── */
 .layout-list .card {
