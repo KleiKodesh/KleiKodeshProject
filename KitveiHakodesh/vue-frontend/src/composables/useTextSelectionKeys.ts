@@ -5,6 +5,8 @@ import { useSelectAllInContainer } from './useSelectAllInContainer'
 export function useScopedKeys(
   containerRef: Ref<HTMLElement | null>,
   options?: {
+    /** False blocks Ctrl+A (the key is still swallowed, so the page is not selected either). */
+    canSelectAll?: () => boolean
     onCtrlF?: () => void
     /**
      * Takes over plain Ctrl+C. The copy paths need to load data before writing the
@@ -28,7 +30,7 @@ export function useScopedKeys(
 
     if (event.code === 'KeyA') {
       event.preventDefault()
-      selectAllInContainer()
+      if (options?.canSelectAll?.() !== false) selectAllInContainer()
     } else if (event.code === 'KeyF' && options?.onCtrlF) {
       event.preventDefault()
       options.onCtrlF()
