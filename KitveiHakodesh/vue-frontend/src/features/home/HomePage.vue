@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useBookCatalogCategoryNavigation } from '@/features/book-catalog/useBookCatalogCategoryNavigation'
 import { ref, computed, onMounted } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useElementSize } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
 import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
@@ -13,6 +13,7 @@ import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
+import { useHomeContentWidth } from './useHomeContentWidth'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
@@ -28,6 +29,11 @@ const { navigate, openFolderPicker } = useAppNavigation()
 const { openCatalogCategory } = useBookCatalogCategoryNavigation()
 
 const searchBarRef = ref<HTMLElement | null>(null)
+// Cards keep a fixed width; the search bar and the grid both take the width of
+// the whole columns that fit, instead of the cards stretching to fill the pane.
+const homeInnerRef = ref<HTMLElement | null>(null)
+const { width: homeInnerWidth } = useElementSize(homeInnerRef)
+const contentWidth = useHomeContentWidth(homeInnerWidth, () => settingsStore.homeView)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
@@ -124,7 +130,7 @@ onMounted(focusSearchInput)
 
 <template>
   <div class="home-page">
-    <div class="home-inner">
+    <div ref="homeInnerRef" class="home-inner" :style="{ '--home-content-width': `${contentWidth}px` }">
       <div class="home-search-blanket">
         <div
           ref="searchBarRef"
@@ -255,7 +261,8 @@ onMounted(focusSearchInput)
   display: grid;
   /* Card min-width scales with the pane (cqi), so narrow panes still fit 2+
      columns instead of collapsing to one full-width card per row. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
+  /* Fixed-width columns; useHomeContentWidth sizes the grid to whole columns. */
+  grid-template-columns: repeat(auto-fill, min(100%, 200px));
   gap: 8px;
   width: 100%;
   max-width: var(--home-content-width);
@@ -267,7 +274,7 @@ onMounted(focusSearchInput)
 }
 /* Tiles: the catalog's 72px icon tiles. */
 .home-cards--tiles {
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-template-columns: repeat(auto-fill, 72px);
   gap: 6px;
   justify-items: center;
 }
