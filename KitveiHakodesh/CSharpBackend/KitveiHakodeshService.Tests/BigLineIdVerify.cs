@@ -48,6 +48,16 @@ namespace KitveiHakodeshService.Tests
             {
                 string primary = Path.Combine(dir, "seforim.db");
                 HardeningVerify.BuildLibrary(primary, "ראשי", "ספר ראשי", "טקסט ראשי", "פרק ראשי", HardeningVerify.Shape.Plain, altToc: true, regularToc: true);
+                int primaryFirstLineId;
+                using (var pc = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = primary }.ConnectionString))
+                {
+                    pc.Open();
+                    HardeningVerify.Exec(pc, "CREATE TABLE connection_type(id INTEGER PRIMARY KEY, name TEXT UNIQUE); " +
+                        "INSERT INTO connection_type VALUES (1,'COMMENTARY'),(4,'REFERENCE'),(5,'SOURCE'),(14,'OTHER')");
+                    using var q0 = pc.CreateCommand();
+                    q0.CommandText = "SELECT id FROM line WHERE bookId = 1 AND lineIndex = 0";
+                    primaryFirstLineId = Convert.ToInt32(q0.ExecuteScalar());
+                }
 
                 foreach (var shape in new[] { HardeningVerify.Shape.SplitCompressed, HardeningVerify.Shape.Plain })
                 {
@@ -124,6 +134,31 @@ namespace KitveiHakodeshService.Tests
                     var byIndex = q.GetLineByBookAndLineIndex(far.Id, 2);
                     Check(byIndex.Count == 1 && byIndex[0].Id == linesFar[2].Id && byIndex[0].Content == "מדבר שומם",
                         "GetLineByBookAndLineIndex returns line 2 of the far book with its global id", "by index: " + string.Join("|", byIndex.Select(l => l.Id + "=" + l.Content)));
+                    // ── links of the far book: external_link translated to global ids ──────────
+                    var groups = q.GetCommentaryLinkGroupsForSourceLineRange(linesFar.Select(l => l.Id).ToList());
+                    var sourceGroup = groups.FirstOrDefault(g => g.TargetBookId == 1);
+                    var noteGroup = groups.FirstOrDefault(g => g.TargetBookId == SeforimDbLibraryId.ToGlobal(1, 2));
+                    Check(groups.Count == 2 && sourceGroup != null && sourceGroup.ConnectionTypeId == 5
+                          && sourceGroup.LineIds.SequenceEqual(new[] { primaryFirstLineId }) && sourceGroup.LineIndexes.SequenceEqual(new[] { 0 }),
+                        "a line of the far book links to the official book it cites (by title), with the official line id and type SOURCE",
+                        "link groups: " + string.Join("|", groups.Select(g => g.TargetBookId + "/" + g.ConnectionTypeId + ":" + string.Join(",", g.LineIds))));
+                    Check(noteGroup != null && noteGroup.ConnectionTypeId == 1 && noteGroup.LineIndexes.SequenceEqual(new[] { 1 })
+                          && noteGroup.LineIds.Length == 1 && noteGroup.LineIds[0] > 1 * SeforimDbLibraryId.OffsetUnit && noteGroup.LineIds[0] < 2 * SeforimDbLibraryId.OffsetUnit,
+                        "a footnote link to another book of the library resolves to a global line id (footnotes shown as commentary)",
+                        "note group: " + (noteGroup == null ? "none" : string.Join(",", noteGroup.LineIds)));
+                    Check(groups.All(g => g.TargetBookId != 0), "a target that does not exist (no book of that title) is left out", "unresolved target produced a group");
+                    var old = q.GetCommentaryLinksForSourceLineRange(linesFar.Select(l => l.Id).ToList());
+                    Check(old.Count == 2 && old.Any(l => l.TargetBookId == 1 && l.TargetLineId == primaryFirstLineId),
+                        "the flat link list agrees with the grouped one", "flat links: " + string.Join("|", old.Select(l => l.TargetBookId + ":" + l.TargetLineId)));
+                    var targetLine = q.GetLinkTargetForSourceLineAndBook(linesFar[1].Id, 1);
+                    Check(targetLine.Count == 1 && targetLine[0].TargetLineId == primaryFirstLineId && targetLine[0].LineIndex == 0,
+                        "the link of one line into one official book is found", "link target: " + string.Join(",", targetLine.Select(t => t.TargetLineId)));
+                    var filter = q.GetStaticFilterBooks(far.Id, new List<int> { 1, 4, 5, 14 });
+                    Check(filter.Count == 2 && filter.Any(f => f.TargetBookId == 1 && f.ConnectionTypeId == 5) && filter.Any(f => f.TargetBookId == SeforimDbLibraryId.ToGlobal(1, 2) && f.ConnectionTypeId == 1),
+                        "the books the far book links to are listed with their types", "static filter: " + string.Join("|", filter.Select(f => f.TargetBookId + "/" + f.ConnectionTypeId)));
+                    var info = q.GetBookById(far.Id);
+                    Check(info != null && info.HasSourceConnection == 1 && info.HasCommentaryConnection == 1 && info.HasReferenceConnection == 0,
+                        "the far book's flags say it has source and commentary links (so the reader asks for them)", "flags: " + (info == null ? "none" : $"{info.HasSourceConnection}/{info.HasCommentaryConnection}/{info.HasReferenceConnection}"));
                     var linesSecond = q.GetLinesPaged(second.Id, 10, 0);
                     Check(linesSecond.Count == 2 && linesSecond[0].Content == "נהר גדול",
                         "another book of the same library reads correctly", "second book: " + string.Join("|", linesSecond.Select(l => l.Content)));
@@ -259,6 +294,14 @@ namespace KitveiHakodeshService.Tests
                 ? "CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, lineIndex INTEGER); CREATE INDEX idx_line_book_index ON line(bookId, lineIndex); CREATE TABLE line_content(id INTEGER PRIMARY KEY, content)"
                 : "CREATE TABLE line(id INTEGER PRIMARY KEY, bookId INTEGER, lineIndex INTEGER, content TEXT); CREATE INDEX idx_line_book_index ON line(bookId, lineIndex)");
             HardeningVerify.Exec(conn, "INSERT INTO category VALUES (1, NULL, 'ספרייה גדולה', 0)");
+            // links in the shape a library built for merging carries them: the target by title and line index
+            HardeningVerify.Exec(conn, @"
+                CREATE TABLE external_link (sourceBookId INTEGER NOT NULL, sourceLineIndex INTEGER NOT NULL,
+                    targetSource TEXT, targetTitle TEXT NOT NULL, targetRef TEXT, targetLineIndex INTEGER, connectionType TEXT);
+                CREATE INDEX idx_external_link_source ON external_link(sourceBookId, sourceLineIndex);
+                INSERT INTO external_link VALUES (5000, 1, 'official', 'ספר ראשי', NULL, 0, 'SOURCE');
+                INSERT INTO external_link VALUES (5000, 2, 'big-library', 'ספר שני', NULL, 1, 'FOOTNOTES');
+                INSERT INTO external_link VALUES (5000, 3, 'official', 'ספר שאין כזה', NULL, 0, 'SOURCE');");
 
             byte[]? dict = null;
             ZstdSharp.Compressor? compressor = null;

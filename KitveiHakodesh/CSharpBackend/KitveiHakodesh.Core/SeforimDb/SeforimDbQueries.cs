@@ -251,19 +251,41 @@ namespace KitveiHakodesh.Core.SeforimDb
             }
 
             cmd.Parameters.AddWithValue("@id", localId);
-            using var r = cmd.ExecuteReader();
-            if (!r.Read()) return null;
-
-            return new BookInfo
+            BookInfo info;
+            using (var r = cmd.ExecuteReader())
             {
-                TotalLines = r.IsDBNull(0) ? 0 : r.GetInt32(0),
-                HasTeamim = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                HasTargumConnection = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                HasReferenceConnection = r.IsDBNull(3) ? 0 : r.GetInt32(3),
-                HasSourceConnection = r.IsDBNull(4) ? 0 : r.GetInt32(4),
-                HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
-                HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
-            };
+                if (!r.Read()) return null;
+                info = new BookInfo
+                {
+                    TotalLines = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                    HasTeamim = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    HasTargumConnection = r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                    HasReferenceConnection = r.IsDBNull(3) ? 0 : r.GetInt32(3),
+                    HasSourceConnection = r.IsDBNull(4) ? 0 : r.GetInt32(4),
+                    HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
+                    HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
+                };
+            }
+
+            // A book of a library that links through external_link: its flags follow the kinds of links it has.
+            if (libraryIndex != 0 && FindAttached(libraryIndex) is { } own && SeforimDbExternalLinks.HasTable(conn, own))
+            {
+                var types = SeforimDbExternalLinks.LoadConnectionTypeIds(conn);
+                foreach (string kind in SeforimDbExternalLinks.KindsOfBook(conn, own, localId))
+                {
+                    int typeId = SeforimDbExternalLinks.ConnectionTypeId(types, kind);
+                    string name = types.FirstOrDefault(t => t.Value == typeId).Key ?? "";
+                    switch (name.ToUpperInvariant())
+                    {
+                        case "SOURCE": info.HasSourceConnection = 1; break;
+                        case "REFERENCE": info.HasReferenceConnection = 1; break;
+                        case "TARGUM": info.HasTargumConnection = 1; break;
+                        case "COMMENTARY": case "SUPER_COMMENTARY": info.HasCommentaryConnection = 1; break;
+                        default: info.HasOtherConnection = 1; break;
+                    }
+                }
+            }
+            return info;
         }
 
         private bool? _lineHasCharCount;
@@ -737,11 +759,37 @@ namespace KitveiHakodesh.Core.SeforimDb
         // the seforim DB is static for the life of the process (see the catalog caches).
         private bool? _linkHasTargetLineIndex;
 
+        /// <summary>The links from lines of additional libraries (global ids), translated from the library's
+        /// <c>external_link</c> (see <see cref="SeforimDbExternalLinks"/>). Empty when none of the lines belongs to
+        /// a library, or the library has no such table.</summary>
+        private List<SeforimDbExternalLinks.Link> ExternalLinksForLines(SqliteConnection conn, List<int> globalLineIds)
+        {
+            var links = new List<SeforimDbExternalLinks.Link>();
+            if (_attachedLibraries.Count == 0) return links;
+            Dictionary<string, int>? types = null;
+            foreach (var (libraryIndex, localIds) in GroupByLibrary(globalLineIds))
+            {
+                if (libraryIndex == 0 || FindAttached(libraryIndex) is not { } library) continue;
+                if (!SeforimDbExternalLinks.HasTable(conn, library)) continue;
+                types ??= SeforimDbExternalLinks.LoadConnectionTypeIds(conn);
+                links.AddRange(SeforimDbExternalLinks.ForLines(conn, library, localIds, types));
+            }
+            return links;
+        }
+
         public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds)
         {
             var list = new List<CommentaryLinkRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
+            foreach (var l in ExternalLinksForLines(conn, lineIds.Where(id => id >= SeforimDbLibraryId.OffsetUnit).ToList()))
+                list.Add(new CommentaryLinkRow
+                {
+                    TargetBookId = l.TargetBookId, TargetLineId = l.TargetLineId,
+                    ConnectionTypeId = l.ConnectionTypeId, LineIndex = l.TargetLineIndex,
+                });
+            lineIds = lineIds.Where(id => id < SeforimDbLibraryId.OffsetUnit).ToList();
+            if (lineIds.Count == 0) return list;
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinksForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
@@ -767,6 +815,29 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<CommentaryLinkGroupRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
+
+            // Lines of an additional library: their links come from external_link, already global; grouped
+            // per (target book, type) like the primary ones, and placed in the same (book, type) order.
+            var external = ExternalLinksForLines(conn, lineIds.Where(id => id >= SeforimDbLibraryId.OffsetUnit).ToList());
+            if (external.Count > 0)
+            {
+                foreach (var g in external
+                    .GroupBy(l => (l.TargetBookId, l.ConnectionTypeId))
+                    .OrderBy(g => g.Key.TargetBookId).ThenBy(g => g.Key.ConnectionTypeId))
+                {
+                    var ordered = g.GroupBy(l => l.TargetLineId).Select(x => x.First())
+                        .OrderBy(l => l.TargetLineIndex).ThenBy(l => l.TargetLineId).ToList();
+                    list.Add(new CommentaryLinkGroupRow
+                    {
+                        TargetBookId = g.Key.TargetBookId,
+                        ConnectionTypeId = g.Key.ConnectionTypeId,
+                        LineIds = ordered.Select(l => l.TargetLineId).ToArray(),
+                        LineIndexes = ordered.Select(l => l.TargetLineIndex).ToArray(),
+                    });
+                }
+                lineIds = lineIds.Where(id => id < SeforimDbLibraryId.OffsetUnit).ToList();
+                if (lineIds.Count == 0) return list;
+            }
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
@@ -797,7 +868,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 indexes.Add(r.IsDBNull(3) ? 0 : r.GetInt32(3));
             }
             Flush();
-            return list;
+            return list.OrderBy(g => g.TargetBookId).ThenBy(g => g.ConnectionTypeId).ToList();
         }
 
         // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
@@ -979,6 +1050,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<StaticFilterRow>();
             if (typeIds is null || typeIds.Count == 0) return list;
             using var conn = Open();
+            var (sourceLibraryIndex, localSourceBookId) = SeforimDbLibraryId.Resolve(sourceBookId);
+            if (sourceLibraryIndex != 0)
+            {
+                // A book of an additional library: the books its external_link rows point at.
+                if (FindAttached(sourceLibraryIndex) is not { } library) return list;
+                var types = SeforimDbExternalLinks.LoadConnectionTypeIds(conn);
+                foreach (var (targetBook, typeId) in SeforimDbExternalLinks.ForBook(conn, library, localSourceBookId, types))
+                    if (typeIds.Contains(typeId))
+                        list.Add(new StaticFilterRow { TargetBookId = targetBook, ConnectionTypeId = typeId });
+                return list;
+            }
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetStaticFilterBooks(typeIds.Count);
             cmd.Parameters.AddWithValue("@bookId", sourceBookId);
@@ -1037,6 +1119,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             var list = new List<LinkTargetRow>();
             using var conn = Open();
+            if (sourceLineId >= SeforimDbLibraryId.OffsetUnit)
+            {
+                foreach (var l in ExternalLinksForLines(conn, new List<int> { sourceLineId })
+                    .Where(l => l.TargetBookId == targetBookId)
+                    .OrderBy(l => l.TargetLineIndex))
+                    list.Add(new LinkTargetRow { TargetLineId = l.TargetLineId, LineIndex = l.TargetLineIndex });
+                return list;
+            }
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetLinkTargetForSourceLineAndBook;
             cmd.Parameters.AddWithValue("@sourceLineId", sourceLineId);
