@@ -258,7 +258,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             built = null;
 
-            var window = index.LocateSnippetWindow(hit, requireOrdered, contextWords);
+            var window = index.LocateSnippetWindow(hit, requireOrdered, contextWords, maxWordDistance);
             if (!window.IsMatch) return false;
             if (window.WordDistance > maxWordDistance) return false;
 

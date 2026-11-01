@@ -271,12 +271,16 @@ namespace FtsLib.Fts5
             finally { corpus?.Dispose(); }
         }
 
+        /// <param name="maxWordDistance">The caller keeps only hits whose WordDistance is at
+        /// most this: the marks are then only the tokens of covering windows inside the
+        /// snippet that keep it (issue #4). int.MaxValue = no filter.</param>
         public static SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
-                                                            int contextWords = SnippetDescriptorPipeline.DefaultContextWords)
+                                                            int contextWords = SnippetDescriptorPipeline.DefaultContextWords,
+                                                            int maxWordDistance = int.MaxValue)
         {
             if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
             var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords);
+            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords, maxWordDistance);
         }
 
         // ── Pipeline ──────────────────────────────────────────────────
