@@ -179,9 +179,8 @@ function onRemove() {
   min-height: 49px;
   box-sizing: border-box;
   padding: 8px 12px;
-  /* Fluent/iOS: spacing separates items, not lines. A barely-there fill gives
-     each item a body (focus) without the grid reading as boxes; no border. */
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  /* No fill and no border: spacing separates the items; hover/focus paint them. */
+  background: none;
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--text-primary);
