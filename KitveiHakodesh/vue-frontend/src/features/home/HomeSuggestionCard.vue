@@ -339,8 +339,7 @@ function onRemove() {
   }
 }
 
-/* ── List layout: a flat 38px row, title then path on one line, as in the
-   catalog's list view. ─────────────────────────────────────────────────────── */
+/* ── List layout: a flat 38px row, the title only (path in the tooltip). ─────────────────────────────────────────────────────── */
 .layout-list .card {
   min-height: 38px;
   height: 38px;
@@ -355,19 +354,11 @@ function onRemove() {
   transform: none;
   background: var(--active-bg);
 }
-.layout-list .card-text {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 10px;
-}
 .layout-list .card-title {
-  flex-shrink: 0;
-  max-width: 60%;
   font-size: 14px;
 }
 .layout-list .card-path {
-  flex: 1;
-  min-width: 0;
+  display: none;
 }
 .layout-list .card-actions {
   top: 50%;
