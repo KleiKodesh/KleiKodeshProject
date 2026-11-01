@@ -9,8 +9,8 @@ namespace KitveiHakodeshService.Tests;
 /// Checks for the ONE tree-order computation (Core's SeforimDbBookTreeOrder).
 ///
 ///   --treeorder-selftest        fixture tree: base text before its mefarshim subfolder,
-///                               non-base own books after subfolders, folder-named book
-///                               counts as base, dependent book does not, custom last,
+///                               non-base own books after subfolders, a book titled like
+///                               its folder is NOT base (flag only), custom last,
 ///                               orphans last.
 ///   --treeorder-dump out.tsv    bookId TAB treeOrder for the real DB, for diffing against
 ///                               an independent simulation.
@@ -34,7 +34,7 @@ public static class TreeOrderCheck
         //   1 Halacha
         //     2 Tur            (own: 100 Tur [base], 101 notes-on-Tur [not base])
         //       3 Mefarshim    (own: 102, 103)
-        //     4 Mitzvot        (own: 110 "sefer hamitzvot" [not flagged, title == folder], 111 Chinuch)
+        //     4 Mitzvot        (own: 110 "sefer hamitzvot" [not flagged, title == folder: NOT base], 111 Chinuch)
         //       5 "sefer hamitzvot" folder? no - 4 IS the folder titled like 110
         //     6 Rishonim       (own: 120 one-off)   subfolders: 7 Rashi (own: 121, 122)
         //   8 Custom root (-1)   (own: 130)
@@ -71,7 +71,7 @@ public static class TreeOrderCheck
         Expect(o.Values.Distinct().Count() == books.Count, "numbers unique");
         Expect(o[100] < o[102] && o[100] < o[103], "base text (flag) before its mefarshim subfolder");
         Expect(o[102] < o[101], "non-base own book after the subfolder");
-        Expect(o[110] < o[112] && o[112] < o[111], "folder-named unflagged book is base: before its subfolder, sibling after it");
+        Expect(o[112] < o[110] && o[110] < o[111], "folder-named unflagged book is NOT base: after its subfolder, in load order");
         Expect(o[121] < o[120] && o[122] < o[120], "commentary folder with no base: subfolders first, one-off last");
         Expect(o[151] < o[150], "dependent book titled like its folder is NOT promoted");
         Expect(o[130] > o[122] && o[130] > o[120] && o[130] > o[151], "custom root last among roots");

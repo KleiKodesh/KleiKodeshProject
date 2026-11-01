@@ -209,7 +209,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // v25: level indexed (Int32Field) so the book-title search can filter to level 0.
     // v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
     //      searches are pure index queries with no per-reader tables.
-    public const string IndexFormatVersion = "v26";
+    // v27: tree order counts a base text by the isBaseBook flag only (no title-equals-folder rule).
+    public const string IndexFormatVersion = "v27";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
