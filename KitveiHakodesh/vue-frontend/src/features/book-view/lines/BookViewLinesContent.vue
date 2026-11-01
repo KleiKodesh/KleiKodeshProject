@@ -41,6 +41,7 @@ import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip
 import { useWordLinkAnchors } from './useWordLinkAnchors'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { isExportRestricted } from '../exportRestriction'
 import { exportToWord, pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
@@ -153,6 +154,7 @@ const renderedLineIds = (): number[] => {
 }
 useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
+  canSelectAll: () => !exportRestricted.value,
   onCtrlF: () => emit('ctrl-f'),
   // Ctrl+C is intercepted so it takes the same path as the menu's copy: the export
   // warm-up has to be awaited before the clipboard event fires (see prepareAndCopy).
@@ -265,6 +267,11 @@ const {
   activeVersionId: () => props.activeVersionId ?? null,
 })
 const booksDataStore = useBooksDataStore()
+// Publisher-restricted books (the toolbar hides export to Word for them) get no
+// select-all either: a whole-book copy is the same export by another route.
+const exportRestricted = computed(() =>
+  isExportRestricted(booksDataStore.allBooksMap.get(bookId)?.title || bookTitle),
+)
 // What copy-with-notes needs beyond the rendered markup: the notes and citations of
 // lines that were never scrolled into view, plus the target lines those citations
 // point at (they become endnotes). Warmed by the copy actions, never on render.
@@ -299,6 +306,11 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   resolveWordLinkTarget,
   ensureAllLines: () => props.ensureAllLines(),
 })
+const visibleContextMenuItems = computed(() =>
+  exportRestricted.value
+    ? contextMenuItems.filter((item) => !('action' in item) || item.action !== selectAllInContainer)
+    : contextMenuItems,
+)
 useScopedCopy(
   scrollerEl,
   () => { const texts: string[] = []; props.lines.forEachLoaded((line) => { if (line.content) texts.push(line.content) }); return texts },
@@ -487,7 +499,7 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint
 
 <template>
   <div dir="rtl" class="lines-content">
-    <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <ContextMenu ref="contextMenuRef" :items="visibleContextMenuItems" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
       :selected-text="errorReportTarget.selectedText"
