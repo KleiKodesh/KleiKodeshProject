@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useElementSize } from '@vueuse/core'
+import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
@@ -54,6 +55,21 @@ const VIEW_COMPONENTS = {
   tiles: BookCatalogViewTiles,
 }
 const activeViewComponent = computed(() => VIEW_COMPONENTS[view.value])
+
+// Cards view: cards keep a 140-200px width and the grid takes whole columns,
+// centred; the address bar shares that width so its edges line up with the grid.
+// 24px = the grid's own inline padding (.catalog-cards).
+const contentRef = ref<HTMLElement | null>(null)
+const { width: contentWidth } = useElementSize(contentRef)
+const gridLayout = useCardGridLayout(() => contentWidth.value - 24, view)
+const gridStyle = computed(() =>
+  view.value === 'cards' && contentWidth.value > 0
+    ? {
+        '--catalog-content-width': `${gridLayout.value.width}px`,
+        '--catalog-columns': gridLayout.value.columns,
+      }
+    : undefined,
+)
 
 function setView(v: BooksView) {
   // Assigning the store ref persists it — settingsStore watches and writes.
@@ -314,8 +330,9 @@ function onSearchEnter() {
 
 <template>
   <!-- Never translated, always RTL in every UI language (user decision). -->
-  <div class="books-page" dir="rtl">
+  <div class="books-page" dir="rtl" :style="gridStyle">
     <BookCatalogTitleBar
+      :class="{ 'matches-grid': gridStyle }"
       :view="view"
       :path="path"
       :show-search="showSearch"
@@ -339,7 +356,7 @@ function onSearchEnter() {
         />
       </template>
     </BookCatalogTitleBar>
-    <div class="books-content">
+    <div ref="contentRef" class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
         <MessageBanner class="error-msg" :message="error" :dismissible="false" />
@@ -417,6 +434,10 @@ function onSearchEnter() {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+}
+/* The pill spans the card grid's width, centred over it (see gridStyle). */
+.matches-grid {
+  padding-inline: calc((100% - var(--catalog-content-width)) / 2);
 }
 .books-content {
   flex: 1;
