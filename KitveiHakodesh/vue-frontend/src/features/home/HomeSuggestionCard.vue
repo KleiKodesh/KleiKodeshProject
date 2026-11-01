@@ -319,13 +319,11 @@ function onRemove() {
   }
 }
 
-/* ── Cards layout: the icon + title pair sits centred in the card as one block;
-   a long title still shrinks to its ellipsis. ── */
+/* ── Cards layout: the inline padding grows with the card's width (% of the
+   wrapper), so icons stay aligned down a column while wider cards get a roomier
+   start margin. ── */
 .layout-cards .card {
-  justify-content: center;
-}
-.layout-cards .card-text {
-  flex: 0 1 auto;
+  padding-inline: max(12px, 10%);
 }
 
 /* ── List layout: a flat 38px row, the title only. ─────────────────────────────────────────────────────── */
