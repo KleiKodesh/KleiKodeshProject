@@ -241,7 +241,8 @@ function onRemove() {
 .card-path {
   font-size: 11px;
   line-height: 1.3;
-  color: var(--text-secondary);
+  /* Fainter than the secondary text: the path is background detail. */
+  color: color-mix(in srgb, var(--text-secondary) 65%, transparent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
