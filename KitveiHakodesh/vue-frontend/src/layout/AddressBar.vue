@@ -36,6 +36,8 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore, type Tab } from '@/stores/tabStore'
 import { sortedByRecency } from '@/stores/recentLocations'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useHostSearchStore } from '@/stores/hostSearchStore'
+import { parseBookLink } from '@/utils/appDeepLink'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
@@ -54,6 +56,7 @@ const pane = useAppShellPane(props.paneId)
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+const hostSearchStore = useHostSearchStore()
 const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 
 // Explorer behaviour: the field opens holding the full path of what the tab shows,
@@ -336,6 +339,12 @@ function onKeydown(e: KeyboardEvent) {
 function openTypedPath(): boolean {
   const text = searchQuery.value.trim()
   if (!text || text === initialPath) { close(); return true }
+  const bookLink = parseBookLink(text)
+  if (bookLink) {
+    close()
+    void hostSearchStore.openBookLink(bookLink)
+    return true
+  }
   if (isDiskPath(text)) {
     if (looksLikeFile(text)) {
       const fileName = text.split(/[\\/]/).pop()!

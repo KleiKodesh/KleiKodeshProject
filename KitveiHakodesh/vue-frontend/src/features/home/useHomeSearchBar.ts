@@ -1,6 +1,8 @@
 import { ref, watch, type Ref } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
+import { useHostSearchStore } from '@/stores/hostSearchStore'
+import { parseBookLink } from '@/utils/appDeepLink'
 
 // Book names stay Hebrew in both UI languages; only the prefix wording is translated.
 const EXAMPLE_BOOK_HB = '\u05E9\u05D1\u05EA'
@@ -133,6 +135,13 @@ export function useHomeSearchBar(options: {
   function submit() {
     const trimmed = query.value.trim()
     if (!trimmed) return
+    // A pasted book link (otzaria://, zayit://, ours) opens the book instead of searching.
+    const bookLink = parseBookLink(trimmed)
+    if (bookLink) {
+      reset()
+      void useHostSearchStore().openBookLink(bookLink)
+      return
+    }
     // Capture before reset() blanks the query, then hand off to the page.
     reset()
     options.onSubmit(trimmed)

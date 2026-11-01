@@ -20,11 +20,12 @@
  *   - a bare `:` in a path segment parses, but some link detectors in chat and mail
  *     clients end an auto-linked URL at the punctuation and truncate it.
  *
- * The app does NOT register itself as a handler for the scheme, so clicking such a
- * link outside the app does nothing today. The format exists so links copied now keep
- * working if a handler is ever registered: it is URL-parseable (protocol
+ * The installer registers the app as the Windows handler for the scheme
+ * (Build/Installer/Helpers/ShellRegistrationHelper.cs RegisterProtocol), so clicking
+ * such a link outside the app opens it. The link is URL-parseable (protocol
  * 'kitveihakodeshapp:', host 'book') and carries exactly the two values
- * openBookTarget needs — bookId and openTocLineIndex.
+ * openBookTarget needs — bookId and openTocLineIndex. Pasting one into the address
+ * bar or the home search bar opens it too.
  */
 
 /** Scheme of this app's own links. Was `seforimapp` — HostLink.cs still parses that. */
