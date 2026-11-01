@@ -123,7 +123,7 @@ export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 /** Which edge of the book view the toolbar docks to. */
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 /** Layout modes for the book catalog page. */
-export type BooksView = 'list' | 'tiles'
+export type BooksView = 'list' | 'cards' | 'tiles'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
@@ -182,7 +182,7 @@ const DEFAULTS = {
   /** Dictionary source pills the user picked; empty = all sources. */
   dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
-  booksView: 'tiles' as BooksView,
+  booksView: 'cards' as BooksView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   // The address a "דיווח על טעות" report is sent from. Remembered so the user types
@@ -854,7 +854,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // it to the list, and reject anything else unrecognized, because the title bar
   // indexes a two-key record by this value and would throw on a third one.
   function normalizeBooksView(value: LegacyBooksView | null): BooksView | null {
-    if (value === 'list' || value === 'tiles') return value
+    if (value === 'list' || value === 'cards' || value === 'tiles') return value
     if (value === 'tree') return 'list'
     return null
   }

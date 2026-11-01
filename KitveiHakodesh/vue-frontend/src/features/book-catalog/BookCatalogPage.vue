@@ -5,6 +5,7 @@ import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
 import BookCatalogViewCards from './BookCatalogView.Cards.vue'
+import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -47,9 +48,12 @@ const {
 // Persisted in settingsStore alongside every other display preference — it is
 // app-wide, not per-tab, so it needs no load-on-mount step.
 const { booksView: view } = storeToRefs(useSettingsStore())
-const activeViewComponent = computed(() =>
-  view.value === 'tiles' ? BookCatalogViewCards : BookCatalogViewList,
-)
+const VIEW_COMPONENTS = {
+  list: BookCatalogViewList,
+  cards: BookCatalogViewCards,
+  tiles: BookCatalogViewTiles,
+}
+const activeViewComponent = computed(() => VIEW_COMPONENTS[view.value])
 
 function setView(v: BooksView) {
   // Assigning the store ref persists it — settingsStore watches and writes.

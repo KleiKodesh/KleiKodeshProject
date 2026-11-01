@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
+import BookCatalogSearchTiles from './BookCatalogSearch.Tiles.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
@@ -20,19 +21,23 @@ const emit = defineEmits<{
 }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
+const isGridView = computed(() => props.view !== 'list')
 
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
 // whichever view is active.
 const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
-  getCount: () => (props.view === 'tiles' ? 0 : props.items.length),
+  getCount: () => (isGridView.value ? 0 : props.items.length),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
   containerElement: scrollEl,
 })
 
-// The grid view (cards; legacy BookCatalogSearch.Tiles.vue is a drop-in swap)
-// owns its own highlight and keyboard navigation.
+// The grid views (cards, tiles) are drop-in swaps for each other: each owns its
+// own highlight and keyboard navigation.
 const gridRef = ref<InstanceType<typeof BookCatalogSearchCards> | null>(null)
+const gridComponent = computed(() =>
+  props.view === 'tiles' ? BookCatalogSearchTiles : BookCatalogSearchCards,
+)
 
 // New results make the old highlight point at a different item — drop it.
 watch(
@@ -49,8 +54,14 @@ watch(
 // after, so its index is set on the next tick.
 watch(
   () => props.view,
-  (view) => {
-    if (view === 'tiles') {
+  (view, oldView) => {
+    if (view !== 'list' && oldView !== 'list') {
+      // Grid to grid: the old grid is still mounted, so read its index first.
+      const index = gridRef.value?.focusedIndex ?? -1
+      nextTick(() => {
+        if (gridRef.value) gridRef.value.focusedIndex = index
+      })
+    } else if (view !== 'list') {
       const index = listActiveIndex.value
       nextTick(() => {
         if (gridRef.value) gridRef.value.focusedIndex = index
@@ -80,7 +91,7 @@ function onSelect(item: SearchFsItem, openInNewTab = false) {
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) =>
-    props.view === 'tiles' ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
+    isGridView.value ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
 })
 
 function selectListItem(i: number, event?: MouseEvent) {
@@ -91,7 +102,7 @@ function selectListItem(i: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length && !searching" class="empty">{{ $t('bookCatalog.noResults') }}</p>
-  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
+  <div v-else-if="view === 'list'" ref="scrollEl" class="scroller">
     <div
       v-for="(item, index) in items"
       :key="item.uid"
@@ -110,7 +121,8 @@ function selectListItem(i: number, event?: MouseEvent) {
       </span>
     </div>
   </div>
-  <BookCatalogSearchCards
+  <component
+    :is="gridComponent"
     v-else
     ref="gridRef"
     :items="items"

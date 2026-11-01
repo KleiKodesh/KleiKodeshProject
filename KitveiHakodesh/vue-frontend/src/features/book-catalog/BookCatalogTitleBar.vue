@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   IconHome16Regular,
   IconSearch20Regular,
   IconTextBulletList20Regular,
   IconGrid20Regular,
+  IconAppsList20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
+import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BooksView } from '@/stores/settingsStore'
@@ -26,21 +28,30 @@ const emit = defineEmits<{
   goHome: []
 }>()
 
-// Two views, so the button is a straight toggle: it shows the view you are IN and
-// switches to the other one on click. The title names the view being switched TO,
-// since the icon already says where you are.
+// Three views, so the button opens a menu of them. It shows the view you are IN;
+// the menu ticks it.
 const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }> = {
   list: { label: t('bookCatalog.titleBar.listView'), icon: IconTextBulletList20Regular },
+  cards: { label: t('bookCatalog.titleBar.cardsView'), icon: IconAppsList20Regular },
   tiles: { label: t('bookCatalog.titleBar.tilesView'), icon: IconGrid20Regular },
 }
 
-const otherView = computed(() => (props.view === 'list' ? 'tiles' : 'list') as BooksView)
-const viewToggleTitle = computed(
-  () => t('bookCatalog.titleBar.switchTo', { view: VIEWS[otherView.value].label }),
+const viewMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const viewMenuItems = computed<ContextMenuItem[]>(() =>
+  (Object.keys(VIEWS) as BooksView[]).map((view) => ({
+    type: 'checkbox',
+    label: VIEWS[view].label,
+    checked: props.view === view,
+    onChange: () => {
+      emit('setView', view)
+      viewMenuRef.value?.hide()
+    },
+  })),
 )
 
-function toggleView() {
-  emit('setView', otherView.value)
+function openViewMenu(event: MouseEvent) {
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  void viewMenuRef.value?.showAtPosition(rect.left, rect.bottom)
 }
 </script>
 
@@ -99,12 +110,13 @@ function toggleView() {
     <template #right>
       <button
         class="bar-btn pill-btn"
-        :title="viewToggleTitle"
+        :title="$t('bookCatalog.titleBar.viewMenu')"
         @mousedown.prevent
-        @click="toggleView"
+        @click="openViewMenu"
       >
-        <component :is="VIEWS[otherView].icon" :key="otherView" />
+        <component :is="VIEWS[view].icon" :key="view" />
       </button>
+      <ContextMenu ref="viewMenuRef" :items="viewMenuItems" />
     </template>
   </TopSearchBar>
 </template>
