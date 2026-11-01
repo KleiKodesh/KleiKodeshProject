@@ -141,7 +141,6 @@ function onRemove() {
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
       <span class="card-text" :dir="layout === 'list' ? undefined : textDir">
         <span class="card-title">{{ card.title }}</span>
-        <span v-if="card.path" class="card-path">{{ card.path }}</span>
       </span>
     </button>
 
@@ -238,16 +237,6 @@ function onRemove() {
 /* One line, like the title: ellipsis, never wraps — the full path is in the
    tooltip. Omitted when empty, so a lone title centres vertically; the card's
    min-height keeps it as tall as a title+path card. */
-.card-path {
-  font-size: 11px;
-  line-height: 1.3;
-  /* Fainter than the secondary text: the path is background detail. */
-  color: var(--text-secondary);
-  opacity: 0.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* ── Actions (pin / delete), in the card's end corner ─────────────────────── */
 .card-actions {
@@ -341,7 +330,7 @@ function onRemove() {
   }
 }
 
-/* ── List layout: a flat 38px row, the title only (path in the tooltip), aligned
+/* ── List layout: a flat 38px row, the title only, aligned
    with the app's direction rather than the title's. ─────────────────────────────────────────────────────── */
 .layout-list .card {
   min-height: 38px;
@@ -359,9 +348,6 @@ function onRemove() {
 }
 .layout-list .card-title {
   font-size: 14px;
-}
-.layout-list .card-path {
-  display: none;
 }
 .layout-list .card-actions {
   top: 50%;
@@ -412,9 +398,6 @@ function onRemove() {
   -webkit-box-orient: vertical;
 }
 /* No room under a tile; the path stays in the tooltip. */
-.layout-tiles .card-path {
-  display: none;
-}
 .layout-tiles .card-actions {
   top: 0;
   inset-inline-end: 0;
