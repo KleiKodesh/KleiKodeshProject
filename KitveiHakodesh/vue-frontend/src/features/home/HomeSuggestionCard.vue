@@ -139,7 +139,7 @@ function onRemove() {
       @auxclick.middle="card.open(wantsNewTab($event))"
     >
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
-      <span class="card-text" :dir="textDir">
+      <span class="card-text" :dir="layout === 'list' ? undefined : textDir">
         <span class="card-title">{{ card.title }}</span>
         <span v-if="card.path" class="card-path">{{ card.path }}</span>
       </span>
@@ -339,7 +339,8 @@ function onRemove() {
   }
 }
 
-/* ── List layout: a flat 38px row, the title only (path in the tooltip). ─────────────────────────────────────────────────────── */
+/* ── List layout: a flat 38px row, the title only (path in the tooltip), aligned
+   with the app's direction rather than the title's. ─────────────────────────────────────────────────────── */
 .layout-list .card {
   min-height: 38px;
   height: 38px;
