@@ -296,6 +296,24 @@ namespace KitveiHakodeshLib.LocalFile
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
+        /// <summary>Shows a file in Explorer with it selected ("Open file location").</summary>
+        public void HandleRevealInFolder(JsonElement root, string id)
+        {
+            try
+            {
+                string filePath = root.GetProperty("filePath").GetString();
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                {
+                    _bridge.Reply(id, new { error = "הקובץ לא נמצא" });
+                    return;
+                }
+
+                string error = LocalFileOpenRules.RevealInFolder(filePath);
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
         /// <summary>PDF viewer TOC autosave: write an incremental-save tail back into the file
         /// (rules in PdfIncrementalSaveWriter). Bytes arrive base64 over the JSON bridge.</summary>
         public void HandleWritePdfTail(JsonElement root, string id)
