@@ -104,10 +104,4 @@ defineExpose({
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
 }
-/* One line each, title and path: ellipsis, never wrap. The full text is in the tooltip. */
-.catalog-cards :deep(.card-path) {
-  display: block;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 </style>

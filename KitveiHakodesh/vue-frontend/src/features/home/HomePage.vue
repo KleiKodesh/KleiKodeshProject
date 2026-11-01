@@ -4,6 +4,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
+import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
+import { t } from '@/i18n'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -15,6 +17,12 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const settingsStore = useSettingsStore()
+
+const VIEW_LABELS = {
+  list: t('home.viewMode.list'),
+  cards: t('home.viewMode.cards'),
+  tiles: t('home.viewMode.tiles'),
+}
 
 const { navigate, openFolderPicker } = useAppNavigation()
 const { openCatalogCategory } = useBookCatalogCategoryNavigation()
@@ -142,6 +150,13 @@ onMounted(focusSearchInput)
             >
               <IconSearch20Regular />
             </button>
+            <ViewModeDropdown
+              v-model="settingsStore.homeView"
+              class="home-search-bar__search-button"
+              tabindex="-1"
+              :labels="VIEW_LABELS"
+              :title="$t('home.viewMode.menu')"
+            />
           </div>
           <GlobalSearchDropdown
             v-if="searchBar.isDropdownOpen.value"
@@ -165,11 +180,12 @@ onMounted(focusSearchInput)
           />
         </div>
       </div>
-      <div class="home-cards">
+      <div class="home-cards" :class="`home-cards--${settingsStore.homeView}`">
         <HomeSuggestionCard
           v-for="(card, index) in cards"
           :key="card.key"
           :card="card"
+          :layout="settingsStore.homeView"
           @keydown="onCardKeydown($event, index)"
         />
       </div>
@@ -243,6 +259,17 @@ onMounted(focusSearchInput)
   gap: 8px;
   width: 100%;
   max-width: var(--home-content-width);
+}
+/* List: one full-width row per item, like the catalog's list view. */
+.home-cards--list {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+/* Tiles: the catalog's 72px icon tiles. */
+.home-cards--tiles {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  justify-items: center;
 }
 
 /* Search bar — flows with the cards (centered as a group when there's room),

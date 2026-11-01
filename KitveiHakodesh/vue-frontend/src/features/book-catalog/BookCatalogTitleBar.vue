@@ -1,26 +1,19 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed, h, ref, type Component } from 'vue'
-import {
-  IconHome16Regular,
-  IconSearch20Regular,
-  IconTextBulletListRtl20Regular,
-  IconGrid20Regular,
-  IconGridKanban20Regular,
-} from '@iconify-prerendered/vue-fluent'
+import { IconHome16Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
-import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
+import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BooksView } from '@/stores/settingsStore'
 
-const props = defineProps<{
+defineProps<{
   view: BooksView
   path: CategoryNode[]
   /** Which face the bar is showing: the search field, or the path. */
   showSearch: boolean
 }>()
-const emit = defineEmits<{
+defineEmits<{
   setView: [BooksView]
   navigate: [number]
   navigateToSibling: [{ atIndex: number; node: CategoryNode }]
@@ -28,34 +21,10 @@ const emit = defineEmits<{
   goHome: []
 }>()
 
-// The list icon is drawn right-to-left; .dir-icon mirrors it for an LTR UI.
-const ListViewIcon = () => h(IconTextBulletListRtl20Regular, { class: 'dir-icon' })
-
-// Three views, so the button opens a menu of them. It shows the view you are IN;
-// the menu ticks it.
-const VIEWS: Record<BooksView, { label: string; icon: Component }> = {
-  list: { label: t('bookCatalog.titleBar.listView'), icon: ListViewIcon },
-  cards: { label: t('bookCatalog.titleBar.cardsView'), icon: IconGridKanban20Regular },
-  tiles: { label: t('bookCatalog.titleBar.tilesView'), icon: IconGrid20Regular },
-}
-
-const viewMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const viewMenuItems = computed<ContextMenuItem[]>(() =>
-  (Object.keys(VIEWS) as BooksView[]).map((view) => ({
-    type: 'checkbox',
-    label: VIEWS[view].label,
-    icon: VIEWS[view].icon,
-    checked: props.view === view,
-    onChange: () => {
-      emit('setView', view)
-      viewMenuRef.value?.hide()
-    },
-  })),
-)
-
-function openViewMenu(event: MouseEvent) {
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  void viewMenuRef.value?.showAtPosition(rect.left, rect.bottom)
+const VIEW_LABELS = {
+  list: t('bookCatalog.titleBar.listView'),
+  cards: t('bookCatalog.titleBar.cardsView'),
+  tiles: t('bookCatalog.titleBar.tilesView'),
 }
 </script>
 
@@ -112,15 +81,13 @@ function openViewMenu(event: MouseEvent) {
       <IconSearch20Regular class="search-icon path-search-icon" />
     </div>
     <template #right>
-      <button
-        class="bar-btn pill-btn"
+      <ViewModeDropdown
+        class="pill-btn"
+        :model-value="view"
+        :labels="VIEW_LABELS"
         :title="$t('bookCatalog.titleBar.viewMenu')"
-        @mousedown.prevent
-        @click="openViewMenu"
-      >
-        <component :is="VIEWS[view].icon" :key="view" />
-      </button>
-      <ContextMenu ref="viewMenuRef" :items="viewMenuItems" />
+        @update:model-value="$emit('setView', $event)"
+      />
     </template>
   </TopSearchBar>
 </template>

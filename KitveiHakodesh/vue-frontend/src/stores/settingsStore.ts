@@ -94,6 +94,7 @@ const KEYS = {
 
   // Per-feature preferences
   SETTINGS_BOOKS_VIEW: 'books.view',
+  SETTINGS_HOME_VIEW: 'home.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_DICTIONARY_SOURCE_FILTER: 'dictionary.sourceFilter',
@@ -122,8 +123,12 @@ import {
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 /** Which edge of the book view the toolbar docks to. */
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
+/** The three layouts a page of items can render in (see ViewModeDropdown.vue). */
+export type CardsViewMode = 'list' | 'cards' | 'tiles'
 /** Layout modes for the book catalog page. */
-export type BooksView = 'list' | 'cards' | 'tiles'
+export type BooksView = CardsViewMode
+/** Layout modes for the home page's suggestion cards. */
+export type HomeView = CardsViewMode
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
@@ -183,6 +188,7 @@ const DEFAULTS = {
   dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'cards' as BooksView,
+  homeView: 'cards' as HomeView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   // The address a "דיווח על טעות" report is sent from. Remembered so the user types
@@ -381,6 +387,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
   const booksView = ref<BooksView>(DEFAULTS.booksView)
+  /** Which layout the home page renders its suggestion cards in. */
+  const homeView = ref<HomeView>(DEFAULTS.homeView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -547,6 +555,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
     const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
     if (storedBooksView != null) booksView.value = storedBooksView
+    const storedHomeView = lsGet<HomeView>(KEYS.SETTINGS_HOME_VIEW)
+    if (storedHomeView === 'list' || storedHomeView === 'cards' || storedHomeView === 'tiles') homeView.value = storedHomeView
     applyCSSVariables()
   }
 
@@ -632,6 +642,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
+  persistSetting(homeView, KEYS.SETTINGS_HOME_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -803,6 +814,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
     errorReportSenderEmail.value = DEFAULTS.errorReportSenderEmail
     booksView.value = DEFAULTS.booksView
+    homeView.value = DEFAULTS.homeView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
     // undone by them re-writing every key we just deleted. Clear once they have run.
@@ -840,6 +852,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,
+    homeView,
     init, toggleCleanText, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,
   }
