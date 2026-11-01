@@ -19,6 +19,8 @@ export interface ContextMenuCheckboxItem {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  /** Optional icon shown before the label; replaces the tick, highlighted when checked. */
+  icon?: import('vue').Component
 }
 
 export interface ContextMenuComponentItem {
@@ -229,7 +231,14 @@ defineExpose({ show, showAtPosition, hide })
           @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
           @mouseenter="closeSubmenu"
         >
-          <span class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+          <!-- An item with an icon shows its state by highlighting the icon instead of a tick. -->
+          <component
+            :is="(item as ContextMenuCheckboxItem).icon"
+            v-if="(item as ContextMenuCheckboxItem).icon"
+            class="item-icon"
+            :class="{ checked: (item as ContextMenuCheckboxItem).checked }"
+          />
+          <span v-else class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
           <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
         </div>
         <div
@@ -275,6 +284,15 @@ defineExpose({ show, showAtPosition, hide })
 </template>
 
 <style scoped>
+.item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+.item-icon.checked {
+  color: var(--accent-color);
+}
 .context-menu {
   /* The row metrics, published as variables so any row rendered INSIDE this menu can
      consume them — including rows in a `component` item, which this scoped CSS cannot
