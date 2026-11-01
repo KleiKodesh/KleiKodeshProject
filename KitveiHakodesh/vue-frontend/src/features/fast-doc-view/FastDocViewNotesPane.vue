@@ -24,6 +24,8 @@ const props = defineProps<{
 const emit = defineEmits<{ goToReference: [note: FastDocViewPlacedNote]; close: [] }>()
 
 const pane = ref<HTMLElement | null>(null)
+/** The scroller: the page attaches the notes' own zoom handler to it (as a book-view commentary panel's). */
+defineExpose({ scrollerElement: pane })
 
 function noteKey(note: Pick<FastDocViewPlacedNote, 'kind' | 'number' | 'label'>): string {
   return fastDocViewNoteKey(note.kind, note.number, note.label)
@@ -89,9 +91,9 @@ watch(
 
 /** The library marks a note's own number (Word's footnoteRef / ODF citation / RTF chftn / .doc
  *  auto mark) as <span class="note-mark">; that number is the note's one back-link to its reference. */
+const settingsStore = useSettingsStore()
 const NOTE_MARK = 'class="note-mark"'
 function hasOwnMark(note: FastDocViewPlacedNote): boolean {
-const settingsStore = useSettingsStore()
   return note.html.includes(NOTE_MARK)
 }
 function bodyHtml(note: FastDocViewPlacedNote, title: string): string {

@@ -28,7 +28,8 @@ export interface TabState {
   searchPerWord?: import('@/features/full-text-search/queryWordSyntax').PerWord // per-tab per-word option choices
   htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
   txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
-  fastDocViewZoom?: number        // per-tab zoom level for /fast-doc-view tabs
+  fastDocViewZoom?: number        // per-tab zoom level for /fast-doc-view tabs (the document text, as the book view's lines)
+  fastDocViewNotesZoom?: number   // per-tab zoom of the notes pane (as a book-view commentary panel's own zoom)
   fastDocViewBlockIndex?: number  // first visible block of a /fast-doc-view tab (position restore)
   fastDocViewBlockOffset?: number // pixels the viewport sits below that block's top
   fastDocViewNotesVisible?: boolean // the notes pane open / closed (like the bottom commentary)

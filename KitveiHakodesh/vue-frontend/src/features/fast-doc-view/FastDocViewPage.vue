@@ -98,15 +98,36 @@ async function savePositionNow() {
 }
 const savePosition = useDebounceFn(savePositionNow, 300)
 
+// Zoom, the book view's model: the text (its lines) and the notes (its commentary) each keep
+// their own per-tab zoom. Ctrl+wheel / trackpad pinch / touch pinch, and Ctrl+= / - / 0 with the
+// focus inside a pane, zoom that pane only (useZoomHandler on each scroller); the toolbar buttons,
+// and the keys with the focus elsewhere in the page, step both, each from its own value.
+const notesZoom = ref<number>(ZOOM_CONFIG.DEFAULT)
 async function saveZoom() {
-  await patchTabState({ fastDocViewZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined })
+  await patchTabState({
+    fastDocViewZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
+    fastDocViewNotesZoom: notesZoom.value !== ZOOM_CONFIG.DEFAULT ? notesZoom.value : undefined,
+  })
 }
 function setZoom(value: number) {
   zoom.value = value
   void saveZoom()
 }
+function setNotesZoom(value: number) {
+  notesZoom.value = value
+  void saveZoom()
+}
+function zoomBoth(step: (current: number) => number) {
+  zoom.value = step(zoom.value)
+  notesZoom.value = step(notesZoom.value)
+  void saveZoom()
+}
 const zoomModel = computed({ get: () => zoom.value, set: setZoom })
 useZoomHandler({ zoom: zoomModel, target: scrollerElement, keyboard: true })
+const notesPaneRef = ref<{ scrollerElement: HTMLElement | null } | null>(null)
+const notesScrollerElement = computed(() => notesPaneRef.value?.scrollerElement ?? null)
+const notesZoomModel = computed({ get: () => notesZoom.value, set: setNotesZoom })
+useZoomHandler({ zoom: notesZoomModel, target: notesScrollerElement, keyboard: true })
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
 // Page text width: each block's column is as wide as its section's text area in Word (page
@@ -122,9 +143,17 @@ const documentFontPx = computed(() => {
 function blockColumnStyle(index: number): Record<string, string> | undefined {
   const twips = fastDocument.textWidthTwipsAt(index)
   if (twips == null) return undefined
-  const widthPx = (twips / 15) * (fontPx.value / documentFontPx.value)
+  const widthPx = (twips / 15) * textScale.value
   return { '--lines-content-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
 }
+/**
+ * How much larger than the document's own sizes its text is shown. The library writes Word's
+ * absolute sizes (pt: font sizes, indents, spacing, table widths), so the block's text is laid out
+ * at the document's sizes and CSS-zoomed as a whole: every size scales together (a 16 pt heading
+ * stays 16/12 of 12 pt body) and, with the column scaled the same, lines break at the same words.
+ */
+const textScale = computed(() => fontPx.value / documentFontPx.value)
+const blockTextStyle = computed(() => ({ zoom: String(textScale.value), fontSize: `${documentFontPx.value}px` }))
 
 // The book view's text context menu, with the items a Word document can serve (useFastDocViewContextMenu).
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -191,6 +220,7 @@ onMounted(async () => {
   scrollerElement.value = windowedScroller.value?.scrollerElement ?? null
   const saved = await tabStore.getTabViewState(tabId)
   if (saved?.fastDocViewZoom != null) zoom.value = saved.fastDocViewZoom
+  if (saved?.fastDocViewNotesZoom != null) notesZoom.value = saved.fastDocViewNotesZoom
   tocState.value = saved?.fastDocViewToc
   if (saved?.fastDocViewTocVisible) tocVisible.value = true
   if (saved?.fastDocViewNotesVisible != null) notesVisible.value = saved.fastDocViewNotesVisible
@@ -308,6 +338,30 @@ function navigateToAdjacentHeading(direction: 'next' | 'previous') {
   lastNavigatedHeadingId = target.id
   void landOnRow(target.blockIndex, { force: true })
 }
+// Ctrl+= / - / 0 with the focus in neither scroller zoom both, as the book view's
+// page shortcuts (a focused scroller's own handler zooms only its pane). The browser's page zoom is blocked.
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  if (!(event.ctrlKey || event.metaKey)) return
+  const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
+  const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
+  const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
+  if (!isZoomIn && !isZoomOut && !isReset) return
+  // as the book view's: only split view off or this pane focused, and only for this pane's active tab
+  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+  if (paneNavigation.activeTab.id !== tabId) return
+  const focused = document.activeElement
+  event.preventDefault()
+  if (scrollerElement.value?.contains(focused) || notesScrollerElement.value?.contains(focused)) return
+  zoomBoth(isZoomIn ? zoomIn : isZoomOut ? zoomOut : () => ZOOM_CONFIG.DEFAULT)
+})
+// Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
+  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+  if (paneNavigation.activeTab.id !== tabId) return
+  event.preventDefault()
+  settingsStore.toggleCleanText()
+})
 // Ctrl+Arrow, as in the book view (RTL: Ctrl+Left = next). On the text, outside inputs.
 useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
@@ -338,14 +392,6 @@ const notesSync = ref(true)
 type NotesPlace = 'bottom' | 'right' | 'left'
 const NOTES_PLACE_ORDER: NotesPlace[] = ['bottom', 'right', 'left']
 const notesPlace = ref<NotesPlace>('bottom')
-// Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
-  if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
-  if (paneNavigation.activeTab.id !== tabId) return
-  event.preventDefault()
-  settingsStore.toggleCleanText()
-})
 const { width: pageWidth } = useElementSize(pageElement)
 const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
 const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
@@ -364,8 +410,8 @@ const notesFraction = computed<number | undefined>({
   get: () => notesFractions.value[effectiveNotesPlace.value],
   set: (value) => { notesFractions.value = { ...notesFractions.value, [effectiveNotesPlace.value]: value } },
 })
-/** The notes pane's text size: the commentary's (commentary font setting at the page zoom), as in the book view. */
-const notesFontPx = computed(() => (zoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15)
+/** The notes pane's text size: the commentary's (commentary font setting at the notes' own zoom), as in the book view. */
+const notesFontPx = computed(() => (notesZoom.value / 100) * (settingsStore.commentaryFontSize / 100) * 15)
 async function saveNotesLayout() {
   await patchTabState({
     fastDocViewNotesVisible: notesVisible.value,
@@ -453,10 +499,13 @@ if (import.meta.env.DEV) {
         renderedRange: { start: renderedRange.value.start, end: renderedRange.value.end },
         cachedBlocks: fastDocument.cachedBlockCount(),
         zoom: zoom.value,
+        notesZoom: notesZoom.value,
         notesPaneOpen: notesVisible.value && hasNotes.value,
       }
     },
     scrollToBlock: (index: number) => windowedScroller.value?.scrollToIndex(index),
+    setZoom,
+    setNotesZoom,
     reopen: () => fastDocument.reopen(),
   }
   const target = window as unknown as { __fastDocViewTest?: typeof hook }
@@ -577,11 +626,12 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
       :has-headings="outline.length > 0"
       :has-notes="hasNotes"
       :zoom="zoom"
+      :notes-zoom="notesZoom"
       @toggle-toc="toggleToc"
       @step-notes="stepNotes"
       @toggle-notes-sync="notesSync = !notesSync"
-      @zoom-in="setZoom(zoomIn(zoom))"
-      @zoom-out="setZoom(zoomOut(zoom))"
+      @zoom-in="zoomBoth(zoomIn)"
+      @zoom-out="zoomBoth(zoomOut)"
       :pdf-state="pdfState"
       :can-open-as-pdf="canOpenAsPdf"
       @open-as-pdf="openAsPdf"
@@ -654,6 +704,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
               :data-fast-doc-view-root="contentRootId"
               @click="onContentClick"
             >
+              <ContextMenu ref="contextMenuRef" :items="contextMenu.items" />
               <WordLinkTooltip
                 v-if="noteTooltip"
                 :key="`note-${noteTooltip.id}`"
@@ -672,23 +723,25 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
                 :pinned-indexes="pinnedRowIndexes"
                 :landmark-tiers="fastDocument.landmarkTiers.value"
                 :row-weights="fastDocument.rowWeights.value"
-                :style="{ fontSize: fontPx + 'px' }"
                 tabindex="0"
                 @scroll="onScrollerScroll"
+                @contextmenu="contextMenuRef?.show($event)"
               >
                 <template #row="{ index }">
                   <div
                     v-if="fastDocument.blockAt(index)"
                     class="reading-column-line fast-doc-view-block"
                     :style="blockColumnStyle(index)"
-                    v-html="blockHtml(index)"
-                  />
+                  >
+                    <div class="fast-doc-view-block-text" :style="blockTextStyle" v-html="blockHtml(index)" />
+                  </div>
                 </template>
               </WindowedScroller>
             </div>
           </template>
           <template #bottom>
             <FastDocViewNotesPane
+              ref="notesPaneRef"
               :notes="visibleNotes"
               :is-right-to-left="isRightToLeft"
               :active-key="activeNoteKey"
@@ -704,7 +757,6 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
     </div>
     </div>
   </div>
-              <ContextMenu ref="contextMenuRef" :items="contextMenu.items" />
 </template>
 
 <style scoped>
@@ -725,7 +777,6 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
 .fast-doc-view-frame.toolbar-at-bottom .fast-doc-view-frame-toolbar {
   order: 1;
 }
-                @contextmenu="contextMenuRef?.show($event)"
 .fast-doc-view-frame.toolbar-at-left,
 .fast-doc-view-frame.toolbar-at-right {
   flex-direction: row;
@@ -778,7 +829,7 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
   background: color-mix(in srgb, var(--accent-color) 25%, transparent);
   border-radius: 2px;
 }
-.fast-doc-view-block:empty::before,
+.fast-doc-view-block-text:empty::before,
 .fast-doc-view-block :deep(:is(p, h1, h2, h3, h4, h5, h6):empty::before) {
   content: '\200b';
 }

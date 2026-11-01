@@ -34,6 +34,8 @@ defineProps<{
   hasHeadings: boolean
   hasNotes: boolean
   zoom: number
+  /** The notes pane's own zoom (the book view's commentary zoom). */
+  notesZoom: number
   pdfState: ConversionActionState
   searchVisible: boolean
   canOpenAsPdf: boolean
@@ -131,12 +133,12 @@ function onToggleToc(event: MouseEvent) {
     <button :class="{ active: searchVisible }" :title="$t('fastDocView.search')" @click="emit('toggleSearch')">
       <IconSearch20Regular />
     </button>
-    <!-- hold to repeat, as in the book view (shared usePressRepeat) -->
-    <button
     <!-- the book view's clean-text combo (Ctrl+D): the same global setting and options dropdown -->
     <BookViewCleanTextCombo class="dropdown-host" />
-      :title="$t('fastDocView.zoomOut', { text: Math.round(zoom) })"
-      :disabled="zoom <= ZOOM_CONFIG.MIN"
+    <!-- hold to repeat, as in the book view (shared usePressRepeat) -->
+    <button
+      :title="$t('fastDocView.zoomOut', { text: Math.round(zoom), notes: Math.round(notesZoom) })"
+      :disabled="zoom <= ZOOM_CONFIG.MIN && notesZoom <= ZOOM_CONFIG.MIN"
       @pointerdown="zoomRepeat.start(() => emit('zoomOut'))"
       @pointerup="zoomRepeat.stop"
       @pointerleave="zoomRepeat.stop"
@@ -145,8 +147,8 @@ function onToggleToc(event: MouseEvent) {
       <IconZoomOut20Regular />
     </button>
     <button
-      :title="$t('fastDocView.zoomIn', { text: Math.round(zoom) })"
-      :disabled="zoom >= ZOOM_CONFIG.MAX"
+      :title="$t('fastDocView.zoomIn', { text: Math.round(zoom), notes: Math.round(notesZoom) })"
+      :disabled="zoom >= ZOOM_CONFIG.MAX && notesZoom >= ZOOM_CONFIG.MAX"
       @pointerdown="zoomRepeat.start(() => emit('zoomIn'))"
       @pointerup="zoomRepeat.stop"
       @pointerleave="zoomRepeat.stop"
