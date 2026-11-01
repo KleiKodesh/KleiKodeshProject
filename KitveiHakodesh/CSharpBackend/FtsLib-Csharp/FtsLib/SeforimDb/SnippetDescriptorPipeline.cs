@@ -94,12 +94,13 @@ namespace FtsLib.SeforimDb
             PreparedQueryGroups prepared,
             bool                requireOrdered     = false,
             int                 originalGroupCount = 0,
-            int                 contextWords       = DefaultContextWords)
+            int                 contextWords       = DefaultContextWords,
+            int                 maxWordDistance    = int.MaxValue)
         {
             if (string.IsNullOrEmpty(content) || prepared == null || prepared.IsEmpty)
                 return SnippetDescriptor.NoMatch;
 
-            var descriptor = GetLocator(contextWords).Locate(content, prepared, requireOrdered, originalGroupCount);
+            var descriptor = GetLocator(contextWords).Locate(content, prepared, requireOrdered, originalGroupCount, maxWordDistance);
             ReleaseLocatorIfOversized(content);
             return descriptor;
         }

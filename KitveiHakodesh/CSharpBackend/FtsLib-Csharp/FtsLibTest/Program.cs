@@ -18,6 +18,7 @@ namespace FtsLibTest
                 case "parsertest":        QueryParserTest.Run(args); return;
                 case "phrasetest":        QuotedPhraseTest.Run(args); return;
                 case "worddist":          WordDistanceTest.Run(args); return;
+                case "occmarks":          OccurrenceMarksTest.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
                 case "tokentest":         TokenRuleTest.Run(args); return;
                 case "tokdiag":           TokenDiag.Run(args); return;
