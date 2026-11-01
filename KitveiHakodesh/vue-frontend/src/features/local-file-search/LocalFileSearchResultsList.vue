@@ -7,10 +7,14 @@ import {
   IconDocumentGlobe20Filled,
   IconWindowArrowUp20Regular,
   IconPuzzlePiece20Regular,
+  IconFolderOpen20Regular,
+  IconCopy20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useI18n } from 'vue-i18n'
+import { showToast } from '@/composables/useToast'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
-import { openFileInDefaultApp } from '@/webview-host/bridge'
+import { openFileInDefaultApp, revealFileInFolder } from '@/webview-host/bridge'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
@@ -53,6 +57,24 @@ function selectItem(index: number, event?: MouseEvent) {
 function openInDefaultApp(item: LocalFileSearchResult, event: MouseEvent) {
   event.stopPropagation()
   void openFileInDefaultApp(item.fullPath)
+}
+
+const { t } = useI18n()
+
+// Explorer window with the file selected.
+function openFileLocation(item: LocalFileSearchResult, event: MouseEvent) {
+  event.stopPropagation()
+  void revealFileInFolder(item.fullPath)
+}
+
+async function copyPath(item: LocalFileSearchResult, event: MouseEvent) {
+  event.stopPropagation()
+  try {
+    await navigator.clipboard.writeText(item.fullPath)
+    showToast(t('localFileSearch.pathCopied'))
+  } catch {
+    showToast(t('localFileSearch.copyPathFailed'), { variant: 'error' })
+  }
 }
 
 type FileIconInfo = { component: unknown; color: string }
@@ -120,6 +142,26 @@ defineExpose({
         </span>
         <span class="item-path" dir="ltr">{{ item.path }}</span>
       </span>
+      <button
+        class="open-in-app-button"
+        type="button"
+        :title="$t('localFileSearch.copyPath')"
+        @click="copyPath(item, $event)"
+        @auxclick.stop
+        @mousedown.stop
+      >
+        <IconCopy20Regular />
+      </button>
+      <button
+        class="open-in-app-button"
+        type="button"
+        :title="$t('localFileSearch.openFileLocation')"
+        @click="openFileLocation(item, $event)"
+        @auxclick.stop
+        @mousedown.stop
+      >
+        <IconFolderOpen20Regular />
+      </button>
       <button
         class="open-in-app-button"
         type="button"

@@ -29,7 +29,7 @@ public static class WindowsServiceMode
     private static readonly HashSet<string> DesktopOnlyOps = new(StringComparer.Ordinal)
     {
         "pickLocalFile", "pickFolder", "pickSeforimDbPath",
-        "exportToWord", "pasteIntoWord", "openFileInDefaultApp",
+        "exportToWord", "pasteIntoWord", "openFileInDefaultApp", "revealFileInFolder",
     };
 
     public static bool IsDesktopOnlyOp(string op) => DesktopOnlyOps.Contains(op);

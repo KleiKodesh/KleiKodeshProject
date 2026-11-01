@@ -83,6 +83,7 @@ namespace KitveiHakodeshLib
                             });
                             break;
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
+                        case "revealInFolder": _localFile.HandleRevealInFolder(root, id); break;
                         case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
                         case "writePdfTail": _localFile.HandleWritePdfTail(root, id); break;
                         case "readTxtFileContent":await _localFile.HandleReadTxtFileContent(root, id); break;

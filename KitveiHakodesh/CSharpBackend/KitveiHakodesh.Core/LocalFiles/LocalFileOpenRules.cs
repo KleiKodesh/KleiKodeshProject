@@ -71,4 +71,25 @@ public static class LocalFileOpenRules
             return ex.Message;
         }
     }
+
+    /// <summary>Opens Explorer on the folder holding <paramref name="fullPath"/> with the file
+    /// selected. Returns null on success, or the error message. The caller validates the path
+    /// first.</summary>
+    public static string? RevealInFolder(string fullPath)
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = "/select,\"" + fullPath + "\"",
+                UseShellExecute = true,
+            });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
 }

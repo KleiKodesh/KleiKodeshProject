@@ -300,6 +300,26 @@ export async function openFileInDefaultApp(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Show a local file in Explorer with it selected ("Open file location").
+ * Hosted: the C# host (`revealInFolder`). Dev: the service op (`revealFileInFolder`).
+ * Returns true when requested, false on any error/unavailable bridge.
+ */
+export async function revealFileInFolder(filePath: string): Promise<boolean> {
+  try {
+    if (typeof window.__webviewAction !== 'function') {
+      const r = await serviceCall<{ ok?: boolean; error?: string }>('revealFileInFolder', {
+        path: filePath,
+      })
+      return !!r?.ok
+    }
+    const res = await action<{ ok?: boolean; error?: string }>('revealInFolder', { filePath })
+    return !!res?.ok
+  } catch {
+    return false
+  }
+}
+
+/**
  * PDF viewer TOC autosave: write an incremental-save `tail` back into the PDF at `offset`
  * (the length the viewer loaded). `anchor` = the loaded bytes just before `offset`; the
  * write is refused when they no longer match the disk (rules: Core PdfIncrementalSaveWriter).

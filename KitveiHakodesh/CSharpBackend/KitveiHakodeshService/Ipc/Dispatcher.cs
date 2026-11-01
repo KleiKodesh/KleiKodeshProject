@@ -278,6 +278,19 @@ public sealed class Dispatcher(
                         : new OpenInDefaultAppResult { Error = openError }));
                 }
 
+                // Show a local file in Explorer (selected) — the dev-mode equivalent of the hosted
+                // "revealInFolder" bridge action. Same path checks as a shell-open.
+                case "revealFileInFolder":
+                {
+                    var a = MsgPack.De<OpenInDefaultAppArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    string? revealError = LocalFileOpenRules.RevealInFolder(full);
+                    return RpcResponse.Ok(MsgPack.Ser(revealError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = revealError }));
+                }
+
                 // PDF viewer TOC autosave — the dev-mode equivalent of the hosted "writePdfTail"
                 // bridge action. Same path checks as a shell-open, then Core's tail writer.
                 case "writePdfTail":
