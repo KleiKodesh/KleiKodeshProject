@@ -13,7 +13,7 @@ import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
-import { useHomeContentWidth } from './useHomeContentWidth'
+import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
@@ -33,7 +33,7 @@ const searchBarRef = ref<HTMLElement | null>(null)
 // the whole columns that fit, instead of the cards stretching to fill the pane.
 const homeInnerRef = ref<HTMLElement | null>(null)
 const { width: homeInnerWidth } = useElementSize(homeInnerRef)
-const contentLayout = useHomeContentWidth(homeInnerWidth, () => settingsStore.homeView)
+const contentLayout = useCardGridLayout(homeInnerWidth, () => settingsStore.homeView, 720)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
@@ -261,7 +261,7 @@ onMounted(focusSearchInput)
   display: grid;
   /* Card min-width scales with the pane (cqi), so narrow panes still fit 2+
      columns instead of collapsing to one full-width card per row. */
-  /* Column count and grid width come from useHomeContentWidth: cards shrink to fit
+  /* Column count and grid width come from useCardGridLayout: cards shrink to fit
      another column, but never stretch past their max. */
   grid-template-columns: repeat(var(--home-columns, 3), minmax(0, 1fr));
   gap: 8px;

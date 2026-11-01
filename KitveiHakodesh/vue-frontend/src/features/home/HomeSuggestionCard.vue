@@ -319,6 +319,15 @@ function onRemove() {
   }
 }
 
+/* ── Cards layout: the icon + title pair sits centred in the card as one block;
+   a long title still shrinks to its ellipsis. ── */
+.layout-cards .card {
+  justify-content: center;
+}
+.layout-cards .card-text {
+  flex: 0 1 auto;
+}
+
 /* ── List layout: a flat 38px row, the title only. ─────────────────────────────────────────────────────── */
 .layout-list .card {
   min-height: 38px;

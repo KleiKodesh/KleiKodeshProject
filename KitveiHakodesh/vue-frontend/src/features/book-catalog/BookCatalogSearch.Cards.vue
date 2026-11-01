@@ -86,9 +86,13 @@ defineExpose({
 /* Same grid as BookCatalogView.Cards.vue / the home page's .home-cards. */
 .catalog-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
+  /* Column count and grid width come from the page (useCardGridLayout): cards
+     shrink to fit another column, never stretch past their max, and the grid
+     sits centred. Until the page has measured, it falls back to auto-fill. */
+  grid-template-columns: repeat(var(--catalog-columns, auto-fill), minmax(min(100%, 140px), 1fr));
   gap: 8px;
   padding: 12px;
+  padding-inline: calc((100% - 24px - var(--catalog-content-width, calc(100% - 24px))) / 2 + 12px);
   overflow-x: hidden;
   overflow-y: auto;
   height: 100%;
