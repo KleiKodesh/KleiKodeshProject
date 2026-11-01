@@ -242,7 +242,8 @@ function onRemove() {
   font-size: 11px;
   line-height: 1.3;
   /* Fainter than the secondary text: the path is background detail. */
-  color: color-mix(in srgb, var(--text-secondary) 65%, transparent);
+  color: var(--text-secondary);
+  opacity: 0.65;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
