@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed, ref } from 'vue'
+import { computed, h, ref, type Component } from 'vue'
 import {
   IconHome16Regular,
   IconSearch20Regular,
-  IconTextBulletList20Regular,
+  IconTextBulletListRtl20Regular,
   IconGrid20Regular,
-  IconAppsList20Regular,
+  IconGridKanban20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
@@ -28,11 +28,14 @@ const emit = defineEmits<{
   goHome: []
 }>()
 
+// The list icon is drawn right-to-left; .dir-icon mirrors it for an LTR UI.
+const ListViewIcon = () => h(IconTextBulletListRtl20Regular, { class: 'dir-icon' })
+
 // Three views, so the button opens a menu of them. It shows the view you are IN;
 // the menu ticks it.
-const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }> = {
-  list: { label: t('bookCatalog.titleBar.listView'), icon: IconTextBulletList20Regular },
-  cards: { label: t('bookCatalog.titleBar.cardsView'), icon: IconAppsList20Regular },
+const VIEWS: Record<BooksView, { label: string; icon: Component }> = {
+  list: { label: t('bookCatalog.titleBar.listView'), icon: ListViewIcon },
+  cards: { label: t('bookCatalog.titleBar.cardsView'), icon: IconGridKanban20Regular },
   tiles: { label: t('bookCatalog.titleBar.tilesView'), icon: IconGrid20Regular },
 }
 
@@ -41,6 +44,7 @@ const viewMenuItems = computed<ContextMenuItem[]>(() =>
   (Object.keys(VIEWS) as BooksView[]).map((view) => ({
     type: 'checkbox',
     label: VIEWS[view].label,
+    icon: VIEWS[view].icon,
     checked: props.view === view,
     onChange: () => {
       emit('setView', view)
