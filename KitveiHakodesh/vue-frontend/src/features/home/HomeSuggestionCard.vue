@@ -4,8 +4,13 @@ import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fl
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { wantsNewTab, OPEN_IN_NEW_TAB_HINT } from '@/composables/useOpenInNewTab'
 import type { HomeSuggestionCard as HomeSuggestionCardData } from './homeSuggestionCard'
+import type { CardsViewMode } from '@/stores/settingsStore'
 
-const props = defineProps<{ card: HomeSuggestionCardData }>()
+// `layout` restyles the same card as a list row or an icon tile (home's view
+// dropdown); the catalog uses the default card look.
+const props = withDefaults(defineProps<{ card: HomeSuggestionCardData; layout?: CardsViewMode }>(), {
+  layout: 'cards',
+})
 
 const actions = computed(() => !!props.card.pinning)
 
@@ -116,7 +121,7 @@ function onRemove() {
   <div
     ref="wrapRef"
     class="card-wrap"
-    :class="{ 'has-actions': actions, 'is-removing': isRemoving, 'is-revealed': isRevealed, 'is-touch': isTouch }"
+    :class="[`layout-${layout}`, { 'has-actions': actions, 'is-removing': isRemoving, 'is-revealed': isRevealed, 'is-touch': isTouch }]"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -230,18 +235,16 @@ function onRemove() {
   text-overflow: ellipsis;
 }
 
-/* The full path may wrap to two lines, then clips — never overflows the card.
-   Omitted when empty, so a lone title centres vertically; the card's
+/* One line, like the title: ellipsis, never wraps — the full path is in the
+   tooltip. Omitted when empty, so a lone title centres vertically; the card's
    min-height keeps it as tall as a title+path card. */
 .card-path {
   font-size: 11px;
   line-height: 1.3;
   color: var(--text-secondary);
+  white-space: nowrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
 }
 
 /* ── Actions (pin / delete), in the card's end corner ─────────────────────── */
@@ -334,6 +337,93 @@ function onRemove() {
   .card-actions {
     gap: 8px;
   }
+}
+
+/* ── List layout: a flat 38px row, title then path on one line, as in the
+   catalog's list view. ─────────────────────────────────────────────────────── */
+.layout-list .card {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 12px;
+  background: none;
+  border-radius: 6px;
+}
+.layout-list .card:hover {
+  background: var(--hover-bg);
+}
+.layout-list .card:active {
+  transform: none;
+  background: var(--active-bg);
+}
+.layout-list .card-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 10px;
+}
+.layout-list .card-title {
+  flex-shrink: 0;
+  max-width: 60%;
+  font-size: 14px;
+}
+.layout-list .card-path {
+  flex: 1;
+  min-width: 0;
+}
+.layout-list .card-actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ── Tiles layout: the catalog's 72px icon tile — icon over a short label. ── */
+.layout-tiles {
+  width: 72px;
+}
+.layout-tiles .card {
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  padding: 6px 4px;
+  background: none;
+  border-radius: 6px;
+}
+.layout-tiles .card:active {
+  transform: none;
+}
+/* Only the icon moves, as on the catalog tiles, so the grid does not jitter. */
+.layout-tiles .card-icon {
+  font-size: 24px;
+  transition: transform 0.15s ease;
+}
+.layout-tiles .card:hover .card-icon,
+.layout-tiles .card:focus-visible .card-icon {
+  transform: scale(1.15);
+}
+.layout-tiles .card:active .card-icon {
+  transform: scale(0.95);
+}
+.layout-tiles .card-text {
+  flex: none;
+  width: 100%;
+  align-items: center;
+}
+.layout-tiles .card-title {
+  max-width: 68px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+/* No room under a tile; the path stays in the tooltip. */
+.layout-tiles .card-path {
+  display: none;
+}
+.layout-tiles .card-actions {
+  top: 0;
+  inset-inline-end: 0;
 }
 
 /* Delete: the card scales + fades out before it is removed. */

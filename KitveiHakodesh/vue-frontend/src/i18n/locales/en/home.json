@@ -22,6 +22,12 @@
     "dailyLearning": "Daily learning",
     "bookNotInLibrary": "The book is not in the library"
   },
+  "viewMode": {
+    "list": "List view",
+    "cards": "Cards view",
+    "tiles": "Tiles view",
+    "menu": "View"
+  },
   "card": {
     "unpin": "Unpin",
     "pin": "Pin",

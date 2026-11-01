@@ -22,6 +22,12 @@
     "dailyLearning": "לימוד יומי",
     "bookNotInLibrary": "הספר אינו בספרייה"
   },
+  "viewMode": {
+    "list": "תצוגת רשימה",
+    "cards": "תצוגת כרטיסים",
+    "tiles": "תצוגת אריחים",
+    "menu": "תצוגה"
+  },
   "card": {
     "unpin": "בטל הצמדה",
     "pin": "הצמד",
