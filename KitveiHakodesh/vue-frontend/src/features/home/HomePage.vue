@@ -33,7 +33,7 @@ const searchBarRef = ref<HTMLElement | null>(null)
 // the whole columns that fit, instead of the cards stretching to fill the pane.
 const homeInnerRef = ref<HTMLElement | null>(null)
 const { width: homeInnerWidth } = useElementSize(homeInnerRef)
-const contentWidth = useHomeContentWidth(homeInnerWidth, () => settingsStore.homeView)
+const contentLayout = useHomeContentWidth(homeInnerWidth, () => settingsStore.homeView)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
@@ -130,7 +130,7 @@ onMounted(focusSearchInput)
 
 <template>
   <div class="home-page">
-    <div ref="homeInnerRef" class="home-inner" :style="{ '--home-content-width': `${contentWidth}px` }">
+    <div ref="homeInnerRef" class="home-inner" :style="{ '--home-content-width': `${contentLayout.width}px`, '--home-columns': contentLayout.columns }">
       <div class="home-search-blanket">
         <div
           ref="searchBarRef"
@@ -261,8 +261,9 @@ onMounted(focusSearchInput)
   display: grid;
   /* Card min-width scales with the pane (cqi), so narrow panes still fit 2+
      columns instead of collapsing to one full-width card per row. */
-  /* Fixed-width columns; useHomeContentWidth sizes the grid to whole columns. */
-  grid-template-columns: repeat(auto-fill, min(100%, 200px));
+  /* Column count and grid width come from useHomeContentWidth: cards shrink to fit
+     another column, but never stretch past their max. */
+  grid-template-columns: repeat(var(--home-columns, 3), minmax(0, 1fr));
   gap: 8px;
   width: 100%;
   max-width: var(--home-content-width);
@@ -274,7 +275,7 @@ onMounted(focusSearchInput)
 }
 /* Tiles: the catalog's 72px icon tiles. */
 .home-cards--tiles {
-  grid-template-columns: repeat(auto-fill, 72px);
+  grid-template-columns: repeat(var(--home-columns, 9), 72px);
   gap: 6px;
   justify-items: center;
 }
