@@ -61,7 +61,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
     return destinations.map((destination) => ({
       key: `nav:${destination.label}`,
       title: destination.text,
-      // Shown in the card's muted subtitle line (.card-path).
+      // Shown in the card's tooltip.
       path: destination.description,
       icon: destination.icon,
       color: destination.color,
