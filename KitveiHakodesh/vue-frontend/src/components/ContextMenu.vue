@@ -19,7 +19,7 @@ export interface ContextMenuCheckboxItem {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
-  /** Optional icon shown before the label; replaces the tick, highlighted when checked. */
+  /** Optional icon shown before the label; replaces the tick; a checked item highlights its row. */
   icon?: import('vue').Component
 }
 
@@ -228,15 +228,15 @@ defineExpose({ show, showAtPosition, hide })
         <div
           v-else-if="item.type === 'checkbox'"
           class="context-menu-item context-menu-checkbox"
+          :class="{ 'is-selected': (item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked }"
           @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
           @mouseenter="closeSubmenu"
         >
-          <!-- An item with an icon shows its state by highlighting the icon instead of a tick. -->
+          <!-- An item with an icon shows its state by highlighting the whole row instead of a tick. -->
           <component
             :is="(item as ContextMenuCheckboxItem).icon"
             v-if="(item as ContextMenuCheckboxItem).icon"
             class="item-icon"
-            :class="{ checked: (item as ContextMenuCheckboxItem).checked }"
           />
           <span v-else class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
           <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
@@ -290,8 +290,8 @@ defineExpose({ show, showAtPosition, hide })
   height: 16px;
   color: inherit;
 }
-.item-icon.checked {
-  color: var(--accent-color);
+.context-menu-item.is-selected {
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
 }
 .context-menu {
   /* The row metrics, published as variables so any row rendered INSIDE this menu can
