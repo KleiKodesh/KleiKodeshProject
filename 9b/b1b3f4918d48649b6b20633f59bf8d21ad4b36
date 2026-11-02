@@ -1,0 +1,16 @@
+User-facing: improved - Open file: the notes pane starts closed, shows each note's own number as the link back to the text, and uses the commentary font
+User-facing-he: חלונית ההערות נפתחת סגורה, מציגה את המספר של כל הערה כקישור חזרה לטקסט, ומשתמשת בגופן של המפרשים
+User-facing: new - Open file: hovering a footnote mark in the text shows the note
+User-facing-he: מעבר עכבר על ציון הערת שוליים בטקסט מציג את ההערה
+User-facing: new - Open file: the notes pane can follow the text and can sit at the bottom, right or left
+User-facing-he: חלונית ההערות יכולה לעקוב אחרי הטקסט ולהיות למטה, מימין או משמאל
+User-facing: improved - Book view: link and note previews fit their content instead of a fixed height
+User-facing-he: התצוגות המקדימות של קשרים והערות מתאימות את גובהן לתוכן במקום גובה קבוע
+User-facing: improved - Open file: the search bar, recent searches, zoom buttons (hold to repeat), keyboard shortcuts (Ctrl+K, Ctrl+J, Ctrl+F, Ctrl+B, Ctrl+arrows) and toolbar work exactly like in the book view
+User-facing-he: שורת החיפוש, החיפושים האחרונים, כפתורי ההגדלה (לחיצה ארוכה חוזרת), קיצורי המקלדת (Ctrl+K, Ctrl+J, Ctrl+F, Ctrl+B, Ctrl+חיצים) וסרגל הכלים עובדים בדיוק כמו בתצוגת ספר
+User-facing: improved - Open file: the toolbar can be dragged to any edge of the page, like in the book view
+User-facing-he: אפשר לגרור את סרגל הכלים לכל קצה של הדף, כמו בתצוגת ספר
+User-facing: improved - Open file: previous / next section buttons on the toolbar step through the document's headings, like in the book view
+User-facing-he: כפתורי הקטע הקודם והבא בסרגל הכלים עוברים בין כותרות המסמך, כמו בתצוגת ספר
+User-facing: new - Open file: links in documents open the linked book in the app, and web and email links open outside it
+User-facing-he: קישורים במסמכים פותחים את הספר המקושר בתוכנה, וקישורי אינטרנט ודוא"ל נפתחים מחוצה לה
