@@ -1,0 +1,4 @@
+User-facing: improved - Address bar: on a narrow window it opens across the whole top bar with the results list full width underneath, plus search and close buttons
+User-facing-he: בחלון צר היא נפתחת לרוחב כל הסרגל העליון, עם רשימת התוצאות ברוחב מלא מתחתיה וכפתורי חיפוש וסגירה
+User-facing: fixed - Address bar: English file paths show left-to-right, and the home page no longer shows the last file's path
+User-facing-he: נתיבי קבצים באנגלית מוצגים משמאל לימין, ודף הבית כבר לא מציג את הנתיב של הקובץ האחרון
