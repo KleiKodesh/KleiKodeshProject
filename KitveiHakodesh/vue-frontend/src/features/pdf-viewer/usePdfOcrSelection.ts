@@ -74,7 +74,43 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     disposed = true
     for (const worker of Object.values(workers)) worker?.terminate()
     window.removeEventListener('message', onMessage)
+    window.removeEventListener('keydown', onKeydown, true)
+    detachIframeKeydown()
   })
+
+  // ── Escape ─────────────────────────────────────────────────────────────────
+  // Both close buttons advertise Esc. The popup's own keydown listener never fires
+  // because nothing focuses it, and focus usually sits inside the PDF iframe, whose
+  // key events don't reach this window — so listen on both windows here.
+  // Esc closes the result popup first (unless OCR is still running), then OCR mode.
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return
+    if (result.value) {
+      if (isProcessing.value) return
+      dismissResult()
+    } else if (isActive.value) {
+      deactivate()
+    } else {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
+  let keydownWin: Window | null = null
+  function attachIframeKeydown() {
+    const win = getIframe()?.contentWindow ?? null
+    if (win === keydownWin) return
+    detachIframeKeydown()
+    win?.addEventListener('keydown', onKeydown, true)
+    keydownWin = win
+  }
+  function detachIframeKeydown() {
+    keydownWin?.removeEventListener('keydown', onKeydown, true)
+    keydownWin = null
+  }
+
+  window.addEventListener('keydown', onKeydown, true)
 
   // ── Inject script into iframe ──────────────────────────────────────────────
 
@@ -162,6 +198,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     const win = (getIframe()?.contentWindow as any)
     win.__kitveiHakodeshOcrTool.activate(LANG_FILES[script.value], forceOcr.value)
     isActive.value = true
+    attachIframeKeydown()
   }
 
   function deactivate() {
