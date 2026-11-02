@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UnreachableBadge from '@/layout/UnreachableBadge.vue'
 import { ref, computed } from 'vue'
 import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -142,7 +143,10 @@ function onRemove() {
       @click="card.open(wantsNewTab($event))"
       @auxclick.middle="card.open(wantsNewTab($event))"
     >
-      <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
+      <span class="card-icon-wrap">
+        <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
+        <UnreachableBadge v-if="card.unreachable" />
+      </span>
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
         <span v-if="card.path && layout === 'cards'" class="card-path">{{ shortPath }}</span>
@@ -220,6 +224,12 @@ function onRemove() {
 }
 .card:active {
   transform: scale(0.98);
+}
+
+.card-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 
 .card-icon {

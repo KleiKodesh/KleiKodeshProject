@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, onMounted, nextTick, inject } from 'vue'
 
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -127,6 +128,7 @@ ${item.description}`"
     >
       <span class="nav-icon">
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
+        <UnreachableBadge v-if="item.unreachable" />
       </span>
       <span class="nav-label">{{ item.text }}</span>
       <span class="nav-shortcut">{{ item.shortcut }}</span>
@@ -223,6 +225,7 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
 }
 
 .nav-icon {
+  position: relative;
   display: flex;
   align-items: center;
   font-size: 18px;

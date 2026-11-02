@@ -13,6 +13,8 @@ export interface HomeSuggestionCard {
   path: string
   icon: Component
   color?: string
+  /** External destination that can't be reached right now: broken-connection badge. */
+  unreachable?: boolean
   open: (openInNewTab: boolean) => void
   /** Present only on history cards — they can be pinned and removed. */
   pinning?: {
