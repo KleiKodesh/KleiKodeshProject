@@ -6,7 +6,7 @@ public static class FastDocViewFileTypes
 {
     private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".odt", ".ott", ".fodt", ".rtf", ".txt", ".html", ".htm",
+        ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".odt", ".ott", ".fodt", ".rtf", ".txt",
     };
 
     public static bool IsSupported(string path) => Extensions.Contains(Path.GetExtension(path));
