@@ -4,7 +4,7 @@
  * No Vue reactivity — purely async functions and pure transformations.
  */
 import { getReverseLineData, getReverseBooks, getStaticFilterBooks } from '@/webview-host/seforimApi'
-import type { BookRow, CommentaryLinkGroupRow } from '@/webview-host/queries.types'
+import type { BookRow, CommentaryLinkGroups } from '@/webview-host/queries.types'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
   ensureConnectionTypeNamesLoaded,
@@ -147,11 +147,11 @@ export function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[])
 
 export async function buildCommentaryGroupsFromCombined(
   /**
-   * The forward links, already DISTINCT and grouped per (target book, connection
-   * type id) by Core (getCommentaryLinkGroupsForSourceLineRange): ids and line
-   * indexes only. Text is fetched per window later (lines start as '').
+   * The links, already DISTINCT and grouped per (book, connection type id) by Core
+   * (getCommentaryLinkGroupsForSourceLineRange): ids and line indexes only. Text is
+   * fetched per window later (lines start as '').
    */
-  linkGroups: CommentaryLinkGroupRow[],
+  linkGroups: CommentaryLinkGroups,
   sourceEntries: CommentaryBookEntry[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
@@ -160,28 +160,50 @@ export async function buildCommentaryGroupsFromCombined(
   const byBookConnection: ByBookConnectionMap = new Map()
   const lineIndexById = new Map<number, number>()
 
-  for (const row of linkGroups) {
-    const rawConnectionTypeName = getConnectionTypeName(row.connectionTypeId)
-    const canonicalConnectionTypeName = normalizeConnectionTypeName(rawConnectionTypeName)
+  function addLinkGroup(
+    bookId: number,
+    canonicalConnectionTypeName: CommentaryConnectionType,
+    lineIds: number[],
+    lineIndexes: number[],
+  ) {
+    // Several raw type ids can normalize to one canonical name, and a book can be
+    // linked from both ends, so a (book, name) entry may collect the lines of more
+    // than one Core group.
+    const key: ByBookConnectionKey = `${bookId}::${canonicalConnectionTypeName}`
+    if (!byBookConnection.has(key))
+      byBookConnection.set(key, { bookId, lineIds: new Set(), connectionType: canonicalConnectionTypeName })
+    const entry = byBookConnection.get(key)!
+    for (let i = 0; i < lineIds.length; i++) {
+      const lineId = lineIds[i]!
+      entry.lineIds.add(lineId)
+      lineIndexById.set(lineId, lineIndexes[i] ?? 0)
+    }
+  }
+
+  // A book the catalogue files as a commentary on this one is shown as one whatever the
+  // link type says (Pilpula Charifta on the Rosh is type OTHER), in either direction —
+  // the same pair can be stored either way round.
+  const catalogCommentaryBookIds = new Set(linkGroups.catalogCommentaryBookIds)
+  const canonicalTypeFor = (bookId: number, connectionTypeId: number): CommentaryConnectionType =>
+    catalogCommentaryBookIds.has(bookId)
+      ? 'COMMENTARY'
+      : normalizeConnectionTypeName(getConnectionTypeName(connectionTypeId))
+
+  for (const row of linkGroups.rows) {
+    const canonicalConnectionTypeName = canonicalTypeFor(row.targetBookId, row.connectionTypeId)
     // SOURCE is the one type retrieved via a reverse query — its forward-direction
     // links are unreliable, so skip forward SOURCE rows. Every other type, TARGUM
     // included, is a normal forward link and is handled right here.
     if (canonicalConnectionTypeName === 'SOURCE') continue
-    // Several raw type ids can normalize to one canonical name, so a (book, name)
-    // entry may collect the lines of more than one Core group.
-    const key: ByBookConnectionKey = `${row.targetBookId}::${canonicalConnectionTypeName}`
-    if (!byBookConnection.has(key))
-      byBookConnection.set(key, {
-        bookId: row.targetBookId,
-        lineIds: new Set(),
-        connectionType: canonicalConnectionTypeName,
-      })
-    const entry = byBookConnection.get(key)!
-    for (let i = 0; i < row.lineIds.length; i++) {
-      const lineId = row.lineIds[i]!
-      entry.lineIds.add(lineId)
-      lineIndexById.set(lineId, row.lineIndexes[i] ?? 0)
-    }
+    addLinkGroup(row.targetBookId, canonicalConnectionTypeName, row.lineIds, row.lineIndexes)
+  }
+
+  // Links stored the other way round (Sefaria's alphabetical order — see
+  // CommentaryLinkGroups); apart from catalogue commentaries they land under OTHER.
+  for (const row of linkGroups.incoming) {
+    const canonicalConnectionTypeName = canonicalTypeFor(row.sourceBookId, row.connectionTypeId)
+    if (canonicalConnectionTypeName === 'SOURCE') continue
+    addLinkGroup(row.sourceBookId, canonicalConnectionTypeName, row.lineIds, row.lineIndexes)
   }
 
   // Collect all connection types per book so each entry's connectionTypes field

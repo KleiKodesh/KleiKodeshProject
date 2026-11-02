@@ -165,11 +165,16 @@ export function useCommentary(
 
   const filterGroups = computed(() => {
     if (!staticFilterGroupsLoaded.value) return groups.value
+    const staticBookIds = new Set(staticFilterGroups.value.map((group) => group.bookId))
     return [
       ...staticFilterGroups.value,
       ...groups.value.filter((group) => {
         const primaryType = getPrimaryConnectionType(group.connectionTypes)
-        return !isStaticFilterConnectionType(primaryType)
+        // A static-type live group is normally a duplicate of its static entry. Not
+        // always: a commentary the catalogue shelves under this book but whose links
+        // are stored the other way round (Pilpula Charifta on the Rosh) is only found
+        // per line, so it joins the list the first time a linked line is selected.
+        return !isStaticFilterConnectionType(primaryType) || !staticBookIds.has(group.bookId)
       }),
     ]
   })
@@ -354,10 +359,12 @@ export function useCommentary(
       const queryLineIds = isMulti ? multiIds : [lineId]
       const lineIdsForReverse = queryLineIds
 
-      const forwardQueryPromise = getCommentaryLinkGroupsForSourceLineRange(queryLineIds)
+      // One call brings the forward groups, the links pointing AT these lines and the
+      // catalogue's commentary verdict for this book (see CommentaryLinkGroups).
+      const linkGroupsPromise = getCommentaryLinkGroupsForSourceLineRange(queryLineIds, sourceBookId() ?? 0)
 
-      const [rows, sourceEntries] = await Promise.all([
-        forwardQueryPromise,
+      const [linkGroups, sourceEntries] = await Promise.all([
+        linkGroupsPromise,
         Promise.all([
           booksDataStore.ensureLoaded(),
           booksDataStore.ensureCommentaryMetadataLoaded(),
@@ -367,10 +374,10 @@ export function useCommentary(
         ),
       ])
 
-      if (!rows.length && !sourceEntries.length) return
+      if (!linkGroups.rows.length && !linkGroups.incoming.length && !sourceEntries.length) return
 
       const built = await buildCommentaryGroupsFromCombined(
-        rows,
+        linkGroups,
         sourceEntries,
         booksDataStore.allBooksMap,
       )

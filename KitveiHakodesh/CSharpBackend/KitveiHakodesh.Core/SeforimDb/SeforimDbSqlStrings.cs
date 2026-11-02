@@ -200,36 +200,120 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// NOTE: schema difference verified 2026-07-19 against both real DBs; both DB projects
         /// evolve independently — RE-VERIFY when either ships a new schema. The ColumnExists
         /// probe adapts at runtime either way; only the perf reasoning can go stale.</summary>
-        public static string GetCommentaryLinksForSourceLineRange(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+        public static string GetCommentaryLinksForSourceLineRange(SeforimDbSchema schema, int count, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
                    l.targetLineIndex AS lineIndex
             FROM link l
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})"
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}"
             : $@"
             SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
                    ln.lineIndex
             FROM link l
             JOIN line ln ON ln.id = l.targetLineId
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})";
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}";
 
         /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange: ordered so
         /// the reader can cut groups on a (book, type) change; DISTINCT because a range of source
         /// lines links the same target line many times over.</summary>
-        public static string GetCommentaryLinkGroupsForSourceLineRange(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+        public static string GetCommentaryLinkGroupsForSourceLineRange(SeforimDbSchema schema, int count, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
                    l.targetLineIndex AS lineIndex
             FROM link l
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}
             ORDER BY l.targetBookId, l.connectionTypeId, lineIndex, l.targetLineId"
             : $@"
             SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
                    ln.lineIndex
             FROM link l
             JOIN line ln ON ln.id = l.targetLineId
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}
             ORDER BY l.targetBookId, l.connectionTypeId, ln.lineIndex, l.targetLineId";
+
+        /// <summary>The end of a link a query shows it from — the numbering of link_suppressed_side.side.</summary>
+        public enum LinkSide { Source = 0, Target = 1 }
+
+        /// <summary>Drops links the data says not to show from <paramref name="shownSide"/> (see
+        /// SeforimDbSchema.HasLinkSuppressedSide). Empty on databases without the table, so every
+        /// link query can append it unconditionally. Expects the link table aliased as `l`.</summary>
+        private static string HiddenSideFilter(SeforimDbSchema schema, LinkSide shownSide) => schema.HasLinkSuppressedSide
+            ? $@"
+              AND NOT EXISTS (SELECT 1 FROM link_suppressed_side ss
+                               WHERE ss.linkId = l.id AND ss.side = {(int)shownSide})"
+            : "";
+
+        /// <summary>Links that point AT the given lines, grouped like
+        /// GetCommentaryLinkGroupsForSourceLineRange but keyed by the SOURCE book: the other end
+        /// of every link whose target is one of ours.
+        ///
+        /// Why this exists: in the otzaria database a link is stored once, in Sefaria's order,
+        /// and Sefaria sorts a link's two ends ALPHABETICALLY by English title for every type
+        /// that is not a dependant (commentary/targum/...) type. "Pilpula Charifta" sorts before
+        /// "Rosh", so all 590 Pilpula-Rosh links are source=Pilpula, target=Rosh, type OTHER, and
+        /// a forward query from the Rosh never sees its own commentaries. The direction of such
+        /// a link carries no meaning, so a book's links are the union of both ends.
+        ///
+        /// The dependant types (DependantConnectionTypeNames) are excluded because reversing
+        /// THOSE answers a different question - "what is this book's base text" - which
+        /// GetReverseLineData already handles with its own guards.</summary>
+        public static string GetIncomingLinkGroupsForTargetLineRange(SeforimDbSchema schema, int lineCount) => $@"
+            SELECT DISTINCT l.sourceBookId, l.connectionTypeId, l.sourceLineId, ln.lineIndex
+            FROM link l
+            JOIN line ln ON ln.id = l.sourceLineId
+            WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
+              AND l.sourceBookId != l.targetBookId
+              AND l.connectionTypeId NOT IN (SELECT ct.id FROM connection_type ct
+                                              WHERE ct.name IN ({DependantConnectionTypeNamesSql})){HiddenSideFilter(schema, LinkSide.Target)}
+            ORDER BY l.sourceBookId, l.connectionTypeId, ln.lineIndex, l.sourceLineId";
+
+        /// <summary>Connection types that make a book DEPEND on another (comment on, translate,
+        /// expound a base text). Same list as the frontend's base-text reverse lookup.</summary>
+        public static readonly string[] DependantConnectionTypeNames =
+            { "COMMENTARY", "SUPER_COMMENTARY", "TARGUM", "MIDRASH", "PARSHANUT", "DIBUR_HAMATCHIL" };
+
+        private static readonly string DependantConnectionTypeNamesSql =
+            string.Join(", ", System.Array.ConvertAll(DependantConnectionTypeNames, n => "'" + n + "'"));
+
+        /// <summary>Books the catalogue itself files as commentaries on @bookId: every book shelved
+        /// at least TWO folders below the parent of the book's own folder, when that parent is a
+        /// work's folder (level >= 2 - "Talmud Bavli / Rishonim / Rosh"). Piskei HaRosh on Bava
+        /// Batra sits in "Rosh / Seder Nezikin" (one below "Rosh"), as do the other Rosh volumes;
+        /// Pilpula Charifta and Korban Netanel sit in "Rosh / Mefarshim / Pilpula Charifta /
+        /// Seder ..." (three below), so they qualify while the work's own volumes do not.
+        ///
+        /// This is the only place the data says "X comments on the Rosh": the links between them
+        /// are type OTHER (see GetIncomingLinkGroupsForTargetLineRange), there is no base-text
+        /// row, and no title contains the other. Level 1 is deliberately NOT enough - at that
+        /// level the parent is a corpus (Shulchan Aruch, Midrash Rabbah) and every volume in it
+        /// would count as a commentary on every other. Depth, not the collective title, tells a
+        /// work's volumes from its commentaries because the Zayit database has no
+        /// collectiveTitleHe column; on the otzaria database both rules agree for the Rosh.</summary>
+        public const string GetCatalogCommentaryBooks = @"
+            SELECT sb.id
+            FROM book tb
+            JOIN category tc ON tc.id = tb.categoryId
+            JOIN category pc ON pc.id = tc.parentId
+            JOIN category_closure cc ON cc.ancestorId = pc.id
+            JOIN category sc ON sc.id = cc.descendantId
+            JOIN book sb ON sb.categoryId = sc.id
+            WHERE tb.id = @bookId
+              AND sb.id != tb.id
+              AND pc.level >= 2
+              AND sc.level >= pc.level + 2";
+
+        /// <summary>The books GetCatalogCommentaryBooks names that actually link to @bookId (either
+        /// direction) - the related-books list adds these as commentaries, since their links are
+        /// not of a commentary type and the forward/reverse type-filtered lookups miss them.
+        /// The book's linked books are collected ONCE and intersected: a per-candidate EXISTS
+        /// cost 0.5-1.6 s on Zayit, whose catalogue yields up to ~570 candidates for one book.
+        /// No candidates (the common case: parent folder above level 2) = no link scan at all.</summary>
+        public const string GetLinkedCatalogCommentaryBooks = @"
+            SELECT cb.id
+            FROM (" + GetCatalogCommentaryBooks + @") cb
+            WHERE cb.id IN (SELECT l.sourceBookId FROM link l WHERE l.targetBookId = @bookId
+                            UNION
+                            SELECT l.targetBookId FROM link l WHERE l.sourceBookId = @bookId)";
 
         /// <summary>Content backfill for a batch of line ids.</summary>
         public static string GetLineContents(SeforimDbSchema schema, int count) =>

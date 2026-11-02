@@ -183,6 +183,31 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
     }
 
+    /// <summary>A link group seen from its TARGET end: the source book and ITS lines that point
+    /// at the lines asked about. Same parallel-array shape as CommentaryLinkGroupRow.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class IncomingLinkGroupRow
+    {
+        public int SourceBookId { get; set; }
+        public int ConnectionTypeId { get; set; }
+        public int[] LineIds { get; set; } = System.Array.Empty<int>();
+        public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
+    }
+
+    /// <summary>Everything the commentary pane needs for a range of lines, in ONE call: the
+    /// forward link groups, the links pointing AT those lines (the other end of links Sefaria
+    /// stored in alphabetical order - see SeforimDbSqlStrings.GetIncomingLinkGroupsForTargetLineRange),
+    /// and which of the incoming books the catalogue files as commentaries on this book
+    /// (SeforimDbSqlStrings.GetCatalogCommentaryBooks), so the pane can shelve those with
+    /// the commentaries and the rest under links.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryLinkGroups
+    {
+        public List<CommentaryLinkGroupRow> Rows { get; set; } = new();
+        public List<IncomingLinkGroupRow> Incoming { get; set; } = new();
+        public int[] CatalogCommentaryBookIds { get; set; } = System.Array.Empty<int>();
+    }
+
     /// <summary>Word-level link anchor (link_anchor ⋈ link) for a source line. CharStart/CharEnd
     /// are visible-char offsets into the line's raw content (upstream countVisibleChars convention:
     /// tags = 0, entity = 1, everything else — including diacritics — = 1). CharEnd null = point

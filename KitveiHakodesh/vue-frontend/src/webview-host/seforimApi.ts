@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroupRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -429,10 +429,15 @@ export async function getLineRefAndContent(
 }
 
 /**
- * Forward commentary links for a range of source lines, de-duplicated and grouped per
- * (target book, connection type) in Core. Numbers only: a whole-book range is a few
- * hundred KB where the per-row shape above was ~4 MB.
+ * Commentary links for a range of lines, de-duplicated and grouped per (book, connection
+ * type) in Core: forward links, links pointing AT the lines, and the catalogue's commentary
+ * verdict for `bookId` (see CommentaryLinkGroups). Numbers only: a whole-book range is a
+ * few hundred KB where the per-row shape above was ~4 MB.
  */
-export async function getCommentaryLinkGroupsForSourceLineRange(lineIds: number[]): Promise<CommentaryLinkGroupRow[]> {
-  return (await seforimOp<{ rows: CommentaryLinkGroupRow[] }>('getCommentaryLinkGroupsForSourceLineRange', { lineIds })).rows
+export async function getCommentaryLinkGroupsForSourceLineRange(
+  lineIds: number[],
+  /** The book the lines belong to; 0 skips the catalogue's commentary verdict. */
+  bookId = 0,
+): Promise<CommentaryLinkGroups> {
+  return seforimOp<CommentaryLinkGroups>('getCommentaryLinkGroupsForSourceLineRange', { lineIds, bookId })
 }
