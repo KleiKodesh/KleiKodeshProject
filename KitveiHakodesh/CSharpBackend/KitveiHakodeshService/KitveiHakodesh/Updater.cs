@@ -103,7 +103,7 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
 
     /// <summary>Where installers are downloaded: beside the service, which the installer
     /// leaves alone on update.</summary>
-    public static string DownloadFolder => Path.Combine(AppContext.BaseDirectory, "updates");
+    public static string DownloadFolder => Path.Combine(global::KitveiHakodesh.Core.Common.AppFileLocator.DataRoot, "updates");
 
     /// <summary>
     /// The downloaded installer of the newest release that is newer than the installed version,

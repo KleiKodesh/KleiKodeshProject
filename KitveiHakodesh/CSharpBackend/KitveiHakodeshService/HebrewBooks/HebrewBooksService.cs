@@ -20,7 +20,7 @@ public sealed class HebrewBooksService
     /// first writable app root, and the service deliberately keeps its data next to its
     /// binary.</summary>
     private static readonly string CacheDir =
-        Path.Combine(AppContext.BaseDirectory, "hb-cache");
+        Path.Combine(global::KitveiHakodesh.Core.Common.AppFileLocator.DataRoot, "hb-cache");
 
     public const int DefaultLimit = CoreHebrewBooks.HebrewBooksCatalogDbQueries.DefaultSearchLimit;
 

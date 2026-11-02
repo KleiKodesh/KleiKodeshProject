@@ -82,6 +82,55 @@ function injectAddinBridgeStub(body: Buffer): Buffer {
 // an overridden exe is used as-is, never rebuilt.
 const KHS_EXE_OVERRIDE = process.env.KHS_EXE || ''
 const KHS_EXE = KHS_EXE_OVERRIDE || path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
+// ── Shadow copy: the running service never locks bin\Release ───────────────────
+// The service runs from a COPY of the program files (top-level files + runtimes/) in
+// bin\dev-shadow\<exe-mtime-ms>\, so `dotnet build -c Release` from any shell can overwrite
+// bin\Release while our service is up. KHS_DATA_DIR points the copy back at the real build
+// folder, where the data (FtsIndex, CatalogTocIndex, hb-cache, Dictionary, ...) stays — see
+// AppFileLocator.DataRoot. Real copies, not hard links: a hard link shares the locked file.
+// Only top-level files + runtimes/ are program files; every other subfolder is data (or a
+// stale RID publish like win-x64/) and is never copied.
+const KHS_BUILD_DIR = path.dirname(KHS_EXE)
+const KHS_SHADOW_ROOT = path.join(KHS_DIR, 'bin', 'dev-shadow')
+
+function copyDirSync(src: string, dst: string): void {
+  fs.mkdirSync(dst, { recursive: true })
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, e.name), d = path.join(dst, e.name)
+    if (e.isDirectory()) copyDirSync(s, d)
+    else fs.copyFileSync(s, d)
+  }
+}
+
+/** The exe to spawn: a shadow copy matching the current build (made or reused). Older shadows
+ *  nobody holds are deleted; one still locked (EBUSY/EPERM) is left for next time. */
+function ensureKhsShadowExe(): string {
+  if (KHS_EXE_OVERRIDE) return KHS_EXE
+  const stamp = String(Math.floor(fs.statSync(KHS_EXE).mtimeMs))
+  const dir = path.join(KHS_SHADOW_ROOT, stamp)
+  const exe = path.join(dir, path.basename(KHS_EXE))
+  const done = path.join(dir, '.complete')
+  if (!fs.existsSync(done)) {
+    const t0 = Date.now()
+    fs.rmSync(dir, { recursive: true, force: true }) // a half-written copy from a crash
+    fs.mkdirSync(dir, { recursive: true })
+    for (const e of fs.readdirSync(KHS_BUILD_DIR, { withFileTypes: true })) {
+      const s = path.join(KHS_BUILD_DIR, e.name)
+      if (e.isFile()) fs.copyFileSync(s, path.join(dir, e.name))
+      else if (e.isDirectory() && e.name === 'runtimes') copyDirSync(s, path.join(dir, e.name))
+    }
+    fs.writeFileSync(done, '')
+    console.log(`[khs] shadow copy made (${Date.now() - t0}ms) — ${path.relative(KHS_DIR, dir)}`)
+  }
+  try {
+    for (const old of fs.readdirSync(KHS_SHADOW_ROOT)) {
+      if (old === stamp) continue
+      try { fs.rmSync(path.join(KHS_SHADOW_ROOT, old), { recursive: true, force: true }) }
+      catch (e: any) { if (e?.code !== 'EBUSY' && e?.code !== 'EPERM') throw e }
+    }
+  } catch (e: any) { console.warn('[khs] old shadow cleanup skipped:', e?.message) }
+  return exe
+}
 const KHS_CONNECT_TIMEOUT_MS = 2_000
 const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
 const KHS_STARTUP_POLL_MS = 250
@@ -189,9 +238,9 @@ const khsGen: number = ((globalThis as any).__khsGen = ((globalThis as any).__kh
 //   • Each dev server keys its service pipe to its OWN pid (KitveiHakodesh.<pid>), so both
 //     spawn a service and each publishes a different /khs-endpoint.
 //   • The browser has learned exactly ONE endpoint. When the other dev server rebuilds, it
-//     graceful-stops then taskkills ITS service and re-links the shared exe — but the DLLs
-//     are locked by the sibling instance, so the build fails and/or the browser's service
-//     disappears. The generation guard then makes the owner DECLINE to respawn (it sees a
+//     graceful-stops then taskkills ITS service and respawns — the browser's service
+//     disappears. (Services run from a shadow copy, so the build itself no longer fails
+//     on locked DLLs; both instances would still share the data folder.) The generation guard then makes the owner DECLINE to respawn (it sees a
 //     gen it doesn't recognise), so nothing comes back.
 // The visible symptom is "the service worked for a while, then went unresponsive" while vite
 // itself keeps serving pages — the service is gone (or is the wrong instance) but the page is
@@ -440,11 +489,13 @@ function buildKhsService(): Promise<void> {
  *     stop (Http/OwnerWatcher), so no orphaned port is ever left behind. */
 async function spawnKhsExe(): Promise<void> {
   console.log('[khs] starting service (prebuilt exe)...')
-  khsProc = spawn(KHS_EXE, [], {
+  const exe = ensureKhsShadowExe()
+  khsProc = spawn(exe, [], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
     env: {
       ...process.env,
+      ...(KHS_EXE_OVERRIDE ? {} : { KHS_DATA_DIR: KHS_BUILD_DIR }),
       ...(khsDbPath ? { DB_PATH: khsDbPath } : {}),
       ...(khsFtsIndexPath ? { FTS_INDEX_PATH: khsFtsIndexPath } : {}),
       KHS_PIPE_NAME: KHS_PIPE_NAME,
@@ -557,7 +608,7 @@ async function ensureKhsService(): Promise<void> {
 
   // We must (re)start. Mark the stop as MANAGED so the exit handler doesn't also try to
   // respawn underneath us. Stop OUR existing instance GRACEFULLY first, then force-kill it,
-  // so the exe is unlocked (a rebuild would fail to overwrite it otherwise).
+  // so the new build's instance replaces it (the shadow copy means it never locks bin\Release).
   try {
     khsManagedStop = true
     khsReused = false // spawning our own child below — supervision is handle-based again

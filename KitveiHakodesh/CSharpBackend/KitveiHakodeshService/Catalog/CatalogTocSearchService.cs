@@ -14,7 +14,7 @@ using CatalogIndexLogLevel = global::KitveiHakodesh.Core.SeforimDbCatalog.Catalo
 /// database once per process, and the CATALOG_TOC_INDEX_PATH override.
 ///
 /// Index location: CATALOG_TOC_INDEX_PATH if set, else "CatalogTocIndex" next to the service
-/// binary (AppContext.BaseDirectory).
+/// binary (AppFileLocator.DataRoot — AppContext.BaseDirectory unless KHS_DATA_DIR is set).
 /// </summary>
 public sealed class CatalogTocSearchService
 {
@@ -48,7 +48,7 @@ public sealed class CatalogTocSearchService
     {
         string? env = Environment.GetEnvironmentVariable("CATALOG_TOC_INDEX_PATH");
         if (!string.IsNullOrWhiteSpace(env)) return env;
-        return Path.Combine(AppContext.BaseDirectory, "CatalogTocIndex");
+        return Path.Combine(global::KitveiHakodesh.Core.Common.AppFileLocator.DataRoot, "CatalogTocIndex");
     }
 
     /// <summary>The Core coordinator, for the DB change watcher's rebuild policy.</summary>

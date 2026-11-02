@@ -8,7 +8,7 @@ namespace KitveiHakodeshService.SeforimDb;
 /// What is left here is DI lifetime, the log hookup and the FTS_INDEX_PATH override.
 ///
 /// Index location: FTS_INDEX_PATH if set (used as-is, never built into or wiped), else
-/// "FtsIndex" next to the service binary (AppContext.BaseDirectory) — so deleting the
+/// "FtsIndex" next to the service binary (AppFileLocator.DataRoot) — so deleting the
 /// service folder deletes the index too.
 /// </summary>
 public sealed class FullTextSearchService
@@ -21,7 +21,7 @@ public sealed class FullTextSearchService
         bool external = !string.IsNullOrWhiteSpace(envIndexPath);
         _coordinator = new SeforimDbFtsIndexCoordinator(
             databasePath: SeforimDbLocator.Resolve(),
-            indexPath: external ? envIndexPath! : Path.Combine(AppContext.BaseDirectory, "FtsIndex"),
+            indexPath: external ? envIndexPath! : Path.Combine(global::KitveiHakodesh.Core.Common.AppFileLocator.DataRoot, "FtsIndex"),
             indexIsExternal: external,
             log: (level, message, ex) =>
             {

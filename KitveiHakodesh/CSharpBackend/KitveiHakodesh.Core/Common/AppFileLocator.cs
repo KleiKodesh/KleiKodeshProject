@@ -40,6 +40,27 @@ namespace KitveiHakodesh.Core.Common
                 "KleiKodesh");
 
         /// <summary>
+        /// The folder that holds the data kept "beside the exe" (FtsIndex, CatalogTocIndex,
+        /// hb-cache, convert-cache, updates, Dictionary, HebrewBooks, SearchExpansion,
+        /// filesystemindex ...). Normally AppContext.BaseDirectory — the installed service
+        /// keeps its data next to its binary on purpose.
+        ///
+        /// KHS_DATA_DIR overrides it. The dev server runs the service from a SHADOW COPY of
+        /// the build output (so a running service never locks bin\Release against another
+        /// rebuild) and points this at the real build folder, where the ~1.5 GB of data stays.
+        /// Absent the variable (installed, portable) nothing changes. Every "data beside the
+        /// exe" path must go through here, never through AppContext.BaseDirectory directly.
+        /// </summary>
+        public static string DataRoot
+        {
+            get
+            {
+                string? env = Environment.GetEnvironmentVariable("KHS_DATA_DIR");
+                return string.IsNullOrWhiteSpace(env) ? AppContext.BaseDirectory : env!;
+            }
+        }
+
+        /// <summary>
         /// Every root worth probing, most-specific first. Duplicates and blanks are dropped so
         /// a caller can enumerate without caring which host it is in.
         /// </summary>
@@ -62,6 +83,10 @@ namespace KitveiHakodesh.Core.Common
         [UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Empty Assembly.Location is filtered out; see IL3000 note below.")]
         private static IEnumerable<string?> EnumerateRootsRaw()
         {
+            // 0. The data root — differs from (1) only when KHS_DATA_DIR is set (dev shadow
+            //    copy); the same folder otherwise, deduplicated by CandidateRoots.
+            yield return SafeDirectory(() => DataRoot);
+
             // 1. Next to the running assembly. Correct for the portable DemoApp and for the
             //    service; under VSTO this is the shadow-copy folder and simply will not match.
             yield return SafeDirectory(() => AppContext.BaseDirectory);
