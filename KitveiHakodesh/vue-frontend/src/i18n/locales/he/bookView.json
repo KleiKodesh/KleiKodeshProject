@@ -144,7 +144,7 @@
     "cleanDibburHamatchilDash": "מקף דיבור המתחיל לנקודה",
     "cleanMaqaf": "מקף לרווח",
     "cleanNikkud": "ניקוד",
-    "cleanNormalizePunctuation": "יישור פיסוק",
+    "cleanNormalizePunctuation": "נקודתיים, מרכאות ורווחים",
     "cleanRemovePunctuation": "הסר פיסוק (שמור סוף שורה)",
     "cleanTeamim": "טעמים",
     "cleanText": "נקה טקסט",

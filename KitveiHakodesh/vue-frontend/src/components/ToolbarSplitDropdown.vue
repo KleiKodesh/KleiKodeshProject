@@ -73,7 +73,7 @@ defineExpose({ close })
       <IconChevronDown12Regular />
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="split-dropdown-panel overflow-submenu" :style="submenuStyle">
+    <div v-if="isOpen" ref="dropdownRef" class="split-dropdown-panel overflow-submenu" title="" :style="submenuStyle">
       <slot />
     </div>
   </div>
@@ -96,7 +96,7 @@ defineExpose({ close })
       <IconChevronDown12Regular />
     </button>
 
-    <div v-if="isOpen" ref="dropdownRef" class="split-dropdown-panel" :class="`dropdown-${toolbarPosition}`">
+    <div v-if="isOpen" ref="dropdownRef" class="split-dropdown-panel" title="" :class="`dropdown-${toolbarPosition}`">
       <slot />
     </div>
   </div>
