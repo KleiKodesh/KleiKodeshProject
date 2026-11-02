@@ -1,1 +1,2 @@
 User-facing: fixed - PDF viewer: Escape in the zoom box restores the value, and the text no longer disappears when scrolling fast.
+User-facing-he: Esc בתיבת ההגדלה מחזיר את הערך הקודם, והטקסט כבר לא נעלם בגלילה מהירה
