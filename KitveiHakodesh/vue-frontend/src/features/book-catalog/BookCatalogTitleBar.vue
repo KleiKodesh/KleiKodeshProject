@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { IconHome16Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconLibrary16Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
@@ -45,7 +45,7 @@ const VIEW_LABELS = {
          button out from under the pointer. -->
     <template #left>
       <button class="bar-btn pill-btn" :title="$t('bookCatalog.titleBar.reset')" @mousedown.prevent @click="$emit('goHome')">
-        <IconHome16Regular />
+        <IconLibrary16Regular />
       </button>
     </template>
 
