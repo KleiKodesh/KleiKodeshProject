@@ -1,0 +1,2 @@
+User-facing: fixed - Open file: cancelling a Word to PDF conversion stops it at once, and the next file no longer waits for it
+User-facing-he: ביטול המרה מוורד ל-PDF עוצר אותה מיד, והקובץ הבא כבר לא מחכה לה
