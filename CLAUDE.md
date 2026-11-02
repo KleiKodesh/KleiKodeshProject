@@ -3,10 +3,14 @@
 Every commit message body ends with one line per change the user will notice:
 
 `User-facing: new|improved|fixed - <Area>: <one plain sentence>`
+`User-facing-he: <the same sentence in Hebrew>`
 
 - Area = the name in `.github/scripts/release-glossary.txt`.
 - The sentence is what a non-programmer user notices. No jargon, file names or code terms.
 - Gemini puts this text into the release notes as written, so write it like a release note.
+- The Hebrew line is the author's own wording for the Hebrew release notes; Gemini only
+  fixes grammar and glossary terms in it. Write it like a note a yeshiva student reads.
+  Commits up to 2026-11-02 carried only the English line; from now on write both.
 - Internal-only work (refactors, cleanup, CI, build, tests, docs) gets `User-facing: none`.
 
 Example:
@@ -15,4 +19,5 @@ Example:
 Book view: bookmarks anchored to the exact text position
 
 User-facing: new - Book view: save bookmarks at the exact place in the text (Ctrl+Shift+D)
+User-facing-he: <Hebrew: save a bookmark at the exact place in the text (Ctrl+Shift+D)>
 ```
