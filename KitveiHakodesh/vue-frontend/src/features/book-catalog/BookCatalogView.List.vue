@@ -99,6 +99,7 @@ function selectItem(index: number, event?: MouseEvent) {
 .scroller {
   height: 100%;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 .list-items {
   min-height: 100%;
@@ -119,6 +120,12 @@ function selectItem(index: number, event?: MouseEvent) {
 }
 .fs-item:hover {
   background: var(--hover-bg);
+}
+/* Selected: Explorer's selection look, shared with the home page (main.css --item-selected-*). */
+.fs-item.is-focused {
+  background: var(--item-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--item-selected-border);
+  border-radius: 0;
 }
 .fs-item:active {
   background: var(--active-bg);

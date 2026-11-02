@@ -321,6 +321,21 @@ body {
   --item-card-path: 11px;
   --item-tile-icon: 32px;
   --item-tile-label: 11px;
+  /* Three lines, then "…"; the selected item shows the whole name — measured on
+     a Windows 11 Explorer screenshot (icon view). The full title is also in the tooltip. */
+  --item-tile-lines: 3;
+  /* Selected item, measured on the same dark-mode screenshot: fill #505050 and a
+     1px #A6A6A6 border on the #191919 page, square corners. Expressed as text-color
+     mixes so light mode follows (light mode not measured). Toned down from the
+     measured 24% / 61% — that read too dark in the app. Opaque, so a focused
+     tile's overflowing label can sit on it. */
+  /* Light: a softer mix — the dark-mode strength reads as a heavy gray box on white. */
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 8%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 22%, var(--bg-primary));
+}
+:root.dark {
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 14%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 40%, var(--bg-primary));
 }
 
 /* Global icon-button defaults — applies to all toolbar/bar buttons app-wide */

@@ -17,6 +17,12 @@ const props = withDefaults(defineProps<{ card: HomeSuggestionCardData; layout?: 
 const actions = computed(() => !!props.card.pinning)
 
 const isRemoving = ref(false)
+
+// Tiles: the keyboard-focused tile grows to show its full title (see .tile-expanded).
+const isKeyboardFocused = ref(false)
+function onFocusIn(e: FocusEvent) {
+  isKeyboardFocused.value = (e.target as HTMLElement).matches?.(':focus-visible') ?? false
+}
 const isPinPopping = ref(false)
 
 // Cards' second line: only the nearest step of the path (parent folder / last
@@ -134,6 +140,8 @@ function onRemove() {
     @pointerleave="onPointerUp"
     @click.capture="onClickCapture"
     @contextmenu="onContextMenu"
+    @focusin="onFocusIn"
+    @focusout="isKeyboardFocused = false"
   >
     <button
       type="button"
@@ -152,6 +160,14 @@ function onRemove() {
         <span v-if="card.path && layout === 'cards'" class="card-path">{{ shortPath }}</span>
       </span>
     </button>
+    <div
+      v-if="layout === 'tiles' && isKeyboardFocused"
+      class="tile-expanded"
+      aria-hidden="true"
+    >
+      <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
+      <span class="tile-expanded-title">{{ card.title }}</span>
+    </div>
 
     <div v-if="card.pinning" class="card-actions">
       <button
@@ -218,9 +234,14 @@ function onRemove() {
 .card:hover {
   background: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
 }
-.card:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 1px;
+/* Selected: Explorer's selection look (main.css --item-selected-*). Keyboard
+   focus here; the catalog marks its current card with .is-focused instead. */
+/* .card-wrap prefix: outranks the per-layout `background: none` rules below. */
+.card-wrap .card:focus-visible,
+.card-wrap.is-focused .card {
+  background: var(--item-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--item-selected-border);
+  border-radius: 0;
 }
 .card:active {
   transform: scale(0.98);
@@ -430,8 +451,7 @@ function onRemove() {
   font-size: var(--item-tile-icon);
   transition: transform 0.15s ease;
 }
-.layout-tiles .card:hover .card-icon,
-.layout-tiles .card:focus-visible .card-icon {
+.layout-tiles .card:hover .card-icon {
   transform: scale(1.15);
 }
 .layout-tiles .card:active .card-icon {
@@ -450,8 +470,39 @@ function onRemove() {
   white-space: normal;
   word-break: break-word;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: var(--item-tile-lines);
   -webkit-box-orient: vertical;
+}
+/* Focused tile: like Explorer's selected icon, the whole selection box grows
+   to fit the full title and lays over the row below. Drawn as a copy on top
+   of the tile (only for the focused one), so the tile itself keeps its size and
+   the grid never moves. Must mirror .layout-tiles .card / .card-title above. */
+.card-wrap.layout-tiles:has(.tile-expanded) {
+  z-index: 3;
+}
+.tile-expanded {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 4px;
+  background: var(--item-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--item-selected-border);
+  color: var(--text-primary);
+  pointer-events: none;
+}
+.tile-expanded .card-icon {
+  font-size: var(--item-tile-icon);
+}
+.tile-expanded-title {
+  max-width: 68px;
+  font-size: var(--item-tile-label);
+  line-height: 1.3;
+  text-align: center;
+  word-break: break-word;
 }
 /* No room under a tile; the path stays in the tooltip. */
 .layout-tiles .card-actions {
