@@ -145,6 +145,7 @@ function selectListItem(i: number, event?: MouseEvent) {
 .scroller {
   height: 100%;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 .fs-item {
   display: flex;

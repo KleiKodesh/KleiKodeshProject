@@ -176,6 +176,7 @@ function selectRow(index: number, event?: MouseEvent) {
 .scroller {
   height: 100%;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 .tree-items {
   min-height: 100%;

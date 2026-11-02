@@ -5,7 +5,7 @@ import type { BooksView } from '@/stores/settingsStore'
 // (.home-cards in HomePage.vue, .catalog-cards in the book catalog).
 // Columns shrink toward `min` to fit one more, and never grow past `max`.
 const GRID: Partial<Record<BooksView, { min: number; max: number; gap: number }>> = {
-  cards: { min: 160, max: 260, gap: 16 },
+  cards: { min: 140, max: 260, gap: 16 },
   tiles: { min: 72, max: 72, gap: 6 },
 }
 
