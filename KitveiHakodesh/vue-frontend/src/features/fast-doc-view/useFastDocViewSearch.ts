@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
-import type { FastDocViewApi } from '@/webview-host/fastDocViewApi'
+import type { FastDocViewApi, FastDocViewSearchStep } from '@/webview-host/fastDocViewApi'
 
 /** Blocks the service scans per search call (it stops sooner at the end of the known blocks). */
 export const FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP = 500
@@ -16,25 +16,32 @@ export interface FastDocViewSearchOptions {
   currentBlock: () => number
 }
 
+/** One match: the block it is in and which occurrence of the query within that block (the book view's BookViewMatch). */
+export interface FastDocViewMatch {
+  block: number
+  occurrence: number
+}
+
 /**
  * In-document search over the windowed document, behaving like the book view's search
  * (useBookViewSearch + useBookViewSearchPanel): typing never moves the view; the count shows the
  * match nearest the reader as current; the FIRST Enter (or Shift+Enter) after a new query or a
  * reader scroll re-anchors to the match nearest the view in that direction, later presses step.
- * The service scans bounded steps of blocks and returns hit block indexes only (no text); the scan
+ * The service scans bounded steps of blocks and returns hit block indexes with the match count of
+ * each (no text); every occurrence is one match, as the book view's per-line counts. The scan
  * runs from the reader's block to the end, then wraps; a newer query cancels the running loop.
  */
 export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
   const query = ref('')
-  /** Hit blocks, ascending. */
-  const hits = shallowRef<number[]>([])
-  const currentHit = ref(0)
+  /** Every match in document order (ascending block, then occurrence). Shallow: a search can hold many. */
+  const matches = shallowRef<FastDocViewMatch[]>([])
+  const currentMatch = ref(0)
   const isSearching = ref(false)
   let generation = 0
   /** False until the first step after a query change or a reader scroll (see step). */
   let isNavigationArmed = false
 
-  const hitCount = computed(() => hits.value.length)
+  const matchCount = computed(() => matches.value.length)
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   watch(query, (value) => {
@@ -44,27 +51,50 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
   })
   onScopeDispose(() => { if (debounceTimer) clearTimeout(debounceTimer) })
 
-  /** The index of the hit nearest the reader: the first at or after the view's top. */
-  function nearestIndex(found: number[]): number {
+  /** The index of the match nearest the reader: the first at or after the view's top block. */
+  function nearestIndex(found: FastDocViewMatch[]): number {
     const cursor = options.currentBlock()
-    const index = found.findIndex((block) => block >= cursor)
+    const index = found.findIndex((match) => match.block >= cursor)
     return index === -1 ? 0 : index
   }
 
-  function insertHits(found: number[]) {
+  /** The step's hit blocks as matches, one per occurrence; `keep` filters blocks (the wrap phase). */
+  function matchesOf(step: FastDocViewSearchStep, keep: (block: number) => boolean = () => true): FastDocViewMatch[] {
+    const found: FastDocViewMatch[] = []
+    for (let i = 0; i < step.hitBlocks.length; i++) {
+      const block = step.hitBlocks[i]!
+      if (!keep(block)) continue
+      const count = Math.max(1, step.hitCounts[i] ?? 1)
+      for (let occurrence = 0; occurrence < count; occurrence++) found.push({ block, occurrence })
+    }
+    return found
+  }
+
+  function insertMatches(found: FastDocViewMatch[]) {
     if (found.length === 0) return
-    // Once navigating, the current match is a BLOCK: hits inserted before it (the wrap phase)
-    // must not shift it to another one.
-    const currentBlock = isNavigationArmed ? hits.value[currentHit.value] : undefined
-    const merged = [...new Set([...hits.value, ...found])].sort((a, b) => a - b)
-    hits.value = merged
-    currentHit.value = currentBlock != null ? merged.indexOf(currentBlock) : nearestIndex(merged)
+    // Once navigating, the current match is a MATCH (block + occurrence): matches inserted before
+    // it (the wrap phase) must not shift it to another one.
+    const current = isNavigationArmed ? matches.value[currentMatch.value] : undefined
+    const byBlock = new Map<number, FastDocViewMatch[]>()
+    for (const match of [...matches.value, ...found]) {
+      const list = byBlock.get(match.block)
+      if (list) { if (!list.some((m) => m.occurrence === match.occurrence)) list.push(match) }
+      else byBlock.set(match.block, [match])
+    }
+    const merged: FastDocViewMatch[] = []
+    for (const block of [...byBlock.keys()].sort((a, b) => a - b)) {
+      merged.push(...byBlock.get(block)!.sort((a, b) => a.occurrence - b.occurrence))
+    }
+    matches.value = merged
+    currentMatch.value = current
+      ? Math.max(0, merged.findIndex((m) => m.block === current.block && m.occurrence === current.occurrence))
+      : nearestIndex(merged)
   }
 
   async function run(text: string) {
     const myGeneration = ++generation
-    hits.value = []
-    currentHit.value = 0
+    matches.value = []
+    currentMatch.value = 0
     isNavigationArmed = false
     const documentId = options.documentId()
     if (!text.trim() || !documentId) {
@@ -80,7 +110,7 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
       while (isCurrent()) {
         const step = await options.api.search(documentId, text, false, from, FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP)
         if (!isCurrent()) return
-        insertHits(step.hitBlocks)
+        insertMatches(matchesOf(step))
         if (step.reachedEnd || step.nextBlock < 0) break
         if (step.nextBlock <= from) await new Promise((resolve) => setTimeout(resolve, WAIT_FOR_INDEX_MS))
         from = Math.max(from, step.nextBlock)
@@ -90,39 +120,40 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
       while (isCurrent() && from < start) {
         const step = await options.api.search(documentId, text, false, from, Math.min(FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP, start - from))
         if (!isCurrent()) return
-        insertHits(step.hitBlocks.filter((block) => block < start))
+        insertMatches(matchesOf(step, (block) => block < start))
         if (step.nextBlock < 0 || step.nextBlock <= from) break
         from = step.nextBlock
       }
     } catch {
-      // A failed step leaves the hits found so far; the reader can search again.
+      // A failed step leaves the matches found so far; the reader can search again.
     } finally {
       if (myGeneration === generation) isSearching.value = false
     }
   }
 
   /**
-   * One step in `direction`; returns the hit block to show. The first press after a query
-   * change or a reader scroll re-anchors: forward to the first hit at or after the view's top,
-   * backward to the last one above it. Later presses step and wrap.
+   * One step in `direction`; returns the match to show. The first press after a query change
+   * or a reader scroll re-anchors: forward to the first match at or after the view's top block,
+   * backward to the last one above it. Later presses step match by match (through a block's
+   * occurrences, then on to the next block) and wrap.
    */
-  function step(direction: 'forward' | 'backward'): number | undefined {
-    const list = hits.value
+  function step(direction: 'forward' | 'backward'): FastDocViewMatch | undefined {
+    const list = matches.value
     if (list.length === 0) return undefined
     if (!isNavigationArmed) {
       isNavigationArmed = true
       const cursor = options.currentBlock()
       if (direction === 'forward') {
-        currentHit.value = nearestIndex(list)
+        currentMatch.value = nearestIndex(list)
       } else {
         let found = -1
-        for (let index = list.length - 1; index >= 0; index--) if (list[index]! < cursor) { found = index; break }
-        currentHit.value = found === -1 ? list.length - 1 : found
+        for (let index = list.length - 1; index >= 0; index--) if (list[index]!.block < cursor) { found = index; break }
+        currentMatch.value = found === -1 ? list.length - 1 : found
       }
     } else {
-      currentHit.value = (currentHit.value + (direction === 'forward' ? 1 : -1) + list.length) % list.length
+      currentMatch.value = (currentMatch.value + (direction === 'forward' ? 1 : -1) + list.length) % list.length
     }
-    return list[currentHit.value]
+    return list[currentMatch.value]
   }
 
   /** The reader scrolled: the next step re-anchors to the view (as in the book view). */
@@ -133,11 +164,11 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
   function clear() {
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
     generation++
-    hits.value = []
-    currentHit.value = 0
+    matches.value = []
+    currentMatch.value = 0
     isSearching.value = false
     isNavigationArmed = false
   }
 
-  return { query, hits, hitCount, currentHit, isSearching, step, onReaderScroll, clear }
+  return { query, matches, matchCount, currentMatch, isSearching, step, onReaderScroll, clear }
 }
