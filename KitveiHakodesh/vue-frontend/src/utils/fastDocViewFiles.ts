@@ -8,9 +8,9 @@
  */
 export const OPEN_DOCUMENTS_IN_FAST_DOC_VIEW = true
 
-/** Extensions FastDocView reads - Word family, OpenDocument text, RTF, plain text and HTML. */
+/** Extensions FastDocView reads - Word family, OpenDocument text, RTF and plain text. */
 const FAST_DOC_VIEW_EXTENSIONS = new Set([
-  '.doc', '.docx', '.docm', '.dot', '.dotx', '.dotm', '.odt', '.ott', '.fodt', '.rtf', '.txt', '.html', '.htm',
+  '.doc', '.docx', '.docm', '.dot', '.dotx', '.dotm', '.odt', '.ott', '.fodt', '.rtf', '.txt',
 ])
 
 /** Whether a local file opens in FastDocView (always false while the switch is off). */
