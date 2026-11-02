@@ -268,6 +268,11 @@ onMounted(focusSearchInput)
   width: 100%;
   max-width: var(--home-content-width);
 }
+/* Cards: Explorer-like wide columns, tight rows (column gap = useCardGridLayout's). */
+.home-cards--cards {
+  column-gap: 16px;
+  row-gap: 4px;
+}
 /* List: one full-width row per item, like the catalog's list view. */
 .home-cards--list {
   grid-template-columns: 1fr;
@@ -293,7 +298,9 @@ onMounted(focusSearchInput)
   justify-content: center;
   width: 100%;
   flex-shrink: 0;
-  margin-bottom: 8px;
+  /* With the wrapper's 6px bottom padding: 18px from the pill to the first row,
+     the catalog's gap (TopSearchBar's 6px + the catalog grid's 12px top padding). */
+  margin-bottom: 12px;
   background: var(--bg-primary);
 }
 
