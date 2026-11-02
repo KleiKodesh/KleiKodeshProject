@@ -144,7 +144,7 @@
     "cleanDibburHamatchilDash": "Dibbur hamatchil dash to period",
     "cleanMaqaf": "Maqaf to space",
     "cleanNikkud": "Vowels",
-    "cleanNormalizePunctuation": "Normalize punctuation",
+    "cleanNormalizePunctuation": "Colons, quotes and spacing",
     "cleanRemovePunctuation": "Remove punctuation (keep line end)",
     "cleanTeamim": "Cantillation",
     "cleanText": "Clean text",
