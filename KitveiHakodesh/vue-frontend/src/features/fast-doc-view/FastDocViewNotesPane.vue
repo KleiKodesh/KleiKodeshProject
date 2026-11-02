@@ -308,8 +308,19 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
   vertical-align: baseline !important;
   font-size: inherit !important;
 }
+/* Note paragraphs stay blocks: Word footnotes have no margins of their own, but each paragraph keeps its
+   own indents (w:ind - hanging indents are common in footnotes), which an inline paragraph would lose.
+   Only a note without a number of its own runs its first paragraph on after the pane's label. */
+.note-body {
+  display: block;
+}
 .note-body :deep(p) {
+  margin-block: 0;
+}
+.note-label + .note-body {
   display: inline;
-  margin: 0;
+}
+.note-label + .note-body :deep(p:first-child) {
+  display: inline;
 }
 </style>
