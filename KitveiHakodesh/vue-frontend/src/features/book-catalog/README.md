@@ -1,6 +1,6 @@
 # book-catalog
 
-Book catalog browser: list and tiles views, with Lucene-backed search.
+Book catalog browser: list, cards, tiles and tree views, with Lucene-backed search.
 
 **BookCatalogPage.vue** - main page, orchestrating the address bar and the active view. It owns which face the bar shows (path or search field) — see the `showSearch` note in the file — and forwards the search input's keys to whichever view is on screen. Which view that is comes from `settingsStore.booksView`, an app-wide preference shared by every `/books` tab, not per-tab state; assigning it persists it, so there is nothing to load on mount.
 
@@ -8,7 +8,9 @@ Book catalog browser: list and tiles views, with Lucene-backed search.
 
 **BookCatalogView.Tiles.vue** - the same items as a wrapping tile grid, sharing the home page's tile look. Its keyboard steps a whole row at a time and takes left/right within a row (`getColumnsPerRow` / `countGridColumns` in `useInputListNavigation`).
 
-**BookCatalogTitleBar.vue** - the address bar: one pill (`TopSearchBar`) holding home, the breadcrumb or the search field, and — beside the search icon — the list/tiles toggle.
+**BookCatalogView.Tree.vue** - the whole catalog as one tree (Otzaria's library layout): a shelf unfolds in place to its subfolders and books instead of being entered. Takes the browsed root and the page's path, which it unfolds to; same rows, icons and keyboard model as the list.
+
+**BookCatalogTitleBar.vue** - the address bar: one pill (`TopSearchBar`) holding home, the breadcrumb or the search field, and — beside the search icon — the view menu (list / cards / tiles / tree). The catalog's view is `settingsStore.booksView`; the home page's is `homeView` — two settings, never linked.
 
 **BookCatalogSearch.vue** - renders book matches and TOC entry matches, in a list or as tiles to match the active view.
 

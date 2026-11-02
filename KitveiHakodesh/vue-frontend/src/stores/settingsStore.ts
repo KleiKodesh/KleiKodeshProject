@@ -127,17 +127,16 @@ export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 /** The three layouts a page of items can render in (see ViewModeDropdown.vue). */
 export type CardsViewMode = 'list' | 'cards' | 'tiles'
-/** Layout modes for the book catalog page. */
-export type BooksView = CardsViewMode
-/** Layout modes for the home page's suggestion cards. */
+/** Layout modes for the book catalog page: the three card layouts plus a tree. */
+export type BooksView = CardsViewMode | 'tree'
+/**
+ * Layout modes for the home page's suggestion cards. Its own setting, never tied
+ * to the catalog's: switching one page's layout must not change the other's.
+ */
 export type HomeView = CardsViewMode
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
-// The catalog also had a tree view once. It is gone, but the preference was never
-// cleared from disk, so anyone who chose it still has it stored under the same key
-// this setting uses again — see normalizeBooksView.
-type LegacyBooksView = BooksView | 'tree'
 
 const DEFAULTS = {
   // How the divine names are rendered. Was a boolean in builds before the
@@ -558,7 +557,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
-    const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
+    const storedBooksView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_BOOKS_VIEW))
     if (storedBooksView != null) booksView.value = storedBooksView
     const storedHomeView = lsGet<HomeView>(KEYS.SETTINGS_HOME_VIEW)
     if (storedHomeView === 'list' || storedHomeView === 'cards' || storedHomeView === 'tiles') homeView.value = storedHomeView
@@ -870,12 +869,10 @@ export const useSettingsStore = defineStore('settings', () => {
     return value
   }
 
-  // A stored value is whatever an older build wrote, not necessarily a BooksView:
-  // the catalog's retired tree view is still on disk for anyone who picked it. Map
-  // it to the list, and reject anything else unrecognized, because the title bar
-  // indexes a two-key record by this value and would throw on a third one.
-  function normalizeBooksView(value: LegacyBooksView | null): BooksView | null {
-    if (value === 'list' || value === 'cards' || value === 'tiles') return value
-    if (value === 'tree') return 'list'
+  // A stored value is whatever an older build wrote, not necessarily a BooksView.
+  // Reject anything unrecognized, because the title bar indexes a record by this
+  // value and would throw on an unknown key.
+  function normalizeBooksView(value: string | null): BooksView | null {
+    if (value === 'list' || value === 'cards' || value === 'tiles' || value === 'tree') return value
     return null
   }

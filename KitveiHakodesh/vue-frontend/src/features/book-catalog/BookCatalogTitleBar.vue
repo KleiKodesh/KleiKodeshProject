@@ -25,6 +25,7 @@ const VIEW_LABELS = {
   list: t('bookCatalog.titleBar.listView'),
   cards: t('bookCatalog.titleBar.cardsView'),
   tiles: t('bookCatalog.titleBar.tilesView'),
+  tree: t('bookCatalog.titleBar.treeView'),
 }
 </script>
 
@@ -68,7 +69,10 @@ const VIEW_LABELS = {
          an address bar does — the crumbs and chevrons stop their own clicks, so
          what reaches here is the slack around them, including the icon below. -->
     <div v-show="!showSearch" class="pill-middle pill-path" @click="$emit('openSearch')">
+      <!-- The tree has no "current folder" — the whole catalog is on screen — so
+           the path means nothing there and the bar shows only home. -->
       <BookCatalogBreadcrumb
+        v-if="view !== 'tree'"
         :path="path"
         @navigate="$emit('navigate', $event)"
         @navigate-to-sibling="$emit('navigateToSibling', $event)"
