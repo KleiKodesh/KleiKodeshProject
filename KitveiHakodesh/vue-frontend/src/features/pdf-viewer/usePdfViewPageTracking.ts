@@ -213,6 +213,9 @@ export function usePdfViewPageTracking() {
   let pdfOutlineEntries: PdfOutlineEntry[] = []
   let tabId: string | null = null
   let pendingPage: { pageNumber: number } | null = null
+  // True once buildOutlineIndex has finished; until then an empty outlineEntries only
+  // means "not built yet", not "this PDF has no outline".
+  let outlineIndexReady = false
   // Bumped per attach — stale async work (the rehydrate poll) checks it.
   let attachGeneration = 0
   // The bridge object this instance registered — detach only unregisters its
@@ -334,7 +337,14 @@ export function usePdfViewPageTracking() {
     if (outlineEntry) {
       paneNavigation.updateActiveTab({ tocPath: outlineEntry.path })
     } else if (outlineEntries.length === 0) {
-      pendingPage = { pageNumber: currentPage }
+      if (!outlineIndexReady) {
+        pendingPage = { pageNumber: currentPage }
+        return
+      }
+      const pagesCount = applicationRef?.pagesCount
+      paneNavigation.updateActiveTab({
+        tocPath: pagesCount ? `עמוד ${currentPage} מתוך ${pagesCount}` : undefined,
+      })
     } else {
       paneNavigation.updateActiveTab({ tocPath: undefined })
     }
@@ -346,6 +356,7 @@ export function usePdfViewPageTracking() {
 
     outlineEntries = await buildOutlineIndex(pdfDocument)
     pdfOutlineEntries = buildPdfOutlineEntries(outlineEntries)
+    outlineIndexReady = true
 
     if (tabId) {
       registeredBridge = {
@@ -556,6 +567,7 @@ export function usePdfViewPageTracking() {
     pagechangingHandler = null
     documentloadedHandler = null
     pendingPage = null
+    outlineIndexReady = false
     outlineEntries = []
     pdfOutlineEntries = []
   }

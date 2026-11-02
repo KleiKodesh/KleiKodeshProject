@@ -76,11 +76,26 @@ function fireSwipe(direction: 'next' | 'previous') {
   )
 }
 
+// A sideways gesture over a page that can still scroll that way (zoomed in, horizontal
+// scroll mode) is panning, not a tab switch. sign > 0 means toward a larger scrollLeft.
+// Chromium's RTL scrollLeft runs from -(scrollWidth - clientWidth) to 0.
+function viewerCanScrollX(sign: number): boolean {
+  const el = iframeRef.value?.contentDocument?.getElementById('viewerContainer')
+  if (!el) return false
+  const range = el.scrollWidth - el.clientWidth
+  if (range <= 1) return false
+  const rtl = getComputedStyle(el).direction === 'rtl'
+  const min = rtl ? -range : 0
+  const max = rtl ? 0 : range
+  return sign > 0 ? el.scrollLeft < max - 1 : el.scrollLeft > min + 1
+}
+
 useSwipe(iframeContentWindow, {
   threshold: RELAY_TOUCH_THRESHOLD_PX,
   onSwipeEnd(_event, direction) {
-    if (direction === 'right') fireSwipe('next')
-    else if (direction === 'left') fireSwipe('previous')
+    // Finger moving right scrolls the content toward a smaller scrollLeft.
+    if (direction === 'right' && !viewerCanScrollX(-1)) fireSwipe('next')
+    else if (direction === 'left' && !viewerCanScrollX(1)) fireSwipe('previous')
   },
 })
 
@@ -94,7 +109,14 @@ function attachIframeWheelRelay() {
   const contentWindow = iframeRef.value?.contentWindow
   if (!contentWindow) return
 
-  const onWheel = createWheelSwipeHandler(fireSwipe)
+  const swipeHandler = createWheelSwipeHandler(fireSwipe)
+  const onWheel = (event: WheelEvent) => {
+    // Ctrl+wheel is zoom (a trackpad pinch arrives with ctrlKey), and a page that can
+    // still scroll sideways is being panned; neither should switch tabs.
+    if (event.ctrlKey) return
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY) && viewerCanScrollX(Math.sign(event.deltaX))) return
+    swipeHandler(event)
+  }
   contentWindow.addEventListener('wheel', onWheel, { passive: true })
   iframeWheelCleanup = () => contentWindow.removeEventListener('wheel', onWheel)
 }
