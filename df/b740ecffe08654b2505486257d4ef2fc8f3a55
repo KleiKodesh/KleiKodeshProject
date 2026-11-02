@@ -1,0 +1,4 @@
+User-facing: fixed - Open file: the notes pane now scrolls through all of the document's notes on its own when sync is off, and a clicked reference always shows its note
+User-facing-he: חלונית ההערות גוללת לבד את כל הערות המסמך כשהסנכרון כבוי, ולחיצה על ציון הערה מציגה תמיד את ההערה שלו
+User-facing: improved - Open file: notes line up with the document's page margins and their numbers look like footnote marks
+User-facing-he: ההערות מיושרות לשולי העמוד של המסמך, והמספרים שלהן נראים כמו ציוני הערות שוליים
