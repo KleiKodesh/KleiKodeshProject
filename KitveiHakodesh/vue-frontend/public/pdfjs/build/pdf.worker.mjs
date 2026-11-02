@@ -63072,6 +63072,63 @@ class WorkerMessageHandler {
       // trailer's Root stays valid. This block MUST run before the
       // `changes.size === 0` early return below, or an outline-only save would
       // return the original bytes unchanged.
+      // [KleiKodesh] PATCH: when this save replaces a KH-TOC section (see the
+      // "KH-TOC marker" block below), the bytes from its start are dropped. A
+      // value copied from the loaded outline may reference an object defined
+      // only inside that section (another writer's section can keep an item's
+      // action or destination in an object of its own): such references are
+      // resolved and written inline, or re-emitted as a new object when they
+      // are streams, so the new section never points at a missing object.
+      const khDropFrom = editedOutline != null ? khReadTocMarker(stream.bytes)?.start ?? null : null;
+      const khLocation = num => {
+        const entry = xref.getEntry(num);
+        if (!entry) {
+          return -1;
+        }
+        if (entry.uncompressed) {
+          return entry.offset;
+        }
+        const container = xref.getEntry(entry.offset);
+        return container ? container.offset : -1;
+      };
+      const khDetach = async (value, seen = new Set()) => {
+        if (khDropFrom === null) {
+          return value;
+        }
+        if (value instanceof Ref) {
+          const key = value.toString();
+          if (seen.has(key) || khLocation(value.num) < khDropFrom) {
+            return value;
+          }
+          const target = await xref.fetchAsync(value);
+          if (target instanceof BaseStream) {
+            const copyRef = xref.getNewTemporaryRef();
+            changes.put(copyRef, {
+              data: target
+            });
+            return copyRef;
+          }
+          seen.add(key);
+          const inline = await khDetach(target, seen);
+          seen.delete(key);
+          return inline;
+        }
+        if (Array.isArray(value)) {
+          const out = [];
+          for (const element of value) {
+            out.push(await khDetach(element, seen));
+          }
+          return out;
+        }
+        if (value instanceof Dict) {
+          const out = new Dict(xref);
+          for (const [k, v] of value.getRawEntries()) {
+            out.set(k, await khDetach(v, seen));
+          }
+          return out;
+        }
+        return value;
+      };
       if (editedOutline != null && catalogRef && !isPureXfa) {
         // Entries carry `src` — their index into the ORIGINAL outline flattened
         // in the same BFS order the viewer uses — so everything the editor does
@@ -63130,22 +63187,22 @@ class WorkerMessageHandler {
             if (rawDict) {
               const rawDest = rawDict.getRaw("Dest");
               if (rawDest !== undefined) {
-                dict.set("Dest", rawDest);
+                dict.set("Dest", await khDetach(rawDest));
                 targetSet = true;
               } else {
                 const rawAction = rawDict.getRaw("A");
                 if (rawAction !== undefined) {
-                  dict.set("A", rawAction);
+                  dict.set("A", await khDetach(rawAction));
                   targetSet = true;
                 }
               }
               const rawFlags = rawDict.getRaw("F");
               if (rawFlags !== undefined) {
-                dict.set("F", rawFlags);
+                dict.set("F", await khDetach(rawFlags));
               }
               const rawColor = rawDict.getRaw("C");
               if (rawColor !== undefined) {
-                dict.set("C", rawColor);
+                dict.set("C", await khDetach(rawColor));
               }
             }
             if (!targetSet) {
