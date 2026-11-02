@@ -306,6 +306,23 @@ body {
   --catalog-row-height: 32px;
 }
 
+/* Item sizes for the home page AND the book catalog, every view mode.
+   RULE: a home item and a catalog item must always be the same size in the same
+   mode (list / cards / tiles) — change sizes here only, never per page. */
+:root {
+  --item-radius: 4px;
+  --item-gap: 10px;
+  /* 12px: lines the icons up under the search pill's text (pill padding 12 + 1px border). */
+  --item-padding-inline: 12px;
+  /* List and cards share icon and title size; cards add the path line.
+     List row height is --catalog-row-height. */
+  --item-icon: 20px;
+  --item-title: 13px;
+  --item-card-path: 11px;
+  --item-tile-icon: 32px;
+  --item-tile-label: 11px;
+}
+
 /* Global icon-button defaults — applies to all toolbar/bar buttons app-wide */
 button {
   background: transparent;

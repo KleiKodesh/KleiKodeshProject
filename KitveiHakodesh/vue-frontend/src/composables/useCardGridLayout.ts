@@ -1,11 +1,11 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import type { BooksView } from '@/stores/settingsStore'
 
-// Column width range and gap per view; the gap must match the grids that use this
+// Column width range and column gap per view; the gap must match the grids that use this
 // (.home-cards in HomePage.vue, .catalog-cards in the book catalog).
 // Columns shrink toward `min` to fit one more, and never grow past `max`.
 const GRID: Partial<Record<BooksView, { min: number; max: number; gap: number }>> = {
-  cards: { min: 140, max: 200, gap: 8 },
+  cards: { min: 160, max: 260, gap: 16 },
   tiles: { min: 72, max: 72, gap: 6 },
 }
 

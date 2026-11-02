@@ -119,7 +119,7 @@ function selectItem(i: number, event?: MouseEvent) {
   padding: 6px 4px;
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--item-radius);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -155,7 +155,8 @@ function selectItem(i: number, event?: MouseEvent) {
   /* No chip behind the glyph, as on the home page: the icon itself carries the
      colour, and the tile reads lighter without a filled square under every one. */
   background: none;
-  font-size: 24px;
+  /* Sizes shared with the home page's tiles (main.css --item-*): keep them the same. */
+  font-size: var(--item-tile-icon);
   transition:
     transform 0.15s ease,
     opacity 0.12s ease;
@@ -173,7 +174,7 @@ function selectItem(i: number, event?: MouseEvent) {
   color: #c1440e;
 }
 .tile-label {
-  font-size: 11px;
+  font-size: var(--item-tile-label);
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;

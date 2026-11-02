@@ -4,6 +4,7 @@ import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fl
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { wantsNewTab, OPEN_IN_NEW_TAB_HINT } from '@/composables/useOpenInNewTab'
 import type { HomeSuggestionCard as HomeSuggestionCardData } from './homeSuggestionCard'
+import { HOME_CARD_PATH_SEPARATOR } from './homeResumePath'
 import type { CardsViewMode } from '@/stores/settingsStore'
 
 // `layout` restyles the same card as a list row or an icon tile (home's view
@@ -16,6 +17,20 @@ const actions = computed(() => !!props.card.pinning)
 
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
+
+// Cards' second line: only the nearest step of the path (parent folder / last
+// category), like Explorer's short location line; the full path is in the tooltip.
+const shortPath = computed(() => {
+  const parts = props.card.path
+    .replaceAll(HOME_CARD_PATH_SEPARATOR, '\\')
+    .split('\\')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  // Folder / file / category paths end with the item itself (file name may add an extension).
+  const last = parts.at(-1)
+  if (last?.startsWith(props.card.title)) parts.pop()
+  return parts.at(-1) ?? ''
+})
 
 // Tooltip: title + full path, plus the open-in-new-tab hint (every card honours
 // Ctrl+click / Ctrl+Enter).
@@ -130,7 +145,7 @@ function onRemove() {
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
-        <span v-if="card.path && layout === 'cards'" class="card-path">{{ card.path }}</span>
+        <span v-if="card.path && layout === 'cards'" class="card-path">{{ shortPath }}</span>
       </span>
     </button>
 
@@ -162,6 +177,9 @@ function onRemove() {
 </template>
 
 <style scoped>
+/* Item sizes come from main.css --item-*: the book catalog uses the same ones, so
+   home and catalog items are always the same size in every mode. Never hard-code
+   a size here that the catalog doesn't share. */
 .card-wrap {
   position: relative;
   display: flex;
@@ -328,17 +346,16 @@ function onRemove() {
   }
 }
 
-/* ── Cards layout: Windows 11 (Fluent) two-line item: Body 14px title over a Caption 12px
-   secondary line, 12px icon gap, 32px icon, no fill until hover. */
+/* ── Cards layout: Windows 11 (Fluent) two-line item: 13px title over an 11px
+   secondary line, 10px icon gap, same icon as list, no fill until hover. */
 .layout-cards .card {
-  gap: 12px;
-  padding: 8px;
-  border-radius: 4px;
+  gap: var(--item-gap);
+  padding: 6px var(--item-padding-inline);
+  border-radius: var(--item-radius);
   background: none;
 }
-/* Explorer-size icon: as tall as the two text lines, so the block reads as one unit. */
 .layout-cards .card-icon {
-  font-size: 32px;
+  font-size: var(--item-icon);
 }
 .layout-cards .card:hover {
   background: var(--hover-bg);
@@ -347,21 +364,23 @@ function onRemove() {
   gap: 1px;
 }
 .layout-cards .card-title {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--item-title);
+  line-height: 18px;
 }
 .layout-cards .card-path {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--item-card-path);
+  line-height: 15px;
 }
 
-/* ── List layout: a flat 38px row, the title only. ─────────────────────────────────────────────────────── */
+/* ── List layout: a flat 32px row, the title only — Explorer's list row:
+   20px icon, 13px title, same 10px gap / 8px padding / 4px radius as cards. ── */
 .layout-list .card {
-  min-height: 38px;
-  height: 38px;
-  padding: 0 12px;
+  min-height: var(--catalog-row-height);
+  height: var(--catalog-row-height);
+  gap: var(--item-gap);
+  padding: 0 var(--item-padding-inline);
   background: none;
-  border-radius: 6px;
+  border-radius: var(--item-radius);
 }
 .layout-list .card:hover {
   background: var(--hover-bg);
@@ -370,8 +389,11 @@ function onRemove() {
   transform: none;
   background: var(--active-bg);
 }
+.layout-list .card-icon {
+  font-size: var(--item-icon);
+}
 .layout-list .card-title {
-  font-size: 14px;
+  font-size: var(--item-title);
 }
 .layout-list .card-actions {
   top: 50%;
@@ -388,14 +410,14 @@ function onRemove() {
   min-height: 0;
   padding: 6px 4px;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--item-radius);
 }
 .layout-tiles .card:active {
   transform: none;
 }
 /* Only the icon moves, as on the catalog tiles, so the grid does not jitter. */
 .layout-tiles .card-icon {
-  font-size: 24px;
+  font-size: var(--item-tile-icon);
   transition: transform 0.15s ease;
 }
 .layout-tiles .card:hover .card-icon,
@@ -412,7 +434,7 @@ function onRemove() {
 }
 .layout-tiles .card-title {
   max-width: 68px;
-  font-size: 11px;
+  font-size: var(--item-tile-label);
   line-height: 1.3;
   text-align: center;
   white-space: normal;

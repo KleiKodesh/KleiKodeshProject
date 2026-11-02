@@ -106,8 +106,9 @@ function selectItem(index: number, event?: MouseEvent) {
 .fs-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
+  /* Sizes shared with the home page's list (main.css --item-*): keep them the same. */
+  gap: var(--item-gap);
+  padding: 0 var(--item-padding-inline);
   height: var(--catalog-row-height, 38px);
   cursor: pointer;
   box-sizing: border-box;
@@ -127,7 +128,7 @@ function selectItem(index: number, event?: MouseEvent) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
+  font-size: var(--item-icon);
 }
 .folder-icon svg {
   color: var(--status-warning);
@@ -136,7 +137,7 @@ function selectItem(index: number, event?: MouseEvent) {
   color: #c1440e;
 }
 .title {
-  font-size: 14px;
+  font-size: var(--item-title);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
