@@ -314,12 +314,12 @@ body {
   --item-gap: 10px;
   /* 12px: lines the icons up under the search pill's text (pill padding 12 + 1px border). */
   --item-padding-inline: 12px;
-  /* List and cards share icon and title size; cards add the path line.
-     List row height is --catalog-row-height. */
+  /* Small icon: list and tree. Row height is --catalog-row-height. */
   --item-icon: 20px;
   --item-title: 13px;
+  /* Large icon: cards and tiles share it. */
+  --item-large-icon: 28px;
   --item-card-path: 11px;
-  --item-tile-icon: 32px;
   --item-tile-label: 11px;
   /* Three lines, then "…"; the selected item shows the whole name — measured on
      a Windows 11 Explorer screenshot (icon view). The full title is also in the tooltip. */
