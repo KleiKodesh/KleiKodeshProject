@@ -451,7 +451,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var conn = Open();
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinksForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
+            cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinksForSourceLineRange(SchemaOf(conn), lineIds.Count, _linkHasTargetLineIndex.Value);
             BindList(cmd, "p", lineIds);
             using var r = cmd.ExecuteReader();
             while (r.Read())
@@ -468,30 +468,66 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>The same links as GetCommentaryLinksForSourceLineRange, de-duplicated and
-        /// grouped per (target book, connection type) — see CommentaryLinkGroupRow.</summary>
-        public List<CommentaryLinkGroupRow> GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds)
+        /// grouped per (target book, connection type) — see CommentaryLinkGroupRow — together
+        /// with the links pointing AT the lines and the catalogue's commentary verdict for
+        /// <paramref name="bookId"/> (the book the lines belong to; 0 = skip the verdict).
+        /// One connection, three statements: the pane opens on this single call.</summary>
+        public CommentaryLinkGroups GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds, int bookId)
         {
-            var list = new List<CommentaryLinkGroupRow>();
-            if (lineIds is null || lineIds.Count == 0) return list;
+            var result = new CommentaryLinkGroups();
+            if (lineIds is null || lineIds.Count == 0) return result;
             using var conn = Open();
+            var schema = SchemaOf(conn);
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
-            BindList(cmd, "p", lineIds);
-            using var r = cmd.ExecuteReader();
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(schema, lineIds.Count, _linkHasTargetLineIndex.Value);
+                BindList(cmd, "p", lineIds);
+                using var r = cmd.ExecuteReader();
+                ReadLinkGroups(r, (book, type, ids, indexes) => result.Rows.Add(new CommentaryLinkGroupRow
+                {
+                    TargetBookId = book, ConnectionTypeId = type, LineIds = ids, LineIndexes = indexes,
+                }));
+            }
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetIncomingLinkGroupsForTargetLineRange(schema, lineIds.Count);
+                BindList(cmd, "t", lineIds);
+                using var r = cmd.ExecuteReader();
+                ReadLinkGroups(r, (book, type, ids, indexes) => result.Incoming.Add(new IncomingLinkGroupRow
+                {
+                    SourceBookId = book, ConnectionTypeId = type, LineIds = ids, LineIndexes = indexes,
+                }));
+            }
+
+            // Applies to BOTH directions: a pair can be stored either way round (Zayit keeps
+            // some forward-only), and the related-books list counts both.
+            if (bookId > 0 && (result.Incoming.Count > 0 || result.Rows.Count > 0))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetCatalogCommentaryBooks;
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                using var r = cmd.ExecuteReader();
+                var ids = new List<int>();
+                while (r.Read()) ids.Add(r.GetInt32(0));
+                result.CatalogCommentaryBookIds = ids.ToArray();
+            }
+            return result;
+        }
+
+        /// <summary>Cuts an (book, type, lineId, lineIndex) reader ordered by book then type into
+        /// groups, handing each group's parallel id/index arrays to <paramref name="add"/>.</summary>
+        private static void ReadLinkGroups(SqliteDataReader r, Action<int, int, int[], int[]> add)
+        {
             int curBook = int.MinValue, curType = int.MinValue;
             var ids = new List<int>();
             var indexes = new List<int>();
             void Flush()
             {
                 if (ids.Count == 0) return;
-                list.Add(new CommentaryLinkGroupRow
-                {
-                    TargetBookId = curBook,
-                    ConnectionTypeId = curType,
-                    LineIds = ids.ToArray(),
-                    LineIndexes = indexes.ToArray(),
-                });
+                add(curBook, curType, ids.ToArray(), indexes.ToArray());
                 ids.Clear();
                 indexes.Clear();
             }
@@ -504,7 +540,6 @@ namespace KitveiHakodesh.Core.SeforimDb
                 indexes.Add(r.IsDBNull(3) ? 0 : r.GetInt32(3));
             }
             Flush();
-            return list;
         }
 
         // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
@@ -662,15 +697,30 @@ namespace KitveiHakodesh.Core.SeforimDb
             cmd.CommandText = SeforimDbSqlStrings.GetStaticFilterBooks(typeIds.Count);
             cmd.Parameters.AddWithValue("@bookId", sourceBookId);
             BindList(cmd, "c", typeIds);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
+            using (var r = cmd.ExecuteReader())
             {
-                list.Add(new StaticFilterRow
+                while (r.Read())
                 {
-                    TargetBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
-                    ConnectionTypeId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                });
+                    list.Add(new StaticFilterRow
+                    {
+                        TargetBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                        ConnectionTypeId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    });
+                }
             }
+
+            // Commentaries the catalogue shelves under this book but whose links carry no
+            // commentary type (Pilpula Charifta on the Rosh) - listed as COMMENTARY, matching
+            // how the pane shows them (see SeforimDbSqlStrings.GetCatalogCommentaryBooks).
+            using var typeCmd = conn.CreateCommand();
+            typeCmd.CommandText = "SELECT id FROM connection_type WHERE name = 'COMMENTARY'";
+            if (typeCmd.ExecuteScalar() is not long commentaryTypeId) return list;
+            using var catalogCmd = conn.CreateCommand();
+            catalogCmd.CommandText = SeforimDbSqlStrings.GetLinkedCatalogCommentaryBooks;
+            catalogCmd.Parameters.AddWithValue("@bookId", sourceBookId);
+            using var cr = catalogCmd.ExecuteReader();
+            while (cr.Read())
+                list.Add(new StaticFilterRow { TargetBookId = cr.GetInt32(0), ConnectionTypeId = (int)commentaryTypeId });
             return list;
         }
 

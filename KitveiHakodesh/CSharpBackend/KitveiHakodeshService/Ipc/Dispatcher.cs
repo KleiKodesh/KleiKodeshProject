@@ -794,8 +794,8 @@ public sealed class Dispatcher(
                 }
                 case "getCommentaryLinkGroupsForSourceLineRange":
                 {
-                    var a = MsgPack.De<LineIdsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinkGroupsResult { Rows = seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds) }));
+                    var a = MsgPack.De<CommentaryLinkGroupsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds, a.BookId)));
                 }
 
                 case "getLineContents":

@@ -138,8 +138,14 @@ public sealed class BookIdArgs { public int BookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CommentaryLinksResult { public List<CommentaryLinkRow> Rows { get; set; } = new(); }
 
+/// <summary>Lines to look up plus the book they belong to (0 = unknown; the catalogue's
+/// commentary verdict is then skipped). The result is Core's CommentaryLinkGroups as-is.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class CommentaryLinkGroupsResult { public List<CommentaryLinkGroupRow> Rows { get; set; } = new(); }
+public sealed class CommentaryLinkGroupsArgs
+{
+    public List<int> LineIds { get; set; } = new();
+    public int BookId { get; set; }
+}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentsResult { public List<LineContentRow> Rows { get; set; } = new(); }
