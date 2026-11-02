@@ -43,14 +43,15 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const double RebuildThresholdFraction = 0.20;
 
         /// <summary>
-        /// Default index location: an "index" subfolder in the current AppDomain's base directory.
+        /// Default index location: a "filesystemindex" subfolder of the data root (beside the exe,
+        /// or KHS_DATA_DIR — see <see cref="Common.AppFileLocator.DataRoot"/>).
         ///
         /// This is typically the folder where the executing assembly (service exe or library caller)
         /// lives. When the service is deployed alongside the demo, both see the same path.
         /// </summary>
         public static readonly string DefaultIndexPath =
             System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
+                Common.AppFileLocator.DataRoot,
                 "filesystemindex");
 
         private readonly string          _indexPath;

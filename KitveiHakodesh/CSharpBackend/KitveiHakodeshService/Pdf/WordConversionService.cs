@@ -15,7 +15,7 @@ public sealed class WordConversionService
     public WordConversionService(ILogger<WordConversionService> logger)
     {
         _renderer = new WordDocumentRenderer(
-            Path.Combine(AppContext.BaseDirectory, "convert-cache"),
+            Path.Combine(global::KitveiHakodesh.Core.Common.AppFileLocator.DataRoot, "convert-cache"),
             wordDisabled: Environment.GetEnvironmentVariable("KHS_DISABLE_WORD") is "1" or "true",
             log: (level, message, ex) =>
             {

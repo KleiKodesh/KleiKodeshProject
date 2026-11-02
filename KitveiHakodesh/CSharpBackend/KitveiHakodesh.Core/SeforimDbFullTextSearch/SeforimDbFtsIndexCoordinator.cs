@@ -265,7 +265,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             // Prepare). Best effort — a folder still held open is retried next start.
             try
             {
-                string trialFolder = Path.Combine(AppContext.BaseDirectory, "FtsIndexFts5");
+                string trialFolder = Path.Combine(Common.AppFileLocator.DataRoot, "FtsIndexFts5");
                 if (Directory.Exists(trialFolder)) Directory.Delete(trialFolder, recursive: true);
             }
             catch (Exception ex) { _log(FtsIndexLogLevel.Debug, "FTS trial folder not removed yet", ex); }
