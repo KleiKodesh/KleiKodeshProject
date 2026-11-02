@@ -130,6 +130,7 @@ function onRemove() {
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
+        <span v-if="card.path && layout === 'cards'" class="card-path">{{ card.path }}</span>
       </span>
     </button>
 
@@ -226,6 +227,14 @@ function onRemove() {
 /* One line, like the title: ellipsis, never wraps — the full path is in the
    tooltip. Omitted when empty, so a lone title centres vertically; the card's
    min-height keeps it as tall as a title+path card. */
+.card-path {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Actions (pin / delete), in the card's end corner ─────────────────────── */
 .card-actions {
@@ -319,11 +328,31 @@ function onRemove() {
   }
 }
 
-/* ── Cards layout: the inline padding grows with the card's width (% of the
-   wrapper), so icons stay aligned down a column while wider cards get a roomier
-   start margin. ── */
+/* ── Cards layout: Windows 11 (Fluent) two-line item: Body 14px title over a Caption 12px
+   secondary line, 12px icon gap, 32px icon, no fill until hover. */
 .layout-cards .card {
-  padding-inline: max(12px, 10%);
+  gap: 12px;
+  padding: 8px;
+  border-radius: 4px;
+  background: none;
+}
+/* Explorer-size icon: as tall as the two text lines, so the block reads as one unit. */
+.layout-cards .card-icon {
+  font-size: 32px;
+}
+.layout-cards .card:hover {
+  background: var(--hover-bg);
+}
+.layout-cards .card-text {
+  gap: 1px;
+}
+.layout-cards .card-title {
+  font-size: 14px;
+  line-height: 20px;
+}
+.layout-cards .card-path {
+  font-size: 12px;
+  line-height: 16px;
 }
 
 /* ── List layout: a flat 38px row, the title only. ─────────────────────────────────────────────────────── */
