@@ -12,6 +12,8 @@ import {
   IconLayoutColumnTwoFocusRight20Filled,
   IconLayoutColumnTwoFocusLeft20Filled,
   IconTimeline20Regular,
+  IconDocumentMargins20Regular,
+  IconDocumentMargins20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import WordDocumentGlyph from '@/components/WordDocumentGlyph.vue'
@@ -23,8 +25,9 @@ import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import BookViewCleanTextCombo from '@/features/book-view/BookViewCleanTextCombo.vue'
+import ToolbarSplitDropdown from '@/components/ToolbarSplitDropdown.vue'
 
-defineProps<{
+const props = defineProps<{
   tocVisible: boolean
   notesVisible: boolean
   notesSync: boolean
@@ -39,11 +42,15 @@ defineProps<{
   pdfState: ConversionActionState
   searchVisible: boolean
   canOpenAsPdf: boolean
+  /** The text column ignores the document's page width / margins (global setting). */
+  ignoreMargins: boolean
 }>()
 
 const emit = defineEmits<{
   toggleToc: [toggleButton: HTMLElement]
-  stepNotes: []
+  toggleNotes: []
+  setNotesPlace: [place: 'bottom' | 'right' | 'left']
+  toggleIgnoreMargins: []
   toggleNotesSync: []
   zoomIn: []
   zoomOut: []
@@ -64,6 +71,21 @@ const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 const toolbarEl = ref<HTMLElement | null>(null)
 const { isDragging, dropPreviewStyle } = useToolbarDrag(toolbarEl, toolbarPosition, '.fast-doc-view')
+
+const notesPlaceMenu = ref<InstanceType<typeof ToolbarSplitDropdown> | null>(null)
+const NOTES_PLACES = [
+  { place: 'bottom', labelKey: 'fastDocView.notesPlaceBottom' },
+  { place: 'right', labelKey: 'fastDocView.notesPlaceRight' },
+  { place: 'left', labelKey: 'fastDocView.notesPlaceLeft' },
+] as const
+function pickNotesPlace(place: 'bottom' | 'right' | 'left') {
+  emit('setNotesPlace', place)
+  notesPlaceMenu.value?.close()
+}
+/** The place the pane shows in now (a side place falls back to the bottom on a narrow page). */
+function shownNotesPlace() {
+  return props.canPlaceNotesBeside ? props.notesPlace : 'bottom'
+}
 
 function onToggleToc(event: MouseEvent) {
   emit('toggleToc', event.currentTarget as HTMLElement)
@@ -105,21 +127,38 @@ function onToggleToc(event: MouseEvent) {
     >
       <IconChevronLeft20Regular class="dir-icon" />
     </button>
-    <!-- One button steps the notes pane: closed -> bottom -> right -> left -> closed (the side places
-         only on a wide page). The icon is the current state (the book view's bottom / side / side-left
-         commentary icons), the tooltip names the next step. -->
-    <button
-      :class="{ active: notesVisible }"
+    <!-- The notes split button (the clean-text combo's shared ToolbarSplitDropdown): the main half opens /
+         closes the pane in the chosen place, the dropdown picks bottom / right / left (sides on a wide page only). -->
+    <ToolbarSplitDropdown
+      ref="notesPlaceMenu"
+      class="dropdown-host fast-doc-view-notes-place"
+      :active="notesVisible"
       :disabled="!hasNotes"
-      :title="$t(!notesVisible || !canPlaceNotesBeside || notesPlace === 'left' ? 'fastDocView.notes'
-        : notesPlace === 'bottom' ? 'fastDocView.notesPlaceToRight' : 'fastDocView.notesPlaceToLeft')"
-      @click="emit('stepNotes')"
+      :main-title="$t('fastDocView.notes')"
+      :options-title="$t('fastDocView.notesPlace')"
+      @toggle="emit('toggleNotes')"
     >
-      <IconLayoutRowTwo20Regular v-if="!notesVisible" />
-      <IconLayoutColumnTwoFocusRight20Filled v-else-if="notesPlace === 'right'" />
-      <IconLayoutColumnTwoFocusLeft20Filled v-else-if="notesPlace === 'left'" />
-      <IconLayoutRowTwoFocusBottom20Filled v-else />
-    </button>
+      <template #icon>
+        <IconLayoutRowTwo20Regular v-if="!notesVisible" />
+        <IconLayoutColumnTwoFocusRight20Filled v-else-if="shownNotesPlace() === 'right'" />
+        <IconLayoutColumnTwoFocusLeft20Filled v-else-if="shownNotesPlace() === 'left'" />
+        <IconLayoutRowTwoFocusBottom20Filled v-else />
+      </template>
+      <template #label>{{ $t('fastDocView.notes') }}</template>
+      <template v-for="(option, i) in NOTES_PLACES" :key="option.place">
+        <div v-if="i > 0" class="notes-place-separator" role="separator" />
+        <button
+          class="option-row"
+          role="menuitemradio"
+          :aria-checked="notesPlace === option.place"
+          :disabled="option.place !== 'bottom' && !canPlaceNotesBeside"
+          @click="pickNotesPlace(option.place)"
+        >
+          <input type="radio" tabindex="-1" :checked="notesPlace === option.place" :disabled="option.place !== 'bottom' && !canPlaceNotesBeside" />
+          <span>{{ $t(option.labelKey) }}</span>
+        </button>
+      </template>
+    </ToolbarSplitDropdown>
     <!-- the book view's sync-commentaries toggle (same icon and tooltips), for the notes pane -->
     <button
       v-if="hasNotes"
@@ -135,6 +174,17 @@ function onToggleToc(event: MouseEvent) {
     </button>
     <!-- the book view's clean-text combo (Ctrl+D): the same global setting and options dropdown -->
     <BookViewCleanTextCombo class="dropdown-host" />
+    <!-- Ignore the document's page width / margins: the book view's reading-column width (global setting). -->
+    <button
+      class="fast-doc-view-ignore-margins"
+      :class="{ active: ignoreMargins }"
+      :aria-pressed="ignoreMargins"
+      :title="$t('fastDocView.ignoreMargins')"
+      @click="emit('toggleIgnoreMargins')"
+    >
+      <IconDocumentMargins20Filled v-if="ignoreMargins" />
+      <IconDocumentMargins20Regular v-else />
+    </button>
     <!-- hold to repeat, as in the book view (shared usePressRepeat) -->
     <button
       :title="$t('fastDocView.zoomOut', { text: Math.round(zoom), notes: Math.round(notesZoom) })"
@@ -204,5 +254,21 @@ button.active {
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+/* the notes-place dropdown rows are buttons: undo the toolbar button sizing above */
+.fast-doc-view-notes-place :deep(.option-row) {
+  width: 100%;
+  height: 28px;
+  justify-content: flex-start;
+  border-radius: 0;
+}
+.fast-doc-view-notes-place :deep(.option-row input) {
+  margin: 0;
+  pointer-events: none;
+}
+.fast-doc-view-notes-place :deep(.notes-place-separator) {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border-color);
 }
 </style>

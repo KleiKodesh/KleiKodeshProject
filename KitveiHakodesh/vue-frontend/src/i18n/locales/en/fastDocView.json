@@ -29,7 +29,9 @@
   "closeNotes": "Close the notes pane",
   "syncNotesOffTitle": "Sync notes\nThe notes pane will follow the text in view",
   "syncNotesOnTitle": "Sync notes\nClick to turn off auto-sync",
-  "notesPlaceToRight": "Move the notes pane to the right",
-  "notesPlaceToLeft": "Move the notes pane to the left",
-  "notesPlaceToBottom": "Move the notes pane to the bottom"
+  "notesPlace": "Notes pane place",
+  "notesPlaceBottom": "Notes at the bottom",
+  "notesPlaceRight": "Notes on the right",
+  "notesPlaceLeft": "Notes on the left",
+  "ignoreMargins": "Ignore document margins\nUse the regular reading-column width"
 }

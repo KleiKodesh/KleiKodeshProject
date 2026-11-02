@@ -29,7 +29,9 @@
   "closeNotes": "סגירת חלון ההערות",
   "syncNotesOffTitle": "סנכרן הערות\nההערות יעקבו אחר הטקסט שבתצוגה",
   "syncNotesOnTitle": "סנכרן הערות\nלחץ לכיבוי הסנכרון האוטומטי",
-  "notesPlaceToRight": "העבר את חלונית ההערות לימין",
-  "notesPlaceToLeft": "העבר את חלונית ההערות לשמאל",
-  "notesPlaceToBottom": "העבר את חלונית ההערות למטה"
+  "notesPlace": "מיקום חלונית ההערות",
+  "notesPlaceBottom": "הערות למטה",
+  "notesPlaceRight": "הערות מימין",
+  "notesPlaceLeft": "הערות משמאל",
+  "ignoreMargins": "התעלם משולי המסמך\nרוחב עמודת קריאה רגיל"
 }
