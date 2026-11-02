@@ -323,7 +323,7 @@ foreach ($g in ($lost | Group-Object { $found[$_].area_en })) {
 # The author's own Hebrew, when the commits carried one (User-facing-he lines): step 3
 # starts from it instead of translating the English.
 foreach ($c in $plan.changes) {
-    $hes = @($c.from | Where-Object { $_ -ge 0 -and $_ -lt $found.Count } | ForEach-Object { $found[$_].he } | Where-Object { $_ -and $_ -match '[֐-׿]' } | Select-Object -Unique)
+    $hes = @($c.from | Where-Object { $_ -ge 0 -and $_ -lt $found.Count } | ForEach-Object { $found[$_].he } | Where-Object { $_ -and $_ -match '[0590-05FF]' } | Select-Object -Unique)
     $c | Add-Member he_author ($hes -join ' / ') -Force
 }
 if ($lost) { Write-Host "Fixes brought back: $($lost.Count) lines" }
