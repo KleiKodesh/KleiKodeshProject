@@ -542,6 +542,7 @@ const notesFollowIndex = computed<number | null>(() => {
 // note; a note's number jumps the text to the block holding its reference and flashes it.
 const landNoteIndex = ref<number | null>(null)
 const noteLandingNonce = ref(0)
+let noteLookupGeneration = 0
 function referenceKey(element: HTMLElement): string {
   return fastDocViewNoteKey(element.dataset.noteKind ?? '', Number(element.dataset.noteNumber ?? 0), (element.textContent ?? '').trim())
 }
@@ -553,8 +554,11 @@ function openNoteFromReference(element: HTMLElement) {
   const occurrence = [...row.querySelectorAll<HTMLElement>('.note-reference[data-note-kind]')].indexOf(element)
   const key = referenceKey(element)
   notesVisible.value = true
+  // Only the latest click lands: an earlier click's slower lookup must not land over it.
+  const request = ++noteLookupGeneration
+  const documentId = fastDocument.summary.value?.documentId
   void fastNotes.findNote(blockIndex, Math.max(0, occurrence), (note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key).then((index) => {
-    if (index == null) return
+    if (index == null || request !== noteLookupGeneration || fastDocument.summary.value?.documentId !== documentId) return
     landNoteIndex.value = index
     noteLandingNonce.value++
   })
