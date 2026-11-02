@@ -5,8 +5,8 @@ import type { FastDocViewBlock } from '@/webview-host/fastDocViewApi'
  * `capacity`, the blocks farthest from the last requested range go first, except those
  * inside a retained range (the mounted window, a selection's ends).
  */
-export class FastDocViewBlockCache {
-  private readonly blocks = new Map<number, FastDocViewBlock>()
+export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBlock> {
+  private readonly blocks = new Map<number, T>()
 
   constructor(private readonly capacity: number) {}
 
@@ -14,7 +14,7 @@ export class FastDocViewBlockCache {
     return this.blocks.size
   }
 
-  get(index: number): FastDocViewBlock | undefined {
+  get(index: number): T | undefined {
     return this.blocks.get(index)
   }
 
@@ -45,7 +45,7 @@ export class FastDocViewBlockCache {
    * Blocks inside `retained` ranges are never evicted.
    */
   store(
-    blocks: readonly FastDocViewBlock[],
+    blocks: readonly T[],
     focus: readonly [number, number],
     retained: ReadonlyArray<readonly [number, number]> = [],
   ): void {

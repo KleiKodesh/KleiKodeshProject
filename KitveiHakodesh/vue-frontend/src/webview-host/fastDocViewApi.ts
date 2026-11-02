@@ -70,6 +70,10 @@ export interface FastDocViewApi {
   open(path: string): Promise<FastDocViewSummary>
   blocks(documentId: string, first: number, count: number): Promise<FastDocViewBlock[]>
   headings(documentId: string): Promise<FastDocViewHeading[]>
+  /** Notes [first, first + count) in body order (the notes pane's own windows over every note); at most 100. */
+  notes(documentId: string, first: number, count: number): Promise<FastDocViewNote[]>
+  /** One Int32 per known note (body order): the block holding its reference. Grows with the index. */
+  noteBlocks(documentId: string): Promise<Int32Array>
   /** Searches up to `maxBlocks` blocks from `fromBlock` (block indexes only; book-view normalisation). */
   search(documentId: string, query: string, matchCase: boolean, fromBlock: number, maxBlocks: number): Promise<FastDocViewSearchStep>
   /** The block holding bookmark `name` (an internal link's target), or null when there is none. */
@@ -109,6 +113,10 @@ export const fastDocViewApi: FastDocViewApi = {
   open: (path) => serviceCall<FastDocViewSummary>('fastDocViewOpen', { path }),
   blocks: async (documentId, first, count) =>
     (await serviceCall<FastDocViewBlock[]>('fastDocViewBlocks', { documentId, first, count })) ?? [],
+  notes: async (documentId, first, count) =>
+    (await serviceCall<FastDocViewNote[]>('fastDocViewNotes', { documentId, first, count })) ?? [],
+  noteBlocks: async (documentId) =>
+    decodeFastDocViewWeights(await serviceCall<Uint8Array>('fastDocViewNoteBlocks', { documentId })),
   headings: async (documentId) =>
     (await serviceCall<FastDocViewHeading[]>('fastDocViewHeadings', { documentId })) ?? [],
   search: async (documentId, query, matchCase, fromBlock, maxBlocks) =>

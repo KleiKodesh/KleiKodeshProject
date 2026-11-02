@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { effectScope } from 'vue'
 import { useFastDocViewDocument, FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS } from './useFastDocViewDocument'
+import { useFastDocViewNotes } from './useFastDocViewNotes'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
 import {
   FAST_DOC_VIEW_SOURCE_CHANGED,
@@ -43,6 +44,12 @@ function fakeApi(total: number) {
       { blockIndex: 20, level: 1, text: 'c' },
     ],
     weights: async () => Int32Array.from({ length: total }, () => 10),
+    // one footnote, referenced in block 5
+    notes: async (documentId, first, count) => {
+      calls.push({ op: 'notes', args: [documentId, first, count] })
+      return first === 0 && count > 0 ? block(5).notes : []
+    },
+    noteBlocks: async () => Int32Array.from([5]),
     bookmark: async () => null,
     search: async () => ({ hitBlocks: [], nextBlock: -1, reachedEnd: true }),
     sections: async () => [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }],
@@ -244,11 +251,31 @@ describe('useFastDocViewDocument', () => {
     expect(document.landmarkTiers.value).toEqual([[0, 20], [50]])
     expect(document.rowWeights.value?.length).toBe(100)
     expect([document.textWidthTwipsAt(0), document.textWidthTwipsAt(49), document.textWidthTwipsAt(50), document.textWidthTwipsAt(99)]).toEqual([9360, 9360, 13680, 13680])
-    await document.ensureBlocks(0, 10)
-    expect(document.notesInRange(0, 10).map((note) => note.label)).toEqual(['1'])
     scope.stop()
     await flush()
     expect(calls.some((call) => call.op === 'close' && call.args[0] === 'doc1')).toBe(true)
+  })
+})
+
+describe('useFastDocViewNotes', () => {
+  it('windows over every note and finds the note of a reference by its block', async () => {
+    const { api, calls } = fakeApi(100)
+    const scope = effectScope()
+    const { document, notes } = scope.run(() => {
+      const document = useFastDocViewDocument({ api })
+      return { document, notes: useFastDocViewNotes({ api, summary: document.summary }) }
+    })!
+    await document.open('x')
+    await flush()
+    expect(notes.noteCount.value).toBe(1)
+    expect(notes.firstNoteAtOrAfter(0)).toBe(0)
+    expect(notes.firstNoteAtOrAfter(6)).toBe(1)
+    await notes.ensureNotes(0, 50)
+    expect(calls.filter((call) => call.op === 'notes').map((call) => call.args.slice(1))).toEqual([[0, 1]])
+    expect(notes.noteAt(0)).toMatchObject({ label: '1', index: 0, blockIndex: 5 })
+    expect(await notes.findNote(5, 0, (note) => note.label === '1')).toBe(0)
+    expect(await notes.findNote(4, 0, () => true)).toBeNull()
+    scope.stop()
   })
 })
 

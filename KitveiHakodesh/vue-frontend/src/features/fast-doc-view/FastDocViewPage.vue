@@ -38,7 +38,7 @@ import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useNoteTooltip } from '@/features/book-view/lines/useNoteTooltip'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
-import type { FastDocViewPlacedNote } from './useFastDocViewDocument'
+import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
 
 const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
@@ -124,7 +124,7 @@ function zoomBoth(step: (current: number) => number) {
 }
 const zoomModel = computed({ get: () => zoom.value, set: setZoom })
 useZoomHandler({ zoom: zoomModel, target: scrollerElement, keyboard: true })
-const notesPaneRef = ref<{ scrollerElement: HTMLElement | null } | null>(null)
+const notesPaneRef = ref<{ scrollerElement: HTMLElement | null; renderedRange: () => { start: number; end: number } } | null>(null)
 const notesScrollerElement = computed(() => notesPaneRef.value?.scrollerElement ?? null)
 const notesZoomModel = computed({ get: () => notesZoom.value, set: setNotesZoom })
 useZoomHandler({ zoom: notesZoomModel, target: notesScrollerElement, keyboard: true })
@@ -141,6 +141,9 @@ const documentFontPx = computed(() => {
 })
 /** The column style of block `index`: its section's width (twips / 15 = CSS px at 96 dpi) at the text's scale. */
 function blockColumnStyle(index: number): Record<string, string> | undefined {
+  // "Ignore document margins" (global, as the book view's column width): the book view's reading
+  // column - for the text and, through this same function, the notes pane.
+  if (settingsStore.fastDocViewIgnoreMargins) return undefined
   const twips = fastDocument.textWidthTwipsAt(index)
   if (twips == null) return undefined
   const widthPx = (twips / 15) * textScale.value
@@ -186,6 +189,7 @@ function closeSearch() {
 // the search's first step, as a reader scroll does in the book view. Told by its source - the
 // input that causes it - so the search's own landing scroll never counts, whatever its timing.
 function onReaderInput() {
+  followPinnedNote.value = null
   search.onReaderScroll()
   lastNavigatedHeadingId = null
 }
@@ -385,24 +389,25 @@ const notesVisible = ref(false)
 /** Keep the notes pane in sync with the text (the book view's sync-commentaries toggle); on by default here. */
 const notesSync = ref(true)
 /**
- * Where the notes pane sits, cycled bottom -> right -> left by one toolbar toggle. The side
+ * Where the notes pane sits, picked in the notes button's dropdown (bottom / right / left). The side
  * places need a wide page, as the book view's side commentary slots (BookViewPage isWideScreen,
  * 650 px); on a narrow one the pane falls back to the bottom without losing the choice.
  */
 type NotesPlace = 'bottom' | 'right' | 'left'
-const NOTES_PLACE_ORDER: NotesPlace[] = ['bottom', 'right', 'left']
 const notesPlace = ref<NotesPlace>('bottom')
 const { width: pageWidth } = useElementSize(pageElement)
 const canPlaceNotesBeside = computed(() => pageWidth.value >= 650)
 const effectiveNotesPlace = computed<NotesPlace>(() => (canPlaceNotesBeside.value ? notesPlace.value : 'bottom'))
-/** The toolbar's notes button: closed -> bottom -> right -> left -> closed; on a narrow page (no side
- *  places) it only opens and closes. */
-function stepNotes() {
+/** The notes split button's main half: opens / closes the pane in the chosen place. */
+function toggleNotes() {
   if (!hasNotes.value) return
-  if (!notesVisible.value) { notesPlace.value = 'bottom'; notesVisible.value = true; return }
-  const next = NOTES_PLACE_ORDER.indexOf(notesPlace.value) + 1
-  if (!canPlaceNotesBeside.value || next >= NOTES_PLACE_ORDER.length) { notesVisible.value = false; return }
-  notesPlace.value = NOTES_PLACE_ORDER[next]!
+  notesVisible.value = !notesVisible.value
+}
+/** The notes split button's dropdown: moves the pane there and shows it. */
+function setNotesPlace(place: NotesPlace) {
+  if (!hasNotes.value) return
+  notesPlace.value = place
+  notesVisible.value = true
 }
 /** The text pane's share of the split, per place (height below, width beside) - as the book view keeps one per slot. */
 const notesFractions = ref<Partial<Record<NotesPlace, number>>>({})
@@ -513,31 +518,63 @@ if (import.meta.env.DEV) {
   onBeforeUnmount(() => { if (target.__fastDocViewTest === hook) delete target.__fastDocViewTest })
 }
 
-const visibleNotes = computed(() => fastDocument.notesInRange(renderedRange.value.start, renderedRange.value.end))
+// The notes pane's own rows: every note in body order (bounded cache near its window only).
+const fastNotes = useFastDocViewNotes({
+  api: fastDocViewApi,
+  summary: fastDocument.summary,
+  retainedRanges: () => {
+    const range = notesPaneRef.value?.renderedRange()
+    return range ? [[range.start, range.end]] : []
+  },
+})
+/** A note whose number jumped the text to its reference: sync keeps it (not the block's first note) until the reader moves the text. */
+const followPinnedNote = ref<number | null>(null)
+/** Sync on: the first note at or after the first block in view. */
+const notesFollowIndex = computed<number | null>(() => {
+  if (!notesSync.value) return null
+  if (followPinnedNote.value != null) return followPinnedNote.value
+  const index = fastNotes.firstNoteAtOrAfter(firstVisibleIndex.value)
+  return index < fastNotes.noteCount.value ? index : null
+})
 
 // Footnotes linked both ways. A reference in the text (<sup class="note-reference"
-// data-note-kind data-note-number>, rendered by the library) opens the notes pane on its note;
-// a note's label jumps the text to the block holding its reference and flashes it.
-const activeNoteKey = ref<string | null>(null)
+// data-note-kind data-note-number>, rendered by the library) opens the notes pane and lands its
+// note; a note's number jumps the text to the block holding its reference and flashes it.
+const landNoteIndex = ref<number | null>(null)
 const noteLandingNonce = ref(0)
+function referenceKey(element: HTMLElement): string {
+  return fastDocViewNoteKey(element.dataset.noteKind ?? '', Number(element.dataset.noteNumber ?? 0), (element.textContent ?? '').trim())
+}
+/** Opens the notes pane on the note a reference in the text points at (loaded and landed there). */
+function openNoteFromReference(element: HTMLElement) {
+  const row = element.closest<HTMLElement>('[data-index]')
+  if (!row) return
+  const blockIndex = Number(row.dataset.index)
+  const occurrence = [...row.querySelectorAll<HTMLElement>('.note-reference[data-note-kind]')].indexOf(element)
+  const key = referenceKey(element)
+  notesVisible.value = true
+  void fastNotes.findNote(blockIndex, Math.max(0, occurrence), (note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key).then((index) => {
+    if (index == null) return
+    landNoteIndex.value = index
+    noteLandingNonce.value++
+  })
+}
+/** The cleaned HTML of the note a reference in the text points at - from its own block's notes, no service call. */
+function noteHtmlForReference(element: HTMLElement): string | null {
+  const row = element.closest<HTMLElement>('[data-index]')
+  const key = referenceKey(element)
+  const html = fastDocument.blockAt(Number(row?.dataset.index ?? -1))?.notes.find((note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key)?.html
+  return html == null ? null : cleanHebrewText(html, settingsStore.cleanTextFlags)
+}
 function onContentClick(event: MouseEvent) {
   if (onLinkClick(event)) return
   const reference = (event.target as HTMLElement | null)?.closest<HTMLElement>('.note-reference[data-note-kind]')
-  if (!reference) return
-  activeNoteKey.value = fastDocViewNoteKey(reference.dataset.noteKind ?? '', Number(reference.dataset.noteNumber ?? 0), (reference.textContent ?? '').trim())
-  noteLandingNonce.value++
-  notesVisible.value = true
+  if (reference) openNoteFromReference(reference)
 }
-// Hovering a reference previews its note in the book view's note tooltip (WordLinkTooltip,
-// not interactive). The note HTML is already in the rendered block's notes - no service call.
+// Hovering a reference previews its note in the book view's note tooltip (WordLinkTooltip, not interactive).
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerElement, {
   selector: '.note-reference[data-note-kind]',
-  htmlFor: (marker) => {
-    const element = marker as HTMLElement
-    const key = fastDocViewNoteKey(element.dataset.noteKind ?? '', Number(element.dataset.noteNumber ?? 0), (element.textContent ?? '').trim())
-    const html = visibleNotes.value.find((note) => fastDocViewNoteKey(note.kind, note.number, note.label) === key)?.html
-    return html == null ? null : cleanHebrewText(html, settingsStore.cleanTextFlags)
-  },
+  htmlFor: (marker) => noteHtmlForReference(marker as HTMLElement),
 })
 const REFERENCE_FLASH_MS = 2000
 
@@ -600,8 +637,9 @@ async function goToBookmark(href: string) {
   const row = windowedScroller.value?.rowElement(blockIndex) as HTMLElement | null | undefined
   flash([...(row?.querySelectorAll<HTMLElement>('.bookmark[id]') ?? [])].find((element) => element.id === href.slice(1)) ?? row)
 }
-async function goToNoteReference(note: FastDocViewPlacedNote) {
-  activeNoteKey.value = fastDocViewNoteKey(note.kind, note.number, note.label)
+async function goToNoteReference(note: FastDocViewIndexedNote) {
+  // Sync on: the text's jump must not move the notes off the note the reader came from.
+  followPinnedNote.value = note.index
   await windowedScroller.value?.scrollToIndex(note.blockIndex)
   const row = windowedScroller.value?.rowElement(note.blockIndex) as HTMLElement | null | undefined
   const references = [...(row?.querySelectorAll<HTMLElement>(`.note-reference[data-note-kind="${note.kind}"]`) ?? [])]
@@ -628,7 +666,10 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
       :zoom="zoom"
       :notes-zoom="notesZoom"
       @toggle-toc="toggleToc"
-      @step-notes="stepNotes"
+      @toggle-notes="toggleNotes"
+      @set-notes-place="setNotesPlace"
+      :ignore-margins="settingsStore.fastDocViewIgnoreMargins"
+      @toggle-ignore-margins="settingsStore.fastDocViewIgnoreMargins = !settingsStore.fastDocViewIgnoreMargins"
       @toggle-notes-sync="notesSync = !notesSync"
       @zoom-in="zoomBoth(zoomIn)"
       @zoom-out="zoomBoth(zoomOut)"
@@ -742,11 +783,15 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
           <template #bottom>
             <FastDocViewNotesPane
               ref="notesPaneRef"
-              :notes="visibleNotes"
+              :note-count="fastNotes.noteCount.value"
+              :ensure-notes="fastNotes.ensureNotes"
+              :note-at="fastNotes.noteAt"
+              :row-source-version="fastNotes.contentVersion.value"
+              :column-style="blockColumnStyle"
               :is-right-to-left="isRightToLeft"
-              :active-key="activeNoteKey"
+              :land-index="landNoteIndex"
               :landing-nonce="noteLandingNonce"
-              :follow-index="notesSync ? firstVisibleIndex : null"
+              :follow-index="notesFollowIndex"
               :font-px="notesFontPx"
               @close="notesVisible = false"
               @go-to-reference="goToNoteReference"
@@ -806,11 +851,14 @@ async function goToNoteReference(note: FastDocViewPlacedNote) {
 .fast-doc-view-content {
   height: 100%;
   position: relative;
-  /* the reading column's side padding (readingColumn.css), added to the page text width */
+}
+/* the reading column's side padding (readingColumn.css), added to the page text width - on the
+   page, so the notes pane's entries take the same side margins as the document column */
+.fast-doc-view {
   --fast-doc-view-column-padding: 12px;
 }
 @container app-shell (min-width: 600px) {
-  .fast-doc-view-content {
+  .fast-doc-view {
     --fast-doc-view-column-padding: 22px;
   }
 }

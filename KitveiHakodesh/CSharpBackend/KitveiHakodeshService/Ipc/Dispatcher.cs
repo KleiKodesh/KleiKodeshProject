@@ -173,6 +173,13 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Blocks(a.DocumentId, a.First, a.Count)));
                 }
+                case "fastDocViewNotes":
+                {
+                    var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Notes(a.DocumentId, a.First, a.Count)));
+                }
+                case "fastDocViewNoteBlocks":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.NoteBlocks(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewHeadings":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewSearch":

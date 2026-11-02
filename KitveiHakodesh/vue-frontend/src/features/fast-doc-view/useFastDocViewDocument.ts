@@ -267,17 +267,6 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     return cache.get(index)
   }
 
-  /** The notes of the cached blocks in [start, end), in block order, each with the block holding its reference. */
-  function notesInRange(start: number, end: number): FastDocViewPlacedNote[] {
-    void cacheRevision.value
-    const notes: FastDocViewPlacedNote[] = []
-    for (let index = start; index < end; index++) {
-      const block = cache.get(index)
-      if (block?.notes.length) for (const note of block.notes) notes.push({ ...note, blockIndex: index })
-    }
-    return notes
-  }
-
   /** Heading starts by level, coarse first - the scrollbar's landmark tiers. */
   const landmarkTiers = computed<number[][]>(() => {
     const byLevel = new Map<number, number[]>()
@@ -344,7 +333,6 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     open,
     ensureBlocks,
     blockAt,
-    notesInRange,
     /** Opens the same file again (as after a change on disk) - diagnostics. */
     reopen,
     /** For tests and diagnostics: how many blocks are held. */
