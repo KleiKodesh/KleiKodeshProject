@@ -159,7 +159,7 @@ function selectItem(i: number, event?: MouseEvent) {
      colour, and the tile reads lighter without a filled square under every one. */
   background: none;
   /* Sizes shared with the home page's tiles (main.css --item-*): keep them the same. */
-  font-size: var(--item-tile-icon);
+  font-size: var(--item-large-icon);
   transition:
     transform 0.15s ease,
     opacity 0.12s ease;

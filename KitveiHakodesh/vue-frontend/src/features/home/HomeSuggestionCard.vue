@@ -378,7 +378,7 @@ function onRemove() {
 }
 
 /* ── Cards layout: Windows 11 (Fluent) two-line item: 13px title over an 11px
-   secondary line, 10px icon gap, same icon as list, no fill until hover. */
+   secondary line, 10px icon gap, same icon as tiles, no fill until hover. */
 .layout-cards .card {
   gap: var(--item-gap);
   padding: 6px var(--item-padding-inline);
@@ -386,7 +386,7 @@ function onRemove() {
   background: none;
 }
 .layout-cards .card-icon {
-  font-size: var(--item-icon);
+  font-size: var(--item-large-icon);
 }
 .layout-cards .card:hover {
   background: var(--hover-bg);
@@ -448,7 +448,7 @@ function onRemove() {
 }
 /* Only the icon moves, as on the catalog tiles, so the grid does not jitter. */
 .layout-tiles .card-icon {
-  font-size: var(--item-tile-icon);
+  font-size: var(--item-large-icon);
   transition: transform 0.15s ease;
 }
 .layout-tiles .card:hover .card-icon {
@@ -495,7 +495,7 @@ function onRemove() {
   pointer-events: none;
 }
 .tile-expanded .card-icon {
-  font-size: var(--item-tile-icon);
+  font-size: var(--item-large-icon);
 }
 .tile-expanded-title {
   max-width: 68px;

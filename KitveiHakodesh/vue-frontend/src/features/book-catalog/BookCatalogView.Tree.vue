@@ -214,7 +214,8 @@ function selectRow(index: number, event?: MouseEvent) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
+  /* Same as the list (main.css --item-*). */
+  font-size: var(--item-icon);
 }
 .folder-icon svg {
   color: var(--status-warning);
@@ -223,7 +224,7 @@ function selectRow(index: number, event?: MouseEvent) {
   color: #c1440e;
 }
 .title {
-  font-size: 14px;
+  font-size: var(--item-title);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
