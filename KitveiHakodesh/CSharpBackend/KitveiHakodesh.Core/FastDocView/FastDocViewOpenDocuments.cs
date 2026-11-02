@@ -64,6 +64,32 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             return blocks;
         });
 
+    /// <summary>Notes [first, first + count) of the document's note references (body order) - the notes pane's own
+    /// windows over every note, each note read on its own (never the notes part); clamped to the notes known so far.</summary>
+    public List<FastDocViewNote> Notes(string documentId, int first, int count) =>
+        Use(documentId, document =>
+        {
+            IReadOnlyList<WordDocumentNoteHtml> rendered = document.RenderNotes(Math.Max(0, first), Math.Clamp(count, 0, MaxBlocksPerRequest));
+            var notes = new List<FastDocViewNote>(rendered.Count);
+            foreach (WordDocumentNoteHtml note in rendered)
+                notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
+            return notes;
+        });
+
+    /// <summary>Int32 little-endian per known note (body order): the block holding its reference. Index-time data.</summary>
+    public byte[] NoteBlocks(string documentId) =>
+        Use(documentId, document =>
+        {
+            IReadOnlyList<WordDocumentNoteReference> references = document.NoteReferences;
+            var bytes = new byte[references.Count * 4];
+            for (int i = 0; i < references.Count; i++)
+            {
+                int block = references[i].BlockIndex;
+                bytes[i * 4] = (byte)block; bytes[i * 4 + 1] = (byte)(block >> 8); bytes[i * 4 + 2] = (byte)(block >> 16); bytes[i * 4 + 3] = (byte)(block >> 24);
+            }
+            return bytes;
+        });
+
     /// <summary>Headings known so far (all of them once the index is complete).</summary>
     public List<FastDocViewHeading> Headings(string documentId) =>
         Use(documentId, document =>
