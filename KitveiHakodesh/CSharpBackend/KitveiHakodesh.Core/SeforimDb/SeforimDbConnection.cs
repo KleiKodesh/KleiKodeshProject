@@ -73,6 +73,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// configured paths are live right now.</summary>
         public IReadOnlyList<SeforimDbAttachedLibraries.Library> AttachedLibraries => _attachedLibraries;
 
+        /// <summary>Reads each additional library's citations of official lines in the background (see
+        /// <see cref="SeforimDbExternalLinkCitations"/>), so the first official book opened does not wait.</summary>
+        public void PrewarmExternalLinkCitations()
+        {
+            foreach (var library in _attachedLibraries)
+                SeforimDbExternalLinkCitations.Prewarm(Open, library);
+        }
+
         /// <summary>The resolved path, or null when none was found. A non-null value is not a
         /// promise the file is still there — see <see cref="IsAvailable"/>.</summary>
         public string? DatabasePath => _databasePath;

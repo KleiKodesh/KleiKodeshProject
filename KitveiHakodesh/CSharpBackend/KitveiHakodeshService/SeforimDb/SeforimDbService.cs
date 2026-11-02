@@ -23,10 +23,18 @@ namespace KitveiHakodeshService.SeforimDb;
 /// </summary>
 public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 {
-    private readonly SeforimDbQueries _queries = new();
+    private readonly SeforimDbQueries _queries = CreateQueries();
 
     /// <summary>The Core query object, for Core operations that take it together with another service's Core object.</summary>
     public SeforimDbQueries Queries => _queries;
+
+    /// <summary>The queries object; starts reading the additional libraries' citations of official lines in the background.</summary>
+    private static SeforimDbQueries CreateQueries()
+    {
+        var queries = new SeforimDbQueries();
+        queries.PrewarmExternalLinkCitations();
+        return queries;
+    }
 
     /// <summary>Whether there is a database to read — false when the user has chosen none, or
     /// the one they chose has moved.</summary>

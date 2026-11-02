@@ -53,7 +53,9 @@ namespace KitveiHakodeshService.Tests
                 {
                     pc.Open();
                     HardeningVerify.Exec(pc, "CREATE TABLE connection_type(id INTEGER PRIMARY KEY, name TEXT UNIQUE); " +
-                        "INSERT INTO connection_type VALUES (1,'COMMENTARY'),(4,'REFERENCE'),(5,'SOURCE'),(14,'OTHER')");
+                        "INSERT INTO connection_type VALUES (1,'COMMENTARY'),(4,'REFERENCE'),(5,'SOURCE'),(14,'OTHER'); " +
+                        "CREATE TABLE link(id INTEGER PRIMARY KEY, sourceBookId INTEGER, targetBookId INTEGER, sourceLineId INTEGER, " +
+                        "targetLineId INTEGER, targetLineIndex INTEGER, targetBookOrderIndex INTEGER, connectionTypeId INTEGER, isDeclaredBase INTEGER)");
                     using var q0 = pc.CreateCommand();
                     q0.CommandText = "SELECT id FROM line WHERE bookId = 1 AND lineIndex = 0";
                     primaryFirstLineId = Convert.ToInt32(q0.ExecuteScalar());
@@ -159,6 +161,19 @@ namespace KitveiHakodeshService.Tests
                     var info = q.GetBookById(far.Id);
                     Check(info != null && info.HasSourceConnection == 1 && info.HasCommentaryConnection == 1 && info.HasReferenceConnection == 0,
                         "the far book's flags say it has source and commentary links (so the reader asks for them)", "flags: " + (info == null ? "none" : $"{info.HasSourceConnection}/{info.HasCommentaryConnection}/{info.HasReferenceConnection}"));
+                    // ── the other direction: the official line the far book cites lists the far book's line ──
+                    var citedGroups = q.GetCommentaryLinkGroupsForSourceLineRange(new List<int> { primaryFirstLineId });
+                    var citing = citedGroups.FirstOrDefault(g => g.TargetBookId == far.Id);
+                    Check(citing != null && citing.ConnectionTypeId == 1 && citing.LineIds.SequenceEqual(new[] { linesFar[1].Id }) && citing.LineIndexes.SequenceEqual(new[] { 1 }),
+                        "an official line cited by a library book lists that book's line as a commentary link",
+                        "citations: " + string.Join("|", citedGroups.Select(g => g.TargetBookId + "/" + g.ConnectionTypeId + ":" + string.Join(",", g.LineIds))));
+                    var officialFilter = q.GetStaticFilterBooks(1, new List<int> { 1, 4, 5, 14 });
+                    Check(officialFilter.Any(f => f.TargetBookId == far.Id && f.ConnectionTypeId == 1),
+                        "the official book's commentators include the library book that cites it",
+                        "official static filter: " + string.Join("|", officialFilter.Select(f => f.TargetBookId + "/" + f.ConnectionTypeId)));
+                    var viaBook = q.GetLinkTargetForSourceLineAndBook(primaryFirstLineId, far.Id);
+                    Check(viaBook.Count == 1 && viaBook[0].TargetLineId == linesFar[1].Id && viaBook[0].LineIndex == 1,
+                        "an official line's link into the citing library book is found", "link target: " + string.Join(",", viaBook.Select(t => t.TargetLineId)));
                     var linesSecond = q.GetLinesPaged(second.Id, 10, 0);
                     Check(linesSecond.Count == 2 && linesSecond[0].Content == "נהר גדול",
                         "another book of the same library reads correctly", "second book: " + string.Join("|", linesSecond.Select(l => l.Content)));
