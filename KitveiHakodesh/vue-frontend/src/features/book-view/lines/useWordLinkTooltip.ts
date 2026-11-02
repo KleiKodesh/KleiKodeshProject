@@ -75,6 +75,22 @@ const HOVER_DELAY_MS = 250
  */
 const CLOSE_GRACE_MS = 220
 
+/**
+ * What a hover-preview panel previews: which elements are links, what one link's preview holds,
+ * and what clicking it does. The book view's word links are one source (useWordLinkTooltip);
+ * FastDocView's footnote references are another - same panel, same open/stay/close lifecycle.
+ */
+export interface LinkPreviewSource {
+  selector: string
+  /** What identifies one link across its fragments (a range anchor split over tags). */
+  linkKey: (el: Element) => string | null
+  /** The panel's content for a hovered link, or null for nothing to show. `isCurrent` turns
+   *  false once the hover moved on - stop fetching then. */
+  preview: (el: Element, isCurrent: () => boolean) => Promise<Omit<WordLinkTooltipData, 'id' | 'anchorRect'> | null>
+  /** A plain click on the link (not the end of a selection drag). */
+  activate: (el: Element) => void
+}
+
 export function useWordLinkTooltip(
   scrollerEl: Ref<HTMLElement | null>,
   opts: {
@@ -82,6 +98,98 @@ export function useWordLinkTooltip(
     onNavigate: (target: WordLinkTarget) => void
   },
 ) {
+  /** The navigation target of a link element. An inline ref names only the line, so its
+   *  book and index cost one lookup. */
+  async function resolveTarget(el: Element): Promise<WordLinkTarget | null> {
+    if (el.hasAttribute('data-wl')) return parseWordLinkData(el.getAttribute('data-wl'))
+    const lineId = parseInlineRefLineId(el.getAttribute('href'))
+    if (lineId == null) return null
+    const row = (await getLineIndexFromLineId(lineId))[0]
+    return row ? { bookId: row.bookId, lineIndex: row.lineIndex, lineId } : null
+  }
+
+  async function preview(el: Element, isCurrent: () => boolean): Promise<Omit<WordLinkTooltipData, 'id' | 'anchorRect'> | null> {
+    let target: WordLinkTarget | null
+    try {
+      target = await resolveTarget(el)
+    } catch {
+      return null
+    }
+    if (!target || !isCurrent()) return null
+    // Nothing is cached or prefetched: the links are painted in the lines view
+    // from their own markup, and the preview's content and TOC path are fetched
+    // here, for this one hover, and live only as long as the tooltip does.
+    let content: string
+    let tocPath: string
+    let tocEntries: TocEntry[]
+    try {
+      // All three depend only on the target, so they go out together. The TOC is
+      // what the section resolution needs before it can ask for lines, and awaiting
+      // it after these would put four round-trips in series behind a 250ms hover.
+      // Its failure is not fatal — it only costs the section — so it is caught
+      // individually rather than taking the whole preview down with it.
+      const [contentRows, tocPathByLine, entries] = await Promise.all([
+        getLineContents([target.lineId]),
+        getTocPathsForLines([target.lineId]),
+        loadSectionTocEntries(target.bookId).catch(() => [] as TocEntry[]),
+      ])
+      content = contentRows[0]?.content ?? ''
+      tocPath = tocPathByLine.get(target.lineId) ?? ''
+      tocEntries = entries
+    } catch {
+      return null
+    }
+    // The cited line is the fallback preview AND the anchor within the section, so
+    // an empty one means there is nothing worth showing at all.
+    if (!isCurrent() || !content) return null
+
+    const section = tocEntries.length
+      ? await loadWordLinkSection(target.bookId, target.lineIndex, tocEntries).catch(() => null)
+      : null
+    if (!isCurrent()) return null
+
+    // The section is only worth showing if the cited line is actually in it. A
+    // mismatch would scroll the panel to the wrong place and silently reframe the
+    // citation, so fall back to the single line rather than guessing an index.
+    const focusIndex = section?.lines.findIndex((l) => l.id === target.lineId) ?? -1
+    const useSection = section !== null && focusIndex >= 0
+
+    return {
+      bookTitle: opts.getBookTitle(target.bookId),
+      // The section's own TOC text already names the section; prefer the line's
+      // full path, which is the more specific of the two, and fall back to the
+      // section heading when the line has no line_toc row of its own.
+      tocPath: tocPath || (useSection ? section.tocPath : ''),
+      html: content,
+      ...(useSection
+        ? {
+            section: {
+              lines: section.lines.map((l) => ({ id: l.id, html: l.content })),
+              focusIndex,
+            },
+          }
+        : {}),
+    }
+  }
+
+  const { linkPreview, closeLinkPreview, keepOpen, releaseOpen, beginSelection } = useLinkPreviewTooltip(scrollerEl, {
+    selector: WORD_LINK_SELECTOR,
+    // A range anchor split over tags repeats its data-wl; an inline ref is one element, so its href serves.
+    linkKey: (el) => el.getAttribute('data-wl') ?? el.getAttribute('href'),
+    preview,
+    activate: (el) => {
+      void resolveTarget(el)
+        .then((target) => {
+          if (target) opts.onNavigate(target)
+        })
+        .catch(() => {})
+    },
+  })
+  return { wordLinkTooltip: linkPreview, closeWordLinkTooltip: closeLinkPreview, keepOpen, releaseOpen, beginSelection }
+}
+
+/** The hover-preview lifecycle (see the file comment) over any LinkPreviewSource. */
+export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, source: LinkPreviewSource) {
   const wordLinkTooltip = ref<WordLinkTooltipData | null>(null)
   let hoverToken = 0
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
@@ -186,90 +294,16 @@ export function useWordLinkTooltip(
 
   function findLinkEl(event: Event): Element | null {
     const target = event.target as HTMLElement | null
-    const el = target?.closest?.(WORD_LINK_SELECTOR)
+    const el = target?.closest?.(source.selector)
     return el && scrollerEl.value?.contains(el) ? el : null
   }
 
-  /** What identifies one link across its fragments — a range anchor split over tags
-   *  repeats its data-wl; an inline ref is one element, so its href serves. */
-  function linkKey(el: Element): string | null {
-    return el.getAttribute('data-wl') ?? el.getAttribute('href')
-  }
-
-  /** The navigation target of a link element. An inline ref names only the line, so its
-   *  book and index cost one lookup. */
-  async function resolveTarget(el: Element): Promise<WordLinkTarget | null> {
-    if (el.hasAttribute('data-wl')) return parseWordLinkData(el.getAttribute('data-wl'))
-    const lineId = parseInlineRefLineId(el.getAttribute('href'))
-    if (lineId == null) return null
-    const row = (await getLineIndexFromLineId(lineId))[0]
-    return row ? { bookId: row.bookId, lineIndex: row.lineIndex, lineId } : null
-  }
+  const linkKey = source.linkKey
 
   async function show(el: Element, token: number) {
-    let target: WordLinkTarget | null
-    try {
-      target = await resolveTarget(el)
-    } catch {
-      return
-    }
-    if (!target || token !== hoverToken) return
-    // Nothing is cached or prefetched: the links are painted in the lines view
-    // from their own markup, and the preview's content and TOC path are fetched
-    // here, for this one hover, and live only as long as the tooltip does.
-    let content: string
-    let tocPath: string
-    let tocEntries: TocEntry[]
-    try {
-      // All three depend only on the target, so they go out together. The TOC is
-      // what the section resolution needs before it can ask for lines, and awaiting
-      // it after these would put four round-trips in series behind a 250ms hover.
-      // Its failure is not fatal — it only costs the section — so it is caught
-      // individually rather than taking the whole preview down with it.
-      const [contentRows, tocPathByLine, entries] = await Promise.all([
-        getLineContents([target.lineId]),
-        getTocPathsForLines([target.lineId]),
-        loadSectionTocEntries(target.bookId).catch(() => [] as TocEntry[]),
-      ])
-      content = contentRows[0]?.content ?? ''
-      tocPath = tocPathByLine.get(target.lineId) ?? ''
-      tocEntries = entries
-    } catch {
-      return
-    }
-    // The cited line is the fallback preview AND the anchor within the section, so
-    // an empty one means there is nothing worth showing at all.
-    if (token !== hoverToken || !content) return
-
-    const section = tocEntries.length
-      ? await loadWordLinkSection(target.bookId, target.lineIndex, tocEntries).catch(() => null)
-      : null
-    if (token !== hoverToken) return
-
-    // The section is only worth showing if the cited line is actually in it. A
-    // mismatch would scroll the panel to the wrong place and silently reframe the
-    // citation, so fall back to the single line rather than guessing an index.
-    const focusIndex = section?.lines.findIndex((l) => l.id === target.lineId) ?? -1
-    const useSection = section !== null && focusIndex >= 0
-
-    wordLinkTooltip.value = {
-      id: token,
-      bookTitle: opts.getBookTitle(target.bookId),
-      // The section's own TOC text already names the section; prefer the line's
-      // full path, which is the more specific of the two, and fall back to the
-      // section heading when the line has no line_toc row of its own.
-      tocPath: tocPath || (useSection ? section.tocPath : ''),
-      html: content,
-      anchorRect: el.getBoundingClientRect(),
-      ...(useSection
-        ? {
-            section: {
-              lines: section.lines.map((l) => ({ id: l.id, html: l.content })),
-              focusIndex,
-            },
-          }
-        : {}),
-    }
+    const content = await source.preview(el, () => token === hoverToken).catch(() => null)
+    if (!content || token !== hoverToken) return
+    wordLinkTooltip.value = { ...content, id: token, anchorRect: el.getBoundingClientRect() }
   }
 
   function onMouseOver(event: MouseEvent) {
@@ -297,7 +331,7 @@ export function useWordLinkTooltip(
     // A range anchor crossing tag boundaries is emitted as several fragments
     // sharing one data-wl, so compare the value, not element identity — moving
     // between fragments of the same link never leaves it.
-    const relatedLink = related?.closest?.(WORD_LINK_SELECTOR)
+    const relatedLink = related?.closest?.(source.selector)
     if (relatedLink && linkKey(relatedLink) === linkKey(hoverEl)) {
       hoverEl = relatedLink
       return
@@ -342,11 +376,7 @@ export function useWordLinkTooltip(
     event.preventDefault()
     event.stopPropagation()
     closeWordLinkTooltip()
-    void resolveTarget(el)
-      .then((target) => {
-        if (target) opts.onNavigate(target)
-      })
-      .catch(() => {})
+    source.activate(el)
   }
 
   useEventListener(scrollerEl, 'mouseover', onMouseOver)
@@ -399,5 +429,5 @@ export function useWordLinkTooltip(
     }
   })
 
-  return { wordLinkTooltip, closeWordLinkTooltip, keepOpen, releaseOpen, beginSelection }
+  return { linkPreview: wordLinkTooltip, closeLinkPreview: closeWordLinkTooltip, keepOpen, releaseOpen, beginSelection }
 }

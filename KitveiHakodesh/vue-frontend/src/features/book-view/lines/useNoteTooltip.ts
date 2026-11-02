@@ -21,8 +21,8 @@ import type { WordLinkTooltipData } from './useWordLinkTooltip'
 const HOVER_DELAY_MS = 250
 
 /**
- * The default reads a user note marker; FastDocView passes its footnote/endnote references
- * (`.note-reference`) and returns the note's rendered HTML (already in the block, no fetch).
+ * The default reads a user note marker; other callers may pass their own markers
+ * (FastDocView's footnote references use the interactive useLinkPreviewTooltip instead).
  */
 export interface NoteTooltipSource {
   selector: string

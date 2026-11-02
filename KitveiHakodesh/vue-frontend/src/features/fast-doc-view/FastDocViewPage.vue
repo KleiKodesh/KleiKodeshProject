@@ -36,7 +36,7 @@ import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useFastDocViewContextMenu } from './useFastDocViewContextMenu'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
-import { useNoteTooltip } from '@/features/book-view/lines/useNoteTooltip'
+import { useLinkPreviewTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
 import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
 
@@ -567,14 +567,28 @@ function noteHtmlForReference(element: HTMLElement): string | null {
   return html == null ? null : cleanHebrewText(html, settingsStore.cleanTextFlags)
 }
 function onContentClick(event: MouseEvent) {
-  if (onLinkClick(event)) return
-  const reference = (event.target as HTMLElement | null)?.closest<HTMLElement>('.note-reference[data-note-kind]')
-  if (reference) openNoteFromReference(reference)
+  onLinkClick(event)
 }
-// Hovering a reference previews its note in the book view's note tooltip (WordLinkTooltip, not interactive).
-const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerElement, {
+// A reference previews its note in the book view's word-link tooltip, with its whole lifecycle
+// (useLinkPreviewTooltip): hover delay, a grace period to reach the panel, stays open while the
+// pointer is inside, a selection drag or a context menu is under way; closes on leave, Esc, the
+// close button, a text scroll, a window resize or a click. Its toolbar (text size, close),
+// selection, copy, scrolling and resize are the panel's own. A plain click on the reference is
+// the book view's "open": the note lands in the notes pane.
+const {
+  linkPreview: noteTooltip,
+  closeLinkPreview: closeNoteTooltip,
+  keepOpen: keepNoteTooltipOpen,
+  releaseOpen: releaseNoteTooltip,
+  beginSelection: beginNoteTooltipSelection,
+} = useLinkPreviewTooltip(scrollerElement, {
   selector: '.note-reference[data-note-kind]',
-  htmlFor: (marker) => noteHtmlForReference(marker as HTMLElement),
+  linkKey: (element) => referenceKey(element as HTMLElement),
+  preview: async (element) => {
+    const html = noteHtmlForReference(element as HTMLElement)
+    return html == null ? null : { bookTitle: '', tocPath: '', html }
+  },
+  activate: (element) => openNoteFromReference(element as HTMLElement),
 })
 const REFERENCE_FLASH_MS = 2000
 
@@ -750,7 +764,9 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                 v-if="noteTooltip"
                 :key="`note-${noteTooltip.id}`"
                 :data="noteTooltip"
-                :interactive="false"
+                @pointer-enter="keepNoteTooltipOpen"
+                @pointer-leave="releaseNoteTooltip"
+                @select-start="beginNoteTooltipSelection"
                 @close="closeNoteTooltip"
               />
               <WindowedScroller
