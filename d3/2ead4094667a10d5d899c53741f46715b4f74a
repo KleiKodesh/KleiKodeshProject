@@ -1,0 +1,4 @@
+User-facing: improved - Open file: scrolling a large Word document stays smooth while it is still being indexed
+User-facing-he: הגלילה במסמך וורד גדול נשארת חלקה גם בזמן שהוא עדיין בעיבוד
+User-facing: fixed - Open file: jumping to the end of a document now shows its last lines, and empty paragraphs show as blank lines like in Word
+User-facing-he: קפיצה לסוף המסמך מציגה את השורות האחרונות שלו, ופסקאות ריקות מוצגות כשורות ריקות כמו בוורד
