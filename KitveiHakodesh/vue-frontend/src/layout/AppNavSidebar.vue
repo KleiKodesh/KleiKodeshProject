@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UnreachableBadge from './UnreachableBadge.vue'
 import { computed, inject, ref, watch } from 'vue'
 import {
   IconChevronDoubleRight20Regular,
@@ -107,10 +108,12 @@ watch(hasNavOverflow, (has) => {
         :key="item.label"
         class="nav-btn"
         tabindex="-1"
-        :title="`${item.text} (${item.shortcut})`"
+        :title="`${item.text} (${item.shortcut})
+${item.description}`"
         @click="navigateInNewTab(item.label)"
       >
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
+        <UnreachableBadge v-if="item.unreachable" />
       </button>
       <!-- Space is what separates the destinations from the rail's own controls - a rule
            here would cut the one surface into two. A real element rather than an auto
@@ -270,7 +273,14 @@ ${updateItem.text}` : t('layout.moreItems')"
   min-height: 0;
 }
 
+/* The button is wider than its icon: pull the badge in onto the icon's corner. */
+.nav-btn > .unreachable-badge {
+  bottom: 5px;
+  right: 5px;
+}
+
 .nav-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

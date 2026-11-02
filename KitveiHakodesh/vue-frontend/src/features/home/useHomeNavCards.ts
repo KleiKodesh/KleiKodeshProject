@@ -20,7 +20,7 @@ function destinationIcon(key: DocumentIconKey): { icon: Component; color: string
 /** A shared destination: label (route key) + translated text + description from appNavItems, icon from the shared table. */
 function navDestination(key: DocumentIconKey, label: string) {
   const item = [...APP_NAV_ITEMS.value, APP_NAV_SETTINGS_ITEM].find((navItem) => navItem.label === label)
-  return { label, text: item?.text ?? label, description: item?.description ?? '', ...destinationIcon(key) }
+  return { label, text: item?.text ?? label, description: item?.description ?? '', unreachable: item?.unreachable, ...destinationIcon(key) }
 }
 
 /**
@@ -40,7 +40,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
   return computed<HomeSuggestionCard[]>(() => {
     if (settingsStore.getNavSidebarVisible(paneId)) return []
     const dbMissing = !dbReady.value
-    const destinations: { label: string; text: string; description: string; icon: Component; color: string }[] = [
+    const destinations: { label: string; text: string; description: string; unreachable?: boolean; icon: Component; color: string }[] = [
       dbMissing
         ? { label: 'הורד מסד ספרים', text: t('layout.dbDownload'), description: libraryDownload.statusText.value || t('layout.dbDownloadDescription'), icon: IconArrowDownload24Filled, color: '#B5451B' }
         : navDestination('library', 'קטלוג הספרים'),
@@ -63,6 +63,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       path: destination.description,
       icon: destination.icon,
       color: destination.color,
+      unreachable: destination.unreachable,
       open: () => void navigate(destination.label),
     }))
   })
