@@ -7,6 +7,7 @@ import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
 import BookCatalogViewCards from './BookCatalogView.Cards.vue'
 import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
+import BookCatalogViewTree from './BookCatalogView.Tree.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -53,8 +54,16 @@ const VIEW_COMPONENTS = {
   list: BookCatalogViewList,
   cards: BookCatalogViewCards,
   tiles: BookCatalogViewTiles,
+  tree: BookCatalogViewTree,
 }
 const activeViewComponent = computed(() => VIEW_COMPONENTS[view.value])
+// The three flat views show the current folder; the tree shows the whole catalog
+// and unfolds to wherever the path points.
+const activeViewProps = computed(() =>
+  view.value === 'tree' ? { root: ROOT.value, path: path.value } : { items: treeItems.value },
+)
+// Search results have no tree shape: in tree mode they list.
+const searchResultsView = computed(() => (view.value === 'tree' ? 'list' : view.value))
 
 // Cards view: cards keep a 140-200px width and the grid takes whole columns,
 // centred; the address bar shares that width so its edges line up with the grid.
@@ -150,6 +159,8 @@ type ActiveViewInstance = ComponentPublicInstance & {
   /** Both views forward the search input's keys, keeping the caret in the field. */
   onSearchInputKeydown: (event: KeyboardEvent) => boolean
   highlightFirst: () => void
+  /** Tree view only: folds every shelf back up. */
+  reset?: () => void
 }
 
 const activeViewRef = ref<ActiveViewInstance | null>(null)
@@ -266,9 +277,12 @@ function onNavigateToSibling(atIndex: number, node: CategoryNode) {
   focusSearchInput()
 }
 
+// Home: the root folder in the flat views; in the tree, which is always at the
+// root, it folds everything back up instead.
 function onGoHome() {
   editingSearch.value = false
   navigateTo(0)
+  activeViewRef.value?.reset?.()
   focusSearchInput()
 }
 
@@ -396,7 +410,7 @@ function onSearchEnter() {
           :is="activeViewComponent"
           ref="activeViewRef"
           v-show="!isSearching"
-          :items="treeItems"
+          v-bind="activeViewProps"
           @select-book="onSelectBook"
           @enter-folder="onEnterFolder"
         />
@@ -417,7 +431,7 @@ function onSearchEnter() {
             ref="searchResultsRef"
             v-else
             :items="searchItems"
-            :view="view"
+            :view="searchResultsView"
             :searching="tocSearching"
             @select-book="onSelectBook"
             @select-toc="onSelectToc"
