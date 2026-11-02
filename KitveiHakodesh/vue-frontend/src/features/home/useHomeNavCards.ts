@@ -8,7 +8,6 @@ import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM, HAMESHIV_LABEL } from '@/layout/appNavItems'
-import { useHameshivReachable } from '@/composables/useHameshivReachable'
 import { t } from '@/i18n'
 import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
 
@@ -35,7 +34,6 @@ function navDestination(key: DocumentIconKey, label: string) {
 export function useHomeNavCards(navigate: (label: string) => unknown) {
   const settingsStore = useSettingsStore()
   const paneId = inject<1 | 2>('paneId', 1)
-  const hameshivReachable = useHameshivReachable()
   // The download card's subtitle becomes the live status once a download has anything to say.
   const libraryDownload = useSeforimLibraryDownload()
 
@@ -55,7 +53,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('dict', 'מילון'),
       navDestination('calendar', 'לוח שנה'),
       navDestination('ruler', 'מידות ושיעורים'),
-      ...(hameshivReachable.value ? [navDestination('hameshiv', HAMESHIV_LABEL)] : []),
+      navDestination('hameshiv', HAMESHIV_LABEL),
       navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({

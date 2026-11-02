@@ -8,7 +8,6 @@ import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
 import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiChromeVisibility'
 import { HAMESHIV_LABEL } from '@/layout/appNavItems'
-import { useHameshivReachable } from '@/composables/useHameshivReachable'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -83,7 +82,6 @@ export function useAppTitleBarShortcuts(options: {
     'מידות ושיעורים',
     HAMESHIV_LABEL,
   ]
-  const hameshivReachable = useHameshivReachable()
 
   // Forward Ctrl+key shortcuts from child iframes (HTML/txt viewer) back into the
   // top-level keydown pipeline. Only pane 1 needs this — iframes only appear there.
@@ -171,8 +169,6 @@ export function useAppTitleBarShortcuts(options: {
       const index = Number(e.code.slice(5)) - 1
       const label = QUICK_NAV_LABELS[index]
       if (label === undefined) return false
-      // Hameshiv is hidden while unreachable - its shortcut is a no-op then, like the missing item.
-      if (label === HAMESHIV_LABEL && !hameshivReachable.value) return true
       navigateInNewTab(label)
       return true
     }
