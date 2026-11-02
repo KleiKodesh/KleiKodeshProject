@@ -118,38 +118,58 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     if (!container) return null;
     const origin = paddingBoxOrigin(container);
 
+    // Collect every page canvas the box overlaps (a box can span pages, or both pages of
+    // a spread), cropped to the true overlap in content coordinates.
+    const parts = [];
     for (const canvas of container.querySelectorAll('.canvasWrapper canvas')) {
       const cr = canvas.getBoundingClientRect();
+      if (!cr.width || !cr.height) continue;
       const cl = cr.left - origin.x;
       const ct = cr.top  - origin.y;
 
-      const intersects = !(
-        rect.left + rect.width  < cl ||
-        rect.left               > cl + cr.width ||
-        rect.top  + rect.height < ct ||
-        rect.top                > ct + cr.height
-      );
-      if (!intersects) continue;
+      const x0 = Math.max(rect.left, cl);
+      const y0 = Math.max(rect.top, ct);
+      const x1 = Math.min(rect.left + rect.width,  cl + cr.width);
+      const y1 = Math.min(rect.top  + rect.height, ct + cr.height);
+      if (x1 - x0 < 1 || y1 - y0 < 1) continue;
 
-      const rx = Math.max(0, rect.left - cl);
-      const ry = Math.max(0, rect.top  - ct);
-      const rw = Math.min(rect.width,  cr.width  - rx);
-      const rh = Math.min(rect.height, cr.height - ry);
-      const sx = canvas.width  / cr.width;
-      const sy = canvas.height / cr.height;
-
-      const out = document.createElement('canvas');
-      out.width  = Math.round(rw * sx);
-      out.height = Math.round(rh * sy);
-      out.getContext('2d').drawImage(
-        canvas,
-        Math.round(rx * sx), Math.round(ry * sy),
-        out.width, out.height,
-        0, 0, out.width, out.height
-      );
-      return out.toDataURL('image/png');
+      parts.push({
+        canvas, x0, y0, x1, y1, cl, ct,
+        sx: canvas.width  / cr.width,
+        sy: canvas.height / cr.height,
+      });
     }
-    return null;
+    if (parts.length === 0) return null;
+
+    // Draw each part where it sits on screen, at the sharpest canvas resolution among
+    // them; the gaps between pages stay white.
+    let scale = 0;
+    let ux = Infinity, uy = Infinity, ux1 = -Infinity, uy1 = -Infinity;
+    for (const p of parts) {
+      scale = Math.max(scale, p.sx, p.sy);
+      ux = Math.min(ux, p.x0);
+      uy = Math.min(uy, p.y0);
+      ux1 = Math.max(ux1, p.x1);
+      uy1 = Math.max(uy1, p.y1);
+    }
+
+    const out = document.createElement('canvas');
+    out.width  = Math.max(1, Math.round((ux1 - ux) * scale));
+    out.height = Math.max(1, Math.round((uy1 - uy) * scale));
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.imageSmoothingQuality = 'high';
+    for (const p of parts) {
+      ctx.drawImage(
+        p.canvas,
+        (p.x0 - p.cl) * p.sx, (p.y0 - p.ct) * p.sy,
+        (p.x1 - p.x0) * p.sx, (p.y1 - p.y0) * p.sy,
+        (p.x0 - ux) * scale, (p.y0 - uy) * scale,
+        (p.x1 - p.x0) * scale, (p.y1 - p.y0) * scale
+      );
+    }
+    return out.toDataURL('image/png');
   }
 
   // ── Mouse handlers ───────────────────────────────────────────────────────
