@@ -44,6 +44,8 @@ const KEYS = {
 
   // Copy flags
   SETTINGS_COPY_CLEAN_TEXT: 'copy.cleanText',
+  // FastDocView: the text column ignores the document's page width / margins (book view column width instead)
+  SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS: 'fastDocView.ignoreMargins',
   SETTINGS_COPY_JOIN_LINES: 'copy.joinLines',
   SETTINGS_COPY_SOURCE_POSITION: 'copy.sourcePosition',
   SETTINGS_COPY_WITH_NOTES: 'copy.withNotes',
@@ -213,6 +215,7 @@ const DEFAULTS = {
   searchGrammarSuffix: false,
   searchFuzzy: false,
   copyCleanText: false,
+  fastDocViewIgnoreMargins: false,
   // Join the selected lines into one continuous run of text with NO line break
   // between them (default off = keep one line break per source line on paste).
   copyJoinLines: false,
@@ -339,6 +342,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchGrammarSuffix = ref(DEFAULTS.searchGrammarSuffix)
   const searchFuzzy = ref(DEFAULTS.searchFuzzy)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
+  const fastDocViewIgnoreMargins = ref(DEFAULTS.fastDocViewIgnoreMargins)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
   const copyWithNotes = ref(DEFAULTS.copyWithNotes)
@@ -499,6 +503,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX, searchGrammarSuffix)
     loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
+    loadSetting(KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS, fastDocViewIgnoreMargins)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
@@ -602,6 +607,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchGrammarSuffix, KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX)
   persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
+  persistSetting(fastDocViewIgnoreMargins, KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
   persistSetting(copyWithNotes, KEYS.SETTINGS_COPY_WITH_NOTES)
@@ -784,6 +790,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchGrammarSuffix.value = DEFAULTS.searchGrammarSuffix
     searchFuzzy.value = DEFAULTS.searchFuzzy
     copyCleanText.value = DEFAULTS.copyCleanText
+    fastDocViewIgnoreMargins.value = DEFAULTS.fastDocViewIgnoreMargins
     copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
     copyWithNotes.value = DEFAULTS.copyWithNotes
@@ -833,6 +840,7 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyCleanText,
+    fastDocViewIgnoreMargins,
     copyJoinLines,
     copySourcePosition,
     copyWithNotes,
