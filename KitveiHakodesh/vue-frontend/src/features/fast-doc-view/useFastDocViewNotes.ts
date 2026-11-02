@@ -1,4 +1,4 @@
-import { ref, shallowRef, watch, type Ref } from 'vue'
+import { onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue'
 import { isFastDocViewSourceChangedError, type FastDocViewApi, type FastDocViewSummary } from '@/webview-host/fastDocViewApi'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
 import type { FastDocViewPlacedNote } from './useFastDocViewDocument'
@@ -90,6 +90,12 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
     },
     { immediate: true },
   )
+
+  // The pane's page closed: no refresh may fire after it.
+  onScopeDispose(() => {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = null
+  })
 
   function reset() {
     if (refreshTimer) clearTimeout(refreshTimer)
