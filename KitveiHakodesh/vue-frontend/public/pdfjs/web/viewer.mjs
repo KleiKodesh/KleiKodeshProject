@@ -4683,8 +4683,9 @@ class CommentManager {
   #popup;
   #sidebar;
   static #hasForcedColors = null;
-  constructor(commentDialog, sidebar, eventBus, linkService, overlayManager, ltr, hasForcedColors, globalAbortSignal) {
-    const dateFormat = new Intl.DateTimeFormat(undefined, {
+  constructor(commentDialog, sidebar, eventBus, linkService, overlayManager, ltr, hasForcedColors, globalAbortSignal, locale = undefined) {
+    // [KleiKodesh] Comment dates in the viewer's UI language (l10n, "he"), not the browser's.
+    const dateFormat = new Intl.DateTimeFormat(locale, {
       dateStyle: "long"
     });
     this.dialogElement = commentDialog.dialog;
@@ -4987,6 +4988,12 @@ class CommentSidebar extends Sidebar {
   }
   #setDate(element, date) {
     date = PDFDateString.toDateObject(date);
+    // [KleiKodesh] No /M and no /CreationDate: no date (it used to throw on null).
+    if (!date) {
+      element.removeAttribute("datetime");
+      element.textContent = "";
+      return;
+    }
     element.dateTime = date.toISOString();
     element.textContent = this.#dateFormat.format(date);
   }
@@ -5600,7 +5607,10 @@ class CommentPopup {
         className: "richText"
       }, this.#text);
     }
-    this.#time.textContent = this.#dateFormat.format(PDFDateString.toDateObject(modificationDate || creationDate));
+    // [KleiKodesh] A comment with no /M and no /CreationDate shows no date. format(null) is the
+    // epoch, so it used to read "January 1, 1970".
+    const date = PDFDateString.toDateObject(modificationDate || creationDate);
+    this.#time.textContent = date ? this.#dateFormat.format(date) : "";
     this.#setPosition(...editor.commentPopupPosition, editor.hasDefaultPopupPosition());
     editor.elementBeforePopup.after(container);
     container.addEventListener("focus", ({
@@ -18497,7 +18507,7 @@ const PDFViewerApplication = {
       sidebarTitle: appConfig.annotationEditorParams?.editorCommentsSidebarTitle || null,
       closeButton: appConfig.annotationEditorParams?.editorCommentsSidebarCloseButton || null,
       commentToolbarButton: appConfig.toolbar?.editorCommentButton || null
-    }, eventBus, linkService, overlayManager, l10n.getDirection() === "ltr", hasForcedColors, abortSignal) : null;
+    }, eventBus, linkService, overlayManager, l10n.getDirection() === "ltr", hasForcedColors, abortSignal, l10n.getLanguage()) : null;
     const maxCanvasPixels = AppOptions.get("maxCanvasPixels"),
       maxCanvasDim = AppOptions.get("maxCanvasDim"),
       capCanvasAreaFactor = AppOptions.get("capCanvasAreaFactor");
