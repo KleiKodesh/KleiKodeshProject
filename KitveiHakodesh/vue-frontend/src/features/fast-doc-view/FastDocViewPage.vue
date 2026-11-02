@@ -169,8 +169,8 @@ const { selectAllInContainer } = useScopedKeys(scrollerElement, {
 useContextMenuLongPress(scrollerElement, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
 
 // In-document search (Ctrl+F): the book view's own search bar (ReadingSearchBar, floating over
-// the text) and its behaviour; only the hit source differs - the service finds hit blocks in
-// bounded steps. Matches are highlighted inside the rendered blocks only. Closing the bar keeps
+// the text) and its behaviour; only the hit source differs - the service finds hit blocks (and how
+// many matches each holds) in bounded steps. Matches are highlighted inside the rendered blocks only. Closing the bar keeps
 // the query for the next open, as in the book view.
 const searchVisible = ref(false)
 const search = useFastDocViewSearch({
@@ -209,9 +209,10 @@ const { scrollToLine: landOnRow } = useWindowedRowLanding(
   () => {},
 )
 async function onSearchStep(direction: 'forward' | 'backward') {
-  const block = search.step(direction)
-  if (block == null) return
-  await landOnRow(block, { occurrence: 0, direction })
+  const match = search.step(direction)
+  if (!match) return
+  // The block's nth mark becomes the current one (setCurrentMark), as the book view's per-line occurrence.
+  await landOnRow(match.block, { occurrence: match.occurrence, direction })
 }
 /** A block's HTML with the search query's matches marked (only while searching, only rendered blocks). */
 function blockHtml(index: number): string {
@@ -506,6 +507,13 @@ if (import.meta.env.DEV) {
         zoom: zoom.value,
         notesZoom: notesZoom.value,
         notesPaneOpen: notesVisible.value && hasNotes.value,
+        search: {
+          visible: searchVisible.value,
+          isSearching: search.isSearching.value,
+          matchCount: search.matchCount.value,
+          currentMatch: search.currentMatch.value,
+          current: search.matches.value[search.currentMatch.value] ?? null,
+        },
       }
     },
     scrollToBlock: (index: number) => windowedScroller.value?.scrollToIndex(index),
@@ -724,8 +732,8 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
         <ReadingSearchBar
           :visible="searchVisible"
           toolbar-position="top"
-          :match-count="search.query.value.trim() && !search.isSearching.value && search.hitCount.value === 0 ? 0 : search.hitCount.value || -1"
-          :current-match="search.currentHit.value"
+          :match-count="search.query.value.trim() && !search.isSearching.value && search.matchCount.value === 0 ? 0 : search.matchCount.value || -1"
+          :current-match="search.currentMatch.value"
           :commentary-visible="false"
           :open-commentary-slots="[]"
           mode="content"

@@ -85,12 +85,14 @@ public sealed class FastDocViewSearchArgs
     public int MaxBlocks { get; set; }
 }
 
-/// <summary>One bounded search step: the hit blocks of the scanned range (ascending), where to continue
-/// (-1 at the end), and whether the whole document was scanned. Block indexes only - no text.</summary>
+/// <summary>One bounded search step: the hit blocks of the scanned range (ascending) with, parallel to them, how
+/// many times the query occurs in each (the page steps match by match, as the book view does per line), where to
+/// continue (-1 at the end), and whether the whole document was scanned. Numbers only - no text.</summary>
 [MessagePackObject(keyAsPropertyName: true)]
 public sealed class FastDocViewSearchResult
 {
     public int[] HitBlocks { get; set; } = [];
+    public int[] HitCounts { get; set; } = [];
     public int NextBlock { get; set; }
     public bool ReachedEnd { get; set; }
 }
