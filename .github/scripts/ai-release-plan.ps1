@@ -50,7 +50,7 @@ $blocks = foreach ($h in $hashes) {
     # (git notes --ref=release add -m "User-facing: fixed - Area: sentence" <commit>).
     # NOTES_VARIANT=nonotes (test runs only): ignore the notes.
     $note = if ($env:NOTES_VARIANT -notmatch 'nonotes') { (git notes --ref=release show $h 2>$null | Out-String).Trim() }
-    if ($note) { $msg = $msg -replace '(?im)^\s*User-facing:.*$', ''; $msg = "$msg`n$note".Trim() }
+    if ($note) { $msg = $msg -replace '(?im)^\s*User-facing(-he)?:.*$', ''; $msg = "$msg`n$note".Trim() }
     if ($msg -match '(?im)^\s*User-facing:\s*none\b') { continue }
     $files = @(git diff-tree --no-commit-id --name-only -r $h)
     # Nothing a user runs: CI, build scripts, docs, notes, tests.
@@ -190,9 +190,11 @@ $verdictSchema = @{
             section = @{ type = 'STRING'; enum = @('new', 'improved', 'fixed', 'none') }
             area_en = @{ type = 'STRING' }
             en      = @{ type = 'STRING' }
+
+            he      = @{ type = 'STRING' }
         }
-        required   = @('id', 'visible', 'section', 'area_en', 'en')
-        propertyOrdering = @('id', 'visible', 'section', 'area_en', 'en')
+        required   = @('id', 'visible', 'section', 'area_en', 'en', 'he')
+        propertyOrdering = @('id', 'visible', 'section', 'area_en', 'en', 'he')
     } } }
     required   = @('notes')
 }
@@ -214,6 +216,9 @@ the same id: is anything in it visible to a user of the app or the Word add-in?
   options, English interface work, installer settings, About page, macros, downloads.
 - A body line "User-facing: <section> - <Area>: <sentence>" is the author's own verdict:
   copy it. "User-facing: none" means visible=false.
+- A body line "User-facing-he: <sentence>" right after it is the author's own Hebrew for
+  that same change: copy it VERBATIM into he (same letters, no translation, no edits).
+  No such line: he is an empty string. Never write Hebrew yourself.
 - area_en: glossary term. en: one plain sentence, at most ~20 words, the effect for the user.
 
 $rules
@@ -315,6 +320,12 @@ foreach ($g in ($lost | Group-Object { $found[$_].area_en })) {
         from = @($g.Group); area_en = $t[0]; area_he = $t[1]
         en = $f.en; rank = 2; section = 'fixed'; weight = $g.Count }
 }
+# The author's own Hebrew, when the commits carried one (User-facing-he lines): step 3
+# starts from it instead of translating the English.
+foreach ($c in $plan.changes) {
+    $hes = @($c.from | Where-Object { $_ -ge 0 -and $_ -lt $found.Count } | ForEach-Object { $found[$_].he } | Where-Object { $_ -and $_ -match '[֐-׿]' } | Select-Object -Unique)
+    $c | Add-Member he_author ($hes -join ' / ') -Force
+}
 if ($lost) { Write-Host "Fixes brought back: $($lost.Count) lines" }
 # Nothing user-visible is dropped: every change stays, headline first.
 $kept = @($plan.changes | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
@@ -345,7 +356,9 @@ function Test-Hebrew($o, [int]$count) { @($o.he).Count -eq $count -and -not (@($
 $heText = @()
 for ($i = 0; $i -lt $kept.Count; $i += 15) {
     $batch = @($kept[$i..([Math]::Min($i + 15, $kept.Count) - 1)])
-    $numbered = for ($k = 0; $k -lt $batch.Count; $k++) { "[$k] ($($batch[$k].area_he)) $($batch[$k].en)" }
+    $numbered = for ($k = 0; $k -lt $batch.Count; $k++) {
+        "[$k] ($($batch[$k].area_he)) $($batch[$k].en)" + $(if ($batch[$k].he_author) { "`n    AUTHOR'S HEBREW: $($batch[$k].he_author)" })
+    }
     $prompt = @"
 Write Hebrew release-note lines for KleiKodesh (a Torah-study app and Word add-in; readers
 are yeshiva students and Torah scholars). Below are $($batch.Count) English items, numbered,
@@ -356,6 +369,10 @@ lines, in the same order - item [0] first.
   "now", "significantly"), use Hebrew word order and idiom.
 - Keep the meaning exactly; the English is usually the author's own wording - stay close
   to it.
+- An item with an "AUTHOR'S HEBREW" line: that is the developer's own Hebrew for this
+  change - use it as the line, correcting only grammar, spelling and glossary terms.
+  Several author lines separated by " / " describe steps of one change: merge them into
+  one line in the author's words.
 - Any app area, button or feature name MUST be the exact Hebrew glossary term, spelled
   exactly as in the glossary. Do not repeat the area name at the start of the line.
 - No anglicisms, no invented words. Check gender and number agreement and the definite
