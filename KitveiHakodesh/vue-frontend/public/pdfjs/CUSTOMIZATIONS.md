@@ -1841,7 +1841,12 @@ are accepted on the structural checks alone). Anything else — a forged/stale m
 another tool's append or same-length in-place edit — is a plain append on the full file,
 never a truncation (a forged `start=` at half the file used to drop the page tree). The
 host's `tocMarkerStart` only reads S as a hint; when the worker rejects the marker its
-save keeps every loaded byte, so writing `saved[S..]` at S is still correct. Re-apply this worker
+save keeps every loaded byte, so writing `saved[S..]` at S is still correct. When the save
+replaces a section, every `/Dest`, `/A`, `/F` and `/C` value it copies from the loaded outline
+is detached from that section (`khDetach`): a reference to an object whose newest copy lives at
+or after S is resolved and written inline (a stream gets a new object in the new section), since
+another writer's section may keep an item's action or destination in an object of its own and
+those bytes are dropped. Re-apply this worker
 patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
 On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
 (capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
