@@ -578,8 +578,9 @@ public sealed class Dispatcher(
 
                 case "deleteOwnSeforimLibrary":
                 {
-                    // Never under a running download; Core itself refuses while ours is in use.
-                    bool deleted = !libraryDownload.IsBusy && OwnSeforimLibrary.TryDelete();
+                    // The user chose to delete it, so a download or update still running is
+                    // pointless: stop it first. Core itself refuses while ours is in use.
+                    bool deleted = await libraryDownload.CancelAndWaitAsync(ct) && OwnSeforimLibrary.TryDelete();
                     return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = deleted }));
                 }
 
