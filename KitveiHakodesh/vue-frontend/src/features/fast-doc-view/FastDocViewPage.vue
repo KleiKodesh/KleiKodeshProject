@@ -141,13 +141,14 @@ const documentFontPx = computed(() => {
 })
 /** The column style of block `index`: its section's width (twips / 15 = CSS px at 96 dpi) at the text's scale. */
 function blockColumnStyle(index: number): Record<string, string> | undefined {
-  // "Ignore document margins" (global, as the book view's column width): the book view's reading
-  // column - for the text and, through this same function, the notes pane.
+  // The document's own text width is the only margin (plus the page's fixed gutter); the book
+  // view's column width and padding never apply here. "Ignore document margins" (global): the
+  // text fills the pane - for the text and, through this same function, the notes pane.
   if (settingsStore.fastDocViewIgnoreMargins) return undefined
   const twips = fastDocument.textWidthTwipsAt(index)
   if (twips == null) return undefined
   const widthPx = (twips / 15) * textScale.value
-  return { '--lines-content-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
+  return { '--fast-doc-view-column-max-width': `calc(${widthPx.toFixed(1)}px + 2 * var(--fast-doc-view-column-padding))` }
 }
 /**
  * How much larger than the document's own sizes its text is shown. The library writes Word's
@@ -243,7 +244,7 @@ function onScrollerMounted(instance: unknown) {
   scrollerElement.value = windowedScroller.value?.scrollerElement ?? null
 }
 
-// ── The library's stylesheet, scoped to this document's content root ───────
+// ── The library's stylesheet, scoped to this document's text and notes (the split pane) ───────
 const contentRootId = `fast-doc-view-${tabId}`
 const scopedStylesheet = computed(() => {
   const css = fastDocument.summary.value?.stylesheet
@@ -412,8 +413,9 @@ function setNotesPlace(place: NotesPlace) {
 }
 /** The text pane's share of the split, per place (height below, width beside) - as the book view keeps one per slot. */
 const notesFractions = ref<Partial<Record<NotesPlace, number>>>({})
-const notesFraction = computed<number | undefined>({
-  get: () => notesFractions.value[effectiveNotesPlace.value],
+const notesFraction = computed<number>({
+  // never dragged in this place: the notes take a quarter of the page (the text the rest)
+  get: () => notesFractions.value[effectiveNotesPlace.value] ?? 0.75,
   set: (value) => { notesFractions.value = { ...notesFractions.value, [effectiveNotesPlace.value]: value } },
 })
 /** The notes pane's text size: the commentary's (commentary font setting at the notes' own zoom), as in the book view. */
@@ -519,6 +521,7 @@ if (import.meta.env.DEV) {
     scrollToBlock: (index: number) => windowedScroller.value?.scrollToIndex(index),
     setZoom,
     setNotesZoom,
+    setNotesPlace,
     reopen: () => fastDocument.reopen(),
   }
   const target = window as unknown as { __fastDocViewTest?: typeof hook }
@@ -763,12 +766,11 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
           :dismissible="false"
         />
         <LoadingAnimation v-else-if="fastDocument.isLoading.value || !stateReady" />
-        <SplitPane v-else-if="fastDocument.summary.value" class="fast-doc-view-notes-split" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes" :second-place="effectiveNotesPlace">
+        <SplitPane v-else-if="fastDocument.summary.value" class="fast-doc-view-notes-split" :data-fast-doc-view-root="contentRootId" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes" :second-place="effectiveNotesPlace">
           <template #top>
             <div
               class="fast-doc-view-content"
               :dir="isRightToLeft ? 'rtl' : 'ltr'"
-              :data-fast-doc-view-root="contentRootId"
               @click="onContentClick"
             >
               <ContextMenu ref="contextMenuRef" :items="contextMenu.items" />
@@ -802,7 +804,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                     class="reading-column-line fast-doc-view-block"
                     :style="blockColumnStyle(index)"
                   >
-                    <div class="fast-doc-view-block-text" :style="blockTextStyle" v-html="blockHtml(index)" />
+                    <div class="fast-doc-view-block-text word-document" :style="blockTextStyle" v-html="blockHtml(index)" />
                   </div>
                 </template>
               </WindowedScroller>
@@ -880,15 +882,26 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
   height: 100%;
   position: relative;
 }
-/* the reading column's side padding (readingColumn.css), added to the page text width - on the
-   page, so the notes pane's entries take the same side margins as the document column */
+/* The column's only margins are the document's own (its page text width, blockColumnStyle) plus
+   this small fixed gutter, so text never touches the pane's edge on a narrow window. Not the book
+   view's reading column (readingColumn.css padding, --lines-content-max-width from its settings).
+   On the page, so the notes pane's entries take the same column as the document. */
 .fast-doc-view {
   --fast-doc-view-column-padding: 12px;
 }
-@container app-shell (min-width: 600px) {
-  .fast-doc-view {
-    --fast-doc-view-column-padding: 22px;
-  }
+.fast-doc-view-block {
+  padding-inline: var(--fast-doc-view-column-padding);
+  max-width: var(--fast-doc-view-column-max-width, none);
+}
+/* The library's stylesheet (scoped above) styles everything inside `.word-document`: list labels as
+   inline-blocks reaching their tab stop, paragraph margins, tables, pictures. Its text colour, family
+   and base leading are the page's (theme, reading font, line height setting). */
+.fast-doc-view-block-text.word-document {
+  /* a floating picture stays inside its own block (rows are laid out one by one, windowed) */
+  display: flow-root;
+  color: inherit;
+  font-family: inherit;
+  line-height: inherit;
 }
 .fast-doc-view-scroller :deep(.windowed-scroller-content) {
   padding-block-end: 24px;
