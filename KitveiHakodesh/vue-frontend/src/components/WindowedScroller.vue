@@ -297,11 +297,30 @@ function onViewportKeydown(event: KeyboardEvent) {
   }
 }
 
+/**
+ * Brings row `index` into view with 'nearest' semantics: nothing while it is fully
+ * showing; a mounted row scrolls the few pixels needed (the browser's own nearest-edge
+ * scroll, so stepping through the list reads as advancing, never as a jump); a row that
+ * is not mounted lands exactly through scrollToIndex, top-aligned when it lies above the
+ * viewport and bottom-aligned when below. For keyboard highlight movement.
+ */
+function revealIndex(index: number) {
+  if (isRowFullyVisible(index)) return
+  const row = isRowRendered(index) ? rowElement(index) : null
+  if (row) {
+    row.scrollIntoView({ block: 'nearest' })
+    return
+  }
+  const isAbove = index < (readFirstVisible()?.index ?? renderedRange.value.start)
+  void scrollToIndex(index, { align: isAbove ? 'start' : 'end' })
+}
+
 defineExpose({
   scrollerElement: viewportElement,
   scrollbarElement: computed(() => barReference.value?.barElement ?? null),
   renderedRange,
   scrollToIndex,
+  revealIndex,
   readFirstVisible,
   isRowRendered,
   isRowFullyVisible,
