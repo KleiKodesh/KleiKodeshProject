@@ -107,7 +107,7 @@ const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
 /** Paragraph view: the lines between headings run on as one paragraph. One app-wide setting. */
 const flowText = computed(() => settingsStore.linesLayout === 'flow')
 /** Says what a click does, so it names the other state. */
-const FLOW_TEXT_LABEL = computed(() => t(flowText.value ? 'bookView.toolbar.flowTextOff' : 'bookView.toolbar.flowTextOn'))
+const flowTextLabel = computed(() => t(flowText.value ? 'bookView.toolbar.flowTextOff' : 'bookView.toolbar.flowTextOn'))
 function toggleFlowText() {
   settingsStore.linesLayout = flowText.value ? 'rows' : 'flow'
 }
@@ -476,8 +476,7 @@ defineExpose({ tocBtnRef, createBookmark })
     <button
       v-bind="collapseAttrs('lines-layout')"
       :class="{ active: flowText }"
-      :aria-pressed="flowText"
-      :title="FLOW_TEXT_LABEL"
+      :title="flowTextLabel"
       @click="toggleFlowText"
     >
       <IconTextAlignJustify20Regular v-if="flowText" />
@@ -589,13 +588,12 @@ defineExpose({ tocBtnRef, createBookmark })
         role="menuitem"
         class="overflow-row"
         :class="{ active: flowText }"
-        :aria-pressed="flowText"
-        :title="FLOW_TEXT_LABEL"
+        :title="flowTextLabel"
         @click="toggleFlowText"
       >
         <IconTextAlignJustify20Regular v-if="flowText" />
         <IconTextAlignRight20Regular v-else />
-        <span>{{ FLOW_TEXT_LABEL }}</span>
+        <span>{{ flowTextLabel }}</span>
       </button>
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width

@@ -170,9 +170,16 @@ const renderedRange = computed(() => ({ start: windowStart.value, end: windowEnd
  * A paragraph is keyed by its first row. The window's top moves by whole blocks,
  * so that row never changes while the paragraph is mounted: it keeps its spans as
  * it grows at its end, and a paragraph prepended above is a new element — nothing
- * mounted ever re-wraps. A pinned paragraph takes its block's first row, the key
- * the paragraph it left had in the usual case (no block row inside the stretch).
+ * mounted ever re-wraps. A pinned paragraph takes the key the paragraph it left
+ * had: the first row of its run, found by walking back over the inline rows.
  */
+/** The first row of the inline run holding `index`, within its block. */
+function runStartOf(index: number, block: number): number {
+  let start = index
+  while (start > block && rowKind(start - 1) === 'inline') start--
+  return start
+}
+
 type RenderedGroup =
   | { kind: 'block'; key: string; index: number; pinned: boolean }
   | { kind: 'flow'; key: string; block: number; indexes: number[]; pinned: boolean }
@@ -196,7 +203,7 @@ const renderedGroups = computed<RenderedGroup[]>(() => {
       run.indexes.push(index)
       return
     }
-    let key = `p${isPinned ? block : index}`
+    let key = `p${isPinned ? runStartOf(index, block) : index}`
     // The window's bottom may end inside a block: a pinned row further down it
     // would take the key of the window's own last paragraph.
     if (usedKeys.has(key)) key += '-pinned'
