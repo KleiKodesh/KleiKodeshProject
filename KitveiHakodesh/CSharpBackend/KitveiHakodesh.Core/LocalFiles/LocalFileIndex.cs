@@ -85,6 +85,14 @@ namespace KitveiHakodesh.Core.LocalFiles
         // Guarded by the _liveThreads lock, which already serialises live-update state.
         private readonly HashSet<char> _unwatchedDrives = new HashSet<char>();
 
+        // Folder watchers for the unwatched drives (see LocalFileIndexFolderWatcher).
+        // Guarded by the _liveThreads lock; disposed with the index.
+        private readonly List<LocalFileIndexFolderWatcher> _folderWatchers = new List<LocalFileIndexFolderWatcher>();
+
+        // Serialises whole-drive rebuilds after startup (periodic rescan, watcher overflow).
+        // RebuildDrive deletes then ADDS, so two interleaved rebuilds would index every file twice.
+        private readonly object _rebuildLock = new object();
+
         // Periodic-rescan state (the unelevated staleness mitigation). Guarded by _rescanLock.
         private readonly object _rescanLock = new object();
         private Thread _rescanThread;
@@ -817,6 +825,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                     // and nothing can watch those, so they are all unwatched.
                     foreach (var drive in LocalFileIndexDirectoryCrawler.GetFallbackDrives())
                         _unwatchedDrives.Add(drive.Name[0]);
+                    StartFolderWatchers(ct, onError);
                     return;
                 }
                 foreach (var drive in drives)
@@ -851,14 +860,92 @@ namespace KitveiHakodesh.Core.LocalFiles
                     _liveThreads.Add(thread);
                     thread.Start();
                 }
+                StartFolderWatchers(ct, onError);
             }
         }
 
         /// <summary>
-        /// NTFS drives that were indexed but have no live USN watcher, because the volume
-        /// handle was refused (process not elevated). For these the index is a
-        /// point-in-time snapshot — nothing tracks changes after the build, so
-        /// <see cref="StartPeriodicRescan"/> is what keeps it current.
+        /// Watches every unwatched drive for changes the way Everything's "Folder Indexing"
+        /// does without its service: no admin rights, changes applied as they happen, a
+        /// rescan when the change buffer overflows, and the daily rescan as a safety net.
+        /// Caller holds the _liveThreads lock.
+        /// </summary>
+        private void StartFolderWatchers(CancellationToken ct, Action<string, Exception> onError)
+        {
+            if (_folderWatchers.Count > 0) return; // already running
+            foreach (char letter in _unwatchedDrives)
+            {
+                try
+                {
+                    _folderWatchers.Add(new LocalFileIndexFolderWatcher(
+                        letter, ApplyFolderChanges, RescanDrive, ct, onError));
+                }
+                catch (Exception ex)
+                {
+                    // No watcher on this drive: the daily rescan still bounds staleness.
+                    onError?.Invoke($"Folder watcher on {char.ToUpper(letter)}: could not start", ex);
+                }
+            }
+        }
+
+        /// <summary>Applies one batch of folder-watcher changes and commits once.</summary>
+        private void ApplyFolderChanges(List<LocalFileIndexFolderWatcher.Change> changes, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _backgroundWrites);
+            try
+            {
+                foreach (var change in changes)
+                {
+                    if (change.Kind == LocalFileIndexFolderWatcher.ChangeKind.Removed)
+                    {
+                        // The watcher cannot tell whether a deleted path was a file or a
+                        // folder, so drop both the path itself and anything under it.
+                        string lower = change.Path.ToLowerInvariant();
+                        _writer.DeleteDocuments(new Term(FLD_PATH, lower));
+                        _writer.DeleteDocuments(new WildcardQuery(new Term(FLD_PATH, EscapeWildcard(lower + "\\") + "*")));
+                    }
+                    else if (System.IO.Directory.Exists(change.Path))
+                    {
+                        // A folder created or moved in: its files raise no events of their own.
+                        foreach (var path in LocalFileIndexDirectoryCrawler.EnumeratePathsUnder(change.Path, ct: ct))
+                            _writer.UpdateDocument(new Term(FLD_PATH, path), MakeDocument(path));
+                    }
+                    else if (File.Exists(change.Path)
+                             && LocalFileIndexMftCrawler.IsAllowedExtension(Path.GetFileName(change.Path))
+                             && !LocalFileIndexMftCrawler.IsInSkippedDirectory(change.Path))
+                    {
+                        _writer.UpdateDocument(new Term(FLD_PATH, change.Path.ToLowerInvariant()), MakeDocument(change.Path));
+                    }
+                }
+                _writer.Commit();
+                _searcherManager.MaybeRefreshBlocking();
+            }
+            finally { Interlocked.Decrement(ref _backgroundWrites); }
+        }
+
+        /// <summary>Re-crawls one drive in full: the watcher's buffer overflowed, so some
+        /// changes were lost.</summary>
+        private void RescanDrive(char driveLetter, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _backgroundWrites);
+            try
+            {
+                lock (_rebuildLock)
+                {
+                    var paths = LocalFileIndexDirectoryCrawler.EnumeratePathsWithFallback(driveLetter, ct: ct);
+                    ct.ThrowIfCancellationRequested();
+                    RebuildDrive(driveLetter, paths);
+                    _writer.Commit();
+                    _searcherManager.MaybeRefreshBlocking();
+                }
+            }
+            finally { Interlocked.Decrement(ref _backgroundWrites); }
+        }
+
+        /// <summary>
+        /// Drives that were indexed but have no live USN watcher (process not elevated, or
+        /// not NTFS). A folder watcher follows their changes instead, and
+        /// <see cref="StartPeriodicRescan"/> catches whatever it missed.
         /// </summary>
         public bool HasUnwatchedDrives
         {
@@ -963,7 +1050,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                     onRescan?.Invoke("Rescanning file index (no live file-system watcher)");
 
                     Interlocked.Increment(ref _backgroundWrites);
-                    try { Build(null, ct); }
+                    try { lock (_rebuildLock) Build(null, ct); }
                     finally { Interlocked.Decrement(ref _backgroundWrites); }
                 }
                 catch (OperationCanceledException) { return; }
@@ -1148,7 +1235,13 @@ namespace KitveiHakodesh.Core.LocalFiles
             // large delta (it then fails on the closed writer, and since its cursor was not
             // saved, that delta is simply replayed from the journal by the next Build).
             Thread[] live;
-            lock (_liveThreads) live = _liveThreads.ToArray();
+            LocalFileIndexFolderWatcher[] watchers;
+            lock (_liveThreads)
+            {
+                live = _liveThreads.ToArray();
+                watchers = _folderWatchers.ToArray();
+            }
+            foreach (var w in watchers) w.Dispose();
             foreach (var t in live)
             {
                 if (t != Thread.CurrentThread) t.Join(TimeSpan.FromSeconds(2));
