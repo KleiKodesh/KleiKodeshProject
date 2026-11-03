@@ -55,6 +55,8 @@ export interface WindowedScrollerApi {
    * Resolves once the scroll is set.
    */
   scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<void>
+  /** Brings the row into view with 'nearest' semantics (no-op when fully visible) — the keyboard-highlight reveal. */
+  revealIndex(index: number): void
   /**
    * The first row showing below the viewport's top plus `topInsetPx`. `fully` asks for
    * the first row whose top is below that line, not merely any part of it.
