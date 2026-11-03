@@ -9,7 +9,7 @@ import { findCategoryChain } from '@/features/book-catalog/bookCatalogTree'
  * '\'; local files show their real disk path.
  */
 const SEPARATOR = '\\'
-const FILE_ROUTES = new Set<string>(['/pdf-view', '/html-view', '/txt-view', '/fast-doc-view'])
+const FILE_ROUTES = new Set<string>(['/pdf-view', '/html-view', '/fast-doc-view'])
 
 export function addressBarPath(tab: Tab | undefined, root: CategoryNode, books: Map<number, BookRow>): string {
   if (!tab) return ''

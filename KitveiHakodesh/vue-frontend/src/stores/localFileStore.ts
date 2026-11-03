@@ -131,10 +131,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       )
     }
     if (msg.event === 'localFileTxtReady') {
-      // .txt files are opened in /txt-view — no virtual URL, just the file path for restore.
-      // With FastDocView on, they and the Word family open there instead (same fields).
+      // .txt and the Word family open in FastDocView — no virtual URL, just the file path for restore.
       const tabFields = {
-        route: (opensInFastDocView(msg.filePath as string) ? '/fast-doc-view' : '/txt-view') as TabRoute,
+        route: '/fast-doc-view' as TabRoute,
         title: stripFileExtension(msg.fileName as string),
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
@@ -239,7 +238,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       for (const tabId of Array.from(_converting)) {
         const wasRemoved = !currentIds.has(tabId)
         const route = current.find((t) => t.id === tabId)?.route
-        const navigatedAway = route !== '/pdf-view' && route !== '/html-view' && route !== '/txt-view'
+        const navigatedAway = route !== '/pdf-view' && route !== '/html-view'
         if (wasRemoved || navigatedAway) { _converting.delete(tabId); stopHbProgressPoll(tabId) }
       }
     },
@@ -516,8 +515,8 @@ export const useLocalFileStore = defineStore('localFile', () => {
     } else if (tab.localFilePath) {
       const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
       if (ext === '.txt') {
-        // .txt tabs restore directly — TxtViewPage reads the file itself via bridge
-        tabStore.updateTab(tabId, { route: '/txt-view' })
+        // .txt tabs restore directly — FastDocView reads the file itself
+        tabStore.updateTab(tabId, { route: '/fast-doc-view' })
       } else {
         const filePath = tab.localFilePath
         const res = await restoreLocalFile(filePath)
@@ -600,10 +599,6 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const ext = localFilePath.substring(localFilePath.lastIndexOf('.')).toLowerCase()
       if (opensInFastDocView(localFilePath)) {
         placeTab({ route: '/fast-doc-view', title, localFileName: entry.localFileName ?? title, localFilePath })
-        return
-      }
-      if (ext === '.txt') {
-        placeTab({ route: '/txt-view', title, localFileName: entry.localFileName ?? title, localFilePath })
         return
       }
       const isHtmlLike = ext === '.htm' || ext === '.html'

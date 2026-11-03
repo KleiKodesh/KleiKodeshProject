@@ -66,7 +66,7 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 - `useAppShellPane(paneId)` is the composable behind the provided API — use it when you need pane-scoped operations outside the injection context.
 - Store-level pane-2 equivalents exist (`pane2ActiveTabId`, `openPane2Tab`, `updatePane2ActiveTab`) but are implementation details of `useAppShellPane`; prefer the injected API.
 - `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
-- Keying in `AppPageView`: `/book-view` is keyed by tab id + book id, `/search` and `/txt-view` by tab id — these fully remount on tab switch, so setup-time reads of the active tab are stable for the component's lifetime. All other routes share one instance.
+- Keying in `AppPageView`: `/book-view` is keyed by tab id + book id, `/search` by tab id — these fully remount on tab switch, so setup-time reads of the active tab are stable for the component's lifetime. All other routes share one instance.
 
 ### Singleton pages
 

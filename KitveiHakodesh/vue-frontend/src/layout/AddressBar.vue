@@ -431,7 +431,7 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
   const isHtmlLike = extension === '.htm' || extension === '.html'
   const route = opensInFastDocView(fullPath)
     ? '/fast-doc-view'
-    : extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+    : isHtmlLike ? '/html-view' : '/pdf-view'
 
   // The addin name is known synchronously, so the placeholder tab gets it too —
   // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
@@ -444,7 +444,7 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
     ? pane.openTab({ route, title: displayTitle }).id
     : pane.activeTabId.value
 
-  if (route === '/fast-doc-view' || route === '/txt-view') {
+  if (route === '/fast-doc-view') {
     tabStore.updateTab(targetTabId, {
       route,
       title: displayTitle,

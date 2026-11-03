@@ -91,7 +91,7 @@ Pane 2 invariants are enforced synchronously at setup time, before first render:
 Keying (the `pageKey` computed) decides what remounts on tab switch:
 
 - `/book-view` — keyed by `` `${activeTabId}:${bookId}` `` so it remounts on both tab and book change
-- `/search` and `/txt-view` — keyed by `activeTabId`
+- `/search` — keyed by `activeTabId`
 - All other routes share a single instance
 
 ## Setup Wizard
@@ -164,7 +164,7 @@ Navigation rules:
 
 Singleton routes enforce one-tab-per-route and are never persisted across sessions. The authoritative list is `SINGLETON_ROUTES` in `tabStore.ts` (with Hebrew titles in `SINGLETON_TITLES` beside it): `/settings`, `/books`, `/hebrewbooks`, `/workspaces`, `/hebrew-calendar`, `/dictionary`, `/midot`, `/file-search`.
 
-Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt-view`, `/fast-doc-view`) can have multiple tabs open simultaneously.
+Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/fast-doc-view`) can have multiple tabs open simultaneously.
 
 ## Pages & Routes
 
@@ -179,7 +179,6 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                                |
 | `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                           |
 | `/html-view`       | `HtmlViewPage.vue`         | multi-instance                           |
-| `/txt-view`        | `TxtViewPage.vue`          | multi-instance (keyed by tabId)          |
 | `/fast-doc-view`   | `FastDocViewPage.vue`      | multi-instance (keyed by tabId + file)   |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                                |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                                |
@@ -387,14 +386,6 @@ HTML file viewer for local HTML documents.
 - `HtmlViewPage.vue` — main HTML viewer page
 - `useOtzariaAddinBridge.ts` — bridge to the Otzaria add-in
 
-### txt-view/
-
-Native Vue viewer for local `.txt` files. Renders content directly in a `<div>` — no iframe, no virtual host.
-
-- `TxtViewPage.vue` — loads raw text via bridge (`readTxtFileContent` action in C#), parses custom line markup (`@#$` → h2, `!` → strip prefix), renders with RTL layout. Scroll position persisted to `TabState.htmlViewScrollTop`.
-- `useTxtViewSearch.ts` — in-document search
-- `useTxtViewCopyMenu.ts` — copy context menu
-
 ### fast-doc-view/
 
 The FastDocView page: Word-family / OpenDocument / RTF / text files read in windows of blocks from the service (ops `fastDocView*`, contract in the folder README). Its own feature - not the book view; it shares only `src/components` / `src/composables` pieces and `assets/styles/readingColumn.css`. Routing is behind `OPEN_DOCUMENTS_IN_FAST_DOC_VIEW` in `utils/fastDocViewFiles.ts` (off until the service ops exist).
@@ -491,7 +482,7 @@ Per-feature *display* preferences belong here too, not in the feature or in `tab
 
 **hebrewBooksHistoryStore** — HebrewBooks download history, LRU-capped at 25 entries. This store owns the `app-hb-history` IDB database **entirely** — type, schema, open, read, write — rather than going through `persistence.ts`, which is why that database does not appear in the `handles` map there. It is the documented exception to the "all IDB access goes through persistence.ts" rule.
 
-**recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /txt-view. Loaded lazily on first access. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
+**recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /fast-doc-view. Loaded lazily on first access. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
 
 Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no reactive state, and both `tabStore` (for teardown) and feature composables (for read/write) use them, so they can live in neither a feature folder nor `utils`. Split on the database boundary, which is also the scoping boundary:
 

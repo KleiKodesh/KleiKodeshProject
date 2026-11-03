@@ -10,7 +10,6 @@ import { hasHostBridge, emitWebviewEvent } from './seforimDb'
 import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
-import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 
@@ -134,9 +133,8 @@ export async function pickLocalFile(
         picked.fileName || filePath.substring(Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')) + 1)
       const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
 
-      if (ext === '.txt' || opensInFastDocView(filePath)) {
-        // .txt opens in /txt-view straight off the path (TxtViewPage reads it via the bridge);
-        // with FastDocView on, Word-family files take the same event and the store routes them.
+      if (opensInFastDocView(filePath)) {
+        // .txt and the Word family open in FastDocView straight off the path; the store routes the event.
         emitWebviewEvent({ event: 'localFileTxtReady', fileName, filePath, openInNewTab })
         return { url: '', fileName, filePath }
       }
@@ -383,30 +381,6 @@ export async function openUrlInSystemBrowser(url: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-/**
- * Read a .txt file from disk and return its content (string).
- * Used by TxtViewPage to load content on mount and on session restore.
- */
-export async function readTxtFileContent(filePath: string): Promise<string | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: authorize + fetch the .txt through the same capability-gated /khs-file proxy, then
-    // decode with the shared encoding-detection util (BOM → UTF-8 → Windows-1255 fallback), the
-    // same detection the hosted lib uses — a naive UTF-8 decode garbles legacy Hebrew .txt.
-    try {
-      const r = await serviceCall<{ handle: string; error?: string }>('openLocalFile', { path: filePath })
-      if (!r?.handle) return null
-      const res = await fetch(`/khs-file/${r.handle}`, { cache: 'no-store' })
-      if (!res.ok) return null
-      return decodeTextDetectEncoding(await res.arrayBuffer())
-    } catch {
-      return null
-    }
-  }
-  const res = await action<{ textContent?: string; error?: string }>('readTxtFileContent', { filePath })
-  if (res.error || !res.textContent) return null
-  return res.textContent
 }
 
 /**

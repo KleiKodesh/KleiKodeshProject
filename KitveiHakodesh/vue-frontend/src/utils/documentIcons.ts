@@ -126,8 +126,6 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'pdf'
     case '/html-view':
       return 'html'
-    case '/txt-view':
-      return 'txt'
     case '/fast-doc-view':
       return 'document'
     case '/':

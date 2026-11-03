@@ -1,20 +1,16 @@
 /* Which local files open in the FastDocView page. Every file-opening path (picker,
    search results, address bar, recents, push events) asks opensInFastDocView. */
 
-/**
- * THE switch for FastDocView routing. On: the Word family, OpenDocument text, RTF and .txt
- * open in /fast-doc-view (see features/fast-doc-view/README.md); "open as PDF" on that page
- * is the explicit Word -> PDF choice. Off: Word-family files open as PDF and .txt in /txt-view.
- */
-export const OPEN_DOCUMENTS_IN_FAST_DOC_VIEW = true
-
 /** Extensions FastDocView reads - Word family, OpenDocument text, RTF and plain text. */
 const FAST_DOC_VIEW_EXTENSIONS = new Set([
   '.doc', '.docx', '.docm', '.dot', '.dotx', '.dotm', '.odt', '.ott', '.fodt', '.rtf', '.txt',
 ])
 
-/** Whether a local file opens in FastDocView (always false while the switch is off). */
+/**
+ * Whether a local file opens in FastDocView: the Word family, OpenDocument text, RTF and .txt
+ * (see features/fast-doc-view/README.md). "Open as PDF" on that page is the explicit Word -> PDF choice.
+ */
 export function opensInFastDocView(filePath: string | undefined | null): boolean {
-  if (!OPEN_DOCUMENTS_IN_FAST_DOC_VIEW || !filePath) return false
+  if (!filePath) return false
   return FAST_DOC_VIEW_EXTENSIONS.has(filePath.substring(filePath.lastIndexOf('.')).toLowerCase())
 }

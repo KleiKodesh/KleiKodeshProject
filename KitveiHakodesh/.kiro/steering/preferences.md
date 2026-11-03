@@ -99,7 +99,6 @@ Components (hard limit 350):
 | `features/book-view/BookViewPage.vue` | 657 |
 | `features/halachic-units/HalachicUnitsPage.vue` | 620 |
 | `layout/AppTitleBar.vue` | 420 |
-| `features/txt-view/TxtViewPage.vue` | 567 |
 | `features/full-text-search/FullTextSearchResultsList.vue` | 535 |
 | `features/home/HomeSearchDropdown.vue` | 525 |
 | `features/book-view/lines/BookViewLinesContent.vue` | 510 |

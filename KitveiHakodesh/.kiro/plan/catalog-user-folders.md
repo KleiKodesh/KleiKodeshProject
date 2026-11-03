@@ -6,7 +6,7 @@ Lets the user add a folder from their own computer to the book catalog, so their
 
 - A toolbar button on the catalog page (next to the three view-mode buttons) opens a folder picker and adds the chosen folder to the catalog.
 - Only the folder **path** is persisted. Contents are never cached — the catalog reflects what is on disk right now.
-- The folder appears as a top-level catalog entry whose subtree mirrors the folder hierarchy. Its files open in the normal local-file viewers (`/pdf-view`, `/html-view`, `/txt-view`), since they are files on disk, not rows in the seforim DB.
+- The folder appears as a top-level catalog entry whose subtree mirrors the folder hierarchy. Its files open in the normal local-file viewers (`/pdf-view`, `/html-view`, `/fast-doc-view`), since they are files on disk, not rows in the seforim DB.
 - A delete affordance on the added folder's own row (hover-revealed) removes it from the catalog. Nothing on disk is touched. Sub-folders inside it get no delete button.
 - Must work identically in dev (service RPC) and hosted (WebView2 bridge).
 - File types are DocumentLocator's indexed set — the 12 extensions in `MftCrawler.AllowedExtensions`.
