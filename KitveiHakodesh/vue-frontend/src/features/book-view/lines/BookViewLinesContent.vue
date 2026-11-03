@@ -135,8 +135,25 @@ const BLOCK_MARKUP =
 function rowKind(index: number): WindowedScrollerRowKind {
   void props.linesRevision
   const content = props.lines.contentAt(index)
-  if (content == null || content.trim() === '' || BLOCK_MARKUP.test(content)) return 'block'
+  if (content == null || content.trim() === '' || BLOCK_MARKUP.test(content) || isWhollyBold(content)) return 'block'
   return 'inline'
+}
+
+/**
+ * A line that is ONE bold element from start to end is a heading in all but tag
+ * (measured 2026-11-03: about 8.5k lines), so it stands as a block, like a TOC
+ * line. A line that only OPENS with bold words — the usual start of a comment —
+ * still flows.
+ */
+function isWhollyBold(content: string): boolean {
+  const match = /^\s*<(b|strong)\b[^>]*>/i.exec(content)
+  if (!match) return false
+  const tag = match[1]!.toLowerCase()
+  const close = `</${tag}>`
+  const lower = content.toLowerCase()
+  const end = lower.trimEnd()
+  // The first closing tag must be the line's very end: otherwise text follows the bold run.
+  return end.endsWith(close) && lower.indexOf(close) === end.length - close.length
 }
 
 // The windowed scroller mounts the rows around any target before it scrolls, so
@@ -668,16 +685,18 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line-inline.selected {
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
 }
+/* Inside running text the label is a marker between two sentences: a clear gap on
+   both sides, wider before it, so it reads as a break point, not as a word. */
 .line.line-inline[data-alt-toc]::before {
   display: inline;
-  padding-inline-end: 4px;
+  margin-inline: 1em 0.6em;
 }
 /* A label on a paragraph's FIRST line marks a section start (it follows a heading,
    or a TOC line) — on its own line above the text, as in rows mode. Only a label
    inside running text (an aliyah, a daf marker) stays inline. */
 :deep(.windowed-scroller-paragraph > .windowed-scroller-row:first-child) > .line.line-inline[data-alt-toc]::before {
   display: block;
-  padding-inline-end: 0;
+  margin-inline: 0;
 }
 /* Momentary flash when the line is opened from a deep link (otzaria:// / zayit://).
    A soft, light orange that eases in, holds briefly, then fades through several
