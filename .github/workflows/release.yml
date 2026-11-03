@@ -176,7 +176,7 @@ jobs:
           path: ChromeTabs
 
       # Dictionary.db and expansion-routed.db: the latest releases of
-      # KleiKodesh/KitveiHakodeshDictionary and KleiKodesh/SearchExpansion (sha256-checked).
+      # KleiKodesh/KitveiHakodeshDictionary and KleiKodesh/SearchExpansionReleases (sha256-checked).
       # build-installer.ps1 runs the same script again (no-op when already current).
       - name: Fetch latest released DBs
         shell: pwsh

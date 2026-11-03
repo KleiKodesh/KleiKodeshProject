@@ -6,7 +6,7 @@
 .DESCRIPTION
     Sources (GitHub Releases, published by each repo's CI on every push):
       Dictionary.db         KleiKodesh/KitveiHakodeshDictionary
-      expansion-routed.db   KleiKodesh/SearchExpansion
+      expansion-routed.db   KleiKodesh/SearchExpansionReleases (public, releases only; built by the private KleiKodesh/SearchExpansion CI)
     Each download is checked against the release's <name>.sha256 asset. The release tag
     in use is kept next to the file as <file>.release-tag (gitignored).
 
@@ -36,7 +36,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $dbs = @(
     @{ Key = 'dictionary'; Repo = 'KleiKodesh/KitveiHakodeshDictionary'; Asset = 'Dictionary.db'
        Dest = 'KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db' },
-    @{ Key = 'expansion';  Repo = 'KleiKodesh/SearchExpansion';          Asset = 'expansion-routed.db'
+    @{ Key = 'expansion';  Repo = 'KleiKodesh/SearchExpansionReleases';  Asset = 'expansion-routed.db'
        Dest = 'KitveiHakodesh\CSharpBackend\FtsLib-Csharp\SearchExpansion\expansion-routed.db' }
 )
 
