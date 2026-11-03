@@ -329,6 +329,26 @@ export function useBookView(
     }
   }
 
+  /**
+   * Ctrl+Down / Ctrl+Up: selects the next / previous line, exactly as a click would,
+   * and keeps it on screen. Needs an open commentary panel and an already selected
+   * line; stops at the first and last line.
+   */
+  async function stepSelectedLine(delta: 1 | -1) {
+    if (!anyCommentaryVisible.value || selectedLineId.value == null) return
+    const current = lines.value.indexOfId(selectedLineId.value)
+    if (current == null) return
+    const target = current + delta
+    if (target < 0 || target >= lines.value.length) return
+    if ((lines.value.at(target)?.id ?? 0) <= 0) {
+      await ensureLineIds(target, target + 1).catch(() => {})
+    }
+    const lineId = lines.value.at(target)?.id ?? 0
+    if (lineId <= 0) return
+    onLineSelected(lineId, false)
+    linesContentRef()?.scrollToLineId(lineId, target, { skipIfVisible: true })
+  }
+
   // ── TOC ───────────────────────────────────────────────────────────────────
 
   const {
@@ -474,6 +494,7 @@ export function useBookView(
     navigateToAdjacentTocSection,
     () => settingsStore.toggleCleanText(),
     () => toolbarRef()?.createBookmark(),
+    (delta) => void stepSelectedLine(delta),
   )
 
   // ── Commentary section navigation ─────────────────────────────────────────
