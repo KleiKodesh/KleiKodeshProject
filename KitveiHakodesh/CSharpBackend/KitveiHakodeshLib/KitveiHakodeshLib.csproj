@@ -116,6 +116,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="HostTestMode.cs" />
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>

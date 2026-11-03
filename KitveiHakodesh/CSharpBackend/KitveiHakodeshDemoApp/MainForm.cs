@@ -27,7 +27,7 @@ namespace KitveiHakodeshDemoApp
         internal const string WebCacheFolder = "webcache-standalone";
 
         private static readonly string TabsSessionPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KleiKodesh", "tabs-session.bin");
+            HostTestMode.KleiKodeshLocalFolder, "tabs-session.bin");
 
         public MainForm(string initialRequest = null)
         {

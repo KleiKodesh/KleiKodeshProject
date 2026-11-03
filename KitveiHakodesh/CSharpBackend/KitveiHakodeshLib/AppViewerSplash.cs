@@ -24,8 +24,7 @@ namespace KitveiHakodeshLib
         // splash. Under LocalAppData, not the exe's KitveiHakodesh\ folder: the dev build
         // mirrors the Vue dist over that folder and deletes anything extra.
         private string SnapshotPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "KleiKodesh", _webCacheFolder + "-snapshot.png");
+            HostTestMode.KleiKodeshLocalFolder, _webCacheFolder + "-snapshot.png");
 
         private void _InitSplash()
         {

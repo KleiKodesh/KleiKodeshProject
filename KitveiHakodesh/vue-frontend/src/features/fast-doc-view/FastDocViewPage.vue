@@ -494,7 +494,8 @@ function cancelOpenAsPdf() {
 
 // Dev-only test hook (stripped from production builds, like devTestHook.ts): plain data for
 // Playwright checks, and the two actions they drive. The last mounted page owns it.
-if (import.meta.env.DEV) {
+// VITE_KH_TEST_HOOKS=1: the hosted e2e rig's private build (e2e-hosted/).
+if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
   const hook = {
     state: () => {
       const summary = fastDocument.summary.value
