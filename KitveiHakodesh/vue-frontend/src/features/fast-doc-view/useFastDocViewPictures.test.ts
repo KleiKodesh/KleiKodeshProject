@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest'
+import { effectScope, nextTick, ref } from 'vue'
+import { useFastDocViewPictures } from './useFastDocViewPictures'
+
+async function flush() {
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  await nextTick()
+}
+
+describe('useFastDocViewPictures', () => {
+  it('requests each picture once and puts its source on the img', async () => {
+    const requested: string[] = []
+    const documentId = ref<string | undefined>('d1')
+    const scope = effectScope()
+    const pictures = scope.run(() => useFastDocViewPictures(
+      { pictureSource: async (id, pictureId) => { requested.push(`${id}/${pictureId}`); return `/p/${id}/${encodeURIComponent(pictureId)}` } },
+      () => documentId.value))!
+    const html = '<p>a<img class="word-picture" data-word-picture="p:Pictures/a&amp;b.png" width="10" height="5" loading="lazy"></p>'
+    expect(pictures.withPictureSources(html)).toBe(html)          // not known yet: no src, the box keeps its size
+    pictures.withPictureSources(html)                             // a second render does not ask again
+    await flush()
+    expect(requested).toEqual(['d1/p:Pictures/a&b.png'])
+    expect(pictures.withPictureSources(html)).toContain('data-word-picture="p:Pictures/a&amp;b.png" src="/p/d1/p%3APictures%2Fa%26b.png"')
+    expect(pictures.withPictureSources('<p>no pictures</p>')).toBe('<p>no pictures</p>')
+    documentId.value = 'd2'                                       // another document: sources start over
+    await flush()
+    expect(pictures.sourceCount()).toBe(0)
+    scope.stop()
+  })
+
+  it('keeps a failed picture as its empty box without asking again', async () => {
+    let calls = 0
+    const scope = effectScope()
+    const pictures = scope.run(() => useFastDocViewPictures(
+      { pictureSource: async () => { calls++; throw new Error('gone') } }, () => 'd1'))!
+    const html = '<img data-word-picture="1:0">'
+    pictures.withPictureSources(html)
+    await flush()
+    expect(pictures.withPictureSources(html)).toBe(html)
+    await flush()
+    expect(calls).toBe(1)
+    scope.stop()
+  })
+})

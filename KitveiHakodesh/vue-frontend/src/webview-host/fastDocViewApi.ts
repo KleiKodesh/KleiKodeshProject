@@ -3,7 +3,7 @@
  * never whole. The contract is documented in features/fast-doc-view/README.md - the C#
  * side (Core FastDocView + one Dispatcher case per op) must match it exactly.
  */
-import { serviceCall } from './serviceClient'
+import { serviceCall, serviceGetUrl } from './serviceClient'
 
 /** What `fastDocViewOpen` returns: the document's identity for every later call, and its shape. */
 export interface FastDocViewSummary {
@@ -88,7 +88,25 @@ export interface FastDocViewApi {
   weights(documentId: string): Promise<Int32Array>
   /** Builds `blocks` more of the index (renders nothing) and returns the new state. */
   scan(documentId: string, blocks: number): Promise<FastDocViewScanState>
+  /**
+   * An <img> source for picture `pictureId` (a block's `data-word-picture`): a URL the browser
+   * fetches when the image comes into view (dev: the service's GET endpoint), or an object URL
+   * of the bytes read through the service (hosted). One picture per call - pictures never travel
+   * inside the block HTML. Object URLs (`blob:`) are the caller's to revoke.
+   */
+  pictureSource(documentId: string, pictureId: string): Promise<string>
   close(documentId: string): Promise<void>
+}
+
+/** What `fastDocViewPicture` returns: one picture's bytes. */
+interface FastDocViewPictureReply {
+  contentType: string
+  bytes: Uint8Array
+}
+
+/** The service's GET path for one picture (HttpHostServer: the open document id is the capability). */
+export function fastDocViewPicturePath(documentId: string, pictureId: string): string {
+  return `/fast-doc-view-picture/${encodeURIComponent(documentId)}/${encodeURIComponent(pictureId)}`
 }
 
 /**
@@ -133,6 +151,13 @@ export const fastDocViewApi: FastDocViewApi = {
   weights: async (documentId) =>
     decodeFastDocViewWeights(await serviceCall<Uint8Array>('fastDocViewWeights', { documentId })),
   scan: (documentId, blocks) => serviceCall<FastDocViewScanState>('fastDocViewScan', { documentId, blocks }),
+  pictureSource: async (documentId, pictureId) => {
+    const url = await serviceGetUrl(fastDocViewPicturePath(documentId, pictureId))
+    if (url) return url
+    const reply = await serviceCall<FastDocViewPictureReply | undefined>('fastDocViewPicture', { documentId, pictureId })
+    if (!reply?.bytes?.length) throw new Error(`FastDocView: picture ${pictureId} not found`)
+    return URL.createObjectURL(new Blob([reply.bytes as BlobPart], { type: reply.contentType }))
+  },
   close: async (documentId) => {
     await serviceCall('fastDocViewClose', { documentId })
   },

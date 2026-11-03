@@ -57,6 +57,7 @@ function fakeApi(total: number) {
       calls.push({ op: 'scan', args: [documentId, blocks] })
       return { knownBlockCount: total, isIndexComplete: true, footnoteCount: 1, endnoteCount: 0 }
     },
+    pictureSource: async (documentId, pictureId) => `/picture/${documentId}/${pictureId}`,
     close: async (documentId) => { calls.push({ op: 'close', args: [documentId] }) },
   }
   return { api, calls, failSourceChanged: () => { failNextBlocksWithSourceChanged = true } }

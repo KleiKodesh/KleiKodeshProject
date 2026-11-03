@@ -193,6 +193,13 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FastDocViewBookmarkArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Bookmark(a.DocumentId, a.Name)));
                 }
+                case "fastDocViewPicture":
+                {
+                    // the hosted app's leg (its relay serves POST only); dev <img>s use GET /fast-doc-view-picture
+                    var a = MsgPack.De<FastDocViewPictureArgs>(req.Args);
+                    FastDocViewPicture? picture = fastDocViewDocuments.Picture(a.DocumentId, a.PictureId);
+                    return picture is null ? RpcResponse.Err("FastDocView: no such picture") : RpcResponse.Ok(MsgPack.Ser(picture));
+                }
                 case "fastDocViewSections":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewWeights":
