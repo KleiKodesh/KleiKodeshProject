@@ -76,6 +76,22 @@ public sealed class FastDocViewBookmarkArgs
 }
 
 [MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewPictureArgs
+{
+    public string DocumentId { get; set; } = "";
+    /// <summary>The id a rendered block's &lt;img data-word-picture&gt; carries (opaque, per open document).</summary>
+    public string PictureId { get; set; } = "";
+}
+
+/// <summary>What <c>fastDocViewPicture</c> returns: one picture's bytes (null when the document has no such picture).</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewPicture
+{
+    public string ContentType { get; set; } = "";
+    public byte[] Bytes { get; set; } = [];
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
 public sealed class FastDocViewSearchArgs
 {
     public string DocumentId { get; set; } = "";

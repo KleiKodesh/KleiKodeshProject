@@ -29,6 +29,8 @@ const props = defineProps<{
   /** The document column's width at the note's reference block (the page margins); undefined = none. */
   columnStyle?: (blockIndex: number) => Record<string, string> | undefined
   fontPx: number
+  /** Gives the note's pictures their sources (the page's picture loader); the HTML as is without it. */
+  withPictureSources?: (html: string) => string
 }>()
 const emit = defineEmits<{ goToReference: [note: FastDocViewIndexedNote]; close: [] }>()
 
@@ -149,7 +151,8 @@ function referenceTitle(note: FastDocViewIndexedNote, t: (key: string) => string
 }
 function bodyHtml(note: FastDocViewIndexedNote, title: string): string {
   // the book view's clean-text (Ctrl+D), as on its commentary
-  return cleanHebrewText(note.html, settingsStore.cleanTextFlags).replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
+  const html = cleanHebrewText(note.html, settingsStore.cleanTextFlags).replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
+  return props.withPictureSources ? props.withPictureSources(html) : html
 }
 function onBodyActivate(event: Event, note: FastDocViewIndexedNote) {
   if (!(event.target as HTMLElement | null)?.closest?.('.note-mark')) return

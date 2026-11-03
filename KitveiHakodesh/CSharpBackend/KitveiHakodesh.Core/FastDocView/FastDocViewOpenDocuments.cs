@@ -119,6 +119,14 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     public FastDocViewBookmarkResult Bookmark(string documentId, string name) =>
         Use(documentId, document => new FastDocViewBookmarkResult { BlockIndex = string.IsNullOrEmpty(name) ? null : document.FindBookmark(name) });
 
+    /// <summary>One picture of a rendered block, by the id its &lt;img data-word-picture&gt; carries: only that picture
+    /// is read (the library's windowed ReadPicture), never the block or the document. Null for an unknown id or a
+    /// format a browser cannot show.</summary>
+    public FastDocViewPicture? Picture(string documentId, string pictureId) =>
+        Use(documentId, document => document.ReadPicture(pictureId ?? "") is { } picture
+            ? new FastDocViewPicture { ContentType = picture.ContentType, Bytes = picture.Bytes }
+            : null);
+
     /// <summary>Page text width per section (index-time data); the known ones while the index builds.</summary>
     public List<FastDocViewSection> Sections(string documentId) =>
         Use(documentId, document =>

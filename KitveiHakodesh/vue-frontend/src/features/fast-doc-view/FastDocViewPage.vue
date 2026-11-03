@@ -38,6 +38,7 @@ import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useLinkPreviewTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
+import { useFastDocViewPictures } from './useFastDocViewPictures'
 import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
 
 const paneNavigation = usePaneNavigation()
@@ -216,10 +217,14 @@ async function onSearchStep(direction: 'forward' | 'backward') {
   await landOnRow(match.block, { occurrence: match.occurrence, direction })
 }
 /** A block's HTML with the search query's matches marked (only while searching, only rendered blocks). */
+// Pictures: the block HTML names them by id; their sources come one by one, for the shown blocks only.
+const pictures = useFastDocViewPictures(fastDocViewApi, () => fastDocument.summary.value?.documentId)
 function blockHtml(index: number): string {
-  // The book view's clean-text (Ctrl+D, global setting) first, then the search marks, as its line renderer.
+  // The book view's clean-text (Ctrl+D, global setting) first, then the search marks, as its line renderer;
+  // the picture sources last (never searched or cleaned).
   const html = cleanHebrewText(fastDocument.blockAt(index)?.html ?? '', settingsStore.cleanTextFlags)
-  return search.query.value.trim() && searchVisible.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
+  const marked = search.query.value.trim() && searchVisible.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
+  return pictures.withPictureSources(marked)
 }
 
 onMounted(async () => {
@@ -522,6 +527,7 @@ if (import.meta.env.DEV) {
     setZoom,
     setNotesZoom,
     setNotesPlace,
+    pictureSourceCount: () => pictures.sourceCount(),
     reopen: () => fastDocument.reopen(),
   }
   const target = window as unknown as { __fastDocViewTest?: typeof hook }
@@ -823,6 +829,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
               :landing-nonce="noteLandingNonce"
               :follow-index="notesFollowIndex"
               :font-px="notesFontPx"
+              :with-picture-sources="pictures.withPictureSources"
               @close="notesVisible = false"
               @go-to-reference="goToNoteReference"
             />
