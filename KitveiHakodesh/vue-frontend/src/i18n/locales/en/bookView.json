@@ -162,6 +162,8 @@
     "prevSection": "Previous section (Ctrl+Right)",
     "search": "Search (Ctrl+F)",
     "syncCommentaries": "Sync commentaries",
+    "flowTextOn": "Turn on paragraph view",
+    "flowTextOff": "Turn off paragraph view",
     "syncOffTitle": "Sync commentaries\nCommentaries will follow the top line automatically",
     "syncOnTitle": "Sync commentaries\nClick to turn off auto-sync",
     "toc": "Table of contents (Ctrl+K)",

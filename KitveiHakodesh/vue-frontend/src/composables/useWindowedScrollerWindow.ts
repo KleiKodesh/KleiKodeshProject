@@ -56,6 +56,14 @@ export interface WindowedScrollerWindowOptions {
   rowElement: (index: number) => HTMLElement | null
   /** Resolves once the rows of [start, end) can be rendered; rejects when they cannot be. */
   ensureRows: (start: number, end: number) => Promise<void>
+  /**
+   * The [start, end) of the block holding a row. The window's top edge only ever
+   * moves by whole blocks — a landing, an extension or a trim at the top never
+   * starts inside one — so rows flowing together in a paragraph (flow mode, see
+   * windowedScrollerFlowPlan.ts) are never prepended to and never re-wrap. Each
+   * row its own block when omitted.
+   */
+  blockRange?: (index: number) => readonly [number, number]
 }
 
 export interface WindowedScrollerLandingOptions {
@@ -74,6 +82,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   function isRowInWindow(index: number) {
     return index >= windowStart.value && index < windowEnd.value
+  }
+
+  /** The first row of the block holding `index`. */
+  function blockStartOf(index: number): number {
+    return options.blockRange ? options.blockRange(index)[0] : index
+  }
+
+  /** One past the last row of the block holding `index`. */
+  function blockEndOf(index: number): number {
+    return options.blockRange ? options.blockRange(index)[1] : index + 1
   }
 
   /** The count shrank (a book change): drop rows that no longer exist. */
@@ -303,7 +321,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const generation = ++landingGeneration
     const wantEnd = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
     if (!isRowInWindow(target) || !options.rowElement(target)) {
-      const start = Math.max(0, target - ROWS_ABOVE_ON_REBUILD)
+      const start = blockStartOf(Math.max(0, target - ROWS_ABOVE_ON_REBUILD))
       // Fetching the rows can shrink the count (a list whose length was an estimate
       // until its rows were read): a target now past the end lands on the new last
       // row instead of mounting an empty window beyond it — a blank screen.
@@ -363,6 +381,31 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     }
   }
 
+  /**
+   * The blocks changed under the mounted window (flow mode switched on, or the
+   * plan's inputs — landmarks, weights — arrived after the window was built): moves
+   * the window's start back to the start of its block, so the top edge again lies
+   * on a block boundary. The update hooks hold the reader's words through the
+   * regrouping it causes.
+   */
+  async function snapToBlocks(): Promise<void> {
+    const startBefore = windowStart.value
+    const endBefore = windowEnd.value
+    const start = blockStartOf(startBefore)
+    if (endBefore <= startBefore || start === startBefore) return
+    changesPending++
+    try {
+      await options.ensureRows(start, startBefore)
+    } catch {
+      changesPending--
+      return
+    }
+    if (windowStart.value === startBefore && windowEnd.value === endBefore) windowStart.value = start
+    await nextTick()
+    changesPending--
+    fill()
+  }
+
   // ── Growing and trimming ──────────────────────────────────────────────────────
 
   function edgePx(viewport: HTMLElement) {
@@ -401,7 +444,8 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   async function extend(side: 'top' | 'bottom', rows: number) {
     const startBefore = windowStart.value
     const endBefore = windowEnd.value
-    const addStart = side === 'bottom' ? endBefore : Math.max(0, startBefore - rows)
+    // Upward, the whole block the step reaches into comes along.
+    const addStart = side === 'bottom' ? endBefore : blockStartOf(Math.max(0, startBefore - rows))
     const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + rows) : startBefore
     changesPending++
     try {
@@ -436,13 +480,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     return edgePx(viewport) * TRIM_KEEP_EDGES
   }
 
+  /** Whole blocks only: a block goes once its last row is above the limit. */
   function trimTop(viewport: HTMLElement) {
     const limit = viewport.scrollTop - keepPx(viewport)
     let start = windowStart.value
-    while (start < windowEnd.value - 1) {
-      const row = options.rowElement(start)
-      if (!row || row.offsetTop + row.offsetHeight >= limit) break
-      start++
+    while (true) {
+      const end = blockEndOf(start)
+      if (end >= windowEnd.value) break
+      const last = options.rowElement(end - 1)
+      if (!last || last.offsetTop + last.offsetHeight >= limit) break
+      start = end
     }
     windowStart.value = start
   }
@@ -469,6 +516,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     holdAnchorThroughScroll,
     landAt,
     refreshRows,
+    snapToBlocks,
     fill,
   }
 }

@@ -16,6 +16,8 @@ import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
+  IconTextAlignRight20Regular,
+  IconTextAlignJustify20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
@@ -101,6 +103,14 @@ const MORE_LABEL = t('bookView.toolbar.more')
  * the name.
  */
 const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
+
+/** Paragraph view: the lines between headings run on as one paragraph. One app-wide setting. */
+const flowText = computed(() => settingsStore.linesLayout === 'flow')
+/** Says what a click does, so it names the other state. */
+const FLOW_TEXT_LABEL = computed(() => t(flowText.value ? 'bookView.toolbar.flowTextOff' : 'bookView.toolbar.flowTextOn'))
+function toggleFlowText() {
+  settingsStore.linesLayout = flowText.value ? 'rows' : 'flow'
+}
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
@@ -463,6 +473,17 @@ defineExpose({ tocBtnRef, createBookmark })
 
     <BookViewCleanTextCombo v-bind="collapseAttrs('clean-text')" class="dropdown-host" />
 
+    <button
+      v-bind="collapseAttrs('lines-layout')"
+      :class="{ active: flowText }"
+      :aria-pressed="flowText"
+      :title="FLOW_TEXT_LABEL"
+      @click="toggleFlowText"
+    >
+      <IconTextAlignJustify20Regular v-if="flowText" />
+      <IconTextAlignRight20Regular v-else />
+    </button>
+
     <!-- The shared conversion button: while the export runs it is an animated X that cancels it. -->
     <ConversionActionButton
       v-if="!exportRestricted"
@@ -563,6 +584,19 @@ defineExpose({ tocBtnRef, createBookmark })
         :on-open="onRelatedBooksOpen"
       />
       <BookViewCleanTextCombo v-if="isOverflowed('clean-text')" in-overflow />
+      <button
+        v-if="isOverflowed('lines-layout')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: flowText }"
+        :aria-pressed="flowText"
+        :title="FLOW_TEXT_LABEL"
+        @click="toggleFlowText"
+      >
+        <IconTextAlignJustify20Regular v-if="flowText" />
+        <IconTextAlignRight20Regular v-else />
+        <span>{{ FLOW_TEXT_LABEL }}</span>
+      </button>
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width
         strip and there is no reason to spend two of them on a control whose two halves are

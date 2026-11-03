@@ -21,6 +21,7 @@ const KEYS = {
   SETTINGS_LINE_PADDING: 'text.linePadding',
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
+  SETTINGS_LINES_LAYOUT: 'text.linesLayout',
   SETTINGS_CLEAN_TEXT_ACTIVE: 'text.cleanText.active',
   SETTINGS_CLEAN_TEXT_OPTIONS: 'text.cleanText.options',
   SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
@@ -122,6 +123,11 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+/**
+ * How the book's lines are laid out: a block per line, or flowing on as one
+ * paragraph between headings (WindowedScroller's flow mode).
+ */
+export type LinesLayout = 'rows' | 'flow'
 /** Which edge of the book view the toolbar docks to. */
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 /** The three layouts a page of items can render in (see ViewModeDropdown.vue). */
@@ -224,6 +230,7 @@ const DEFAULTS = {
   // Measure cap in px; 0 means unlimited. 900 keeps a comfortable line length on a wide
   // window, where full-bleed text would otherwise run too far for the eye to track back.
   linesContentMaxWidth: 900,
+  linesLayout: 'rows' as LinesLayout,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
@@ -346,6 +353,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const copyAsSourceWithQuotation = ref(DEFAULTS.copyAsSourceWithQuotation)
   const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
+  const linesLayout = ref<LinesLayout>(DEFAULTS.linesLayout)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   // Book-view chrome preferences. bookViewStore reads these; the per-pane fan-out
@@ -530,6 +538,7 @@ export const useSettingsStore = defineStore('settings', () => {
         .catch(() => {})
     }
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
+    loadSetting(KEYS.SETTINGS_LINES_LAYOUT, linesLayout)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
@@ -612,6 +621,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setHbLocalFolderInRegistry(hebrewBooksLocalFolder.value || '')
   })
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
+  persistSetting(linesLayout, KEYS.SETTINGS_LINES_LAYOUT)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
@@ -790,6 +800,7 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsSourceWithQuotation.value = DEFAULTS.copyAsSourceWithQuotation
     hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
+    linesLayout.value = DEFAULTS.linesLayout
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     toolbarVisible.value = DEFAULTS.toolbarVisible
@@ -839,6 +850,7 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsSourceWithQuotation,
     hebrewBooksLocalFolder,
     linesContentMaxWidth,
+    linesLayout,
     titleBarHiddenButtons,
     scrollbarsHidden,
     navSidebarVisibleByPane,

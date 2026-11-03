@@ -2,7 +2,7 @@
 import { computed, ref, watch, nextTick, onMounted, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import WindowedScroller from '@/components/WindowedScroller.vue'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi, WindowedScrollerRowKind } from '@/components/windowedScrollerTypes'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -117,6 +117,27 @@ const zoom = computed({
 
 const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
+const linesLayout = computed(() => settingsStore.linesLayout)
+
+/**
+ * Block-level markup a line may carry. Such a line cannot run on inside a
+ * paragraph — an empty line is a paragraph break, a centred or tabular line a block
+ * of its own — so flow mode gives it a row to itself (measured 2026-11-03: under
+ * 0.3% of lines; headings are the TOC's and already blocks).
+ */
+const BLOCK_MARKUP =
+  /<(?:h[1-6]|p|div|center|table|ol|ul|li|dl|dt|dd|blockquote|details|summary|img|hr|pre|section|article|figure|header|footer|nav|aside|form|fieldset|address)\b|display\s*:\s*(?:block|flex|grid|table)/i
+
+/**
+ * Flow mode: whether a mounted line stands as a block or flows on with its
+ * neighbours. Reads the lines revision, so a text swap re-groups the rows.
+ */
+function rowKind(index: number): WindowedScrollerRowKind {
+  void props.linesRevision
+  const content = props.lines.contentAt(index)
+  if (content == null || content.trim() === '' || BLOCK_MARKUP.test(content)) return 'block'
+  return 'inline'
+}
 
 // The windowed scroller mounts the rows around any target before it scrolls, so
 // every position read here is a real DOM measurement — see WindowedScroller.vue.
@@ -555,6 +576,9 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint
       :pinned-indexes="pinnedRowIndexes"
       :landmark-tiers="tocLandmarkTiers"
       :row-weights="lineCharacterCounts ?? undefined"
+      :mode="linesLayout"
+      :row-kind="rowKind"
+      paragraph-class="reading-column-line"
       tabindex="0"
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
@@ -564,12 +588,16 @@ defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >
-      <template #row="{ index }">
+      <template #row="{ index, kind }">
         <!-- Never a placeholder: the scroller asked for these lines before mounting them. -->
-        <div
+        <!-- An inline row flows inside the scroller's paragraph, which carries the column look. -->
+        <component
+          :is="kind === 'inline' ? 'span' : 'div'"
           v-if="rowHasText(index)"
-          class="line reading-column-line"
+          class="line"
           :class="{
+            'reading-column-line': kind !== 'inline',
+            'line-inline': kind === 'inline',
             selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines.idAt(index),
             'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(index),
             'multi-selected': props.commentaryVisible && isMultiSelected(index),
@@ -627,6 +655,29 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 }
 .line.multi-selected {
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+/* Flowing lines have no row edge for the accent bar: the selection and the active
+   section tint the text's own background instead, and the alt-TOC label sits in
+   the running text. */
+.line-inline::after {
+  content: none;
+}
+.line-inline.toc-section {
+  background: color-mix(in srgb, var(--accent-color) 6%, transparent);
+}
+.line-inline.selected {
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+}
+.line.line-inline[data-alt-toc]::before {
+  display: inline;
+  padding-inline-end: 4px;
+}
+/* A label on a paragraph's FIRST line marks a section start (it follows a heading,
+   or a TOC line) — on its own line above the text, as in rows mode. Only a label
+   inside running text (an aliyah, a daf marker) stays inline. */
+:deep(.windowed-scroller-paragraph > .windowed-scroller-row:first-child) > .line.line-inline[data-alt-toc]::before {
+  display: block;
+  padding-inline-end: 0;
 }
 /* Momentary flash when the line is opened from a deep link (otzaria:// / zayit://).
    A soft, light orange that eases in, holds briefly, then fades through several

@@ -171,7 +171,11 @@
     "fontNav": "Font and size",
     "maxWidthNav": "Maximum width",
     "maxWidth": "Maximum text column width",
-    "maxWidthHint": "Shorter lines are easier to read"
+    "maxWidthHint": "Shorter lines are easier to read",
+    "linesLayout": "Line layout",
+    "linesLayoutHint": "Flowing text joins the lines between headings into one paragraph, like a printed page. Very long stretches without a heading stay one line per row.",
+    "linesLayoutRows": "Line per row",
+    "linesLayoutFlow": "Flowing text"
   },
   "commentary": {
     "section": "Commentary display",
