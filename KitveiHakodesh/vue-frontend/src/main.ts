@@ -11,10 +11,11 @@ import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
-import { dbReady, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
+import { dbReady, emitWebviewEvent, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
+import { useLocalFileStore } from './stores/localFileStore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
@@ -50,6 +51,16 @@ useTabStore().init()
 
 // Mirror the tab store to the native chrome tab strip (no-op in dev / VSTO).
 initTabMirror()
+
+// The files the host was launched with arrive as their open events in a one-shot
+// document-created script (AppViewer.InjectStartupOpenEventsAsync), not pushed after
+// 'appReady': applied here, before the first render, the opened file is the active tab
+// that mounts, and the restored session's view does not render ahead of it.
+const startupEvents = (window as { __webviewStartupEvents?: Record<string, unknown>[] }).__webviewStartupEvents
+if (Array.isArray(startupEvents)) {
+  useLocalFileStore()
+  for (const msg of startupEvents) emitWebviewEvent(msg)
+}
 
 app.mount('#app')
 

@@ -158,27 +158,14 @@ namespace KitveiHakodeshLib.LocalFile
                     return;
                 }
 
-                WindowsRecentDocuments.Add(filePath);
-
-                string fileName = Path.GetFileName(filePath);
-
-                // Text and the Word family open in the page's FastDocView (windowed reading through
-                // the service): the page is told the path only - never the file's content - and no
-                // Word -> PDF conversion starts. "Open as PDF" on that page converts on request
-                // (restoreLocalFile). The page's localFileStore routes this event by extension.
-                if (LocalFileOpenRules.IsText(filePath) || needsConvert)
+                object readyEvent = ReadyEvent(filePath, needsConvert, openInNewTab, out string url);
+                if (readyEvent != null)
                 {
-                    _bridge.PushEvent(new { @event = "localFileTxtReady", fileName, filePath, openInNewTab });
-                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false });
-                    return;
-                }
-
-                if (!needsConvert)
-                {
-                    string url = RegisterFolder(filePath);
-                    bool isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(LocalFileOpenRules.AssetFolderOf(filePath));
-                    _bridge.PushEvent(new { @event = "localFileReady", url, fileName, filePath, openInNewTab, isOtzariaAddin });
-                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false, url, fileName, filePath });
+                    _bridge.PushEvent(readyEvent);
+                    if (replyId != null)
+                        _bridge.Reply(replyId, url == null
+                            ? (object)new { cancelled = false }
+                            : new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
                     return;
                 }
 
@@ -209,6 +196,45 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 Fail(ex.Message);
             }
+        }
+
+        /// <summary>
+        /// The event that opens a supported <paramref name="filePath"/> in the page. Text and the
+        /// Word family open in the page's FastDocView (windowed reading through the service): the
+        /// page is told the path only - never the file's content - and no Word -> PDF conversion
+        /// starts. "Open as PDF" on that page converts on request (restoreLocalFile). PDF and HTML
+        /// are served from a virtual host, whose url comes back in <paramref name="url"/> (null for
+        /// the others). The page's localFileStore routes these events by extension.
+        /// Call on the UI thread (RegisterFolder touches CoreWebView2).
+        /// </summary>
+        private object ReadyEvent(string filePath, bool needsConvert, bool openInNewTab, out string url)
+        {
+            url = null;
+            WindowsRecentDocuments.Add(filePath);
+            string fileName = Path.GetFileName(filePath);
+            if (LocalFileOpenRules.IsText(filePath) || needsConvert)
+                return new { @event = "localFileTxtReady", fileName, filePath, openInNewTab };
+
+            url = RegisterFolder(filePath);
+            bool isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(LocalFileOpenRules.AssetFolderOf(filePath));
+            return new { @event = "localFileReady", url, fileName, filePath, openInNewTab, isOtzariaAddin };
+        }
+
+        /// <summary>
+        /// The open event for a file the host was launched with, built BEFORE the page loads so
+        /// the page can open its tab at boot, ahead of the rest of the session (AppViewer's
+        /// startup-events script). Null when the file is missing, unsupported or fails to
+        /// register: the caller then opens it the normal way, which reports the error.
+        /// </summary>
+        public object StartupOpenEvent(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return null;
+                if (!LocalFileOpenRules.IsSupported(filePath, out bool needsConvert)) return null;
+                return ReadyEvent(filePath, needsConvert, openInNewTab: true, out _);
+            }
+            catch (Exception) { return null; }
         }
 
         /// <summary>

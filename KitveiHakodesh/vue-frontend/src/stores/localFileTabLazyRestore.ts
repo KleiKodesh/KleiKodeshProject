@@ -17,9 +17,11 @@ import { useLocalFileStore } from './localFileStore'
 export function restoreLocalFileTabsLazily(): void {
   const tabStore = useTabStore()
   const localFileStore = useLocalFileStore()
+  // A tab that already has its URL was opened this session (a launch file applied
+  // at boot, see main.ts); only the persisted ones come back without it.
   const awaitingRestore = new Set(
     tabStore.tabs
-      .filter((t) => t.route === '/pdf-view' || t.route === '/html-view')
+      .filter((t) => (t.route === '/pdf-view' || t.route === '/html-view') && !t.localFileVirtualUrl)
       .map((t) => t.id),
   )
   if (awaitingRestore.size === 0) return
