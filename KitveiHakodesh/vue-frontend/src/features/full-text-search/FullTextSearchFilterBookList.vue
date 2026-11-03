@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import type { BookRow } from '@/webview-host/queries.types'
 const props = defineProps<{
@@ -12,10 +14,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{ toggleBook: [number]; navigateToBook: [number] }>()
 
-// A plain list: every book is a row, and the browser skips the layout and paint of the
-// rows off screen (`content-visibility: auto` below) — no virtualizer, nothing to
-// measure or position. A few thousand rows at most.
-const scrollEl = ref<HTMLElement | null>(null)
+// Windowed: a filter query can match thousands of books, so only the rows near the
+// viewport exist.
+const windowedScroller = ref<WindowedScrollerApi | null>(null)
+// New results are a new list: re-keying the scroller starts it back at the top.
+const generation = ref(0)
 
 // Combobox model: focus stays in the panel's filter input; the panel forwards
 // its keydown events here (onSearchInputKeydown). Enter with a highlight
@@ -26,11 +29,14 @@ const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation(
     const book = props.books[i]
     if (book) emit('toggleBook', book.id)
   },
-  containerElement: scrollEl,
+  scrollIntoView: (index) => windowedScroller.value?.revealIndex(index),
 })
 
 // Reset the highlight when the book list changes (new search query)
-watch(() => props.books, () => { activeIndex.value = -1 })
+watch(() => props.books, () => {
+  activeIndex.value = -1
+  generation.value++
+})
 
 function onBookRowCheckClick(index: number) {
   activeIndex.value = index
@@ -49,50 +55,53 @@ defineExpose({ onSearchInputKeydown })
 
 <template>
   <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
-  <div v-else ref="scrollEl" class="scroller" dir="rtl">
-    <div
-      v-for="(book, index) in books"
-      :key="book.id"
-      class="book-row"
-      data-nav-item
-      :class="{
-        checked: checkedBookIds.has(book.id),
-        focused: activeIndex === index,
-      }"
-    >
-      <button class="checkbox-col" @click.stop="onBookRowCheckClick(index)">
-        <span v-if="checkedBookIds.has(book.id)" class="check-mark">✓</span>
-        <IconBookRtl20 v-else class="book-icon" />
-      </button>
-      <button class="book-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="onBookRowTitleClick(index)">
-        <span class="title-line">
-          <span class="title-text">{{ book.title }}</span>
-          <span v-if="hasSearched && resultCounts.get(book.id)" class="count">({{ resultCounts.get(book.id) }})</span>
-        </span>
-        <span v-if="book.parentPath" class="path-text">{{ book.parentPath }}</span>
-      </button>
-    </div>
+  <div v-else class="scroller" dir="rtl">
+    <WindowedScroller ref="windowedScroller" :key="generation" :count="books.length" class="windowed">
+      <template #row="{ index }">
+        <div
+          v-if="books[index]"
+          class="book-row"
+          data-nav-item
+          :class="{
+            checked: checkedBookIds.has(books[index]!.id),
+            focused: activeIndex === index,
+          }"
+        >
+          <button class="checkbox-col" @click.stop="onBookRowCheckClick(index)">
+            <span v-if="checkedBookIds.has(books[index]!.id)" class="check-mark">✓</span>
+            <IconBookRtl20 v-else class="book-icon" />
+          </button>
+          <button class="book-title" :title="$t('fullTextSearch.filter.scrollToFirst')" @click.stop="onBookRowTitleClick(index)">
+            <span class="title-line">
+              <span class="title-text">{{ books[index]!.title }}</span>
+              <span v-if="hasSearched && resultCounts.get(books[index]!.id)" class="count">({{ resultCounts.get(books[index]!.id) }})</span>
+            </span>
+            <span v-if="books[index]!.parentPath" class="path-text">{{ books[index]!.parentPath }}</span>
+          </button>
+        </div>
+      </template>
+    </WindowedScroller>
   </div>
 </template>
 
 <style scoped>
 .scroller {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  min-height: 0;
+  position: relative;
   outline: none;
+}
+/* Absolutely filled so the scroller has a definite height inside the flex column. */
+.scroller > :deep(.windowed-scroller) {
+  position: absolute;
+  inset: 0;
+  height: auto;
 }
 .book-row {
   display: flex;
   align-items: stretch;
   min-height: 40px;
   user-select: none;
-  /* Rows off screen are neither laid out nor painted; the placeholder size keeps
-     the scrollbar honest until a row is reached. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
 }
 .book-row.focused {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);

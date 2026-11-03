@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import BookCatalogSearchTiles from './BookCatalogSearch.Tiles.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
@@ -20,7 +22,9 @@ const emit = defineEmits<{
   selectToc: [TocFsItem, boolean?]
 }>()
 
-const scrollEl = ref<HTMLElement | null>(null)
+const windowedScroller = ref<WindowedScrollerApi | null>(null)
+// New results are a new list: re-keying the scroller starts it back at the top.
+const generation = ref(0)
 const isGridView = computed(() => props.view !== 'list')
 
 // Combobox model: focus stays in the page's search input; the page forwards its
@@ -29,7 +33,8 @@ const isGridView = computed(() => props.view !== 'list')
 const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
   getCount: () => (isGridView.value ? 0 : props.items.length),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  containerElement: scrollEl,
+  // Windowed (the list view): most rows have no element, so the scroller reveals the highlighted one.
+  scrollIntoView: (index) => windowedScroller.value?.revealIndex(index),
 })
 
 // The grid views (cards, tiles) are drop-in swaps for each other: each owns its
@@ -44,6 +49,7 @@ watch(
   () => props.items,
   () => {
     listActiveIndex.value = -1
+    generation.value++
   },
 )
 
@@ -102,24 +108,29 @@ function selectListItem(i: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length && !searching" class="empty">{{ $t('bookCatalog.noResults') }}</p>
-  <div v-else-if="view === 'list'" ref="scrollEl" class="scroller">
-    <div
-      v-for="(item, index) in items"
-      :key="item.uid"
-      class="fs-item"
-      data-nav-item
-      :class="{ 'is-focused': listActiveIndex === index }"
-      :title="itemTooltip(item)"
-      @mousedown.prevent
-      @click="selectListItem(index, $event)"
-      @auxclick.middle="selectListItem(index, $event)"
-    >
-      <span class="icon"><IconBookRtl20 /></span>
-      <span class="item-text">
-        <span class="item-title">{{ itemTitle(item) }}</span>
-        <span v-if="item.book.parentPath" class="item-path">{{ item.book.parentPath }}</span>
-      </span>
-    </div>
+  <div v-else-if="view === 'list'" class="scroller">
+    <!-- Windowed: results are never capped (a one-letter title search is thousands), so only
+         the rows near the viewport exist. -->
+    <WindowedScroller ref="windowedScroller" :key="generation" :count="items.length" class="windowed">
+      <template #row="{ index }">
+        <div
+          v-if="items[index]"
+          class="fs-item"
+          data-nav-item
+          :class="{ 'is-focused': listActiveIndex === index }"
+          :title="itemTooltip(items[index]!)"
+          @mousedown.prevent
+          @click="selectListItem(index, $event)"
+          @auxclick.middle="selectListItem(index, $event)"
+        >
+          <span class="icon"><IconBookRtl20 /></span>
+          <span class="item-text">
+            <span class="item-title">{{ itemTitle(items[index]!) }}</span>
+            <span v-if="items[index]!.book.parentPath" class="item-path">{{ items[index]!.book.parentPath }}</span>
+          </span>
+        </div>
+      </template>
+    </WindowedScroller>
   </div>
   <component
     :is="gridComponent"
@@ -144,8 +155,9 @@ function selectListItem(i: number, event?: MouseEvent) {
 }
 .scroller {
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
+}
+.scroller > :deep(.windowed) {
+  height: 100%;
 }
 .fs-item {
   display: flex;
@@ -155,10 +167,6 @@ function selectListItem(i: number, event?: MouseEvent) {
   min-height: 44px;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.1s;
-  /* Results can run to thousands: off-screen rows skip rendering (no virtualizer). */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
 }
 .fs-item:hover {
   background: var(--hover-bg);
