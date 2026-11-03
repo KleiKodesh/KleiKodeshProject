@@ -20,6 +20,7 @@ import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 import { detectAvailableFonts } from '@/webview-host/fontsApi'
+import { ownLibraryOffer } from '@/webview-host/ownLibraryOffer'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -211,6 +212,15 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
       @confirm="bookViewStore.resolvePdfCloseConfirm(true)"
       @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
       @extra="pdfCloseSaveAs"
+    />
+    <!-- Switched away from the library this app downloaded: offer to free its disk space. -->
+    <ConfirmDialog
+      v-if="ownLibraryOffer"
+      :title="t('settings.advanced.freeOwnLibraryTitle')"
+      :desc="t('settings.advanced.freeOwnLibraryDesc', { size: (ownLibraryOffer.sizeBytes / 1024 ** 3).toFixed(1) })"
+      :confirm-label="t('settings.advanced.freeOwnLibraryConfirm')"
+      @confirm="ownLibraryOffer.answer(true)"
+      @cancel="ownLibraryOffer.answer(false)"
     />
   </div>
 </template>

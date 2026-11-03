@@ -86,16 +86,24 @@ export function ensureCategorySchema(): Promise<void> {
  * it. The reload waits for the NEW instance to answer (bridge.waitForServiceRestart): the
  * old one keeps serving the old library for a few seconds after accepting the change, and
  * a reload landing on it showed the old catalog until the next app launch.
+ *
+ * Leaving the library this app downloaded itself offers to delete it (it is gigabytes). The
+ * question comes first, while the page is alive; the delete waits for the restart, because
+ * until then the service still has that file open.
  */
 export async function onDbPathChanged(previousPath: string, newPath: string) {
   dbReady.value = true
+  const switched = !!previousPath && previousPath !== newPath
+  const ownLibrary = await import('./ownLibraryOffer')
+  const freeOwnLibrary = switched && (await ownLibrary.askToFreeOwnLibrary(previousPath, newPath))
   // Awaited, not fire-and-forget: reloading mid-wipe would leave stale data behind.
-  if (previousPath && previousPath !== newPath) {
+  if (switched) {
     const { clearStaleBookData } = await import('./dbSwitchCleanup')
     await clearStaleBookData()
   }
   const { waitForServiceRestart } = await import('./bridge')
   await waitForServiceRestart()
+  if (freeOwnLibrary) await ownLibrary.freeOwnLibrary()
   window.location.reload()
 }
 

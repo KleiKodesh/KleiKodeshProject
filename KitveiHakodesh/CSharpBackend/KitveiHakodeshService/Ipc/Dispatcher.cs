@@ -1,5 +1,6 @@
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.Settings;
+using KitveiHakodesh.Core.SeforimLibraryDownload;
 using KitveiHakodesh.Core.HebrewBooks;
 using KitveiHakodesh.Core.LocalFiles;
 using KitveiHakodesh.Core.WordDocuments;
@@ -569,6 +570,18 @@ public sealed class Dispatcher(
 
                 case "seforimLibraryDownloadStatus":
                     return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+
+                // The page moved to another library (Otzaria's, Zayit's, a picked file): it asks
+                // whether our own downloaded copy is on disk, and — if the user agrees — frees it.
+                case "ownSeforimLibraryInfo":
+                    return RpcResponse.Ok(MsgPack.Ser(OwnSeforimLibrary.Describe()));
+
+                case "deleteOwnSeforimLibrary":
+                {
+                    // Never under a running download; Core itself refuses while ours is in use.
+                    bool deleted = !libraryDownload.IsBusy && OwnSeforimLibrary.TryDelete();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = deleted }));
+                }
 
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
                 // The frontend calls this every ~300ms while a book tab is in the downloading state
