@@ -49,7 +49,12 @@ public static class FastDocViewPictureRpcCheck
                 for (int first = 0; first < blockCount && pictureIds.Count < 50; first += FastDocViewOpenDocuments.MaxBlocksPerRequest)
                     foreach (FastDocViewBlock block in documents.Blocks(id, first, FastDocViewOpenDocuments.MaxBlocksPerRequest))
                         foreach (Match match in PictureId.Matches(block.Html))
+                        {
                             pictureIds.Add(System.Net.WebUtility.HtmlDecode(match.Groups[1].Value));
+                            int tagStart = block.Html.LastIndexOf("<img", match.Index, StringComparison.Ordinal);
+                            int tagEnd = block.Html.IndexOf('>', match.Index);
+                            if (tagStart >= 0 && tagEnd > tagStart) Console.WriteLine($"         block {block.Index}: {block.Html[tagStart..(tagEnd + 1)]}");
+                        }
                 Expect(pictureIds.Count > 0, $"{blockCount} blocks, {pictureIds.Count} picture id(s) in the blocks");
 
                 foreach (string pictureId in pictureIds)
