@@ -90,8 +90,13 @@ function warmBooksDataInBackground() {
 }
 // The service says whether the resolved DB exists; the catalog warm-up waits for that
 // answer so a missing library does not fire queries that can only fail.
+// A launch file is what the user waits for: the startup snapshot stays up until the
+// service goes idle (whenStartupContentDrawn), so the catalog load would hold it back.
+// Warm the catalog only once the file is drawn.
+const launchedWithFile = Array.isArray(startupEvents) && startupEvents.length > 0
 void probeDbReady().then(() => {
-  warmBooksDataInBackground()
+  if (launchedWithFile) void whenStartupContentDrawn().then(warmBooksDataInBackground)
+  else warmBooksDataInBackground()
   // The app may have moved to Otzaria's or Zayit's library on its own since our copy was
   // downloaded; if so, offer to free the space (asked once).
   if (dbReady.value) void import('./webview-host/ownLibraryOffer').then((m) => m.offerToFreeOwnLibraryAtStart())
