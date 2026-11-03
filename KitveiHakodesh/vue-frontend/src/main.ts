@@ -79,7 +79,12 @@ function warmBooksDataInBackground() {
 }
 // The service says whether the resolved DB exists; the catalog warm-up waits for that
 // answer so a missing library does not fire queries that can only fail.
-void probeDbReady().then(warmBooksDataInBackground)
+void probeDbReady().then(() => {
+  warmBooksDataInBackground()
+  // The app may have moved to Otzaria's or Zayit's library on its own since our copy was
+  // downloaded; if so, offer to free the space (asked once).
+  if (dbReady.value) void import('./webview-host/ownLibraryOffer').then((m) => m.offerToFreeOwnLibraryAtStart())
+})
 
 // Register the host-search listener before 'appReady' is posted below, so any search
 // request queued C#-side (context menu clicked before Vue mounted) is delivered.

@@ -16,6 +16,13 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
 
         /// <summary>The database plus every leftover of a download or update beside it.</summary>
         public long SizeBytes { get; set; }
+
+        /// <summary>It is the library being read right now — nothing to offer to delete.</summary>
+        public bool InUse { get; set; }
+
+        /// <summary>The user was asked while another library was in use and chose to keep it. Asked
+        /// again only after this copy has been the one in use again.</summary>
+        public bool Declined { get; set; }
     }
 
     /// <summary>
@@ -30,12 +37,31 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         public static OwnSeforimLibraryInfo Describe()
         {
             string database = SeforimLibraryDownloadLocations.DatabasePath;
+            bool inUse = IsInUse();
+            // Back in use: whatever the user said last time no longer applies to the next switch.
+            if (inUse && Declined) Declined = false;
             return new OwnSeforimLibraryInfo
             {
                 Path = database,
                 Exists = File.Exists(database),
                 SizeBytes = SizeOnDisk(),
+                InUse = inUse,
+                Declined = Declined,
             };
+        }
+
+        /// <summary>The user chose to keep our copy while another library is in use.</summary>
+        public static void Decline() => Declined = true;
+
+        // Its own registry section: the Database key is watched, and a write there restarts the service.
+        private const string RegistryApp = "KitveiHakodesh";
+        private const string RegistrySection = "OwnLibrary";
+        private const string RegistryDeclinedName = "KeepChosen";
+
+        private static bool Declined
+        {
+            get => AppSettingsRegistry.Get(RegistryApp, RegistrySection, RegistryDeclinedName, "") == "1";
+            set => AppSettingsRegistry.Set(RegistryApp, RegistrySection, RegistryDeclinedName, value ? "1" : "");
         }
 
         /// <summary>Deletes the library and its download leftovers. False when it is the library
