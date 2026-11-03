@@ -6,6 +6,8 @@
  *   useZoomHandler takes over (but we still preventDefault to block the browser).
  *   When focus is elsewhere (toolbar, etc.) we zoom both panels together.
  * - Ctrl+Left / Ctrl+Right: section navigation (RTL — Left = next, Right = previous).
+ * - Ctrl+Down / Ctrl+Up: select the next / previous line (only with a commentary
+ *   panel open and a line selected; not while typing in a field).
  * - Ctrl+D: toggle clean text (the toolbar's eraser button).
  * - Ctrl+Shift+D: create a bookmark at the top line (the toolbar's bookmarks dropdown).
  */
@@ -28,6 +30,7 @@ export function useBookViewKeyboardShortcuts(
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
   toggleCleanText: () => void,
   createBookmark: () => void,
+  stepSelectedLine: (delta: 1 | -1) => void,
 ) {
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
@@ -46,6 +49,15 @@ export function useBookViewKeyboardShortcuts(
     const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
     const isNextSection = event.code === 'ArrowLeft'
     const isPreviousSection = event.code === 'ArrowRight'
+
+    if ((event.code === 'ArrowDown' || event.code === 'ArrowUp') && !event.shiftKey && !event.altKey) {
+      // Typing fields keep their own Ctrl+Up/Down.
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return
+      event.preventDefault()
+      stepSelectedLine(event.code === 'ArrowDown' ? 1 : -1)
+      return
+    }
 
     if (event.code === 'KeyD' && !event.shiftKey && !event.altKey) {
       event.preventDefault()
