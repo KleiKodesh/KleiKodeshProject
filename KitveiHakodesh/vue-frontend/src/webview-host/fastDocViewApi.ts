@@ -92,9 +92,10 @@ export interface FastDocViewApi {
    * An <img> source for picture `pictureId` (a block's `data-word-picture`): a URL the browser
    * fetches when the image comes into view (dev: the service's GET endpoint), or an object URL
    * of the bytes read through the service (hosted). One picture per call - pictures never travel
-   * inside the block HTML. Object URLs (`blob:`) are the caller's to revoke.
+   * inside the block HTML. Object URLs (`blob:`) are the caller's to revoke. Null when the
+   * document has no such picture, or is no longer open (hosted: the service answers empty).
    */
-  pictureSource(documentId: string, pictureId: string): Promise<string>
+  pictureSource(documentId: string, pictureId: string): Promise<string | null>
   close(documentId: string): Promise<void>
 }
 
@@ -155,7 +156,7 @@ export const fastDocViewApi: FastDocViewApi = {
     const url = await serviceGetUrl(fastDocViewPicturePath(documentId, pictureId))
     if (url) return url
     const reply = await serviceCall<FastDocViewPictureReply | undefined>('fastDocViewPicture', { documentId, pictureId })
-    if (!reply?.bytes?.length) throw new Error(`FastDocView: picture ${pictureId} not found`)
+    if (!reply?.bytes?.length) return null
     return URL.createObjectURL(new Blob([reply.bytes as BlobPart], { type: reply.contentType }))
   },
   close: async (documentId) => {

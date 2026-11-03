@@ -30,6 +30,7 @@ bool watcherMode = false;
 bool variantMode = false;
 bool abbrevMode = false;
 var ktivSimQueries = new List<string>();
+var pictureRpcFiles = new List<string>();
 bool treeOrderSelfTest = false;
 bool expanderSelfTest = false;
 string? treeOrderDump = null;
@@ -57,6 +58,7 @@ for (int i = 0; i < args.Length; i++)
         case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;
         case "--golden-cold": goldenDir = args[++i]; goldenTag = args[++i]; goldenCold = args[++i]; break;
         case "--exhaustive": exhaustiveOut = args[++i]; break;
+        case "--fastdocview-picture-rpc": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pictureRpcFiles.Add(args[++i]); break;
         case "--exh-levels": exhLevels = int.Parse(args[++i]); break;
         case "--exh-every": exhEvery = int.Parse(args[++i]); break;
         case "--exh-shard": { var p = args[++i].Split('/'); exhShard = int.Parse(p[0]); exhShards = int.Parse(p[1]); break; }
@@ -75,6 +77,8 @@ if (abbrevProblems.Count > 0)
     return 3;
 }
 
+if (pictureRpcFiles.Count > 0)
+    return KitveiHakodeshService.Tests.FastDocViewPictureRpcCheck.Run(pictureRpcFiles);
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
 if (expanderSelfTest)
