@@ -815,8 +815,15 @@ namespace KitveiHakodesh.Core.LocalFiles
                 {
                     char letter = drive.Name[0];
                     // Only start a thread for drives whose cursor we saved during Build.
+                    // No cursor means Build had no journal access (not elevated): the drive
+                    // is unwatched too, or the idle trimmer would close the index and the
+                    // next search would crawl the whole drive again.
                     LocalFileIndexUsnJournal.Cursor cursor;
-                    if (!LocalFileIndexUsnJournal.TryLoadCursor(_indexPath, letter, out cursor)) continue;
+                    if (!LocalFileIndexUsnJournal.TryLoadCursor(_indexPath, letter, out cursor))
+                    {
+                        _unwatchedDrives.Add(letter);
+                        continue;
+                    }
 
                     // Probe here, not just inside the loop, so callers can tell whether
                     // the USN watcher is actually live on this drive. Without this the
