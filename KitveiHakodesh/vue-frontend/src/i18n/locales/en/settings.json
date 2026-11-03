@@ -178,9 +178,7 @@
     "syncNav": "Sync commentaries",
     "sync": "Sync commentaries by default when opening a book",
     "syncHint": "Can be changed per book with the sync commentaries toolbar button",
-    "fontNav": "Commentary font",
-    "maxWidthNav": "Commentary maximum width",
-    "maxWidth": "Maximum commentary column width"
+    "fontNav": "Commentary font"
   },
   "reset": {
     "section": "Reset",
