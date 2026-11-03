@@ -64,7 +64,6 @@ export function useAppTitleBarShortcuts(options: {
 
   const activeTab = computed(() => pane.activeTab.value)
   const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
-  const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
   const isFastDocViewActive = computed(() => activeTab.value?.route === '/fast-doc-view')
   const isThisPaneFocused = computed(
     () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === paneId,
@@ -219,7 +218,6 @@ export function useAppTitleBarShortcuts(options: {
         if (document.activeElement?.closest('[data-ctrlf-enabled]')) return false
         if (isBookViewActive.value) bookViewStore.openSearch(paneId)
         else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'openSearch')
-        else if (isTxtViewActive.value) bookViewStore.txtViewToggleSearch(paneId)
         return true
       case 'KeyN':
         // Swallow the browser's new-window; new tab is Ctrl+T.

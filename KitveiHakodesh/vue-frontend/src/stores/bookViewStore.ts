@@ -132,8 +132,6 @@ export const useBookViewStore = defineStore('bookView', () => {
   })
   const openSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const toggleTocPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
-  const txtViewToggleSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
-  const txtViewSearchVisible = ref(false)
   const autoSelectTopLine = computed<boolean>({
     get: () => settings.autoSelectTopLine,
     set: (value) => { settings.autoSelectTopLine = value },
@@ -159,12 +157,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     toggleTocPanelSignal.value = { count: toggleTocPanelSignal.value.count + 1, paneId }
   }
 
-  function txtViewToggleSearch(paneId: 1 | 2 = 1) {
-    txtViewToggleSearchSignal.value = { count: txtViewToggleSearchSignal.value.count + 1, paneId }
-  }
-
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
-  const isTxtViewActive = computed(() => tabStore.activeTab.route === '/txt-view')
 
   // Per-tab+book zoom maps — one for lines text, one for commentary text.
   // Keys: `${tabId}:${bookId}`
@@ -525,11 +518,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     openSearch,
     toggleTocPanelSignal,
     toggleTocPanel,
-    txtViewToggleSearchSignal,
-    txtViewToggleSearch,
-    txtViewSearchVisible,
     isBookViewActive,
-    isTxtViewActive,
     splitViewEnabled,
     splitViewFraction,
     focusedPaneId,

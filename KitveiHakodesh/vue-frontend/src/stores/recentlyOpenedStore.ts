@@ -1,7 +1,7 @@
 /**
  * Opened documents store.
  * Tracks the documents the user opened across /book-view, /pdf-view,
- * /html-view, and /txt-view. Opening an already-tracked document adds a visit's
+ * /html-view, and /fast-doc-view. Opening an already-tracked document adds a visit's
  * points rather than simply moving it to the front — ranking is by popularity,
  * not recency; see stores/popularityScore for the model, shared with the
  * frequently-visited folders. The list is loaded lazily on first access — no
@@ -22,7 +22,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/txt-view' | '/fast-doc-view'
+export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/fast-doc-view'
 
 export interface RecentlyOpenedEntry extends PopularityScored {
   /** Stable unique key; also what a visit is matched on. */
@@ -31,7 +31,7 @@ export interface RecentlyOpenedEntry extends PopularityScored {
   title: string
   /** Present for /book-view entries. */
   bookId?: number
-  /** Present for /pdf-view, /html-view, /txt-view entries that are local files. */
+  /** Present for /pdf-view, /html-view, /fast-doc-view entries that are local files. */
   localFilePath?: string
   /** Present for HebrewBooks /pdf-view entries (identified by HB book id). */
   localFileHbBookId?: string
@@ -87,7 +87,13 @@ async function idbLoadList(): Promise<RecentlyOpenedEntry[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const req = db.transaction(RECENTLY_OPENED_STORE).objectStore(RECENTLY_OPENED_STORE).get(LIST_KEY)
-    req.onsuccess = () => resolve((req.result as RecentlyOpenedEntry[] | undefined) ?? [])
+    // The plain-text viewer is gone: its entries reopen in FastDocView.
+    req.onsuccess = () =>
+      resolve(
+        ((req.result as RecentlyOpenedEntry[] | undefined) ?? []).map((e) =>
+          (e.route as string) === '/txt-view' ? { ...e, route: '/fast-doc-view' as const } : e,
+        ),
+      )
     req.onerror = () => reject(req.error)
   })
 }
@@ -257,7 +263,6 @@ export const TRACKABLE_ROUTES = new Set<TabRoute>([
   '/book-view',
   '/pdf-view',
   '/html-view',
-  '/txt-view',
   '/fast-doc-view',
 ])
 

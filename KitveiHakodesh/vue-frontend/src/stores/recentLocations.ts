@@ -42,7 +42,7 @@ export function loadRecentLocations(wsId: string): Promise<NavLocation[]> {
  * from ordinary use within minutes.
  */
 function isWellFormed(loc: NavLocation): boolean {
-  return !!loc && typeof loc.route === 'string' && typeof loc.recentStamp === 'number'
+  return !!loc && typeof loc.route === 'string' && (loc.route as string) !== '/txt-view' && typeof loc.recentStamp === 'number'
 }
 
 export function saveRecentLocations(wsId: string, locations: NavLocation[]): Promise<void> {
