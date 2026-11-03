@@ -110,7 +110,7 @@ function getTooltip(item: LocalFileSearchResult): string {
 }
 
 defineExpose({
-  onSearchInputKeydown,
+  onSearchInputKeydown: (event: KeyboardEvent): boolean => onSearchInputKeydown(event),
 })
 </script>
 
@@ -126,6 +126,7 @@ defineExpose({
       :title="getTooltip(item)"
       @click="selectItem(index, $event)"
       @auxclick.middle="selectItem(index, $event)"
+      @mousedown.prevent
     >
       <span class="icon" :style="{ color: getFileIcon(item).color }">
         <component :is="getFileIcon(item).component" />
@@ -135,6 +136,42 @@ defineExpose({
           <span class="item-title">{{
             item.addinName || item.fileName
           }}</span>
+        </span>
+      </span>
+      <span class="item-side">
+        <span class="item-meta-row">
+          <span class="item-actions">
+            <button
+              class="open-in-app-button"
+              type="button"
+              :title="$t('localFileSearch.copyPath')"
+              @click="copyPath(item, $event)"
+              @auxclick.stop
+              @mousedown.prevent.stop
+            >
+              <IconCopy20Regular />
+            </button>
+            <button
+              class="open-in-app-button"
+              type="button"
+              :title="$t('localFileSearch.openFileLocation')"
+              @click="openFileLocation(item, $event)"
+              @auxclick.stop
+              @mousedown.prevent.stop
+            >
+              <IconFolderOpen20Regular />
+            </button>
+            <button
+              class="open-in-app-button"
+              type="button"
+              :title="$t('localFileSearch.openInDefaultApp')"
+              @click="openInDefaultApp(item, $event)"
+              @auxclick.stop
+              @mousedown.prevent.stop
+            >
+              <IconWindowArrowUp20Regular />
+            </button>
+          </span>
           <span
             v-if="item.modifiedDate"
             class="item-date-pill"
@@ -142,36 +179,6 @@ defineExpose({
         </span>
         <span class="item-path" dir="ltr">{{ item.path }}</span>
       </span>
-      <button
-        class="open-in-app-button"
-        type="button"
-        :title="$t('localFileSearch.copyPath')"
-        @click="copyPath(item, $event)"
-        @auxclick.stop
-        @mousedown.stop
-      >
-        <IconCopy20Regular />
-      </button>
-      <button
-        class="open-in-app-button"
-        type="button"
-        :title="$t('localFileSearch.openFileLocation')"
-        @click="openFileLocation(item, $event)"
-        @auxclick.stop
-        @mousedown.stop
-      >
-        <IconFolderOpen20Regular />
-      </button>
-      <button
-        class="open-in-app-button"
-        type="button"
-        :title="$t('localFileSearch.openInDefaultApp')"
-        @click="openInDefaultApp(item, $event)"
-        @auxclick.stop
-        @mousedown.stop
-      >
-        <IconWindowArrowUp20Regular />
-      </button>
     </div>
   </div>
 </template>
@@ -223,7 +230,7 @@ defineExpose({
 }
 .item-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   overflow: hidden;
 }
@@ -237,8 +244,25 @@ defineExpose({
   min-width: 0;
   flex-shrink: 1;
 }
+/* Date pill over the full path, one block at the far inline-end; the title block beside it
+   is centered vertically in the row by .file-item's align-items:center. */
+.item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* physical left in RTL */
+  gap: 2px;
+  min-width: 0;
+  max-width: 45%;
+  flex-shrink: 1;
+}
+.item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .item-path {
   display: block;
+  max-width: 100%;
   font-size: 11px;
   color: var(--text-secondary);
   line-height: 1.3;
@@ -248,12 +272,9 @@ defineExpose({
   direction: ltr;
   text-align: start;
 }
-/* Date pill pushed to the far inline-end of the title row (physical left in RTL) so its
-   left edge lines up vertically with the path row's left edge below it — the two-line item
-   then reads as a tidy left-aligned column (pill over path), with the title on the right and
-   the open-in-app button just outside to the far physical-left. */
+/* Date pill: last in the title row (far physical left in RTL), directly above the path's
+   end, and outside the hover-only row actions so it never moves when they appear. */
 .item-date-pill {
-  margin-inline-start: auto;
   flex-shrink: 0;
   font-size: 10px;
   color: var(--text-secondary);
@@ -264,27 +285,36 @@ defineExpose({
   line-height: 1.5;
   white-space: nowrap;
 }
-/* "Open in default program" — a direct child of .file-item at the far inline end (physical
-   left in RTL), vertically CENTERED against the whole row by the row's own align-items:center —
-   mirroring the file-type icon on the opposite (physical-right) edge. It sits OUTSIDE the
-   title/path text block on purpose: inside the baseline-aligned title row the button rode high
-   and read as disconnected. .item-text's flex:1 consumes the middle and lands the button at the
-   edge, so no auto-margin (and no interaction with the date pill) is needed. */
+/* Row actions live INSIDE the text block, at the end of the title row after the date pill.
+   Compact (22px) so they don't make the two-line row taller. */
+.item-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+  /* Hidden until the row is hovered or focused; opacity (not display) keeps the row's layout steady. */
+  opacity: 0;
+}
+.file-item:hover .item-actions,
+.file-item.is-focused .item-actions,
+.file-item:focus-within .item-actions {
+  opacity: 1;
+}
 .open-in-app-button {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border-radius: 4px;
   color: var(--text-secondary);
   transition: background 0.1s, color 0.1s;
 }
 .open-in-app-button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: inherit;
 }
 .open-in-app-button:hover {
