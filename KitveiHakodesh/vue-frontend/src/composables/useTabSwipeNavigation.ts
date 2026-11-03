@@ -62,6 +62,27 @@ const RUNT_DECAY = 0.8
 const WHEEL_LINE_HEIGHT_PX = 16
 const TOUCH_THRESHOLD_PX = 60
 
+// Horizontal must beat vertical by this factor to count as a swipe. A user scrolling
+// mostly sideways with a slight diagonal drift is scrolling, not navigating.
+const HORIZONTAL_DOMINANCE_RATIO = 2
+
+/**
+ * True when `target` or an ancestor can scroll sideways (overflow-x auto/scroll/overlay and
+ * content wider than the box). A gesture that starts over such an element is a scroll,
+ * not a navigation swipe — even once the scroller hits its edge mid-gesture.
+ */
+export function isInsideHorizontalScroller(target: EventTarget | null): boolean {
+  let el = target instanceof Element ? target : null
+  while (el && el !== el.ownerDocument.documentElement) {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      const overflowX = el.ownerDocument.defaultView?.getComputedStyle(el).overflowX
+      if (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') return true
+    }
+    el = el.parentElement
+  }
+  return false
+}
+
 // Custom event name used by iframe relays (PdfViewPage, HtmlViewPage, etc.) to
 // signal a completed swipe gesture that originated inside an iframe where native
 // touch/wheel events cannot bubble to the parent document.
@@ -108,6 +129,7 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
   let accumulatedDeltaX = 0
   let lastWheelTime = 0
   let firedThisGesture = false
+  let gestureIsScroll = false // gesture began over a horizontal scroller — never navigates
   let lastFiredSign = 0 // direction of the last switch (+1 previous / -1 next), for reversal detection
   let prevAbsDeltaX = 0 // |deltaX| of the previous HORIZONTAL event, for the re-strike checks
   let prevPrevAbsDeltaX = 0 // one further back — runt immunity for the re-strike reference
@@ -127,11 +149,17 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
     if (gap > ACCUM_RESET_GAP_MS) {
       firedThisGesture = false
       accumulatedDeltaX = 0
+      // New gesture: decide once whether it belongs to a scrollable element under the pointer.
+      gestureIsScroll = isInsideHorizontalScroller(event.target)
+    }
+    if (gestureIsScroll) {
+      accumulatedDeltaX = 0
+      return
     }
 
-    // Ignore vertical-dominant scrolling. (Returning early leaves prevAbsDeltaX untouched,
+    // Ignore anything not clearly horizontal. (Returning early leaves prevAbsDeltaX untouched,
     // so the ratio tests below always compare consecutive HORIZONTAL events.)
-    if (Math.abs(deltaX) <= Math.abs(deltaY)) return
+    if (Math.abs(deltaX) <= Math.abs(deltaY) * HORIZONTAL_DOMINANCE_RATIO) return
 
     const absDeltaX = Math.abs(deltaX)
     const prevAbs = prevAbsDeltaX
@@ -238,9 +266,14 @@ export function useTabSwipeNavigation() {
 
   // ── Touch swipe (native — document body) ────────────────────────────────────
 
+  let touchStartedInScroller = false
   useSwipe(document.body, {
     threshold: TOUCH_THRESHOLD_PX,
+    onSwipeStart(event) {
+      touchStartedInScroller = isInsideHorizontalScroller(event.target)
+    },
     onSwipeEnd(_event, direction) {
+      if (touchStartedInScroller) return
       if (direction === 'right') switchToAdjacentTab('next')
       else if (direction === 'left') switchToAdjacentTab('previous')
     },
