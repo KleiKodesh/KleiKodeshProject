@@ -38,6 +38,7 @@ export const TOOLBAR_OVERFLOW_ORDER = [
   'sync-commentaries',
   'related-books',
   'clean-text',
+  'lines-layout',
   'zoom',
   'side-commentaries',
   'bottom-commentary',

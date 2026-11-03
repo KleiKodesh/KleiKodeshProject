@@ -6,6 +6,12 @@ import type { Ref } from 'vue'
  * and must not import the `.vue` file.
  */
 
+/**
+ * How a row is laid out in flow mode: a `block` of its own, or `inline`, flowing
+ * on with its neighbours as a span of one paragraph. In rows mode every row is a block.
+ */
+export type WindowedScrollerRowKind = 'block' | 'inline'
+
 export interface WindowedScrollerScrollToOptions {
   /**
    * Pixels added to the row's top when landing. Negative leaves a gap above the
