@@ -205,7 +205,7 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
               @click="emit('goToReference', noteAt(index)!)"
             >{{ noteAt(index)!.label }}</button>
             <span
-              class="note-body"
+              class="note-body word-document"
               @click="onBodyActivate($event, noteAt(index)!)"
               @keydown.enter="onBodyActivate($event, noteAt(index)!)"
               v-html="bodyHtml(noteAt(index)!, referenceTitle(noteAt(index)!, $t))"
@@ -246,20 +246,13 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
 /* the WindowedScroller's viewport (its attributes fall through to it) */
 .notes-scroller {
   padding-block-start: 6px;
-  --commentary-pad-inline: 12px;
 }
-/* As the commentary panel: more side room on a wide panel (its own width, not the window's). */
-@container fast-doc-view-notes (min-width: 600px) {
-  .notes-scroller {
-    --commentary-pad-inline: 22px;
-  }
-}
-/* The side margins of the document column above: its page text width (columnStyle sets
-   --lines-content-max-width per note, from its reference's section) and its side padding. */
+/* The document column above, exactly: its page text width (columnStyle sets
+   --fast-doc-view-column-max-width per note, from its reference's section) and the page's gutter. */
 .line {
-  padding-inline: var(--fast-doc-view-column-padding, var(--commentary-pad-inline, 12px));
+  padding-inline: var(--fast-doc-view-column-padding, 12px);
   padding-block: 2px;
-  max-width: var(--lines-content-max-width, none);
+  max-width: var(--fast-doc-view-column-max-width, none);
   margin-inline: auto;
   font-family: var(--commentary-text-font);
   font-size: var(--commentary-font-size, 100%);
@@ -313,6 +306,14 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
    Only a note without a number of its own runs its first paragraph on after the pane's label. */
 .note-body {
   display: block;
+}
+/* the library's stylesheet applies inside `.word-document` (list labels, tables, pictures); colour,
+   family, size and leading stay the pane's */
+.note-body.word-document {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 .note-body :deep(p) {
   margin-block: 0;
