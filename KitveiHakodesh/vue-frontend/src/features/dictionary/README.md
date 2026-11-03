@@ -75,5 +75,5 @@ Three files handle all query logic:
 
 `Misc/scripts/dictionary/import_radak_definitions.py` — imports clean definitions from ספר השרשים לרד"ק. Re-runnable.
 
-`scripts/AddOtzariaAcronymsToDictionary.py` (repo root) — imports ראשי תיבות from the Otzaria app's `Acronyms.json` asset as source `אוצריא - ראשי תיבות`, deduped against the existing ראשי תיבות sources. Re-runnable.
+`import/AddOtzariaAcronymsToDictionary.py` in the KitveiHakodeshDictionary repo (see `CSharpBackend/KitveiHakodesh.Core/Dictionary/README.md`) — imports ראשי תיבות from the Otzaria app's `Acronyms.json` asset as source `אוצריא - ראשי תיבות`, deduped against the existing ראשי תיבות sources. Re-runnable.
 `Misc/scripts/dictionary/import_radak_roots.py` — imports 2,048 roots into a standalone `root_form` table (not used by the app directly).

@@ -191,38 +191,3 @@ function New-ReleaseNotes {
         }
     }
 }
-
-function Initialize-Submodules {
-    # A clone made without --recursive has empty submodule folders: fill them.
-    # Only when .gitmodules lists something; never touches a submodule that is checked out.
-    $gitmodules = Join-Path $ProjectRoot ".gitmodules"
-    if (-not (Test-Path $gitmodules) -or -not (Select-String -Path $gitmodules -Pattern '^\s*path\s*=' -Quiet)) { return }
-    Push-Location $ProjectRoot
-    try {
-        # cmd /c keeps git's stderr away from PowerShell (a stale gitlink without a
-        # .gitmodules entry makes `git submodule status` print a fatal line).
-        $missing = cmd /c "git submodule status 2>nul" | Where-Object { $_ -match '^-' }
-        # One at a time: SearchExpansion is PRIVATE, so for anyone without access it fails;
-        # skip it with a note. Builds never need it: they download the released DBs
-        # (fetch-release-dbs.ps1). GIT_TERMINAL_PROMPT=0: fail instead of asking for a login.
-        $prevPrompt = $env:GIT_TERMINAL_PROMPT
-        $env:GIT_TERMINAL_PROMPT = '0'
-        try {
-            foreach ($line in $missing) {
-                $path = ($line -split '\s+')[1]
-                Write-Host "  Initializing submodule: $path" -ForegroundColor Cyan
-                $out = cmd /c "git submodule update --init --recursive -- `"$path`" 2>&1"
-                if ($LASTEXITCODE -eq 0) { $out | ForEach-Object { Write-Host "  $_" } }
-                elseif ($path -eq 'SearchExpansion') {
-                    Write-Host "  Skipped SearchExpansion: private repo (no access). Not needed to build: expansion-routed.db comes from the KleiKodesh/SearchExpansionReleases release." -ForegroundColor DarkGray
-                }
-                else {
-                    $out | ForEach-Object { Write-Host "  $_" }
-                    Write-Host "WARNING: git submodule update failed for $path." -ForegroundColor Yellow
-                }
-            }
-        }
-        finally { $env:GIT_TERMINAL_PROMPT = $prevPrompt }
-    }
-    finally { Pop-Location }
-}

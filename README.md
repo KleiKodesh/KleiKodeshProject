@@ -32,7 +32,6 @@
 | [`ChromeTabs`](ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
 | [`WpfLib`](WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
 | `WpfLib.Gallery` / `WpfLib.Gallery.Tests` | WPF + xUnit | גלריית הפקדים של WpfLib ובדיקות ויזואליות/התנהגות עליה |
-| [`SearchExpansion`](SearchExpansion/README.md) | Python | בונה את `expansion-routed.db` — הרחבת מילים בחיפוש הטקסט המלא |
 | `SearchExpansion-models` | נתונים (לא במעקב git) | מודלים וקבצי עבודה מקומיים של SearchExpansion |
 | `packages` | NuGet | חבילות NuGet של פרויקטי `packages.config` |
 | `hebrew-typing-tutor` | Web app (מאגר נפרד, לא במעקב) | מאמן הקלדה עברית |
@@ -84,27 +83,10 @@ FtsLib (generic full-text engine) · DocConvertLib (Word→HTML) · SQLite
 
 ## בנייה
 
-Clone with submodules (KitveiHakodeshDictionary is public; SearchExpansion is PRIVATE, so
-without access to it its clone fails - that is fine, see below):
-
-```bash
-git clone --recursive https://github.com/KleiKodesh/KleiKodeshProject.git
-# already cloned without it:
-git submodule update --init --recursive
-# no access to SearchExpansion: take only the public one
-git submodule update --init KitveiHakodeshDictionary
-```
-
-The build scripts (`Initialize-Submodules` in `Build/scripts/build-helpers.ps1`) fill
-missing submodules and skip SearchExpansion with a note when it is not reachable.
-No build needs either submodule's source: only the released DBs.
-
-`Dictionary.db` and `expansion-routed.db` are not edited here: every build downloads the
-latest release of [KitveiHakodeshDictionary](https://github.com/KleiKodesh/KitveiHakodeshDictionary)
-and [SearchExpansionReleases](https://github.com/KleiKodesh/SearchExpansionReleases)
-(public, releases only; built by the private SearchExpansion repo's CI) via
-`Build/scripts/fetch-release-dbs.ps1` (also run by `dotnet build`, see
-`KitveiHakodesh/CSharpBackend/FetchReleaseDbs.targets`).
+`Dictionary.db` and `expansion-routed.db` are committed here (one working copy each) and
+built by their own repos; see
+[`KitveiHakodesh.Core/Dictionary/README.md`](KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/Dictionary/README.md)
+and [`FtsLib-Csharp/SearchExpansion/README.md`](KitveiHakodesh/CSharpBackend/FtsLib-Csharp/SearchExpansion/README.md).
 
 הכל מתועד ב-[`Build/README.md`](Build/README.md). בקצרה:
 

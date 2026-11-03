@@ -175,16 +175,6 @@ jobs:
           repository: KleiKodesh/EasyTabs
           path: ChromeTabs
 
-      # Dictionary.db and expansion-routed.db: the latest releases of
-      # KleiKodesh/KitveiHakodeshDictionary and KleiKodesh/SearchExpansionReleases (sha256-checked).
-      # build-installer.ps1 runs the same script again (no-op when already current).
-      - name: Fetch latest released DBs
-        shell: pwsh
-        run: |
-          git submodule update --init --recursive   # not needed for the DBs; non-fatal
-          & .\Build\scripts\fetch-release-dbs.ps1 -Mode Always
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-
       - uses: microsoft/setup-msbuild@v3
 
       # The runner has the Office build targets but not the VSTO runtime they load.
