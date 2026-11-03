@@ -84,17 +84,25 @@ FtsLib (generic full-text engine) · DocConvertLib (Word→HTML) · SQLite
 
 ## בנייה
 
-Clone with submodules (KitveiHakodeshDictionary, SearchExpansion):
+Clone with submodules (KitveiHakodeshDictionary is public; SearchExpansion is PRIVATE, so
+without access to it its clone fails - that is fine, see below):
 
 ```bash
 git clone --recursive https://github.com/KleiKodesh/KleiKodeshProject.git
 # already cloned without it:
 git submodule update --init --recursive
+# no access to SearchExpansion: take only the public one
+git submodule update --init KitveiHakodeshDictionary
 ```
+
+The build scripts (`Initialize-Submodules` in `Build/scripts/build-helpers.ps1`) fill
+missing submodules and skip SearchExpansion with a note when it is not reachable.
+No build needs either submodule's source: only the released DBs.
 
 `Dictionary.db` and `expansion-routed.db` are not edited here: every build downloads the
 latest release of [KitveiHakodeshDictionary](https://github.com/KleiKodesh/KitveiHakodeshDictionary)
-and [SearchExpansion](https://github.com/KleiKodesh/SearchExpansion) via
+and [SearchExpansionReleases](https://github.com/KleiKodesh/SearchExpansionReleases)
+(public, releases only; built by the private SearchExpansion repo's CI) via
 `Build/scripts/fetch-release-dbs.ps1` (also run by `dotnet build`, see
 `KitveiHakodesh/CSharpBackend/FetchReleaseDbs.targets`).
 

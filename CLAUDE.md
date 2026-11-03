@@ -21,3 +21,12 @@ Book view: bookmarks anchored to the exact text position
 User-facing: new - Book view: save bookmarks at the exact place in the text (Ctrl+Shift+D)
 User-facing-he: <Hebrew: save a bookmark at the exact place in the text (Ctrl+Shift+D)>
 ```
+
+# Released DBs (Dictionary.db, expansion-routed.db)
+
+- Never edit these DBs here; every build downloads the latest release
+  (`Build/scripts/fetch-release-dbs.ps1`, sha256-checked).
+- Dictionary.db: public repo + releases KleiKodesh/KitveiHakodeshDictionary (normal submodule).
+- expansion-routed.db: built by the PRIVATE KleiKodesh/SearchExpansion (submodule; outsiders'
+  clones skip it), released to the PUBLIC KleiKodesh/SearchExpansionReleases (releases only,
+  published by SearchExpansion CI with the `RELEASES_TOKEN` secret).
