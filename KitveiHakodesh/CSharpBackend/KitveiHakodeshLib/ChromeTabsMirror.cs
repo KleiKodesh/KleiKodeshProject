@@ -6,7 +6,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Windows.Forms;
 
 namespace KitveiHakodeshLib
@@ -296,25 +295,11 @@ namespace KitveiHakodeshLib
         // (and the favicons) are saved on close and applied at startup as a stand-in;
         // Vue's first real snapshot then reconciles over it by tab id.
 
-        private sealed class SessionTab
-        {
-            public string Id { get; set; }
-            public string Title { get; set; }
-            public string ListTitle { get; set; }
-            public string IconKey { get; set; }
-            public int Pane { get; set; }
-        }
-
-        private sealed class Session
-        {
-            public List<SessionTab> Tabs { get; set; }
-            public string ActiveTabId { get; set; }
-            public string Pane2ActiveTabId { get; set; }
-            public bool SplitView { get; set; }
-            public int FocusedPane { get; set; }
-            public double SplitFraction { get; set; }
-            public Dictionary<string, string> IconsPngBase64 { get; set; }
-        }
+        // A small binary file, not JSON: it is read on the UI thread before the window
+        // shows, and the first System.Text.Json deserialize on net48 (type loading + JIT of
+        // the serializer) cost ~1 s there. BinaryReader is already loaded and costs nothing.
+        // Bump SessionFormat when the layout changes; an unknown version reads as no session.
+        private const int SessionFormat = 1;
 
         public void SaveSession(string path)
         {
@@ -322,66 +307,89 @@ namespace KitveiHakodeshLib
             if (s == null) return;
             try
             {
-                var session = new Session
-                {
-                    Tabs = s.Tabs.Select(t => new SessionTab
-                    {
-                        Id = t.Id, Title = t.Title, ListTitle = t.ListTitle, IconKey = t.IconKey, Pane = t.Pane,
-                    }).ToList(),
-                    ActiveTabId = s.ActiveTabId,
-                    Pane2ActiveTabId = s.Pane2ActiveTabId,
-                    SplitView = s.SplitView,
-                    FocusedPane = s.FocusedPane,
-                    SplitFraction = s.SplitFraction,
-                    IconsPngBase64 = new Dictionary<string, string>(),
-                };
-                foreach (var pair in _tabIcons)
-                    using (var ms = new MemoryStream())
-                    {
-                        pair.Value.Save(ms, ImageFormat.Png);
-                        session.IconsPngBase64[pair.Key] = Convert.ToBase64String(ms.ToArray());
-                    }
-
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, JsonSerializer.Serialize(session));
+                using (var w = new BinaryWriter(File.Create(path)))
+                {
+                    w.Write(SessionFormat);
+                    w.Write(s.Tabs.Count);
+                    foreach (MirroredTabInfo t in s.Tabs)
+                    {
+                        WriteNullable(w, t.Id);
+                        WriteNullable(w, t.Title);
+                        WriteNullable(w, t.ListTitle);
+                        WriteNullable(w, t.IconKey);
+                        w.Write(t.Pane);
+                    }
+                    WriteNullable(w, s.ActiveTabId);
+                    WriteNullable(w, s.Pane2ActiveTabId);
+                    w.Write(s.SplitView);
+                    w.Write(s.FocusedPane);
+                    w.Write(s.SplitFraction);
+                    w.Write(_tabIcons.Count);
+                    foreach (var pair in _tabIcons)
+                        using (var ms = new MemoryStream())
+                        {
+                            pair.Value.Save(ms, ImageFormat.Png);
+                            w.Write(pair.Key);
+                            w.Write((int)ms.Length);
+                            w.Write(ms.GetBuffer(), 0, (int)ms.Length);
+                        }
+                }
             }
             catch (Exception) { /* a missing session only means an empty strip at startup */ }
         }
 
         public void RestoreSession(string path)
         {
-            Session session;
+            var tabs = new List<MirroredTabInfo>();
+            string activeTabId, pane2ActiveTabId;
+            bool splitView;
+            int focusedPane;
+            double splitFraction;
+            var icons = new Dictionary<string, Image>();
             try
             {
                 if (!File.Exists(path)) return;
-                session = JsonSerializer.Deserialize<Session>(File.ReadAllText(path));
+                using (var r = new BinaryReader(File.OpenRead(path)))
+                {
+                    if (r.ReadInt32() != SessionFormat) return;
+                    int count = r.ReadInt32();
+                    for (int i = 0; i < count; i++)
+                        tabs.Add(new MirroredTabInfo
+                        {
+                            Id = ReadNullable(r), Title = ReadNullable(r), ListTitle = ReadNullable(r),
+                            IconKey = ReadNullable(r), Pane = r.ReadInt32(),
+                        });
+                    activeTabId = ReadNullable(r);
+                    pane2ActiveTabId = ReadNullable(r);
+                    splitView = r.ReadBoolean();
+                    focusedPane = r.ReadInt32();
+                    splitFraction = r.ReadDouble();
+                    int iconCount = r.ReadInt32();
+                    for (int i = 0; i < iconCount; i++)
+                    {
+                        string key = r.ReadString();
+                        byte[] png = r.ReadBytes(r.ReadInt32());
+                        try { icons[key] = Image.FromStream(new MemoryStream(png)); }
+                        catch (Exception) { }
+                    }
+                }
             }
             catch (Exception) { return; }
-            if (session?.Tabs == null || session.Tabs.Count == 0) return;
+            if (tabs.Count == 0) return;
 
-            if (session.IconsPngBase64 != null)
-            {
-                var icons = new Dictionary<string, Image>();
-                foreach (var pair in session.IconsPngBase64)
-                {
-                    try { icons[pair.Key] = Image.FromStream(new MemoryStream(Convert.FromBase64String(pair.Value))); }
-                    catch (Exception) { }
-                }
-                _tabIcons = icons;
-            }
-
+            _tabIcons = icons;
             Reconcile(new TabsStateChangedEventArgs(
-                session.Tabs.Select(t => new MirroredTabInfo
-                {
-                    Id = t.Id, Title = t.Title, ListTitle = t.ListTitle, IconKey = t.IconKey, Pane = t.Pane,
-                }).ToList(),
-                session.ActiveTabId,
-                session.Pane2ActiveTabId,
-                session.SplitView,
-                session.FocusedPane,
-                session.SplitFraction,
-                -1, 0));
+                tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction, -1, 0));
         }
+
+        private static void WriteNullable(BinaryWriter w, string value)
+        {
+            w.Write(value != null);
+            if (value != null) w.Write(value);
+        }
+
+        private static string ReadNullable(BinaryReader r) => r.ReadBoolean() ? r.ReadString() : null;
 
         // -- UI language ---------------------------------------------------------------
         //

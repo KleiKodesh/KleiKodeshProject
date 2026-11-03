@@ -303,6 +303,12 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { });
             _appReady = true;
+            // The page has applied the launch files at boot; a reload must not open them again.
+            if (_startupEventsScriptId != null)
+            {
+                _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_startupEventsScriptId);
+                _startupEventsScriptId = null;
+            }
             if (_pendingFilePaths.Count > 0)
             {
                 string[] paths = _pendingFilePaths.ToArray();

@@ -100,6 +100,10 @@ namespace KitveiHakodeshDemoApp
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            // The browser process is the long pole of a cold start: launch it before the form
+            // is built, so it comes up while the rest of startup runs. MainForm's AppViewer
+            // uses the same folder and picks this environment up.
+            AppViewer.StartSharedEnvironment(MainForm.WebCacheFolder);
             KitveiHakodeshLib.LocalFile.WindowsRecentDocuments.Enabled = true;
             // Before the form: the receiver must exist the moment the mutex is ours, so
             // launches that race our startup (a multi-file Explorer open) find it.
