@@ -126,7 +126,8 @@ if (hasHostBridge) {
 
 // DEV-only test hook: lets the Playwright rigs open a local file and inspect
 // tab/PDF-edit state without UI scraping. Stripped from production builds by
-// the import.meta.env.DEV guard (dead-code eliminated).
-if (import.meta.env.DEV) {
+// the import.meta.env.DEV guard (dead-code eliminated). The hosted e2e rig
+// (e2e-hosted/) builds with VITE_KH_TEST_HOOKS=1 to keep it in its own private build.
+if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
   void import('./devTestHook').then((m) => m.installDevTestHook())
 }

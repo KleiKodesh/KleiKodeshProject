@@ -38,6 +38,14 @@ namespace KitveiHakodeshDemoApp
                 return;
             }
 
+            // Hosted e2e rig (HostTestMode): a standalone instance that never hands off to,
+            // or takes requests from, the user's running app.
+            if (IsHostTestMode())
+            {
+                RunTestInstance();
+                return;
+            }
+
             bool createdNew;
             using (var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew))
             {
@@ -112,6 +120,22 @@ namespace KitveiHakodeshDemoApp
             // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
             var form = new MainForm(GetOpenRequestArgument());
             form.HandleCreated += (s, e) => form.BeginInvoke(new Action(DrainEarlyRequests));
+            lock (EarlyRequestsLock) _mainForm = form;
+            Application.Run(form);
+        }
+
+        // BCL only, like the rest of Main before the first-instance check (HostTestMode.IsOn
+        // would load KitveiHakodeshLib on every second launch).
+        private static bool IsHostTestMode()
+            => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("KH_TEST_CDP_PORT"));
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void RunTestInstance()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            AppViewer.StartSharedEnvironment(MainForm.WebCacheFolder);
+            var form = new MainForm(GetOpenRequestArgument());
             lock (EarlyRequestsLock) _mainForm = form;
             Application.Run(form);
         }

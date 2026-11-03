@@ -45,8 +45,9 @@ namespace KitveiHakodeshLib
         public static void StartSharedEnvironment(string webCacheFolder)
             => GetSharedEnv(UserDataFolderFor(webCacheFolder));
 
+        // Test mode (HostTestMode): the rig's own profile folder, never the user's.
         private static string UserDataFolderFor(string webCacheFolder)
-            => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", webCacheFolder);
+            => Path.Combine(HostTestMode.ProfileDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh"), webCacheFolder);
 
         private static Task<CoreWebView2Environment> GetSharedEnv(string userDataFolder)
         {
@@ -95,7 +96,9 @@ namespace KitveiHakodeshLib
                         "--no-first-run " +
                         "--no-default-browser-check " +
                         "--js-flags=\"--max_old_space_size=512 --max_semi_space_size=4\" " +
-                        "--disable-features=CalculateNativeWinOcclusion",
+                        "--disable-features=CalculateNativeWinOcclusion" +
+                        // Hosted e2e rig only (HostTestMode, off unless KH_TEST_CDP_PORT is set).
+                        (HostTestMode.IsOn ? " --remote-debugging-port=" + HostTestMode.CdpPort : ""),
 
                     // Disable tracking prevention — all content is local or from a single
                     // trusted domain; the feature adds overhead with no benefit here.
