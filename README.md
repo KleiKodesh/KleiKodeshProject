@@ -84,6 +84,20 @@ FtsLib (generic full-text engine) · DocConvertLib (Word→HTML) · SQLite
 
 ## בנייה
 
+Clone with submodules (KitveiHakodeshDictionary, SearchExpansion):
+
+```bash
+git clone --recursive https://github.com/KleiKodesh/KleiKodeshProject.git
+# already cloned without it:
+git submodule update --init --recursive
+```
+
+`Dictionary.db` and `expansion-routed.db` are not edited here: every build downloads the
+latest release of [KitveiHakodeshDictionary](https://github.com/KleiKodesh/KitveiHakodeshDictionary)
+and [SearchExpansion](https://github.com/KleiKodesh/SearchExpansion) via
+`Build/scripts/fetch-release-dbs.ps1` (also run by `dotnet build`, see
+`KitveiHakodesh/CSharpBackend/FetchReleaseDbs.targets`).
+
 הכל מתועד ב-[`Build/README.md`](Build/README.md). בקצרה:
 
 ```powershell

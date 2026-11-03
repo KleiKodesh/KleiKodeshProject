@@ -124,6 +124,14 @@ elseif (-not $ManualVersion -and $version -eq $versionBefore -and
     exit 1
 }
 
+# ── 2a. Submodules + latest released DBs (Dictionary.db, expansion-routed.db) ──
+Start-BuildStep "Submodules + latest released DBs"
+Initialize-Submodules
+# Always: an installer must ship the newest release; any failure stops the build. The
+# MSBuild fetch target (FetchReleaseDbs.targets) then finds them fresh and skips.
+& powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "fetch-release-dbs.ps1") -Mode Always
+if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: could not fetch the latest released DBs." -ForegroundColor Red; exit 1 }
+
 # ── 2b. Restore packages (same as the GitHub Actions release) ─────────────────
 Start-BuildStep "Restore packages (msbuild, nuget, npm)"
 & (Find-MSBuild) (Join-Path $ProjectRoot "KleiKodeshProject.slnx") -t:restore -v:minimal -nologo

@@ -50,7 +50,14 @@
        FtsLib-Csharp/SearchExpansion/ - updating that file updates all outputs.
        Copied next to consumers as SearchExpansion/expansion-routed.db and read
        at runtime relative to the binary (see SearchExpansionService /
-       SearchExpansion). -->
+       SearchExpansion).
+       Built and released by KleiKodesh/SearchExpansion; FetchReleaseDbs.targets downloads
+       the latest release here before every build (this also covers
+       KitveiHakodesh.Core.Portable, which references this project). Never edit this copy. -->
+  <PropertyGroup>
+    <FetchReleaseDb>expansion</FetchReleaseDb>
+  </PropertyGroup>
+  <Import Project="..\..\FetchReleaseDbs.targets" />
   <ItemGroup>
     <Content Include="..\SearchExpansion\expansion-routed.db">
       <Link>SearchExpansion\expansion-routed.db</Link>
