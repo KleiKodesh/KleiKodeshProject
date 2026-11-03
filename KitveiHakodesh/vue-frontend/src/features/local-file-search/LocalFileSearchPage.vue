@@ -22,6 +22,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { restoreLocalFile } from '@/webview-host/bridge'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
@@ -137,7 +138,13 @@ onBeforeUnmount(() => {
 // Combobox model: focus stays in the input; arrows/paging move the results
 // highlight, Enter opens the highlighted file.
 function onSearchKeydown(event: KeyboardEvent) {
-  resultsListElement.value?.onSearchInputKeydown(event)
+  if (resultsListElement.value?.onSearchInputKeydown(event)) return
+  // An Enter the list did not consume (nothing highlighted) opens a lone result,
+  // like the catalog's single-result shortcut.
+  if (event.code === 'Enter' && results.value.length === 1) {
+    event.preventDefault()
+    void onOpenFile(results.value[0]!, wantsNewTab(event))
+  }
 }
 
 // No isHosted guard: it is TRUE in dev so it never gated anything, and opening a local file
