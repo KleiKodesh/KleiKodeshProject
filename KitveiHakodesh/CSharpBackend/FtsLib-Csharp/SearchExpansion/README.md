@@ -20,6 +20,10 @@ there), or, outside KleiKodeshProject, from a sibling clone of KitveiHakodeshDic
 
 ## Updating this DB
 
+The builder repo is NOT kept on this machine: nothing for reproducing this DB lives here
+except the DB itself. Clone it only when you need to update the DB, and delete the clone
+when you are done (everything worth keeping must be pushed there first).
+
 ```bash
 cd KleiKodeshProject                      # the folder that holds KitveiHakodesh/
 git clone https://github.com/KleiKodesh/SearchExpansion.git
@@ -28,3 +32,7 @@ python build_all.py                       # writes straight over this expansion-
 ```
 
 Then commit this DB here. The `SearchExpansion/` folder is gitignored here.
+
+Large files that are not committed there (the full fastText model, the full Sefaria lexicon
+export) are assets of its `local-archive-2026-11-03` release; fetch them with
+`python build/tools/fetch_archive_assets.py <source id> <out dir>` (ids in `sources.json`).
