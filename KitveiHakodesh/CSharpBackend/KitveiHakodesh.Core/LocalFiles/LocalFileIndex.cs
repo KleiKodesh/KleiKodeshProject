@@ -83,7 +83,7 @@ namespace KitveiHakodesh.Core.LocalFiles
 
         // Drives indexed WITHOUT a live USN watcher (volume handle refused — not elevated).
         // Guarded by the _liveThreads lock, which already serialises live-update state.
-        private readonly List<char> _unwatchedDrives = new List<char>();
+        private readonly HashSet<char> _unwatchedDrives = new HashSet<char>();
 
         // Periodic-rescan state (the unelevated staleness mitigation). Guarded by _rescanLock.
         private readonly object _rescanLock = new object();
@@ -811,6 +811,14 @@ namespace KitveiHakodesh.Core.LocalFiles
                 if (_liveThreads.Count > 0) return; // already running
 
                 var drives = LocalFileIndexMftCrawler.GetNtfsDrives();
+                if (drives.Count == 0)
+                {
+                    // No NTFS volume: Build indexed the fallback drives by directory walk,
+                    // and nothing can watch those, so they are all unwatched.
+                    foreach (var drive in LocalFileIndexDirectoryCrawler.GetFallbackDrives())
+                        _unwatchedDrives.Add(drive.Name[0]);
+                    return;
+                }
                 foreach (var drive in drives)
                 {
                     char letter = drive.Name[0];
