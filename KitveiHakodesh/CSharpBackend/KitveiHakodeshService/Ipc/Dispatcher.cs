@@ -576,6 +576,10 @@ public sealed class Dispatcher(
                 case "ownSeforimLibraryInfo":
                     return RpcResponse.Ok(MsgPack.Ser(OwnSeforimLibrary.Describe()));
 
+                case "declineOwnSeforimLibraryDeletion":
+                    OwnSeforimLibrary.Decline();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = true }));
+
                 case "deleteOwnSeforimLibrary":
                 {
                     // The user chose to delete it, so a download or update still running is
