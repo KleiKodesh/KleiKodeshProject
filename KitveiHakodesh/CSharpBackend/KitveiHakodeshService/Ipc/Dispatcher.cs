@@ -196,9 +196,14 @@ public sealed class Dispatcher(
                 case "fastDocViewPicture":
                 {
                     // the hosted app's leg (its relay serves POST only); dev <img>s use GET /fast-doc-view-picture
+                    // A missing picture, or one asked for after its document closed or changed, is an EMPTY
+                    // result, not an error: the page keeps the sized empty box and logs nothing (one error per
+                    // picture would flood the console); the block fetches, not pictures, drive a reopen.
                     var a = MsgPack.De<FastDocViewPictureArgs>(req.Args);
-                    FastDocViewPicture? picture = fastDocViewDocuments.Picture(a.DocumentId, a.PictureId);
-                    return picture is null ? RpcResponse.Err("FastDocView: no such picture") : RpcResponse.Ok(MsgPack.Ser(picture));
+                    FastDocViewPicture? picture;
+                    try { picture = fastDocViewDocuments.Picture(a.DocumentId, a.PictureId); }
+                    catch (global::KitveiHakodesh.Core.FastDocView.FastDocViewSourceChangedException) { picture = null; }
+                    return RpcResponse.Ok(picture is null ? null : MsgPack.Ser(picture));
                 }
                 case "fastDocViewSections":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));

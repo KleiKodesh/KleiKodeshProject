@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { effectScope, nextTick, ref } from 'vue'
 import { useFastDocViewPictures } from './useFastDocViewPictures'
 
@@ -40,5 +40,44 @@ describe('useFastDocViewPictures', () => {
     await flush()
     expect(calls).toBe(1)
     scope.stop()
+  })
+
+  it('a missing picture keeps its box silently; a late answer for a changed document is revoked', async () => {
+    const revoked: string[] = []
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('URL', { createObjectURL: () => '', revokeObjectURL: (url: string) => revoked.push(url) })
+    let release: (value: string) => void = () => {}
+    const documentId = ref('d1')
+    const scope = effectScope()
+    const pictures = scope.run(() => useFastDocViewPictures(
+      { pictureSource: (_id, pictureId) => pictureId === 'missing' ? Promise.resolve(null) : new Promise<string>((resolve) => { release = resolve }) },
+      () => documentId.value))!
+    pictures.withPictureSources('<img data-word-picture="missing">')
+    await flush()
+    expect(pictures.withPictureSources('<img data-word-picture="missing">')).toBe('<img data-word-picture="missing">')
+    pictures.withPictureSources('<img data-word-picture="late">')
+    documentId.value = 'd2'                                         // the document changed while the picture was read
+    await flush()
+    release('blob:old/1')
+    await flush()
+    expect(revoked).toEqual(['blob:old/1'])
+    expect(pictures.sourceCount()).toBe(0)
+    expect(warn).not.toHaveBeenCalled()
+    scope.stop()
+    warn.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('revokes object URLs when the page goes away', async () => {
+    const revoked: string[] = []
+    vi.stubGlobal('URL', { createObjectURL: () => '', revokeObjectURL: (url: string) => revoked.push(url) })
+    const scope = effectScope()
+    const pictures = scope.run(() => useFastDocViewPictures({ pictureSource: async () => 'blob:a/1' }, () => 'd1'))!
+    pictures.withPictureSources('<img data-word-picture="1">')
+    await flush()
+    expect(pictures.sourceCount()).toBe(1)
+    scope.stop()
+    expect(revoked).toEqual(['blob:a/1'])
+    vi.unstubAllGlobals()
   })
 })

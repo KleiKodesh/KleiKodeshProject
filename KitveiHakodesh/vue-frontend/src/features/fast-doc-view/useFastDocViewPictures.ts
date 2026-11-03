@@ -56,7 +56,9 @@ export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'
     pending.add(pictureId)
     try {
       const source = await api.pictureSource(id, pictureId)
-      if (documentId() !== id) { revoke(source); return }
+      if (documentId() !== id) { if (source) revoke(source); return }
+      // no such picture (or the document closed meanwhile): the sized empty box stays, silently
+      if (!source) { failed.add(pictureId); return }
       const next = new Map(sources.value)
       next.set(pictureId, source)
       while (next.size > MAX_PICTURE_SOURCES) {
@@ -67,8 +69,10 @@ export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'
       sources.value = next
     } catch (error) {
       // a picture the service cannot give (gone, a format it does not serve) keeps its empty box
+      // (the service call already printed its failure; one line per document, not per picture)
+      if (documentId() !== id) return
+      if (failed.size === 0) console.warn(`[fast-doc-view] picture ${pictureId}`, error)
       failed.add(pictureId)
-      console.warn(`[fast-doc-view] picture ${pictureId}`, error)
     } finally {
       pending.delete(pictureId)
     }
