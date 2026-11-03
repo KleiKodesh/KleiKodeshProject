@@ -220,7 +220,13 @@ function handleKeydown(e: KeyboardEvent) {
      gives them a clean edge to disappear behind. */
   background: var(--bg-toolbar);
   border-bottom: 1px solid var(--border-color);
-  padding-inline: 6px;
+  /* Strip stays full width; its controls sit inside the same centred column as the
+     commentary lines (--lines-content-max-width), so the edges line up with the text. */
+  --nav-col-inset: calc((100% - var(--lines-content-max-width, 100%)) / 2 + var(--commentary-pad-inline, 12px) - 6px);
+  position: relative;
+  padding-inline: max(6px, var(--nav-col-inset));
+  /* Room for the close button, which is pinned to the panel's end edge. */
+  padding-inline-end: max(30px, var(--nav-col-inset));
 }
 
 .btn {
@@ -293,6 +299,9 @@ function handleKeydown(e: KeyboardEvent) {
   pointer-events: none;
 }
 .close-btn {
-  margin-inline-start: auto;
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 </style>
