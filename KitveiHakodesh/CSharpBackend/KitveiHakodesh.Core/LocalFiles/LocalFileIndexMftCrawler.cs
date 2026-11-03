@@ -165,7 +165,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// directory segments is in <see cref="SkippedDirectoryNames"/>.
         /// The path is expected to be in its original case (not yet lowercased).
         /// </summary>
-        private static bool IsInSkippedDirectory(string fullPath)
+        internal static bool IsInSkippedDirectory(string fullPath)
         {
             // Walk every segment except the last one (which is the file name itself).
             // A path like "C:\Windows\System32\foo.pdf" is excluded because "Windows"

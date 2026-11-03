@@ -80,8 +80,17 @@ namespace KitveiHakodesh.Core.LocalFiles
             char              driveLetter,
             Action<int>       progress = null,
             CancellationToken ct       = default)
+            => EnumeratePathsUnder(char.ToUpper(driveLetter) + ":\\", progress, ct);
+
+        /// <summary>
+        /// Same walk as <see cref="EnumeratePaths"/>, from any folder. The folder watcher
+        /// uses it for a folder created or moved in, whose files it was never told about.
+        /// </summary>
+        public static IEnumerable<string> EnumeratePathsUnder(
+            string            root,
+            Action<int>       progress = null,
+            CancellationToken ct       = default)
         {
-            string root = char.ToUpper(driveLetter) + ":\\";
             int count = 0;
             int reportThreshold = 1_000;
 
