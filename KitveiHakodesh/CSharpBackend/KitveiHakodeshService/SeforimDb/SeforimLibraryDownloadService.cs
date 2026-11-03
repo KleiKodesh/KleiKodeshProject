@@ -66,6 +66,17 @@ public sealed class SeforimLibraryDownloadService(
 
     public bool Cancel() => _downloader.Cancel();
 
+    /// <summary>Stops a run in progress and waits for it to let go of its files. False when it
+    /// is still running after a few seconds.</summary>
+    public async Task<bool> CancelAndWaitAsync(CancellationToken ct)
+    {
+        if (!_downloader.IsBusy) return true;
+        _downloader.Cancel();
+        for (int waited = 0; _downloader.IsBusy && waited < 100; waited++)
+            await Task.Delay(100, ct);
+        return !_downloader.IsBusy;
+    }
+
     /// <summary>A snapshot now and one per change, until the client disconnects.</summary>
     public async Task StreamProgressAsync(Func<SeforimLibraryDownloadProgress, Task> emit, CancellationToken ct)
     {
