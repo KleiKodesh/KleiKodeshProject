@@ -29,7 +29,6 @@ const {
   commentaryFontWeight,
   commentaryLinePadding,
   linesContentMaxWidth,
-  commentaryMaxWidth,
 } = storeToRefs(settings)
 
 useSettings() // wires the commentary-mirror watcher
@@ -55,12 +54,6 @@ const linesContentMaxWidthSlider = computed({
   },
 })
 
-const commentaryMaxWidthSlider = computed({
-  get: () => commentaryMaxWidth.value === 0 ? CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL : commentaryMaxWidth.value,
-  set: (sliderValue: number) => {
-    commentaryMaxWidth.value = sliderValue === CONTENT_MAX_WIDTH_UNLIMITED_SENTINEL ? 0 : sliderValue
-  },
-})
 </script>
 
 <template>
@@ -160,18 +153,6 @@ const commentaryMaxWidthSlider = computed({
       :default-header-font="DEFAULT_HEADER_FONT_FAMILY"
       :default-text-font="DEFAULT_TEXT_FONT_FAMILY"
       @close-other="bookDisplayRef?.closeDropdowns()"
-    />
-
-    <SliderSetting
-      id="nav-commentary-max-width"
-      :data-nav-label="$t('settings.commentary.maxWidthNav')"
-      :label="$t('settings.commentary.maxWidth')"
-      :hint="$t('settings.book.maxWidthHint')"
-      v-model="commentaryMaxWidthSlider"
-      :min="500"
-      :max="950"
-      :step="50"
-      :format-value="formatMaxWidth"
     />
   </div>
 </template>

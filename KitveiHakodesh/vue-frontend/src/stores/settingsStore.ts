@@ -31,7 +31,6 @@ const KEYS = {
   SETTINGS_COMMENTARY_FONT_SIZE: 'commentary.fontSize',
   SETTINGS_COMMENTARY_FONT_WEIGHT: 'commentary.fontWeight',
   SETTINGS_COMMENTARY_LINE_PADDING: 'commentary.linePadding',
-  SETTINGS_COMMENTARY_MAX_WIDTH: 'commentary.maxWidth',
   SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'commentary.defaultAutoSync',
 
   // Word link tooltip
@@ -225,7 +224,6 @@ const DEFAULTS = {
   // Measure cap in px; 0 means unlimited. 900 keeps a comfortable line length on a wide
   // window, where full-bleed text would otherwise run too far for the eye to track back.
   linesContentMaxWidth: 900,
-  commentaryMaxWidth: 900,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
@@ -348,7 +346,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const copyAsSourceWithQuotation = ref(DEFAULTS.copyAsSourceWithQuotation)
   const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
-  const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   // Book-view chrome preferences. bookViewStore reads these; the per-pane fan-out
@@ -443,7 +440,6 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-font-weight', commentaryFontWeight.value.toString())
     style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
     style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
-    style.setProperty('--commentary-max-width', commentaryMaxWidth.value > 0 ? `${commentaryMaxWidth.value}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
@@ -534,7 +530,6 @@ export const useSettingsStore = defineStore('settings', () => {
         .catch(() => {})
     }
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
-    loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
@@ -617,7 +612,6 @@ export const useSettingsStore = defineStore('settings', () => {
     setHbLocalFolderInRegistry(hebrewBooksLocalFolder.value || '')
   })
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
-  persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
@@ -796,7 +790,6 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsSourceWithQuotation.value = DEFAULTS.copyAsSourceWithQuotation
     hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
-    commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     toolbarVisible.value = DEFAULTS.toolbarVisible
@@ -846,7 +839,6 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsSourceWithQuotation,
     hebrewBooksLocalFolder,
     linesContentMaxWidth,
-    commentaryMaxWidth,
     titleBarHiddenButtons,
     scrollbarsHidden,
     navSidebarVisibleByPane,

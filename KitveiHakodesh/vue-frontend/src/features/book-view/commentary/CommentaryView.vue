@@ -860,7 +860,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
 .line {
   padding-inline: var(--commentary-pad-inline, 12px);
   padding-block: 2px;
-  max-width: var(--commentary-max-width, none);
+  max-width: var(--lines-content-max-width, none);
   margin-inline: auto;
   font-family: var(--commentary-text-font);
   font-size: var(--commentary-font-size, 100%);
