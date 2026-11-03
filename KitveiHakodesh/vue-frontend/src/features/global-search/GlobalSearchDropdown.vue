@@ -91,7 +91,7 @@ const dropdownStyle = computed(() => ({
   top: props.anchorTop + 'px',
   left: props.anchorLeft + 'px',
   right: props.anchorRight + 'px',
-  maxHeight: props.maxHeight + 'px',
+  '--dropdown-max-height': props.maxHeight + 'px',
 }))
 
 // The three sections in priority order. The prioritized source comes first;
@@ -429,6 +429,7 @@ function getTabIcon(route: string): FileIconInfo {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.12);
+  max-height: var(--dropdown-max-height); /* CSS, not inline: the viewport fit clears inline max-height */
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
