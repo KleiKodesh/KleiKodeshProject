@@ -1,0 +1,8 @@
+[submodule "KitveiHakodeshDictionary"]
+	path = KitveiHakodeshDictionary
+	url = https://github.com/KleiKodesh/KitveiHakodeshDictionary.git
+	branch = main
+[submodule "SearchExpansion"]
+	path = SearchExpansion
+	url = https://github.com/KleiKodesh/SearchExpansion.git
+	branch = master

@@ -63,7 +63,13 @@
     <ProjectReference Include="..\..\..\FastDocView\FastDocView\FastDocView.csproj" />
   </ItemGroup>
 
-  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db. -->
+  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db.
+       Built and released by KleiKodesh/KitveiHakodeshDictionary; FetchReleaseDbs.targets downloads
+       the latest release here before every build. Never edit this copy. -->
+  <PropertyGroup>
+    <FetchReleaseDb>dictionary</FetchReleaseDb>
+  </PropertyGroup>
+  <Import Project="..\FetchReleaseDbs.targets" />
   <ItemGroup>
     <Content Include="Dictionary\Dictionary.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

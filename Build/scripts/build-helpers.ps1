@@ -191,3 +191,22 @@ function New-ReleaseNotes {
         }
     }
 }
+
+function Initialize-Submodules {
+    # A clone made without --recursive has empty submodule folders: fill them.
+    # Only when .gitmodules lists something; never touches a submodule that is checked out.
+    $gitmodules = Join-Path $ProjectRoot ".gitmodules"
+    if (-not (Test-Path $gitmodules) -or -not (Select-String -Path $gitmodules -Pattern '^\s*path\s*=' -Quiet)) { return }
+    Push-Location $ProjectRoot
+    try {
+        # cmd /c keeps git's stderr away from PowerShell (a stale gitlink without a
+        # .gitmodules entry makes `git submodule status` print a fatal line).
+        $missing = cmd /c "git submodule status 2>nul" | Where-Object { $_ -match '^-' }
+        if ($missing) {
+            Write-Host "  Initializing submodules: $(($missing | ForEach-Object { ($_ -split '\s+')[1] }) -join ', ')" -ForegroundColor Cyan
+            cmd /c "git submodule update --init --recursive 2>&1" | ForEach-Object { Write-Host "  $_" }
+            if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: git submodule update failed." -ForegroundColor Yellow }
+        }
+    }
+    finally { Pop-Location }
+}
