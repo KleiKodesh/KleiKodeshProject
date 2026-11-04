@@ -963,6 +963,15 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
    On the page, so the notes pane's entries take the same column as the document. */
 .fast-doc-view {
   --fast-doc-view-column-padding: 12px;
+  /* The library stylesheet's own colours (var(--fdv-*, Word's value)) follow the app theme. The document's
+     explicit colours come as light-dark(original, dark variant) and follow the root's color-scheme. */
+  --fdv-text: var(--text-primary);
+  --fdv-link: var(--accent-color);
+  --fdv-muted: var(--text-secondary);
+  --fdv-muted-strong: var(--text-secondary);
+  --fdv-rule: var(--border-color);
+  --fdv-table-border: color-mix(in srgb, var(--text-primary) 45%, var(--bg-primary));
+  --fdv-frame-border: var(--border-color);
 }
 .fast-doc-view-block {
   padding-inline: var(--fast-doc-view-column-padding);
