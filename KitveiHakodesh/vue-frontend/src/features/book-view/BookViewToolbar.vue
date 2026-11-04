@@ -21,7 +21,6 @@ import {
   IconReadAloud20Regular,
   IconReadAloud20Filled,
 } from '@iconify-prerendered/vue-fluent'
-import { useBookViewReadAloud } from './useBookViewReadAloud'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewBookmarksDropdown from './BookViewBookmarksDropdown.vue'
@@ -87,8 +86,10 @@ const props = defineProps<{
   // The side panels need a pane wide enough to hold them; on a narrow pane their
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
+  /** Whether the read-aloud panel is open. */
+  readAloudOpen?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; cancelExportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
+defineEmits<{ toggleReadAloud: []; toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; cancelExportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -115,20 +116,9 @@ function toggleFlowText() {
   settingsStore.linesLayout = flowText.value ? 'rows' : 'flow'
 }
 
-/** Read aloud: from the selection, or from the top line in view on. Stops on a book or version change. */
-const readAloud = useBookViewReadAloud()
-const readAloudLabel = computed(() =>
-  t(readAloud.isReading.value ? 'bookView.toolbar.readAloudStop' : 'bookView.toolbar.readAloud'),
-)
-function toggleReadAloud() {
-  if (readAloud.isReading.value) {
-    readAloud.stop()
-    return
-  }
-  if (props.bookId == null) return
-  void readAloud.start(props.bookId, props.activeVersionId, props.currentScrollLineIndex, props.lines.length)
-}
-watch(() => [props.bookId, props.activeVersionId], () => readAloud.stop())
+/** Read aloud lives in its own panel (BookViewReadAloudPanel); this button opens and closes it. */
+const readAloudSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+const readAloudLabel = computed(() => t('bookView.toolbar.readAloud'))
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
@@ -278,7 +268,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
       case 'word-link-markers': return wordLinkMarkersPresent.value
       case 'bookmarks': return bookmarksPresent.value
       case 'export-to-word': return !props.exportRestricted
-      case 'read-aloud': return readAloud.isSupported
+      case 'read-aloud': return readAloudSupported
       case 'sync-commentaries': return props.hasCommentaries
       case 'related-books': return props.hasRelatedBooks
       case 'side-commentaries': return props.hasCommentaries && !!props.canUseSidePanel
@@ -515,13 +505,13 @@ defineExpose({ tocBtnRef, createBookmark })
       <BookViewExportToWordGlyph />
     </ConversionActionButton>
     <button
-      v-if="readAloud.isSupported"
+      v-if="readAloudSupported"
       v-bind="collapseAttrs('read-aloud')"
-      :class="{ active: readAloud.isReading.value }"
+      :class="{ active: readAloudOpen }"
       :title="readAloudLabel"
-      @click="toggleReadAloud"
+      @click="$emit('toggleReadAloud')"
     >
-      <IconReadAloud20Filled v-if="readAloud.isReading.value" />
+      <IconReadAloud20Filled v-if="readAloudOpen" />
       <IconReadAloud20Regular v-else />
     </button>
     <!--
@@ -593,10 +583,10 @@ defineExpose({ tocBtnRef, createBookmark })
         v-if="isOverflowed('read-aloud')"
         role="menuitem"
         class="overflow-row"
-        :class="{ active: readAloud.isReading.value }"
-        @click="overflowOpen = false; toggleReadAloud()"
+        :class="{ active: readAloudOpen }"
+        @click="overflowOpen = false; $emit('toggleReadAloud')"
       >
-        <IconReadAloud20Filled v-if="readAloud.isReading.value" />
+        <IconReadAloud20Filled v-if="readAloudOpen" />
         <IconReadAloud20Regular v-else />
         <span>{{ readAloudLabel }}</span>
       </button>

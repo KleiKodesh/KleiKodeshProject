@@ -140,6 +140,34 @@
   "toc": {
     "loadError": "שגיאה בטעינת תוכן עניינים"
   },
+  "readAloud": {
+    "panel": "קריאה בקול",
+    "play": "התחל קריאה",
+    "pause": "השהה",
+    "resume": "המשך",
+    "stop": "עצור",
+    "previousLine": "שורה קודמת",
+    "nextLine": "שורה הבאה",
+    "highlight": "סמן את המילה הנקראת",
+    "follow": "גלול אחרי הקריאה",
+    "voice": "קול",
+    "drag": "גרור כדי להזיז",
+    "close": "סגור",
+    "slower": "לאט יותר",
+    "faster": "מהר יותר",
+    "skip": "דלג על חלקים מהטקסט",
+    "skipOptions": "על מה לדלג",
+    "noHebrewVoice": "לא מותקן קול עברי ב-Windows",
+    "noHebrewVoiceShort": "אין קול",
+    "skipOption": {
+      "links": "מראי מקום (קישורים בטקסט)",
+      "noteMarkers": "סימני הערות",
+      "parentheses": "כל מה שבסוגריים ( )",
+      "squareBrackets": "כל מה שבסוגריים מרובעים [ ]",
+      "singleLetterWords": "מילים של אות אחת",
+      "headings": "כותרות"
+    }
+  },
   "toolbar": {
     "cleanDibburHamatchilDash": "מקף דיבור המתחיל לנקודה",
     "cleanMaqaf": "מקף לרווח",
@@ -155,7 +183,6 @@
     "dragHint": "גרור כדי להזיז את סרגל הכלים",
     "exportToWord": "ייצא ל-Word",
     "readAloud": "הקרא בקול",
-    "readAloudStop": "עצור הקראה",
     "more": "פריטים נוספים",
     "nextSection": "קטע הבא (Ctrl+חץ שמאלי)",
     "open_bottom": "חלונית מפרשים תחתונה (Ctrl+J)",
