@@ -625,7 +625,9 @@ function flash(element: Element | null | undefined) {
 
 // Links in the document. Internal ones (a TOC field entry, a cross-reference, w:hyperlink
 // w:anchor) point at "#bookmark-<name>": the block is asked of the index and reached by a
-// windowed jump - the browser never follows the # (the target may not be mounted). Book
+// windowed jump - the browser never follows the # (the target may not be mounted). A table of
+// contents FastDocView built itself (a TOC field Word saved without a result) points at
+// "#block-<index>": the heading's block, reached by the same jump. Book
 // links (otzaria:// zayit:// kitveihakodeshapp://) open like a host deep link. Web and mail
 // links keep their default (they open outside the app).
 const hostSearchStore = useHostSearchStore()
@@ -636,6 +638,12 @@ function onLinkClick(event: MouseEvent): boolean {
   if (href.startsWith('#bookmark-')) {
     event.preventDefault()
     void goToBookmark(href)
+    return true
+  }
+  if (href.startsWith('#block-')) {
+    event.preventDefault()
+    const blockIndex = Number.parseInt(href.slice('#block-'.length), 10)
+    if (Number.isInteger(blockIndex) && blockIndex >= 0) void goToBlock(blockIndex)
     return true
   }
   const bookLink = parseBookLink(href)
@@ -650,6 +658,20 @@ function onLinkClick(event: MouseEvent): boolean {
   if (anchor.dataset.appLink) showToast(t('fastDocView.linkNotSupported'))
   else void openUrlInSystemBrowser(href)
   return true
+}
+async function goToBlock(blockIndex: number) {
+  // an index still building may not have reached the block yet: wait for the count, as a bookmark jump does
+  if (blockIndex >= fastDocument.blockCount.value) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => { stop(); resolve() }, 15000)
+      const stop = watch(fastDocument.blockCount, (count) => {
+        if (count > blockIndex) { clearTimeout(timer); stop(); resolve() }
+      })
+    })
+  }
+  if (blockIndex >= fastDocument.blockCount.value) return
+  await windowedScroller.value?.scrollToIndex(blockIndex)
+  flash(windowedScroller.value?.rowElement(blockIndex) as HTMLElement | null | undefined)
 }
 async function goToBookmark(href: string) {
   const documentId = fastDocument.summary.value?.documentId
