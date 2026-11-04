@@ -44,9 +44,10 @@ const HOVER_DELAY_MS = 120
 const USER_SCROLL_WINDOW_MS = 400
 /** How long the scroll-follow label stays after the scrolling stops. */
 const SCROLL_LINGER_MS = 800
-/** Scroll-follow needs this much travel (in screens) within JOURNEY_WINDOW_MS. */
-const JOURNEY_SCREENS = 2
-const JOURNEY_WINDOW_MS = 300
+/** Scroll-follow shows once the reader has scrolled without pause this long. */
+const SUSTAINED_SCROLL_MS = 600
+/** A gap longer than this between scroll steps ends the run (wheel notches ~100 ms apart). */
+const SCROLL_PAUSE_MS = 250
 /** Books shorter than this many screens never get the scroll-follow label. */
 const MIN_SCREENS = 4
 
@@ -124,29 +125,29 @@ export function useBookViewScrollbarTocTooltip(
     useEventListener(options.viewportElement, ['wheel', 'touchmove', 'keydown'], (event: Event) => {
       if ((event as WheelEvent | KeyboardEvent).ctrlKey) {
         lastUserInputAt = -Infinity
-        thumbSamples.length = 0
+        scrollRunStartAt = -Infinity
         return
       }
       lastUserInputAt = performance.now()
     }, { passive: true })
   }
 
-  /** Recent thumb tops, to tell a real journey from a nudge. */
-  const thumbSamples: { at: number; top: number }[] = []
+  /** When the current uninterrupted scroll run began, and its last step. */
+  let scrollRunStartAt = -Infinity
+  let lastScrollStepAt = -Infinity
 
   /**
    * Worth labelling only when the book is long (thumb under a quarter of the track)
-   * and the reader travelled far fast (thumb moved two of its own heights — about two
-   * screens — within the window). Once shown, it keeps following until it lingers out.
+   * and the reader keeps scrolling — a run with no pause, lasting SUSTAINED_SCROLL_MS.
+   * A nudge never shows it. Once shown, it keeps following until it lingers out.
    */
-  function isJourney(thumbTop: number, thumbHeight: number, trackHeight: number): boolean {
+  function isJourney(thumbHeight: number, trackHeight: number): boolean {
     const now = performance.now()
-    thumbSamples.push({ at: now, top: thumbTop })
-    while (thumbSamples.length && now - thumbSamples[0]!.at > JOURNEY_WINDOW_MS) thumbSamples.shift()
+    if (now - lastScrollStepAt > SCROLL_PAUSE_MS) scrollRunStartAt = now
+    lastScrollStepAt = now
     if (isScrollFollow) return true
     if (!thumbHeight || thumbHeight * MIN_SCREENS > trackHeight) return false
-    const tops = thumbSamples.map((sample) => sample.top)
-    return Math.max(...tops) - Math.min(...tops) >= thumbHeight * JOURNEY_SCREENS
+    return now - scrollRunStartAt >= SUSTAINED_SCROLL_MS
   }
 
   function followScroll() {
@@ -159,7 +160,7 @@ export function useBookViewScrollbarTocTooltip(
     const trackRect = track.getBoundingClientRect()
     const thumbTop = parseFloat(thumb.style.top) || 0
     const thumbHeight = parseFloat(thumb.style.height) || 0
-    if (!isJourney(thumbTop, thumbHeight, trackRect.height)) return
+    if (!isJourney(thumbHeight, trackRect.height)) return
     const thumbCenterY = trackRect.top + thumbTop + thumbHeight / 2
     const index = lineIndexForPointer(thumbCenterY)
     const bookTitle = titleAt(index)
