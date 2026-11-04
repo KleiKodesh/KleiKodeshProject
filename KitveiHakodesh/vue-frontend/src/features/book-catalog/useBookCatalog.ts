@@ -5,11 +5,12 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookCatalogSearch } from './useBookCatalogSearch'
 import { withoutHiddenCategories, findCategoryChain } from './bookCatalogTree'
 import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
-import type { CategoryNode } from './bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from './bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 export type FsItem =
   | { uid: string; kind: 'folder'; node: CategoryNode }
   | { uid: string; kind: 'book'; book: BookRow }
+  | { uid: string; kind: 'file'; file: LocalFileItem }
 
 export function useBookCatalog() {
   const store = useBooksDataStore()

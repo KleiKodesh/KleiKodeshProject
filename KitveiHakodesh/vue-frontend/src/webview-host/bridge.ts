@@ -601,6 +601,33 @@ export async function catalogTocSearch(query: string): Promise<CatalogTocSearchR
   return serviceCall<CatalogTocSearchResult>('catalogTocSearch', { query })
 }
 
+/** One UserSpace root as the search sees it: a catalog category OR a computer folder. */
+export type UserSpaceSearchRoot = { categoryId?: number; folder?: string }
+
+/** One `userSpaceSearch` hit: a catalog hit (bookId > 0, tocPath "" for a book title) or a file (filePath). */
+export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string }
+
+/** Result of `userSpaceSearch`. The not-ready fields mean what they mean on CatalogTocSearchResult. */
+export type UserSpaceSearchResult = Omit<CatalogTocSearchResult, 'results'> & { hits: UserSpaceSearchHit[] }
+
+/**
+ * Search under the UserSpace roots only: the catalog index filtered to the root categories and
+ * the file index filtered to the root folders, merged into ONE list ranked by the catalog
+ * search's own rules (Core UserSpaceSearch). Roots go in the user's order - the last tiebreak.
+ */
+export async function userSpaceSearch(query: string, roots: UserSpaceSearchRoot[]): Promise<UserSpaceSearchResult> {
+  return serviceCall<UserSpaceSearchResult>('userSpaceSearch', { query, roots })
+}
+
+/** Why a computer folder cannot be a UserSpace root yet ("" when it can). */
+export type UserSpaceFolderReason = '' | 'notFound' | 'notIndexedDrive' | 'excluded' | 'systemFolder'
+
+/** Whether file search covers a folder - UserSpace only accepts folders its search can reach. */
+export async function checkUserSpaceFolder(folderPath: string): Promise<{ covered: boolean; reason: UserSpaceFolderReason }> {
+  const r = await serviceCall<{ covered?: boolean; reason?: UserSpaceFolderReason }>('checkUserSpaceFolder', { value: folderPath })
+  return { covered: !!r?.covered, reason: r?.reason ?? '' }
+}
+
 /** Result of a book-title search (catalogTitleSearch wire shape, camelCased). The not-ready
  *  fields mean what they mean on CatalogTocSearchResult. */
 export type CatalogTitleSearchResult = {
@@ -1260,6 +1287,28 @@ export async function pickFolder(title?: string): Promise<string | null> {
   const result = await action<{ folderPath?: string; cancelled?: boolean; error?: string }>('pickFolder')
   if (result.cancelled || result.error || !result.folderPath) return null
   return result.folderPath
+}
+
+export interface LocalFolderListing {
+  /** Subfolder names. */
+  folders: string[]
+  /** Names of the files the app can open; everything else is left out. */
+  files: string[]
+  /** Set when the folder could not be read (missing, no access). */
+  error?: string
+}
+
+/**
+ * One level of a folder on disk - UserSpace's tree asks for each folder as the
+ * user opens it. The service does the listing in both runtimes (Core LocalFolderListing).
+ */
+export async function listLocalFolder(folderPath: string): Promise<LocalFolderListing> {
+  try {
+    const r = await serviceCall<Partial<LocalFolderListing>>('listLocalFolder', { value: folderPath })
+    return { folders: r?.folders ?? [], files: r?.files ?? [], error: r?.error ?? undefined }
+  } catch (err) {
+    return { folders: [], files: [], error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 // ── Seforim DB path (settings page + setup wizard) ─────────────────────────────

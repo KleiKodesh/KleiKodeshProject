@@ -16,6 +16,10 @@
       "label": "Open file",
       "description": "Open a file or folder from this computer"
     },
+    "userSpace": {
+      "label": "UserSpace",
+      "description": "Your chosen books and folders, in one place"
+    },
     "fileSearch": {
       "label": "File search",
       "description": "Search documents on this computer"

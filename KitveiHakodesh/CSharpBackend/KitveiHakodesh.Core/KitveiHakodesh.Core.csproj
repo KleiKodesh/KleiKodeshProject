@@ -53,6 +53,10 @@
   <!-- The FTS engine. Core feeds it through IFtsCorpus (SeforimDbFtsCorpus) - the engine's
        built-in corpus reader is not used from here. -->
   <ItemGroup>
+    <InternalsVisibleTo Include="KitveiHakodeshService.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
     <!-- Word -> PDF (COM) and the Office-free OOXML -> HTML fallback (WordDocuments/).
          net10.0 leg, IsAotCompatible. -->

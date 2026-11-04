@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem } from './useBookCatalogSearch'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
@@ -26,10 +27,13 @@ watch(
   },
 )
 
-const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
+const itemTitle = (item: SearchFsItem) => {
+  if (item.kind === 'file') return fileTitle(item.file)
+  return item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
+}
 
 function itemTooltip(item: SearchFsItem): string {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
@@ -67,10 +71,12 @@ defineExpose({
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
     >
-      <div class="tile-icon"><IconBookRtl20 /></div>
+      <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+        <div v-else class="tile-icon"><IconBookRtl20 /></div>
       <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
       <span v-if="focusedIndex === i" class="tile-expanded" aria-hidden="true">
-        <div class="tile-icon"><IconBookRtl20 /></div>
+        <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+        <div v-else class="tile-icon"><IconBookRtl20 /></div>
         <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
       </span>
     </button>
@@ -139,6 +145,10 @@ defineExpose({
   width: 1em;
   height: 1em;
   color: #c1440e;
+}
+/* The file's own colour is set on the box. */
+.tile-icon.file-icon svg {
+  color: inherit;
 }
 .tile-label {
   display: block;

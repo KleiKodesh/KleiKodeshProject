@@ -42,6 +42,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.calendar') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>8</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.measuresAndQuantities') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.hameshiv') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.userSpace') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F1</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.settings') }}</span></div>
     <!-- Book view -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.bookView') }}</div>
@@ -59,7 +60,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousSection') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.downArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.nextLine') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.upArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousLine') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideCommentaryMarkers') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideCommentaryMarkers') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.removeRestoreVowelsAndCantillation') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.createBookmark') }}</span></div>
     <!-- Full-text search results -->

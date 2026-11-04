@@ -43,6 +43,7 @@ const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('היברו-בוקס', 'hbooks', 'Ctrl+3'),
   navItem('פתח קובץ', 'folder', 'Ctrl+4'),
   navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5'),
+  navItem('אזור אישי', 'userSpace', 'Ctrl+U'),
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),

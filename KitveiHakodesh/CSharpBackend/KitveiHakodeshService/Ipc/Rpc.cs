@@ -84,6 +84,16 @@ public sealed class PickFolderResult
     public bool Cancelled { get; set; }
 }
 
+/// <summary>Result of <c>listLocalFolder</c>: one level of a folder - subfolder names and the
+/// names of the files the app can open. <see cref="Error"/> is set when the folder can't be read.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ListLocalFolderResult
+{
+    public List<string> Folders { get; set; } = [];
+    public List<string> Files { get; set; } = [];
+    public string? Error { get; set; }
+}
+
 /// <summary>Args for <c>setExcludedFolders</c> — the full replacement list of folders to exclude
 /// from file-search results.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -386,6 +396,22 @@ public sealed class HbProgressResult
 public sealed class StringArg
 {
     public string? Value { get; set; }
+}
+
+/// <summary>Args for <c>userSpaceSearch</c>: the query and the user's roots, in the user's order.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserSpaceSearchArgs
+{
+    public string? Query { get; set; }
+    public List<UserSpaceRootArg>? Roots { get; set; }
+}
+
+/// <summary>One UserSpace root: a catalog category id OR an absolute folder path.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserSpaceRootArg
+{
+    public int? CategoryId { get; set; }
+    public string? Folder { get; set; }
 }
 
 /// <summary>Generic single-string result (e.g. <c>getHbLocalFolder</c>).</summary>

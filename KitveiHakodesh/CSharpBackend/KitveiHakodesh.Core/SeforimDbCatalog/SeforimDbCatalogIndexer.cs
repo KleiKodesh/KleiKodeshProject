@@ -89,6 +89,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldBookTitleJoined = "bookTitleJoined";    // level 0 only: the title's words joined by spaces, untokenized (starts-with)
     private const string FieldBookTitleWordsDv = "bookTitleDistinctWords"; // level 0 only: distinct title word count
     private const string FieldBookIdDv = "bookIdValue";               // level 0 only: book id as doc-values
+    private const string FieldCategoryAncestor = "categoryAncestor";  // every category id from the book's own up to the root (untokenized, stored; scope filter)
     internal const string VariantSkeletonField = FieldVariantSkeleton;
     internal const char SkeletonSeparator = '\u0001';
 
@@ -210,7 +211,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
     //      searches are pure index queries with no per-reader tables.
     // v27: tree order counts a base text by the isBaseBook flag only (no title-equals-folder rule).
-    public const string IndexFormatVersion = "v27";
+    // v28: category-ancestor ids per doc, so a search can be scoped to catalog categories.
+    public const string IndexFormatVersion = "v28";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -312,6 +314,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
         // for a book like פרי מגדים whose title carries neither שלחן nor ערוך.
         var catalogPathByBook = ComputeCatalogPaths(categoryList, books);
+        // Every category id above each book, its own first — the scope filter's field.
+        var ancestorsByBook = ComputeCategoryAncestors(categoryList, books);
 
         // Reuse the already-open directory handle if one exists (a committed reader may
         // be serving off it); otherwise open one. A single handle per index path avoids
@@ -374,7 +378,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 titleLength: b.Title.Length,
                 level: 0,
                 treeOrder: TreeOrder(b.Id),
-                structureId: RegularTocStructureId));
+                structureId: RegularTocStructureId,
+                categoryAncestors: ancestorsByBook.GetValueOrDefault(b.Id, [])));
             docCount++;
         }
 
@@ -384,7 +389,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             ct.ThrowIfCancellationRequested();
             if (!bookMeta.TryGetValue(group.BookId, out var book)) continue;
             docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(group.BookId, ""), RegularTocStructureId);
+                catalogPathByBook.GetValueOrDefault(group.BookId, ""), ancestorsByBook.GetValueOrDefault(group.BookId, []), RegularTocStructureId);
             if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
         }
 
@@ -395,7 +400,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             if (!altStructures.TryGetValue(group.StructureId, out var st)) continue;
             if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
             docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(st.BookId, ""), group.StructureId);
+                catalogPathByBook.GetValueOrDefault(st.BookId, ""), ancestorsByBook.GetValueOrDefault(st.BookId, []), group.StructureId);
         }
 
         // 1+2. The normal index is complete — commit it before the slower verse pass,
@@ -408,7 +413,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // documents (same fields, analyzer, ordering). 6. Final commit here. The writer
         // is left OPEN — the caller writes the ver file, does the final NRT refresh (so
         // the verses become visible), then disposes it.
-        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ct);
+        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ancestorsByBook, ct);
         writer.Commit();
         return docCount;
     }
@@ -449,7 +454,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private static int IndexTanachVerses(
         IndexWriter writer, SqliteConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
-        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
+        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, Dictionary<int, int[]> ancestorsByBook,
+        CancellationToken ct)
     {
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
@@ -461,6 +467,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             if (!TanachBookTitles.Contains(book.Title)) continue;
             ct.ThrowIfCancellationRequested();
             string catalogPath = catalogPathByBook.GetValueOrDefault(book.Id, "");
+            int[] categoryAncestors = ancestorsByBook.GetValueOrDefault(book.Id, []);
 
             // The book's TOC entries (chapters), root-stripped, with resolved paths.
             var rows = StripTitleRoots(LoadTocRowsForBook(conn, book.Id), book.Title, book.Id);
@@ -523,7 +530,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         treeOrder: treeOrder(book.Id),
                         // Generated from the regular TOC's chapters, so they truncate
                         // together with it — a chapter hit outranks its verse hits.
-                        structureId: RegularTocStructureId));
+                        structureId: RegularTocStructureId,
+                        categoryAncestors: categoryAncestors));
                     added++;
                     expectedVerse++;
                 }
@@ -600,7 +608,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
         string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int titleLength, int level,
-        long treeOrder, int structureId)
+        long treeOrder, int structureId, int[] categoryAncestors)
     {
         var doc = new Document
         {
@@ -634,6 +642,10 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             doc.Add(new Field(FieldAuthor, authors, StoredDocsOnlyText));
             doc.Add(new Field(FieldVariantSkeleton, authors, DocsOnlyText));
         }
+        // One untokenized term per ancestor category: a scoped search filters any-of these,
+        // and the stored values tell it which scope root a hit fell under.
+        foreach (int categoryId in categoryAncestors)
+            doc.Add(new StringField(FieldCategoryAncestor, categoryId.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.YES));
         if (level == 0)
         {
             var titleWords = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
@@ -653,7 +665,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private int IndexTocTree(
         IndexWriter writer, List<TocRow> rows,
         (int Id, string Title, int CategoryId, string? Authors) book,
-        Func<int, long> treeOrder, string catalogPath, int structureId)
+        Func<int, long> treeOrder, string catalogPath, int[] categoryAncestors, int structureId)
     {
         rows = StripTitleRoots(rows, book.Title, book.Id);
         rows = ExpandDafAmudim(rows);
@@ -693,7 +705,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 titleLength: book.Title.Length,
                 level: level,
                 treeOrder: treeOrder(book.Id),
-                structureId: structureId));
+                structureId: structureId,
+                categoryAncestors: categoryAncestors));
             added++;
         }
         return added;
@@ -737,6 +750,34 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
         var map = new Dictionary<int, string>(books.Count);
         foreach (var b in books) map[b.Id] = CatPath(b.CategoryId);
+        return map;
+    }
+
+    /// <summary>Each book's category ids, its own category first, then every parent up to the
+    /// root. Orphaned books (unknown category) get none. A parent cycle stops at the repeat.</summary>
+    private static Dictionary<int, int[]> ComputeCategoryAncestors(
+        List<(int Id, int? ParentId, string Title)> categories,
+        List<(int Id, string Title, int CategoryId, string? Authors)> books)
+    {
+        var parentById = new Dictionary<int, int?>(categories.Count);
+        foreach (var c in categories) parentById[c.Id] = c.ParentId;
+
+        var chainCache = new Dictionary<int, int[]>(categories.Count);
+        int[] Chain(int id)
+        {
+            if (chainCache.TryGetValue(id, out var cached)) return cached;
+            var chain = new List<int>();
+            int? cur = id;
+            while (cur is { } c && parentById.TryGetValue(c, out var parent) && !chain.Contains(c))
+            {
+                chain.Add(c);
+                cur = parent;
+            }
+            return chainCache[id] = chain.ToArray();
+        }
+
+        var map = new Dictionary<int, int[]>(books.Count);
+        foreach (var b in books) map[b.Id] = Chain(b.CategoryId);
         return map;
     }
 

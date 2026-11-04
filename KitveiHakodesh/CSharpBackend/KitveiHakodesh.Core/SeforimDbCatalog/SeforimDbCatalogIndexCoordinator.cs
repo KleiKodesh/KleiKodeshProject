@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -62,6 +63,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         /// before disposing the index it is reading — otherwise the query faults instead of
         /// coming back superseded.</summary>
         private CancellationTokenSource? _searchCts;
+        /// <summary>Same as <see cref="_searchCts"/> for category-SCOPED searches (the UserSpace
+        /// page), so the catalog page and a scoped page never supersede each other.</summary>
+        private CancellationTokenSource? _scopedSearchCts;
 
         private readonly object _lock = new object();
         private SeforimDbCatalogIndex? _index;
@@ -539,6 +543,8 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         {
             try { Interlocked.Exchange(ref _searchCts, null)?.Cancel(); }
             catch (ObjectDisposedException) { /* that search already finished and disposed it */ }
+            try { Interlocked.Exchange(ref _scopedSearchCts, null)?.Cancel(); }
+            catch (ObjectDisposedException) { /* that search already finished and disposed it */ }
         }
 
         /// <summary>
@@ -647,7 +653,15 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
 
         /// <summary>Run a catalog TOC-path search. Results are NEVER capped; ordering is
         /// (Level, TreeOrder) only. A newer search supersedes this one (Superseded = true).</summary>
-        public CatalogTocSearchResult Search(string query)
+        public CatalogTocSearchResult Search(string query) => SearchCore(query, null, ref _searchCts);
+
+        /// <summary><see cref="Search"/> limited to books filed (at any depth) under one of
+        /// <paramref name="categoryIds"/>; an empty set matches nothing. Latest-wins among scoped
+        /// searches only. Each hit carries <see cref="CatalogTocHit.CategoryAncestors"/>.</summary>
+        public CatalogTocSearchResult Search(string query, IReadOnlyCollection<int> categoryIds)
+            => SearchCore(query, categoryIds, ref _scopedSearchCts);
+
+        private CatalogTocSearchResult SearchCore(string query, IReadOnlyCollection<int>? categoryIds, ref CancellationTokenSource? searchCts)
         {
             EnsureIndex();
             var result = new CatalogTocSearchResult();
@@ -672,7 +686,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             if (string.IsNullOrWhiteSpace(query)) return result;
 
             using var cts = new CancellationTokenSource();
-            var prev = Interlocked.Exchange(ref _searchCts, cts);
+            var prev = Interlocked.Exchange(ref searchCts, cts);
             // Cancel the superseded search: without the `using` above, one CTS per keystroke-search
             // accumulates for the process lifetime. Cancel() first — disposing a CTS does not
             // cancel it. We deliberately do NOT dispose `prev`: its owning Search call is still on
@@ -685,7 +699,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             {
                 // A reset racing in here disposes this index, which is the
                 // ObjectDisposedException the catch below turns into Superseded.
-                result.Results = index.Search(query, cts.Token);
+                result.Results = index.Search(query, categoryIds, cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -707,7 +721,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             }
             finally
             {
-                Interlocked.CompareExchange(ref _searchCts, null, cts);
+                Interlocked.CompareExchange(ref searchCts, null, cts);
             }
             return result;
         }

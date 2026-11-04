@@ -79,7 +79,7 @@
   },
   "loading": "Loading...",
   "markers": {
-    "title": "Commentary markers (Ctrl+U)"
+    "title": "Commentary markers (Ctrl+Shift+U)"
   },
   "note": {
     "delete": "Delete note",

@@ -111,6 +111,12 @@ public sealed class CatalogTocHit
     /// filed under a category named like it.</summary>
     [MessagePack.IgnoreMember]
     public bool MatchesTitleOrAuthor { get; set; }
+
+    /// <summary>Internal (not on the wire): the book's category ids, its own first, then each
+    /// parent up to the root. Filled only by a category-SCOPED search (empty otherwise), which
+    /// uses it to tell which scope root the hit fell under.</summary>
+    [MessagePack.IgnoreMember]
+    public int[] CategoryAncestors { get; set; } = [];
 }
 
 /// <summary>Result of a catalog TOC search (catalogTocSearch wire shape).</summary>

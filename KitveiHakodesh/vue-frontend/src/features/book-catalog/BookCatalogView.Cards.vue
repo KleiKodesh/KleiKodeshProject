@@ -6,7 +6,8 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggestionCard'
 import type { FsItem } from './useBookCatalog'
-import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
@@ -14,8 +15,19 @@ import { stripCommentaryTarget } from './stripCommentaryTarget'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
-const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+const props = defineProps<{
+  items: FsItem[]
+  /** UserSpace only: which folders carry a remove action (its roots). */
+  canRemove?: (node: CategoryNode) => boolean
+}>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  enterFolder: [CategoryNode]
+  /** UserSpace only: a file from a computer folder. */
+  selectFile: [LocalFileItem, boolean?]
+  /** UserSpace only: the remove action on a folder that canRemove allows. */
+  removeFolder: [CategoryNode]
+}>()
 
 const cardsEl = ref<HTMLElement | null>(null)
 const CARD_CELL = ':scope > *'
@@ -25,25 +37,32 @@ const BOOK_ICON = markRaw(IconBookRtl20)
 function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder'
-    ? emit('enterFolder', item.node)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'folder') emit('enterFolder', item.node)
+  else if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
 
 /** Secondary line: book count for a folder; a book's author is in its title. */
 function getSecondaryLine(item: FsItem): string {
-  if (item.kind === 'book') return ''
+  if (item.kind !== 'folder') return ''
   const count = item.node.subtreeBookIds?.length ?? 0
   return count ? t('bookCatalog.bookCount', { n: count }) : ''
+}
+
+function getTitle(item: FsItem): string {
+  if (item.kind === 'folder') return item.node.title
+  if (item.kind === 'file') return fileTitle(item.file)
+  return titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
 }
 
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
-    title: item.kind === 'folder' ? item.node.title : titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors),
+    title: getTitle(item),
     path: getSecondaryLine(item),
-    icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
-    color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
+    icon: item.kind === 'folder' ? FOLDER_ICON : item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
+    color: item.kind === 'folder' ? 'var(--status-warning)' : item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
+    remove: item.kind === 'folder' && props.canRemove?.(item.node) ? () => emit('removeFolder', item.node) : undefined,
     open: (openInNewTab) => {
       focusedIndex.value = i
       activateIndex(i, openInNewTab)
@@ -133,6 +152,10 @@ defineExpose({
 .catalog-cards > * {
   content-visibility: auto;
   contain-intrinsic-size: auto 49px;
+}
+.is-focused :deep(.card-action) {
+  opacity: 1;
+  pointer-events: auto;
 }
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));

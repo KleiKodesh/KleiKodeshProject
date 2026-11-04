@@ -79,7 +79,7 @@
   },
   "loading": "טוען...",
   "markers": {
-    "title": "ציוני מפרשים (Ctrl+U)"
+    "title": "ציוני מפרשים (Ctrl+Shift+U)"
   },
   "note": {
     "delete": "מחק הערה",

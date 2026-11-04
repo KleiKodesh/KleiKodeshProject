@@ -379,6 +379,33 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     }
 
     /// <summary>
+    /// <see cref="LocateAsync"/>'s match set scoped to files under any of
+    /// <paramref name="folders"/> (a Lucene-level prefix filter), with the user's excluded
+    /// folders applied in the query. Matching and ordering are uncapped; only the ordered
+    /// top <see cref="LocalFileIndex.MaterializeCap"/> entries come back (see
+    /// <see cref="LocalFileIndex.SearchUnderFolders"/>) and the caller re-ranks them. Like
+    /// LocateAsync, waits for the first build when the index is not built yet.
+    /// </summary>
+    public async Task<List<PathEntry>> SearchUnderFoldersAsync(
+        string query, IReadOnlyCollection<string> folders, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(query) || folders.Count == 0) return [];
+
+        var index = await AcquireIndexAsync(ct);
+        int total;
+        List<PathEntry> entries;
+        try
+        {
+            entries = index.SearchUnderFolders(query, drive: null, folders, GetExcludedFolders(), limit: 0, total: out total);
+        }
+        finally
+        {
+            lock (_useLock) _activeSearches--;
+        }
+        return LocalFileIndexExcludedFolders.Filter(entries, GetExcludedFolders(), ref total);
+    }
+
+    /// <summary>
     /// Opens (or reopens, after an idle release) the index and registers one search on it.
     /// The caller MUST decrement <c>_activeSearches</c> under <c>_useLock</c> when done.
     /// Loops if an idle release detached the index between the open and the registration.

@@ -159,6 +159,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-dict-cache': null,
   'app-frequent-folders': null,
   'app-bookmarks': null,
+  'app-user-space': null,
 }
 
 // In-flight opens, keyed by database name. The handle is only set in `onsuccess`, so two

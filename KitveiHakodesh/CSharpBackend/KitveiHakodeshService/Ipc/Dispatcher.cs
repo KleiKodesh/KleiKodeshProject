@@ -249,6 +249,20 @@ public sealed class Dispatcher(
                         : new PickFolderResult { Path = picked }));
                 }
 
+                // One level of a folder on disk for UserSpace's tree (Core LocalFolderListing).
+                // Names only - opening a file still goes through openLocalFile's grant.
+                case "listLocalFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    var listing = LocalFolderListing.List(a.Value ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new ListLocalFolderResult
+                    {
+                        Folders = listing.Folders,
+                        Files = listing.Files,
+                        Error = listing.Error,
+                    }));
+                }
+
                 // Excluded folders for file search — persisted in excluded_folders.json BESIDE
                 // the index directory (a reindex deletes that directory) via the SAME shared
                 // LocalFileIndexExcludedFolders the hosted DocumentLocator service uses, so the
@@ -1002,6 +1016,22 @@ public sealed class Dispatcher(
 
                 case "catalogTocStatus":
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
+
+                // ── UserSpace: one ranked search over the user's catalog categories + folders ──
+                case "userSpaceSearch":
+                {
+                    var a = MsgPack.De<UserSpaceSearchArgs>(req.Args);
+                    var roots = (a.Roots ?? new()).Select(r => new global::KitveiHakodesh.Core.UserSpace.UserSpaceRoot(r.CategoryId, r.Folder)).ToList();
+                    return RpcResponse.Ok(MsgPack.Ser(await global::KitveiHakodesh.Core.UserSpace.UserSpaceSearch.SearchAsync(
+                        a.Query ?? "", roots, catalogToc.Coordinator, locator.Coordinator, ct)));
+                }
+
+                case "checkUserSpaceFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(global::KitveiHakodesh.Core.UserSpace.UserSpaceFolderCheck.Check(
+                        a.Value ?? "", locator.GetExcludedFolders())));
+                }
 
                 // Why each index last (re)built — polled by the frontend, which logs each new
                 // reason to its console. Read-only: never starts a build.

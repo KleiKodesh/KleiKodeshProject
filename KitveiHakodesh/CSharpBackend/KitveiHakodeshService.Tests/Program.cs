@@ -53,6 +53,9 @@ for (int i = 0; i < args.Length; i++)
         case "--abbrev": abbrevMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
+        case "--userspace-selftest": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Run() == 0 ? 0 : 1;
+        case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
+        case "--userspace-bench": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Bench(args[++i], args[++i], args.Skip(i + 1).ToArray());
         case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
         case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;

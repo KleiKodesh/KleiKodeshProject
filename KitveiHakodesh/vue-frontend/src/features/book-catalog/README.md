@@ -4,6 +4,8 @@ Book catalog browser: list, cards, tiles and tree views, with Lucene-backed sear
 
 **BookCatalogPage.vue** - main page, orchestrating the address bar and the active view. It owns which face the bar shows (path or search field) — see the `showSearch` note in the file — and forwards the search input's keys to whichever view is on screen. Which view that is comes from `settingsStore.booksView`, an app-wide preference shared by every `/books` tab, not per-tab state; assigning it persists it, so there is nothing to load on mount.
 
+The views also render a third row kind, `file` (a computer file - `fsItemFileIcon.ts`), and emit `selectFile` and, in the tree, `expandFolder`; only UserSpace produces or listens to them.
+
 **BookCatalogView.List.vue** - the catalog list, with folder and book rows.
 
 **BookCatalogView.Tiles.vue** - the same items as a wrapping tile grid, sharing the home page's tile look. Its keyboard steps a whole row at a time and takes left/right within a row (`getColumnsPerRow` / `countGridColumns` in `useInputListNavigation`).

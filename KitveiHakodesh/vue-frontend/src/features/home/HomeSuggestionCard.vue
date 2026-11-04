@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{ card: HomeSuggestionCardData; layout?: 
   layout: 'cards',
 })
 
-const actions = computed(() => !!props.card.pinning)
+const actions = computed(() => !!props.card.pinning || !!props.card.remove)
 
 const isRemoving = ref(false)
 
@@ -29,7 +29,8 @@ const isPinPopping = ref(false)
 // category), like Explorer's short location line; the full path is in the tooltip.
 const shortPath = computed(() => {
   const parts = props.card.path
-    .replaceAll(HOME_CARD_PATH_SEPARATOR, '\\')
+    .split(HOME_CARD_PATH_SEPARATOR)
+    .join('\\')
     .split('\\')
     .map((p) => p.trim())
     .filter(Boolean)
@@ -121,6 +122,10 @@ function onPin() {
 }
 
 function onRemove() {
+  if (props.card.remove) {
+    props.card.remove()
+    return
+  }
   if (isRemoving.value) return
   isRemoving.value = true
   // Let the card animate out before the parent unmounts it.
@@ -169,14 +174,15 @@ function onRemove() {
       <span class="tile-expanded-title">{{ card.title }}</span>
     </div>
 
-    <div v-if="card.pinning" class="card-actions">
+    <div v-if="actions" class="card-actions">
       <button
+        v-if="card.pinning"
         type="button"
         class="card-action card-action--pin"
-        :class="{ 'is-active': card.pinning.pinned, 'is-popping': isPinPopping }"
+        :class="{ 'is-active': card.pinning?.pinned, 'is-popping': isPinPopping }"
         tabindex="-1"
-        :title="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
-        :aria-label="card.pinning.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
+        :title="card.pinning?.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
+        :aria-label="card.pinning?.pinned ? $t('home.card.unpin') : $t('home.card.pin')"
         @click.stop="onPin"
         @animationend="isPinPopping = false"
       >

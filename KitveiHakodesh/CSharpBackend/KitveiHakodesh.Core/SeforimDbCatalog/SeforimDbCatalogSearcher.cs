@@ -170,7 +170,16 @@ public sealed partial class SeforimDbCatalogIndex
     /// truncate it.
     /// </summary>
     public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
+        => Search(query, null, ct);
+
+    /// <summary><see cref="Search(string, CancellationToken)"/> limited to books filed (at any
+    /// depth) under one of <paramref name="categoryIds"/> — a FILTER clause on every query the
+    /// search runs, so the ranking is the catalog's own over the scoped set. Null = unscoped;
+    /// an empty set matches nothing. Scoped hits carry
+    /// <see cref="CatalogTocHit.CategoryAncestors"/>.</summary>
+    public List<CatalogTocHit> Search(string query, IReadOnlyCollection<int>? categoryIds, CancellationToken ct = default)
     {
+        if (categoryIds is { Count: 0 }) return [];
         var tokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
 
@@ -183,7 +192,7 @@ public sealed partial class SeforimDbCatalogIndex
         }
         try
         {
-            return SearchOnSearcher(searcher, new VariantLookup(searcher.IndexReader), tokens, query, ct);
+            return SearchOnSearcher(searcher, new VariantLookup(searcher.IndexReader), tokens, query, CategoryFilter(categoryIds), ct);
         }
         finally
         {
@@ -209,11 +218,11 @@ public sealed partial class SeforimDbCatalogIndex
 
     private List<CatalogTocHit> SearchOnSearcher(
         IndexSearcher searcher, VariantLookup variants,
-        List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, string query, CancellationToken ct)
+        List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, string query, Query? scope, CancellationToken ct)
     {
         // The words the ranking treats as typed, and the books those words name — both
         // decided once per search, the latter feeding the collector's pre-cap order.
-        var queryWords = QueryWordSet(tokens, variants);
+        var queryWords = SeforimDbCatalogRankingKeys.QueryWordSet(tokens, variants);
         var coveredRanks = CoveredBookRanks(searcher.IndexReader, queryWords);
 
         // Accuracy-first ranking (see SortKeyCollector): literal (exact / non-variant)
@@ -221,7 +230,7 @@ public sealed partial class SeforimDbCatalogIndex
         // materialization cap, run the strict literal query (no variants, no fuzzy) into
         // a doc-ID set; a hit is literal iff it is in that set.
         var litCollector = new DocIdSetCollector(ct, searcher.IndexReader.MaxDoc);
-        searcher.Search(BuildQuery(tokens, fuzzy: false, variants: null), litCollector);
+        searcher.Search(Scoped(BuildQuery(tokens, fuzzy: false, variants: null), scope), litCollector);
         FixedBitSet? literalDocIds = litCollector.Ids;
 
         // Word list for the query-token-order tiebreak (see RunPass).
@@ -237,7 +246,7 @@ public sealed partial class SeforimDbCatalogIndex
         var queryQuotedKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(query);
 
         // Normal pass: exact + כתיב/ה-prefix variants (never fuzzy).
-        var hits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: false, literalDocIds, orderWords, queryQuotedKeys, ct);
+        var hits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: false, literalDocIds, orderWords, queryQuotedKeys, scope, ct);
 
         // SPARSE-FUZZY APPEND: when the normal result set is sparse (fewer than
         // SparseFuzzyThreshold hits — which subsumes the old "exact found nothing"
@@ -250,7 +259,7 @@ public sealed partial class SeforimDbCatalogIndex
         // confident results above it.
         if (hits.Count < SparseFuzzyThreshold && tokens.Any(HasFuzzyableWord))
         {
-            var fuzzyHits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: true, literalDocIds, orderWords, queryQuotedKeys, ct);
+            var fuzzyHits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: true, literalDocIds, orderWords, queryQuotedKeys, scope, ct);
             var seen = new HashSet<(int, string)>(hits.Count);
             foreach (var h in hits) seen.Add((h.BookId, h.FullTocPath));
             foreach (var fh in fuzzyHits)
@@ -277,10 +286,10 @@ public sealed partial class SeforimDbCatalogIndex
         IndexSearcher searcher, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants,
         HashSet<string> queryWords, HashSet<long> coveredRanks,
         bool fuzzy, FixedBitSet? literalDocIds, List<string> orderWords, HashSet<string>? queryQuotedKeys,
-        CancellationToken ct)
+        Query? scope, CancellationToken ct)
     {
         var collector = new SortKeyCollector(ct, literalDocIds, coveredRanks);
-        searcher.Search(BuildQuery(tokens, fuzzy, variants), collector);
+        searcher.Search(Scoped(BuildQuery(tokens, fuzzy, variants), scope), collector);
         if (collector.Count == 0) return [];
 
         // Order EVERY match by (IsLiteral, Level, TreeOrder): literal (exact / non-
@@ -296,7 +305,7 @@ public sealed partial class SeforimDbCatalogIndex
         // documents are turned into full hit objects (no one scrolls past ~1000).
         int take = Math.Min(MaterializeCap, ordered.Count);
         var hits = new List<CatalogTocHit>(take);
-        var queryCounts = QueryWordCounts(tokens);
+        var queryCounts = SeforimDbCatalogRankingKeys.QueryWordCounts(tokens);
         int queryWordCount = 0;
         foreach (var n in queryCounts.Values) queryWordCount += n;
         for (int i = 0; i < take; i++)
@@ -309,7 +318,7 @@ public sealed partial class SeforimDbCatalogIndex
             var pathTokens = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
             var titleTokens = ordered[i].Level == 0 ? pathTokens : SeforimDbCatalogTextNormalizer.Tokenize(TitleOf(doc, fullTocPath, ordered[i].Level));
             string tocPath = PathWithoutTitle(doc, fullTocPath, ordered[i].Level);
-            var leafTokens = ordered[i].Level == 0 ? titleTokens : SeforimDbCatalogTextNormalizer.Tokenize(LastSegment(tocPath));
+            var leafTokens = ordered[i].Level == 0 ? titleTokens : SeforimDbCatalogTextNormalizer.Tokenize(SeforimDbCatalogRankingKeys.LastSegment(tocPath));
             hits.Add(new CatalogTocHit
             {
                 BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
@@ -323,12 +332,14 @@ public sealed partial class SeforimDbCatalogIndex
                 StructureId = ordered[i].StructureId,
                 QuotedFormMatch = ordered[i].Level == 0 && queryQuotedKeys != null && HitCarriesQuotedKey(doc, queryQuotedKeys),
                 MatchesTitleOrAuthor = MatchesOnTitleOrAuthor(doc, pathTokens, tokens, variants),
-                TitleCovered = IsCovered(titleTokens, queryWords),
-                TitleDistinctWords = DistinctFound(titleTokens, queryWords),
+                TitleCovered = SeforimDbCatalogRankingKeys.IsCovered(titleTokens, queryWords),
+                TitleDistinctWords = SeforimDbCatalogRankingKeys.DistinctFound(titleTokens, queryWords),
                 TitleLengthGap = Math.Abs(titleTokens.Count - queryWordCount),
-                LeafCovered = IsCovered(leafTokens, queryWords),
-                LeafAddsWord = ordered[i].Level > 0 && IsCovered(leafTokens, queryWords) && leafTokens.Exists(w => !titleTokens.Contains(w)),
-                WordsMatched = CountMatched(pathTokens, queryCounts, variants),
+                LeafCovered = SeforimDbCatalogRankingKeys.IsCovered(leafTokens, queryWords),
+                LeafAddsWord = ordered[i].Level > 0 && SeforimDbCatalogRankingKeys.IsCovered(leafTokens, queryWords) && leafTokens.Exists(w => !titleTokens.Contains(w)),
+                WordsMatched = SeforimDbCatalogRankingKeys.CountMatched(pathTokens, queryCounts, variants),
+                // Read only for a scoped search (UserSpace needs it to find the hit's root).
+                CategoryAncestors = scope is null ? [] : CategoryAncestorsOf(doc),
             });
         }
 
@@ -341,7 +352,7 @@ public sealed partial class SeforimDbCatalogIndex
             // One tokenization per hit serves BOTH the order test and the proximity
             // measurement; measuring them separately tokenized every path twice, on every
             // keystroke.
-            var scratch = new PathScratch(orderWords.Count);
+            var scratch = new SeforimDbCatalogRankingKeys.PathScratch(orderWords.Count);
             foreach (var h in hits) scratch.Measure(h.PathTokens, orderWords, h);
 
             var groupsWithInOrder = new HashSet<(int Level, long Book)>();
@@ -371,7 +382,7 @@ public sealed partial class SeforimDbCatalogIndex
         // acronym is typically ONE word, and a category collision needs no particular length
         // either. Stable, and below IsLiteral throughout, so a variant match never overtakes a
         // literal one.
-        StableSortByFieldAccuracy(hits);
+        SeforimDbCatalogRankingKeys.StableSortByFieldAccuracy(hits);
 
         // Word-proximity rank: how tightly the query's words sit together in the path (keys
         // already measured in the fused pass above). Reordering the materialized window rather
@@ -386,7 +397,7 @@ public sealed partial class SeforimDbCatalogIndex
         // WordsFound outranks WordSpan: finding more of the query in the path beats packing
         // fewer words closer together.
         if (orderWords.Count >= 2)
-            StableSortByProximity(hits);
+            SeforimDbCatalogRankingKeys.StableSortByProximity(hits);
 
         // Per-structure level truncation: within ONE book's ONE TOC structure, a hit at a
         // shallower level is the more accurate address for the query, so that structure's
@@ -497,6 +508,37 @@ public sealed partial class SeforimDbCatalogIndex
         return perWord;
     }
 
+    /// <summary>The any-of category clause for a scoped search; null when unscoped.
+    /// <see cref="CoveredBookRanks"/> stays unscoped on purpose: it only marks books the query
+    /// names, and a book outside the scope never reaches the collector to be marked.</summary>
+    private static Query? CategoryFilter(IReadOnlyCollection<int>? categoryIds)
+    {
+        if (categoryIds is null) return null;
+        var anyOf = new BooleanQuery();
+        foreach (int id in categoryIds)
+            anyOf.Add(new TermQuery(new Term(FieldCategoryAncestor, id.ToString(System.Globalization.CultureInfo.InvariantCulture))), Occur.SHOULD);
+        return anyOf;
+    }
+
+    /// <summary>The words query AND the scope: the scope is a MUST that only filters — scores
+    /// are ignored by every collector here anyway.</summary>
+    private static Query Scoped(BooleanQuery query, Query? scope)
+    {
+        if (scope is null) return query;
+        var scoped = new BooleanQuery { { query, Occur.MUST }, { scope, Occur.MUST } };
+        return scoped;
+    }
+
+    /// <summary>The stored category ancestors of a hit's book, own category first.</summary>
+    private static int[] CategoryAncestorsOf(Document doc)
+    {
+        var values = doc.GetValues(FieldCategoryAncestor);
+        var ids = new int[values.Length];
+        for (int i = 0; i < values.Length; i++)
+            ids[i] = int.Parse(values[i], System.Globalization.CultureInfo.InvariantCulture);
+        return ids;
+    }
+
     /// <summary>True when a query token has any word of 3+ chars — the threshold that
     /// makes the fuzzy fallback worthwhile.</summary>
     private static bool HasFuzzyableWord(SeforimDbCatalogTextNormalizer.QueryToken token)
@@ -505,76 +547,6 @@ public sealed partial class SeforimDbCatalogIndex
             foreach (var word in alt)
                 if (word.Length >= 3) return true;
         return false;
-    }
-
-    /// <summary>
-    /// Stable re-sort of the materialized window on the FIELD-ACCURACY keys — the ones that can
-    /// only be read from stored text, which the collector never sees.
-    /// </summary>
-    private static void StableSortByFieldAccuracy(List<CatalogTocHit> hits)
-    {
-        int n = hits.Count;
-        var arrival = new int[n];
-        var items = new CatalogTocHit[n];
-        for (int i = 0; i < n; i++) { items[i] = hits[i]; arrival[i] = i; }
-
-        Array.Sort(arrival, (x, y) =>
-        {
-            var a = items[x];
-            var b = items[y];
-            if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
-            if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
-            if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
-            if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
-            if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
-            if (a.LeafCovered != b.LeafCovered) return a.LeafCovered ? -1 : 1;
-            if (a.WordsMatched != b.WordsMatched) return b.WordsMatched.CompareTo(a.WordsMatched);
-            if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
-            return x.CompareTo(y);
-        });
-
-        hits.Clear();
-        for (int i = 0; i < n; i++) hits.Add(items[arrival[i]]);
-    }
-
-    /// <summary>
-    /// Stable re-sort of the materialized window by how tightly the query's words sit together
-    /// in the path. Carries the field-accuracy keys too: this pass re-sorts the same window, so
-    /// a key it did not carry would be undone here — proximity must not float an ordinary-word
-    /// hit above the book actually written the way the query was typed.
-    /// </summary>
-    private static void StableSortByProximity(List<CatalogTocHit> hits)
-    {
-        int n = hits.Count;
-        var arrival = new int[n];
-        var items = new CatalogTocHit[n];
-        for (int i = 0; i < n; i++) { items[i] = hits[i]; arrival[i] = i; }
-
-        // Sort an index permutation so the arrival position stays attached to each hit without
-        // a per-hit dictionary lookup in the comparer.
-        Array.Sort(arrival, (x, y) =>
-        {
-            var a = items[x];
-            var b = items[y];
-            if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
-            if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
-            if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
-            if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
-            if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
-            if (a.LeafCovered != b.LeafCovered) return a.LeafCovered ? -1 : 1;
-            if (a.WordsMatched != b.WordsMatched) return b.WordsMatched.CompareTo(a.WordsMatched);
-            if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
-            int c = b.WordsFound.CompareTo(a.WordsFound);   // more words found first
-            if (c != 0) return c;
-            // Words in the typed order first: "Shmuel 2 perek 1" is not "Shmuel 1 / perek 2",
-            // though both carry the same four words equally tightly.
-            if (a.QueryInOrder != b.QueryInOrder) return a.QueryInOrder ? -1 : 1;
-            c = a.WordSpan.CompareTo(b.WordSpan);           // tighter cluster first
-            return c != 0 ? c : x.CompareTo(y);             // else keep arrival order
-        });
-
-        hits.Clear();
-        for (int i = 0; i < n; i++) hits.Add(items[arrival[i]]);
     }
 
     /// <summary>True when this hit's own stored text carries any of the quoted acronyms the
@@ -607,88 +579,6 @@ public sealed partial class SeforimDbCatalogIndex
         return titleLength >= 0 && cut <= fullTocPath.Length ? fullTocPath.Substring(cut) : fullTocPath;
     }
 
-    /// <summary>Every word the ranking counts as typed: each alternative's words and their
-    /// variants — except for an unquoted word that is also a key, which counts only as itself
-    /// (<see cref="SeforimDbCatalogTextNormalizer.QueryToken.PreferLiteral"/>): "bamidbar"
-    /// must not make Bamidbar Rabbah's title look fully typed. Built once per pass;
-    /// <see cref="IsCovered"/> tests each hit's title against it.</summary>
-    private static HashSet<string> QueryWordSet(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants)
-    {
-        var queryWords = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var token in tokens)
-        {
-            IEnumerable<string[]> alts = token.PreferLiteral ? [token.RankingWords] : token.Alternatives;
-            foreach (var alt in alts)
-                foreach (var word in alt)
-                {
-                    queryWords.Add(word);
-                    if (variants != null)
-                        foreach (var variant in variants.Lookup(word)) queryWords.Add(variant);
-                }
-        }
-        return queryWords;
-    }
-
-    /// <summary>The query's words with their multiplicity, one alternative per token
-    /// (<see cref="SeforimDbCatalogTextNormalizer.QueryToken.RankingWords"/>).</summary>
-    private static Dictionary<string, int> QueryWordCounts(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens)
-    {
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var token in tokens)
-            foreach (var word in token.RankingWords)
-                counts[word] = counts.GetValueOrDefault(word) + 1;
-        return counts;
-    }
-
-    /// <summary>How many of the query's words, with repetition, <paramref name="pathTokens"/>
-    /// holds: per query word, min(times in query, times in path), a path occurrence of any
-    /// variant of the word counting for it.</summary>
-    private static int CountMatched(List<string> pathTokens, Dictionary<string, int> queryCounts, VariantLookup? variants)
-    {
-        if (queryCounts.Count == 0 || pathTokens.Count == 0) return 0;
-        var pathCounts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var t in pathTokens) pathCounts[t] = pathCounts.GetValueOrDefault(t) + 1;
-
-        int matched = 0;
-        foreach (var (word, wanted) in queryCounts)
-        {
-            int have = pathCounts.GetValueOrDefault(word);
-            if (have < wanted && variants != null)
-                foreach (var variant in variants.Lookup(word))
-                    have += pathCounts.GetValueOrDefault(variant);
-            matched += Math.Min(have, wanted);
-        }
-        return matched;
-    }
-
-    /// <summary>How many DISTINCT words of <paramref name="tokens"/> the query can match.</summary>
-    private static int DistinctFound(List<string> tokens, HashSet<string> queryWords)
-    {
-        if (tokens.Count == 0) return 0;
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var word in tokens)
-            if (queryWords.Contains(word)) seen.Add(word);
-        return seen.Count;
-    }
-
-    /// <summary>The last " / "-separated segment of a path without its title.</summary>
-    private static string LastSegment(string tocPath)
-    {
-        int i = tocPath.LastIndexOf(" / ", StringComparison.Ordinal);
-        return i < 0 ? tocPath : tocPath.Substring(i + 3);
-    }
-
-    /// <summary>True when EVERY title word is a query word — the query names the book. An
-    /// abbreviation query counts through its expansions, so a quoted acronym for a two-word
-    /// title covers that title.</summary>
-    private static bool IsCovered(List<string> titleTokens, HashSet<string> queryWords)
-    {
-        if (titleTokens.Count == 0) return false;
-        foreach (var word in titleTokens)
-            if (!queryWords.Contains(word)) return false;
-        return true;
-    }
-
     /// <summary>The book title at the head of a stored path (the whole path for a level-0
     /// hit); same split as <see cref="PathWithoutTitle"/>.</summary>
     private static string TitleOf(Document doc, string fullTocPath, int level)
@@ -711,156 +601,11 @@ public sealed partial class SeforimDbCatalogIndex
     private static bool MatchesOnTitleOrAuthor(
         Document doc, List<string> pathTokens, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants)
     {
-        if (tokens.Count == 0) return false;
-
         var authorText = doc.Get(FieldAuthor);
         var authorTokens = string.IsNullOrEmpty(authorText)
             ? null
             : SeforimDbCatalogTextNormalizer.Tokenize(authorText);
-
-        bool Present(string word)
-        {
-            if (pathTokens.Contains(word)) return true;
-            if (authorTokens != null && authorTokens.Contains(word)) return true;
-            if (variants != null)
-                foreach (var variant in variants.Lookup(word))
-                {
-                    if (pathTokens.Contains(variant)) return true;
-                    if (authorTokens != null && authorTokens.Contains(variant)) return true;
-                }
-            return false;
-        }
-
-        foreach (var token in tokens)
-        {
-            bool anyAlt = false;
-            foreach (var alt in token.Alternatives)
-            {
-                bool allWords = true;
-                foreach (var word in alt)
-                    if (!Present(word)) { allWords = false; break; }
-                if (allWords) { anyAlt = true; break; }
-            }
-            if (!anyAlt) return false; // this token only matched the category path
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// Reusable scratch for measuring one hit's path against the query words.
-    ///
-    /// Both measurements this makes — the query-token-ORDER test and the word-PROXIMITY span —
-    /// need the path's tokens, so they come off ONE tokenization with buffers reused across
-    /// hits. Measuring them separately tokenized every hit's path twice, per keystroke.
-    /// </summary>
-    private sealed class PathScratch
-    {
-        private readonly List<string> _ordered;   // participating, WITH duplicates
-        private readonly List<string> _distinct;  // participating, distinct
-        private readonly List<int> _positions;    // flattened, per-word ranges
-        private readonly int[] _starts;
-        private readonly int[] _cursor;
-
-        public PathScratch(int queryWordCount)
-        {
-            _ordered = new List<string>(queryWordCount);
-            _distinct = new List<string>(queryWordCount);
-            _positions = new List<int>(64);
-            _starts = new int[queryWordCount + 1];
-            _cursor = new int[queryWordCount];
-        }
-
-        /// <summary>Measure one hit and write QueryInOrder / WordsFound / WordSpan onto it.</summary>
-        public void Measure(List<string> pathTokens, List<string> queryWords, CatalogTocHit hit)
-        {
-
-            // Participation, both forms, in ONE sweep over the query words. Membership is
-            // tested against the path token list directly: it is short (a TOC path), and a scan
-            // beats allocating a HashSet per hit.
-            //
-            // _ordered KEEPS duplicates and _distinct does not, and that difference matters:
-            // the order test must match a twice-typed word twice, while the span must not
-            // demand two positions for it.
-            _ordered.Clear();
-            _distinct.Clear();
-            foreach (var t in queryWords)
-            {
-                bool inPath = false;
-                for (int i = 0; i < pathTokens.Count; i++)
-                    if (string.Equals(pathTokens[i], t, StringComparison.Ordinal)) { inPath = true; break; }
-                if (!inPath) continue;
-                _ordered.Add(t);
-                if (!_distinct.Contains(t)) _distinct.Add(t);
-            }
-
-            hit.QueryInOrder = TestOrder(pathTokens);
-            var span = MeasureSpan(pathTokens);
-            hit.WordsFound = span.Found;
-            hit.WordSpan = span.Span;
-        }
-
-        /// <summary>Participating query words must appear in the path as an ordered subsequence
-        /// in typed order. Fewer than two participating words means there is nothing to order —
-        /// the hit counts as in order.</summary>
-        private bool TestOrder(List<string> pathTokens)
-        {
-            if (_ordered.Count < 2) return true;
-            int qi = 0;
-            foreach (var tok in pathTokens)
-                if (string.Equals(tok, _ordered[qi], StringComparison.Ordinal) && ++qi == _ordered.Count)
-                    return true;
-            return false;
-        }
-
-        /// <summary>
-        /// Width of the SMALLEST window of the path's token sequence containing every distinct
-        /// participating word. Adjacent words give a span equal to the word count (the tightest
-        /// possible); words scattered across TOC levels give a wide one.
-        ///
-        /// Returns the participating count too, because a span only compares between hits that
-        /// found the same number of words in the path — "2 words within 2 slots" is tighter than
-        /// "2 within 5", but says nothing against a hit where only 1 word was in the path at
-        /// all. Fewer than two leaves nothing to measure: span 0, and the lower count already
-        /// sorts the hit below every measured one.
-        /// </summary>
-        private (int Found, int Span) MeasureSpan(List<string> pathTokens)
-        {
-            int n = _distinct.Count;
-            if (n < 2) return (n, 0);
-
-            // Positions flattened into one list with per-word ranges — no dictionary and no
-            // per-word list allocation.
-            _positions.Clear();
-            for (int w = 0; w < n; w++)
-            {
-                _starts[w] = _positions.Count;
-                string word = _distinct[w];
-                for (int i = 0; i < pathTokens.Count; i++)
-                    if (string.Equals(pathTokens[i], word, StringComparison.Ordinal)) _positions.Add(i);
-            }
-            _starts[n] = _positions.Count;
-
-            // Minimum-window sweep: advance the cursor of the word sitting leftmost — the only
-            // move that can shrink the window — and record the narrowest span seen.
-            Array.Clear(_cursor, 0, n);
-            int best = int.MaxValue;
-            while (true)
-            {
-                int min = int.MaxValue, max = int.MinValue, minWord = -1;
-                for (int w = 0; w < n; w++)
-                {
-                    int lo = _starts[w] + _cursor[w];
-                    if (lo >= _starts[w + 1]) return (n, best);  // exhausted — no narrower window left
-                    int pos = _positions[lo];
-                    if (pos < min) { min = pos; minWord = w; }
-                    if (pos > max) max = pos;
-                }
-                int span = max - min + 1;
-                if (span < best) best = span;
-                if (best == n) return (n, best);                 // tightest possible — stop early
-                _cursor[minWord]++;
-            }
-        }
+        return SeforimDbCatalogRankingKeys.EveryTokenPresent(tokens, pathTokens, authorTokens, variants);
     }
 
     /// <summary>Collects just the global doc-IDs a query matched, into a set. Used to
@@ -1022,7 +767,7 @@ public sealed partial class SeforimDbCatalogIndex
     /// that should also be probed — always applied, not gated behind the fuzzy fallback.
     /// Memoized for the one search it serves.
     /// </summary>
-    private sealed class VariantLookup(IndexReader reader)
+    internal sealed class VariantLookup(IndexReader reader)
     {
         private readonly Dictionary<string, List<string>> _memo = new(StringComparer.Ordinal);
         private TermsEnum? _skeletons;

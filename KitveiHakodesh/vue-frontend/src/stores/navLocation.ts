@@ -121,6 +121,7 @@ const NON_DOCUMENT_ROUTES = new Set<TabRoute>([
   '/dictionary',
   '/midot',
   '/file-search',
+  '/user-space',
 ])
 
 /** Builds a location record from a tab's current state. */

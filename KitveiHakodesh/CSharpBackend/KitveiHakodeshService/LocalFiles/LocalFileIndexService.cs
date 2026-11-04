@@ -25,6 +25,9 @@ public sealed class LocalFileIndexService : IDisposable
         });
     }
 
+    /// <summary>The Core coordinator, for searches Core composes across indexes (UserSpace).</summary>
+    public LocalFileIndexCoordinator Coordinator => _coordinator;
+
     public List<string> GetExcludedFolders() => _coordinator.GetExcludedFolders();
 
     public void SetExcludedFolders(IEnumerable<string> folders) => _coordinator.SetExcludedFolders(folders);
