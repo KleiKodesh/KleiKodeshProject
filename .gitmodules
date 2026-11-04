@@ -1,0 +1,9 @@
+[submodule "FastDocView"]
+	path = FastDocView
+	url = https://github.com/KleiKodesh/FastDocView.git
+[submodule "SeekableDeflate"]
+	path = SeekableDeflate
+	url = https://github.com/KleiKodesh/SeekableDeflate.git
+[submodule "TextEncodingDetection"]
+	path = TextEncodingDetection
+	url = https://github.com/KleiKodesh/TextEncodingDetection.git
