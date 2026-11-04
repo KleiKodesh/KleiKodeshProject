@@ -144,11 +144,25 @@ function restoreState(saved: TocPersistState | undefined) {
   applyState(saved)
 }
 
+/** The search box's reset button: clear the query, collapse both trees, back to the top. */
+function resetTrees() {
+  searchQuery.value = ''
+  tocSectionRef.value?.reset()
+  altSectionRef.value?.reset()
+}
+
 defineExpose({ snapshotState, restoreState })
 </script>
 
 <template>
-  <TocTreeLayout v-model:query="searchQuery" :loading="loading" :error="error" @focus-list="focusTocList">
+  <TocTreeLayout
+    v-model:query="searchQuery"
+    :loading="loading"
+    :error="error"
+    resettable
+    @focus-list="focusTocList"
+    @reset="resetTrees"
+  >
     <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
       <template #top>
         <TocTreeSection

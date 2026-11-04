@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
+import { IconArrowCounterclockwise20Regular } from '@iconify-prerendered/vue-fluent'
 import MessageBanner from './MessageBanner.vue'
 
 /**
@@ -8,9 +9,10 @@ import MessageBanner from './MessageBanner.vue'
  * the FastDocView outline both use it, so they look the same by construction. `query` is the
  * search box's model; arrow keys / Tab in the box ask the page to focus the list (`focusList`).
  */
-const props = withDefaults(defineProps<{ loading?: boolean; error?: string | null; dir?: 'rtl' | 'ltr' }>(), { dir: 'rtl' })
+const props = withDefaults(defineProps<{ loading?: boolean; error?: string | null; dir?: 'rtl' | 'ltr'; resettable?: boolean }>(), { dir: 'rtl' })
 const query = defineModel<string>('query', { default: '' })
-const emit = defineEmits<{ focusList: [] }>()
+// `reset` (only with `resettable`): the reset button in the search box - collapse the tree(s).
+const emit = defineEmits<{ focusList: []; reset: [] }>()
 
 const searchRef = ref<HTMLInputElement | null>(null)
 // The panel mounts fresh each time it opens (v-if), so onMounted focuses the box; the watcher
@@ -46,6 +48,16 @@ watch(
             @keydown.down.prevent="emit('focusList')"
             @keydown.tab.prevent="emit('focusList')"
           />
+          <button
+            v-if="resettable"
+            type="button"
+            class="reset-btn"
+            :title="$t('components.resetTree')"
+            :aria-label="$t('components.resetTree')"
+            @click="emit('reset')"
+          >
+            <IconArrowCounterclockwise20Regular />
+          </button>
         </div>
       </div>
     </template>
@@ -82,6 +94,32 @@ watch(
   border: none;
   outline: none;
   font-size: 12px;
+  color: var(--text-primary);
+}
+
+.reset-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  /* Negative block margin: the button must not make the search row taller. */
+  margin-block: -6px;
+  margin-inline-start: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.reset-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.reset-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   color: var(--text-primary);
 }
 

@@ -4,8 +4,10 @@ import TreeNode from './TreeNode.vue'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { SegmentSearchTree } from '@/utils/segmentSearchTree'
+import { useElementSize } from '@vueuse/core'
 
-const props = defineProps<{
+// Vue casts an absent boolean prop to false, so the on-by-default flag needs an explicit default.
+const props = withDefaults(defineProps<{
   nodes: TreeNodeItem[]
   filter?: string
   activeNodeId?: number
@@ -14,7 +16,7 @@ const props = defineProps<{
   fontSize?: string
   stickyHeaders?: boolean
   searchTree?: SegmentSearchTree
-}>()
+}>(), { stickyHeaders: true })
 
 // The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
 // (keyboard) — both flow through wantsNewTab. It is undefined only for
@@ -119,6 +121,92 @@ function setExpanded(ids: readonly number[]): void {
 
 defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded })
 
+/**
+ * Sticky breadcrumb: the full ancestor path of the row at the top of the scroll
+ * area (not just its direct parent), drawn as our own overlay element above the
+ * scroller. Recomputed once per frame on scroll; clicking a crumb brings that
+ * heading to the top.
+ */
+const headerRef = ref<HTMLElement | null>(null)
+const headerPath = ref<TreeNodeItem[]>([])
+// The scroller's scrollbar width - the header stops short of it so the bar stays usable.
+const scrollbarWidth = ref(0)
+const nodeById = computed(() => {
+  const map = new Map<number, TreeNodeItem>()
+  for (const n of props.nodes) map.set(n.id, n)
+  return map
+})
+
+function rowTop(el: HTMLElement, container: HTMLElement) {
+  return el.offsetTop - container.offsetTop
+}
+
+/** First visible row whose bottom is below `y` (binary search - rows are in order). */
+function rowAt(y: number): TreeNodeItem | undefined {
+  const container = containerRef.value
+  const list = visibleNodes.value
+  if (!container) return undefined
+  let lo = 0
+  let hi = list.length - 1
+  let found: TreeNodeItem | undefined
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const el = rowRefs.value.get(list[mid]!.id)
+    if (!el) return undefined
+    if (rowTop(el, container) + el.offsetHeight > y) {
+      found = list[mid]
+      hi = mid - 1
+    } else lo = mid + 1
+  }
+  return found
+}
+
+function updateHeader() {
+  const container = containerRef.value
+  if (!container || props.filter || props.stickyHeaders === false || container.scrollTop <= 0) {
+    headerPath.value = []
+    return
+  }
+  scrollbarWidth.value = container.offsetWidth - container.clientWidth
+  const top = rowAt(container.scrollTop + (headerRef.value?.offsetHeight ?? 0))
+  const path: TreeNodeItem[] = []
+  let parentId = top?.parentId ?? null
+  while (parentId != null) {
+    const parent = nodeById.value.get(parentId)
+    if (!parent) break
+    path.unshift(parent)
+    parentId = parent.parentId
+  }
+  const same =
+    path.length === headerPath.value.length && path.every((n, i) => n.id === headerPath.value[i]!.id)
+  if (!same) headerPath.value = path
+}
+
+let headerFrame = 0
+function onScroll() {
+  if (headerFrame) return
+  headerFrame = requestAnimationFrame(() => {
+    headerFrame = 0
+    updateHeader()
+  })
+}
+
+function scrollToCrumb(node: TreeNodeItem) {
+  const el = rowRefs.value.get(node.id)
+  const container = containerRef.value
+  if (!el || !container) return
+  // The overlay header covers the top of the scroller: land the heading just below it
+  // (its path is then the heading's ancestors, so the header's height is final).
+  container.scrollTop = rowTop(el, container)
+  updateHeader()
+  nextTick(() => {
+    container.scrollTop = rowTop(el, container) - (headerRef.value?.offsetHeight ?? 0)
+  })
+}
+
+// Keyboard nav / reveal-active scroll rows into view: keep them out from under the header.
+const { height: headerHeight } = useElementSize(headerRef, undefined, { box: 'border-box' })
+
 const { focusedIndex, containerFocused } = useListKeys(
   containerRef,
   () => visibleNodes.value.length,
@@ -162,10 +250,22 @@ const visibleNodes = computed(() => {
   }
   return result
 })
+// After visibleNodes is declared - the getter reads it during setup.
+watch(
+  () => [visibleNodes.value, props.filter],
+  () => nextTick(updateHeader),
+)
 </script>
 
 <template>
-  <div ref="containerRef" class="tree-entries toc-thin-scroll" tabindex="0">
+  <div class="tree-view">
+  <div v-if="headerPath.length" ref="headerRef" class="tree-sticky-header" :style="{ insetInlineEnd: `${scrollbarWidth}px` }">
+    <template v-for="(crumb, ci) in headerPath" :key="crumb.id">
+      <span v-if="ci > 0" class="crumb-sep">›</span>
+      <span class="crumb" @click="scrollToCrumb(crumb)">{{ crumb.text }}</span>
+    </template>
+  </div>
+  <div ref="containerRef" class="tree-entries toc-thin-scroll" tabindex="0" :style="{ scrollPaddingTop: `${headerPath.length ? headerHeight : 0}px` }" @scroll.passive="onScroll">
     <TreeNode
       v-for="(node, i) in visibleNodes"
       :key="node.id"
@@ -178,16 +278,49 @@ const visibleNodes = computed(() => {
       :indent="indent"
       :row-height="rowHeight"
       :font-size="fontSize"
-      :sticky-headers="stickyHeaders !== false"
       @toggle="toggle(node)"
       @select="selectNode(i, node, $event)"
     >
       {{ filter ? (activeTree.displayPaths.get(node.id) ?? node.text) : node.text }}
     </TreeNode>
   </div>
+  </div>
 </template>
 
 <style scoped>
+.tree-view {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Overlay, not in the flow: its height changes with the path and must not shift the rows. */
+.tree-sticky-header {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--tree-bg, var(--bg-primary));
+}
+.crumb {
+  cursor: pointer;
+}
+.crumb:hover {
+  color: var(--accent-color, #3478f6);
+}
+.crumb-sep {
+  opacity: 0.6;
+}
 .tree-entries {
   flex: 1;
   height: 100%;
@@ -201,9 +334,6 @@ const visibleNodes = computed(() => {
 .tree-entries .tree-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 28px;
-}
-.tree-entries .tree-row.is-sticky {
-  content-visibility: visible;
 }
 .tree-entries .tree-row.is-filtered {
   contain-intrinsic-size: auto 56px;

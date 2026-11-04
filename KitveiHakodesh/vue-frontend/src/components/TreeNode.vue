@@ -11,7 +11,6 @@ const props = defineProps<{
   indent?: number
   rowHeight?: number
   fontSize?: string
-  stickyHeaders?: boolean
 }>()
 
 // `select` carries the originating MouseEvent when triggered by a click, so
@@ -34,7 +33,6 @@ const fs = () => props.fontSize ?? '0.8rem'
       'is-focused': focused,
       'is-filtered': filtered,
       'is-parent': node.hasChildren && !filtered,
-      'is-sticky': node.hasChildren && !filtered && stickyHeaders !== false,
     }"
     @keydown.space.prevent="node.hasChildren && !filtered ? $emit('toggle') : $emit('select')"
   >
@@ -73,31 +71,22 @@ const fs = () => props.fontSize ?? '0.8rem'
 .tree-row.is-parent {
   background: var(--tree-bg, var(--bg-primary));
 }
-.tree-row.is-sticky {
-  position: sticky;
-  top: calc(v-bind('node.level') * var(--rh, 28px));
-  z-index: calc(10 - v-bind('node.level'));
-  background: var(--tree-bg, var(--bg-primary));
-}
 .tree-row:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
-.tree-row.is-parent:hover,
-.tree-row.is-sticky:hover {
+.tree-row.is-parent:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, var(--tree-bg, var(--bg-primary)));
 }
 .tree-row:has(.tree-label:active) {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
-.tree-row.is-parent:has(.tree-label:active),
-.tree-row.is-sticky:has(.tree-label:active) {
+.tree-row.is-parent:has(.tree-label:active) {
   background: color-mix(in srgb, var(--text-primary) 10%, var(--tree-bg, var(--bg-primary)));
 }
 .tree-row.is-active {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-.tree-row.is-parent.is-active,
-.tree-row.is-sticky.is-active {
+.tree-row.is-parent.is-active {
   background: color-mix(in srgb, var(--text-primary) 8%, var(--tree-bg, var(--bg-primary)));
 }
 .tree-row.is-active .tree-label {

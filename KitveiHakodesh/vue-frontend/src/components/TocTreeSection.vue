@@ -23,6 +23,12 @@ defineExpose({
   containerRef: () => treeViewRef.value?.containerRef ?? null,
   getExpanded: () => treeViewRef.value?.getExpanded() ?? [],
   setExpanded: (ids: readonly number[]) => treeViewRef.value?.setExpanded(ids),
+  /** Collapse everything and go back to the top. */
+  reset: () => {
+    treeViewRef.value?.reset()
+    const el = treeViewRef.value?.containerRef
+    if (el) el.scrollTop = 0
+  },
 })
 </script>
 
