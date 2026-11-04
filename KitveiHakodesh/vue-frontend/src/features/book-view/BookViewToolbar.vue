@@ -18,7 +18,10 @@ import {
   IconMoreHorizontal24Regular,
   IconTextAlignRight20Regular,
   IconTextAlignJustify20Regular,
+  IconReadAloud20Regular,
+  IconReadAloud20Filled,
 } from '@iconify-prerendered/vue-fluent'
+import { useBookViewReadAloud } from './useBookViewReadAloud'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewBookmarksDropdown from './BookViewBookmarksDropdown.vue'
@@ -111,6 +114,21 @@ const flowTextLabel = computed(() => t(flowText.value ? 'bookView.toolbar.flowTe
 function toggleFlowText() {
   settingsStore.linesLayout = flowText.value ? 'rows' : 'flow'
 }
+
+/** Read aloud: from the selection, or from the top line in view on. Stops on a book or version change. */
+const readAloud = useBookViewReadAloud()
+const readAloudLabel = computed(() =>
+  t(readAloud.isReading.value ? 'bookView.toolbar.readAloudStop' : 'bookView.toolbar.readAloud'),
+)
+function toggleReadAloud() {
+  if (readAloud.isReading.value) {
+    readAloud.stop()
+    return
+  }
+  if (props.bookId == null) return
+  void readAloud.start(props.bookId, props.activeVersionId, props.currentScrollLineIndex, props.lines.length)
+}
+watch(() => [props.bookId, props.activeVersionId], () => readAloud.stop())
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
@@ -260,6 +278,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
       case 'word-link-markers': return wordLinkMarkersPresent.value
       case 'bookmarks': return bookmarksPresent.value
       case 'export-to-word': return !props.exportRestricted
+      case 'read-aloud': return readAloud.isSupported
       case 'sync-commentaries': return props.hasCommentaries
       case 'related-books': return props.hasRelatedBooks
       case 'side-commentaries': return props.hasCommentaries && !!props.canUseSidePanel
@@ -495,6 +514,16 @@ defineExpose({ tocBtnRef, createBookmark })
     >
       <BookViewExportToWordGlyph />
     </ConversionActionButton>
+    <button
+      v-if="readAloud.isSupported"
+      v-bind="collapseAttrs('read-aloud')"
+      :class="{ active: readAloud.isReading.value }"
+      :title="readAloudLabel"
+      @click="toggleReadAloud"
+    >
+      <IconReadAloud20Filled v-if="readAloud.isReading.value" />
+      <IconReadAloud20Regular v-else />
+    </button>
     <!--
       Stands in for whatever the pane was too narrow to hold. It holds ONE place, at the
       toolbar's far end, and holds it at every width: it is out of the flex flow entirely
@@ -560,6 +589,17 @@ defineExpose({ tocBtnRef, createBookmark })
       >
         <BookViewExportToWordGlyph />
       </ConversionActionButton>
+      <button
+        v-if="isOverflowed('read-aloud')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: readAloud.isReading.value }"
+        @click="overflowOpen = false; toggleReadAloud()"
+      >
+        <IconReadAloud20Filled v-if="readAloud.isReading.value" />
+        <IconReadAloud20Regular v-else />
+        <span>{{ readAloudLabel }}</span>
+      </button>
       <button
         v-if="isOverflowed('sync-commentaries')"
         role="menuitem"

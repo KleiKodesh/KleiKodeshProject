@@ -154,6 +154,8 @@
     "close_right": "סגור חלונית מפרשים מימין (Ctrl+Shift+J)",
     "dragHint": "גרור כדי להזיז את סרגל הכלים",
     "exportToWord": "ייצא ל-Word",
+    "readAloud": "הקרא בקול",
+    "readAloudStop": "עצור הקראה",
     "more": "פריטים נוספים",
     "nextSection": "קטע הבא (Ctrl+חץ שמאלי)",
     "open_bottom": "חלונית מפרשים תחתונה (Ctrl+J)",

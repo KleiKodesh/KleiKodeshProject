@@ -154,6 +154,8 @@
     "close_right": "Close right commentary panel (Ctrl+Shift+J)",
     "dragHint": "Drag to move the toolbar",
     "exportToWord": "Export to Word",
+    "readAloud": "Read aloud",
+    "readAloudStop": "Stop reading aloud",
     "more": "More items",
     "nextSection": "Next section (Ctrl+Left)",
     "open_bottom": "Bottom commentary panel (Ctrl+J)",
