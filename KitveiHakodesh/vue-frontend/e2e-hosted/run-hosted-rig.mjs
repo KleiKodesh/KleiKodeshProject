@@ -358,6 +358,18 @@ async function main() {
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
     page.on('pageerror', (e) => consoleErrors.push(String(e)))
     await waitFor('test hooks', () => page.evaluate(() => !!window.__khTest), 60_000)
+    // a fresh profile shows the first-run wizard over everything: seed the two settings it checks
+    // (settingsStore app.setupDone / app.termsAccepted under the persistence prefix) and reload once
+    const seeded = await page.evaluate(() => {
+      const keys = ['kitvei-hakodesh.app.setupDone', 'kitvei-hakodesh.app.termsAccepted']
+      const missing = keys.filter((k) => localStorage.getItem(k) !== 'true')
+      for (const k of missing) localStorage.setItem(k, 'true')
+      return missing.length
+    })
+    if (seeded) {
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await waitFor('test hooks after seeding', () => page.evaluate(() => !!window.__khTest), 60_000)
+    }
     log(`attached to ${page.url()}`)
     await runChecks(page, consoleErrors)
   } finally {
