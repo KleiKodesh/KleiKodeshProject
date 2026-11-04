@@ -122,10 +122,14 @@ function onVoiceChange(voiceUri: string) {
   display: flex;
   flex-direction: row;
   align-items: center;
-  /* The book-view toolbar's own height and padding. */
+  /* The book-view toolbar's height (border included); buttons a size smaller so they fit. */
+  /* 28px bar - 2px border = 26px inside: 22px buttons leave 2px clear above and below. */
+  --read-aloud-button-size: 22px;
+  /* The shared split dropdown (skip) sizes itself from this. */
+  --toolbar-button-size: var(--read-aloud-button-size);
   box-sizing: border-box;
   height: var(--toolbar-horizontal-height);
-  padding: 0 var(--toolbar-horizontal-padding);
+  padding: 0 2px;
   gap: 0;
   background: var(--bg-toolbar);
   border: 1px solid var(--border-color);
@@ -136,9 +140,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--toolbar-button-size);
-  height: var(--toolbar-button-size);
-  padding: 6px;
+  width: var(--read-aloud-button-size);
+  height: var(--read-aloud-button-size);
+  padding: 3px;
   border-radius: 4px;
   flex-shrink: 0;
 }
@@ -166,8 +170,8 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: var(--toolbar-button-size);
+  width: 16px;
+  height: var(--read-aloud-button-size);
   cursor: grab;
   color: var(--text-secondary);
   touch-action: none;
