@@ -166,6 +166,15 @@ function layoutPair(text: SVGTextElement) {
     context.drawImage(source, sx, 0, Math.min(step * 1.5, inkWidth - sx), inkHeight, 0, 0, Math.min(step * 1.5, inkWidth - sx), inkHeight)
   }
 
+  // the bent ink's own bounds, in the shape's points (the fill spans them - paintOverTextBounds)
+  const pixels = context.getImageData(0, 0, target.width, target.height).data
+  let left = target.width, right = -1, upperRow = target.height, lowerRow = -1
+  for (let y = 0; y < target.height; y++)
+    for (let x = 0; x < target.width; x++)
+      if (pixels[(y * target.width + x) * 4 + 3]! > 0) { if (x < left) left = x; if (x > right) right = x; if (y < upperRow) upperRow = y; if (y > lowerRow) lowerRow = y }
+  if (right >= left)
+    text.setAttribute('data-fontwork-ink', [minX + left / pixelsPerPoint, minY + upperRow / pixelsPerPoint, (right - left + 1) / pixelsPerPoint, (lowerRow - upperRow + 1) / pixelsPerPoint].join(' '))
+
   // 4. the bent text as a mask over a rectangle painted with the text's own fill - a colour, or the shape's gradient / pattern
   //    paint in the shape's coordinates (Fontwork fills its outlines with the shape's fill: the paint is not flattened to one
   //    colour). The text itself stays for selection and accessibility, transparent.
@@ -186,11 +195,63 @@ function layoutPair(text: SVGTextElement) {
   mask.appendChild(image)
   const paint = document.createElementNS(SVG_NS, 'rect')
   for (const [name, value] of [['x', minX], ['y', minY], ['width', maxX - minX], ['height', maxY - minY]] as const) paint.setAttribute(name, String(value))
-  paint.setAttribute('fill', text.getAttribute('fill') ?? '#000000')
+  paint.setAttribute('fill', text.getAttribute('data-fontwork-paint') ?? text.getAttribute('fill') ?? '#000000')
   paint.setAttribute('mask', `url(#${maskId})`)
   group.append(mask, paint)
   text.parentNode?.insertBefore(group, text)
   text.setAttribute('fill-opacity', '0')
+}
+
+/**
+ * The fill spans the text's own bounds: LibreOffice puts every glyph outline of the effect into ONE path object with the
+ * shape's fill attributes (EnhancedCustomShapeFontWork.cxx:1096-1130 CreateSdrObjectFromParagraphOutlines: aPolyPoly of all
+ * characters, SetMergedItemSet(the custom shape's set)), and a gradient fills its object's bounds. The library writes the
+ * shape's paint over the shape's box; here a copy is made over the union of the bent ink (paired lines) and the text boxes
+ * (single lines): a linear gradient keeps its angle and is laid out again over the new box (the box grown to the turned extent,
+ * basegfx gradienttools.cxx init1DGradientInfo :52-120), a rectangular shade is mapped onto it, a pattern keeps its tile size.
+ */
+export function paintOverTextBounds(group: Element) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  const take = (x: number, y: number, w: number, h: number) => { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h) }
+  for (const text of group.querySelectorAll<SVGTextElement>('text[data-fontwork]')) {
+    const ink = text.getAttribute('data-fontwork-ink')
+    if (ink) { const [x, y, w, h] = ink.split(' ').map(Number); take(x!, y!, w!, h!) }
+    else if (text.getAttribute('data-fontwork') === 'single') { const box = text.getBBox(); if (box.width > 0) take(box.x, box.y, box.width, box.height) }
+  }
+  if (!(maxX > minX && maxY > minY)) return
+  const width = maxX - minX, height = maxY - minY
+  const painted = [...group.querySelectorAll<SVGElement>('text[data-fontwork="single"], .fast-doc-view-fontwork-bent rect[mask]')]
+  for (const element of painted) {
+    const original = element.getAttribute('data-fontwork-paint') ?? element.getAttribute('fill') ?? ''
+    const reference = /^url\(#([^)]+)\)$/.exec(original)
+    if (!reference) continue
+    element.setAttribute('data-fontwork-paint', original)
+    const server = group.ownerDocument.getElementById(reference[1] ?? '')
+    if (!server) continue
+    const copy = server.cloneNode(true) as SVGElement
+    copy.setAttribute('id', `${server.id}-text-${Math.round(minX * 100)}-${Math.round(minY * 100)}-${Math.round(width * 100)}-${Math.round(height * 100)}`)
+    if (copy.tagName.toLowerCase() === 'lineargradient') {
+      const x1 = Number(copy.getAttribute('x1')), y1 = Number(copy.getAttribute('y1')), x2 = Number(copy.getAttribute('x2')), y2 = Number(copy.getAttribute('y2'))
+      const length = Math.hypot(x2 - x1, y2 - y1)
+      if (length <= 0) continue
+      const dx = (x2 - x1) / length, dy = (y2 - y1) / length              // (sin a, cos a) of the gradient's turn
+      const half = (height * Math.abs(dy) + width * Math.abs(dx)) / 2      // the turned extent of the text box
+      const cx = minX + width / 2, cy = minY + height / 2
+      copy.setAttribute('x1', String(cx - dx * half)); copy.setAttribute('y1', String(cy - dy * half))
+      copy.setAttribute('x2', String(cx + dx * half)); copy.setAttribute('y2', String(cy + dy * half))
+    } else if (copy.tagName.toLowerCase() === 'pattern') {
+      const tileWidth = Number(copy.getAttribute('width')), tileHeight = Number(copy.getAttribute('height'))
+      const isShade = server.id.startsWith('word-officeart-shade-')
+      copy.setAttribute('patternTransform', isShade && tileWidth > 0 && tileHeight > 0
+        ? `translate(${minX} ${minY}) scale(${width / tileWidth} ${height / tileHeight})`
+        : `translate(${minX} ${minY})`)
+    } else continue
+    const defs = group.ownerDocument.createElementNS(SVG_NS, 'defs')
+    defs.setAttribute('class', 'fast-doc-view-fontwork-paint')
+    defs.appendChild(copy)
+    group.insertBefore(defs, group.firstChild)
+    element.setAttribute('fill', `url(#${copy.id})`)
+  }
 }
 
 /** Lays out every text effect inside `root` once (marked done, so re-runs on the same element are free). */
@@ -200,6 +261,7 @@ export function layoutFontwork(root: Element) {
     group.setAttribute('data-fontwork-done', '')
     layoutSingle(group)
     for (const text of group.querySelectorAll<SVGTextElement>('text[data-fontwork="pair"]')) layoutPair(text)
+    paintOverTextBounds(group)
   }
 }
 
@@ -208,7 +270,11 @@ export function relayoutChangedResolution(root: Element) {
   for (const text of root.querySelectorAll<SVGTextElement>('text[data-fontwork="pair"][data-fontwork-pixels]')) {
     const drawnAt = Number(text.getAttribute('data-fontwork-pixels'))
     const now = pixelsPerPointOf(text)
-    if (Math.abs(now - drawnAt) / drawnAt > 0.01) layoutPair(text)
+    if (Math.abs(now - drawnAt) / drawnAt > 0.01) {
+      layoutPair(text)
+      const group = text.closest('g[data-fontwork-shape]')
+      if (group) { for (const old of group.querySelectorAll('defs.fast-doc-view-fontwork-paint')) old.remove(); paintOverTextBounds(group) }
+    }
   }
 }
 
