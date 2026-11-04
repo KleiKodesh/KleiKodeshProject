@@ -74,6 +74,18 @@ jobs:
           ref: ${{ inputs.source_ref || 'feature/multi-library-badge-toggle' }}
           path: src
 
+      # The source may reference the public FastDocView submodule (the upstream added it in v10.4.0). Only that
+      # one: the others are private or replaced by a stub below. Harmless when the source has no such submodule.
+      - name: Fetch the public FastDocView submodule (if the source uses it)
+        shell: pwsh
+        working-directory: src
+        run: |
+          if (Test-Path ".gitmodules") {
+            $has = (Select-String -Path ".gitmodules" -Pattern "KitveiHakodesh/FastDocView" -Quiet)
+            if ($has) { git submodule update --init --depth 1 KitveiHakodesh/FastDocView; if ($LASTEXITCODE -ne 0) { throw "FastDocView submodule failed" } }
+            else { Write-Host "No FastDocView submodule in this source." }
+          }
+
       - name: Record what is being built
         shell: pwsh
         working-directory: src
