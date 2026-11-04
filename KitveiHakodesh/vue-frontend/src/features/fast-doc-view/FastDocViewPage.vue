@@ -14,7 +14,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useFastDocViewCommands } from '@/composables/fastDocViewCommands'
 import { useTabStore } from '@/stores/tabStore'
-import { fastDocViewApi } from '@/webview-host/fastDocViewApi'
+import { fastDocViewApi, parseFastDocViewOpenFailure } from '@/webview-host/fastDocViewApi'
 import { cancelLocalFileConversion, openFileInDefaultApp, openUrlInSystemBrowser, restoreLocalFile } from '@/webview-host/bridge'
 import { useI18n } from 'vue-i18n'
 import { showToast } from '@/composables/useToast'
@@ -441,6 +441,19 @@ watch([notesVisible, notesFractions, notesSync, notesPlace], () => void saveNote
 // "Open as PDF": the same file through the existing Word -> PDF conversion (an explicit
 // choice; FastDocView is the default). The tab becomes a PDF (or HTML fallback) tab.
 const { t } = useI18n()
+
+/** A failure's banner text: the translated message for a known open-failure code, the raw text as the detail line. */
+function describeFailure(failure: unknown, fallbackKey: string): { message: string; details: string } {
+  const known = parseFastDocViewOpenFailure(failure)
+  if (known) return { message: t(`fastDocView.openFailure.${known.code}`), details: known.detail }
+  return { message: t(fallbackKey), details: failure instanceof Error ? failure.message : String(failure) }
+}
+const openErrorText = computed(() => describeFailure(fastDocument.error.value, 'fastDocView.loadError'))
+const readErrorText = computed(() => describeFailure(fastDocument.readError.value, 'fastDocView.readError'))
+
+async function retryOpen() {
+  if (filePath) await fastDocument.open(filePath, { reachIndex: initialIndex.value })
+}
 /** idle -> busy (converting; the button cancels) -> done (a check; the click opens the result). */
 const pdfState = ref<ConversionActionState>('idle')
 let convertedPdf: { url: string; kind?: 'pdf' | 'html' } | null = null
@@ -784,6 +797,17 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
           :dismissible="true"
         />
         <MessageBanner
+          v-if="fastDocument.readError.value && !fastDocument.error.value"
+          severity="error"
+          :message="readErrorText.message"
+          :details="readErrorText.details"
+          :dismissible="false"
+        >
+          <template #actions>
+            <button type="button" class="fast-doc-view-banner-action" data-fast-doc-view-retry-read @click="fastDocument.retryRead">{{ $t('fastDocView.retry') }}</button>
+          </template>
+        </MessageBanner>
+        <MessageBanner
           v-if="!filePath"
           severity="info"
           :message="$t('fastDocView.noFileOpen')"
@@ -792,10 +816,14 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
         <MessageBanner
           v-else-if="fastDocument.error.value"
           severity="error"
-          :message="$t('fastDocView.loadError')"
-          :details="String(fastDocument.error.value)"
+          :message="openErrorText.message"
+          :details="openErrorText.details"
           :dismissible="false"
-        />
+        >
+          <template #actions>
+            <button type="button" class="fast-doc-view-banner-action" data-fast-doc-view-retry-open @click="retryOpen">{{ $t('fastDocView.retry') }}</button>
+          </template>
+        </MessageBanner>
         <LoadingAnimation v-else-if="fastDocument.isLoading.value || !stateReady" />
         <SplitPane v-else-if="fastDocument.summary.value" class="fast-doc-view-notes-split" :data-fast-doc-view-root="contentRootId" v-model="notesFraction" :bottom-visible="notesVisible && hasNotes" :second-place="effectiveNotesPlace">
           <template #top>
@@ -867,6 +895,21 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
 </template>
 
 <style scoped>
+.fast-doc-view-banner-action {
+  flex: none;
+  align-self: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fast-doc-view-banner-action:hover { background: var(--hover-bg, var(--bg-secondary)); }
+.fast-doc-view-banner-action:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
 .fast-doc-view {
   position: relative;
   display: flex;

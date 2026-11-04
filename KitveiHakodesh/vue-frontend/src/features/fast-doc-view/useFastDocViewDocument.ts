@@ -22,6 +22,9 @@ export const FAST_DOC_VIEW_INDEX_BLOCKS_PER_SCAN = 5000
  * growing and `indexBuildFailed` is set. A changed file is not retried here (it reopens). */
 export const FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS: readonly number[] = [500, 1000, 2000, 4000, 8000]
 
+/** A fetch that lost its document (closed, replaced, reopened meanwhile): the scroller just asks again - never shown. */
+export class FastDocViewStaleFetchError extends Error {}
+
 /** A note with the block whose text references it - for jumping between reference and note. */
 export type FastDocViewPlacedNote = FastDocViewNote & { blockIndex: number }
 
@@ -53,6 +56,11 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   const sections = shallowRef<FastDocViewSection[]>([])
   const isLoading = ref(false)
   const error = ref<unknown>(null)
+  /** A block fetch (or the reopen after a change on disk) failed after the document was shown: the page shows
+   * a banner over the text with a retry. Cleared by `retryRead` and by every open. */
+  const readError = ref<unknown>(null)
+  /** The failure came from reopening the file (moved, deleted, now unreadable): a retry opens it again. */
+  let readErrorNeedsReopen = false
   /** Bumped when cached content is replaced under the same indexes (a reopen) - the scroller's rowSourceVersion. */
   const contentVersion = ref(0)
   /** Bumped when provisional blocks (drawn before the index was final) are dropped - the scroller asks
@@ -95,6 +103,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     openedPath = path
     isLoading.value = true
     error.value = null
+    readError.value = null
+    readErrorNeedsReopen = false
     try {
       const opened = await api.open(path)
       if (generation !== openGeneration) {
@@ -234,7 +244,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     for (let start = first; start < end; start += FAST_DOC_VIEW_MAX_BLOCKS_PER_REQUEST) {
       const count = Math.min(FAST_DOC_VIEW_MAX_BLOCKS_PER_REQUEST, end - start)
       const documentId = summary.value?.documentId
-      if (!documentId) throw new Error('FastDocView: document closed')
+      if (!documentId) throw new FastDocViewStaleFetchError('FastDocView: document closed')
       beginFetch()
       let fetched
       try {
@@ -244,7 +254,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       }
       // Reopened or closed meanwhile: these blocks belong to the old document. The
       // reopen bumps contentVersion, so the scroller asks for its window again.
-      if (summary.value?.documentId !== documentId) throw new Error('FastDocView: document replaced')
+      if (summary.value?.documentId !== documentId) throw new FastDocViewStaleFetchError('FastDocView: document replaced')
       cache.store(fetched, focus, options.retainedRanges?.() ?? [])
       cacheRevision.value++
       // a fetch begun before the index completed may still bring provisional blocks: fetch them again
@@ -257,7 +267,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
    * cannot be had. A "source changed" error reopens the document and tries once more.
    */
   async function ensureBlocks(start: number, end: number): Promise<void> {
-    if (!summary.value) throw new Error('FastDocView: no document open')
+    if (!summary.value) throw new FastDocViewStaleFetchError('FastDocView: no document open')
     const clampedEnd = Math.min(end, blockCount.value)
     const focus = [start, clampedEnd] as const
     const fetchMissing = async () => {
@@ -265,12 +275,47 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
         await fetchSpan(spanStart, spanEnd, focus)
       }
     }
+    const generation = openGeneration
     try {
-      await fetchMissing()
+      try {
+        await fetchMissing()
+      } catch (caught) {
+        if (!isFastDocViewSourceChangedError(caught)) throw caught
+        try {
+          await reopen()
+        } catch (reopenFailure) {
+          if (generation === openGeneration && !(reopenFailure instanceof FastDocViewStaleFetchError)) readErrorNeedsReopen = true
+          throw reopenFailure
+        }
+        await fetchMissing()
+      }
     } catch (caught) {
-      if (!isFastDocViewSourceChangedError(caught)) throw caught
+      // the scroller only learns "not available"; the reader is told here (a stale fetch is just asked again)
+      if (generation === openGeneration && !(caught instanceof FastDocViewStaleFetchError) && readError.value == null) {
+        console.error('[FastDocView] reading blocks failed', caught)
+        readError.value = caught
+      }
+      throw caught
+    }
+  }
+
+  /** The reader's "try again" after a read failure: reopens when the reopen failed, else asks for the window again. */
+  async function retryRead(): Promise<void> {
+    if (readError.value == null) return
+    const generation = openGeneration
+    const needsReopen = readErrorNeedsReopen
+    readError.value = null
+    readErrorNeedsReopen = false
+    if (!needsReopen) {
+      refetchVersion.value++
+      return
+    }
+    try {
       await reopen()
-      await fetchMissing()
+    } catch (caught) {
+      if (generation !== openGeneration || caught instanceof FastDocViewStaleFetchError) return
+      readError.value = caught
+      readErrorNeedsReopen = true
     }
   }
 
@@ -339,6 +384,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     textWidthTwipsAt,
     isLoading,
     error,
+    readError,
+    retryRead,
     contentVersion,
     refetchVersion,
     landmarkTiers,

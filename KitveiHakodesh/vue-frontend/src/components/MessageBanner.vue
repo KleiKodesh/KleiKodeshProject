@@ -37,6 +37,7 @@ import {
 //            the rest; the icon is decorative; the dismiss button carries a Hebrew label.
 //
 // Props: severity (default 'error'), message, details?, dismissible (default true).
+// Slot:  actions (optional) - buttons on the inline-end side, before the dismiss button (e.g. "Try again").
 // Emits: dismiss — the parent owns visibility (v-if on its own state), the banner only asks.
 
 type Severity = 'error' | 'warning' | 'info' | 'success'
@@ -78,6 +79,7 @@ const isAssertive = computed(() => props.severity === 'error')
         <span class="message-banner-message">{{ message }}</span>
         <span v-if="details" class="message-banner-details">{{ details }}</span>
       </div>
+      <slot name="actions" />
       <button
         v-if="dismissible"
         type="button"

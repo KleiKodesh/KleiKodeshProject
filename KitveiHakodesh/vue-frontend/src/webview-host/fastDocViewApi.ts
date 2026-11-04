@@ -124,6 +124,25 @@ export function isFastDocViewSourceChangedError(error: unknown): boolean {
   return message.includes(FAST_DOC_VIEW_SOURCE_CHANGED)
 }
 
+/**
+ * The service's error text when the library could not open the file:
+ * "FastDocViewOpenFailed:<code>: detail" (Core FastDocViewOpenFailedException). The page shows
+ * its own translated message for the code; the detail stays as a secondary line.
+ */
+export const FAST_DOC_VIEW_OPEN_FAILED = 'FastDocViewOpenFailed'
+export const FAST_DOC_VIEW_OPEN_FAILURE_CODES = ['encrypted', 'corrupt', 'online-only', 'not-found', 'unsupported', 'access-denied'] as const
+export type FastDocViewOpenFailureCode = (typeof FAST_DOC_VIEW_OPEN_FAILURE_CODES)[number]
+
+/** The open-failure code and the raw detail, or null when the error carries no known code. */
+export function parseFastDocViewOpenFailure(error: unknown): { code: FastDocViewOpenFailureCode; detail: string } | null {
+  const message = error instanceof Error ? error.message : String(error)
+  const match = /FastDocViewOpenFailed:([a-z-]+):\s*([\s\S]*)/.exec(message)
+  if (!match) return null
+  const code = match[1] as FastDocViewOpenFailureCode
+  if (!FAST_DOC_VIEW_OPEN_FAILURE_CODES.includes(code)) return null
+  return { code, detail: match[2]!.trim() }
+}
+
 /** Little-endian Int32 per block, from the raw bytes the service sends. */
 export function decodeFastDocViewWeights(bytes: Uint8Array | ArrayLike<number> | null | undefined): Int32Array {
   if (!bytes) return new Int32Array(0)

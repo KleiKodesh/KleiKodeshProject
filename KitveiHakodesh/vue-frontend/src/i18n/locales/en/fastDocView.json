@@ -33,5 +33,14 @@
   "notesPlaceBottom": "Notes at the bottom",
   "notesPlaceRight": "Notes on the right",
   "notesPlaceLeft": "Notes on the left",
-  "ignoreMargins": "Ignore document margins\nUse the regular reading-column width"
+  "ignoreMargins": "Ignore document margins\nUse the regular reading-column width",
+  "readError": "Part of the document could not be read",
+  "openFailure": {
+    "encrypted": "This file is password-protected. Remove the password in Word and open it again.",
+    "corrupt": "This file is damaged and cannot be read.",
+    "online-only": "This file is stored online only and could not be downloaded. Make it available offline, or start the cloud app, then try again.",
+    "not-found": "The file was not found. It may have been moved, renamed or deleted.",
+    "unsupported": "This file type or version is not supported.",
+    "access-denied": "You do not have permission to read this file."
+  }
 }

@@ -29,7 +29,12 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     /// a big file returns after its first blocks; the page then calls <see cref="Scan"/> until complete.</summary>
     public FastDocViewSummary Open(string validatedPath)
     {
-        string id = _documents.Open(validatedPath);
+        string id;
+        try { id = _documents.Open(validatedPath); }
+        catch (Exception exception) when (FastDocViewOpenFailedException.CodeOf(exception) is { } code)
+        {
+            throw new FastDocViewOpenFailedException(code, exception.Message, exception);
+        }
         return Use(id, document =>
         {
             (int footnotes, int endnotes) = document.NoteCounts;
