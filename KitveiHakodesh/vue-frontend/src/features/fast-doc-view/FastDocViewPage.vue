@@ -530,6 +530,7 @@ if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
         zoom: zoom.value,
         notesZoom: notesZoom.value,
         notesPaneOpen: notesVisible.value && hasNotes.value,
+        notesSync: notesSync.value,
         search: {
           visible: searchVisible.value,
           isSearching: search.isSearching.value,
@@ -540,6 +541,8 @@ if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
       }
     },
     scrollToBlock: (index: number) => windowedScroller.value?.scrollToIndex(index),
+    /** The notes pane's sync toggle (the toolbar button's state). */
+    setNotesSync: (on: boolean) => { notesSync.value = on },
     setZoom,
     setNotesZoom,
     setNotesPlace,
