@@ -168,13 +168,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # release notes read the log since the last tag
-          submodules: true        # WpfLib, FastDocView, SeekableDeflate, TextEncodingDetection
-
-      # Not in this repo: its own repository, gitignored here.
-      - uses: actions/checkout@v7
-        with:
-          repository: KleiKodesh/EasyTabs
-          path: ChromeTabs
+          submodules: recursive   # WpfLib, ChromeTabs (EasyTabs), FastDocView + its SeekableDeflate, TextEncodingDetection
 
       - uses: microsoft/setup-msbuild@v3
 
