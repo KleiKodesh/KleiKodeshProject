@@ -49,6 +49,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     {
         using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         bool isRegistered = !string.IsNullOrEmpty(openId) && _pendingOpens.TryAdd(openId!, source);
+        if (isRegistered && WasCancelledEarly(openId!)) source.Cancel();   // the cancel arrived before this open registered
         string id;
         try { id = _documents.Open(validatedPath, cancellation: source.Token); }
         catch (Exception exception) when (exception is not OperationCanceledException && FastDocViewOpenFailedException.CodeOf(exception) is { } code)
@@ -198,10 +199,42 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     /// <summary>Stops the open the page started with <paramref name="openId"/>, if it is still running. False when none is.</summary>
     public bool CancelOpen(string openId)
     {
-        if (string.IsNullOrEmpty(openId) || !_pendingOpens.TryGetValue(openId, out CancellationTokenSource? source)) return false;
+        if (string.IsNullOrEmpty(openId)) return false;
+        if (!_pendingOpens.TryGetValue(openId, out CancellationTokenSource? source))
+        {
+            RememberEarlyCancel(openId);     // the open may not have registered yet (requests race): stop it when it does
+            return false;
+        }
         try { source.Cancel(); }
         catch (ObjectDisposedException) { return false; }     // the open finished meanwhile
         return true;
+    }
+
+    // cancels that found no running open, kept briefly by id (bounded): an open that registers later is stopped at once
+    private const int MaxEarlyCancels = 64;
+    private static readonly TimeSpan EarlyCancelLifetime = TimeSpan.FromSeconds(30);
+    private readonly Dictionary<string, DateTime> _earlyCancels = new(StringComparer.Ordinal);
+
+    private void RememberEarlyCancel(string openId)
+    {
+        lock (_earlyCancels)
+        {
+            DateTime now = DateTime.UtcNow;
+            foreach (string stale in _earlyCancels.Where(pair => now - pair.Value > EarlyCancelLifetime).Select(pair => pair.Key).ToList()) _earlyCancels.Remove(stale);
+            if (_earlyCancels.Count >= MaxEarlyCancels) _earlyCancels.Remove(_earlyCancels.OrderBy(pair => pair.Value).First().Key);
+            _earlyCancels[openId] = now;
+        }
+        // the open may have registered between the lookup and here
+        if (_pendingOpens.TryGetValue(openId, out CancellationTokenSource? late))
+        {
+            try { late.Cancel(); } catch (ObjectDisposedException) { }
+        }
+    }
+
+    private bool WasCancelledEarly(string openId)
+    {
+        lock (_earlyCancels)
+            return _earlyCancels.Remove(openId, out DateTime at) && DateTime.UtcNow - at <= EarlyCancelLifetime;
     }
 
     private T Use<T>(string documentId, Func<IWordWindowedDocument, T> action)
