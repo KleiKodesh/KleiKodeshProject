@@ -39,6 +39,7 @@ import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useLinkPreviewTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
 import FastDocViewNotesPane, { fastDocViewNoteKey } from './FastDocViewNotesPane.vue'
 import { useFastDocViewPictures } from './useFastDocViewPictures'
+import { vFastDocViewFontwork } from './fastDocViewFontwork'
 import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
 
 const paneNavigation = usePaneNavigation()
@@ -811,7 +812,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                     class="reading-column-line fast-doc-view-block"
                     :style="blockColumnStyle(index)"
                   >
-                    <div class="fast-doc-view-block-text word-document" :style="blockTextStyle" v-html="blockHtml(index)" />
+                    <div v-fast-doc-view-fontwork class="fast-doc-view-block-text word-document" :style="blockTextStyle" v-html="blockHtml(index)" />
                   </div>
                 </template>
               </WindowedScroller>
