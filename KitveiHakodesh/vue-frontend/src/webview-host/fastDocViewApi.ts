@@ -35,6 +35,9 @@ export interface FastDocViewBlock {
   kind: string
   html: string
   notes: FastDocViewNote[]
+  /** Drawn before the index was final with something only the final index knows (an .odt connector
+   * glued to shapes in other blocks): fetched again once the index is complete. */
+  provisional?: boolean
 }
 
 /** What `fastDocViewScan` returns: the index state after one more building step. */

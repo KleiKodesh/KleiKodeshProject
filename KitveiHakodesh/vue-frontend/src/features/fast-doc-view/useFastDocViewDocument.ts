@@ -55,6 +55,13 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   const error = ref<unknown>(null)
   /** Bumped when cached content is replaced under the same indexes (a reopen) - the scroller's rowSourceVersion. */
   const contentVersion = ref(0)
+  /** Bumped when provisional blocks (drawn before the index was final) are dropped - the scroller asks
+   * for its window again and fetches only them; with contentVersion, the scroller's rowSourceVersion. */
+  const refetchVersion = ref(0)
+  /** Drops provisional blocks once the index is final, so they are fetched again. */
+  function dropProvisionalBlocks() {
+    if (cache.dropWhere((block) => block.provisional === true) > 0) refetchVersion.value++
+  }
   /** Bumped on every cache write so rows reading the cache re-render. */
   const cacheRevision = ref(0)
 
@@ -189,6 +196,9 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       if (summary.value) summary.value = withScanState(summary.value, state)
       if (state.isIndexComplete) {
         isIndexComplete.value = true
+        // Blocks drawn with what only the final index knows: dropped, so the scroller asks for
+        // the ones on screen again (only those - the rest are fetched when scrolled to).
+        dropProvisionalBlocks()
         await loadOutline(documentId, generation)
       }
     }
@@ -237,6 +247,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       if (summary.value?.documentId !== documentId) throw new Error('FastDocView: document replaced')
       cache.store(fetched, focus, options.retainedRanges?.() ?? [])
       cacheRevision.value++
+      // a fetch begun before the index completed may still bring provisional blocks: fetch them again
+      if (isIndexComplete.value) dropProvisionalBlocks()
     }
   }
 
@@ -328,6 +340,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     isLoading,
     error,
     contentVersion,
+    refetchVersion,
     landmarkTiers,
     rowWeights,
     open,
