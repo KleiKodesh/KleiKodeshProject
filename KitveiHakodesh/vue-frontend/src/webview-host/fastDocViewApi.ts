@@ -74,7 +74,13 @@ export interface FastDocViewSection {
 
 /** Everything the page needs from the service - injectable so the composable is testable. */
 export interface FastDocViewApi {
-  open(path: string): Promise<FastDocViewSummary>
+  /** `openId`: the page's id for this open, so `cancelOpen` can stop it while it runs. */
+  open(path: string, openId?: string): Promise<FastDocViewSummary>
+  /**
+   * Stops the service's work on a running open (the tab closed, or another file opened before it returned);
+   * the open then fails with "Cancelled." and nothing stays open. Optional: a host without it lets the open finish.
+   */
+  cancelOpen?(openId: string): Promise<void>
   blocks(documentId: string, first: number, count: number): Promise<FastDocViewBlock[]>
   headings(documentId: string): Promise<FastDocViewHeading[]>
   /** Notes [first, first + count) in body order (the notes pane's own windows over every note); at most 100. */
@@ -155,7 +161,10 @@ export function decodeFastDocViewWeights(bytes: Uint8Array | ArrayLike<number> |
 }
 
 export const fastDocViewApi: FastDocViewApi = {
-  open: (path) => serviceCall<FastDocViewSummary>('fastDocViewOpen', { path }),
+  open: (path, openId) => serviceCall<FastDocViewSummary>('fastDocViewOpen', { path, openId }),
+  cancelOpen: async (openId) => {
+    await serviceCall('fastDocViewCancelOpen', { openId })
+  },
   blocks: async (documentId, first, count) =>
     (await serviceCall<FastDocViewBlock[]>('fastDocViewBlocks', { documentId, first, count })) ?? [],
   notes: async (documentId, first, count) =>
