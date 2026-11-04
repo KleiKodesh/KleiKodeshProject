@@ -16,7 +16,7 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Curren
 # Correct build order: dependencies first, then VSTO last
 $projects = @(
     # Shared libraries (no dependencies)
-    "WpfLib/WpfLib.csproj",
+    "KleiKodeshVsto/WpfLib/WpfLib/WpfLib.csproj",
     
     # DocDesign (depends on WpfLib)
     "KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj",
