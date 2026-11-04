@@ -38,6 +38,13 @@ export interface ReadAloudPosition {
   wordEnd: number
 }
 
+/**
+ * The voices read aloud offers: Hebrew ones, except Hila - left out at the user's request.
+ */
+export function isOfferedVoice(voice: SpeechSynthesisVoice): boolean {
+  return voice.lang.toLowerCase().startsWith('he') && !/hila/i.test(voice.name)
+}
+
 /** The voice list arrives late on first use; waits for it once. */
 function waitForVoices(): Promise<void> {
   if (speechSynthesis.getVoices().length > 0) return Promise.resolve()
@@ -83,7 +90,6 @@ export function useBookViewReadAloud() {
   const rate = useStorage<number>('bookView.readAloud.rate', 1)
   const voiceUri = useStorage<string>('bookView.readAloud.voice', '')
   const highlightWords = useStorage<boolean>('bookView.readAloud.highlight', true)
-  const followAlong = useStorage<boolean>('bookView.readAloud.follow', true)
   /** Skipping on/off, and what it skips. */
   const skipEnabled = useStorage<boolean>('bookView.readAloud.skip', true)
   const skipOptions = useStorage<ReadAloudSkipOptions>('bookView.readAloud.skipOptions', { ...DEFAULT_SKIP_OPTIONS }, undefined, { mergeDefaults: true })
@@ -103,8 +109,8 @@ export function useBookViewReadAloud() {
   function chosenVoice(): SpeechSynthesisVoice | null {
     const all = speechSynthesis.getVoices()
     return (
-      all.find((v) => v.voiceURI === voiceUri.value) ??
-      all.find((v) => v.lang.toLowerCase().startsWith('he')) ??
+      all.find((v) => v.voiceURI === voiceUri.value && isOfferedVoice(v)) ??
+      all.find(isOfferedVoice) ??
       null
     )
   }
@@ -244,7 +250,7 @@ export function useBookViewReadAloud() {
 
   return {
     isSupported, isReading, isPaused, position, voices,
-    rate, voiceUri, highlightWords, followAlong, skipEnabled, skipOptions,
+    rate, voiceUri, highlightWords, skipEnabled, skipOptions,
     start, pause, resume, stop, skip, changeRate, applySettingsChange,
   }
 }

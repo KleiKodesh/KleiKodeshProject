@@ -2,7 +2,7 @@ import { onScopeDispose, watch } from 'vue'
 import type { BookViewReadAloud, ReadAloudPosition } from './useBookViewReadAloud'
 
 /**
- * Marks the word being read aloud in the lines pane, and keeps the line being read in view.
+ * Marks the word being read aloud in the lines pane, and always keeps the line being read in view.
  *
  * The mark is a CSS Custom Highlight (`::highlight(kh-read-aloud)`), so the rendered line's
  * DOM is never touched. The spoken text and the rendered line can differ (markers, notes,
@@ -88,7 +88,7 @@ export function useBookViewReadAloudHighlight(
         clear()
         return
       }
-      if (readAloud.followAlong.value && pos.lineIndex !== previous?.lineIndex) follow(pos.lineIndex)
+      if (pos.lineIndex !== previous?.lineIndex) follow(pos.lineIndex)
       if (!supported || !readAloud.highlightWords.value || pos.wordStart < 0) {
         clear()
         return

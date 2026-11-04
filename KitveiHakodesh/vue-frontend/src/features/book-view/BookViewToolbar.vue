@@ -119,6 +119,9 @@ function toggleFlowText() {
 /** Read aloud lives in its own panel (BookViewReadAloudPanel); this button opens and closes it. */
 const readAloudSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 const readAloudLabel = computed(() => t('bookView.toolbar.readAloud'))
+/** The toolbar button's tooltip: the name, then what it reads, on new lines. */
+const readAloudTitle = computed(() => `${t('bookView.toolbar.readAloud')}
+${t('bookView.toolbar.readAloudHint')}`)
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
@@ -508,7 +511,7 @@ defineExpose({ tocBtnRef, createBookmark })
       v-if="readAloudSupported"
       v-bind="collapseAttrs('read-aloud')"
       :class="{ active: readAloudOpen }"
-      :title="readAloudLabel"
+      :title="readAloudTitle"
       @click="$emit('toggleReadAloud')"
     >
       <IconReadAloud20Filled v-if="readAloudOpen" />
