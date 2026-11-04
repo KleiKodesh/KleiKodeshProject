@@ -82,7 +82,7 @@ function choose(voiceUri: string) {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: var(--toolbar-button-size);
+  height: var(--read-aloud-button-size, 24px);
   padding: 0 6px;
   border-radius: 4px;
   font-size: 12px;
