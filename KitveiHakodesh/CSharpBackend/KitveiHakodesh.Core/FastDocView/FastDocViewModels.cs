@@ -10,6 +10,14 @@ namespace KitveiHakodesh.Core.FastDocView;
 public sealed class FastDocViewOpenArgs
 {
     public string Path { get; set; } = "";
+    /// <summary>The page's id for this open: fastDocViewCancelOpen with it stops the open's work (tab closed or another file opened).</summary>
+    public string? OpenId { get; set; }
+}
+
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewCancelOpenArgs
+{
+    public string OpenId { get; set; } = "";
 }
 
 [MessagePackObject(keyAsPropertyName: true)]

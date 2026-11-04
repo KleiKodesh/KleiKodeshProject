@@ -96,8 +96,29 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
    * Opens `path`. `reachIndex` (a restored position): while the index is incomplete, scan
    * until that block is known BEFORE the document is shown, or the reader lands elsewhere.
    */
+  // The open still running in the service, if any: a new open or the page going away cancels it there,
+  // so a big file's first index work stops instead of finishing for nobody.
+  let pendingOpenId: string | null = null
+  let openCounter = 0
+  async function openInService(path: string) {
+    const openId = `${Date.now().toString(36)}-${++openCounter}-${Math.random().toString(36).slice(2)}`
+    pendingOpenId = openId
+    try {
+      return await api.open(path, openId)
+    } finally {
+      if (pendingOpenId === openId) pendingOpenId = null
+    }
+  }
+  function cancelPendingOpen() {
+    const openId = pendingOpenId
+    if (!openId) return
+    pendingOpenId = null
+    void api.cancelOpen?.(openId).catch(() => {})
+  }
+
   async function open(path: string, openOptions: { reachIndex?: number } = {}): Promise<void> {
     const generation = ++openGeneration
+    cancelPendingOpen()
     await closeCurrent()
     if (generation !== openGeneration) return
     openedPath = path
@@ -106,7 +127,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     readError.value = null
     readErrorNeedsReopen = false
     try {
-      const opened = await api.open(path)
+      const opened = await openInService(path)
       if (generation !== openGeneration) {
         void api.close(opened.documentId).catch(() => {})
         return
@@ -223,7 +244,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       try {
         if (!path) return
         const staleDocumentId = summary.value?.documentId
-        const opened = await api.open(path)
+        const opened = await openInService(path)
         if (generation !== openGeneration) {
           void api.close(opened.documentId).catch(() => {})
           return
@@ -371,6 +392,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
 
   onScopeDispose(() => {
     openGeneration++
+    cancelPendingOpen()
     void closeCurrent()
   })
 
