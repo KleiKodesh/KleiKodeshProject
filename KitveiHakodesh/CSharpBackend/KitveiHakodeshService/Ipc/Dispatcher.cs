@@ -176,8 +176,11 @@ public sealed class Dispatcher(
                         };
                         return RpcResponse.Err(code is null ? error : global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.MessageFor(code, error));
                     }
-                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Open(full)));
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Open(full, a.OpenId, ct)));
                 }
+                case "fastDocViewCancelOpen":
+                    fastDocViewDocuments.CancelOpen(MsgPack.De<FastDocViewCancelOpenArgs>(req.Args).OpenId);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
                 case "fastDocViewBlocks":
                 {
                     var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);

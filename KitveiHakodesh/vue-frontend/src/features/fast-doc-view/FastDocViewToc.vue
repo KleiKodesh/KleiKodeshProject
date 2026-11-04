@@ -75,10 +75,12 @@ defineExpose({ snapshotState })
 </script>
 
 <template>
-  <TocTreeLayout v-model:query="query" :dir="isRightToLeft ? 'rtl' : 'ltr'" @focus-list="focusList">
+  <!-- the document's direction applies to its heading rows only; the panel chrome and search box follow the app -->
+  <TocTreeLayout v-model:query="query" @focus-list="focusList">
     <TocTreeSection
       ref="sectionRef"
       class="fast-doc-view-toc-section"
+      :dir="isRightToLeft ? 'rtl' : 'ltr'"
       :title="null"
       :entries="outline"
       :filter="query"

@@ -38,15 +38,26 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     private void OnBlockRenderFailed(string filePath, int blockIndex, Exception cause) =>
         _logError?.Invoke($"FastDocView: block {blockIndex} of {filePath} could not be rendered; shown as a placeholder", cause);
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _pendingOpens = new(StringComparer.Ordinal);
+
     /// <summary>Opens <paramref name="validatedPath"/> (the caller validated access). A first open of
-    /// a big file returns after its first blocks; the page then calls <see cref="Scan"/> until complete.</summary>
-    public FastDocViewSummary Open(string validatedPath)
+    /// a big file returns after its first blocks; the page then calls <see cref="Scan"/> until complete.
+    /// <see cref="CancelOpen"/> with <paramref name="openId"/> (or <paramref name="cancellation"/>) stops the open's
+    /// work - the page closed the tab or opened another file before this returned - and throws
+    /// <see cref="OperationCanceledException"/>; nothing stays open.</summary>
+    public FastDocViewSummary Open(string validatedPath, string? openId = null, CancellationToken cancellation = default)
     {
+        using var source = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        bool isRegistered = !string.IsNullOrEmpty(openId) && _pendingOpens.TryAdd(openId!, source);
         string id;
-        try { id = _documents.Open(validatedPath); }
-        catch (Exception exception) when (FastDocViewOpenFailedException.CodeOf(exception) is { } code)
+        try { id = _documents.Open(validatedPath, cancellation: source.Token); }
+        catch (Exception exception) when (exception is not OperationCanceledException && FastDocViewOpenFailedException.CodeOf(exception) is { } code)
         {
             throw new FastDocViewOpenFailedException(code, exception.Message, exception);
+        }
+        finally
+        {
+            if (isRegistered) _pendingOpens.TryRemove(openId!, out _);
         }
         return Use(id, document =>
         {
@@ -183,6 +194,15 @@ public sealed class FastDocViewOpenDocuments : IDisposable
         });
 
     public void Close(string documentId) => _documents.Close(documentId);
+
+    /// <summary>Stops the open the page started with <paramref name="openId"/>, if it is still running. False when none is.</summary>
+    public bool CancelOpen(string openId)
+    {
+        if (string.IsNullOrEmpty(openId) || !_pendingOpens.TryGetValue(openId, out CancellationTokenSource? source)) return false;
+        try { source.Cancel(); }
+        catch (ObjectDisposedException) { return false; }     // the open finished meanwhile
+        return true;
+    }
 
     private T Use<T>(string documentId, Func<IWordWindowedDocument, T> action)
     {

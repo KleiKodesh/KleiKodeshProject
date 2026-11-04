@@ -88,6 +88,47 @@ describe('FastDocViewBlockCache', () => {
 })
 
 describe('useFastDocViewDocument', () => {
+  it('cancels a running open in the service when another file opens or the page goes away', async () => {
+    const { api } = fakeApi(100)
+    const opens: { path: string; openId: string; resolve: () => void }[] = []
+    const cancelled: string[] = []
+    const closed: string[] = []
+    const summary = (id: string) => ({
+      documentId: id, blockCount: 100, knownBlockCount: 100, isIndexComplete: true,
+      isRightToLeft: false, stylesheet: '', headingCount: 0, footnoteCount: 0, endnoteCount: 0,
+    })
+    api.open = (path, openId) => new Promise((resolve) => {
+      const id = `doc-${opens.length + 1}`
+      opens.push({ path, openId: openId!, resolve: () => resolve(summary(id)) })
+    })
+    api.cancelOpen = async (openId) => { cancelled.push(openId) }
+    api.close = async (documentId) => { closed.push(documentId) }
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    const first = document.open('C:/big.rtf')
+    await flush()
+    expect(opens).toHaveLength(1)
+    const second = document.open('C:/other.txt')
+    await flush()
+    expect(cancelled).toEqual([opens[0]!.openId])
+    expect(opens).toHaveLength(2)
+    expect(opens[1]!.openId).not.toBe(opens[0]!.openId)
+    opens[0]!.resolve()       // the service finished anyway: the stale document is closed, not shown
+    await first
+    expect(closed).toEqual(['doc-1'])
+    opens[1]!.resolve()
+    await second
+    expect(document.summary.value?.documentId).toBe('doc-2')
+    expect(cancelled).toHaveLength(1)   // a finished open is not cancelled
+
+    const third = document.open('C:/huge.txt')
+    await flush()
+    scope.stop()                        // tab closed while the open runs
+    expect(cancelled).toEqual([opens[0]!.openId, opens[2]!.openId])
+    opens[2]!.resolve()
+    await third
+  })
+
   it('fetches only the missing blocks and stays within capacity', async () => {
     const { api, calls } = fakeApi(10_000)
     const scope = effectScope()
