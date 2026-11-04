@@ -13,7 +13,9 @@
  *   (fx, fy) of the text area -> upper(fx) + (lower(fx) - upper(fx)) * fy, fx and fy taken along each outline's length. The
  *   page has no glyph outlines, but the mapping is linear in fy for a fixed fx, so the text is drawn once into a canvas and
  *   copied column by column (one device pixel wide), each column stretched from upper(fx) to lower(fx): the same mapping,
- *   to the pixel. The result replaces the text's paint; the text itself stays in the DOM (transparent) for selection.
+ *   to the pixel. The bent text masks a rectangle painted with the text's own fill - colour, or the shape's gradient /
+ *   pattern (Fontwork fills its outlines with the shape's fill) - and is drawn again when zoom or the device pixel ratio
+ *   changes; the text itself stays in the DOM (transparent) for selection.
  *
  * Runs on block HTML already in the page (the directive below); a block that is not shown is never touched.
  */
@@ -94,16 +96,20 @@ function layoutSingle(group: Element) {
   }
 }
 
-/** The paint of the text (its fill colour; a gradient / pattern paint falls back to its first stop / the shape's colour). */
-function solidFill(text: SVGTextElement): string {
-  const fill = text.getAttribute('fill') ?? '#000000'
-  const reference = /^url\(#([^)]+)\)$/.exec(fill)
-  if (!reference) return fill
-  const server = text.ownerDocument.getElementById(reference[1] ?? '')
-  return server?.querySelector('stop')?.getAttribute('stop-color') ?? server?.querySelector('rect')?.getAttribute('fill') ?? '#000000'
+/** Device pixels per point of the SVG the text is in (its on-screen scale - zoom included - times the device pixel ratio). */
+function pixelsPerPointOf(text: SVGTextElement): number {
+  const svg = text.ownerSVGElement
+  const box = svg?.getBoundingClientRect()
+  const viewBox = svg?.viewBox.baseVal
+  return box && viewBox && viewBox.width > 0 && box.width > 0 ? (box.width / viewBox.width) * (window.devicePixelRatio || 1) : 2
 }
 
+let maskCounter = 0
+
 function layoutPair(text: SVGTextElement) {
+  // a re-layout (zoom / pixel ratio changed) replaces the previous bent text
+  const previous = text.previousElementSibling
+  if (previous?.classList.contains('fast-doc-view-fontwork-bent')) previous.remove()
   const upper = parsePolyline(text.getAttribute('data-fontwork-upper') ?? '')
   const lower = parsePolyline(text.getAttribute('data-fontwork-lower') ?? '')
   const line = Number(text.getAttribute('data-fontwork-line') ?? '0')
@@ -114,9 +120,8 @@ function layoutPair(text: SVGTextElement) {
   const top = (fx: number) => { const u = pointAt(upper, fx), l = pointAt(lower, fx); const f = line / lines; return { x: u.x + (l.x - u.x) * f, y: u.y + (l.y - u.y) * f } }
   const bottom = (fx: number) => { const u = pointAt(upper, fx), l = pointAt(lower, fx); const f = (line + 1) / lines; return { x: u.x + (l.x - u.x) * f, y: u.y + (l.y - u.y) * f } }
 
-  // 1. the text drawn once, large, cropped to its ink (the text area's bound rectangle in Fontwork)
-  const style = getComputedStyle(text)
-  const fontFamily = text.getAttribute('font-family') ?? style.fontFamily
+  // 1. the text drawn once, large, cropped to its ink (the text area's bound rectangle in Fontwork), as a white coverage mask
+  const fontFamily = text.getAttribute('font-family') ?? getComputedStyle(text).fontFamily
   const sourceSize = 200
   const source = document.createElement('canvas')
   const sourceContext = source.getContext('2d')
@@ -129,7 +134,7 @@ function layoutPair(text: SVGTextElement) {
   source.width = inkWidth
   source.height = inkHeight
   sourceContext.font = `${sourceSize}px ${fontFamily}`
-  sourceContext.fillStyle = solidFill(text)
+  sourceContext.fillStyle = '#ffffff'
   sourceContext.textBaseline = 'alphabetic'
   sourceContext.fillText(content, -inkLeft, metrics.actualBoundingBoxAscent)
 
@@ -138,10 +143,8 @@ function layoutPair(text: SVGTextElement) {
   for (let k = 0; k <= 64; k++) {
     for (const p of [top(k / 64), bottom(k / 64)]) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y) }
   }
-  const svg = text.ownerSVGElement
-  const box = svg?.getBoundingClientRect()
-  const viewBox = svg?.viewBox.baseVal
-  const pixelsPerPoint = box && viewBox && viewBox.width > 0 ? (box.width / viewBox.width) * (window.devicePixelRatio || 1) : 2
+  const pixelsPerPoint = pixelsPerPointOf(text)
+  text.setAttribute('data-fontwork-pixels', String(pixelsPerPoint))
   const target = document.createElement('canvas')
   target.width = Math.max(1, Math.ceil((maxX - minX) * pixelsPerPoint))
   target.height = Math.max(1, Math.ceil((maxY - minY) * pixelsPerPoint))
@@ -163,19 +166,30 @@ function layoutPair(text: SVGTextElement) {
     context.drawImage(source, sx, 0, Math.min(step * 1.5, inkWidth - sx), inkHeight, 0, 0, Math.min(step * 1.5, inkWidth - sx), inkHeight)
   }
 
-  // 4. the bent text as an image in the SVG; the text itself stays for selection and accessibility, transparent
+  // 4. the bent text as a mask over a rectangle painted with the text's own fill - a colour, or the shape's gradient / pattern
+  //    paint in the shape's coordinates (Fontwork fills its outlines with the shape's fill: the paint is not flattened to one
+  //    colour). The text itself stays for selection and accessibility, transparent.
+  const group = document.createElementNS(SVG_NS, 'g')
+  group.setAttribute('class', 'fast-doc-view-fontwork-bent')
+  group.setAttribute('aria-hidden', 'true')
+  const maskId = `fast-doc-view-fontwork-mask-${++maskCounter}`
+  const mask = document.createElementNS(SVG_NS, 'mask')
+  mask.setAttribute('id', maskId)
+  mask.setAttribute('maskUnits', 'userSpaceOnUse')
+  for (const [name, value] of [['x', minX], ['y', minY], ['width', maxX - minX], ['height', maxY - minY]] as const) mask.setAttribute(name, String(value))
   const image = document.createElementNS(SVG_NS, 'image')
-  image.setAttribute('x', String(minX))
-  image.setAttribute('y', String(minY))
-  image.setAttribute('width', String(maxX - minX))
-  image.setAttribute('height', String(maxY - minY))
+  for (const [name, value] of [['x', minX], ['y', minY], ['width', maxX - minX], ['height', maxY - minY]] as const) image.setAttribute(name, String(value))
   image.setAttribute('preserveAspectRatio', 'none')
-  image.setAttribute('class', 'fast-doc-view-fontwork-bent')
-  image.setAttribute('aria-hidden', 'true')
   const url = target.toDataURL('image/png')
   image.setAttribute('href', url)
   image.setAttributeNS(XLINK_NS, 'xlink:href', url)
-  text.parentNode?.insertBefore(image, text)
+  mask.appendChild(image)
+  const paint = document.createElementNS(SVG_NS, 'rect')
+  for (const [name, value] of [['x', minX], ['y', minY], ['width', maxX - minX], ['height', maxY - minY]] as const) paint.setAttribute(name, String(value))
+  paint.setAttribute('fill', text.getAttribute('fill') ?? '#000000')
+  paint.setAttribute('mask', `url(#${maskId})`)
+  group.append(mask, paint)
+  text.parentNode?.insertBefore(group, text)
   text.setAttribute('fill-opacity', '0')
 }
 
@@ -189,10 +203,23 @@ export function layoutFontwork(root: Element) {
   }
 }
 
-/** `v-fast-doc-view-fontwork` on the element that holds block HTML: lays out its text effects after each render, once fonts are ready. */
+/** Re-bends paired text whose device resolution changed (zoom, window moved to another screen) so it stays sharp. */
+export function relayoutChangedResolution(root: Element) {
+  for (const text of root.querySelectorAll<SVGTextElement>('text[data-fontwork="pair"][data-fontwork-pixels]')) {
+    const drawnAt = Number(text.getAttribute('data-fontwork-pixels'))
+    const now = pixelsPerPointOf(text)
+    if (Math.abs(now - drawnAt) / drawnAt > 0.01) layoutPair(text)
+  }
+}
+
+/** Per element: the size observer and the pixel-ratio query that re-bend on zoom / resolution changes. */
+const watchers = new WeakMap<HTMLElement, () => void>()
+
+/** `v-fast-doc-view-fontwork` on the element that holds block HTML: lays out its text effects after each render, once fonts are ready, and again at a new resolution. */
 export const vFastDocViewFontwork = {
-  mounted(element: HTMLElement) { schedule(element) },
+  mounted(element: HTMLElement) { schedule(element); watch(element) },
   updated(element: HTMLElement) { schedule(element) },
+  unmounted(element: HTMLElement) { watchers.get(element)?.(); watchers.delete(element) },
 }
 
 function schedule(element: HTMLElement) {
@@ -200,4 +227,20 @@ function schedule(element: HTMLElement) {
   const run = () => { if (element.isConnected) layoutFontwork(element) }
   if (document.fonts?.ready) document.fonts.ready.then(run)
   else run()
+}
+
+function watch(element: HTMLElement) {
+  const relayout = () => { if (element.isConnected && element.querySelector('text[data-fontwork="pair"]')) relayoutChangedResolution(element) }
+  // zoom changes the block's laid-out size; a pixel-ratio change (browser zoom, another screen) fires the media query
+  const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(relayout)
+  observer?.observe(element)
+  let query: MediaQueryList | undefined
+  const listenRatio = () => {
+    query?.removeEventListener('change', onRatio)
+    query = typeof matchMedia === 'undefined' ? undefined : matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
+    query?.addEventListener('change', onRatio)
+  }
+  function onRatio() { relayout(); listenRatio() }
+  listenRatio()
+  watchers.set(element, () => { observer?.disconnect(); query?.removeEventListener('change', onRatio) })
 }
