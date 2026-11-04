@@ -4,16 +4,17 @@ import { useI18n } from 'vue-i18n'
 import { IconChevronDown12Regular, IconCheckmark16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
+import { isOfferedVoice } from './useBookViewReadAloud'
 
 /**
- * The read-aloud voice choice: Hebrew voices only. The button shows the voice's short name
+ * The read-aloud voice choice: the offered voices only (isOfferedVoice). The button shows the voice's short name
  * ("Asaf"); the list shows the full names. The empty value means the first Hebrew voice.
  */
 const props = defineProps<{ voices: SpeechSynthesisVoice[]; modelValue: string }>()
 const emit = defineEmits<{ 'update:modelValue': [voiceUri: string] }>()
 const { t } = useI18n()
 
-const hebrewVoices = computed(() => props.voices.filter((v) => v.lang.toLowerCase().startsWith('he')))
+const hebrewVoices = computed(() => props.voices.filter(isOfferedVoice))
 const current = computed(
   () => hebrewVoices.value.find((v) => v.voiceURI === props.modelValue) ?? hebrewVoices.value[0] ?? null,
 )

@@ -10,7 +10,6 @@ import {
   IconNext20Regular,
   IconHighlight20Regular,
   IconHighlight20Filled,
-  IconArrowAutofitDown20Regular,
   IconDismiss20Regular,
   IconReOrderDotsVertical20Regular,
   IconFastForward20Regular,
@@ -64,12 +63,12 @@ function onVoiceChange(voiceUri: string) {
     <span ref="handleEl" class="drag-handle" :title="t('bookView.readAloud.drag')">
       <IconReOrderDotsVertical20Regular />
     </span>
-    <button :class="{ active: r.isReading.value }" :title="playLabel" @click="onPlay">
-      <IconPause20Filled v-if="r.isReading.value && !r.isPaused.value" class="pause-icon" />
-      <IconPlay20Filled v-else />
-    </button>
     <button :disabled="!r.isReading.value" :title="t('bookView.readAloud.stop')" @click="r.stop()">
       <IconStop20Filled />
+    </button>
+    <button :class="{ active: r.isReading.value }" :title="playLabel" @click="onPlay">
+      <IconPause20Filled v-if="r.isReading.value && !r.isPaused.value" class="pause-icon" />
+      <IconPlay20Filled v-else class="rtl-flip" />
     </button>
     <button :disabled="!r.position.value" :title="t('bookView.readAloud.previousLine')" @click="r.skip(-1)">
       <IconNext20Regular />
@@ -80,10 +79,10 @@ function onVoiceChange(voiceUri: string) {
     <div class="separator" />
     <!-- The current speed shows only in these two tooltips. -->
     <button :disabled="r.rate.value <= READ_ALOUD_RATE_MIN" :title="`${t('bookView.readAloud.slower')} (${rateLabel})`" @click="r.changeRate(-READ_ALOUD_RATE_STEP)">
-      <IconRewind20Regular />
+      <IconRewind20Regular class="rtl-flip" />
     </button>
     <button :disabled="r.rate.value >= READ_ALOUD_RATE_MAX" :title="`${t('bookView.readAloud.faster')} (${rateLabel})`" @click="r.changeRate(READ_ALOUD_RATE_STEP)">
-      <IconFastForward20Regular />
+      <IconFastForward20Regular class="rtl-flip" />
     </button>
     <div class="separator" />
     <button
@@ -93,13 +92,6 @@ function onVoiceChange(voiceUri: string) {
     >
       <IconHighlight20Filled v-if="r.highlightWords.value" />
       <IconHighlight20Regular v-else />
-    </button>
-    <button
-      :class="{ active: r.followAlong.value }"
-      :title="t('bookView.readAloud.follow')"
-      @click="r.followAlong.value = !r.followAlong.value"
-    >
-      <IconArrowAutofitDown20Regular />
     </button>
     <BookViewReadAloudSkipDropdown
       v-model:enabled="r.skipEnabled.value"
@@ -155,6 +147,10 @@ button.active {
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+/* Speed arrows point the way Hebrew reads: faster to the left, slower to the right. */
+.rtl-flip {
+  transform: scaleX(-1);
 }
 .pause-icon {
   color: #d13438;
