@@ -24,6 +24,18 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     public static string IndexCacheDirectory => Path.Combine(AppFileLocator.UserInstallRoot, "FastDocViewIndexCache");
 
     private readonly WordWindowedDocumentSet _documents = new(IndexCacheDirectory);
+    private readonly Action<string, Exception>? _logError;
+
+    /// <param name="logError">The host's error log (the service's ILogger): a block that could not be rendered
+    /// (shown on the page as a placeholder) is written there once per document and block.</param>
+    public FastDocViewOpenDocuments(Action<string, Exception>? logError = null)
+    {
+        _logError = logError;
+        if (logError is not null) WordDocumentBlockRenderGuard.BlockRenderFailed += OnBlockRenderFailed;
+    }
+
+    private void OnBlockRenderFailed(string filePath, int blockIndex, Exception cause) =>
+        _logError?.Invoke($"FastDocView: block {blockIndex} of {filePath} could not be rendered; shown as a placeholder", cause);
 
     /// <summary>Opens <paramref name="validatedPath"/> (the caller validated access). A first open of
     /// a big file returns after its first blocks; the page then calls <see cref="Scan"/> until complete.</summary>
@@ -188,5 +200,9 @@ public sealed class FastDocViewOpenDocuments : IDisposable
         _ => "other",
     };
 
-    public void Dispose() => _documents.Dispose();
+    public void Dispose()
+    {
+        WordDocumentBlockRenderGuard.BlockRenderFailed -= OnBlockRenderFailed;
+        _documents.Dispose();
+    }
 }

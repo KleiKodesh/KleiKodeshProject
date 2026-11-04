@@ -83,7 +83,13 @@ internal static partial class Program
         builder.Services.AddSingleton<UserSettingsService>();
         builder.Services.AddSingleton<HttpHostState>();
         builder.Services.AddSingleton<LocalFileGrants>();
-        builder.Services.AddSingleton<global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments>();
+        // FastDocView's render errors (a damaged block shown as a placeholder) go to the service log
+        builder.Services.AddSingleton(services =>
+        {
+            ILogger logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("FastDocView");
+            return new global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments(
+                (message, exception) => logger.LogError(exception, "{Message}", message));
+        });
         builder.Services.AddSingleton<KitveiHakodeshService.Pdf.WordConversionService>();
         builder.Services.AddSingleton<OwnerRegistry>();
         builder.Services.AddSingleton<Dispatcher>();
