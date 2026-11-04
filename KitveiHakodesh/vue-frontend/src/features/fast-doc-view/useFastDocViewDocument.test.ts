@@ -172,6 +172,72 @@ describe('useFastDocViewDocument', () => {
     scope.stop()
   })
 
+  it('a failed block fetch is reported to the reader, and a retry asks again', async () => {
+    const { api } = fakeApi(100)
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x')
+    const realBlocks = api.blocks
+    api.blocks = async () => { throw new Error('service down') }
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(document.ensureBlocks(0, 10)).rejects.toThrow('service down')
+    consoleError.mockRestore()
+    expect(document.readError.value).toBeInstanceOf(Error)
+    expect(document.error.value).toBeNull()
+    api.blocks = realBlocks
+    const refetchBefore = document.refetchVersion.value
+    await document.retryRead()
+    expect(document.readError.value).toBeNull()
+    expect(document.refetchVersion.value).toBe(refetchBefore + 1)
+    await document.ensureBlocks(0, 10)
+    expect(document.blockAt(3)).toBeDefined()
+    scope.stop()
+  })
+
+  it('a failed reopen (file deleted mid-read) is reported, and the retry opens the file again', async () => {
+    const { api, calls, failSourceChanged } = fakeApi(100)
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x')
+    const realOpen = api.open
+    api.open = async () => { throw new Error('service error: FastDocViewOpenFailed:not-found: file not found') }
+    failSourceChanged()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(document.ensureBlocks(0, 10)).rejects.toThrow('not-found')
+    consoleError.mockRestore()
+    expect(String(document.readError.value)).toContain('FastDocViewOpenFailed:not-found')
+    // still missing: the retry fails again and keeps the banner
+    await document.retryRead()
+    expect(document.readError.value).not.toBeNull()
+    api.open = realOpen
+    const opensBefore = calls.filter((call) => call.op === 'open').length
+    await document.retryRead()
+    expect(document.readError.value).toBeNull()
+    expect(calls.filter((call) => call.op === 'open').length).toBe(opensBefore + 1)
+    await document.ensureBlocks(0, 10)
+    expect(document.blockAt(3)).toBeDefined()
+    scope.stop()
+  })
+
+  it('a fetch that lost its document is never shown as an error', async () => {
+    const { api } = fakeApi(100)
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x')
+    let release!: () => void
+    const realBlocks = api.blocks
+    api.blocks = async (...args) => { await new Promise<void>((resolve) => (release = resolve)); return realBlocks(...args) }
+    const pending = document.ensureBlocks(0, 10)
+    await flush()
+    api.blocks = realBlocks
+    const reopened = document.open('y')
+    release()
+    await expect(pending).rejects.toThrow()
+    await reopened
+    expect(document.readError.value).toBeNull()
+    scope.stop()
+  })
+
   it('a failing scan is retried with backoff, then reported - never a silent stall', async () => {
     vi.useFakeTimers()
     try {

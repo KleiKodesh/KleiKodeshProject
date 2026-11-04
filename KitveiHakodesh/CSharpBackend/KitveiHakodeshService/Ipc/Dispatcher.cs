@@ -166,7 +166,16 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<FastDocViewOpenArgs>(req.Args);
                     if (!localFileGrants.TryValidateFastDocViewSource(a.Path, out string full, out string error))
-                        return RpcResponse.Err(error);
+                    {
+                        // a moved / deleted file and a type we do not read get the page's translated message too
+                        string? code = error switch
+                        {
+                            "file not found" => global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.NotFound,
+                            "file type not allowed" => global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.Unsupported,
+                            _ => null,
+                        };
+                        return RpcResponse.Err(code is null ? error : global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.MessageFor(code, error));
+                    }
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Open(full)));
                 }
                 case "fastDocViewBlocks":
