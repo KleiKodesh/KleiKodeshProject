@@ -26,8 +26,6 @@ namespace KitveiHakodeshDemoApp
         /// <summary>The WebView2 user-data folder of this window (Program starts its browser early).</summary>
         internal const string WebCacheFolder = "webcache-standalone";
 
-        private static readonly string TabsSessionPath = System.IO.Path.Combine(
-            HostTestMode.KleiKodeshLocalFolder, "tabs-session.bin");
 
         public MainForm(string initialRequest = null)
         {
@@ -47,14 +45,12 @@ namespace KitveiHakodeshDemoApp
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
 
-            _viewer = new AppViewer(WebCacheFolder, snapshotSplash: true) { Dock = DockStyle.Fill };
+            _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 
             // Keeps the strip in sync with the Vue tab store, both directions.
             _tabsMirror = new ChromeTabsMirror(this, _viewer);
-            // Last session's tabs on the strip right away; Vue's first snapshot replaces them.
-            _tabsMirror.RestoreSession(TabsSessionPath);
 
             // Queue what we were launched with; the viewer holds it until the bridge
             // is ready. Same call the pipe listener makes for a second launch.
@@ -105,7 +101,6 @@ namespace KitveiHakodeshDemoApp
         {
             AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
-            _tabsMirror.SaveSession(TabsSessionPath);
             // The page's pending persistence writes go out before the WebView2 is
             // disposed: the first close is held for the page's ack, the second runs through.
             _viewer.CloseAfterPersistenceFlush(this, e);
