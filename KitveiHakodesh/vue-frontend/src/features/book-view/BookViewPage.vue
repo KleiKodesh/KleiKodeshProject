@@ -25,6 +25,9 @@ import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
 import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot, SideEditionPersistState } from './bookViewTypes'
 import { useI18n } from 'vue-i18n'
+import BookViewReadAloudPanel from './BookViewReadAloudPanel.vue'
+import { useBookViewReadAloud } from './useBookViewReadAloud'
+import { useBookViewReadAloudHighlight } from './useBookViewReadAloudHighlight'
 
 const { t } = useI18n()
 
@@ -164,6 +167,30 @@ function createBookmark() {
   void toolbarRef.value?.createBookmark()
 }
 
+// ── Read aloud ── The toolbar button opens the panel and starts reading from the selection
+// or the top line in view; closing the panel stops. A book or version change stops too.
+const readAloud = useBookViewReadAloud()
+const readAloudOpen = ref(false)
+useBookViewReadAloudHighlight(
+  readAloud,
+  () => linesContentRef.value?.scrollerElement() ?? null,
+  (lineIndex) => void linesContentRef.value?.scrollToLine(lineIndex),
+)
+function startReadAloud() {
+  if (bookId == null) return
+  readAloud.start(bookId, activeVersionId.value, currentScrollLineIndex.value, lines.value.length)
+}
+function toggleReadAloud() {
+  readAloudOpen.value = !readAloudOpen.value
+  if (readAloudOpen.value) startReadAloud()
+  else readAloud.stop()
+}
+function closeReadAloud() {
+  readAloudOpen.value = false
+  readAloud.stop()
+}
+watch(activeVersionId, () => readAloud.stop())
+
 // All toolbar props that do not depend on its position, so the three placements
 // (top / side / bottom) each spread one object instead of repeating the list.
 const toolbarProps = computed(() => ({
@@ -190,6 +217,7 @@ const toolbarProps = computed(() => ({
   sideCommentaryVisible: sideCommentaryOpen.value,
   sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
   canUseSidePanel: isWideScreen.value,
+  readAloudOpen: readAloudOpen.value,
 }))
 
 // The search bar shows one query at a time: the content query, or the query of
@@ -499,6 +527,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
+      @toggle-read-aloud="toggleReadAloud"
     />
     <!-- Middle row: side toolbar + main area (RTL: first child = physical right) -->
     <!-- dir=rtl in both UI languages: left/right settings and the side/side-left commentary slots name PHYSICAL sides, laid out as in Hebrew. -->
@@ -519,6 +548,7 @@ function getSideEditionOutlineTarget(): string | undefined {
         @go-to-bookmark="goToBookmark"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
         @select-version="selectVersion"
+        @toggle-read-aloud="toggleReadAloud"
       />
 
       <!--
@@ -561,6 +591,7 @@ function getSideEditionOutlineTarget(): string | undefined {
 
         <!-- content-area: always fills remaining horizontal space -->
         <div ref="contentAreaRef" class="content-area">
+          <BookViewReadAloudPanel v-if="readAloudOpen" :read-aloud="readAloud" @play="startReadAloud" @close="closeReadAloud" />
           <!--
             One nested layout, always: each side commentary is a column beside the
             text, the bottom commentary a row beneath it. All three are independent
@@ -764,6 +795,7 @@ function getSideEditionOutlineTarget(): string | undefined {
       @go-to-bookmark="goToBookmark"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       @select-version="selectVersion"
+      @toggle-read-aloud="toggleReadAloud"
     />
   </div>
 </template>

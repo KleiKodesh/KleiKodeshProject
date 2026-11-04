@@ -140,6 +140,34 @@
   "toc": {
     "loadError": "Error loading table of contents"
   },
+  "readAloud": {
+    "panel": "Read aloud",
+    "play": "Start reading",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "previousLine": "Previous line",
+    "nextLine": "Next line",
+    "highlight": "Highlight the word being read",
+    "follow": "Scroll along with the reading",
+    "voice": "Voice",
+    "drag": "Drag to move",
+    "close": "Close",
+    "slower": "Slower",
+    "faster": "Faster",
+    "skip": "Skip parts of the text",
+    "skipOptions": "What to skip",
+    "noHebrewVoice": "No Hebrew voice is installed in Windows",
+    "noHebrewVoiceShort": "No voice",
+    "skipOption": {
+      "links": "Source references (links in the text)",
+      "noteMarkers": "Note markers",
+      "parentheses": "Everything in parentheses ( )",
+      "squareBrackets": "Everything in square brackets [ ]",
+      "singleLetterWords": "One-letter words",
+      "headings": "Headings"
+    }
+  },
   "toolbar": {
     "cleanDibburHamatchilDash": "Dibbur hamatchil dash to period",
     "cleanMaqaf": "Maqaf to space",
@@ -155,7 +183,6 @@
     "dragHint": "Drag to move the toolbar",
     "exportToWord": "Export to Word",
     "readAloud": "Read aloud",
-    "readAloudStop": "Stop reading aloud",
     "more": "More items",
     "nextSection": "Next section (Ctrl+Left)",
     "open_bottom": "Bottom commentary panel (Ctrl+J)",

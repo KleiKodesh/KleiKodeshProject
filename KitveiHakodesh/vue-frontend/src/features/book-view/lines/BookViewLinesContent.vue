@@ -539,7 +539,7 @@ function onLinesTextEvicted(lineIds: number[]) {
   evictWordLinkAnchorsForLines(lineIds)
 }
 
-defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
+defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
 </script>
 
 <template>
