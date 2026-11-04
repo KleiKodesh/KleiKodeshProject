@@ -30,7 +30,8 @@ function encodeAttribute(value: string): string {
 export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'>, documentId: () => string | undefined) {
   /** pictureId -> source, for the current document; replaced (not mutated) so renders that read it re-run. */
   const sources = shallowRef(new Map<string, string>())
-  const pending = new Set<string>()
+  /** pictureId -> its load under way */
+  const pending = new Map<string, Promise<void>>()
   const failed = new Set<string>()
   let sourcesDocumentId: string | undefined
 
@@ -52,8 +53,17 @@ export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'
   }, { immediate: true })
   onScopeDispose(clear)
 
-  async function load(id: string, pictureId: string) {
-    pending.add(pictureId)
+  function load(id: string, pictureId: string): Promise<void> {
+    // registered before the read starts (a synchronous failure must not leave a settled entry behind), removed only by
+    // its own read (a read of the previous document must not remove the current document's entry for the same id)
+    const loading: Promise<void> = Promise.resolve().then(() => loadSource(id, pictureId)).finally(() => {
+      if (pending.get(pictureId) === loading) pending.delete(pictureId)
+    })
+    pending.set(pictureId, loading)
+    return loading
+  }
+
+  async function loadSource(id: string, pictureId: string) {
     try {
       const source = await api.pictureSource(id, pictureId)
       if (documentId() !== id) { if (source) revoke(source); return }
@@ -73,8 +83,6 @@ export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'
       if (documentId() !== id) return
       if (failed.size === 0) console.warn(`[fast-doc-view] picture ${pictureId}`, error)
       failed.add(pictureId)
-    } finally {
-      pending.delete(pictureId)
     }
   }
 
@@ -92,5 +100,22 @@ export function useFastDocViewPictures(api: Pick<FastDocViewApi, 'pictureSource'
     })
   }
 
-  return { withPictureSources, sourceCount: () => sources.value.size }
+  /**
+   * withPictureSources once the HTML's pictures have their sources (or failed): for HTML shown once and not
+   * re-rendered when a source arrives (the note tooltip).
+   */
+  async function withLoadedPictureSources(html: string): Promise<string> {
+    const id = documentId()
+    if (!id || !html.includes(FAST_DOC_VIEW_PICTURE_ATTRIBUTE)) return html
+    withPictureSources(html)     // starts the missing loads
+    const loads: Promise<void>[] = []
+    for (const match of html.matchAll(PICTURE_ATTRIBUTE_PATTERN)) {
+      const loading = pending.get(decodeAttribute(match[1]!))
+      if (loading) loads.push(loading)
+    }
+    await Promise.all(loads)
+    return documentId() === id ? withPictureSources(html) : html   // another document meanwhile: its sources do not apply
+  }
+
+  return { withPictureSources, withLoadedPictureSources, sourceCount: () => sources.value.size }
 }

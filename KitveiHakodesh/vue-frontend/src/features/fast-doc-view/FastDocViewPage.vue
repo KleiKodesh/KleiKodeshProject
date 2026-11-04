@@ -623,7 +623,8 @@ const {
   linkKey: (element) => referenceKey(element as HTMLElement),
   preview: async (element) => {
     const html = noteHtmlForReference(element as HTMLElement)
-    return html == null ? null : { bookTitle: '', tocPath: '', html }
+    // the tooltip shows its HTML once: wait for the note's pictures' sources (a picture without one is an empty box)
+    return html == null ? null : { bookTitle: '', tocPath: '', html: await pictures.withLoadedPictureSources(html) }
   },
   activate: (element) => openNoteFromReference(element as HTMLElement),
 })
