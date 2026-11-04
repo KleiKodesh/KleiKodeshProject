@@ -1,0 +1,9 @@
+[submodule "KleiKodeshVsto/WpfLib"]
+	path = KleiKodeshVsto/WpfLib
+	url = https://github.com/KleiKodesh/WpfLib.git
+[submodule "KitveiHakodesh/FastDocView"]
+	path = KitveiHakodesh/FastDocView
+	url = https://github.com/KleiKodesh/FastDocView.git
+[submodule "KitveiHakodesh/CSharpBackend/ChromeTabs"]
+	path = KitveiHakodesh/CSharpBackend/ChromeTabs
+	url = https://github.com/KleiKodesh/EasyTabs.git

@@ -20,7 +20,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import { loadBookBookmarks, loadedBookBookmarks, updateBookBookmarks, type BookBookmark } from '@/stores/bookBookmarks'
 import type { LinesTable } from './lines/linesTable'
 import type { BookViewLinesBookmarkPoint } from './lines/useBookViewLinesBookmarkPoint'
@@ -56,7 +56,7 @@ function toggleOpen() {
 }
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 // ── The book's list ───────────────────────────────────────────────────────────
 //

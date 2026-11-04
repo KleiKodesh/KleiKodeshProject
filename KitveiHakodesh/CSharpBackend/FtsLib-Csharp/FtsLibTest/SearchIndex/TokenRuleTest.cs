@@ -74,6 +74,16 @@ namespace FtsLibTest
             Words("< closed later is still a tag", A + "<b " + B + ">" + G, A + G);
             Words("< after the last > is plain", A + "<i>" + B + "</i> <" + G, A + B, G);
 
+            // <sup> holding a vocalized letter mid-word is transparent (issue #2 H58); other sups break
+            const string Q = "ָ", SH = "ְ";
+            Words("sup letter+mark mid-word joins", A + Q + "<sup>" + B + SH + "</sup>" + G + " " + D, A + B + G, D);
+            Spans("sup joined: span covers the whole word", A + Q + "<sup>" + B + SH + "</sup>" + G + " " + D, (0, 16), (17, 18));
+            Words("SUP with attributes joins", A + "<SUP class=\"x\">" + B + SH + "</SUP>" + G, A + B + G);
+            Words("sup digit marker breaks", A + Q + "<sup>1</sup>" + G, A, "1", G);
+            Words("sup unmarked letter mid-word breaks", A + Q + "<sup>" + B + "</sup>" + G, A, B, G);
+            Words("sup marker at word end breaks", A + "<sup>" + B + SH + "</sup> " + G, A, B, G);
+            Words("sup with a tag inside breaks", A + "<sup><b>" + B + SH + "</b></sup>" + G, A, B, G);
+
             // fuzzy: a swap of two adjacent letters is ONE edit (Otzaria's transposition)
             Check("swap is one edit", FtsLib.Search.Levenshtein.Distance(A + B + G + D, B + A + G + D, 2) == 1, "");
             Check("swap at the end is one edit", FtsLib.Search.Levenshtein.Distance(A + B + G + D, A + B + D + G, 2) == 1, "");

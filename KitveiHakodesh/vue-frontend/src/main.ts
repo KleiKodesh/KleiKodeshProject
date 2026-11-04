@@ -3,16 +3,19 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import { i18n, uiLanguage } from './i18n'
 import './assets/styles/main.css'
+import './assets/styles/readingColumn.css'
+import './assets/styles/readingToolbar.css'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import { useTabStore } from './stores/tabStore'
 import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
-import { dbReady, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
+import { dbReady, emitWebviewEvent, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { restoreLocalFileTabsLazily } from './stores/localFileTabLazyRestore'
+import { useLocalFileStore } from './stores/localFileStore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
 import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
@@ -49,6 +52,16 @@ useTabStore().init()
 // Mirror the tab store to the native chrome tab strip (no-op in dev / VSTO).
 initTabMirror()
 
+// The files the host was launched with arrive as their open events in a one-shot
+// document-created script (AppViewer.InjectStartupOpenEventsAsync), not pushed after
+// 'appReady': applied here, before the first render, the opened file is the active tab
+// that mounts, and the restored session's view does not render ahead of it.
+const startupEvents = (window as { __webviewStartupEvents?: Record<string, unknown>[] }).__webviewStartupEvents
+if (Array.isArray(startupEvents)) {
+  useLocalFileStore()
+  for (const msg of startupEvents) emitWebviewEvent(msg)
+}
+
 app.mount('#app')
 
 initPdfThemeObserver()
@@ -77,7 +90,17 @@ function warmBooksDataInBackground() {
 }
 // The service says whether the resolved DB exists; the catalog warm-up waits for that
 // answer so a missing library does not fire queries that can only fail.
-void probeDbReady().then(warmBooksDataInBackground)
+// A launch file is what the user waits for: the startup snapshot stays up until the
+// service goes idle (whenStartupContentDrawn), so the catalog load would hold it back.
+// Warm the catalog only once the file is drawn.
+const launchedWithFile = Array.isArray(startupEvents) && startupEvents.length > 0
+void probeDbReady().then(() => {
+  if (launchedWithFile) void whenStartupContentDrawn().then(warmBooksDataInBackground)
+  else warmBooksDataInBackground()
+  // The app may have moved to Otzaria's or Zayit's library on its own since our copy was
+  // downloaded; if so, offer to free the space (asked once).
+  if (dbReady.value) void import('./webview-host/ownLibraryOffer').then((m) => m.offerToFreeOwnLibraryAtStart())
+})
 
 // Register the host-search listener before 'appReady' is posted below, so any search
 // request queued C#-side (context menu clicked before Vue mounted) is delivered.
@@ -103,7 +126,8 @@ if (hasHostBridge) {
 
 // DEV-only test hook: lets the Playwright rigs open a local file and inspect
 // tab/PDF-edit state without UI scraping. Stripped from production builds by
-// the import.meta.env.DEV guard (dead-code eliminated).
-if (import.meta.env.DEV) {
+// the import.meta.env.DEV guard (dead-code eliminated). The hosted e2e rig
+// (e2e-hosted/) builds with VITE_KH_TEST_HOOKS=1 to keep it in its own private build.
+if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
   void import('./devTestHook').then((m) => m.installDevTestHook())
 }

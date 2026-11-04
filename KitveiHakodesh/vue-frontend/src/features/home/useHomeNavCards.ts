@@ -8,7 +8,6 @@ import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM, HAMESHIV_LABEL } from '@/layout/appNavItems'
-import { useHameshivReachable } from '@/composables/useHameshivReachable'
 import { t } from '@/i18n'
 import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
 
@@ -21,7 +20,7 @@ function destinationIcon(key: DocumentIconKey): { icon: Component; color: string
 /** A shared destination: label (route key) + translated text + description from appNavItems, icon from the shared table. */
 function navDestination(key: DocumentIconKey, label: string) {
   const item = [...APP_NAV_ITEMS.value, APP_NAV_SETTINGS_ITEM].find((navItem) => navItem.label === label)
-  return { label, text: item?.text ?? label, description: item?.description ?? '', ...destinationIcon(key) }
+  return { label, text: item?.text ?? label, description: item?.description ?? '', unreachable: item?.unreachable, ...destinationIcon(key) }
 }
 
 /**
@@ -35,14 +34,13 @@ function navDestination(key: DocumentIconKey, label: string) {
 export function useHomeNavCards(navigate: (label: string) => unknown) {
   const settingsStore = useSettingsStore()
   const paneId = inject<1 | 2>('paneId', 1)
-  const hameshivReachable = useHameshivReachable()
   // The download card's subtitle becomes the live status once a download has anything to say.
   const libraryDownload = useSeforimLibraryDownload()
 
   return computed<HomeSuggestionCard[]>(() => {
     if (settingsStore.getNavSidebarVisible(paneId)) return []
     const dbMissing = !dbReady.value
-    const destinations: { label: string; text: string; description: string; icon: Component; color: string }[] = [
+    const destinations: { label: string; text: string; description: string; unreachable?: boolean; icon: Component; color: string }[] = [
       dbMissing
         ? { label: 'הורד מסד ספרים', text: t('layout.dbDownload'), description: libraryDownload.statusText.value || t('layout.dbDownloadDescription'), icon: IconArrowDownload24Filled, color: '#B5451B' }
         : navDestination('library', 'קטלוג הספרים'),
@@ -52,19 +50,21 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('hbooks', 'היברו-בוקס'),
       navDestination('folder', 'פתח קובץ'),
       navDestination('fileSearch', 'חיפוש קבצים'),
+      navDestination('userSpace', 'אזור אישי'),
       navDestination('dict', 'מילון'),
       navDestination('calendar', 'לוח שנה'),
       navDestination('ruler', 'מידות ושיעורים'),
-      ...(hameshivReachable.value ? [navDestination('hameshiv', HAMESHIV_LABEL)] : []),
+      navDestination('hameshiv', HAMESHIV_LABEL),
       navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({
       key: `nav:${destination.label}`,
       title: destination.text,
-      // Shown in the card's muted subtitle line (.card-path).
+      // Shown in the card's tooltip.
       path: destination.description,
       icon: destination.icon,
       color: destination.color,
+      unreachable: destination.unreachable,
       open: () => void navigate(destination.label),
     }))
   })

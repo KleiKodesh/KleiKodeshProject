@@ -7,9 +7,9 @@
  */
 
 import { hasHostBridge, emitWebviewEvent } from './seforimDb'
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
-import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 
@@ -133,8 +133,8 @@ export async function pickLocalFile(
         picked.fileName || filePath.substring(Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')) + 1)
       const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
 
-      if (ext === '.txt') {
-        // .txt opens in /txt-view straight off the path (TxtViewPage reads it via the bridge).
+      if (opensInFastDocView(filePath)) {
+        // .txt and the Word family open in FastDocView straight off the path; the store routes the event.
         emitWebviewEvent({ event: 'localFileTxtReady', fileName, filePath, openInNewTab })
         return { url: '', fileName, filePath }
       }
@@ -298,6 +298,26 @@ export async function openFileInDefaultApp(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Show a local file in Explorer with it selected ("Open file location").
+ * Hosted: the C# host (`revealInFolder`). Dev: the service op (`revealFileInFolder`).
+ * Returns true when requested, false on any error/unavailable bridge.
+ */
+export async function revealFileInFolder(filePath: string): Promise<boolean> {
+  try {
+    if (typeof window.__webviewAction !== 'function') {
+      const r = await serviceCall<{ ok?: boolean; error?: string }>('revealFileInFolder', {
+        path: filePath,
+      })
+      return !!r?.ok
+    }
+    const res = await action<{ ok?: boolean; error?: string }>('revealInFolder', { filePath })
+    return !!res?.ok
+  } catch {
+    return false
+  }
+}
+
+/**
  * PDF viewer TOC autosave: write an incremental-save `tail` back into the PDF at `offset`
  * (the length the viewer loaded). `anchor` = the loaded bytes just before `offset`; the
  * write is refused when they no longer match the disk (rules: Core PdfIncrementalSaveWriter).
@@ -342,14 +362,15 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Open an http/https address in the user's default browser.
+ * Open an http/https address in the user's default browser, or a mailto: address in the
+ * default mail app.
  *
  * Hosted: the C# host shell-executes the URL (`openUrlInSystemBrowser`) - a plain
  * window.open inside WebView2 would open a WebView popup, not the system browser.
  * Dev: the page already runs in the system browser, so a new tab is the same thing.
  */
 export async function openUrlInSystemBrowser(url: string): Promise<boolean> {
-  if (!/^https?:\/\//i.test(url)) return false
+  if (!/^(?:https?:\/\/|mailto:)/i.test(url)) return false
   if (typeof window.__webviewAction !== 'function') {
     window.open(url, '_blank', 'noopener,noreferrer')
     return true
@@ -360,30 +381,6 @@ export async function openUrlInSystemBrowser(url: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-/**
- * Read a .txt file from disk and return its content (string).
- * Used by TxtViewPage to load content on mount and on session restore.
- */
-export async function readTxtFileContent(filePath: string): Promise<string | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: authorize + fetch the .txt through the same capability-gated /khs-file proxy, then
-    // decode with the shared encoding-detection util (BOM → UTF-8 → Windows-1255 fallback), the
-    // same detection the hosted lib uses — a naive UTF-8 decode garbles legacy Hebrew .txt.
-    try {
-      const r = await serviceCall<{ handle: string; error?: string }>('openLocalFile', { path: filePath })
-      if (!r?.handle) return null
-      const res = await fetch(`/khs-file/${r.handle}`, { cache: 'no-store' })
-      if (!res.ok) return null
-      return decodeTextDetectEncoding(await res.arrayBuffer())
-    } catch {
-      return null
-    }
-  }
-  const res = await action<{ textContent?: string; error?: string }>('readTxtFileContent', { filePath })
-  if (res.error || !res.textContent) return null
-  return res.textContent
 }
 
 /**
@@ -604,6 +601,33 @@ export async function catalogTocSearch(query: string): Promise<CatalogTocSearchR
   return serviceCall<CatalogTocSearchResult>('catalogTocSearch', { query })
 }
 
+/** One UserSpace root as the search sees it: a catalog category OR a computer folder. */
+export type UserSpaceSearchRoot = { categoryId?: number; folder?: string }
+
+/** One `userSpaceSearch` hit: a catalog hit (bookId > 0, tocPath "" for a book title) or a file (filePath). */
+export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string }
+
+/** Result of `userSpaceSearch`. The not-ready fields mean what they mean on CatalogTocSearchResult. */
+export type UserSpaceSearchResult = Omit<CatalogTocSearchResult, 'results'> & { hits: UserSpaceSearchHit[] }
+
+/**
+ * Search under the UserSpace roots only: the catalog index filtered to the root categories and
+ * the file index filtered to the root folders, merged into ONE list ranked by the catalog
+ * search's own rules (Core UserSpaceSearch). Roots go in the user's order - the last tiebreak.
+ */
+export async function userSpaceSearch(query: string, roots: UserSpaceSearchRoot[]): Promise<UserSpaceSearchResult> {
+  return serviceCall<UserSpaceSearchResult>('userSpaceSearch', { query, roots })
+}
+
+/** Why a computer folder cannot be a UserSpace root yet ("" when it can). */
+export type UserSpaceFolderReason = '' | 'notFound' | 'notIndexedDrive' | 'excluded' | 'systemFolder'
+
+/** Whether file search covers a folder - UserSpace only accepts folders its search can reach. */
+export async function checkUserSpaceFolder(folderPath: string): Promise<{ covered: boolean; reason: UserSpaceFolderReason }> {
+  const r = await serviceCall<{ covered?: boolean; reason?: UserSpaceFolderReason }>('checkUserSpaceFolder', { value: folderPath })
+  return { covered: !!r?.covered, reason: r?.reason ?? '' }
+}
+
 /** Result of a book-title search (catalogTitleSearch wire shape, camelCased). The not-ready
  *  fields mean what they mean on CatalogTocSearchResult. */
 export type CatalogTitleSearchResult = {
@@ -804,11 +828,15 @@ export function localFileIndexStatus(): Promise<LocalFileIndexStatus> {
  * NOTE: guard on __webviewAction, NOT isHosted — isHosted is TRUE in dev while the bridge
  * channel is absent, so an isHosted check would send dev down the hosted path and reject.
  */
-export async function exportToWord(html: string, title: string = ''): Promise<{ ok?: boolean; error?: string }> {
+export async function exportToWord(
+  html: string,
+  title: string = '',
+  requestId?: string,
+): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
   if (typeof window.__webviewAction !== 'function') {
     try {
-      const r = await serviceCall<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
-      return { ok: !!r?.ok, error: r?.error }
+      const r = await serviceCall<{ ok?: boolean; error?: string; cancelled?: boolean }>('exportToWord', { html, title, requestId })
+      return { ok: !!r?.ok, error: r?.error, cancelled: !!r?.cancelled }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
@@ -817,9 +845,28 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
   // instead of replying ok=true immediately, so this can reject where it previously always
   // resolved. Callers get an { error } to inspect rather than an unhandled rejection.
   try {
-    return await action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
+    return await action<{ ok?: boolean; error?: string; cancelled?: boolean }>('exportToWord', { html, title, requestId })
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * Stop the running exportToWord started with the same `requestId`: its exportToWord call then
+ * resolves at once with `{ cancelled: true }`. A Word instance that export started is ended; a Word
+ * the user already had open is never closed - only the export's own document is closed (unsaved)
+ * once Word finishes opening it. Resolves true when an export was running, false otherwise.
+ */
+export async function cancelWordExport(requestId: string): Promise<boolean> {
+  try {
+    if (typeof window.__webviewAction !== 'function') {
+      const r = await serviceCall<{ ok?: boolean }>('cancelWordExport', { requestId })
+      return !!r?.ok
+    }
+    const r = await action<{ ok?: boolean }>('cancelWordExport', { requestId })
+    return !!r?.ok
+  } catch {
+    return false
   }
 }
 
@@ -839,8 +886,8 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
  * bridge channel is absent, so an isHosted check would send dev down the hosted path
  * and reject with 'bridge not available'.
  */
-export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
-  const result = await runPasteIntoWord()
+export async function pasteIntoWord(requestId?: string): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
+  const result = await runPasteIntoWord(requestId)
   // Reported HERE rather than at the call sites: all five of them fire this as
   // `pasteIntoWord().catch(() => {})` from inside a copy event, where there is no
   // sensible place to await an answer. Surfacing the failure centrally is what turns
@@ -850,17 +897,17 @@ export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }>
   return result
 }
 
-async function runPasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+async function runPasteIntoWord(requestId?: string): Promise<{ ok?: boolean; error?: string; cancelled?: boolean }> {
   if (typeof window.__webviewAction !== 'function') {
     try {
-      const r = await serviceCall<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
-      return { ok: !!r?.ok, error: r?.error }
+      const r = await serviceCall<{ ok?: boolean; error?: string; cancelled?: boolean }>('pasteIntoWord', { requestId })
+      return { ok: !!r?.ok, error: r?.error, cancelled: !!r?.cancelled }
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
   }
   try {
-    return await action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+    return await action<{ ok?: boolean; error?: string; cancelled?: boolean }>('pasteIntoWord', { requestId })
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) }
   }
@@ -1094,12 +1141,17 @@ export function cancelHbDownload(bookId: string): void {
 }
 
 /**
- * Abort an in-flight Word/document conversion (the ביטול button). Dev only — trips the service's
- * per-source cancellation so it discards the result and deletes the partial cache file (Word
- * self-quits, no orphan). Fire-and-forget. Hosted mode has its own conversion-cancel path.
+ * Abort an in-flight Word/document conversion (the cancel button). Both legs end only the Word
+ * instance the converter itself started and delete the partial output: dev through the service's
+ * cancelConversion op, hosted through the C# host's cancelLocalFileConversion action
+ * (KitveiHakodeshLib WordToPdfConverter). Fire-and-forget.
  */
 export function cancelLocalFileConversion(sourcePath: string): void {
-  if (typeof window.__webviewAction === 'function' || !sourcePath) return
+  if (!sourcePath) return
+  if (typeof window.__webviewAction === 'function') {
+    void action('cancelLocalFileConversion', { filePath: sourcePath }).catch(() => {})
+    return
+  }
   serviceCallVoid('cancelConversion', { path: sourcePath })
 }
 
@@ -1235,6 +1287,28 @@ export async function pickFolder(title?: string): Promise<string | null> {
   const result = await action<{ folderPath?: string; cancelled?: boolean; error?: string }>('pickFolder')
   if (result.cancelled || result.error || !result.folderPath) return null
   return result.folderPath
+}
+
+export interface LocalFolderListing {
+  /** Subfolder names. */
+  folders: string[]
+  /** Names of the files the app can open; everything else is left out. */
+  files: string[]
+  /** Set when the folder could not be read (missing, no access). */
+  error?: string
+}
+
+/**
+ * One level of a folder on disk - UserSpace's tree asks for each folder as the
+ * user opens it. The service does the listing in both runtimes (Core LocalFolderListing).
+ */
+export async function listLocalFolder(folderPath: string): Promise<LocalFolderListing> {
+  try {
+    const r = await serviceCall<Partial<LocalFolderListing>>('listLocalFolder', { value: folderPath })
+    return { folders: r?.folders ?? [], files: r?.files ?? [], error: r?.error ?? undefined }
+  } catch (err) {
+    return { folders: [], files: [], error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 // ── Seforim DB path (settings page + setup wizard) ─────────────────────────────

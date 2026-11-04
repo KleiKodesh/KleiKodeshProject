@@ -35,6 +35,7 @@ public sealed class HttpHostServer(
     IdleMemoryTrimmer trimmer, KitveiHakodeshService.SeforimDb.FullTextSearchService fts,
     KitveiHakodeshService.Catalog.CatalogTocSearchService catalogToc,
     KitveiHakodeshService.LocalFiles.LocalFileIndexService localFiles,
+    global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments fastDocViewDocuments,
     ILogger<HttpHostServer> logger) : BackgroundService
 {
     private TcpListener? _listener;
@@ -162,6 +163,17 @@ public sealed class HttpHostServer(
                 if (req.Method == "GET" && req.Path.StartsWith("/file/", StringComparison.Ordinal))
                 {
                     await ServeFileAsync(stream, req, ct);
+                    return;
+                }
+
+                // GET /fast-doc-view-picture/<documentId>/<pictureId> - one picture of an open FastDocView
+                // document, for a plain <img> (loading="lazy": the browser asks only for pictures it shows).
+                // Gated like /file: the document id is a 128-bit random id minted only by the token-gated
+                // fastDocViewOpen op, so it is the capability; the picture id is resolved by the library
+                // against that document's own pictures only (never a path). Unknown = a plain 404.
+                if (req.Method == "GET" && req.Path.StartsWith(FastDocViewPicturePrefix, StringComparison.Ordinal))
+                {
+                    await ServeFastDocViewPictureAsync(stream, req, ct);
                     return;
                 }
 
@@ -340,6 +352,29 @@ public sealed class HttpHostServer(
                 await CopyExactAsync(fs, stream, length, ct);
             }
         }
+    }
+
+    private const string FastDocViewPicturePrefix = "/fast-doc-view-picture/";
+
+    /// <summary>One FastDocView picture (see the route above); 404 for an unknown document or picture, or a changed file.</summary>
+    private async Task ServeFastDocViewPictureAsync(NetworkStream stream, HttpProtocol.Request req, CancellationToken ct)
+    {
+        string tail = req.Path[FastDocViewPicturePrefix.Length..];
+        int query = tail.IndexOf('?');
+        if (query >= 0) tail = tail[..query];
+        int slash = tail.IndexOf('/');
+        global::KitveiHakodesh.Core.FastDocView.FastDocViewPicture? picture = null;
+        if (slash > 0)
+        {
+            try { picture = fastDocViewDocuments.Picture(UnescapePath(tail[..slash]), UnescapePath(tail[(slash + 1)..])); }
+            catch (Exception ex) { logger.LogDebug(ex, "FastDocView picture not served"); }
+        }
+        if (picture is null)
+        {
+            await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+            return;
+        }
+        await HttpProtocol.WriteBufferedAsync(stream, 200, "OK", picture.ContentType, picture.Bytes, req.Origin, ct);
     }
 
     /// <summary>Percent-decode one URL path (UTF-8 escapes). Malformed input is served as-is so a

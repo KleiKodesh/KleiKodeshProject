@@ -34,6 +34,36 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const string        FLD_ADDIN_NAME = "addin_name"; // optional: "תוסף אוצריא: {name}" (indexed + stored, lower-cased)
         private const string        FLD_ADDIN_NAME_DISPLAY = "addin_name_display"; // same value, original case, stored only
 
+        // Ordering fields for the folder-scoped (UserSpace) search - see SearchUnderFolders.
+        // Indexed only, never stored; written by MakeDocument, so every writer carries them.
+        private const string FLD_NAME_WORDS   = "name_words";    // file-name words (LocalFileNameWords), one term each, DOCS_ONLY
+        private const string FLD_FOLDER_WORDS = "folder_words";  // every folder name's words on the path, one term each
+        private const string FLD_NAME_SHAPE_DV = "name_shape_dv"; // NumericDocValues: name word count | distinct count << 16
+        private const string FLD_PATH_SORT_DV = "path_sort_dv";  // SortedDocValues: the path UPPER-cased (see PathSortKey)
+        private const string FLD_DATE_DV      = "date_dv";       // NumericDocValues: FLD_DATE as a number
+        private const long   ShapeStoredRead  = 1L << 32;        // name_shape_dv flag: window reads stored fields
+
+        /// <summary>
+        /// The on-disk document format. A different (or missing) stamp in the index folder makes
+        /// the constructor start the index over and drop the USN cursors, so the next Build
+        /// re-crawls every drive and every document gets the current fields. Bump it whenever
+        /// MakeDocument changes what it writes.
+        /// v2: name_words / folder_words / name_shape_dv / path_sort_dv / date_dv (Lucene-side
+        /// ordering and a doc-values window).
+        /// </summary>
+        internal const string IndexFormatVersion = "2";
+        // No "_" in the name: Lucene.Net's writer deletes, as a stale index file, any file whose
+        // name CONTAINS "_x.y" (its codec-file pattern is not anchored) - "index_format.txt" went.
+        private const string IndexFormatFileName = "format-version.txt";
+
+        /// <summary>
+        /// How many folder-scoped hits are MATERIALIZED (stored fields read). A PERFORMANCE
+        /// bound and nothing more: matching and ordering run over EVERY match and the total is
+        /// the full count; only the ordered top this-many become entries. Same idea and size as
+        /// the catalog searcher's MaterializeCap.
+        /// </summary>
+        internal const int MaterializeCap = 1000;
+
         /// <summary>
         /// If the USN journal delta for a drive contains more than this fraction
         /// of the current indexed document count, skip incremental update and do
@@ -43,14 +73,15 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const double RebuildThresholdFraction = 0.20;
 
         /// <summary>
-        /// Default index location: an "index" subfolder in the current AppDomain's base directory.
+        /// Default index location: a "filesystemindex" subfolder of the data root (beside the exe,
+        /// or KHS_DATA_DIR — see <see cref="Common.AppFileLocator.DataRoot"/>).
         ///
         /// This is typically the folder where the executing assembly (service exe or library caller)
         /// lives. When the service is deployed alongside the demo, both see the same path.
         /// </summary>
         public static readonly string DefaultIndexPath =
             System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
+                Common.AppFileLocator.DataRoot,
                 "filesystemindex");
 
         private readonly string          _indexPath;
@@ -82,7 +113,15 @@ namespace KitveiHakodesh.Core.LocalFiles
 
         // Drives indexed WITHOUT a live USN watcher (volume handle refused — not elevated).
         // Guarded by the _liveThreads lock, which already serialises live-update state.
-        private readonly List<char> _unwatchedDrives = new List<char>();
+        private readonly HashSet<char> _unwatchedDrives = new HashSet<char>();
+
+        // Folder watchers for the unwatched drives (see LocalFileIndexFolderWatcher).
+        // Guarded by the _liveThreads lock; disposed with the index.
+        private readonly List<LocalFileIndexFolderWatcher> _folderWatchers = new List<LocalFileIndexFolderWatcher>();
+
+        // Serialises whole-drive rebuilds after startup (periodic rescan, watcher overflow).
+        // RebuildDrive deletes then ADDS, so two interleaved rebuilds would index every file twice.
+        private readonly object _rebuildLock = new object();
 
         // Periodic-rescan state (the unelevated staleness mitigation). Guarded by _rescanLock.
         private readonly object _rescanLock = new object();
@@ -97,14 +136,33 @@ namespace KitveiHakodesh.Core.LocalFiles
             System.IO.Directory.CreateDirectory(indexPath);
             _directory = FSDirectory.Open(new DirectoryInfo(indexPath));
 
+            // An index written by another document format starts over: CREATE empties it, and
+            // without the USN cursors Build crawls every drive in full (see IndexFormatVersion).
+            string formatFile = System.IO.Path.Combine(indexPath, IndexFormatFileName);
+            bool formatCurrent;
+            try { formatCurrent = File.Exists(formatFile) && File.ReadAllText(formatFile).Trim() == IndexFormatVersion; }
+            catch { formatCurrent = false; }
+            if (!formatCurrent)
+            {
+                foreach (var cursor in System.IO.Directory.GetFiles(indexPath, "usn_cursor_*.bin"))
+                    File.Delete(cursor);
+            }
+
             // PathAnalyzer — each path is one token, stored exactly as-is.
             // Searching uses WildcardQuery so no tokenization is needed at query time.
             var config = new IndexWriterConfig(VERSION, new PathAnalyzer())
             {
-                OpenMode = OpenMode.CREATE_OR_APPEND
+                OpenMode = formatCurrent ? OpenMode.CREATE_OR_APPEND : OpenMode.CREATE
             };
 
             _writer          = new IndexWriter(_directory, config);
+            if (!formatCurrent)
+            {
+                // Stamped once the emptied index is committed. A build interrupted after this
+                // point is safe: drives without a saved cursor are re-crawled in full next time.
+                _writer.Commit();
+                File.WriteAllText(formatFile, IndexFormatVersion);
+            }
             _searcherManager = new SearcherManager(_writer, applyAllDeletes: true, searcherFactory: null);
         }
 
@@ -497,11 +555,59 @@ namespace KitveiHakodesh.Core.LocalFiles
             return "0";
         }
 
+        // Indexed-only word terms (name_words / folder_words): untokenized, so the PathAnalyzer
+        // never sees them - each Field instance is exactly one term. No norms, no frequencies.
+        private static readonly FieldType WordFieldType = BuildWordFieldType();
+
+        private static FieldType BuildWordFieldType()
+        {
+            var ft = new FieldType();
+            ft.IsIndexed        = true;
+            ft.IsStored         = false;
+            ft.IsTokenized      = false;
+            ft.IndexOptions     = IndexOptions.DOCS_ONLY;
+            ft.OmitNorms        = true;
+            ft.StoreTermVectors = false;
+            ft.Freeze();
+            return ft;
+        }
+
+        /// <summary>The path_sort_dv value: the lower-cased path upper-cased, so the doc-values'
+        /// byte order is the ranking's OrdinalIgnoreCase path order (which compares upper-cased
+        /// chars: "\" sorts AFTER letters there, before them in raw lower-case order).</summary>
+        private static BytesRef PathSortKey(string lowerPath) => new BytesRef(lowerPath.ToUpperInvariant());
+
         private static Document MakeDocument(string fullPath, string addinName = null)
         {
             var doc = new Document();
-            doc.Add(new Field(FLD_PATH, fullPath.ToLowerInvariant(), PathFieldType));
-            doc.Add(new Field(FLD_DATE, GetLastWriteUnixMs(fullPath), DateFieldType));
+            string lowerPath = fullPath.ToLowerInvariant();
+            doc.Add(new Field(FLD_PATH, lowerPath, PathFieldType));
+            string dateMs = GetLastWriteUnixMs(fullPath);
+            doc.Add(new Field(FLD_DATE, dateMs, DateFieldType));
+
+            // Ordering and window data for SearchUnderFolders (doc-values: read without
+            // decompressing stored fields). The words are the SAME ones the UserSpace ranking
+            // measures (LocalFileNameWords), from the same lower-cased path it is handed.
+            var nameTokens = LocalFileNameWords.NameTokens(lowerPath);
+            var distinctName = new HashSet<string>(nameTokens, StringComparer.Ordinal);
+            foreach (var word in distinctName)
+                doc.Add(new Field(FLD_NAME_WORDS, word, WordFieldType));
+            int lastSep = lowerPath.LastIndexOf('\\');
+            if (lastSep > 0)
+                foreach (var word in new HashSet<string>(LocalFileNameWords.FolderTokens(lowerPath.Substring(0, lastSep)), StringComparer.Ordinal))
+                    doc.Add(new Field(FLD_FOLDER_WORDS, word, WordFieldType));
+            var sortKey = PathSortKey(lowerPath);
+            // The window reads the path back from the sort key (lower-casing it again) unless
+            // that would not give this exact path back, or the doc has an add-in name: then it
+            // reads the stored fields (ShapeStoredRead).
+            bool storedRead = !string.IsNullOrEmpty(addinName)
+                              || sortKey.Utf8ToString().ToLowerInvariant() != lowerPath;
+            doc.Add(new NumericDocValuesField(FLD_NAME_SHAPE_DV,
+                Math.Min(nameTokens.Count, 0xFFFF)
+                | ((long)Math.Min(distinctName.Count, 0xFFFF) << 16)
+                | (storedRead ? ShapeStoredRead : 0)));
+            doc.Add(new SortedDocValuesField(FLD_PATH_SORT_DV, sortKey));
+            doc.Add(new NumericDocValuesField(FLD_DATE_DV, long.TryParse(dateMs, out long ms) ? ms : 0));
             // addin_name is only added for Otzaria addin entry-point files.
             // Non-addin documents simply have no addin_name field — Lucene fields are
             // per-document optional so this costs nothing for the vast majority of docs.
@@ -529,7 +635,19 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// match count so callers can report "showing X of Y results".
         /// </summary>
         public List<PathEntry> Search(string input, char? drive, int limit, out int total)
+            => Search(input, drive, folders: null, limit, out total);
+
+        /// <summary>
+        /// <see cref="Search(string, char?, int, out int)"/> scoped to files under any of
+        /// <paramref name="folders"/> (null = unscoped; an empty list matches nothing). The path
+        /// field is the whole lower-cased path as ONE term, so each folder is a PrefixQuery on
+        /// "folder\" — an index-level filter, no post-filtering.
+        /// </summary>
+        public List<PathEntry> Search(string input, char? drive, IReadOnlyCollection<string> folders, int limit, out int total)
         {
+            if (folders != null)
+                return SearchUnderFolders(input, drive, folders, excludedFolders: null, limit, out total);
+
             total = 0;
             var results = new List<PathEntry>();
             if (string.IsNullOrWhiteSpace(input)) return results;
@@ -594,6 +712,369 @@ namespace KitveiHakodesh.Core.LocalFiles
 
             return results;
         }
+
+        /// <summary>
+        /// The folder-scoped (UserSpace) search: files under any of <paramref name="folders"/>
+        /// whose path holds every word of <paramref name="input"/> as a substring, minus files
+        /// under <paramref name="excludedFolders"/> (applied in the query, so the total and the
+        /// window below are already exclusion-free).
+        ///
+        /// UNCAPPED matching and ordering: <see cref="FolderRankCollector"/> visits EVERY match and
+        /// orders it by the catalog's primary accuracy keys, approximated from index data alone
+        /// (word terms + doc-values, no stored-field read per hit): literal (every query token a
+        /// whole word of the name or of a folder on the path), every token in the name, name
+        /// covered by the query (then more distinct query words, then the length gap), more
+        /// query words in the name, the first matching folder in the caller's order, then the
+        /// path (OrdinalIgnoreCase). <paramref name="total"/> is the FULL match count.
+        ///
+        /// Only MATERIALIZATION is bounded: the ordered top <see cref="MaterializeCap"/> (or
+        /// <paramref name="limit"/> when smaller and positive) are returned, best first. The
+        /// caller re-ranks that window on the exact keys (UserSpaceSearch).
+        ///
+        /// Known approximations (they only decide which ties reach the window): every folder on
+        /// the path counts toward literal, also those above the root; a repeated query word
+        /// counts once; proximity and quoted-form keys are left to the exact re-rank.
+        /// </summary>
+        public List<PathEntry> SearchUnderFolders(
+            string input, char? drive, IReadOnlyCollection<string> folders, IList<string> excludedFolders,
+            int limit, out int total)
+        {
+            total = 0;
+            var results = new List<PathEntry>();
+            if (string.IsNullOrWhiteSpace(input) || folders == null || folders.Count == 0) return results;
+
+            string[] words = input.Trim().Split(
+                new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // The folder any-of is ONE required clause: beside a MUST, bare SHOULDs turn optional.
+            var query = new BooleanQuery { { FolderScopedQuery(words, folders), Occur.MUST } };
+            if (drive.HasValue)
+                query.Add(new WildcardQuery(new Term(FLD_PATH, char.ToLower(drive.Value) + ":*")), Occur.MUST);
+            if (excludedFolders != null)
+                foreach (var excluded in excludedFolders)
+                {
+                    if (string.IsNullOrWhiteSpace(excluded)) continue;
+                    string lower = excluded.ToLowerInvariant().Replace('/', '\\').TrimEnd('\\');
+                    if (lower.Length == 0) continue;
+                    // Same boundary as LocalFileIndexExcludedFolders.IsExcluded: the folder itself
+                    // and what lies under "folder\", never a sibling "folderBar".
+                    query.Add(new TermQuery(new Term(FLD_PATH, lower)), Occur.MUST_NOT);
+                    query.Add(new PrefixQuery(new Term(FLD_PATH, lower + "\\")), Occur.MUST_NOT);
+                }
+
+            var prefixes = new List<string>(folders.Count);
+            foreach (var folder in folders) prefixes.Add(FolderPrefix(folder));
+            int cap = limit > 0 && limit < MaterializeCap ? limit : MaterializeCap;
+
+            _searcherManager.MaybeRefresh();
+            var searcher = _searcherManager.Acquire();
+            try
+            {
+                var collector = new FolderRankCollector(
+                    SeforimDbCatalog.SeforimDbCatalogTextNormalizer.TokenizeQuery(input), prefixes);
+                searcher.Search(query, collector);
+                total = collector.Count;
+                var top = collector.Top(cap, searcher.IndexReader.Leaves);
+
+                // Materialize the window from doc-values; stored fields only for flagged docs.
+                var leaves = searcher.IndexReader.Leaves;
+                var scratch = new BytesRef();
+                foreach (int docId in top)
+                {
+                    int leaf = ReaderUtil.SubIndex(docId, leaves);
+                    var reader = leaves[leaf].AtomicReader;
+                    int local = docId - leaves[leaf].DocBase;
+                    var shape = reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
+                    var pathSort = reader.GetSortedDocValues(FLD_PATH_SORT_DV);
+                    var date = reader.GetNumericDocValues(FLD_DATE_DV);
+                    if (shape == null || pathSort == null || date == null || (shape.Get(local) & ShapeStoredRead) != 0)
+                    {
+                        var doc = searcher.Doc(docId);
+                        results.Add(new PathEntry(doc.Get(FLD_PATH), doc.Get(FLD_DATE) ?? "0",
+                            doc.Get(FLD_ADDIN_NAME_DISPLAY) ?? doc.Get(FLD_ADDIN_NAME) ?? ""));
+                        continue;
+                    }
+                    pathSort.Get(local, scratch);
+                    results.Add(new PathEntry(scratch.Utf8ToString().ToLowerInvariant(),
+                        date.Get(local).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                }
+            }
+            finally
+            {
+                _searcherManager.Release(searcher);
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// Collects every folder-scoped match with ONE packed ordering key (lower = better),
+        /// computed from per-segment word bit sets (name_words / folder_words postings of the
+        /// query's words) and doc-values. Nothing is capped here; <see cref="Top"/> picks the
+        /// ordered best few. The key's low half is the doc's path ORD in its segment, which is
+        /// path order there, so within a segment the key alone is the whole order.
+        /// </summary>
+        private sealed class FolderRankCollector : ICollector
+        {
+            // Key layout, most significant first (each "not" bit: 0 = has it = better).
+            //   62 not literal | 61 not all-tokens-in-name | 60 not name-covered
+            //   59..54 63 - distinct query words in the name (covered only)
+            //   53..46 |name word count - query word count| (covered only, capped 255)
+            //   45..40 63 - query words in the name | 39..32 first matching folder index (cap 255)
+            //   31..0  path_sort_dv ord + 1 (0 = none): the path order inside the segment
+            private const int MaxWords = 64;
+
+            private readonly List<string> _words = new List<string>();  // distinct, index = bit
+            private readonly int[][][] _tokenAlternatives;              // per token, per alt: word bits
+            private readonly ulong _queryWordMask;                      // QueryWordSet
+            private readonly ulong _countWordMask;                      // QueryWordCounts keys
+            private readonly int _queryWordCount;
+            private readonly List<string> _prefixes;
+
+            private readonly List<long> _keys = new List<long>();
+            private readonly List<int> _docs = new List<int>();
+            private readonly List<int> _segmentStarts = new List<int>();   // index into _keys
+            private readonly List<int> _segmentLeaves = new List<int>();   // leaf ord of that segment
+
+            // Per segment.
+            private int _docBase;
+            private FixedBitSet[] _nameBits;
+            private FixedBitSet[] _folderBits;
+            private NumericDocValues _shape;
+            private SortedDocValues _pathSort;
+            private int[] _prefixLo, _prefixHi;
+
+            public int Count => _keys.Count;
+
+            public FolderRankCollector(List<SeforimDbCatalog.SeforimDbCatalogTextNormalizer.QueryToken> tokens, List<string> prefixes)
+            {
+                _prefixes = prefixes;
+                _tokenAlternatives = new int[tokens.Count][][];
+                for (int t = 0; t < tokens.Count; t++)
+                {
+                    var alts = tokens[t].Alternatives;
+                    _tokenAlternatives[t] = new int[alts.Length][];
+                    for (int a = 0; a < alts.Length; a++)
+                    {
+                        _tokenAlternatives[t][a] = new int[alts[a].Length];
+                        for (int w = 0; w < alts[a].Length; w++) _tokenAlternatives[t][a][w] = WordIndex(alts[a][w]);
+                    }
+                }
+                foreach (var word in SeforimDbCatalog.SeforimDbCatalogRankingKeys.QueryWordSet(tokens, null))
+                    _queryWordMask |= Bit(WordIndex(word));
+                foreach (var pair in SeforimDbCatalog.SeforimDbCatalogRankingKeys.QueryWordCounts(tokens))
+                {
+                    _countWordMask |= Bit(WordIndex(pair.Key));
+                    _queryWordCount += pair.Value;
+                }
+            }
+
+            private int WordIndex(string word)
+            {
+                int i = _words.IndexOf(word);
+                if (i >= 0) return i;
+                _words.Add(word);
+                return _words.Count - 1;
+            }
+
+            // A word past the 64th never sets a bit: treated as absent (a 65-word query).
+            private static ulong Bit(int index) => index < MaxWords ? 1UL << index : 0;
+
+            public void SetScorer(Scorer scorer) { /* scores are ignored by design */ }
+            public bool AcceptsDocsOutOfOrder => true;
+
+            public void SetNextReader(AtomicReaderContext context)
+            {
+                var reader = context.AtomicReader;
+                _docBase = context.DocBase;
+                _segmentStarts.Add(_keys.Count);
+                _segmentLeaves.Add(context.Ord);
+                int n = Math.Min(_words.Count, MaxWords);
+                _nameBits = new FixedBitSet[n];
+                _folderBits = new FixedBitSet[n];
+                for (int i = 0; i < n; i++)
+                {
+                    _nameBits[i] = TermBits(reader, FLD_NAME_WORDS, _words[i]);
+                    _folderBits[i] = TermBits(reader, FLD_FOLDER_WORDS, _words[i]);
+                }
+                _shape = reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
+                _pathSort = reader.GetSortedDocValues(FLD_PATH_SORT_DV);
+
+                // Each folder is one contiguous ord range of the sorted path keys.
+                _prefixLo = new int[_prefixes.Count];
+                _prefixHi = new int[_prefixes.Count];
+                for (int i = 0; i < _prefixes.Count && _pathSort != null; i++)
+                {
+                    var lo = PathSortKey(_prefixes[i]);
+                    var hi = BytesRef.DeepCopyOf(lo);
+                    hi.Bytes[hi.Offset + hi.Length - 1]++;   // the prefix ends in '\' - never 0xFF
+                    _prefixLo[i] = InsertionPoint(_pathSort.LookupTerm(lo));
+                    _prefixHi[i] = InsertionPoint(_pathSort.LookupTerm(hi));
+                }
+            }
+
+            private static int InsertionPoint(int lookup) => lookup >= 0 ? lookup : -lookup - 1;
+
+            private static FixedBitSet TermBits(AtomicReader reader, string field, string word)
+            {
+                var docs = reader.GetTermDocsEnum(new Term(field, word));
+                if (docs == null) return null;
+                var bits = new FixedBitSet(reader.MaxDoc);
+                int d;
+                while ((d = docs.NextDoc()) != DocIdSetIterator.NO_MORE_DOCS) bits.Set(d);
+                return bits;
+            }
+
+            public void Collect(int doc)
+            {
+                ulong inName = 0, inFolders = 0;
+                for (int i = 0; i < _nameBits.Length; i++)
+                {
+                    if (_nameBits[i] != null && _nameBits[i].Get(doc)) inName |= 1UL << i;
+                    if (_folderBits[i] != null && _folderBits[i].Get(doc)) inFolders |= 1UL << i;
+                }
+
+                bool literal = EveryToken(inName | inFolders);
+                bool inTitle = EveryToken(inName);
+                // No query word in the name (a substring-only match, the common case): the name
+                // shape cannot matter, so its doc-value is not read.
+                long shape = inName == 0 ? 0 : _shape?.Get(doc) ?? 0;
+                int titleWords = (int)(shape & 0xFFFF);
+                int titleDistinct = (int)((shape >> 16) & 0xFFFF);
+                int distinctFound = PopCount(inName & _queryWordMask);
+                // Covered: every distinct name word is a query word.
+                bool covered = titleDistinct > 0 && distinctFound == titleDistinct;
+                int wordsMatched = PopCount(inName & _countWordMask);
+
+                int root = 0xFF, ord = -1;
+                if (_pathSort != null)
+                {
+                    ord = _pathSort.GetOrd(doc);
+                    for (int i = 0; i < _prefixLo.Length; i++)
+                        if (ord >= _prefixLo[i] && ord < _prefixHi[i]) { root = Math.Min(i, 0xFF); break; }
+                }
+
+                long key = 0;
+                if (!literal) key |= 1L << 62;
+                if (!inTitle) key |= 1L << 61;
+                if (!covered) key |= 1L << 60;
+                else
+                {
+                    key |= (long)(63 - Math.Min(distinctFound, 63)) << 54;
+                    key |= (long)Math.Min(Math.Abs(titleWords - _queryWordCount), 255) << 46;
+                }
+                key |= (long)(63 - Math.Min(wordsMatched, 63)) << 40;
+                key |= (long)root << 32;
+                key |= (uint)(ord + 1);
+
+                _keys.Add(key);
+                _docs.Add(_docBase + doc);
+            }
+
+            /// <summary>Per token, SOME alternative has all its words in <paramref name="present"/>
+            /// (SeforimDbCatalogRankingKeys.EveryTokenPresent, on bits).</summary>
+            private bool EveryToken(ulong present)
+            {
+                if (_tokenAlternatives.Length == 0) return false;
+                foreach (var alts in _tokenAlternatives)
+                {
+                    bool any = false;
+                    foreach (var alt in alts)
+                    {
+                        bool all = true;
+                        foreach (int w in alt)
+                            if ((present & Bit(w)) == 0 || w >= MaxWords) { all = false; break; }
+                        if (all) { any = true; break; }
+                    }
+                    if (!any) return false;
+                }
+                return true;
+            }
+
+            private static int PopCount(ulong x)
+            {
+                int c = 0;
+                while (x != 0) { x &= x - 1; c++; }
+                return c;
+            }
+
+            /// <summary>The global doc ids of the best <paramref name="cap"/> matches, best first.
+            /// Each segment's entries are sorted by key (which ends in the path ord, so that is
+            /// path order); the segments are then merged on the key's rank half and, on a tie,
+            /// the path bytes - read only for the current head of each segment, so about
+            /// cap + segments path reads however many matches tie.</summary>
+            public List<int> Top(int cap, IList<AtomicReaderContext> leaves)
+            {
+                int n = _keys.Count;
+                var keys = _keys.ToArray();
+                var docs = _docs.ToArray();
+                int segments = _segmentStarts.Count;
+                var heads = new int[segments];
+                var ends = new int[segments];
+                var sortValues = new SortedDocValues[segments];
+                var headPaths = new BytesRef[segments];
+                for (int s = 0; s < segments; s++)
+                {
+                    heads[s] = _segmentStarts[s];
+                    ends[s] = s + 1 < segments ? _segmentStarts[s + 1] : n;
+                    Array.Sort(keys, docs, heads[s], ends[s] - heads[s]);
+                    sortValues[s] = leaves[_segmentLeaves[s]].AtomicReader.GetSortedDocValues(FLD_PATH_SORT_DV);
+                    headPaths[s] = new BytesRef();
+                    ReadHeadPath(s);
+                }
+
+                void ReadHeadPath(int s)
+                {
+                    if (segments < 2 || heads[s] >= ends[s]) return;   // one segment: never compared
+                    long ord = (keys[heads[s]] & 0xFFFFFFFFL) - 1;
+                    if (ord < 0 || sortValues[s] == null) headPaths[s].Length = 0;
+                    else sortValues[s].LookupOrd((int)ord, headPaths[s]);
+                }
+
+                var top = new List<int>(Math.Min(cap, n));
+                while (top.Count < cap)
+                {
+                    int best = -1;
+                    for (int s = 0; s < segments; s++)
+                    {
+                        if (heads[s] >= ends[s]) continue;
+                        if (best < 0) { best = s; continue; }
+                        long a = keys[heads[s]] >> 32, b = keys[heads[best]] >> 32;
+                        int c = a != b ? a.CompareTo(b) : headPaths[s].CompareTo(headPaths[best]);
+                        if (c < 0) best = s;
+                    }
+                    if (best < 0) break;
+                    top.Add(docs[heads[best]]);
+                    heads[best]++;
+                    ReadHeadPath(best);
+                }
+                return top;
+            }
+        }
+        /// <summary>
+        /// Any-of the folders, each requiring every word under it. The folder is the LITERAL
+        /// head of each word's pattern ("c:\talmud\*word*"), so Lucene seeks straight to that
+        /// folder's paths in the term dictionary and walks only them - an unscoped "*word*"
+        /// walks every path on the machine. (Add-in names are not searched here: they are not
+        /// under a folder prefix, and the add-in folder's own path is matched like any other.)
+        /// </summary>
+        private static BooleanQuery FolderScopedQuery(string[] words, IReadOnlyCollection<string> folders)
+        {
+            var anyFolder = new BooleanQuery();
+            foreach (var folder in folders)
+            {
+                string head = EscapeWildcard(FolderPrefix(folder));
+                var allWords = new BooleanQuery();
+                foreach (var word in words)
+                    allWords.Add(new WildcardQuery(new Term(FLD_PATH, head + "*" + EscapeWildcard(word.ToLowerInvariant()) + "*")), Occur.MUST);
+                anyFolder.Add(allWords, Occur.SHOULD);
+            }
+            return anyFolder;
+        }
+
+        /// <summary>The path-field prefix of everything under <paramref name="folder"/>:
+        /// lower-cased, one trailing backslash.</summary>
+        internal static string FolderPrefix(string folder)
+            => folder.ToLowerInvariant().Replace('/', '\\').TrimEnd('\\') + "\\";
 
         /// <summary>
         /// Convenience overload — no limit, no total output.
@@ -810,12 +1291,28 @@ namespace KitveiHakodesh.Core.LocalFiles
                 if (_liveThreads.Count > 0) return; // already running
 
                 var drives = LocalFileIndexMftCrawler.GetNtfsDrives();
+                if (drives.Count == 0)
+                {
+                    // No NTFS volume: Build indexed the fallback drives by directory walk,
+                    // and nothing can watch those, so they are all unwatched.
+                    foreach (var drive in LocalFileIndexDirectoryCrawler.GetFallbackDrives())
+                        _unwatchedDrives.Add(drive.Name[0]);
+                    StartFolderWatchers(ct, onError);
+                    return;
+                }
                 foreach (var drive in drives)
                 {
                     char letter = drive.Name[0];
                     // Only start a thread for drives whose cursor we saved during Build.
+                    // No cursor means Build had no journal access (not elevated): the drive
+                    // is unwatched too, or the idle trimmer would close the index and the
+                    // next search would crawl the whole drive again.
                     LocalFileIndexUsnJournal.Cursor cursor;
-                    if (!LocalFileIndexUsnJournal.TryLoadCursor(_indexPath, letter, out cursor)) continue;
+                    if (!LocalFileIndexUsnJournal.TryLoadCursor(_indexPath, letter, out cursor))
+                    {
+                        _unwatchedDrives.Add(letter);
+                        continue;
+                    }
 
                     // Probe here, not just inside the loop, so callers can tell whether
                     // the USN watcher is actually live on this drive. Without this the
@@ -835,14 +1332,92 @@ namespace KitveiHakodesh.Core.LocalFiles
                     _liveThreads.Add(thread);
                     thread.Start();
                 }
+                StartFolderWatchers(ct, onError);
             }
         }
 
         /// <summary>
-        /// NTFS drives that were indexed but have no live USN watcher, because the volume
-        /// handle was refused (process not elevated). For these the index is a
-        /// point-in-time snapshot — nothing tracks changes after the build, so
-        /// <see cref="StartPeriodicRescan"/> is what keeps it current.
+        /// Watches every unwatched drive for changes the way Everything's "Folder Indexing"
+        /// does without its service: no admin rights, changes applied as they happen, a
+        /// rescan when the change buffer overflows, and the daily rescan as a safety net.
+        /// Caller holds the _liveThreads lock.
+        /// </summary>
+        private void StartFolderWatchers(CancellationToken ct, Action<string, Exception> onError)
+        {
+            if (_folderWatchers.Count > 0) return; // already running
+            foreach (char letter in _unwatchedDrives)
+            {
+                try
+                {
+                    _folderWatchers.Add(new LocalFileIndexFolderWatcher(
+                        letter, ApplyFolderChanges, RescanDrive, ct, onError));
+                }
+                catch (Exception ex)
+                {
+                    // No watcher on this drive: the daily rescan still bounds staleness.
+                    onError?.Invoke($"Folder watcher on {char.ToUpper(letter)}: could not start", ex);
+                }
+            }
+        }
+
+        /// <summary>Applies one batch of folder-watcher changes and commits once.</summary>
+        private void ApplyFolderChanges(List<LocalFileIndexFolderWatcher.Change> changes, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _backgroundWrites);
+            try
+            {
+                foreach (var change in changes)
+                {
+                    if (change.Kind == LocalFileIndexFolderWatcher.ChangeKind.Removed)
+                    {
+                        // The watcher cannot tell whether a deleted path was a file or a
+                        // folder, so drop both the path itself and anything under it.
+                        string lower = change.Path.ToLowerInvariant();
+                        _writer.DeleteDocuments(new Term(FLD_PATH, lower));
+                        _writer.DeleteDocuments(new WildcardQuery(new Term(FLD_PATH, EscapeWildcard(lower + "\\") + "*")));
+                    }
+                    else if (System.IO.Directory.Exists(change.Path))
+                    {
+                        // A folder created or moved in: its files raise no events of their own.
+                        foreach (var path in LocalFileIndexDirectoryCrawler.EnumeratePathsUnder(change.Path, ct: ct))
+                            _writer.UpdateDocument(new Term(FLD_PATH, path), MakeDocument(path));
+                    }
+                    else if (File.Exists(change.Path)
+                             && LocalFileIndexMftCrawler.IsAllowedExtension(Path.GetFileName(change.Path))
+                             && !LocalFileIndexMftCrawler.IsInSkippedDirectory(change.Path))
+                    {
+                        _writer.UpdateDocument(new Term(FLD_PATH, change.Path.ToLowerInvariant()), MakeDocument(change.Path));
+                    }
+                }
+                _writer.Commit();
+                _searcherManager.MaybeRefreshBlocking();
+            }
+            finally { Interlocked.Decrement(ref _backgroundWrites); }
+        }
+
+        /// <summary>Re-crawls one drive in full: the watcher's buffer overflowed, so some
+        /// changes were lost.</summary>
+        private void RescanDrive(char driveLetter, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _backgroundWrites);
+            try
+            {
+                lock (_rebuildLock)
+                {
+                    var paths = LocalFileIndexDirectoryCrawler.EnumeratePathsWithFallback(driveLetter, ct: ct);
+                    ct.ThrowIfCancellationRequested();
+                    RebuildDrive(driveLetter, paths);
+                    _writer.Commit();
+                    _searcherManager.MaybeRefreshBlocking();
+                }
+            }
+            finally { Interlocked.Decrement(ref _backgroundWrites); }
+        }
+
+        /// <summary>
+        /// Drives that were indexed but have no live USN watcher (process not elevated, or
+        /// not NTFS). A folder watcher follows their changes instead, and
+        /// <see cref="StartPeriodicRescan"/> catches whatever it missed.
         /// </summary>
         public bool HasUnwatchedDrives
         {
@@ -947,7 +1522,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                     onRescan?.Invoke("Rescanning file index (no live file-system watcher)");
 
                     Interlocked.Increment(ref _backgroundWrites);
-                    try { Build(null, ct); }
+                    try { lock (_rebuildLock) Build(null, ct); }
                     finally { Interlocked.Decrement(ref _backgroundWrites); }
                 }
                 catch (OperationCanceledException) { return; }
@@ -1132,7 +1707,13 @@ namespace KitveiHakodesh.Core.LocalFiles
             // large delta (it then fails on the closed writer, and since its cursor was not
             // saved, that delta is simply replayed from the journal by the next Build).
             Thread[] live;
-            lock (_liveThreads) live = _liveThreads.ToArray();
+            LocalFileIndexFolderWatcher[] watchers;
+            lock (_liveThreads)
+            {
+                live = _liveThreads.ToArray();
+                watchers = _folderWatchers.ToArray();
+            }
+            foreach (var w in watchers) w.Dispose();
             foreach (var t in live)
             {
                 if (t != Thread.CurrentThread) t.Join(TimeSpan.FromSeconds(2));

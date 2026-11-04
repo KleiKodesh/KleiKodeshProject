@@ -243,6 +243,7 @@
 /* Text-bearing surfaces opt back in. .word-link-tooltip is Teleported to body, so
    it sits outside every other selector here and needs its own entry. */
 .lines-content *, .commentary-view *, .word-page *, .txt-content *,
+.fast-doc-view-content *, .fast-doc-view-notes-pane *,
 .word-link-tooltip, .word-link-tooltip * { user-select: text; }
 
 /* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
@@ -303,6 +304,38 @@ body {
   --toolbar-vertical-padding: 2px 2px;
   --toolbar-button-size: 28px;
   --catalog-row-height: 32px;
+}
+
+/* Item sizes for the home page AND the book catalog, every view mode.
+   RULE: a home item and a catalog item must always be the same size in the same
+   mode (list / cards / tiles) — change sizes here only, never per page. */
+:root {
+  --item-radius: 4px;
+  --item-gap: 10px;
+  /* 12px: lines the icons up under the search pill's text (pill padding 12 + 1px border). */
+  --item-padding-inline: 12px;
+  /* Small icon: list and tree. Row height is --catalog-row-height. */
+  --item-icon: 20px;
+  --item-title: 13px;
+  /* Large icon: cards and tiles share it. */
+  --item-large-icon: 28px;
+  --item-card-path: 11px;
+  --item-tile-label: 11px;
+  /* Three lines, then "…"; the selected item shows the whole name — measured on
+     a Windows 11 Explorer screenshot (icon view). The full title is also in the tooltip. */
+  --item-tile-lines: 3;
+  /* Selected item, measured on the same dark-mode screenshot: fill #505050 and a
+     1px #A6A6A6 border on the #191919 page, square corners. Expressed as text-color
+     mixes so light mode follows (light mode not measured). Toned down from the
+     measured 24% / 61% — that read too dark in the app. Opaque, so a focused
+     tile's overflowing label can sit on it. */
+  /* Light: a softer mix — the dark-mode strength reads as a heavy gray box on white. */
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 8%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 22%, var(--bg-primary));
+}
+:root.dark {
+  --item-selected-bg: color-mix(in srgb, var(--text-primary) 14%, var(--bg-primary));
+  --item-selected-border: color-mix(in srgb, var(--text-primary) 40%, var(--bg-primary));
 }
 
 /* Global icon-button defaults — applies to all toolbar/bar buttons app-wide */
@@ -576,6 +609,11 @@ h1::after {
 }
 /* An LTR chrome island (e.g. a commentary panel header) inside an always-RTL area mirrors again. */
 :root[dir='ltr'] [dir='rtl'] [dir='ltr'] .dir-icon {
+  transform: scaleX(-1);
+}
+/* The opposite case: an icon drawn for LTR (the tree-view icon, whose branches hang
+   off a left-hand trunk) mirrors whenever the app is in Hebrew. */
+:root[dir='rtl'] .dir-icon-ltr {
   transform: scaleX(-1);
 }
 

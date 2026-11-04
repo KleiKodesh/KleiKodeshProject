@@ -232,7 +232,7 @@ watch(
   text-overflow: ellipsis;
 }
 /* A dropdown rendered as a row: its wrapper is a full-width strip rather than the toolbar
-   button box it is on the bar, and its panel is a fixed side submenu (useOverflowSubmenu). */
+   button box it is on the bar, and its panel is a fixed side submenu (useToolbarOverflowSubmenu). */
 .toolbar-overflow-menu :deep(.overflow-host) {
   position: static;
   width: 100%;

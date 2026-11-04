@@ -36,6 +36,7 @@ namespace FtsLib.Snippets
         private readonly TokenStream _tokenStream = new TokenStream();
         private          int[]       _groupCount  = new int[8];
         private readonly List<int>   _markRanges  = new List<int>(24);
+        private          bool[]      _markMask    = new bool[32];   // occurrence marks (issue #4)
 
         public SnippetWindowLocator(int contextWords = 8)
         {
@@ -54,7 +55,8 @@ namespace FtsLib.Snippets
             string              rawHtml,
             PreparedQueryGroups prepared,
             bool                requireOrdered     = false,
-            int                 originalGroupCount = 0)
+            int                 originalGroupCount = 0,
+            int                 maxWordDistance    = int.MaxValue)
         {
             if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
                 return SnippetDescriptor.NoMatch;
@@ -68,7 +70,6 @@ namespace FtsLib.Snippets
                 return SnippetDescriptor.NoMatch;
 
             var (snapStart, snapEnd, sIdx, eIdx) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
-            CollectMarkRanges(tokens, prepared, snapStart, snapEnd);
 
             // Visible words actually inside the window — lets the caller detect a "short"
             // snippet for free (no re-scan, no DB) and widen it over neighbouring lines.
@@ -77,6 +78,14 @@ namespace FtsLib.Snippets
             // WordDistance = extra words between matched slots (0 = all consecutive).
             // originalGroupCount overrides so skipped wildcards still count as a slot.
             int denominator = originalGroupCount > 0 ? originalGroupCount : prepared.GroupCount;
+
+            // Marks: the tokens of full occurrences (issue #4). Without a distance every
+            // term token in the snippet is in a covering window, so only the caller's
+            // distance filter narrows them.
+            bool masked = maxWordDistance != int.MaxValue
+                && OccurrenceMarks(tokens, prepared, sIdx, eIdx, iLeft, iRight,
+                                   (long)maxWordDistance + (denominator - 1));
+            CollectMarkRanges(tokens, prepared, snapStart, snapEnd, masked ? sIdx : -1);
             // Words between the ends, by position (a paired reading's second reading shares
             // its first reading's position).
             int wordDist = tokens[iRight].Position - tokens[iLeft].Position - (denominator - 1);
@@ -152,6 +161,31 @@ namespace FtsLib.Snippets
             }
 
             return (bestILeft, bestIRight, bestScore);
+        }
+
+        /// <summary>
+        /// True when <paramref name="rawHtml"/> carries a quoted phrase: a word of each of
+        /// <paramref name="phrase"/>'s groups at consecutive positions, in group order
+        /// (positions as the tokenizer gives them, so a paired reading's second reading
+        /// stands at its first reading's position).
+        /// </summary>
+        public bool ContainsPhrase(string rawHtml, PreparedQueryGroups phrase)
+        {
+            if (string.IsNullOrEmpty(rawHtml) || phrase == null || phrase.IsEmpty) return false;
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            int n = phrase.GroupCount;
+            var at = new HashSet<int>[n];
+            for (int g = 0; g < n; g++) at[g] = new HashSet<int>();
+            foreach (var t in tokens)
+                if (phrase.TryGetGroups(t.NormSpan, out int[] groups))
+                    foreach (int g in groups) at[g].Add(t.Position);
+            foreach (int p in at[0])
+            {
+                int g = 1;
+                while (g < n && at[g].Contains(p + g)) g++;
+                if (g == n) return true;
+            }
+            return false;
         }
 
         private void EnsureGroupCount(int required)
@@ -269,20 +303,80 @@ namespace FtsLib.Snippets
             List<TextToken>     tokens,
             PreparedQueryGroups prepared,
             int                 snapStart,
-            int                 snapEnd)
+            int                 snapEnd,
+            int                 maskStart)
         {
             _markRanges.Clear();
-            foreach (var tok in tokens)
+            for (int t = 0; t < tokens.Count; t++)
             {
+                var tok = tokens[t];
                 if (tok.RawEnd   <= snapStart) continue;
                 if (tok.RawStart >= snapEnd)   break;
                 if (!prepared.TryGetTerm(tok.NormSpan, out var term)) continue;
+                // only tokens of a full occurrence inside the window (issue #4)
+                if (maskStart >= 0 && (t < maskStart || t - maskStart >= _markMask.Length || !_markMask[t - maskStart]))
+                    continue;
 
                 int tokEnd = tok.RawEnd < snapEnd ? tok.RawEnd : snapEnd;
                 _markRanges.Add(tok.RawStart);
                 _markRanges.Add(tokEnd - tok.RawStart);
                 _markRanges.Add(term.Ordinal);
             }
+        }
+
+        // ── Occurrence marks (issue #4) ───────────────────────────────
+
+        /// <summary>
+        /// Marks in <see cref="_markMask"/> (index t - sIdx) every term token of tokens
+        /// sIdx..eIdx inside a full occurrence lying in sIdx..eIdx: a token range covering
+        /// every group whose ends are at most <paramref name="maxSpan"/> positions apart
+        /// (maxWordDistance + groups - 1). False when every term token qualifies anyway
+        /// (all of them inside the best window iLeft..iRight): no mask, the common hit
+        /// stays free. Per right end r (a term token) the covering windows [l', r] are
+        /// those with l' &lt;= L - 1 (the latest covering left end); their union within
+        /// the span is [lo, r].
+        /// </summary>
+        private bool OccurrenceMarks(
+            List<TextToken> tokens, PreparedQueryGroups prepared,
+            int sIdx, int eIdx, int iLeft, int iRight, long maxSpan)
+        {
+            bool outside = false;
+            for (int t = sIdx; t <= eIdx && !outside; t++)
+                if ((t < iLeft || t > iRight) && prepared.TryGetGroups(tokens[t].NormSpan, out _))
+                    outside = true;
+            if (!outside) return false;
+
+            int w = eIdx - sIdx + 1;
+            if (_markMask.Length < w) _markMask = new bool[w * 2];
+            System.Array.Clear(_markMask, 0, _markMask.Length);
+            int k = prepared.GroupCount;
+            EnsureGroupCount(k);
+            for (int i = 0; i < k; i++) _groupCount[i] = 0;
+
+            int covered = 0, L = sIdx, lo = sIdx, markedTo = sIdx;
+            for (int r = sIdx; r <= eIdx; r++)
+            {
+                bool rTerm = prepared.TryGetGroups(tokens[r].NormSpan, out int[] rGroups);
+                if (rTerm)
+                    foreach (int g in rGroups)
+                        if (_groupCount[g]++ == 0) covered++;
+                while (covered >= k)
+                {
+                    if (prepared.TryGetGroups(tokens[L].NormSpan, out int[] lGroups))
+                        foreach (int g in lGroups)
+                            if (--_groupCount[g] == 0) covered--;
+                    L++;
+                }
+                if (!rTerm || L == sIdx) continue;
+                int x = L - 1;
+                while (tokens[r].Position - tokens[lo].Position > maxSpan) lo++;
+                if (lo <= x)
+                {
+                    for (int t = System.Math.Max(lo, markedTo); t <= r; t++) _markMask[t - sIdx] = true;
+                    markedTo = r + 1;
+                }
+            }
+            return true;
         }
     }
 }

@@ -60,7 +60,8 @@ an error worth throwing, not something to guess at - it means the wrong database
 `WHERE content LIKE '%...%'` compares the stored BYTES, so on a schema-6 database it matches
 nothing at all and reports success. Text search goes through the full-text index. The
 dictionary feature's headword lookups are served by the `seforim_headword` table in
-`Dictionary.db`, built by `build_seforim_headword_index.py` beside it.
+`Dictionary.db`, built by `import/build_seforim_headword_index.py` in the KitveiHakodeshDictionary repo
+(see `CSharpBackend/KitveiHakodesh.Core/Dictionary/README.md`).
 
 ---
 

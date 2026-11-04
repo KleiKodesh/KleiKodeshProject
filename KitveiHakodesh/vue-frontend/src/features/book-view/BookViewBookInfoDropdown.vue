@@ -12,7 +12,7 @@ import { IconInfo20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
-import { useOverflowSubmenu } from './useOverflowSubmenu'
+import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -54,7 +54,7 @@ watch(
 )
 
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
-const submenuStyle = useOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
+const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
 </script>
 

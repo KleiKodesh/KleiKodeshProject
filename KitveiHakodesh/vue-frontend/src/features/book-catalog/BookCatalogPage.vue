@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useElementSize } from '@vueuse/core'
+import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
 import BookCatalogViewCards from './BookCatalogView.Cards.vue'
+import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
+import BookCatalogViewTree from './BookCatalogView.Tree.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -47,8 +50,34 @@ const {
 // Persisted in settingsStore alongside every other display preference — it is
 // app-wide, not per-tab, so it needs no load-on-mount step.
 const { booksView: view } = storeToRefs(useSettingsStore())
-const activeViewComponent = computed(() =>
-  view.value === 'tiles' ? BookCatalogViewCards : BookCatalogViewList,
+const VIEW_COMPONENTS = {
+  list: BookCatalogViewList,
+  cards: BookCatalogViewCards,
+  tiles: BookCatalogViewTiles,
+  tree: BookCatalogViewTree,
+}
+const activeViewComponent = computed(() => VIEW_COMPONENTS[view.value])
+// The three flat views show the current folder; the tree shows the whole catalog
+// and unfolds to wherever the path points.
+const activeViewProps = computed(() =>
+  view.value === 'tree' ? { root: ROOT.value, path: path.value } : { items: treeItems.value },
+)
+// Search results have no tree shape: in tree mode they list.
+const searchResultsView = computed(() => (view.value === 'tree' ? 'list' : view.value))
+
+// Cards view: cards keep a 140-200px width and the grid takes whole columns,
+// centred; the address bar shares that width so its edges line up with the grid.
+// 24px = the grid's own inline padding (.catalog-cards).
+const contentRef = ref<HTMLElement | null>(null)
+const { width: contentWidth } = useElementSize(contentRef)
+const gridLayout = useCardGridLayout(() => contentWidth.value - 24, view)
+const gridStyle = computed(() =>
+  view.value === 'cards' && contentWidth.value > 0
+    ? {
+        '--catalog-content-width': `${gridLayout.value.width}px`,
+        '--catalog-columns': gridLayout.value.columns,
+      }
+    : undefined,
 )
 
 function setView(v: BooksView) {
@@ -130,6 +159,8 @@ type ActiveViewInstance = ComponentPublicInstance & {
   /** Both views forward the search input's keys, keeping the caret in the field. */
   onSearchInputKeydown: (event: KeyboardEvent) => boolean
   highlightFirst: () => void
+  /** Tree view only: folds every shelf back up. */
+  reset?: () => void
 }
 
 const activeViewRef = ref<ActiveViewInstance | null>(null)
@@ -246,9 +277,12 @@ function onNavigateToSibling(atIndex: number, node: CategoryNode) {
   focusSearchInput()
 }
 
+// Home: the root folder in the flat views; in the tree, which is always at the
+// root, it folds everything back up instead.
 function onGoHome() {
   editingSearch.value = false
   navigateTo(0)
+  activeViewRef.value?.reset?.()
   focusSearchInput()
 }
 
@@ -304,14 +338,16 @@ function onSelectToc(item: TocFsItem, openInNewTab = false) {
   )
 }
 function onSearchEnter() {
-  if (isSearching.value && searchItems.value.length === 1) onSelectBook(searchItems.value[0]!.book)
+  const only = searchItems.value[0]
+  if (isSearching.value && searchItems.value.length === 1 && only && only.kind !== 'file') onSelectBook(only.book)
 }
 </script>
 
 <template>
   <!-- Never translated, always RTL in every UI language (user decision). -->
-  <div class="books-page" dir="rtl">
+  <div class="books-page" dir="rtl" :style="gridStyle">
     <BookCatalogTitleBar
+      :class="{ 'matches-grid': gridStyle }"
       :view="view"
       :path="path"
       :show-search="showSearch"
@@ -335,7 +371,7 @@ function onSearchEnter() {
         />
       </template>
     </BookCatalogTitleBar>
-    <div class="books-content">
+    <div ref="contentRef" class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
         <MessageBanner class="error-msg" :message="error" :dismissible="false" />
@@ -375,7 +411,7 @@ function onSearchEnter() {
           :is="activeViewComponent"
           ref="activeViewRef"
           v-show="!isSearching"
-          :items="treeItems"
+          v-bind="activeViewProps"
           @select-book="onSelectBook"
           @enter-folder="onEnterFolder"
         />
@@ -396,7 +432,7 @@ function onSearchEnter() {
             ref="searchResultsRef"
             v-else
             :items="searchItems"
-            :view="view"
+            :view="searchResultsView"
             :searching="tocSearching"
             @select-book="onSelectBook"
             @select-toc="onSelectToc"
@@ -413,6 +449,10 @@ function onSearchEnter() {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+}
+/* The pill spans the card grid's width, centred over it (see gridStyle). */
+.matches-grid {
+  padding-inline: calc((100% - var(--catalog-content-width)) / 2);
 }
 .books-content {
   flex: 1;

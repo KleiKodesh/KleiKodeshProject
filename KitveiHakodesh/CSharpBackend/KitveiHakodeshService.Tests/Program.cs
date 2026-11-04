@@ -32,6 +32,8 @@ bool abbrevMode = false;
 bool multiLibMode = false;
 bool multiLibIndexMode = false;
 var ktivSimQueries = new List<string>();
+var pictureRpcFiles = new List<string>();
+string? cancelOpenFile = null;
 bool treeOrderSelfTest = false;
 bool expanderSelfTest = false;
 string? treeOrderDump = null;
@@ -56,11 +58,16 @@ for (int i = 0; i < args.Length; i++)
         case "--multilibindex": multiLibIndexMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
+        case "--userspace-selftest": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Run() == 0 ? 0 : 1;
+        case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
+        case "--userspace-bench": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Bench(args[++i], args[++i], args.Skip(i + 1).ToArray());
         case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
         case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;
         case "--golden-cold": goldenDir = args[++i]; goldenTag = args[++i]; goldenCold = args[++i]; break;
         case "--exhaustive": exhaustiveOut = args[++i]; break;
+        case "--fastdocview-cancel-open": cancelOpenFile = args[++i]; break;
+        case "--fastdocview-picture-rpc": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pictureRpcFiles.Add(args[++i]); break;
         case "--exh-levels": exhLevels = int.Parse(args[++i]); break;
         case "--exh-every": exhEvery = int.Parse(args[++i]); break;
         case "--exh-shard": { var p = args[++i].Split('/'); exhShard = int.Parse(p[0]); exhShards = int.Parse(p[1]); break; }
@@ -79,6 +86,10 @@ if (abbrevProblems.Count > 0)
     return 3;
 }
 
+if (cancelOpenFile is not null)
+    return KitveiHakodeshService.Tests.FastDocViewCancelOpenCheck.Run(cancelOpenFile);
+if (pictureRpcFiles.Count > 0)
+    return KitveiHakodeshService.Tests.FastDocViewPictureRpcCheck.Run(pictureRpcFiles);
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
 if (expanderSelfTest)

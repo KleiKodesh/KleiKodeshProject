@@ -16,5 +16,9 @@
   "openingFile": "פותח קובץ…",
   "truncated": "(מוצגים {shown} מתוך {total} תוצאות)",
   "openInDefaultApp": "פתח בתוכנת ברירת המחדל",
+  "openFileLocation": "פתח מיקום במחשב",
+  "copyPath": "העתק נתיב",
+  "pathCopied": "הנתיב הועתק",
+  "copyPathFailed": "לא ניתן היה להעתיק את הנתיב",
   "searchError": "שגיאה בחיפוש"
 }

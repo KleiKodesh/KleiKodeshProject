@@ -59,7 +59,7 @@ export type TabRoute =
   | '/'
   | '/pdf-view'
   | '/html-view'
-  | '/txt-view'
+  | '/fast-doc-view'
   | '/settings'
   | '/books'
   | '/book-view'
@@ -69,6 +69,7 @@ export type TabRoute =
   | '/dictionary'
   | '/midot'
   | '/file-search'
+  | '/user-space'
 
 export interface Tab {
   id: string
@@ -327,6 +328,9 @@ export const useTabStore = defineStore('tabs', () => {
     const wsStore = useWorkspaceStore()
     const wsId = wsStore.activeId
     const saved = lsGet<PersistedTabList>(tabsListKey(wsId))
+    // The plain-text viewer is gone: a tab saved on it reopens in FastDocView, which reads
+    // the same localFilePath itself.
+    if (saved) saved.tabs = saved.tabs.map((t) => ((t.route as string) === '/txt-view' ? { ...t, route: '/fast-doc-view' as const } : t))
     if (saved && saved.tabs.length > 0) {
       // Single-tab hosts (VSTO task pane, dev browser) paint no tab list, so restoring
       // a multi-tab session there would bring back tabs the reader cannot see or reach.
@@ -393,6 +397,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/dictionary',
     '/midot',
     '/file-search',
+    '/user-space',
   ]
   const DESTINATION_TITLES: Record<string, string> = {
     '/settings': t('stores.tabTitle.settings'),
@@ -402,6 +407,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/dictionary': t('stores.tabTitle.dictionary'),
     '/midot': t('stores.tabTitle.midot'),
     '/file-search': t('stores.tabTitle.fileSearch'),
+    '/user-space': t('stores.tabTitle.userSpace'),
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────
@@ -458,7 +464,7 @@ export const useTabStore = defineStore('tabs', () => {
     }
     const tabState = peekTabViewState(tab.id)
     if (!tabState) return undefined
-    if (tab.route === '/html-view' || tab.route === '/txt-view') {
+    if (tab.route === '/html-view') {
       return tabState.htmlViewScrollTop != null
         ? { htmlViewScrollTop: tabState.htmlViewScrollTop }
         : undefined
@@ -985,7 +991,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   /**
    * Records a tab navigation into the recently opened history.
-   * Only called for trackable routes (/book-view, /pdf-view, /html-view, /txt-view).
+   * Only called for trackable routes (/book-view, /pdf-view, /html-view, /fast-doc-view).
    * Skips entries that lack enough identity information to be re-opened later:
    *   - /book-view requires a bookId
    *   - file routes require either a localFilePath or a localFileHbBookId
@@ -998,7 +1004,9 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab.localFileConverting) return
     if (tab.route === '/book-view' && !tab.bookId) return
     if (
-      (tab.route === '/pdf-view' || tab.route === '/html-view' || tab.route === '/txt-view') &&
+      (tab.route === '/pdf-view' ||
+        tab.route === '/html-view' ||
+        tab.route === '/fast-doc-view') &&
       !tab.localFilePath &&
       !tab.localFileHbBookId &&
       !tab.localFileName

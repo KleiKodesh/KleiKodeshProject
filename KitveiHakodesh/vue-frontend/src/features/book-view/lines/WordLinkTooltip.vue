@@ -323,8 +323,28 @@ const style = computed(() => {
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
     zIndex: '9998',
+    // The fitted height, capped to the chosen side's room; a user resize lifts the cap
+    // (the native handle sets an inline height the cap would otherwise clamp).
+    maxHeight: userResizing.value ? 'none' : resolvedMaxHeight.value === null ? undefined : `${resolvedMaxHeight.value}px`,
   }
 })
+
+/**
+ * The panel fits its content up to the stylesheet's max-height; the native resize handle
+ * (bottom-right corner, the root is LTR) must be free to make it taller than that, so a
+ * press on the handle lifts the cap.
+ */
+const userResizing = ref(false)
+const RESIZE_HANDLE_PX = 16
+function onPanelPointerDown(event: PointerEvent) {
+  const panel = tooltipRef.value
+  if (!panel || userResizing.value) return
+  const rect = panel.getBoundingClientRect()
+  if (event.clientX > rect.right - RESIZE_HANDLE_PX && event.clientY > rect.bottom - RESIZE_HANDLE_PX) {
+    panel.style.height = `${rect.height}px`
+    userResizing.value = true
+  }
+}
 
 /**
  * True when a STATIC panel's content is taller than the panel. Such a panel cannot be
@@ -463,6 +483,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
       @mouseenter="emit('pointer-enter')"
       @mouseleave="emit('pointer-leave')"
       @mousedown.left="emit('select-start')"
+      @pointerdown="onPanelPointerDown"
     >
       <!-- Content wrapper with RTL direction for proper text flow -->
       <div class="word-link-tooltip-content">
@@ -549,7 +570,10 @@ useEventListener(() => window, 'resize', () => emit('close'))
      from the settings store (applied via the style binding after positioning resolves)
      overrides these once the user has resized. */
   width: 360px;
-  height: 140px;
+  /* Fits the content; 140px is the most it takes before the body scrolls (a user
+     resize lifts this - see onPanelPointerDown). */
+  height: auto;
+  max-height: 140px;
   overflow: hidden;
   /* Native HTML resize handle */
   resize: both;

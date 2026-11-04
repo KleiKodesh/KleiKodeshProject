@@ -12,4 +12,4 @@ HTML file viewer for displaying local HTML and HTM files.
 
 **otzariaAddinStorage.ts** — per-addin sandboxed IndexedDB (`app-addin-storage-<addinId>`) backing the `storage.*` API; grants no access to app data.
 
-Text files (`.txt`) are handled by the separate `txt-view` feature, not here.
+Text files (`.txt`) open in FastDocView, not here.

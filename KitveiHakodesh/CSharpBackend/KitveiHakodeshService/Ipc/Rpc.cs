@@ -84,6 +84,16 @@ public sealed class PickFolderResult
     public bool Cancelled { get; set; }
 }
 
+/// <summary>Result of <c>listLocalFolder</c>: one level of a folder - subfolder names and the
+/// names of the files the app can open. <see cref="Error"/> is set when the folder can't be read.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ListLocalFolderResult
+{
+    public List<string> Folders { get; set; } = [];
+    public List<string> Files { get; set; } = [];
+    public string? Error { get; set; }
+}
+
 /// <summary>Args for <c>setExcludedFolders</c> — the full replacement list of folders to exclude
 /// from file-search results.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -138,6 +148,23 @@ public sealed class ExportToWordArgs
 {
     public string? Html { get; set; }
     public string? Title { get; set; }
+    /// <summary>Optional id chosen by the page; <c>cancelWordExport</c> with the same id stops this export.</summary>
+    public string? RequestId { get; set; }
+}
+
+/// <summary>Args for <c>cancelWordExport</c>: the request id of the exportToWord / pasteIntoWord to stop.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CancelWordExportArgs
+{
+    public string? RequestId { get; set; }
+}
+
+/// <summary>Result of <c>cancelWordExport</c>: <see cref="Ok"/> true when a running export was told to stop
+/// (false: none running with that id - already finished).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CancelWordExportResult
+{
+    public bool Ok { get; set; }
 }
 
 /// <summary>Result of <c>exportToWord</c>: <see cref="Ok"/> true once Word opened the exported
@@ -148,6 +175,8 @@ public sealed class ExportToWordResult
 {
     public bool Ok { get; set; }
     public string? Error { get; set; }
+    /// <summary>True when the export was stopped by <c>cancelWordExport</c> (Ok false, no Error).</summary>
+    public bool Cancelled { get; set; }
 }
 
 /// <summary>Result of <c>pasteIntoWord</c>: <see cref="Ok"/> true once the clipboard was pasted
@@ -159,6 +188,15 @@ public sealed class PasteIntoWordResult
 {
     public bool Ok { get; set; }
     public string? Error { get; set; }
+    /// <summary>True when the paste was stopped by <c>cancelWordExport</c> (Ok false, no Error).</summary>
+    public bool Cancelled { get; set; }
+}
+
+/// <summary>Args for <c>pasteIntoWord</c>: an optional id; <c>cancelWordExport</c> with it stops the paste.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class PasteIntoWordArgs
+{
+    public string? RequestId { get; set; }
 }
 
 /// <summary>Parameterized SQL (positional '?') for the generic user-settings read/write ops.
@@ -401,6 +439,22 @@ public sealed class HbProgressResult
 public sealed class StringArg
 {
     public string? Value { get; set; }
+}
+
+/// <summary>Args for <c>userSpaceSearch</c>: the query and the user's roots, in the user's order.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserSpaceSearchArgs
+{
+    public string? Query { get; set; }
+    public List<UserSpaceRootArg>? Roots { get; set; }
+}
+
+/// <summary>One UserSpace root: a catalog category id OR an absolute folder path.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserSpaceRootArg
+{
+    public int? CategoryId { get; set; }
+    public string? Folder { get; set; }
 }
 
 /// <summary>Generic single-string result (e.g. <c>getHbLocalFolder</c>).</summary>

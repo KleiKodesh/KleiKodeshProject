@@ -1,24 +1,19 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed } from 'vue'
-import {
-  IconHome16Regular,
-  IconSearch20Regular,
-  IconTextBulletList20Regular,
-  IconGrid20Regular,
-} from '@iconify-prerendered/vue-fluent'
+import { IconArrowCounterclockwise20Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
+import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BooksView } from '@/stores/settingsStore'
 
-const props = defineProps<{
+defineProps<{
   view: BooksView
   path: CategoryNode[]
   /** Which face the bar is showing: the search field, or the path. */
   showSearch: boolean
 }>()
-const emit = defineEmits<{
+defineEmits<{
   setView: [BooksView]
   navigate: [number]
   navigateToSibling: [{ atIndex: number; node: CategoryNode }]
@@ -26,21 +21,11 @@ const emit = defineEmits<{
   goHome: []
 }>()
 
-// Two views, so the button is a straight toggle: it shows the view you are IN and
-// switches to the other one on click. The title names the view being switched TO,
-// since the icon already says where you are.
-const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }> = {
-  list: { label: t('bookCatalog.titleBar.listView'), icon: IconTextBulletList20Regular },
-  tiles: { label: t('bookCatalog.titleBar.tilesView'), icon: IconGrid20Regular },
-}
-
-const otherView = computed(() => (props.view === 'list' ? 'tiles' : 'list') as BooksView)
-const viewToggleTitle = computed(
-  () => t('bookCatalog.titleBar.switchTo', { view: VIEWS[otherView.value].label }),
-)
-
-function toggleView() {
-  emit('setView', otherView.value)
+const VIEW_LABELS = {
+  list: t('bookCatalog.titleBar.listView'),
+  cards: t('bookCatalog.titleBar.cardsView'),
+  tiles: t('bookCatalog.titleBar.tilesView'),
+  tree: t('bookCatalog.titleBar.treeView'),
 }
 </script>
 
@@ -61,7 +46,7 @@ function toggleView() {
          button out from under the pointer. -->
     <template #left>
       <button class="bar-btn pill-btn" :title="$t('bookCatalog.titleBar.reset')" @mousedown.prevent @click="$emit('goHome')">
-        <IconHome16Regular />
+        <IconArrowCounterclockwise20Regular />
       </button>
     </template>
 
@@ -84,7 +69,10 @@ function toggleView() {
          an address bar does — the crumbs and chevrons stop their own clicks, so
          what reaches here is the slack around them, including the icon below. -->
     <div v-show="!showSearch" class="pill-middle pill-path" @click="$emit('openSearch')">
+      <!-- The tree has no "current folder" — the whole catalog is on screen — so
+           the path means nothing there and the bar shows only home. -->
       <BookCatalogBreadcrumb
+        v-if="view !== 'tree'"
         :path="path"
         @navigate="$emit('navigate', $event)"
         @navigate-to-sibling="$emit('navigateToSibling', $event)"
@@ -97,14 +85,15 @@ function toggleView() {
       <IconSearch20Regular class="search-icon path-search-icon" />
     </div>
     <template #right>
-      <button
-        class="bar-btn pill-btn"
-        :title="viewToggleTitle"
-        @mousedown.prevent
-        @click="toggleView"
-      >
-        <component :is="VIEWS[otherView].icon" :key="otherView" />
-      </button>
+      <!-- Page-specific buttons beside the view menu (UserSpace's add/remove). -->
+      <slot name="actions" />
+      <ViewModeDropdown
+        class="pill-btn"
+        :model-value="view"
+        :labels="VIEW_LABELS"
+        :title="$t('bookCatalog.titleBar.viewMenu')"
+        @update:model-value="$emit('setView', $event)"
+      />
     </template>
   </TopSearchBar>
 </template>

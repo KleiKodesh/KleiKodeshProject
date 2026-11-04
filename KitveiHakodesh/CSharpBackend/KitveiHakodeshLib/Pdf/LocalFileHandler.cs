@@ -127,7 +127,7 @@ namespace KitveiHakodeshLib.LocalFile
         /// The one open path behind a pick (<paramref name="replyId"/> set) and Open-With
         /// (<paramref name="replyId"/> null). Pushes the events the Vue localFileStore handles:
         ///
-        ///   TXT          ->  localFileTxtReady { textContent, fileName, filePath }
+        ///   TXT / Word   ->  localFileTxtReady { fileName, filePath } (the page opens it in FastDocView)
         ///   PDF / HTML   ->  localFileReady { url, fileName, filePath, isOtzariaAddin }
         ///   Word family  ->  localFileConversionStarted { fileName, filePath }, then
         ///                    localFileConversionReady { url, fileName, filePath } (fast path:
@@ -158,24 +158,14 @@ namespace KitveiHakodeshLib.LocalFile
                     return;
                 }
 
-                WindowsRecentDocuments.Add(filePath);
-
-                string fileName = Path.GetFileName(filePath);
-
-                if (LocalFileOpenRules.IsText(filePath))
+                object readyEvent = ReadyEvent(filePath, needsConvert, openInNewTab, out string url);
+                if (readyEvent != null)
                 {
-                    string content = TextEncodingDetector.ReadAllText(filePath);
-                    _bridge.PushEvent(new { @event = "localFileTxtReady", textContent = content, fileName, filePath, openInNewTab });
-                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false });
-                    return;
-                }
-
-                if (!needsConvert)
-                {
-                    string url = RegisterFolder(filePath);
-                    bool isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(LocalFileOpenRules.AssetFolderOf(filePath));
-                    _bridge.PushEvent(new { @event = "localFileReady", url, fileName, filePath, openInNewTab, isOtzariaAddin });
-                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false, url, fileName, filePath });
+                    _bridge.PushEvent(readyEvent);
+                    if (replyId != null)
+                        _bridge.Reply(replyId, url == null
+                            ? (object)new { cancelled = false }
+                            : new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
                     return;
                 }
 
@@ -206,6 +196,45 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 Fail(ex.Message);
             }
+        }
+
+        /// <summary>
+        /// The event that opens a supported <paramref name="filePath"/> in the page. Text and the
+        /// Word family open in the page's FastDocView (windowed reading through the service): the
+        /// page is told the path only - never the file's content - and no Word -> PDF conversion
+        /// starts. "Open as PDF" on that page converts on request (restoreLocalFile). PDF and HTML
+        /// are served from a virtual host, whose url comes back in <paramref name="url"/> (null for
+        /// the others). The page's localFileStore routes these events by extension.
+        /// Call on the UI thread (RegisterFolder touches CoreWebView2).
+        /// </summary>
+        private object ReadyEvent(string filePath, bool needsConvert, bool openInNewTab, out string url)
+        {
+            url = null;
+            WindowsRecentDocuments.Add(filePath);
+            string fileName = Path.GetFileName(filePath);
+            if (LocalFileOpenRules.IsText(filePath) || needsConvert)
+                return new { @event = "localFileTxtReady", fileName, filePath, openInNewTab };
+
+            url = RegisterFolder(filePath);
+            bool isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(LocalFileOpenRules.AssetFolderOf(filePath));
+            return new { @event = "localFileReady", url, fileName, filePath, openInNewTab, isOtzariaAddin };
+        }
+
+        /// <summary>
+        /// The open event for a file the host was launched with, built BEFORE the page loads so
+        /// the page can open its tab at boot, ahead of the rest of the session (AppViewer's
+        /// startup-events script). Null when the file is missing, unsupported or fails to
+        /// register: the caller then opens it the normal way, which reports the error.
+        /// </summary>
+        public object StartupOpenEvent(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return null;
+                if (!LocalFileOpenRules.IsSupported(filePath, out bool needsConvert)) return null;
+                return ReadyEvent(filePath, needsConvert, openInNewTab: true, out _);
+            }
+            catch (Exception) { return null; }
         }
 
         /// <summary>
@@ -288,6 +317,24 @@ namespace KitveiHakodeshLib.LocalFile
                 }
 
                 string error = LocalFileOpenRules.OpenInDefaultApp(filePath);
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>Shows a file in Explorer with it selected ("Open file location").</summary>
+        public void HandleRevealInFolder(JsonElement root, string id)
+        {
+            try
+            {
+                string filePath = root.GetProperty("filePath").GetString();
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                {
+                    _bridge.Reply(id, new { error = "הקובץ לא נמצא" });
+                    return;
+                }
+
+                string error = LocalFileOpenRules.RevealInFolder(filePath);
                 _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }

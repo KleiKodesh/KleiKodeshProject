@@ -43,6 +43,8 @@ export function libraryTooltipText(label: string | null | undefined): string {
 
 /** Library an item came from, as the badge would read it; empty for the main library. Ignores the show/hide preference. */
 export function getLibraryName(item: FsItem): string {
+  // A file of a computer folder (UserSpace) belongs to no library.
+  if (item.kind === 'file') return ''
   return libraryBadgeText(item.kind === 'book' ? item.book.libraryLabel : item.node.libraryLabel)
 }
 
@@ -53,6 +55,7 @@ export function getLibraryName(item: FsItem): string {
  */
 export function getCatalogCardLines(item: FsItem, showBadge = true): CatalogCardLines {
   const badge = showBadge ? getLibraryName(item) : ''
+  if (item.kind === 'file') return { path: '', badge }
   if (item.kind === 'book') {
     return { path: (item.book.authors ?? '').trim(), badge }
   }

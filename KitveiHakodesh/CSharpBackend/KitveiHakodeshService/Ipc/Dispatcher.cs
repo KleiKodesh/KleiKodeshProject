@@ -1,8 +1,10 @@
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.Settings;
+using KitveiHakodesh.Core.SeforimLibraryDownload;
 using KitveiHakodesh.Core.HebrewBooks;
 using KitveiHakodesh.Core.LocalFiles;
 using KitveiHakodesh.Core.WordDocuments;
+using KitveiHakodesh.Core.FastDocView;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
@@ -27,6 +29,7 @@ public sealed class Dispatcher(
     UserSettingsService userSettings,
     HttpHostState httpState,
     LocalFileGrants localFileGrants,
+    global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments fastDocViewDocuments,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
@@ -159,6 +162,78 @@ public sealed class Dispatcher(
                     }));
                 }
 
+                // FastDocView: a Word-family / OpenDocument / RTF / text file read in windows of
+                // blocks (Core FastDocView/). Only rendered windows travel, never the whole file.
+                // A changed file or an unknown id throws FastDocViewSourceChangedException, whose
+                // message the page recognises and reopens on.
+                case "fastDocViewOpen":
+                {
+                    var a = MsgPack.De<FastDocViewOpenArgs>(req.Args);
+                    if (!localFileGrants.TryValidateFastDocViewSource(a.Path, out string full, out string error))
+                    {
+                        // a moved / deleted file and a type we do not read get the page's translated message too
+                        string? code = error switch
+                        {
+                            "file not found" => global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.NotFound,
+                            "file type not allowed" => global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.Unsupported,
+                            _ => null,
+                        };
+                        return RpcResponse.Err(code is null ? error : global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenFailedException.MessageFor(code, error));
+                    }
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Open(full, a.OpenId, ct)));
+                }
+                case "fastDocViewCancelOpen":
+                    fastDocViewDocuments.CancelOpen(MsgPack.De<FastDocViewCancelOpenArgs>(req.Args).OpenId);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+                case "fastDocViewBlocks":
+                {
+                    var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Blocks(a.DocumentId, a.First, a.Count)));
+                }
+                case "fastDocViewNotes":
+                {
+                    var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Notes(a.DocumentId, a.First, a.Count)));
+                }
+                case "fastDocViewNoteBlocks":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.NoteBlocks(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewHeadings":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewSearch":
+                {
+                    var a = MsgPack.De<FastDocViewSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Search(a.DocumentId, a.Query, a.MatchCase, a.FromBlock, a.MaxBlocks)));
+                }
+                case "fastDocViewBookmark":
+                {
+                    var a = MsgPack.De<FastDocViewBookmarkArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Bookmark(a.DocumentId, a.Name)));
+                }
+                case "fastDocViewPicture":
+                {
+                    // the hosted app's leg (its relay serves POST only); dev <img>s use GET /fast-doc-view-picture
+                    // A missing picture, or one asked for after its document closed or changed, is an EMPTY
+                    // result, not an error: the page keeps the sized empty box and logs nothing (one error per
+                    // picture would flood the console); the block fetches, not pictures, drive a reopen.
+                    var a = MsgPack.De<FastDocViewPictureArgs>(req.Args);
+                    FastDocViewPicture? picture;
+                    try { picture = fastDocViewDocuments.Picture(a.DocumentId, a.PictureId); }
+                    catch (global::KitveiHakodesh.Core.FastDocView.FastDocViewSourceChangedException) { picture = null; }
+                    return RpcResponse.Ok(picture is null ? null : MsgPack.Ser(picture));
+                }
+                case "fastDocViewSections":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewWeights":
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Weights(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                case "fastDocViewScan":
+                {
+                    var a = MsgPack.De<FastDocViewScanArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Scan(a.DocumentId, a.Blocks)));
+                }
+                case "fastDocViewClose":
+                    fastDocViewDocuments.Close(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+
                 // Show the NATIVE open-file dialog on the service's desktop (dev's replacement for
                 // the browser <input type=file>, which yields only a blob — no absolute path, so no
                 // reload persistence). Returns just the chosen PATH; the client then authorizes it
@@ -188,6 +263,20 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(picked is null
                         ? new PickFolderResult { Cancelled = true }
                         : new PickFolderResult { Path = picked }));
+                }
+
+                // One level of a folder on disk for UserSpace's tree (Core LocalFolderListing).
+                // Names only - opening a file still goes through openLocalFile's grant.
+                case "listLocalFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    var listing = LocalFolderListing.List(a.Value ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new ListLocalFolderResult
+                    {
+                        Folders = listing.Folders,
+                        Files = listing.Files,
+                        Error = listing.Error,
+                    }));
                 }
 
                 // Excluded folders for file search — persisted in excluded_folders.json BESIDE
@@ -239,6 +328,19 @@ public sealed class Dispatcher(
                         : new OpenInDefaultAppResult { Error = openError }));
                 }
 
+                // Show a local file in Explorer (selected) — the dev-mode equivalent of the hosted
+                // "revealInFolder" bridge action. Same path checks as a shell-open.
+                case "revealFileInFolder":
+                {
+                    var a = MsgPack.De<OpenInDefaultAppArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    string? revealError = LocalFileOpenRules.RevealInFolder(full);
+                    return RpcResponse.Ok(MsgPack.Ser(revealError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = revealError }));
+                }
+
                 // PDF viewer TOC autosave — the dev-mode equivalent of the hosted "writePdfTail"
                 // bridge action. Same path checks as a shell-open, then Core's tail writer.
                 case "writePdfTail":
@@ -259,10 +361,19 @@ public sealed class Dispatcher(
                 case "exportToWord":
                 {
                     var a = MsgPack.De<ExportToWordArgs>(req.Args);
-                    string? exportError = await WordDocumentExporter.ExportHtmlAsNewDocumentAsync(a.Html, a.Title);
-                    return RpcResponse.Ok(MsgPack.Ser(exportError is null
-                        ? new ExportToWordResult { Ok = true }
+                    string? exportError = await WordDocumentExporter.ExportHtmlAsNewDocumentAsync(a.Html, a.Title, a.RequestId);
+                    return RpcResponse.Ok(MsgPack.Ser(exportError is null ? new ExportToWordResult { Ok = true }
+                        : exportError == WordDocumentExporter.CancelledResult ? new ExportToWordResult { Cancelled = true }
                         : new ExportToWordResult { Error = exportError }));
+                }
+
+                // Stop a running exportToWord / pasteIntoWord by its request id: a Word that call started
+                // is ended; the user's own Word is never closed (an export's own document is closed once
+                // it opens; a paste not yet begun is skipped, one Word has begun is left as Word made it).
+                case "cancelWordExport":
+                {
+                    var a = MsgPack.De<CancelWordExportArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CancelWordExportResult { Ok = WordDocumentExporter.CancelExport(a.RequestId) }));
                 }
 
                 // Paste the Windows clipboard into Word at the cursor — the dev-mode equivalent
@@ -273,9 +384,10 @@ public sealed class Dispatcher(
                 // at their document. Runs on an STA thread inside PasteAsync.
                 case "pasteIntoWord":
                 {
-                    string? error = await WordDocumentExporter.PasteClipboardAtCursorAsync();
-                    return RpcResponse.Ok(MsgPack.Ser(error is null
-                        ? new PasteIntoWordResult { Ok = true }
+                    var a = req.Args is { Length: > 0 } ? MsgPack.De<PasteIntoWordArgs>(req.Args) : new PasteIntoWordArgs();
+                    string? error = await WordDocumentExporter.PasteClipboardAtCursorAsync(a.RequestId);
+                    return RpcResponse.Ok(MsgPack.Ser(error is null ? new PasteIntoWordResult { Ok = true }
+                        : error == WordDocumentExporter.CancelledResult ? new PasteIntoWordResult { Cancelled = true }
                         : new PasteIntoWordResult { Error = error }));
                 }
 
@@ -589,6 +701,23 @@ public sealed class Dispatcher(
                 case "seforimLibraryDownloadStatus":
                     return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
 
+                // The page moved to another library (Otzaria's, Zayit's, a picked file): it asks
+                // whether our own downloaded copy is on disk, and — if the user agrees — frees it.
+                case "ownSeforimLibraryInfo":
+                    return RpcResponse.Ok(MsgPack.Ser(OwnSeforimLibrary.Describe()));
+
+                case "declineOwnSeforimLibraryDeletion":
+                    OwnSeforimLibrary.Decline();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = true }));
+
+                case "deleteOwnSeforimLibrary":
+                {
+                    // The user chose to delete it, so a download or update still running is
+                    // pointless: stop it first. Core itself refuses while ours is in use.
+                    bool deleted = await libraryDownload.CancelAndWaitAsync(ct) && OwnSeforimLibrary.TryDelete();
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = deleted }));
+                }
+
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
                 // The frontend calls this every ~300ms while a book tab is in the downloading state
                 // and updates the loading text; Active=false means the download already finished.
@@ -813,8 +942,8 @@ public sealed class Dispatcher(
                 }
                 case "getCommentaryLinkGroupsForSourceLineRange":
                 {
-                    var a = MsgPack.De<LineIdsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinkGroupsResult { Rows = seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds) }));
+                    var a = MsgPack.De<CommentaryLinkGroupsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds, a.BookId)));
                 }
 
                 case "getLineContents":
@@ -991,6 +1120,22 @@ public sealed class Dispatcher(
 
                 case "catalogTocStatus":
                     return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
+
+                // ── UserSpace: one ranked search over the user's catalog categories + folders ──
+                case "userSpaceSearch":
+                {
+                    var a = MsgPack.De<UserSpaceSearchArgs>(req.Args);
+                    var roots = (a.Roots ?? new()).Select(r => new global::KitveiHakodesh.Core.UserSpace.UserSpaceRoot(r.CategoryId, r.Folder)).ToList();
+                    return RpcResponse.Ok(MsgPack.Ser(await global::KitveiHakodesh.Core.UserSpace.UserSpaceSearch.SearchAsync(
+                        a.Query ?? "", roots, catalogToc.Coordinator, locator.Coordinator, ct)));
+                }
+
+                case "checkUserSpaceFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(global::KitveiHakodesh.Core.UserSpace.UserSpaceFolderCheck.Check(
+                        a.Value ?? "", locator.GetExcludedFolders())));
+                }
 
                 // Why each index last (re)built — polled by the frontend, which logs each new
                 // reason to its console. Read-only: never starts a build.

@@ -1,0 +1,79 @@
+# English = Hebrew names exactly as the app's own UI shows them
+# (KitveiHakodesh/vue-frontend/src/i18n/locales, KleiKodeshVsto/Ribbon/AddinText.cs).
+# Use the Hebrew term verbatim; do not invent synonyms.
+
+## Products
+Kitvei Hakodesh (the library app) = כתבי הקודש
+Klei Kodesh (the Word add-in) = כלי קודש (התוסף לוורד)
+Word = וורד
+installer = תוכנת ההתקנה
+
+## Main areas (sidebar / home)
+Home page = דף הבית
+Book catalog = קטלוג הספרים
+Search (full-text search across the library) = חיפוש (חיפוש תוכן במאגר)
+HebrewBooks = היברו-בוקס
+File search = חיפוש קבצים
+Open file = פתח קובץ
+Dictionary = מילון
+Calendar = לוח שנה
+Daily learning = לימוד יומי
+Zmanim = זמני היום
+Measurements (halachic measures) = מידות ושיעורים
+Settings = הגדרות
+Workspaces = סביבות עבודה
+Tabs = לשוניות
+Split view = תצוגה מפוצלת
+Sidebar = סרגל צד
+Title bar menu = תפריט ראשי
+Theme = ערכת נושא
+Status bar (date bar at the bottom) = שורת התאריך
+Update / new version = עדכון / גרסה חדשה
+
+## Book view
+Book view = תצוגת ספר
+Book toolbar = סרגל כלים בספרים
+Commentaries = מפרשים
+Commentary markers = ציוני מפרשים
+Links = קשרים
+Related books = ספרים קרובים
+Table of contents = תוכן עניינים
+Find in text (in-book search) = חיפוש בטקסט
+Search commentaries = חיפוש במפרשים
+Bookmarks = סימניות
+Notes = הערות
+Copy plain text = העתק טקסט נקי
+Context menu = תפריט הקשר
+Scrollbar = פס הגלילה
+Book details = פרטי הספר
+Back / Forward = חזור / קדימה
+Font size = גודל גופן
+Zoom = הגדלה / הקטנה
+Error report = דיווח על טעות
+
+## Search results
+Search results = תוצאות חיפוש
+Search options = אפשרויות חיפוש
+Filter results = סינון תוצאות
+Snippet / preview = תצוגה מקדימה
+
+## PDF / HebrewBooks
+PDF viewer = מציג PDF
+PDF table of contents (outline) = תוכן העניינים של ה-PDF
+Scanned editions on HebrewBooks = מהדורות סרוקות בהיברו-בוקס
+Print = הדפסה
+OCR (text recognition) = זיהוי טקסט (OCR)
+
+## Word add-in buttons (ribbon)
+Torani Design = עיצוב תורני
+Dicta Nakdan = נקדן דיקטה
+Regex Find = חיפוש רגקס
+Websites = דרך האתרים
+Kiwix Library = ספריית קיוויקס
+Duplicate Side Pane = שכפל חלונית צד
+Side pane = חלונית צד
+About = אודות
+Ribbon = רצועת הכלים
+Macros = מאקרו
+Interface language = שפת ממשק
+English interface = ממשק באנגלית

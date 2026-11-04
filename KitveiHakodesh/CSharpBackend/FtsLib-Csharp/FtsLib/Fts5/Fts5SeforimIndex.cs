@@ -84,8 +84,9 @@ namespace FtsLib.Fts5
         // ── Snippet windows (FtsLib's own, unchanged) ────────────────
 
         public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
-                                                     int contextWords = DefaultContextWords)
-            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords);
+                                                     int contextWords = DefaultContextWords,
+                                                     int maxWordDistance = int.MaxValue)
+            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords, maxWordDistance);
 
         public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)
         {

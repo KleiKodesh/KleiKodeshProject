@@ -10,7 +10,6 @@ import {
   IconOptions24Regular,
   IconOptions24Filled,
   IconConvertToText24Regular,
-  IconSearch24Regular,
   IconChevronDoubleDown16Regular,
   IconSplitVertical20Regular,
   IconSplitVertical20Filled,
@@ -107,12 +106,11 @@ const navBtnRef = ref<HTMLElement | null>(null)
 //   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
 // )
 
-// bookViewStore.isBookViewActive and isTxtViewActive read from tabStore.activeTab (pane 1).
+// bookViewStore.isBookViewActive reads from tabStore.activeTab (pane 1).
 // For pane 2 we compute these directly from the pane's active tab.
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 /** Catalog title for a catalog book, the stored title otherwise (see catalogBookTitle). */
 const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(activeTab.value) : ''))
-const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 // OCR works on any PDF.js viewer on screen: a PDF tab, or a HebrewBooks edition shown side
 // by side in the book view's left panel.
 const isOcrAvailable = computed(() =>
@@ -414,15 +412,6 @@ ${updateItem.text}` : t('layout.menu')"
         <IconSplitVertical20Regular v-else />
       </button>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" tabindex="-1" />
-      <button
-        v-if="isTxtViewActive"
-        class="bar-btn"
-        tabindex="-1"
-        :title="t('layout.findInText')"
-        @click.stop="bookViewStore.txtViewToggleSearch(props.paneId)"
-      >
-        <IconSearch24Regular />
-      </button>
       <!-- <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"

@@ -6,6 +6,8 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import TopSearchBar from '@/components/TopSearchBar.vue'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useHebrewBooks } from './useHebrewBooks'
 import type { HebrewBook } from './hebrewBooksCatalog'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
@@ -48,19 +50,23 @@ function resolveDelete(toRecycleBin: boolean | null) {
 }
 
 const searchInputRef = ref<HTMLInputElement>()
-const scrollEl = ref<HTMLElement | null>(null)
+const windowedScroller = ref<WindowedScrollerApi | null>(null)
+// New results are a new list: re-keying the scroller starts it back at the top.
+const generation = ref(0)
 
 // Combobox model: focus stays in the search input; its keydown moves the list
 // highlight, Enter opens the highlighted book (Ctrl+Enter in a new tab).
 const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
   getCount: () => displayedBooks.value.length,
   onActivate: (i, openInNewTab) => openBook(displayedBooks.value[i]!, openInNewTab),
-  containerElement: scrollEl,
+  // Windowed: most rows have no element, so the scroller reveals the highlighted one.
+  scrollIntoView: (i) => windowedScroller.value?.revealIndex(i),
 })
 
 // New results make the old highlight point at a different book — drop it.
 watch(displayedBooks, () => {
   activeIndex.value = -1
+  generation.value++
 })
 
 // Restore the query saved on the tab so switching away and back keeps the input.
@@ -110,26 +116,33 @@ function onBookClicked(
       />
     </TopSearchBar>
 
-    <div ref="scrollEl" class="hb-list">
+    <div class="hb-list">
       <LoadingAnimation v-if="isLoading" />
 
       <div v-else-if="error" class="state">{{ error }}</div>
 
-      <template v-else-if="displayedBooks.length">
-        <!-- A plain list: rows off screen are neither laid out nor painted (.hb-row). -->
-        <div v-for="(book, index) in displayedBooks" :key="book.id" class="hb-row">
+      <!-- Windowed: only the rows near the viewport exist. -->
+      <WindowedScroller
+        v-else-if="displayedBooks.length"
+        ref="windowedScroller"
+        :key="generation"
+        :count="displayedBooks.length"
+        class="hb-scroller"
+      >
+        <template #row="{ index }">
           <HebrewBooksListItem
-            :book="book"
+            v-if="displayedBooks[index]"
+            :book="displayedBooks[index]!"
             :focused="activeIndex === index"
-            :has-local-file="localFileBookIds.has(String(book.id))"
+            :has-local-file="localFileBookIds.has(String(displayedBooks[index]!.id))"
             @book-clicked="(clicked, openInNewTab) => onBookClicked(index, clicked, openInNewTab)"
-            :downloading="downloadingBookIds.has(String(book.id))"
+            :downloading="downloadingBookIds.has(String(displayedBooks[index]!.id))"
             @download-clicked="downloadBook"
             @delete-clicked="pendingDeleteBook = $event"
             @reveal-clicked="revealInFolder"
           />
-        </div>
-      </template>
+        </template>
+      </WindowedScroller>
 
       <div v-else class="state">
         <span class="state-icon">📚</span>
@@ -168,13 +181,12 @@ function onBookClicked(
 
 .hb-list {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  min-height: 0;
+  overflow: hidden;
   outline: none;
 }
-.hb-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 48px;
+.hb-list > :deep(.windowed-scroller) {
+  height: 100%;
 }
 
 .state {

@@ -19,6 +19,8 @@ export interface ContextMenuCheckboxItem {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  /** Optional icon shown before the label; replaces the tick; a checked item highlights its row. */
+  icon?: import('vue').Component
 }
 
 export interface ContextMenuComponentItem {
@@ -226,10 +228,17 @@ defineExpose({ show, showAtPosition, hide })
         <div
           v-else-if="item.type === 'checkbox'"
           class="context-menu-item context-menu-checkbox"
+          :class="{ 'is-selected': (item as ContextMenuCheckboxItem).icon && (item as ContextMenuCheckboxItem).checked }"
           @click="toggleCheckbox(item as ContextMenuCheckboxItem)"
           @mouseenter="closeSubmenu"
         >
-          <span class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+          <!-- An item with an icon shows its state by highlighting the whole row instead of a tick. -->
+          <component
+            :is="(item as ContextMenuCheckboxItem).icon"
+            v-if="(item as ContextMenuCheckboxItem).icon"
+            class="item-icon"
+          />
+          <span v-else class="checkbox-mark">{{ (item as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
           <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
         </div>
         <div
@@ -275,6 +284,15 @@ defineExpose({ show, showAtPosition, hide })
 </template>
 
 <style scoped>
+.item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+.context-menu-item.is-selected {
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
 .context-menu {
   /* The row metrics, published as variables so any row rendered INSIDE this menu can
      consume them — including rows in a `component` item, which this scoped CSS cannot

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import {
   IconDocument20Filled,
   IconDocumentPdf20Filled,
@@ -7,10 +9,14 @@ import {
   IconDocumentGlobe20Filled,
   IconWindowArrowUp20Regular,
   IconPuzzlePiece20Regular,
+  IconFolderOpen20Regular,
+  IconCopy20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useI18n } from 'vue-i18n'
+import { showToast } from '@/composables/useToast'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
-import { openFileInDefaultApp } from '@/webview-host/bridge'
+import { openFileInDefaultApp, revealFileInFolder } from '@/webview-host/bridge'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
@@ -20,7 +26,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{ openFile: [LocalFileSearchResult, boolean?] }>()
 
-const scrollElement = ref<HTMLElement | null>(null)
+const windowedScroller = ref<WindowedScrollerApi | null>(null)
+// New results are a new list: re-keying the scroller starts it back at the top.
+const generation = ref(0)
 
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
@@ -28,7 +36,8 @@ const scrollElement = ref<HTMLElement | null>(null)
 const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: (index, openInNewTab) => onSelect(props.items[index]!, openInNewTab),
-  containerElement: scrollElement,
+  // Windowed: most rows have no element, so the scroller reveals the highlighted one.
+  scrollIntoView: (index) => windowedScroller.value?.revealIndex(index),
 })
 
 // New results make the old highlight point at a different item — drop it.
@@ -36,6 +45,7 @@ watch(
   () => props.items,
   () => {
     activeIndex.value = -1
+    generation.value++
   },
 )
 
@@ -53,6 +63,24 @@ function selectItem(index: number, event?: MouseEvent) {
 function openInDefaultApp(item: LocalFileSearchResult, event: MouseEvent) {
   event.stopPropagation()
   void openFileInDefaultApp(item.fullPath)
+}
+
+const { t } = useI18n()
+
+// Explorer window with the file selected.
+function openFileLocation(item: LocalFileSearchResult, event: MouseEvent) {
+  event.stopPropagation()
+  void revealFileInFolder(item.fullPath)
+}
+
+async function copyPath(item: LocalFileSearchResult, event: MouseEvent) {
+  event.stopPropagation()
+  try {
+    await navigator.clipboard.writeText(item.fullPath)
+    showToast(t('localFileSearch.pathCopied'))
+  } catch {
+    showToast(t('localFileSearch.copyPathFailed'), { variant: 'error' })
+  }
 }
 
 type FileIconInfo = { component: unknown; color: string }
@@ -75,10 +103,13 @@ function getFileIcon(item: LocalFileSearchResult): FileIconInfo {
   }
 }
 
+// One formatter for every row: toLocaleDateString builds a new Intl formatter per call,
+// which was the dominant cost of re-rendering the mounted rows on each highlight change.
+const dateFormatter = new Intl.DateTimeFormat('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+
 function formatDate(unixMs: number): string {
   if (!unixMs) return ''
-  const date = new Date(unixMs)
-  return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  return dateFormatter.format(new Date(unixMs))
 }
 
 function getTooltip(item: LocalFileSearchResult): string {
@@ -88,60 +119,91 @@ function getTooltip(item: LocalFileSearchResult): string {
 }
 
 defineExpose({
-  onSearchInputKeydown,
+  onSearchInputKeydown: (event: KeyboardEvent): boolean => onSearchInputKeydown(event),
 })
 </script>
 
 <template>
-  <div dir="rtl" ref="scrollElement" class="scroller">
-    <!-- A plain list: rows off screen are neither laid out nor painted (.file-item). -->
-    <div
-      v-for="(item, index) in items"
-      :key="item.path + index"
-      class="file-item"
-      data-nav-item
-      :class="{ 'is-focused': activeIndex === index }"
-      :title="getTooltip(item)"
-      @click="selectItem(index, $event)"
-      @auxclick.middle="selectItem(index, $event)"
-    >
-      <span class="icon" :style="{ color: getFileIcon(item).color }">
-        <component :is="getFileIcon(item).component" />
-      </span>
-      <span class="item-text">
-        <span class="item-title-row">
-          <span class="item-title">{{
-            item.addinName || item.fileName
-          }}</span>
-          <span
-            v-if="item.modifiedDate"
-            class="item-date-pill"
-          >{{ formatDate(item.modifiedDate) }}</span>
-        </span>
-        <span class="item-path" dir="ltr">{{ item.path }}</span>
-      </span>
-      <button
-        class="open-in-app-button"
-        type="button"
-        :title="$t('localFileSearch.openInDefaultApp')"
-        @click="openInDefaultApp(item, $event)"
-        @auxclick.stop
-        @mousedown.stop
-      >
-        <IconWindowArrowUp20Regular />
-      </button>
-    </div>
+  <div dir="rtl" class="scroller">
+    <!-- Windowed: only the rows near the viewport exist (5000 results = ~36 rows, not 120k nodes). -->
+    <WindowedScroller ref="windowedScroller" :key="generation" :count="items.length" class="windowed">
+      <template #row="{ index }">
+        <div
+          v-if="items[index]"
+          v-memo="[items[index], activeIndex === index]"
+          class="file-item"
+          data-nav-item
+          :class="{ 'is-focused': activeIndex === index }"
+          :title="getTooltip(items[index]!)"
+          @click="selectItem(index, $event)"
+          @auxclick.middle="selectItem(index, $event)"
+          @mousedown.prevent
+        >
+          <span class="icon" :style="{ color: getFileIcon(items[index]!).color }">
+            <component :is="getFileIcon(items[index]!).component" />
+          </span>
+          <span class="item-text">
+            <span class="item-title-row">
+              <span class="item-title">{{
+                items[index]!.addinName || items[index]!.fileName
+              }}</span>
+            </span>
+          </span>
+          <span class="item-side">
+            <span class="item-meta-row">
+              <span class="item-actions">
+                <button
+                  class="open-in-app-button"
+                  type="button"
+                  :title="$t('localFileSearch.copyPath')"
+                  @click="copyPath(items[index]!, $event)"
+                  @auxclick.stop
+                  @mousedown.prevent.stop
+                >
+                  <IconCopy20Regular />
+                </button>
+                <button
+                  class="open-in-app-button"
+                  type="button"
+                  :title="$t('localFileSearch.openFileLocation')"
+                  @click="openFileLocation(items[index]!, $event)"
+                  @auxclick.stop
+                  @mousedown.prevent.stop
+                >
+                  <IconFolderOpen20Regular />
+                </button>
+                <button
+                  class="open-in-app-button"
+                  type="button"
+                  :title="$t('localFileSearch.openInDefaultApp')"
+                  @click="openInDefaultApp(items[index]!, $event)"
+                  @auxclick.stop
+                  @mousedown.prevent.stop
+                >
+                  <IconWindowArrowUp20Regular />
+                </button>
+              </span>
+              <span
+                v-if="items[index]!.modifiedDate"
+                class="item-date-pill"
+              >{{ formatDate(items[index]!.modifiedDate) }}</span>
+            </span>
+            <span class="item-path" dir="ltr">{{ items[index]!.path }}</span>
+          </span>
+        </div>
+      </template>
+    </WindowedScroller>
   </div>
 </template>
 
 <style scoped>
 .scroller {
   height: 100%;
-  overflow-y: auto;
+}
+.scroller > :deep(.windowed) {
+  height: 100%;
 }
 .file-item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -149,7 +211,6 @@ defineExpose({
   min-height: 44px;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.1s;
 }
 .file-item:hover {
   background: var(--hover-bg);
@@ -181,7 +242,7 @@ defineExpose({
 }
 .item-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   overflow: hidden;
 }
@@ -195,8 +256,25 @@ defineExpose({
   min-width: 0;
   flex-shrink: 1;
 }
+/* Date pill over the full path, one block at the far inline-end; the title block beside it
+   is centered vertically in the row by .file-item's align-items:center. */
+.item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* physical left in RTL */
+  gap: 2px;
+  min-width: 0;
+  max-width: 45%;
+  flex-shrink: 1;
+}
+.item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .item-path {
   display: block;
+  max-width: 100%;
   font-size: 11px;
   color: var(--text-secondary);
   line-height: 1.3;
@@ -206,12 +284,9 @@ defineExpose({
   direction: ltr;
   text-align: start;
 }
-/* Date pill pushed to the far inline-end of the title row (physical left in RTL) so its
-   left edge lines up vertically with the path row's left edge below it — the two-line item
-   then reads as a tidy left-aligned column (pill over path), with the title on the right and
-   the open-in-app button just outside to the far physical-left. */
+/* Date pill: last in the title row (far physical left in RTL), directly above the path's
+   end, and outside the hover-only row actions so it never moves when they appear. */
 .item-date-pill {
-  margin-inline-start: auto;
   flex-shrink: 0;
   font-size: 10px;
   color: var(--text-secondary);
@@ -222,27 +297,36 @@ defineExpose({
   line-height: 1.5;
   white-space: nowrap;
 }
-/* "Open in default program" — a direct child of .file-item at the far inline end (physical
-   left in RTL), vertically CENTERED against the whole row by the row's own align-items:center —
-   mirroring the file-type icon on the opposite (physical-right) edge. It sits OUTSIDE the
-   title/path text block on purpose: inside the baseline-aligned title row the button rode high
-   and read as disconnected. .item-text's flex:1 consumes the middle and lands the button at the
-   edge, so no auto-margin (and no interaction with the date pill) is needed. */
+/* Row actions live INSIDE the text block, at the end of the title row after the date pill.
+   Compact (22px) so they don't make the two-line row taller. */
+.item-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+  /* Hidden until the row is hovered or focused; opacity (not display) keeps the row's layout steady. */
+  opacity: 0;
+}
+.file-item:hover .item-actions,
+.file-item.is-focused .item-actions,
+.file-item:focus-within .item-actions {
+  opacity: 1;
+}
 .open-in-app-button {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border-radius: 4px;
   color: var(--text-secondary);
   transition: background 0.1s, color 0.1s;
 }
 .open-in-app-button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: inherit;
 }
 .open-in-app-button:hover {

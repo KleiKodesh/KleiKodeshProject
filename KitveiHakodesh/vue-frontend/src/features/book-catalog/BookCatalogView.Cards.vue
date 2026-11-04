@@ -6,18 +6,31 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggestionCard'
 import type { FsItem } from './useBookCatalog'
-import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
 import { getCatalogCardLines, getLibraryName, hasLibraryBadges } from './catalogCardLines'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
+import { stripCommentaryTarget } from './stripCommentaryTarget'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
-const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+const props = defineProps<{
+  items: FsItem[]
+  /** UserSpace only: which folders carry a remove action (its roots). */
+  canRemove?: (node: CategoryNode) => boolean
+}>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  enterFolder: [CategoryNode]
+  /** UserSpace only: a file from a computer folder. */
+  selectFile: [LocalFileItem, boolean?]
+  /** UserSpace only: the remove action on a folder that canRemove allows. */
+  removeFolder: [CategoryNode]
+}>()
 
 const cardsEl = ref<HTMLElement | null>(null)
 const CARD_CELL = ':scope > *'
@@ -27,9 +40,9 @@ const BOOK_ICON = markRaw(IconBookRtl20)
 function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder'
-    ? emit('enterFolder', item.node)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'folder') emit('enterFolder', item.node)
+  else if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
 
 /**
@@ -44,20 +57,27 @@ const { showLibraryBadge } = storeToRefs(useSettingsStore())
 // reserve and the cards stay one uniform height (shorter), rather than keeping an empty row.
 const reserveBadge = computed(() => hasLibraryBadges(props.items, showLibraryBadge.value))
 
+function getTitle(item: FsItem): string {
+  if (item.kind === 'folder') return item.node.title
+  if (item.kind === 'file') return fileTitle(item.file)
+  return titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
+}
+
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => {
     const { path, badge } = getCatalogCardLines(item, showLibraryBadge.value)
     return {
       key: item.uid,
-      title: item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors),
+      title: getTitle(item),
       // A book's author rides on its title; the second line is the folder's book count only.
       path: item.kind === 'folder' ? path : '',
       badge,
       sourceLibrary: getLibraryName(item),
       reserveBadge: reserveBadge.value,
       singleLine: true,
-      icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
-      color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
+      icon: item.kind === 'folder' ? FOLDER_ICON : item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
+      color: item.kind === 'folder' ? 'var(--status-warning)' : item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
+      remove: item.kind === 'folder' && props.canRemove?.(item.node) ? () => emit('removeFolder', item.node) : undefined,
       open: (openInNewTab) => {
         focusedIndex.value = i
         activateIndex(i, openInNewTab)
@@ -126,11 +146,18 @@ defineExpose({
 /* Same grid as the home page's .home-cards. */
 .catalog-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
-  gap: 8px;
+  /* Column count and grid width come from the page (useCardGridLayout): cards
+     shrink to fit another column, never stretch past their max, and the grid
+     sits centred. Until the page has measured, it falls back to auto-fill. */
+  grid-template-columns: repeat(var(--catalog-columns, auto-fill), minmax(min(100%, 140px), 1fr));
+  /* Explorer-like: wide columns, tight rows, so each row reads as one line. */
+  column-gap: 16px;
+  row-gap: 4px;
   padding: 12px;
+  padding-inline: calc((100% - 24px - var(--catalog-content-width, calc(100% - 24px))) / 2 + 12px);
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
   height: 100%;
   box-sizing: border-box;
   align-content: flex-start;
@@ -142,12 +169,11 @@ defineExpose({
   content-visibility: auto;
   contain-intrinsic-size: auto 49px;
 }
+.is-focused :deep(.card-action) {
+  opacity: 1;
+  pointer-events: auto;
+}
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
-}
-/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
-.catalog-cards :deep(.card-title) {
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 </style>

@@ -99,7 +99,7 @@ function onHeaderDblClick() {
   padding-inline: var(--commentary-pad-inline, 12px) 6px;
   height: 36px;
   flex-shrink: 0;
-  max-width: var(--commentary-max-width, none);
+  max-width: var(--lines-content-max-width, none);
   margin-inline: auto;
   background: var(--bg-primary);
   cursor: default;

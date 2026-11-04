@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount, useId } from 'vue'
+import { computed, ref, watch, nextTick, useId } from 'vue'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
@@ -16,6 +16,10 @@ import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
+  IconTextAlignRight20Regular,
+  IconTextAlignJustify20Regular,
+  IconReadAloud20Regular,
+  IconReadAloud20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
@@ -27,14 +31,16 @@ import BookViewHebrewBooksEditionsDropdown from './BookViewHebrewBooksEditionsDr
 import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import BookViewCleanTextCombo from './BookViewCleanTextCombo.vue'
-import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
+import BookViewExportToWordGlyph from '@/components/WordDocumentGlyph.vue'
+import { usePressRepeat } from '@/composables/usePressRepeat'
+import ConversionActionButton from '@/components/ConversionActionButton.vue'
 import BookViewToolbarOverflowMenu from './BookViewToolbarOverflowMenu.vue'
 import {
   useBookViewToolbarOverflow,
   TOOLBAR_OVERFLOW_ORDER,
   type ToolbarOverflowKey,
 } from './useBookViewToolbarOverflow'
-import { useBookViewToolbarDrag } from './useBookViewToolbarDrag'
+import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
@@ -80,8 +86,10 @@ const props = defineProps<{
   // The side panels need a pane wide enough to hold them; on a narrow pane their
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
+  /** Whether the read-aloud panel is open. */
+  readAloudOpen?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
+defineEmits<{ toggleReadAloud: []; toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; cancelExportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null]; goToBookmark: [bookmark: BookBookmark] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -99,6 +107,18 @@ const MORE_LABEL = t('bookView.toolbar.more')
  * the name.
  */
 const SYNC_COMMENTARIES_LABEL = t('bookView.toolbar.syncCommentaries')
+
+/** Paragraph view: the lines between headings run on as one paragraph. One app-wide setting. */
+const flowText = computed(() => settingsStore.linesLayout === 'flow')
+/** Says what a click does, so it names the other state. */
+const flowTextLabel = computed(() => t(flowText.value ? 'bookView.toolbar.flowTextOff' : 'bookView.toolbar.flowTextOn'))
+function toggleFlowText() {
+  settingsStore.linesLayout = flowText.value ? 'rows' : 'flow'
+}
+
+/** Read aloud lives in its own panel (BookViewReadAloudPanel); this button opens and closes it. */
+const readAloudSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+const readAloudLabel = computed(() => t('bookView.toolbar.readAloud'))
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 const bookmarksDropdownRef = ref<InstanceType<typeof BookViewBookmarksDropdown> | null>(null)
@@ -128,41 +148,17 @@ async function createBookmark() {
   void overflowBookmarksDropdownRef.value?.createBookmark(point)
 }
 
-// Continuous zoom — fires immediately on pointerdown, then waits 400ms before
-// repeating every 80ms. The delay prevents a normal tap from triggering more
-// than one step.
-let zoomInterval: ReturnType<typeof setInterval> | null = null
-let zoomDelayTimeout: ReturnType<typeof setTimeout> | null = null
-
+// Continuous zoom: the shared hold-to-repeat (usePressRepeat) - a step on pointerdown, then
+// every 80 ms after 400 ms held; stopped on release and on unmount.
 function zoomStep(direction: 'in' | 'out') {
   if (direction === 'in') bookViewStore.zoomIn(props.tabId, props.bookId)
   else bookViewStore.zoomOut(props.tabId, props.bookId)
 }
-
+const zoomRepeat = usePressRepeat()
 function startContinuousZoom(direction: 'in' | 'out') {
-  if (zoomInterval !== null || zoomDelayTimeout !== null) return
-  zoomStep(direction)
-  zoomDelayTimeout = setTimeout(() => {
-    zoomDelayTimeout = null
-    zoomInterval = setInterval(() => zoomStep(direction), 80)
-  }, 400)
+  zoomRepeat.start(() => zoomStep(direction))
 }
-
-function stopContinuousZoom() {
-  if (zoomDelayTimeout !== null) {
-    clearTimeout(zoomDelayTimeout)
-    zoomDelayTimeout = null
-  }
-  if (zoomInterval !== null) {
-    clearInterval(zoomInterval)
-    zoomInterval = null
-  }
-}
-
-// Only pointerup/leave/cancel stopped these, and none of them fire when the button
-// unmounts under the pointer — closing the tab while holding zoom left an 80ms interval
-// calling zoomIn/zoomOut on a dead tab for the life of the page.
-onBeforeUnmount(stopContinuousZoom)
+const stopContinuousZoom = zoomRepeat.stop
 
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
@@ -243,7 +239,7 @@ useEventListener(window, 'resize', () => {
   isWindowResizing.value = true
   void endWindowResize()
 })
-const { isDragging, dropPreviewStyle } = useBookViewToolbarDrag(toolbarEl, toolbarPosition)
+const { isDragging, dropPreviewStyle } = useToolbarDrag(toolbarEl, toolbarPosition, '.book-view')
 const isVerticalToolbar = computed(
   () => toolbarPosition.value === 'left' || toolbarPosition.value === 'right',
 )
@@ -272,6 +268,7 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
       case 'word-link-markers': return wordLinkMarkersPresent.value
       case 'bookmarks': return bookmarksPresent.value
       case 'export-to-word': return !props.exportRestricted
+      case 'read-aloud': return readAloudSupported
       case 'sync-commentaries': return props.hasCommentaries
       case 'related-books': return props.hasRelatedBooks
       case 'side-commentaries': return props.hasCommentaries && !!props.canUseSidePanel
@@ -314,7 +311,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
@@ -486,15 +483,36 @@ defineExpose({ tocBtnRef, createBookmark })
     <BookViewCleanTextCombo v-bind="collapseAttrs('clean-text')" class="dropdown-host" />
 
     <button
+      v-bind="collapseAttrs('lines-layout')"
+      :class="{ active: flowText }"
+      :title="flowTextLabel"
+      @click="toggleFlowText"
+    >
+      <IconTextAlignJustify20Regular v-if="flowText" />
+      <IconTextAlignRight20Regular v-else />
+    </button>
+
+    <!-- The shared conversion button: while the export runs it is an animated X that cancels it. -->
+    <ConversionActionButton
       v-if="!exportRestricted"
       v-bind="collapseAttrs('export-to-word')"
-      :title="EXPORT_TO_WORD_LABEL"
-      :disabled="exportingToWord"
-      :aria-busy="exportingToWord"
-      @click="$emit('exportToWord')"
+      :state="exportingToWord ? 'busy' : 'idle'"
+      :idle-title="EXPORT_TO_WORD_LABEL"
+      :busy-title="t('bookView.toolbar.cancelExportToWord')"
+      @start="$emit('exportToWord')"
+      @cancel="$emit('cancelExportToWord')"
     >
-      <span v-if="exportingToWord" class="export-spinner" />
-      <BookViewExportToWordGlyph v-else />
+      <BookViewExportToWordGlyph />
+    </ConversionActionButton>
+    <button
+      v-if="readAloudSupported"
+      v-bind="collapseAttrs('read-aloud')"
+      :class="{ active: readAloudOpen }"
+      :title="readAloudLabel"
+      @click="$emit('toggleReadAloud')"
+    >
+      <IconReadAloud20Filled v-if="readAloudOpen" />
+      <IconReadAloud20Regular v-else />
     </button>
     <!--
       Stands in for whatever the pane was too narrow to hold. It holds ONE place, at the
@@ -548,17 +566,29 @@ defineExpose({ tocBtnRef, createBookmark })
         @select="$emit('selectVersion', $event)"
       />
       <BookViewWordLinkMarkersDropdown v-if="isOverflowed('word-link-markers')" in-overflow :book-id="bookId" />
-      <button
+      <ConversionActionButton
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
         class="overflow-row"
-        :disabled="exportingToWord"
-        :aria-busy="exportingToWord"
-        @click="overflowOpen = false; $emit('exportToWord')"
+        :state="exportingToWord ? 'busy' : 'idle'"
+        :idle-title="EXPORT_TO_WORD_LABEL"
+        :busy-title="t('bookView.toolbar.cancelExportToWord')"
+        :label="EXPORT_TO_WORD_LABEL"
+        @start="overflowOpen = false; $emit('exportToWord')"
+        @cancel="overflowOpen = false; $emit('cancelExportToWord')"
       >
-        <span v-if="exportingToWord" class="export-spinner" />
-        <BookViewExportToWordGlyph v-else />
-        <span>{{ EXPORT_TO_WORD_LABEL }}</span>
+        <BookViewExportToWordGlyph />
+      </ConversionActionButton>
+      <button
+        v-if="isOverflowed('read-aloud')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: readAloudOpen }"
+        @click="overflowOpen = false; $emit('toggleReadAloud')"
+      >
+        <IconReadAloud20Filled v-if="readAloudOpen" />
+        <IconReadAloud20Regular v-else />
+        <span>{{ readAloudLabel }}</span>
       </button>
       <button
         v-if="isOverflowed('sync-commentaries')"
@@ -583,6 +613,18 @@ defineExpose({ tocBtnRef, createBookmark })
         :on-open="onRelatedBooksOpen"
       />
       <BookViewCleanTextCombo v-if="isOverflowed('clean-text')" in-overflow />
+      <button
+        v-if="isOverflowed('lines-layout')"
+        role="menuitem"
+        class="overflow-row"
+        :class="{ active: flowText }"
+        :title="flowTextLabel"
+        @click="toggleFlowText"
+      >
+        <IconTextAlignJustify20Regular v-if="flowText" />
+        <IconTextAlignRight20Regular v-else />
+        <span>{{ flowTextLabel }}</span>
+      </button>
       <!--
         The zoom pair as ONE row: two buttons on the toolbar, but a row is a full-width
         strip and there is no reason to spend two of them on a control whose two halves are
@@ -712,87 +754,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </template>
 
 <style scoped>
-.book-view-toolbar {
-  /* How far the anchored more button sits from the edge it is pinned to, and therefore how
-     much room the button row must leave for it: its own size plus that inset, twice over so
-     the row stays centred on the toolbar rather than on the space left over. */
-  --toolbar-edge-inset: 2px;
-  --toolbar-reserved-edge: calc(var(--toolbar-button-size) + 2 * var(--toolbar-edge-inset));
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: var(--toolbar-horizontal-padding);
-  background: var(--bg-toolbar);
-  flex-shrink: 0;
-  cursor: grab;
-  touch-action: none;
-}
-.book-view-toolbar.dragging {
-  cursor: grabbing;
-}
-.toolbar-drop-preview {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: none;
-  background: #d0d0d0;
-  opacity: 0.5;
-}
-
-/* ── Orientation ── */
-.toolbar-top,
-.toolbar-bottom {
-  flex-direction: row;
-  height: var(--toolbar-horizontal-height);
-  justify-content: center;
-  /* Both sides, so the buttons stay centred on the toolbar itself and do not drift right as
-     the reserved edge is taken out of one side only. */
-  padding-inline: var(--toolbar-reserved-edge);
-}
-.toolbar-left,
-.toolbar-right {
-  flex-direction: column;
-  justify-content: flex-start;
-  width: var(--toolbar-vertical-width);
-  height: auto;
-  padding: var(--toolbar-vertical-padding);
-  /* The column's own end, where the anchored button sits. Only that end needs reserving -
-     a vertical toolbar starts its buttons at the top rather than centring them. */
-  padding-block-end: var(--toolbar-reserved-edge);
-}
-
-/* ── Borders ──
-   Drawn as an overlay line, not a CSS border: the overflow button is opaque, full button
-   size and stacked above the row (see .overflow-btn), so a real border would sit under its
-   fill. The line is painted above it instead. */
-.book-view-toolbar::after {
-  content: '';
-  position: absolute;
-  /* A border, not a 1px background: at fractional DPI (150%) Chromium snaps a 1px box to 1
-     or 2 device pixels depending on its offset, so the bottom/right line came out double.
-     Border widths are snapped consistently. */
-  border: 0 solid var(--border-color);
-  pointer-events: none;
-  z-index: 2;
-}
-.toolbar-top::after {
-  inset: auto 0 0 0;
-  border-top-width: 1px;
-}
-.toolbar-bottom::after {
-  inset: 0 0 auto 0;
-  border-top-width: 1px;
-}
-.toolbar-left::after {
-  inset: 0 0 0 auto;
-  border-inline-end-width: 1px;
-}
-.toolbar-right::after {
-  inset: 0 auto 0 0;
-  border-inline-end-width: 1px;
-}
-
+/* The shell, orientations, edge line and drag preview: assets/styles/readingToolbar.css (.reading-toolbar). */
 /* ── Buttons ── */
 button {
   display: flex;
@@ -822,29 +784,9 @@ button:disabled {
    that width at the same moment - two jolts from one change, on a toolbar the user is
    actively dragging the edge of.
 
-   So it stays in the flow and shrinks: width and padding to zero, the glyph fading as it
-   goes. Its neighbours slide into the space it gives up rather than teleporting past it,
-   and the same animation run backwards is the button reappearing when the room comes back.
-
-   Width is animatable here precisely because these are fixed-size icon buttons - there is
-   no intrinsic width to discover, so there is no `auto` to interpolate to and none of the
-   usual reasons this does not work apply. */
+   So it stays in the flow and collapses to zero width and padding, at once - no animation. */
 .collapsible {
   overflow: hidden;
-  /* Slow enough to read as one control leaving rather than a row rearranging itself, on an
-     ease-in-out so it starts and ends at rest - the sharper decelerating curve used for
-     presses made the neighbours look flung into place.
-
-     The glyph fades FASTER than the width closes, and out of step with it on purpose: the
-     button is already faint by the time the space it holds starts to go, so the eye follows
-     one thing disappearing instead of watching a shrinking icon get squeezed. Reappearing
-     runs the same way round - the space opens first and the glyph arrives into it. */
-  transition:
-    width 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    height 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    margin 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    padding 260ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 140ms ease;
 }
 .toolbar-top .collapsible.collapsed,
 .toolbar-bottom .collapsible.collapsed {
@@ -868,16 +810,6 @@ button:disabled {
   pointer-events: none;
 }
 
-/* The whole effect is motion for its own sake as far as a reader who has asked for less of
-   it is concerned - the control still goes, it just goes at once. */
-@media (prefers-reduced-motion: reduce) {
-  .collapsible {
-    transition: none;
-  }
-}
-.window-resizing .collapsible {
-  transition: none;
-}
 
 /* Anchored, not laid out. The one control that must never move: buttons collapse into it as
    the pane narrows, and a target that slid along the bar as they went - or appeared out of
@@ -903,9 +835,7 @@ button:disabled {
      naming any property here replaces that declaration wholesale rather than adding to it. */
   transition:
     background 120ms,
-    color 120ms,
-    opacity 260ms ease,
-    visibility 260ms;
+    color 120ms;
 }
 /* The hover tint is a wash over the toolbar's surface, so it has to be composited onto that
    surface rather than replacing it - the global `button:hover` background would otherwise
@@ -951,16 +881,4 @@ button:disabled {
   overflow: visible;
 }
 
-.export-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: export-spin 0.8s linear infinite;
-}
-@keyframes export-spin {
-  to { transform: rotate(360deg); }
-}
 </style>

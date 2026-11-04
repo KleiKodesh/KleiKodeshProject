@@ -273,6 +273,16 @@ async function serviceCallCore<T>(op: string, args: object, signal?: AbortSignal
   return decodeReply(env.Result) as T
 }
 
+/**
+ * Dev only: an absolute URL on the service's loopback HTTP host for a tokenless GET whose path
+ * carries its own capability (as `/file/<handle>`); null in the hosted app, whose relay serves
+ * the POST legs only.
+ */
+export async function serviceGetUrl(path: string): Promise<string | null> {
+  if (typeof window.__webviewAction === 'function') return null
+  return `${(await getEndpoint()).base}${path}`
+}
+
 /** Fire-and-forget variant (warmups etc.) — swallows every error. */
 export function serviceCallVoid(op: string, args: object = {}): void {
   postRpc('/rpc', encodeRequest(op, args)).catch(() => {})

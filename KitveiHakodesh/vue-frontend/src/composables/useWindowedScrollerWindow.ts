@@ -56,6 +56,14 @@ export interface WindowedScrollerWindowOptions {
   rowElement: (index: number) => HTMLElement | null
   /** Resolves once the rows of [start, end) can be rendered; rejects when they cannot be. */
   ensureRows: (start: number, end: number) => Promise<void>
+  /**
+   * The [start, end) of the block holding a row. The window's top edge only ever
+   * moves by whole blocks — a landing, an extension or a trim at the top never
+   * starts inside one — so rows flowing together in a paragraph (flow mode, see
+   * windowedScrollerFlowPlan.ts) are never prepended to and never re-wrap. Each
+   * row its own block when omitted.
+   */
+  blockRange?: (index: number) => readonly [number, number]
 }
 
 export interface WindowedScrollerLandingOptions {
@@ -74,6 +82,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   function isRowInWindow(index: number) {
     return index >= windowStart.value && index < windowEnd.value
+  }
+
+  /** The first row of the block holding `index`. */
+  function blockStartOf(index: number): number {
+    return options.blockRange ? options.blockRange(index)[0] : index
+  }
+
+  /** One past the last row of the block holding `index`. */
+  function blockEndOf(index: number): number {
+    return options.blockRange ? options.blockRange(index)[1] : index + 1
   }
 
   /** The count shrank (a book change): drop rows that no longer exist. */
@@ -109,6 +127,15 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   let anchor: { index: number; offsetTop: number; offsetHeight: number; scrollTop: number } | null = null
 
   /**
+   * The row's top in content coordinates, measured (fractional). offsetTop is rounded:
+   * holding an anchor in rounded offsets drifted a pixel whenever the rows above had
+   * fractional heights, and the row above showed as a 1 px sliver at the top.
+   */
+  function measuredTop(viewport: HTMLElement, row: HTMLElement): number {
+    return row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop
+  }
+
+  /**
    * The reader's row is wherever the viewport is now. Call before the DOM changes.
    *
    * Keeps the previous anchor when no row can be found: before a patch the window
@@ -125,7 +152,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
       // anchored, or each hold would hand the anchor to whichever character the
       // re-wrap left at the top, and the reader's words would walk a line per step.
       const isOwnHold = viewport.scrollTop === heldScrollTop && textAnchor != null && row.contains(textAnchor.node)
-      anchor = { index, offsetTop: row.offsetTop, offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
+      anchor = { index, offsetTop: measuredTop(viewport, row), offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
       if (!isOwnHold) textAnchor = findTextAnchor(viewport, row)
     }
   }
@@ -216,7 +243,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const height = row.offsetHeight
     // A re-wrapped row: hold the reader's words, not a pixel offset into the row.
     if (height !== anchor.offsetHeight && holdTextAnchor(viewport, row)) {
-      anchor.offsetTop = row.offsetTop
+      anchor.offsetTop = measuredTop(viewport, row)
       anchor.offsetHeight = height
       anchor.scrollTop = viewport.scrollTop
       return
@@ -225,10 +252,11 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const scaled = anchor.offsetHeight > 0 && height !== anchor.offsetHeight
       ? Math.round(offsetInto * (height / anchor.offsetHeight))
       : offsetInto
-    const expected = row.offsetTop + scaled
+    const top = measuredTop(viewport, row)
+    const expected = Math.max(0, Math.round(top + scaled))
     if (viewport.scrollTop !== expected) viewport.scrollTop = expected
     heldScrollTop = viewport.scrollTop
-    anchor.offsetTop = row.offsetTop
+    anchor.offsetTop = measuredTop(viewport, row)
     anchor.offsetHeight = height
     anchor.scrollTop = viewport.scrollTop
   }
@@ -244,7 +272,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (!viewport || !anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
-    const delta = row.offsetTop - anchor.offsetTop
+    const delta = Math.round(measuredTop(viewport, row) - anchor.offsetTop)
     if (delta !== 0) viewport.scrollTop += delta
   }
 
@@ -293,18 +321,28 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const generation = ++landingGeneration
     const wantEnd = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
     if (!isRowInWindow(target) || !options.rowElement(target)) {
-      const start = Math.max(0, target - ROWS_ABOVE_ON_REBUILD)
+      const start = blockStartOf(Math.max(0, target - ROWS_ABOVE_ON_REBUILD))
+      // Fetching the rows can shrink the count (a list whose length was an estimate
+      // until its rows were read): a target now past the end lands on the new last
+      // row instead of mounting an empty window beyond it — a blank screen.
+      let isTargetPastEnd = false
       const applied = await prepareWindow(generation, start, wantEnd, () => {
+        if (target >= options.count()) { isTargetPastEnd = true; return }
         // Nothing to hold through the rebuild: the view is leaving wherever it was.
         anchor = null
         windowStart.value = start
-        windowEnd.value = wantEnd
+        windowEnd.value = Math.min(wantEnd, options.count())
       })
+      if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
       if (!applied) return
     } else if (windowEnd.value < wantEnd) {
+      let isTargetPastEnd = false
       const applied = await prepareWindow(generation, windowEnd.value, wantEnd, () => {
-        windowEnd.value = wantEnd
+        if (target >= options.count()) { isTargetPastEnd = true; clampToCount(); return }
+        windowEnd.value = Math.min(wantEnd, options.count())
+        clampToCount()
       })
+      if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
       if (!applied) return
     }
     const viewport = options.viewport()
@@ -317,10 +355,14 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     const offset = requested > 0 && requested >= row.offsetHeight ? 0 : requested
     // offsetHeight is rounded down; a row of fractional height would be clipped by
     // that fraction at the bottom, so the end landing rounds the other way.
+    // offsetTop is rounded too, and rows of fractional height put the target's real
+    // top up to a pixel below it: the row above then showed as a 1 px sliver at the
+    // top (read as "first visible"). Land on the measured top, to the nearest pixel.
+    const viewportTop = viewport.getBoundingClientRect().top
     viewport.scrollTop =
       landing.align === 'end'
-        ? Math.ceil(row.getBoundingClientRect().bottom - viewport.getBoundingClientRect().top + viewport.scrollTop - viewport.clientHeight + offset)
-        : Math.max(0, row.offsetTop + offset)
+        ? Math.ceil(row.getBoundingClientRect().bottom - viewportTop + viewport.scrollTop - viewport.clientHeight + offset)
+        : Math.max(0, Math.round(row.getBoundingClientRect().top - viewportTop + viewport.scrollTop + offset))
     rememberAnchor()
     fill()
   }
@@ -337,6 +379,31 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     } catch {
       // Unavailable for now; the next extension or landing asks again.
     }
+  }
+
+  /**
+   * The blocks changed under the mounted window (flow mode switched on, or the
+   * plan's inputs — landmarks, weights — arrived after the window was built): moves
+   * the window's start back to the start of its block, so the top edge again lies
+   * on a block boundary. The update hooks hold the reader's words through the
+   * regrouping it causes.
+   */
+  async function snapToBlocks(): Promise<void> {
+    const startBefore = windowStart.value
+    const endBefore = windowEnd.value
+    const start = blockStartOf(startBefore)
+    if (endBefore <= startBefore || start === startBefore) return
+    changesPending++
+    try {
+      await options.ensureRows(start, startBefore)
+    } catch {
+      changesPending--
+      return
+    }
+    if (windowStart.value === startBefore && windowEnd.value === endBefore) windowStart.value = start
+    await nextTick()
+    changesPending--
+    fill()
   }
 
   // ── Growing and trimming ──────────────────────────────────────────────────────
@@ -377,7 +444,8 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   async function extend(side: 'top' | 'bottom', rows: number) {
     const startBefore = windowStart.value
     const endBefore = windowEnd.value
-    const addStart = side === 'bottom' ? endBefore : Math.max(0, startBefore - rows)
+    // Upward, the whole block the step reaches into comes along.
+    const addStart = side === 'bottom' ? endBefore : blockStartOf(Math.max(0, startBefore - rows))
     const addEnd = side === 'bottom' ? Math.min(options.count(), endBefore + rows) : startBefore
     changesPending++
     try {
@@ -412,13 +480,16 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     return edgePx(viewport) * TRIM_KEEP_EDGES
   }
 
+  /** Whole blocks only: a block goes once its last row is above the limit. */
   function trimTop(viewport: HTMLElement) {
     const limit = viewport.scrollTop - keepPx(viewport)
     let start = windowStart.value
-    while (start < windowEnd.value - 1) {
-      const row = options.rowElement(start)
-      if (!row || row.offsetTop + row.offsetHeight >= limit) break
-      start++
+    while (true) {
+      const end = blockEndOf(start)
+      if (end >= windowEnd.value) break
+      const last = options.rowElement(end - 1)
+      if (!last || last.offsetTop + last.offsetHeight >= limit) break
+      start = end
     }
     windowStart.value = start
   }
@@ -445,6 +516,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     holdAnchorThroughScroll,
     landAt,
     refreshRows,
+    snapToBlocks,
     fill,
   }
 }

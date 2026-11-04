@@ -24,6 +24,14 @@
  * `pinnedIndexes` keeps rows mounted outside the window, out of flow and clipped —
  * the two ends of a text selection, so a native Range keeps its boundary text nodes.
  *
+ * FLOW MODE (`mode="flow"`): rows run on as spans of one paragraph instead of a
+ * block each, the stretch between two landmarks being the paragraph. Prepending
+ * words to a paragraph would re-wrap the lines on screen, so the window's top edge
+ * only ever moves by whole paragraphs — never seams, never a re-wrap. A stretch
+ * too long to be one paragraph keeps a block per row: windowedScrollerFlowPlan.ts.
+ * The caller's `rowKind` can still make a row within a stretch a block (an empty
+ * line, a centred one), and its slot renders inline content for an `inline` row.
+ *
  * Attributes fall through to the viewport (`tabindex`, data-*, style, native
  * listeners), so the caller treats it as the scroll element it is.
  */
@@ -32,8 +40,10 @@ import { useEventListener, useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
 import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
+import { buildFlowPlan, ROWS_PLAN } from './windowedScrollerFlowPlan'
 import type {
   WindowedScrollerBarTarget,
+  WindowedScrollerRowKind,
   WindowedScrollerScrollToOptions,
   WindowedScrollerVisibleRow,
 } from './windowedScrollerTypes'
@@ -80,8 +90,18 @@ const props = withDefaults(
      * be used; otherwise, or when omitted, the bar estimates from measured rows.
      */
     rowWeights?: ArrayLike<number>
+    /** `flow` runs rows on as paragraphs — see the file comment. `rows` (default) is a block per row. */
+    mode?: 'rows' | 'flow'
+    /**
+     * Flow mode: a row's own kind, read for mounted rows only (it may need the
+     * row's content). `block` takes a row out of its paragraph; `inline` (default)
+     * lets it flow. Rows outside a flowing stretch are blocks regardless.
+     */
+    rowKind?: (index: number) => WindowedScrollerRowKind
+    /** Flow mode: class(es) for the paragraph element holding a run of inline rows — the caller's column look. */
+    paragraphClass?: string
   }>(),
-  { pinnedIndexes: () => [] },
+  { pinnedIndexes: () => [], mode: 'rows' },
 )
 
 const emit = defineEmits<{
@@ -106,6 +126,17 @@ function rowElement(index: number): HTMLElement | null {
   return rowElements.get(index) ?? null
 }
 
+// The block plan: which rows flow and where the blocks are. Rebuilt only when
+// the list changes shape — the window composable and the bar read it per call.
+const flowPlan = computed(() =>
+  props.mode === 'flow' ? buildFlowPlan(props.count, props.landmarkTiers ?? [], props.rowWeights) : ROWS_PLAN,
+)
+
+function rowKind(index: number): WindowedScrollerRowKind {
+  if (!flowPlan.value.isFlowRow(index)) return 'block'
+  return props.rowKind?.(index) ?? 'inline'
+}
+
 const {
   windowStart,
   windowEnd,
@@ -117,27 +148,74 @@ const {
   holdAnchorThroughScroll,
   landAt,
   refreshRows,
+  snapToBlocks,
   fill,
 } = useWindowedScrollerWindow({
   count: () => props.count,
   viewport: () => viewportElement.value,
   rowElement,
   ensureRows: (start, end) => props.ensureRows?.(start, end) ?? Promise.resolve(),
+  blockRange: (index) => flowPlan.value.blockRange(index),
 })
 
 const renderedRange = computed(() => ({ start: windowStart.value, end: windowEnd.value }))
 
-/** Pinned rows outside the window, then the window, then pinned rows after — index order is DOM order. */
-const renderedIndexes = computed(() => {
+/**
+ * Everything mounted, as DOM groups in index order: a block row stands alone; a run
+ * of inline rows shares one paragraph element. ONE keyed list, pinned rows included,
+ * so a row trimmed out of the window but pinned keeps its very element (and the
+ * text node a selection's Range sits on): a block row by its index, a flowing row
+ * inside a pinned paragraph keyed like the paragraph it left.
+ *
+ * A paragraph is keyed by its first row. The window's top moves by whole blocks,
+ * so that row never changes while the paragraph is mounted: it keeps its spans as
+ * it grows at its end, and a paragraph prepended above is a new element — nothing
+ * mounted ever re-wraps. A pinned paragraph takes the key the paragraph it left
+ * had: the first row of its run, found by walking back over the inline rows.
+ */
+/** The first row of the inline run holding `index`, within its block. */
+function runStartOf(index: number, block: number): number {
+  let start = index
+  while (start > block && rowKind(start - 1) === 'inline') start--
+  return start
+}
+
+type RenderedGroup =
+  | { kind: 'block'; key: string; index: number; pinned: boolean }
+  | { kind: 'flow'; key: string; block: number; indexes: number[]; pinned: boolean }
+const renderedGroups = computed<RenderedGroup[]>(() => {
   const start = windowStart.value
   const end = windowEnd.value
   const pinned = [...new Set(props.pinnedIndexes)]
-    .filter((index) => index >= 0 && index < props.count)
+    .filter((index) => index >= 0 && index < props.count && (index < start || index >= end))
     .sort((first, second) => first - second)
-  const indexes: number[] = pinned.filter((index) => index < start)
-  for (let index = start; index < end; index++) indexes.push(index)
-  indexes.push(...pinned.filter((index) => index >= end))
-  return indexes
+  const groups: RenderedGroup[] = []
+  const usedKeys = new Set<string>()
+  let run: Extract<RenderedGroup, { kind: 'flow' }> | null = null
+  const add = (index: number, isPinned: boolean) => {
+    if (rowKind(index) !== 'inline') {
+      run = null
+      groups.push({ kind: 'block', key: `r${index}`, index, pinned: isPinned })
+      return
+    }
+    const block = flowPlan.value.blockRange(index)[0]
+    if (run && run.pinned === isPinned && run.block === block) {
+      run.indexes.push(index)
+      return
+    }
+    let key = `p${isPinned ? runStartOf(index, block) : index}`
+    // The window's bottom may end inside a block: a pinned row further down it
+    // would take the key of the window's own last paragraph.
+    if (usedKeys.has(key)) key += '-pinned'
+    usedKeys.add(key)
+    groups.push((run = { kind: 'flow', key, block, indexes: [index], pinned: isPinned }))
+  }
+  for (const index of pinned) if (index < start) add(index, true)
+  run = null
+  for (let index = start; index < end; index++) add(index, false)
+  run = null
+  for (const index of pinned) if (index >= end) add(index, true)
+  return groups
 })
 
 // Every patch of this component — the window changing, a row's slot content
@@ -162,6 +240,7 @@ const bar = useWindowedScrollerBarMapping({
   landAt: (index) => scrollToIndex(index),
   landmarkTiers: () => props.landmarkTiers ?? [],
   rowWeights: () => props.rowWeights,
+  flowPlan: () => flowPlan.value,
 })
 
 // ── Track hold: page to the destination named at the press ─────────────────────
@@ -256,6 +335,7 @@ watch(
 useEventListener(viewportElement, ['wheel', 'touchstart', 'pointerdown', 'keydown'], () => { hasOpened = true }, { passive: true })
 
 watch(() => props.rowSourceVersion, () => { void refreshRows() })
+watch(flowPlan, () => { void snapToBlocks() })
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -297,11 +377,30 @@ function onViewportKeydown(event: KeyboardEvent) {
   }
 }
 
+/**
+ * Brings row `index` into view with 'nearest' semantics: nothing while it is fully
+ * showing; a mounted row scrolls the few pixels needed (the browser's own nearest-edge
+ * scroll, so stepping through the list reads as advancing, never as a jump); a row that
+ * is not mounted lands exactly through scrollToIndex, top-aligned when it lies above the
+ * viewport and bottom-aligned when below. For keyboard highlight movement.
+ */
+function revealIndex(index: number) {
+  if (isRowFullyVisible(index)) return
+  const row = isRowRendered(index) ? rowElement(index) : null
+  if (row) {
+    row.scrollIntoView({ block: 'nearest' })
+    return
+  }
+  const isAbove = index < (readFirstVisible()?.index ?? renderedRange.value.start)
+  void scrollToIndex(index, { align: isAbove ? 'start' : 'end' })
+}
+
 defineExpose({
   scrollerElement: viewportElement,
   scrollbarElement: computed(() => barReference.value?.barElement ?? null),
   renderedRange,
   scrollToIndex,
+  revealIndex,
   readFirstVisible,
   isRowRendered,
   isRowFullyVisible,
@@ -320,16 +419,33 @@ defineExpose({
       @keydown="onViewportKeydown"
     >
       <div ref="contentElement" class="windowed-scroller-content">
-        <div
-          v-for="index in renderedIndexes"
-          :key="index"
-          :ref="(element) => setRowElement(index, element)"
-          :data-index="index"
-          class="windowed-scroller-row"
-          :class="{ 'pinned-out-of-window': !isRowInWindow(index) }"
-        >
-          <slot name="row" :index="index" />
-        </div>
+        <template v-for="group in renderedGroups" :key="group.key">
+          <div
+            v-if="group.kind === 'block'"
+            :ref="(element) => setRowElement(group.index, element)"
+            :data-index="group.index"
+            class="windowed-scroller-row"
+            :class="{ 'pinned-out-of-window': group.pinned }"
+          >
+            <slot name="row" :index="group.index" kind="block" />
+          </div>
+          <div
+            v-else
+            class="windowed-scroller-paragraph"
+            :class="[paragraphClass, { 'pinned-out-of-window': group.pinned }]"
+          >
+            <!-- The space after each span is the word gap between one row's text and the next. -->
+            <template v-for="index in group.indexes" :key="index">
+              <span
+                :ref="(element) => setRowElement(index, element)"
+                :data-index="index"
+                class="windowed-scroller-row"
+              >
+                <slot name="row" :index="index" kind="inline" />
+              </span>{{ ' ' }}
+            </template>
+          </div>
+        </template>
       </div>
     </div>
     <!-- The bar state goes in as refs on purpose: unwrapping them here would make
@@ -371,8 +487,14 @@ defineExpose({
      their offsetTop — the one shift the anchor could not see. */
   display: flow-root;
 }
+/* NOT positioned, whatever class the caller gives it (a column look may set
+   `position: relative`): every row's offsetTop must be measured against the
+   content element, the inline rows' as much as the blocks'. */
+.windowed-scroller-content > .windowed-scroller-paragraph {
+  position: static;
+}
 /* Mounted only so a selection boundary keeps its text node: no box. */
-.windowed-scroller-row.pinned-out-of-window {
+.windowed-scroller-content > .pinned-out-of-window {
   position: absolute;
   top: 0;
   height: 0;

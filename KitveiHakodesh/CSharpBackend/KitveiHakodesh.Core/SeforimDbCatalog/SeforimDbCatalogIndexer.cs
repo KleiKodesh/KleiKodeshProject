@@ -104,6 +104,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldBookTitleJoined = "bookTitleJoined";    // level 0 only: the title's words joined by spaces, untokenized (starts-with)
     private const string FieldBookTitleWordsDv = "bookTitleDistinctWords"; // level 0 only: distinct title word count
     private const string FieldBookIdDv = "bookIdValue";               // level 0 only: book id as doc-values
+    private const string FieldCategoryAncestor = "categoryAncestor";  // every category id from the book's own up to the root (untokenized, stored; scope filter)
     internal const string VariantSkeletonField = FieldVariantSkeleton;
     internal const char SkeletonSeparator = '\u0001';
 
@@ -224,12 +225,14 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// v25: level indexed (Int32Field) so the book-title search can filter to level 0.
     /// v26: spelling-variant skeleton field and level-0 title fields/doc-values, so both
     ///      searches are pure index queries with no per-reader tables.
-    /// v27: additional libraries only (no change to the primary database's documents): a
+    /// v27: tree order counts a base text by the isBaseBook flag only (no title-equals-folder rule).
+    /// v28: category-ancestor ids per doc, so a search can be scoped to catalog categories.
+    /// v29: additional libraries only (no change to the primary database's documents): a
     /// library that names a tractate's pages "ד." / "ד:" (no word "דף") is indexed as pages
     /// too, and every index built before the additional-library hardening is rebuilt once -
     /// those builds dropped a library they could not read whole yet stamped the index with
     /// the fingerprint of the FULL library set.</summary>
-    public const string IndexFormatVersion = "v27";
+    public const string IndexFormatVersion = "v29";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -423,6 +426,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
             // for a book like פרי מגדים whose title carries neither שלחן nor ערוך.
             var catalogPathByBook = ComputeCatalogPaths(categoryList, books);
+            // Every category id above each book, its own first — the scope filter's field.
+            var ancestorsByBook = ComputeCategoryAncestors(categoryList, books);
 
             // Reuse the already-open directory handle if one exists (a committed reader may
             // be serving off it); otherwise open one. A single handle per index path avoids
@@ -485,7 +490,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     titleLength: b.Title.Length,
                     level: 0,
                     treeOrder: TreeOrder(b.Id),
-                    structureId: RegularTocStructureId));
+                    structureId: RegularTocStructureId,
+                    categoryAncestors: ancestorsByBook.GetValueOrDefault(b.Id, [])));
                 docCount++;
             }
 
@@ -506,7 +512,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     int globalBookId = Global(index, group.BookId);
                     if (!bookMeta.TryGetValue(globalBookId, out var book)) continue;
                     docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                        catalogPathByBook.GetValueOrDefault(globalBookId, ""), RegularTocStructureId);
+                        catalogPathByBook.GetValueOrDefault(globalBookId, ""), ancestorsByBook.GetValueOrDefault(globalBookId, []), RegularTocStructureId);
                     if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
                 }
 
@@ -519,7 +525,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                     if (!altStructures.TryGetValue(globalStructureId, out var st)) continue;
                     if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
                     docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                        catalogPathByBook.GetValueOrDefault(st.BookId, ""), globalStructureId);
+                        catalogPathByBook.GetValueOrDefault(st.BookId, ""), ancestorsByBook.GetValueOrDefault(st.BookId, []), globalStructureId);
                 }
               }
               catch (Exception ex) when (index != 0)
@@ -544,7 +550,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             foreach (var (index, conn) in sources)
             {
                 var libraryBooks = books.Where(b => SeforimDbLibraryId.Resolve(b.Id).LibraryIndex == index).ToList();
-                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ct, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds); }
+                try { docCount += IndexTanachVerses(writer, conn, libraryBooks, TreeOrder, catalogPathByBook, ancestorsByBook, ct, index == 0 ? null : additionalLibraries.First(l => l.Index == index).TocIds); }
                 catch (Exception ex) when (index != 0)
                 {
                     uncovered.Add(index);
@@ -608,8 +614,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private static int IndexTanachVerses(
         IndexWriter writer, SqliteConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
-        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct,
-        SeforimDbIdMap? tocIds = null)
+        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, Dictionary<int, int[]> ancestorsByBook,
+        CancellationToken ct, SeforimDbIdMap? tocIds = null)
     {
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
@@ -622,6 +628,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             if (!TanachBookTitles.Contains(book.Title)) continue;
             ct.ThrowIfCancellationRequested();
             string catalogPath = catalogPathByBook.GetValueOrDefault(book.Id, "");
+            int[] categoryAncestors = ancestorsByBook.GetValueOrDefault(book.Id, []);
 
             // book.Id is GLOBAL (see BuildInPlace, which calls this once per source with that
             // source's own books only); this source's own tables need the LOCAL id back —
@@ -690,7 +697,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         treeOrder: treeOrder(book.Id),
                         // Generated from the regular TOC's chapters, so they truncate
                         // together with it — a chapter hit outranks its verse hits.
-                        structureId: RegularTocStructureId));
+                        structureId: RegularTocStructureId,
+                        categoryAncestors: categoryAncestors));
                     added++;
                     expectedVerse++;
                 }
@@ -784,7 +792,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
         string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int titleLength, int level,
-        long treeOrder, int structureId)
+        long treeOrder, int structureId, int[] categoryAncestors)
     {
         var doc = new Document
         {
@@ -818,6 +826,10 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             doc.Add(new Field(FieldAuthor, authors, StoredDocsOnlyText));
             doc.Add(new Field(FieldVariantSkeleton, authors, DocsOnlyText));
         }
+        // One untokenized term per ancestor category: a scoped search filters any-of these,
+        // and the stored values tell it which scope root a hit fell under.
+        foreach (int categoryId in categoryAncestors)
+            doc.Add(new StringField(FieldCategoryAncestor, categoryId.ToString(System.Globalization.CultureInfo.InvariantCulture), Field.Store.YES));
         if (level == 0)
         {
             var titleWords = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
@@ -837,7 +849,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private int IndexTocTree(
         IndexWriter writer, List<TocRow> rows,
         (int Id, string Title, int CategoryId, string? Authors) book,
-        Func<int, long> treeOrder, string catalogPath, int structureId)
+        Func<int, long> treeOrder, string catalogPath, int[] categoryAncestors, int structureId)
     {
         rows = StripTitleRoots(rows, book.Title, book.Id);
         rows = ExpandDafAmudim(rows);
@@ -877,7 +889,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 titleLength: book.Title.Length,
                 level: level,
                 treeOrder: treeOrder(book.Id),
-                structureId: structureId));
+                structureId: structureId,
+                categoryAncestors: categoryAncestors));
             added++;
         }
         return added;
@@ -921,6 +934,34 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
         var map = new Dictionary<int, string>(books.Count);
         foreach (var b in books) map[b.Id] = CatPath(b.CategoryId);
+        return map;
+    }
+
+    /// <summary>Each book's category ids, its own category first, then every parent up to the
+    /// root. Orphaned books (unknown category) get none. A parent cycle stops at the repeat.</summary>
+    private static Dictionary<int, int[]> ComputeCategoryAncestors(
+        List<(int Id, int? ParentId, string Title)> categories,
+        List<(int Id, string Title, int CategoryId, string? Authors)> books)
+    {
+        var parentById = new Dictionary<int, int?>(categories.Count);
+        foreach (var c in categories) parentById[c.Id] = c.ParentId;
+
+        var chainCache = new Dictionary<int, int[]>(categories.Count);
+        int[] Chain(int id)
+        {
+            if (chainCache.TryGetValue(id, out var cached)) return cached;
+            var chain = new List<int>();
+            int? cur = id;
+            while (cur is { } c && parentById.TryGetValue(c, out var parent) && !chain.Contains(c))
+            {
+                chain.Add(c);
+                cur = parent;
+            }
+            return chainCache[id] = chain.ToArray();
+        }
+
+        var map = new Dictionary<int, int[]>(books.Count);
+        foreach (var b in books) map[b.Id] = Chain(b.CategoryId);
         return map;
     }
 

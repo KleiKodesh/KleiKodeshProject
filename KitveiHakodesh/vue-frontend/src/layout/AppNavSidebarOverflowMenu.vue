@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -63,6 +64,7 @@ const placed = ref(false)
 interface OverflowRow {
   key: string
   label: string
+  unreachable?: boolean
   icon: Component
   color?: string
   shortcut?: string
@@ -95,7 +97,8 @@ function overflowRow(key: string): OverflowRow {
   }
   // A destination, keyed by its label - settings included.
   const item = APP_NAV_ITEMS.value.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
-  return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color }
+  return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color, unreachable: item.unreachable, title: `${item.text}${item.shortcut ? ` (${item.shortcut})` : ''}
+${item.description}` }
 }
 
 function rowTitle(row: OverflowRow) {
@@ -203,6 +206,7 @@ watch(
       >
         <span class="menu-icon">
           <component :is="row.icon" :style="row.color ? { color: row.color } : {}" />
+          <UnreachableBadge v-if="row.unreachable" />
         </span>
         <span class="menu-label">{{ row.label }}</span>
         <span v-if="row.shortcut" class="menu-shortcut">{{ row.shortcut }}</span>
@@ -258,6 +262,7 @@ watch(
 }
 
 .menu-icon {
+  position: relative;
   display: flex;
   align-items: center;
   flex-shrink: 0;

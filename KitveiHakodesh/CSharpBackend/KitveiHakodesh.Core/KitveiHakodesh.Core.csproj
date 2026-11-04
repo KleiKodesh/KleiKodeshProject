@@ -53,13 +53,22 @@
   <!-- The FTS engine. Core feeds it through IFtsCorpus (SeforimDbFtsCorpus) - the engine's
        built-in corpus reader is not used from here. -->
   <ItemGroup>
+    <InternalsVisibleTo Include="KitveiHakodeshService.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
     <!-- Word -> PDF (COM) and the Office-free OOXML -> HTML fallback (WordDocuments/).
          net10.0 leg, IsAotCompatible. -->
     <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
+    <!-- FastDocView/: Word-family, OpenDocument, RTF and text files read in windows of blocks.
+         Its own public repo, a git submodule at KitveiHakodesh\FastDocView (SeekableDeflate and
+         TextEncodingDetection are its own submodules). net10.0 leg, IsAotCompatible, no P/Invoke. -->
+    <ProjectReference Include="..\..\FastDocView\FastDocView\FastDocView.csproj" />
   </ItemGroup>
 
-  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db. -->
+  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db.
+       This is the one working copy; built by KleiKodesh/KitveiHakodeshDictionary (see Dictionary\README.md). -->
   <ItemGroup>
     <Content Include="Dictionary\Dictionary.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

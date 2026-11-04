@@ -48,11 +48,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             bool hasSplitLineContent,
             bool hasCompressedContent,
             bool hasVersionLines,
+            bool hasLinkSuppressedSide,
             string declaredBaseColumn)
         {
             HasSplitLineContent = hasSplitLineContent;
             HasCompressedContent = hasCompressedContent;
             HasVersionLines = hasVersionLines;
+            HasLinkSuppressedSide = hasLinkSuppressedSide;
             DeclaredBaseColumn = declaredBaseColumn;
         }
 
@@ -89,6 +91,18 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// this rather than assuming the table exists.
         /// </summary>
         public bool HasVersionLines { get; }
+
+        /// <summary>
+        /// True when the database has a `link_suppressed_side` table (SeforimLibrary schema 3,
+        /// the current otzaria build). In that schema every link is stored ONCE and is meant
+        /// to be shown from BOTH of its ends, except where this table lists a (linkId, side)
+        /// to hide: side 0 = do not show in the source book, 1 = do not show in the target
+        /// book. The rows mirror Sefaria's own "do not surface this side" rules (anchor is a
+        /// whole perek/parasha, not a single segment, ...); its reasonMask is diagnostic
+        /// only and no reader - Otzaria included - looks at it. Older databases (Zayit) store
+        /// each direction as its own link row and have no such table.
+        /// </summary>
+        public bool HasLinkSuppressedSide { get; }
 
         /// <summary>
         /// The schema of the database behind <paramref name="connection"/>, probed once per
@@ -173,6 +187,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 hasSplitLineContent: hasLineContentTable && !lineStillHasContentColumn,
                 hasCompressedContent: TableExists(connection, "zstd_dict", schema),
                 hasVersionLines: TableExists(connection, "version_line", schema),
+                hasLinkSuppressedSide: TableExists(connection, "link_suppressed_side", schema),
                 declaredBaseColumn: ColumnExists(connection, "link", DeclaredBaseColumnOtzaria, schema)
                     ? DeclaredBaseColumnOtzaria
                     : DeclaredBaseColumnZayit);

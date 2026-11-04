@@ -119,6 +119,10 @@ jobs:
         with:
           fetch-depth: 0          # release notes read the log since the last tag
 
+      - name: Fetch release notes backfill (git notes)
+        if: needs.gate.outputs.renew != 'true'
+        run: git fetch origin refs/notes/release:refs/notes/release || true
+
       - name: Gemini - version bump + release notes
         id: ai
         if: needs.gate.outputs.renew != 'true' && (env.NOTES == 'ai' || (env.BUMP == 'auto' && !inputs.manual_version))
@@ -164,12 +168,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # release notes read the log since the last tag
-
-      # Not in this repo: its own repository, gitignored here.
-      - uses: actions/checkout@v7
-        with:
-          repository: KleiKodesh/EasyTabs
-          path: ChromeTabs
+          submodules: recursive   # WpfLib, ChromeTabs (EasyTabs), FastDocView + its SeekableDeflate, TextEncodingDetection
 
       - uses: microsoft/setup-msbuild@v3
 

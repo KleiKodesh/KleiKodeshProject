@@ -42,6 +42,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.calendar') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>8</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.measuresAndQuantities') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.hameshiv') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.userSpace') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F1</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.settings') }}</span></div>
     <!-- Book view -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.bookView') }}</div>
@@ -57,9 +58,23 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.search') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.leftArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.nextSection') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousSection') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideCommentaryMarkers') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.downArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.nextLine') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.upArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousLine') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideCommentaryMarkers') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.removeRestoreVowelsAndCantillation') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.createBookmark') }}</span></div>
+    <!-- Documents (the FastDocView page: Word, RTF, text and web-archive files) - the keys it answers -->
+    <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.documents') }}</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideNotesPane') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Esc</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.closeNotesPane') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideTableOfContents') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.searchInDocument') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.leftArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.nextHeading') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>{{ $t('settings.shortcutsList.rightArrow') }}</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.previousHeading') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>V</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.copyIntoWord') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>C</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.copyToLibrarySearch') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>D</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.removeRestoreVowelsAndCantillation') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideToolbar') }}</span></div>
     <!-- Full-text search results -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.searchResults') }}</div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>↑</kbd><span class="kbd-plus">/</span><kbd>↓</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.moveBetweenResults') }}</span></div>

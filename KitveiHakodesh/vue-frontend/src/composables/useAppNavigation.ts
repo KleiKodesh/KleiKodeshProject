@@ -29,6 +29,7 @@ export function useAppNavigation() {
     מילון: '/dictionary',
     'מידות ושיעורים': '/midot',
     'חיפוש קבצים': '/file-search',
+    'אזור אישי': '/user-space',
   }
 
   // ── Shared side-effect actions ────────────────────────────────────────────

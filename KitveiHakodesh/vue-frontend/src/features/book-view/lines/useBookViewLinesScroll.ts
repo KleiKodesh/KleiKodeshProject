@@ -19,7 +19,7 @@ import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import type { LinesTable } from './linesTable'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
-import { placeCaretAtRowStart } from './lineCaret'
+import { mayTakeFocus, placeCaretWhenRendered } from './lineCaret'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
@@ -164,13 +164,14 @@ export function useBookViewLinesScroll(
     saveSuppressed = true
     requestAnimationFrame(() => { if (!restoreCancelled) saveSuppressed = false })
     const element = scroller()?.scrollerElement
-    element?.focus({ preventScroll: true })
+    const takeFocus = mayTakeFocus(element)
+    if (takeFocus) element?.focus({ preventScroll: true })
     // Focus says which element the keys reach; it does not say where in the text they
     // start from. Caret browsing (F7) moves the DOCUMENT's caret, and without one in
     // the opened line the browser starts from the top of the mounted window — rows
     // above the landing — so the first arrow key left the line the reader was given.
     // See lineCaret.ts.
-    placeCaretAtRowStart(scroller()?.rowElement(target) ?? null)
+    if (takeFocus) placeCaretWhenRendered(element)
     // FTS: the highlighted mark is in the rendered row — bring it into view.
     if (props.searchHighlightLineIndex != null) {
       element?.querySelector('mark.search-match')?.scrollIntoView({ block: 'center' })
@@ -202,10 +203,11 @@ export function useBookViewLinesScroll(
         saveSuppressed = false // nothing saved: the top is the reader's place
         nextTick(() => {
           const element = scroller()?.scrollerElement
+          if (!mayTakeFocus(element)) return
           element?.focus({ preventScroll: true })
           // The caret belongs on the line the reader is looking at here too — the
           // browser's own starting point is only coincidentally the first row.
-          placeCaretAtRowStart(scroller()?.rowElement(0) ?? null)
+          placeCaretWhenRendered(element)
         })
       },
       { flush: 'post' },

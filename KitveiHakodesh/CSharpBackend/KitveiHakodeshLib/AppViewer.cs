@@ -35,6 +35,20 @@ namespace KitveiHakodeshLib
         // WebCacheFolder before the first instance initialises).
         private static Task<CoreWebView2Environment> _sharedEnvTask;
 
+        /// <summary>
+        /// Starts the shared browser environment for <paramref name="webCacheFolder"/> now,
+        /// before any AppViewer exists. The browser process takes over a second to come up;
+        /// a host that calls this first thing in Main gets that second in parallel with its own
+        /// startup (assembly loads, the form) instead of after it. Call on the UI thread, with
+        /// the same folder the AppViewer will be given; the AppViewer then reuses this one.
+        /// </summary>
+        public static void StartSharedEnvironment(string webCacheFolder)
+            => GetSharedEnv(UserDataFolderFor(webCacheFolder));
+
+        // Test mode (HostTestMode): the rig's own profile folder, never the user's.
+        private static string UserDataFolderFor(string webCacheFolder)
+            => Path.Combine(HostTestMode.ProfileDir ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh"), webCacheFolder);
+
         private static Task<CoreWebView2Environment> GetSharedEnv(string userDataFolder)
         {
             if (_sharedEnvTask == null)
@@ -82,7 +96,9 @@ namespace KitveiHakodeshLib
                         "--no-first-run " +
                         "--no-default-browser-check " +
                         "--js-flags=\"--max_old_space_size=512 --max_semi_space_size=4\" " +
-                        "--disable-features=CalculateNativeWinOcclusion",
+                        "--disable-features=CalculateNativeWinOcclusion" +
+                        // Hosted e2e rig only (HostTestMode, off unless KH_TEST_CDP_PORT is set).
+                        (HostTestMode.IsOn ? " --remote-debugging-port=" + HostTestMode.CdpPort : ""),
 
                     // Disable tracking prevention — all content is local or from a single
                     // trusted domain; the feature adds overhead with no benefit here.
@@ -113,6 +129,8 @@ namespace KitveiHakodeshLib
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
         private string _dbInjectionScriptId;
+        // The one-shot script carrying the launch files' open events (InjectStartupOpenEventsAsync).
+        private string _startupEventsScriptId;
 
         // File paths queued before the Vue app has finished mounting.
         // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
@@ -549,9 +567,7 @@ namespace KitveiHakodeshLib
 
         private async Task InitAsyncCore()
         {
-            string userDataFolder = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", _webCacheFolder);
-            var env = await GetSharedEnv(userDataFolder);
+            var env = await GetSharedEnv(UserDataFolderFor(_webCacheFolder));
 
             await _webView.EnsureCoreWebView2Async(env);
 
@@ -679,6 +695,8 @@ namespace KitveiHakodeshLib
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
 
+            await InjectStartupOpenEventsAsync();
+
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
@@ -690,6 +708,29 @@ namespace KitveiHakodeshLib
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
+        }
+
+        /// <summary>
+        /// Hands the files the host was launched with to the page AT BOOT, as the open events it
+        /// would otherwise get pushed after 'appReady': main.ts applies them before the app
+        /// mounts, so the file's tab is the one drawn first and the restored session's view
+        /// never renders ahead of it. A one-shot script - HandleAppReady removes it, so a later
+        /// reload does not open the files again. A file this cannot prepare stays queued for
+        /// the normal open on 'appReady', which reports the error.
+        /// </summary>
+        private async Task InjectStartupOpenEventsAsync()
+        {
+            var events = new System.Collections.Generic.List<object>();
+            for (int i = 0; i < _pendingFilePaths.Count;)
+            {
+                object openEvent = _localFile.StartupOpenEvent(_pendingFilePaths[i]);
+                if (openEvent == null) { i++; continue; }
+                events.Add(openEvent);
+                _pendingFilePaths.RemoveAt(i);
+            }
+            if (events.Count == 0) return;
+            _startupEventsScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "if(window===window.top)window.__webviewStartupEvents=" + JsonSerializer.Serialize(events) + ";");
         }
 
         /// <summary>

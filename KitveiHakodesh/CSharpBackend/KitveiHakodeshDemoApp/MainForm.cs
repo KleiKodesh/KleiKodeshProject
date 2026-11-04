@@ -23,8 +23,11 @@ namespace KitveiHakodeshDemoApp
         private Form _popoutWindow;
         private Rectangle _lastNormalBounds;
 
+        /// <summary>The WebView2 user-data folder of this window (Program starts its browser early).</summary>
+        internal const string WebCacheFolder = "webcache-standalone";
+
         private static readonly string TabsSessionPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KleiKodesh", "tabs-session.json");
+            HostTestMode.KleiKodeshLocalFolder, "tabs-session.bin");
 
         public MainForm(string initialRequest = null)
         {
@@ -44,7 +47,7 @@ namespace KitveiHakodeshDemoApp
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
 
-            _viewer = new AppViewer("webcache-standalone", snapshotSplash: true) { Dock = DockStyle.Fill };
+            _viewer = new AppViewer(WebCacheFolder, snapshotSplash: true) { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 

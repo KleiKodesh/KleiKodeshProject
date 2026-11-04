@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useBookCatalogCategoryNavigation } from '@/features/book-catalog/useBookCatalogCategoryNavigation'
 import { ref, computed, onMounted } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useElementSize } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
+import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
+import { t } from '@/i18n'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -11,15 +13,27 @@ import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
+import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const settingsStore = useSettingsStore()
 
+const VIEW_LABELS = {
+  list: t('home.viewMode.list'),
+  cards: t('home.viewMode.cards'),
+  tiles: t('home.viewMode.tiles'),
+}
+
 const { navigate, openFolderPicker } = useAppNavigation()
 const { openCatalogCategory } = useBookCatalogCategoryNavigation()
 
 const searchBarRef = ref<HTMLElement | null>(null)
+// Cards keep a fixed width; the search bar and the grid both take the width of
+// the whole columns that fit, instead of the cards stretching to fill the pane.
+const homeInnerRef = ref<HTMLElement | null>(null)
+const { width: homeInnerWidth } = useElementSize(homeInnerRef)
+const contentLayout = useCardGridLayout(homeInnerWidth, () => settingsStore.homeView, 720)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
@@ -116,7 +130,7 @@ onMounted(focusSearchInput)
 
 <template>
   <div class="home-page">
-    <div class="home-inner">
+    <div ref="homeInnerRef" class="home-inner" :style="{ '--home-content-width': `${contentLayout.width}px`, '--home-columns': contentLayout.columns }">
       <div class="home-search-blanket">
         <div
           ref="searchBarRef"
@@ -142,6 +156,13 @@ onMounted(focusSearchInput)
             >
               <IconSearch20Regular />
             </button>
+            <ViewModeDropdown
+              v-model="settingsStore.homeView"
+              class="home-search-bar__search-button"
+              tabindex="-1"
+              :labels="VIEW_LABELS"
+              :title="$t('home.viewMode.menu')"
+            />
           </div>
           <GlobalSearchDropdown
             v-if="searchBar.isDropdownOpen.value"
@@ -165,11 +186,12 @@ onMounted(focusSearchInput)
           />
         </div>
       </div>
-      <div class="home-cards">
+      <div class="home-cards" :class="`home-cards--${settingsStore.homeView}`">
         <HomeSuggestionCard
           v-for="(card, index) in cards"
           :key="card.key"
           :card="card"
+          :layout="settingsStore.homeView"
           @keydown="onCardKeydown($event, index)"
         />
       </div>
@@ -239,10 +261,28 @@ onMounted(focusSearchInput)
   display: grid;
   /* Card min-width scales with the pane (cqi), so narrow panes still fit 2+
      columns instead of collapsing to one full-width card per row. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
+  /* Column count and grid width come from useCardGridLayout: cards shrink to fit
+     another column, but never stretch past their max. */
+  grid-template-columns: repeat(var(--home-columns, 3), minmax(0, 1fr));
   gap: 8px;
   width: 100%;
   max-width: var(--home-content-width);
+}
+/* Cards: Explorer-like wide columns, tight rows (column gap = useCardGridLayout's). */
+.home-cards--cards {
+  column-gap: 16px;
+  row-gap: 4px;
+}
+/* List: one full-width row per item, like the catalog's list view. */
+.home-cards--list {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+/* Tiles: the catalog's 72px icon tiles. */
+.home-cards--tiles {
+  grid-template-columns: repeat(var(--home-columns, 9), 72px);
+  gap: 6px;
+  justify-items: center;
 }
 
 /* Search bar — flows with the cards (centered as a group when there's room),
@@ -258,7 +298,9 @@ onMounted(focusSearchInput)
   justify-content: center;
   width: 100%;
   flex-shrink: 0;
-  margin-bottom: 8px;
+  /* With the wrapper's 6px bottom padding: 18px from the pill to the first row,
+     the catalog's gap (TopSearchBar's 6px + the catalog grid's 12px top padding). */
+  margin-bottom: 12px;
   background: var(--bg-primary);
 }
 

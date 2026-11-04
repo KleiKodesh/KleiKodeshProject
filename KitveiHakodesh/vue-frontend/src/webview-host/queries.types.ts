@@ -185,6 +185,28 @@ export interface CommentaryLinkGroupRow {
   lineIndexes: number[]
 }
 
+/** A link group seen from its target end: the source book and ITS lines that point at ours. */
+export interface IncomingLinkGroupRow {
+  sourceBookId: number
+  connectionTypeId: number
+  lineIds: number[]
+  lineIndexes: number[]
+}
+
+/**
+ * One call's worth of commentary-pane structure. `incoming` is the other end of links
+ * the DB stores pointing AT our lines (Sefaria stores non-dependant links in alphabetical
+ * order, so e.g. every Pilpula Charifta ↔ Rosh link is source=Pilpula, type OTHER);
+ * `catalogCommentaryBookIds` are the books the catalogue files as commentaries on this
+ * one (shelved two or more folders below the parent of its folder, e.g.
+ * "Rosh / Mefarshim / …") — commentaries by placement, whatever the link type says.
+ */
+export interface CommentaryLinkGroups {
+  rows: CommentaryLinkGroupRow[]
+  incoming: IncomingLinkGroupRow[]
+  catalogCommentaryBookIds: number[]
+}
+
 /** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */
 export interface WordLinkAnchor {
   lineId: number

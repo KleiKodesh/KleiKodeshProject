@@ -29,10 +29,9 @@
 | [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/README.md) | WinForms + WebView2 | קורא קבצי ZIM עם kiwix-js מותאם |
 | [`KleiKodeshVsto/Nakdan`](KleiKodeshVsto/Nakdan/README.md) | .NET Library | ניקוד — OOXML + Dicta API |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md) | Vue 3 + C# | כתבי הקודש — ממשק Vue, שכבות C# (ראה ארכיטקטורה למטה), סקריפטי נתונים |
-| [`ChromeTabs`](ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
-| [`WpfLib`](WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
+| [`ChromeTabs`](KitveiHakodesh/CSharpBackend/ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
+| [`WpfLib`](KleiKodeshVsto/WpfLib/WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
 | `WpfLib.Gallery` / `WpfLib.Gallery.Tests` | WPF + xUnit | גלריית הפקדים של WpfLib ובדיקות ויזואליות/התנהגות עליה |
-| [`SearchExpansion`](SearchExpansion/README.md) | Python | בונה את `expansion-routed.db` — הרחבת מילים בחיפוש הטקסט המלא |
 | `SearchExpansion-models` | נתונים (לא במעקב git) | מודלים וקבצי עבודה מקומיים של SearchExpansion |
 | `packages` | NuGet | חבילות NuGet של פרויקטי `packages.config` |
 | `hebrew-typing-tutor` | Web app (מאגר נפרד, לא במעקב) | מאמן הקלדה עברית |
@@ -84,6 +83,11 @@ FtsLib (generic full-text engine) · DocConvertLib (Word→HTML) · SQLite
 
 ## בנייה
 
+`Dictionary.db` and `expansion-routed.db` are committed here (one working copy each) and
+built by their own repos; see
+[`KitveiHakodesh.Core/Dictionary/README.md`](KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/Dictionary/README.md)
+and [`FtsLib-Csharp/SearchExpansion/README.md`](KitveiHakodesh/CSharpBackend/FtsLib-Csharp/SearchExpansion/README.md).
+
 הכל מתועד ב-[`Build/README.md`](Build/README.md). בקצרה:
 
 ```powershell
@@ -122,7 +126,7 @@ npm run dev
 | Change task pane behavior | `KleiKodeshVsto/Helpers/TaskpaneManager.cs` |
 | Change startup/shutdown logic | `KleiKodeshVsto/ThisAddIn.cs` |
 | Change a tool's UI | The tool's own library under `KleiKodeshVsto/` (DocDesign, RegexInWord, WebSitesLib, Kiwix, Nakdan) |
-| Change shared WPF styles | `WpfLib/Themes/OfficePalette.xaml` |
+| Change shared WPF styles | `KleiKodeshVsto/WpfLib/WpfLib/Themes/OfficePalette.xaml` |
 | Change installer pages | `Build/Installer/Pages/` |
 
 ### Common Changes — KitveiHakodesh

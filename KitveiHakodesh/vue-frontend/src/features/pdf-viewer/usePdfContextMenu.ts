@@ -180,6 +180,9 @@ export function usePdfContextMenu(
   // keep the iframe-side range ourselves and restore it before copying.
   let capturedRange: Range | null = null
   let capturedWin: Window | null = null
+  // True only while the menu's own copy runs. The captured text is a fallback for that
+  // copy alone; any later Ctrl+C (find field, outline rename) must copy what's selected now.
+  let menuCopyInProgress = false
 
   function captureSelection(win: Window): void {
     capturedWin = win
@@ -215,7 +218,12 @@ export function usePdfContextMenu(
 
     // The copy listener attached to the iframe document rewrites the payload into the
     // RTL Word-friendly shape; execCommand alone would copy PDF.js's span soup.
-    return triggerCopy(afterCopy, win.document)
+    menuCopyInProgress = true
+    try {
+      return triggerCopy(afterCopy, win.document)
+    } finally {
+      menuCopyInProgress = false
+    }
   }
 
   function onCopy(): void {
@@ -378,10 +386,17 @@ export function usePdfContextMenu(
     // on the PDF text layer — matching book view, where every copy path funnels through
     // the same event handler.
     detachCopy = attachScopedCopy(win.document, () => {
+      // Ctrl+A selects PDF.js's #hiddenCopyElement, and PDF.js's own copy handler then
+      // copies every page's text. Building the payload from the rendered text-layer spans
+      // here would copy only the pages currently in the DOM, so leave that copy to PDF.js.
+      const sel = win.getSelection()
+      const hidden = win.document.getElementById('hiddenCopyElement')
+      if (hidden && sel && sel.rangeCount > 0 && sel.containsNode(hidden, true)) return null
+
       // selectionToText, not sel.toString(): OCR'd text layers carry no space chars, so
       // toString() merges every word in a row (see selectionToText).
       const live = selectionToText(win)
-      return selectionToHtml(live || capturedText) || null
+      return selectionToHtml(live || (menuCopyInProgress ? capturedText : '')) || null
     })
   }
 

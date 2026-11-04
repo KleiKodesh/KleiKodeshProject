@@ -1,0 +1,88 @@
+/*
+ * The reading pages' toolbar shell - the book view's toolbar and the FastDocView toolbar both carry
+ * `.reading-toolbar` plus `toolbar-top|bottom|left|right`: the box, grab cursor, drop preview of a
+ * drag (useToolbarDrag), the four orientations and the edge line. Moved unchanged from
+ * BookViewToolbar.vue (where it was `.book-view-toolbar`).
+ */
+.reading-toolbar {
+  /* How far the anchored more button sits from the edge it is pinned to, and therefore how
+     much room the button row must leave for it: its own size plus that inset, twice over so
+     the row stays centred on the toolbar rather than on the space left over. */
+  --toolbar-edge-inset: 2px;
+  --toolbar-reserved-edge: calc(var(--toolbar-button-size) + 2 * var(--toolbar-edge-inset));
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: var(--toolbar-horizontal-padding);
+  background: var(--bg-toolbar);
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.reading-toolbar.dragging {
+  cursor: grabbing;
+}
+/* teleported to <body>: not under the toolbar */
+.toolbar-drop-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: #d0d0d0;
+  opacity: 0.5;
+}
+
+/* ── Orientation ── */
+.reading-toolbar.toolbar-top,
+.reading-toolbar.toolbar-bottom {
+  flex-direction: row;
+  height: var(--toolbar-horizontal-height);
+  justify-content: center;
+  /* Both sides, so the buttons stay centred on the toolbar itself and do not drift right as
+     the reserved edge is taken out of one side only. */
+  padding-inline: var(--toolbar-reserved-edge);
+}
+.reading-toolbar.toolbar-left,
+.reading-toolbar.toolbar-right {
+  flex-direction: column;
+  justify-content: flex-start;
+  width: var(--toolbar-vertical-width);
+  height: auto;
+  padding: var(--toolbar-vertical-padding);
+  /* The column's own end, where the anchored button sits. Only that end needs reserving -
+     a vertical toolbar starts its buttons at the top rather than centring them. */
+  padding-block-end: var(--toolbar-reserved-edge);
+}
+
+/* ── Borders ──
+   Drawn as an overlay line, not a CSS border: the overflow button is opaque, full button
+   size and stacked above the row (see .overflow-btn), so a real border would sit under its
+   fill. The line is painted above it instead. */
+.reading-toolbar::after {
+  content: '';
+  position: absolute;
+  /* A border, not a 1px background: at fractional DPI (150%) Chromium snaps a 1px box to 1
+     or 2 device pixels depending on its offset, so the bottom/right line came out double.
+     Border widths are snapped consistently. */
+  border: 0 solid var(--border-color);
+  pointer-events: none;
+  z-index: 2;
+}
+.reading-toolbar.toolbar-top::after {
+  inset: auto 0 0 0;
+  border-top-width: 1px;
+}
+.reading-toolbar.toolbar-bottom::after {
+  inset: 0 0 auto 0;
+  border-top-width: 1px;
+}
+.reading-toolbar.toolbar-left::after {
+  inset: 0 0 0 auto;
+  border-inline-end-width: 1px;
+}
+.reading-toolbar.toolbar-right::after {
+  inset: 0 auto 0 0;
+  border-inline-end-width: 1px;
+}
+

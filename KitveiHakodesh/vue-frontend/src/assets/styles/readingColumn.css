@@ -1,0 +1,72 @@
+/*
+ * The reading-column look shared by every page that shows flowing text in rows:
+ * the book view's lines pane and the FastDocView page. One row = `.reading-column-line`.
+ * Page-specific decorations (selection bars, markers, links) stay in the page's own
+ * scoped style.
+ */
+.reading-column-line {
+  padding-inline: 12px;
+  max-width: var(--lines-content-max-width, none);
+  margin-inline: auto;
+  font-family: var(--text-font);
+  font-size: var(--font-size, 100%);
+  font-weight: var(--font-weight, 400);
+  line-height: var(--line-height, 1.7);
+  color: var(--text-primary);
+  text-align: justify;
+  position: relative;
+}
+/* Exact line spacing, opt-in from settings.
+   `line-height` is normally a unitless multiplier, so every inline element
+   recomputes its own line box from its own font-size — one enlarged word mid-line
+   makes THAT row taller than its neighbours. Multiplying by 1em resolves the
+   leading once, against the row's font-size, and it then inherits as a fixed length;
+   the explicit inherit on inline children stops those with their own font-size
+   (bold runs, note markers, wrapper spans) from contributing a taller box.
+   Trade-off: a genuinely oversized word now overlaps the row above instead of
+   pushing it away — which is why this is off by default. */
+html[data-fixed-line-height='true'] .reading-column-line {
+  line-height: calc(var(--line-height, 1.7) * 1em);
+}
+/* Inline text elements only. Deliberately NOT `*`: superscript markers set
+   `line-height: 1` so they contribute no box at all, and nested blocks keep
+   their own leading. */
+html[data-fixed-line-height='true'] .reading-column-line b,
+html[data-fixed-line-height='true'] .reading-column-line strong,
+html[data-fixed-line-height='true'] .reading-column-line i,
+html[data-fixed-line-height='true'] .reading-column-line em,
+html[data-fixed-line-height='true'] .reading-column-line big,
+html[data-fixed-line-height='true'] .reading-column-line span,
+html[data-fixed-line-height='true'] .reading-column-line a,
+html[data-fixed-line-height='true'] .reading-column-line mark,
+html[data-fixed-line-height='true'] .reading-column-line font {
+  line-height: inherit;
+}
+/* On a wide pane give the reading column a bit more breathing room from the
+   edges. Container query on the app-shell pane, so it reacts to THIS pane's
+   width, not the viewport (split-shell aware). */
+@container app-shell (min-width: 600px) {
+  .reading-column-line {
+    padding-inline: 22px;
+  }
+}
+/* Headings are always 300 units heavier than the body so they stay visually
+   distinct at every slider stop (calc() is clamped to 100–900 by the browser). */
+.reading-column-line h1,
+.reading-column-line h2,
+.reading-column-line h3,
+.reading-column-line h4,
+.reading-column-line h5,
+.reading-column-line h6 {
+  font-family: var(--header-font);
+  font-weight: calc(var(--font-weight, 400) + 300);
+}
+.reading-column-line mark.search-match {
+  background: rgba(255, 165, 0, 0.4);
+  color: inherit;
+  border-radius: 2px;
+}
+.reading-column-line mark.search-match.current {
+  background: rgba(255, 165, 0, 0.9);
+  color: #000;
+}

@@ -54,6 +54,7 @@ namespace KitveiHakodeshService.Tests
                     pc.Open();
                     HardeningVerify.Exec(pc, "CREATE TABLE connection_type(id INTEGER PRIMARY KEY, name TEXT UNIQUE); " +
                         "INSERT INTO connection_type VALUES (1,'COMMENTARY'),(4,'REFERENCE'),(5,'SOURCE'),(14,'OTHER'); " +
+                        "CREATE TABLE category_closure(ancestorId INTEGER, descendantId INTEGER); " +
                         "CREATE TABLE link(id INTEGER PRIMARY KEY, sourceBookId INTEGER, targetBookId INTEGER, sourceLineId INTEGER, " +
                         "targetLineId INTEGER, targetLineIndex INTEGER, targetBookOrderIndex INTEGER, connectionTypeId INTEGER, isDeclaredBase INTEGER)");
                     using var q0 = pc.CreateCommand();
@@ -137,7 +138,7 @@ namespace KitveiHakodeshService.Tests
                     Check(byIndex.Count == 1 && byIndex[0].Id == linesFar[2].Id && byIndex[0].Content == "מדבר שומם",
                         "GetLineByBookAndLineIndex returns line 2 of the far book with its global id", "by index: " + string.Join("|", byIndex.Select(l => l.Id + "=" + l.Content)));
                     // ── links of the far book: external_link translated to global ids ──────────
-                    var groups = q.GetCommentaryLinkGroupsForSourceLineRange(linesFar.Select(l => l.Id).ToList());
+                    var groups = q.GetCommentaryLinkGroupsForSourceLineRange(linesFar.Select(l => l.Id).ToList(), 0).Rows;
                     var sourceGroup = groups.FirstOrDefault(g => g.TargetBookId == 1);
                     var noteGroup = groups.FirstOrDefault(g => g.TargetBookId == SeforimDbLibraryId.ToGlobal(1, 2));
                     Check(groups.Count == 2 && sourceGroup != null && sourceGroup.ConnectionTypeId == 5
@@ -162,7 +163,7 @@ namespace KitveiHakodeshService.Tests
                     Check(info != null && info.HasSourceConnection == 1 && info.HasCommentaryConnection == 1 && info.HasReferenceConnection == 0,
                         "the far book's flags say it has source and commentary links (so the reader asks for them)", "flags: " + (info == null ? "none" : $"{info.HasSourceConnection}/{info.HasCommentaryConnection}/{info.HasReferenceConnection}"));
                     // ── the other direction: the official line the far book cites lists the far book's line ──
-                    var citedGroups = q.GetCommentaryLinkGroupsForSourceLineRange(new List<int> { primaryFirstLineId });
+                    var citedGroups = q.GetCommentaryLinkGroupsForSourceLineRange(new List<int> { primaryFirstLineId }, 0).Rows;
                     var citing = citedGroups.FirstOrDefault(g => g.TargetBookId == far.Id);
                     Check(citing != null && citing.ConnectionTypeId == 1 && citing.LineIds.SequenceEqual(new[] { linesFar[1].Id }) && citing.LineIndexes.SequenceEqual(new[] { 1 }),
                         "an official line cited by a library book lists that book's line as a commentary link",

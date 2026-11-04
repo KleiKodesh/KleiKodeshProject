@@ -16,5 +16,9 @@
   "openingFile": "Opening file…",
   "truncated": "(showing {shown} of {total} results)",
   "openInDefaultApp": "Open in default app",
+  "openFileLocation": "Open file location",
+  "copyPath": "Copy path",
+  "pathCopied": "Path copied",
+  "copyPathFailed": "Could not copy the path",
   "searchError": "Search error"
 }

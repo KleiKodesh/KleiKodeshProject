@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 /**
  * AddressBar — the editable search field hosted inside AppTitleBar (an
  * Explorer-style address bar). It reuses the global search engine
@@ -23,7 +24,7 @@
  */
 import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn, useResizeObserver } from '@vueuse/core'
-import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
@@ -35,10 +36,16 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore, type Tab } from '@/stores/tabStore'
 import { sortedByRecency } from '@/stores/recentLocations'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useHostSearchStore } from '@/stores/hostSearchStore'
+import { parseBookLink } from '@/utils/appDeepLink'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import { useI18n } from 'vue-i18n'
+import { storeToRefs } from 'pinia'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useAppNavigation } from '@/composables/useAppNavigation'
+import { addressBarPath, isDiskPath, looksLikeFile, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
 
@@ -49,9 +56,18 @@ const pane = useAppShellPane(props.paneId)
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+const hostSearchStore = useHostSearchStore()
 const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 
-const searchQuery = ref('')
+// Explorer behaviour: the field opens holding the full path of what the tab shows,
+// selected, so typing replaces it. While it still reads that path, the search sees
+// an empty query (the dropdown lists recents) and Enter just closes.
+const { ROOT: catalogRoot, allBooksMap } = storeToRefs(useBooksDataStore())
+const appNavigation = useAppNavigation()
+const initialPath = addressBarPath(pane.activeTab.value, catalogRoot.value, allBooksMap.value)
+const searchQuery = ref(initialPath)
+const searchTerm = ref('')
+watch(searchQuery, (v) => { searchTerm.value = v === initialPath ? '' : v })
 const wrapperRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const isDropdownOpen = ref(false)
@@ -80,7 +96,7 @@ const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
     charIdx = 0
   }
 }, 80)
-watch(searchQuery, (v) => (v ? pauseTyping() : resumeTyping()))
+watch(searchQuery, (v) => (v ? pauseTyping() : resumeTyping()), { immediate: true })
 
 const {
   catalogResults,
@@ -97,11 +113,10 @@ const {
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
-} = useGlobalSearch(searchQuery)
+} = useGlobalSearch(searchTerm)
 
 // The wrapper is the inline bar; only the popup is fitted.
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl], fitToViewport: false })
-useDropdownViewportFit(dropdownEl)
 
 // ── Recents list (dropdown fallback content) ──────────────────────────────────
 // Shown whenever the search has nothing to display: empty/short query, or a query
@@ -208,18 +223,45 @@ const maxHeight = ref(300)
 // borderless field.
 const isPanelMerged = ref(false)
 
+// Narrow shell: the field itself takes over the whole shell width (pinned over the
+// title-bar buttons), and the panel merges under it exactly as on a wide shell.
+// fieldTop/Left/Right are its fixed position then; the root keeps the footprint.
+const isNarrowShell = ref(false)
+const fieldTop = ref(0)
+const fieldHeight = ref(0)
+const fieldLeft = ref(0)
+const fieldRight = ref(0)
+const rootRef = ref<HTMLElement | null>(null)
+
+// Not on a narrow shell: there the panel spans the shell edge to edge on purpose,
+// and the fit's viewport margin would shrink it back off the edges.
+useDropdownViewportFit(computed(() => (isNarrowShell.value ? null : dropdownEl.value)))
+
 // The shell this address bar lives in — it decides both the merge regime and the
 // panel's horizontal edges. Resolved once here and reused by computeAnchor and the
 // resize observer below.
-const shellEl = computed(() => wrapperRef.value?.closest<HTMLElement>('.app-shell') ?? null)
+const shellEl = computed(() => rootRef.value?.closest<HTMLElement>('.app-shell') ?? null)
+
+// Expanded, the field covers the whole title bar, top to bottom.
+function titleBarRect(slot: DOMRect) {
+  const bar = rootRef.value?.closest<HTMLElement>('.title-bar')?.getBoundingClientRect() ?? slot
+  return { top: bar.top, bottom: bar.bottom }
+}
 
 function computeAnchor() {
-  if (!wrapperRef.value) return
-  const rect = wrapperRef.value.getBoundingClientRect()
+  if (!rootRef.value) return
+  const slot = rootRef.value.getBoundingClientRect()
   const shellRect = shellEl.value?.getBoundingClientRect()
-  const isNarrowShell = !!shellRect && shellRect.width <= NARROW_SHELL_WIDTH
-  const anchor = isNarrowShell ? shellRect! : rect
-  isPanelMerged.value = !isNarrowShell
+  isNarrowShell.value = !!shellRect && shellRect.width <= NARROW_SHELL_WIDTH
+  const rect = isNarrowShell.value
+    ? { ...titleBarRect(slot), left: shellRect!.left, right: shellRect!.right }
+    : slot
+  fieldTop.value = rect.top
+  fieldHeight.value = rect.bottom - rect.top
+  fieldLeft.value = rect.left
+  fieldRight.value = window.innerWidth - rect.right
+  const anchor = rect
+  isPanelMerged.value = true
   // Merged: flush against the field's bottom edge, no gap and no overlap — the
   // field drops its bottom border, so there is no seam line left to cover and
   // the two backgrounds simply continue into each other. Floored because
@@ -253,7 +295,7 @@ function computeAnchor() {
 //
 // The field wrapper is observed too: the panel hangs off its bottom edge, so the
 // field moving or changing height has to re-anchor as well.
-useResizeObserver([shellEl, wrapperRef], () => {
+useResizeObserver([shellEl, rootRef], () => {
   if (isDropdownOpen.value) computeAnchor()
 })
 
@@ -280,13 +322,49 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.code === 'Enter') {
     e.preventDefault()
-    launchFullTextSearch()
+    if (!openTypedPath()) launchFullTextSearch()
     return
   }
   if (e.code === 'Escape') {
     e.preventDefault()
     close()
   }
+}
+
+/**
+ * Enter on a path: a disk file opens, a disk folder opens the file picker there,
+ * a catalog path opens the book or category. False when the text is not a path,
+ * so the caller falls back to full-text search.
+ */
+function openTypedPath(): boolean {
+  const text = searchQuery.value.trim()
+  if (!text || text === initialPath) { close(); return true }
+  const bookLink = parseBookLink(text)
+  if (bookLink) {
+    close()
+    void hostSearchStore.openBookLink(bookLink)
+    return true
+  }
+  if (isDiskPath(text)) {
+    if (looksLikeFile(text)) {
+      const fileName = text.split(/[\\/]/).pop()!
+      void onSelectFile({ fullPath: text, fileName } as FileSearchResult)
+    } else {
+      void appNavigation.openFolderPicker(text)
+      close()
+    }
+    return true
+  }
+  const target = resolveCatalogPath(text, catalogRoot.value)
+  if (!target) return false
+  if (target.kind === 'book') {
+    onSelectCatalogBook(target.book.id, target.book.title)
+  } else {
+    pane.navigateToDestination('/books')
+    pane.updateActiveTab({ catalogCategoryId: target.node.id })
+    close()
+  }
+  return true
 }
 
 function launchFullTextSearch() {
@@ -351,7 +429,9 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
   const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
   const isHtmlLike = extension === '.htm' || extension === '.html'
-  const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+  const route = opensInFastDocView(fullPath)
+    ? '/fast-doc-view'
+    : isHtmlLike ? '/html-view' : '/pdf-view'
 
   // The addin name is known synchronously, so the placeholder tab gets it too —
   // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
@@ -364,9 +444,9 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
     ? pane.openTab({ route, title: displayTitle }).id
     : pane.activeTabId.value
 
-  if (extension === '.txt') {
+  if (route === '/fast-doc-view') {
     tabStore.updateTab(targetTabId, {
-      route: '/txt-view',
+      route,
       title: displayTitle,
       localFileName: fileName,
       localFilePath: fullPath,
@@ -403,16 +483,19 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
 // the dropdown right away — with an empty query it shows the tab list.
 nextTick(() => {
   inputRef.value?.focus()
+  inputRef.value?.select()
   computeAnchor()
   isDropdownOpen.value = true
 })
 </script>
 
 <template>
+  <div ref="rootRef" class="address-bar-slot">
   <div
     ref="wrapperRef"
     class="address-bar"
-    :class="{ 'is-merged': isPanelVisible && isPanelMerged }"
+    :class="{ 'is-merged': isPanelVisible && isPanelMerged, 'is-expanded': isNarrowShell }"
+    :style="isNarrowShell ? { top: fieldTop + 'px', height: fieldHeight + 'px', left: fieldLeft + 'px', right: fieldRight + 'px' } : undefined"
     @click.stop="inputRef?.focus()"
   >
     <input
@@ -420,6 +503,7 @@ nextTick(() => {
       v-model="searchQuery"
       class="address-bar__field"
       type="search"
+      :dir="searchQuery ? 'auto' : 'rtl'"
       :placeholder="placeholder"
       autocomplete="off"
       @focus="onFocus"
@@ -427,13 +511,23 @@ nextTick(() => {
       @keydown="onKeydown"
     />
     <button
-      v-if="searchQuery.trim()"
+      v-if="searchQuery.trim() || isNarrowShell"
       class="address-bar__button"
       tabindex="-1"
       :title="t('layout.searchContent')"
       @click.stop="launchFullTextSearch()"
     >
       <IconSearch20Regular />
+    </button>
+    <!-- Expanded over the title-bar buttons, the bar needs its own way out. -->
+    <button
+      v-if="isNarrowShell"
+      class="address-bar__button"
+      tabindex="-1"
+      :title="t('components.close')"
+      @click.stop="close()"
+    >
+      <IconDismiss20Regular />
     </button>
     <GlobalSearchDropdown
       v-if="isPanelVisible"
@@ -464,9 +558,22 @@ nextTick(() => {
       @clear-all-tabs="onClearAllLocations"
     />
   </div>
+  </div>
 </template>
 
 <style scoped>
+.address-bar-slot {
+  display: flex;
+  min-width: 0;
+  height: 24px;
+}
+/* Narrow shell: the field leaves its slot and spans the shell (see isNarrowShell). */
+.address-bar.is-expanded {
+  position: fixed;
+  width: auto;
+  z-index: 1000;
+  background: var(--bg-secondary);
+}
 /* Windows Explorer address-bar look: a flat, near-rectangular field that fills
    the title area and blends into the title-bar chrome (--bg-secondary) with a
    subtle frame — not a stand-out filled search pill. On focus only the BOTTOM

@@ -1,0 +1,62 @@
+# Tries the Gemini release-notes prompt (.github/scripts/ai-release-plan.ps1) on the
+# commits since a release, without building, tagging or publishing anything.
+# gh workflow run release-notes-test.yml [-f since=v10.3.0] ; then gh run download
+name: Release notes test
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Previous release tag (empty = latest release)
+        type: string
+        required: false
+      model:
+        description: Gemini model (empty = default chain)
+        type: string
+        required: false
+      merge_model:
+        description: Model tried first for merging and Hebrew (none = lite only)
+        type: string
+        required: false
+      variant:
+        description: Test variant - empty or nonotes (ignore refs/notes/release)
+        type: string
+        required: false
+      list_models:
+        description: Print the model names the key can use
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fetch release notes backfill (git notes)
+        run: git fetch origin refs/notes/release:refs/notes/release || true
+      - name: List models
+        if: inputs.list_models
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          $r = Invoke-RestMethod -Uri 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200' -Headers @{ 'x-goog-api-key' = $env:GEMINI_API_KEY }
+          $r.models | Where-Object { $_.supportedGenerationMethods -contains 'generateContent' } | ForEach-Object { $_.name }
+      - name: Write notes with Gemini
+        shell: pwsh
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ inputs.model }}
+          NOTES_MERGE_MODEL: ${{ inputs.merge_model }}
+          NOTES_VARIANT: ${{ inputs.variant }}
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-test
+          path: test-notes.md

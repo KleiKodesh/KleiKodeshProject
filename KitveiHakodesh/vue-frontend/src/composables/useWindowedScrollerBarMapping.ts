@@ -21,6 +21,10 @@
  *   thumb stops creeping and a drag lands where the row really is. Prefix sums make
  *   both directions O(log n); they are rebuilt only when the fit has drifted.
  *
+ *   In flow mode a row flowing inline with its neighbours takes no line of its own:
+ *   its extent is `weight × pxPerWeight`, a rate fitted over the window's flowing
+ *   rows beside the line model (`isFlowRow`).
+ *
  * - One average, from the mounted rows, smoothed: the fallback while the weights
  *   have not arrived, when the list has none, or until a fit is possible (a window
  *   of equal-height rows cannot tell line height from padding).
@@ -29,6 +33,7 @@
  * indexes) to the bar, which gives each a minimum span of track.
  */
 import { ref, type Ref } from 'vue'
+import type { WindowedScrollerFlowPlan } from '@/components/windowedScrollerFlowPlan'
 
 export interface WindowedScrollerBarMappingOptions {
   count: () => number
@@ -43,6 +48,13 @@ export interface WindowedScrollerBarMappingOptions {
   landmarkTiers: () => readonly (readonly number[])[]
   /** A size weight per row, `count` long, or nothing — see the file comment. */
   rowWeights: () => ArrayLike<number> | null | undefined
+  /**
+   * The block plan (flow mode). A row it lets flow takes no whole line of its own:
+   * its extent is simply proportional to its weight, so it is estimated by one
+   * pixels-per-weight rate fitted beside the line model. A new plan rebuilds the
+   * estimate.
+   */
+  flowPlan?: () => WindowedScrollerFlowPlan
 }
 
 /** How much of each fresh window average flows into the average estimate. */
@@ -53,6 +65,8 @@ const CALIBRATION_SMOOTHING = 0.2
 const CALIBRATION_REBUILD_DRIFT = 0.01
 /** Fewer mounted rows than this cannot be fitted. */
 const MIN_ROWS_TO_FIT = 4
+/** The line width assumed for block rows before any has been fitted, in weight units. */
+const ASSUMED_LINE_CAPACITY = 100
 
 /** The weight-estimate's parameters, in viewport pixels and weight units. */
 interface WeightCalibration {
@@ -60,7 +74,12 @@ interface WeightCalibration {
   capacity: number
   lineHeight: number
   padding: number
+  /** Pixels per weight unit of a flowing row; null until flowing rows have been measured. */
+  pxPerWeight: number | null
 }
+
+/** The line model before any block rows have been fitted: lineHeight 0 marks it. */
+const UNFITTED_LINE_MODEL = { capacity: ASSUMED_LINE_CAPACITY, lineHeight: 0, padding: 0 }
 
 export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappingOptions) {
   /** The estimated height of the whole list. */
@@ -82,6 +101,8 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   /** `prefixSums[i]` = estimated height of rows [0, i); `count + 1` long. */
   let prefixSums: Float64Array | null = null
   let prefixSumsWeights: ArrayLike<number> | null = null
+  /** The block plan the sums were built with: a new one changes which rows flow. */
+  let prefixSumsPlan: WindowedScrollerFlowPlan | null = null
   /** The window the last fit was taken from — a fit per window, not per scroll tick. */
   let fittedWindowStart = -1
   let fittedWindowEnd = -1
@@ -95,26 +116,86 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return Math.max(1, Math.ceil(weight / capacity))
   }
 
+  /** Whether the plan lets a row flow — for rows that are not mounted. */
+  function isFlowRow(index: number) {
+    return options.flowPlan?.().isFlowRow(index) ?? false
+  }
+
   /**
-   * Least squares of the mounted rows' real extents against their weights, over a
-   * geometric grid of capacities (the one non-linear parameter). Null when the rows
-   * cannot tell the parameters apart.
+   * Whether a MOUNTED row is rendered flowing: inside a paragraph element. The
+   * caller may make a row within a flowing stretch a block (an empty line), and a
+   * block's extent must not be read as a flowing row's.
    */
-  function fitCalibration(weights: ArrayLike<number>): WeightCalibration | null {
+  function isRenderedFlowing(row: HTMLElement) {
+    return row.parentElement?.classList.contains('windowed-scroller-paragraph') ?? false
+  }
+
+  /**
+   * A row's estimated extent under a calibration, by its kind. Until block rows
+   * have been fitted, a block row is a run of text at the flowing rate rounded up
+   * to whole lines of an assumed width — only until the first real fit replaces it.
+   */
+  function estimatedExtent(index: number, weight: number, applied: WeightCalibration) {
+    const rate = applied.pxPerWeight
+    if (rate != null && (isFlowRow(index) || applied.lineHeight === 0)) {
+      if (isFlowRow(index)) return weight * rate
+      return visualLines(weight, ASSUMED_LINE_CAPACITY) * ASSUMED_LINE_CAPACITY * rate
+    }
+    return visualLines(weight, applied.capacity) * applied.lineHeight + applied.padding
+  }
+
+  /**
+   * The mounted rows' real extents against their weights — top to next top, so the
+   * gap between rows is in the extent — split by kind. Flowing rows share visual
+   * lines, so a flowing row's extent is wherever the line breaks fell: only the
+   * rate over many of them means anything, fitted in `fitCalibration`.
+   */
+  function measureWindow(weights: ArrayLike<number>) {
     const start = options.windowStart.value
     const end = options.windowEnd.value
-    const rowWeights: number[] = []
-    const rowExtents: number[] = []
+    const lineWeights: number[] = []
+    const lineExtents: number[] = []
+    let flowWeight = 0
+    let flowExtent = 0
+    let flowRows = 0
     for (let index = start; index < end - 1; index++) {
       const row = options.rowElement(index)
       const next = options.rowElement(index + 1)
       if (!row || !next) continue
-      // Top to next top, so the gap between rows is in the extent.
-      rowWeights.push(weights[index]!)
-      rowExtents.push(next.offsetTop - row.offsetTop)
+      const extent = next.offsetTop - row.offsetTop
+      if (isRenderedFlowing(row)) {
+        flowWeight += weights[index]!
+        flowExtent += extent
+        flowRows++
+      } else {
+        lineWeights.push(weights[index]!)
+        lineExtents.push(extent)
+      }
     }
+    return { lineWeights, lineExtents, flowWeight, flowExtent, flowRows }
+  }
+
+  /**
+   * Least squares of the line rows' extents against their weights, over a geometric
+   * grid of capacities (the one non-linear parameter), plus the flowing rows' rate.
+   * Null when neither can be told from the window; a part that cannot be fitted
+   * keeps its previous value.
+   */
+  function fitCalibration(weights: ArrayLike<number>): WeightCalibration | null {
+    const measured = measureWindow(weights)
+    const pxPerWeight =
+      measured.flowRows >= MIN_ROWS_TO_FIT && measured.flowWeight > 0
+        ? measured.flowExtent / measured.flowWeight
+        : (calibration?.pxPerWeight ?? null)
+    const rowWeights = measured.lineWeights
+    const rowExtents = measured.lineExtents
     const n = rowWeights.length
-    if (n < MIN_ROWS_TO_FIT) return null
+    if (n < MIN_ROWS_TO_FIT) {
+      // Only flowing rows to learn from: the line model stays unfitted (never a
+      // guess, which later fits would only be smoothed away from).
+      if (pxPerWeight == null) return null
+      return calibration ? { ...calibration, pxPerWeight } : { ...UNFITTED_LINE_MODEL, pxPerWeight }
+    }
     let best: WeightCalibration | null = null
     let bestError = Infinity
     for (let capacity = 10; capacity <= 400; capacity = Math.ceil(capacity * 1.06)) {
@@ -136,7 +217,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
       }
       if (error < bestError) {
         bestError = error
-        best = { capacity, lineHeight, padding }
+        best = { capacity, lineHeight, padding, pxPerWeight }
       }
     }
     return best
@@ -147,8 +228,20 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return (
       relative(previous.capacity, next.capacity) > CALIBRATION_REBUILD_DRIFT ||
       relative(previous.lineHeight, next.lineHeight) > CALIBRATION_REBUILD_DRIFT ||
-      relative(previous.padding, next.padding) > CALIBRATION_REBUILD_DRIFT
+      relative(previous.padding, next.padding) > CALIBRATION_REBUILD_DRIFT ||
+      relative(previous.pxPerWeight ?? 0, next.pxPerWeight ?? 0) > CALIBRATION_REBUILD_DRIFT
     )
+  }
+
+  /** One parameter set: smoothed toward the fit, or taken as it is when there is nothing yet to smooth. */
+  function smoothLineModel(current: WeightCalibration, fitted: WeightCalibration): Omit<WeightCalibration, 'pxPerWeight'> {
+    if (fitted.lineHeight === 0) return current
+    if (current.lineHeight === 0) return fitted
+    return {
+      capacity: current.capacity + (fitted.capacity - current.capacity) * CALIBRATION_SMOOTHING,
+      lineHeight: current.lineHeight + (fitted.lineHeight - current.lineHeight) * CALIBRATION_SMOOTHING,
+      padding: current.padding + (fitted.padding - current.padding) * CALIBRATION_SMOOTHING,
+    }
   }
 
   function rebuildPrefixSums(weights: ArrayLike<number>, applied: WeightCalibration) {
@@ -157,7 +250,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     let total = 0
     for (let index = 0; index < count; index++) {
       sums[index] = total
-      total += visualLines(weights[index]!, applied.capacity) * applied.lineHeight + applied.padding
+      total += estimatedExtent(index, weights[index]!, applied)
     }
     sums[count] = total
     prefixSums = sums
@@ -183,16 +276,26 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
       if (fitted) {
         calibration = calibration
           ? {
-              capacity: calibration.capacity + (fitted.capacity - calibration.capacity) * CALIBRATION_SMOOTHING,
-              lineHeight: calibration.lineHeight + (fitted.lineHeight - calibration.lineHeight) * CALIBRATION_SMOOTHING,
-              padding: calibration.padding + (fitted.padding - calibration.padding) * CALIBRATION_SMOOTHING,
+              ...smoothLineModel(calibration, fitted),
+              pxPerWeight:
+                calibration.pxPerWeight == null || fitted.pxPerWeight == null
+                  ? fitted.pxPerWeight ?? calibration.pxPerWeight
+                  : calibration.pxPerWeight + (fitted.pxPerWeight - calibration.pxPerWeight) * CALIBRATION_SMOOTHING,
             }
           : fitted
       }
     }
     if (!calibration) return
-    if (!prefixSums || prefixSumsWeights !== weights || !appliedCalibration || driftExceeds(appliedCalibration, calibration)) {
+    const plan = options.flowPlan?.() ?? null
+    if (
+      !prefixSums ||
+      prefixSumsWeights !== weights ||
+      prefixSumsPlan !== plan ||
+      !appliedCalibration ||
+      driftExceeds(appliedCalibration, calibration)
+    ) {
       rebuildPrefixSums(weights, calibration)
+      prefixSumsPlan = plan
     }
   }
 

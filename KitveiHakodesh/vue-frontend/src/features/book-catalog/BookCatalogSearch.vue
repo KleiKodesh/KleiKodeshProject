@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import WindowedScroller from '@/components/WindowedScroller.vue'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
-import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
+import BookCatalogSearchTiles from './BookCatalogSearch.Tiles.vue'
+import type { FileSearchFsItem, SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
 import { titleWithAuthor } from './titleWithAuthor'
+import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
+import type { LocalFileItem } from './bookCatalogTree'
 
 const props = defineProps<{
   items: SearchFsItem[]
@@ -17,28 +22,38 @@ const props = defineProps<{
 const emit = defineEmits<{
   selectBook: [BookRow, boolean?]
   selectToc: [TocFsItem, boolean?]
+  /** UserSpace only: a computer file. */
+  selectFile: [LocalFileItem, boolean?]
 }>()
 
-const scrollEl = ref<HTMLElement | null>(null)
+const windowedScroller = ref<WindowedScrollerApi | null>(null)
+// New results are a new list: re-keying the scroller starts it back at the top.
+const generation = ref(0)
+const isGridView = computed(() => props.view !== 'list')
 
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
 // whichever view is active.
 const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
-  getCount: () => (props.view === 'tiles' ? 0 : props.items.length),
+  getCount: () => (isGridView.value ? 0 : props.items.length),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  containerElement: scrollEl,
+  // Windowed (the list view): most rows have no element, so the scroller reveals the highlighted one.
+  scrollIntoView: (index) => windowedScroller.value?.revealIndex(index),
 })
 
-// The grid view (cards; legacy BookCatalogSearch.Tiles.vue is a drop-in swap)
-// owns its own highlight and keyboard navigation.
+// The grid views (cards, tiles) are drop-in swaps for each other: each owns its
+// own highlight and keyboard navigation.
 const gridRef = ref<InstanceType<typeof BookCatalogSearchCards> | null>(null)
+const gridComponent = computed(() =>
+  props.view === 'tiles' ? BookCatalogSearchTiles : BookCatalogSearchCards,
+)
 
 // New results make the old highlight point at a different item — drop it.
 watch(
   () => props.items,
   () => {
     listActiveIndex.value = -1
+    generation.value++
   },
 )
 
@@ -49,8 +64,14 @@ watch(
 // after, so its index is set on the next tick.
 watch(
   () => props.view,
-  (view) => {
-    if (view === 'tiles') {
+  (view, oldView) => {
+    if (view !== 'list' && oldView !== 'list') {
+      // Grid to grid: the old grid is still mounted, so read its index first.
+      const index = gridRef.value?.focusedIndex ?? -1
+      nextTick(() => {
+        if (gridRef.value) gridRef.value.focusedIndex = index
+      })
+    } else if (view !== 'list') {
       const index = listActiveIndex.value
       nextTick(() => {
         if (gridRef.value) gridRef.value.focusedIndex = index
@@ -60,11 +81,14 @@ watch(
 )
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc'
+  item.kind === 'file'
+    ? fileTitle(item.file)
+    : item.kind === 'toc'
     ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(item.book.title, item.book.authors)
 
 function itemTooltip(item: SearchFsItem): string {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
@@ -73,14 +97,17 @@ function itemTooltip(item: SearchFsItem): string {
 }
 
 function onSelect(item: SearchFsItem, openInNewTab = false) {
-  item.kind === 'toc'
-    ? emit('selectToc', item, openInNewTab)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else if (item.kind === 'toc') emit('selectToc', item, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
+
+/** Second line: the book's catalog folder, or the file's folder on disk. */
+const itemPath = (item: SearchFsItem) => (item.kind === 'file' ? fileFolder(item.file) : item.book.parentPath ?? '')
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) =>
-    props.view === 'tiles' ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
+    isGridView.value ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
 })
 
 function selectListItem(i: number, event?: MouseEvent) {
@@ -91,26 +118,35 @@ function selectListItem(i: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length && !searching" class="empty">{{ $t('bookCatalog.noResults') }}</p>
-  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
-    <div
-      v-for="(item, index) in items"
-      :key="item.uid"
-      class="fs-item"
-      data-nav-item
-      :class="{ 'is-focused': listActiveIndex === index }"
-      :title="itemTooltip(item)"
-      @mousedown.prevent
-      @click="selectListItem(index, $event)"
-      @auxclick.middle="selectListItem(index, $event)"
-    >
-      <span class="icon"><IconBookRtl20 /></span>
-      <span class="item-text">
-        <span class="item-title">{{ itemTitle(item) }}</span>
-        <span v-if="item.book.parentPath" class="item-path">{{ item.book.parentPath }}</span>
-      </span>
-    </div>
+  <div v-else-if="view === 'list'" class="scroller">
+    <!-- Windowed: results are never capped (a one-letter title search is thousands), so only
+         the rows near the viewport exist. -->
+    <WindowedScroller ref="windowedScroller" :key="generation" :count="items.length" class="windowed">
+      <template #row="{ index }">
+        <div
+          v-if="items[index]"
+          class="fs-item"
+          data-nav-item
+          :class="{ 'is-focused': listActiveIndex === index }"
+          :title="itemTooltip(items[index]!)"
+          @mousedown.prevent
+          @click="selectListItem(index, $event)"
+          @auxclick.middle="selectListItem(index, $event)"
+        >
+          <span v-if="items[index]!.kind === 'file'" class="icon file-icon" :style="{ color: fileIcon((items[index] as FileSearchFsItem).file).color }">
+            <component :is="fileIcon((items[index] as FileSearchFsItem).file).icon20" />
+          </span>
+          <span v-else class="icon"><IconBookRtl20 /></span>
+          <span class="item-text">
+            <span class="item-title">{{ itemTitle(items[index]!) }}</span>
+            <span v-if="itemPath(items[index]!)" class="item-path">{{ itemPath(items[index]!) }}</span>
+          </span>
+        </div>
+      </template>
+    </WindowedScroller>
   </div>
-  <BookCatalogSearchCards
+  <component
+    :is="gridComponent"
     v-else
     ref="gridRef"
     :items="items"
@@ -132,7 +168,9 @@ function selectListItem(i: number, event?: MouseEvent) {
 }
 .scroller {
   height: 100%;
-  overflow-y: auto;
+}
+.scroller > :deep(.windowed) {
+  height: 100%;
 }
 .fs-item {
   display: flex;
@@ -142,10 +180,6 @@ function selectListItem(i: number, event?: MouseEvent) {
   min-height: 44px;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.1s;
-  /* Results can run to thousands: off-screen rows skip rendering (no virtualizer). */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
 }
 .fs-item:hover {
   background: var(--hover-bg);
@@ -162,6 +196,10 @@ function selectListItem(i: number, event?: MouseEvent) {
 }
 .icon svg {
   color: #c1440e;
+}
+/* The file's own colour is set on the span; the theme pins svg colour, so inherit it. */
+.file-icon svg {
+  color: inherit;
 }
 .item-text {
   display: flex;

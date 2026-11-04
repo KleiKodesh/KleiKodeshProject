@@ -79,7 +79,7 @@
   },
   "loading": "Loading...",
   "markers": {
-    "title": "Commentary markers (Ctrl+U)"
+    "title": "Commentary markers (Ctrl+Shift+U)"
   },
   "note": {
     "delete": "Delete note",
@@ -140,11 +140,39 @@
   "toc": {
     "loadError": "Error loading table of contents"
   },
+  "readAloud": {
+    "panel": "Read aloud",
+    "play": "Start reading",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "previousLine": "Previous line",
+    "nextLine": "Next line",
+    "highlight": "Highlight the word being read",
+    "follow": "Scroll along with the reading",
+    "voice": "Voice",
+    "drag": "Drag to move",
+    "close": "Close",
+    "slower": "Slower",
+    "faster": "Faster",
+    "skip": "Skip parts of the text",
+    "skipOptions": "What to skip",
+    "noHebrewVoice": "No Hebrew voice is installed in Windows",
+    "noHebrewVoiceShort": "No voice",
+    "skipOption": {
+      "links": "Source references (links in the text)",
+      "noteMarkers": "Note markers",
+      "parentheses": "Everything in parentheses ( )",
+      "squareBrackets": "Everything in square brackets [ ]",
+      "singleLetterWords": "One-letter words",
+      "headings": "Headings"
+    }
+  },
   "toolbar": {
     "cleanDibburHamatchilDash": "Dibbur hamatchil dash to period",
     "cleanMaqaf": "Maqaf to space",
     "cleanNikkud": "Vowels",
-    "cleanNormalizePunctuation": "Normalize punctuation",
+    "cleanNormalizePunctuation": "Colons, quotes and spacing",
     "cleanRemovePunctuation": "Remove punctuation (keep line end)",
     "cleanTeamim": "Cantillation",
     "cleanText": "Clean text",
@@ -154,6 +182,7 @@
     "close_right": "Close right commentary panel (Ctrl+Shift+J)",
     "dragHint": "Drag to move the toolbar",
     "exportToWord": "Export to Word",
+    "readAloud": "Read aloud",
     "more": "More items",
     "nextSection": "Next section (Ctrl+Left)",
     "open_bottom": "Bottom commentary panel (Ctrl+J)",
@@ -162,11 +191,14 @@
     "prevSection": "Previous section (Ctrl+Right)",
     "search": "Search (Ctrl+F)",
     "syncCommentaries": "Sync commentaries",
+    "flowTextOn": "Turn on paragraph view",
+    "flowTextOff": "Turn off paragraph view",
     "syncOffTitle": "Sync commentaries\nCommentaries will follow the top line automatically",
     "syncOnTitle": "Sync commentaries\nClick to turn off auto-sync",
     "toc": "Table of contents (Ctrl+K)",
     "zoomInTitle": "Zoom in (Ctrl+)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0",
-    "zoomOutTitle": "Zoom out (Ctrl-)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0"
+    "zoomOutTitle": "Zoom out (Ctrl-)\nText: {text}% {'|'} Commentaries: {commentary}\nReset: Ctrl+0",
+    "cancelExportToWord": "Cancel sending to Word"
   },
   "versions": {
     "active": "Version: {name}",
@@ -196,5 +228,6 @@
     "rishonim": "Rishonim",
     "acharonim": "Acharonim",
     "other": "Other"
-  }
+  },
+  "exportLargeAsFile": "The book is large - opening it in Word as a file"
 }

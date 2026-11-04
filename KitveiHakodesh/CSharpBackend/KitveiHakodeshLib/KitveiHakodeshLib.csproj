@@ -116,6 +116,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="HostTestMode.cs" />
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -231,7 +232,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
+    <ProjectReference Include="..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>
   </ItemGroup>

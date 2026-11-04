@@ -111,5 +111,10 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     })
   }
 
-  return {}
+  /** Opens a book link found in content (a FastDocView document's otzaria:// link) the way a host deep link opens. */
+  function openBookLink(link: { scheme: string; bookId: number; index?: number; lineId?: number }) {
+    return handleHostOpenBook({ event: 'hostOpenBook', ...link })
+  }
+
+  return { openBookLink }
 })

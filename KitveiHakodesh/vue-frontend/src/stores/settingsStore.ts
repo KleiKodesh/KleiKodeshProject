@@ -21,6 +21,7 @@ const KEYS = {
   SETTINGS_LINE_PADDING: 'text.linePadding',
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
+  SETTINGS_LINES_LAYOUT: 'text.linesLayout',
   SETTINGS_CLEAN_TEXT_ACTIVE: 'text.cleanText.active',
   SETTINGS_CLEAN_TEXT_OPTIONS: 'text.cleanText.options',
   SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
@@ -31,7 +32,6 @@ const KEYS = {
   SETTINGS_COMMENTARY_FONT_SIZE: 'commentary.fontSize',
   SETTINGS_COMMENTARY_FONT_WEIGHT: 'commentary.fontWeight',
   SETTINGS_COMMENTARY_LINE_PADDING: 'commentary.linePadding',
-  SETTINGS_COMMENTARY_MAX_WIDTH: 'commentary.maxWidth',
   SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'commentary.defaultAutoSync',
 
   // Word link tooltip
@@ -44,6 +44,8 @@ const KEYS = {
 
   // Copy flags
   SETTINGS_COPY_CLEAN_TEXT: 'copy.cleanText',
+  // FastDocView: the text column ignores the document's page width / margins (book view column width instead)
+  SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS: 'fastDocView.ignoreMargins',
   SETTINGS_COPY_JOIN_LINES: 'copy.joinLines',
   SETTINGS_COPY_SOURCE_POSITION: 'copy.sourcePosition',
   SETTINGS_COPY_WITH_NOTES: 'copy.withNotes',
@@ -95,6 +97,8 @@ const KEYS = {
 
   // Per-feature preferences
   SETTINGS_BOOKS_VIEW: 'books.view',
+  SETTINGS_USER_SPACE_VIEW: 'userSpace.view',
+  SETTINGS_HOME_VIEW: 'home.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_DICTIONARY_SOURCE_FILTER: 'dictionary.sourceFilter',
@@ -121,17 +125,25 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+/**
+ * How the book's lines are laid out: a block per line, or flowing on as one
+ * paragraph between headings (WindowedScroller's flow mode).
+ */
+export type LinesLayout = 'rows' | 'flow'
 /** Which edge of the book view the toolbar docks to. */
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
-/** Layout modes for the book catalog page. */
-export type BooksView = 'list' | 'tiles'
+/** The three layouts a page of items can render in (see ViewModeDropdown.vue). */
+export type CardsViewMode = 'list' | 'cards' | 'tiles'
+/** Layout modes for the book catalog page: the three card layouts plus a tree. */
+export type BooksView = CardsViewMode | 'tree'
+/**
+ * Layout modes for the home page's suggestion cards. Its own setting, never tied
+ * to the catalog's: switching one page's layout must not change the other's.
+ */
+export type HomeView = CardsViewMode
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
-// The catalog also had a tree view once. It is gone, but the preference was never
-// cleared from disk, so anyone who chose it still has it stored under the same key
-// this setting uses again — see normalizeBooksView.
-type LegacyBooksView = BooksView | 'tree'
 
 const DEFAULTS = {
   // How the divine names are rendered. Was a boolean in builds before the
@@ -183,7 +195,10 @@ const DEFAULTS = {
   /** Dictionary source pills the user picked; empty = all sources. */
   dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
-  booksView: 'tiles' as BooksView,
+  booksView: 'cards' as BooksView,
+  // The UserSpace page's own view, never linked to the catalog's. Cards by default, like the catalog and home.
+  userSpaceView: 'cards' as BooksView,
+  homeView: 'cards' as HomeView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   // The address a "דיווח על טעות" report is sent from. Remembered so the user types
@@ -208,6 +223,7 @@ const DEFAULTS = {
   searchGrammarSuffix: false,
   searchFuzzy: false,
   copyCleanText: false,
+  fastDocViewIgnoreMargins: false,
   // Join the selected lines into one continuous run of text with NO line break
   // between them (default off = keep one line break per source line on paste).
   copyJoinLines: false,
@@ -218,7 +234,7 @@ const DEFAULTS = {
   // Measure cap in px; 0 means unlimited. 900 keeps a comfortable line length on a wide
   // window, where full-bleed text would otherwise run too far for the eye to track back.
   linesContentMaxWidth: 900,
-  commentaryMaxWidth: 900,
+  linesLayout: 'rows' as LinesLayout,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
@@ -336,13 +352,14 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchGrammarSuffix = ref(DEFAULTS.searchGrammarSuffix)
   const searchFuzzy = ref(DEFAULTS.searchFuzzy)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
+  const fastDocViewIgnoreMargins = ref(DEFAULTS.fastDocViewIgnoreMargins)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
   const copyWithNotes = ref(DEFAULTS.copyWithNotes)
   const copyAsSourceWithQuotation = ref(DEFAULTS.copyAsSourceWithQuotation)
   const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
-  const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
+  const linesLayout = ref<LinesLayout>(DEFAULTS.linesLayout)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   // Book-view chrome preferences. bookViewStore reads these; the per-pane fan-out
@@ -385,6 +402,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
   const booksView = ref<BooksView>(DEFAULTS.booksView)
+  const userSpaceView = ref<BooksView>(DEFAULTS.userSpaceView)
+  /** Which layout the home page renders its suggestion cards in. */
+  const homeView = ref<HomeView>(DEFAULTS.homeView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -436,7 +456,6 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-font-weight', commentaryFontWeight.value.toString())
     style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
     style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
-    style.setProperty('--commentary-max-width', commentaryMaxWidth.value > 0 ? `${commentaryMaxWidth.value}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
@@ -495,6 +514,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX, searchGrammarSuffix)
     loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
+    loadSetting(KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS, fastDocViewIgnoreMargins)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
@@ -526,7 +546,7 @@ export const useSettingsStore = defineStore('settings', () => {
         .catch(() => {})
     }
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
-    loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
+    loadSetting(KEYS.SETTINGS_LINES_LAYOUT, linesLayout)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
@@ -550,8 +570,12 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SHOW_LIBRARY_BADGE, showLibraryBadge)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
-    const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
+    const storedBooksView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_BOOKS_VIEW))
     if (storedBooksView != null) booksView.value = storedBooksView
+    const storedUserSpaceView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_USER_SPACE_VIEW))
+    if (storedUserSpaceView != null) userSpaceView.value = storedUserSpaceView
+    const storedHomeView = lsGet<HomeView>(KEYS.SETTINGS_HOME_VIEW)
+    if (storedHomeView === 'list' || storedHomeView === 'cards' || storedHomeView === 'tiles') homeView.value = storedHomeView
     applyCSSVariables()
   }
 
@@ -597,6 +621,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchGrammarSuffix, KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX)
   persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
+  persistSetting(fastDocViewIgnoreMargins, KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
   persistSetting(copyWithNotes, KEYS.SETTINGS_COPY_WITH_NOTES)
@@ -607,7 +632,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setHbLocalFolderInRegistry(hebrewBooksLocalFolder.value || '')
   })
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
-  persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
+  persistSetting(linesLayout, KEYS.SETTINGS_LINES_LAYOUT)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
@@ -638,6 +663,8 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
+  persistSetting(userSpaceView, KEYS.SETTINGS_USER_SPACE_VIEW)
+  persistSetting(homeView, KEYS.SETTINGS_HOME_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -666,7 +693,7 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * Flip a set of word-link marker commentaries at once: all currently visible →
    * hide them all, otherwise show them all. The dropdown's select-all row and the
-   * Ctrl+U shortcut share this, so the semantics can never drift apart.
+   * Ctrl+Shift+U shortcut share this, so the semantics can never drift apart.
    */
   function toggleWordLinkMarkers(bookIds: number[]) {
     if (!bookIds.length) return
@@ -679,7 +706,7 @@ export const useSettingsStore = defineStore('settings', () => {
     hiddenWordLinkMarkerBookIds.value = [...hidden]
   }
 
-  /** Ctrl+U: toggle all point markers of one book. No-op on books without markers,
+  /** Ctrl+Shift+U: toggle all point markers of one book. No-op on books without markers,
    *  on schema-v1 DBs (empty target list), and on transient failures — including a
    *  dev service transport error, which rejects rather than resolving null. */
   async function toggleWordLinkMarkersForBook(bookId: number) {
@@ -779,13 +806,14 @@ export const useSettingsStore = defineStore('settings', () => {
     searchGrammarSuffix.value = DEFAULTS.searchGrammarSuffix
     searchFuzzy.value = DEFAULTS.searchFuzzy
     copyCleanText.value = DEFAULTS.copyCleanText
+    fastDocViewIgnoreMargins.value = DEFAULTS.fastDocViewIgnoreMargins
     copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
     copyWithNotes.value = DEFAULTS.copyWithNotes
     copyAsSourceWithQuotation.value = DEFAULTS.copyAsSourceWithQuotation
     hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
-    commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
+    linesLayout.value = DEFAULTS.linesLayout
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     toolbarVisible.value = DEFAULTS.toolbarVisible
@@ -810,6 +838,8 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
     errorReportSenderEmail.value = DEFAULTS.errorReportSenderEmail
     booksView.value = DEFAULTS.booksView
+    userSpaceView.value = DEFAULTS.userSpaceView
+    homeView.value = DEFAULTS.homeView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
     // undone by them re-writing every key we just deleted. Clear once they have run.
@@ -828,13 +858,14 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
     copyCleanText,
+    fastDocViewIgnoreMargins,
     copyJoinLines,
     copySourcePosition,
     copyWithNotes,
     copyAsSourceWithQuotation,
     hebrewBooksLocalFolder,
     linesContentMaxWidth,
-    commentaryMaxWidth,
+    linesLayout,
     titleBarHiddenButtons,
     scrollbarsHidden,
     navSidebarVisibleByPane,
@@ -848,6 +879,8 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,
+    userSpaceView,
+    homeView,
     init, toggleCleanText, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,
   }
@@ -857,12 +890,10 @@ export const useSettingsStore = defineStore('settings', () => {
     return value
   }
 
-  // A stored value is whatever an older build wrote, not necessarily a BooksView:
-  // the catalog's retired tree view is still on disk for anyone who picked it. Map
-  // it to the list, and reject anything else unrecognized, because the title bar
-  // indexes a two-key record by this value and would throw on a third one.
-  function normalizeBooksView(value: LegacyBooksView | null): BooksView | null {
-    if (value === 'list' || value === 'tiles') return value
-    if (value === 'tree') return 'list'
+  // A stored value is whatever an older build wrote, not necessarily a BooksView.
+  // Reject anything unrecognized, because the title bar indexes a record by this
+  // value and would throw on an unknown key.
+  function normalizeBooksView(value: string | null): BooksView | null {
+    if (value === 'list' || value === 'cards' || value === 'tiles' || value === 'tree') return value
     return null
   }

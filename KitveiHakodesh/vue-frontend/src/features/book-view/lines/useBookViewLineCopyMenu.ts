@@ -136,7 +136,7 @@ function buildEndnotesHtml(endnotes: EndnoteEntry[], wordLinks: WordLinkEndnote[
 // ── Hebrew search query extraction ───────────────────────────────────────────
 
 /** Strips everything that isn't a Hebrew letter or whitespace, preserving word integrity. */
-function toHebrewSearchQuery(html: string): string {
+export function toHebrewSearchQuery(html: string): string {
   const text = html.replace(/<[^>]*>/g, ' ')
   const stripped = text.replace(/[^א-ת\s]/g, '')
   return stripped.replace(/\s+/g, ' ').trim()

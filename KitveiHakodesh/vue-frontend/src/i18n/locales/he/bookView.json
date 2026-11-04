@@ -79,7 +79,7 @@
   },
   "loading": "טוען...",
   "markers": {
-    "title": "ציוני מפרשים (Ctrl+U)"
+    "title": "ציוני מפרשים (Ctrl+Shift+U)"
   },
   "note": {
     "delete": "מחק הערה",
@@ -140,11 +140,39 @@
   "toc": {
     "loadError": "שגיאה בטעינת תוכן עניינים"
   },
+  "readAloud": {
+    "panel": "קריאה בקול",
+    "play": "התחל קריאה",
+    "pause": "השהה",
+    "resume": "המשך",
+    "stop": "עצור",
+    "previousLine": "שורה קודמת",
+    "nextLine": "שורה הבאה",
+    "highlight": "סמן את המילה הנקראת",
+    "follow": "גלול אחרי הקריאה",
+    "voice": "קול",
+    "drag": "גרור כדי להזיז",
+    "close": "סגור",
+    "slower": "לאט יותר",
+    "faster": "מהר יותר",
+    "skip": "דלג על חלקים מהטקסט",
+    "skipOptions": "על מה לדלג",
+    "noHebrewVoice": "לא מותקן קול עברי ב-Windows",
+    "noHebrewVoiceShort": "אין קול",
+    "skipOption": {
+      "links": "מראי מקום (קישורים בטקסט)",
+      "noteMarkers": "סימני הערות",
+      "parentheses": "כל מה שבסוגריים ( )",
+      "squareBrackets": "כל מה שבסוגריים מרובעים [ ]",
+      "singleLetterWords": "מילים של אות אחת",
+      "headings": "כותרות"
+    }
+  },
   "toolbar": {
     "cleanDibburHamatchilDash": "מקף דיבור המתחיל לנקודה",
     "cleanMaqaf": "מקף לרווח",
     "cleanNikkud": "ניקוד",
-    "cleanNormalizePunctuation": "יישור פיסוק",
+    "cleanNormalizePunctuation": "נקודתיים, מרכאות ורווחים",
     "cleanRemovePunctuation": "הסר פיסוק (שמור סוף שורה)",
     "cleanTeamim": "טעמים",
     "cleanText": "נקה טקסט",
@@ -154,6 +182,7 @@
     "close_right": "סגור חלונית מפרשים מימין (Ctrl+Shift+J)",
     "dragHint": "גרור כדי להזיז את סרגל הכלים",
     "exportToWord": "ייצא ל-Word",
+    "readAloud": "הקרא בקול",
     "more": "פריטים נוספים",
     "nextSection": "קטע הבא (Ctrl+חץ שמאלי)",
     "open_bottom": "חלונית מפרשים תחתונה (Ctrl+J)",
@@ -162,11 +191,14 @@
     "prevSection": "קטע הקודם (Ctrl+חץ ימני)",
     "search": "חיפוש (Ctrl+F)",
     "syncCommentaries": "סנכרן מפרשים",
+    "flowTextOn": "הפעל תצוגת פסקה",
+    "flowTextOff": "כבה תצוגת פסקה",
     "syncOffTitle": "סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה",
     "syncOnTitle": "סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי",
     "toc": "תוכן עניינים (Ctrl+K)",
     "zoomInTitle": "הגדל (Ctrl+)\nטקסט: {text}% {'|'} מפרשים: {commentary}\nאיפוס: Ctrl+0",
-    "zoomOutTitle": "הקטן (Ctrl-)\nטקסט: {text}% {'|'} מפרשים: {commentary}\nאיפוס: Ctrl+0"
+    "zoomOutTitle": "הקטן (Ctrl-)\nטקסט: {text}% {'|'} מפרשים: {commentary}\nאיפוס: Ctrl+0",
+    "cancelExportToWord": "ביתול השליחה ל-Word"
   },
   "versions": {
     "active": "נוסח: {name}",
@@ -196,5 +228,6 @@
     "rishonim": "ראשונים",
     "acharonim": "אחרונים",
     "other": "אחר"
-  }
+  },
+  "exportLargeAsFile": "הספר גדול - נפתח ב-Word כקובץ"
 }

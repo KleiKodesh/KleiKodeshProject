@@ -1,7 +1,7 @@
 <Solution>
   <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
   <Project Path="Build/scripts/SvgToPng/SvgToPng.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567891" />
-  <Project Path="ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
+  <Project Path="KitveiHakodesh/CSharpBackend/ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
   <Project Path="KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
   <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
@@ -11,5 +11,5 @@
   <Project Path="KleiKodeshVsto/Nakdan/Nakdan/Nakdan.csproj" Id="fb53810f-e350-4554-9f5b-d8f42fbe1e9d" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesLib.csproj" Id="8100c454-b34e-45a2-98b5-7f766487c9ff" />
-  <Project Path="WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
+  <Project Path="KleiKodeshVsto/WpfLib/WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
 </Solution>

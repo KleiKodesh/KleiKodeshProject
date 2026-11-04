@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
-import { useScopedKeys } from '../useTextSelectionKeys'
+import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
@@ -860,7 +860,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
 .line {
   padding-inline: var(--commentary-pad-inline, 12px);
   padding-block: 2px;
-  max-width: var(--commentary-max-width, none);
+  max-width: var(--lines-content-max-width, none);
   margin-inline: auto;
   font-family: var(--commentary-text-font);
   font-size: var(--commentary-font-size, 100%);

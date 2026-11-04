@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem } from './useBookCatalogSearch'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
@@ -26,10 +27,13 @@ watch(
   },
 )
 
-const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
+const itemTitle = (item: SearchFsItem) => {
+  if (item.kind === 'file') return fileTitle(item.file)
+  return item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
+}
 
 function itemTooltip(item: SearchFsItem): string {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
@@ -67,8 +71,14 @@ defineExpose({
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
     >
-      <div class="tile-icon"><IconBookRtl20 /></div>
-      <span class="tile-label">{{ itemTitle(item) }}</span>
+      <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+        <div v-else class="tile-icon"><IconBookRtl20 /></div>
+      <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
+      <span v-if="focusedIndex === i" class="tile-expanded" aria-hidden="true">
+        <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+        <div v-else class="tile-icon"><IconBookRtl20 /></div>
+        <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
+      </span>
     </button>
   </div>
 </template>
@@ -81,6 +91,7 @@ defineExpose({
   padding: 12px;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
   height: 100%;
   box-sizing: border-box;
   align-content: flex-start;
@@ -97,7 +108,7 @@ defineExpose({
   padding: 6px 4px;
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--item-radius);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -107,15 +118,13 @@ defineExpose({
 .tile:active .tile-icon {
   transform: scale(0.95);
 }
-/* Keyboard focus reads as the grown icon rather than the global
-   `[data-nav-item].is-focused` fill, matching the browse grid: DOM focus stays in
-   the search field, so the class is the only signal, and a filled square under a
-   grown icon is the same thing said twice. */
+/* Current tile: Explorer's selection look (main.css --item-selected-*), the same
+   as the home page. A class, not `:focus-visible`: DOM focus stays in the search
+   field and this grid only tracks WHICH tile is current. */
 .tile.is-focused {
-  background: none;
-}
-.tile.is-focused .tile-icon {
-  transform: scale(1.25);
+  background: var(--item-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--item-selected-border);
+  border-radius: 0;
 }
 .tile-icon {
   position: relative;
@@ -126,7 +135,8 @@ defineExpose({
   height: 40px;
   border-radius: 6px;
   background: none;
-  font-size: 24px;
+  /* Sizes shared with the home page's tiles (main.css --item-*): keep them the same. */
+  font-size: var(--item-large-icon);
   transition:
     transform 0.15s ease,
     opacity 0.12s ease;
@@ -136,8 +146,20 @@ defineExpose({
   height: 1em;
   color: #c1440e;
 }
+/* The file's own colour is set on the box. */
+.tile-icon.file-icon svg {
+  color: inherit;
+}
 .tile-label {
-  font-size: 11px;
+  display: block;
+  font-size: var(--item-tile-label);
+  line-height: 1.3;
+  /* Up to N lines; fewer when the title is short. Max, not fixed, so a focused
+     tile's full title can still overflow this box. */
+  max-height: calc(var(--item-tile-lines) * 1.3em);
+}
+.tile-label-text {
+  font-size: var(--item-tile-label);
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
@@ -146,7 +168,36 @@ defineExpose({
   white-space: normal;
   word-break: break-word;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: var(--item-tile-lines);
   -webkit-box-orient: vertical;
+}
+/* Focused tile: like Explorer's selected icon, the whole selection box grows to
+   fit the full title and lays over the row below. Drawn as a copy on top of the
+   tile (only for the focused one), so the tile keeps its size and the grid never
+   moves. Same as the home page's tiles (HomeSuggestionCard .tile-expanded). */
+.tile {
+  position: relative;
+}
+.tile.is-focused {
+  z-index: 3;
+}
+.tile-expanded {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 4px;
+  background: var(--item-selected-bg);
+  box-shadow: inset 0 0 0 1px var(--item-selected-border);
+  pointer-events: none;
+}
+.tile-expanded .tile-label {
+  max-height: none;
+}
+.tile-expanded .tile-label-text {
+  -webkit-line-clamp: unset;
 }
 </style>

@@ -43,10 +43,10 @@ public sealed class WordDocumentRenderer
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Cancellation source per in-flight render, keyed by source path. <see cref="Cancel"/>
-    /// (the cancelConversion op / ביטול button) trips it: the blocking COM SaveAs2 can't be
-    /// interrupted mid-call, but the moment it returns we observe the cancel, discard the result and
-    /// delete the partial cache file — and Word self-Quits in Convert's finally, so nothing orphans.
-    /// The HTML fallback (ConvertToHtml) checks the token between paragraphs where practical.</summary>
+    /// (the cancelConversion op) trips it: a queued render stops waiting; a running Word conversion
+    /// ends the Word instance it started (never another) so the blocked COM call fails at once; then
+    /// the partial cache file is deleted and the queue moves on. The HTML fallback (ConvertToHtml)
+    /// is observed when it returns.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _renders =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -105,11 +105,9 @@ public sealed class WordDocumentRenderer
                     try
                     {
                         _log(WordDocumentRenderLogLevel.Information, $"Converting {Path.GetFileName(sourcePath)} → PDF via Word…", null);
-                        // Blocking COM (can't be interrupted mid-SaveAs2). Word self-Quits inside
-                        // Convert's finally, so a cancel never orphans WINWORD — we just discard the
-                        // output the moment control returns and delete the partial file below.
-                        await Task.Run(() => AotWordConverter.Convert(sourcePath, pdf), rct);
-                        rct.ThrowIfCancellationRequested(); // cancelled during the blocking convert
+                        // Blocking COM. A cancel ends the Word instance this conversion started (only
+                        // that one) so the blocked call fails at once; the queue never waits for it.
+                        await ConvertWithWordAsync(sourcePath, pdf, rct);
                         EvictCache();
                         return (pdf, false);
                     }
@@ -146,7 +144,44 @@ public sealed class WordDocumentRenderer
         }
         finally
         {
-            _renders.TryRemove(key, out _);
+            // Only this request's entry: a newer request for the same file may own the key now.
+            _renders.TryRemove(new KeyValuePair<string, CancellationTokenSource>(key, linked));
+        }
+    }
+
+    /// <summary>How long a cancelled conversion may take to end (its Word is terminated) before the
+    /// queue moves on without it.</summary>
+    private static readonly TimeSpan CancelledConversionGrace = TimeSpan.FromSeconds(5);
+
+    /// <summary>Word -> PDF off the caller's thread. On cancel: the converter terminates its own
+    /// Word, which ends the call within moments; the wait for that is bounded so the next request
+    /// is never stuck behind a cancelled one, and a late finish deletes its output.</summary>
+    private async Task ConvertWithWordAsync(string sourcePath, string pdf, CancellationToken cancellation)
+    {
+        // Word writes a private file, renamed into the cache only on success: a cancelled or
+        // killed conversion never leaves a cut-off PDF under the cache name, and a late finish
+        // of an abandoned conversion cannot touch a newer request's output.
+        string partial = Path.ChangeExtension(pdf, "." + Guid.NewGuid().ToString("N") + ".part.pdf");
+        Task conversion = Task.Run(() => AotWordConverter.Convert(sourcePath, partial, cancellation), CancellationToken.None);
+        try
+        {
+            await conversion.WaitAsync(cancellation);
+            cancellation.ThrowIfCancellationRequested();   // cancelled just as the convert returned
+            File.Move(partial, pdf, overwrite: true);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            Task ended = await Task.WhenAny(conversion, Task.Delay(CancelledConversionGrace));
+            if (ended != conversion)
+            {
+                _log(WordDocumentRenderLogLevel.Warning, $"Cancelled conversion of {Path.GetFileName(sourcePath)} is still running; the queue moves on", null);
+                _ = conversion.ContinueWith(_ => TryDelete(partial), TaskScheduler.Default);
+            }
+            throw;
+        }
+        finally
+        {
+            TryDelete(partial);
         }
     }
 

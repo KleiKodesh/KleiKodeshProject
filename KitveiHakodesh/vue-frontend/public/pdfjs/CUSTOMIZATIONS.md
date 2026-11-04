@@ -1841,7 +1841,12 @@ are accepted on the structural checks alone). Anything else — a forged/stale m
 another tool's append or same-length in-place edit — is a plain append on the full file,
 never a truncation (a forged `start=` at half the file used to drop the page tree). The
 host's `tocMarkerStart` only reads S as a hint; when the worker rejects the marker its
-save keeps every loaded byte, so writing `saved[S..]` at S is still correct. Re-apply this worker
+save keeps every loaded byte, so writing `saved[S..]` at S is still correct. When the save
+replaces a section, every `/Dest`, `/A`, `/F` and `/C` value it copies from the loaded outline
+is detached from that section (`khDetach`): a reference to an object whose newest copy lives at
+or after S is resolved and written inline (a stream gets a new object in the new section), since
+another writer's section may keep an item's action or destination in an object of its own and
+those bytes are dropped. Re-apply this worker
 patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
 On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
 (capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
@@ -1911,13 +1916,14 @@ Two patches in `web/viewer.mjs`, both marked `[KleiKodesh]`:
 
 ## Focus, title and text-layer fixes
 
-Four small `[KleiKodesh]` patches:
+Five small `[KleiKodesh]` patches:
 
 1. **`web/viewer.mjs` `PDFLinkService.goToDestination`** — the `textlayerrendered` handler focuses the target page's text layer late. It now skips that when `document.activeElement` is contentEditable, an INPUT or a TEXTAREA: a double-click rename of an outline row on another page was blurred (and so cancelled) by it.
 2. **`web/outline-search.js` `kh-save-complete` listener** — calls `app.setTitle()` after clearing `outlineDirty`. `setTitle()` last ran before the save dialog finished, so the window title kept its `* ` prefix after a completed save.
 3. **`web/viewer.mjs` `PDFViewer._cancelRendering()`** (the big-jump cancel patch) — a text layer whose div is already appended (built) is kept: `cancelRendering({ keepTextLayer: true })`. A still-pending text layer is cancelled as before, and if the canvas is FINISHED the page goes back to INITIAL so the rendering queue redraws it and re-requests the text layer when visible. Before, three jumps on long.pdf left visible page 22 with 0 spans for good.
 
 4. **`web/viewer.mjs` `window.print` override (pdf_print_service)** — with `disableAutoFetch` the page views only get their `pdfPage` once displayed, so `pageViewsReady` stayed false and every print (button, Ctrl+P, the app's `contentWindow.print()`) only alerted `pdfjs-printing-not-ready`. Now `window.print()` first fetches the missing pages (`pdfDocument.getPage` → `pageView.setPdfPage`, like `PDFViewer.setDocument` without disableAutoFetch) and then prints. A print before the pages exist waits for `pagesinit` instead of throwing. `disableAutoFetch` stays on.
+5. **`web/viewer.mjs` comment dates (`CommentManager`, `CommentSidebar.#setDate`, `CommentPopup`)** — a comment with no /M and no /CreationDate showed "January 1, 1970" (`Intl.DateTimeFormat.format(null)` is the epoch) and threw in the comments sidebar (`null.toISOString()`). Now it shows no date. The date format uses the viewer's UI language (`l10n.getLanguage()`, passed to `CommentManager` as a new last argument) instead of the browser's.
 
 ---
 

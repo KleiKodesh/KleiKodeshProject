@@ -42,6 +42,9 @@ namespace KleiKodesh.Helpers
         /// </summary>
         public bool IsPoppedOut => _form != null && !_form.IsDisposed;
 
+        /// <summary>The floating window, or null when not popped out.</summary>
+        public Form PopOutForm => IsPoppedOut ? _form : null;
+
         // ── Pop-out registry ──────────────────────────────────────────────────
         // TaskPaneManager.Show needs to know whether a pane it is about to reveal is
         // currently popped out, but the handler that knows lives here and was never

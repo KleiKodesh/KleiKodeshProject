@@ -50,7 +50,9 @@
        FtsLib-Csharp/SearchExpansion/ - updating that file updates all outputs.
        Copied next to consumers as SearchExpansion/expansion-routed.db and read
        at runtime relative to the binary (see SearchExpansionService /
-       SearchExpansion). -->
+       SearchExpansion).
+       This is the one working copy; built by KleiKodesh/SearchExpansion
+       (see FtsLib-Csharp/SearchExpansion/README.md). -->
   <ItemGroup>
     <Content Include="..\SearchExpansion\expansion-routed.db">
       <Link>SearchExpansion\expansion-routed.db</Link>

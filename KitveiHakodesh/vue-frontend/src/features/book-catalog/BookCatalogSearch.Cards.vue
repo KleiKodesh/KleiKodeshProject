@@ -6,6 +6,8 @@ import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggest
 import type { SearchFsItem } from './useBookCatalogSearch'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
+import { stripCommentaryTarget } from './stripCommentaryTarget'
+import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
 
 // Drop-in replacement for BookCatalogSearch.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the browse view's card look
@@ -18,18 +20,20 @@ const CARD_CELL = ':scope > *'
 const BOOK_ICON = markRaw(IconBookRtl20)
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc'
+  item.kind === 'file'
+    ? fileTitle(item.file)
+    : item.kind === 'toc'
     ? `${item.book.title} / ${item.tocPath}`
-    : titleWithAuthor(item.book.title, item.book.authors)
+    : titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
 
 // Same shape as the search list row: author in the title, folder path below.
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
     title: itemTitle(item),
-    path: item.book.parentPath ?? '',
-    icon: BOOK_ICON,
-    color: '#c1440e',
+    path: item.kind === 'file' ? fileFolder(item.file) : item.book.parentPath ?? '',
+    icon: item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
+    color: item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
     open: (openInNewTab) => {
       focusedIndex.value = i
       emit('select', item, openInNewTab)
@@ -85,11 +89,18 @@ defineExpose({
 /* Same grid as BookCatalogView.Cards.vue / the home page's .home-cards. */
 .catalog-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
-  gap: 8px;
+  /* Column count and grid width come from the page (useCardGridLayout): cards
+     shrink to fit another column, never stretch past their max, and the grid
+     sits centred. Until the page has measured, it falls back to auto-fill. */
+  grid-template-columns: repeat(var(--catalog-columns, auto-fill), minmax(min(100%, 140px), 1fr));
+  /* Explorer-like: wide columns, tight rows, so each row reads as one line. */
+  column-gap: 16px;
+  row-gap: 4px;
   padding: 12px;
+  padding-inline: calc((100% - 24px - var(--catalog-content-width, calc(100% - 24px))) / 2 + 12px);
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: thin;
   height: 100%;
   box-sizing: border-box;
   align-content: flex-start;
@@ -102,10 +113,5 @@ defineExpose({
 }
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));
-}
-/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
-.catalog-cards :deep(.card-title) {
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 </style>
