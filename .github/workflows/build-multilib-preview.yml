@@ -130,10 +130,14 @@ jobs:
         run: |
           # /ChromeTabs/ is git-ignored (own repository). Generate the behaviour-free stand-in so the
           # projects compile. It is never put into the updater payload.
-          $proj = "ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj"
+          # Since v10.4.0 the component sits at KitveiHakodesh/CSharpBackend/ChromeTabs (a private submodule); earlier
+          # sources keep it at the repository root. The projects reference it relative to their own folder.
+          $base = "ChromeTabs"
+          if ((Test-Path ".gitmodules") -and (Select-String -Path ".gitmodules" -Pattern "CSharpBackend/ChromeTabs" -Quiet)) { $base = "KitveiHakodesh/CSharpBackend/ChromeTabs" }
+          $proj = "$base/FluentChromeTabs/FluentChromeTabs.csproj"
           if (Test-Path $proj) { Write-Host "Real/other FluentChromeTabs project present - not generating a stub."; exit 0 }
-          New-Item -ItemType Directory -Force -Path "ChromeTabs/FluentChromeTabs" | Out-Null
-          Copy-Item "../_ci/.github/ci-assets/multilib-preview/FluentChromeTabs-stub/*" "ChromeTabs/FluentChromeTabs/" -Force
+          New-Item -ItemType Directory -Force -Path "$base/FluentChromeTabs" | Out-Null
+          Copy-Item "../_ci/.github/ci-assets/multilib-preview/FluentChromeTabs-stub/*" "$base/FluentChromeTabs/" -Force
           dotnet restore $proj
           "STUB_USED=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
