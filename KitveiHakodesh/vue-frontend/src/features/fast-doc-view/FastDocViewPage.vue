@@ -821,7 +821,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                 :initial-index="initialIndex"
                 :initial-offset-px="initialOffsetPx"
                 :ensure-rows="fastDocument.ensureBlocks"
-                :row-source-version="fastDocument.contentVersion.value"
+                :row-source-version="fastDocument.contentVersion.value + fastDocument.refetchVersion.value"
                 :pinned-indexes="pinnedRowIndexes"
                 :landmark-tiers="fastDocument.landmarkTiers.value"
                 :row-weights="fastDocument.rowWeights.value"

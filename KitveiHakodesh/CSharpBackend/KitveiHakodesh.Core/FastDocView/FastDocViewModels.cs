@@ -66,6 +66,8 @@ public sealed class FastDocViewBlock
     public string Kind { get; set; } = "";
     public string Html { get; set; } = "";
     public List<FastDocViewNote> Notes { get; set; } = [];
+    /// <summary>Drawn before the index was final with something only the final index knows - fetch it again once the index is complete.</summary>
+    public bool Provisional { get; set; }
 }
 
 [MessagePackObject(keyAsPropertyName: true)]

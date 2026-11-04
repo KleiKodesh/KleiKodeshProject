@@ -59,7 +59,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
                 var notes = new List<FastDocViewNote>(block.Notes.Count);
                 foreach (WordDocumentNoteHtml note in block.Notes)
                     notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
-                blocks.Add(new FastDocViewBlock { Index = block.BlockIndex, Kind = BlockKindName(block.Kind), Html = block.Html, Notes = notes });
+                blocks.Add(new FastDocViewBlock { Index = block.BlockIndex, Kind = BlockKindName(block.Kind), Html = block.Html, Notes = notes, Provisional = block.IsProvisional });
             }
             return blocks;
         });

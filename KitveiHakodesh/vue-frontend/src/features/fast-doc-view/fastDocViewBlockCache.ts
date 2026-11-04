@@ -26,6 +26,18 @@ export class FastDocViewBlockCache<T extends { index: number } = FastDocViewBloc
     this.blocks.clear()
   }
 
+  /** Drops the blocks matching `predicate`; returns how many went. */
+  dropWhere(predicate: (block: T) => boolean): number {
+    let dropped = 0
+    for (const [index, block] of this.blocks) {
+      if (predicate(block)) {
+        this.blocks.delete(index)
+        dropped++
+      }
+    }
+    return dropped
+  }
+
   /** The contiguous spans of [start, end) not in the cache, each as [first, end). */
   missingSpans(start: number, end: number): [number, number][] {
     const spans: [number, number][] = []
