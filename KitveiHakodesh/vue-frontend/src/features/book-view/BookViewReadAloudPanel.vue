@@ -122,15 +122,14 @@ function onVoiceChange(voiceUri: string) {
   display: flex;
   flex-direction: row;
   align-items: center;
-  /* The book-view toolbar's height (border included); buttons a size smaller so they fit. */
-  /* 28px bar - 2px border = 26px inside: 22px buttons leave 2px clear above and below. */
+  /* Sized like a compact floating debug bar: 30px tall, 22px square buttons 3px apart. */
   --read-aloud-button-size: 22px;
   /* The shared split dropdown (skip) sizes itself from this. */
   --toolbar-button-size: var(--read-aloud-button-size);
   box-sizing: border-box;
-  height: var(--toolbar-horizontal-height);
-  padding: 0 2px;
-  gap: 0;
+  height: 30px;
+  padding: 0 4px;
+  gap: 3px;
   background: var(--bg-toolbar);
   border: 1px solid var(--border-color);
   border-radius: 6px;
