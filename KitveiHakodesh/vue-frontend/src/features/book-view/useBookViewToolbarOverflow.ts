@@ -35,6 +35,7 @@ export const TOOLBAR_OVERFLOW_ORDER = [
   'versions',
   'word-link-markers',
   'export-to-word',
+  'read-aloud',
   'sync-commentaries',
   'related-books',
   'clean-text',
