@@ -232,7 +232,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
+    <ProjectReference Include="..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>
   </ItemGroup>

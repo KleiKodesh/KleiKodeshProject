@@ -29,7 +29,7 @@
 | [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/README.md) | WinForms + WebView2 | קורא קבצי ZIM עם kiwix-js מותאם |
 | [`KleiKodeshVsto/Nakdan`](KleiKodeshVsto/Nakdan/README.md) | .NET Library | ניקוד — OOXML + Dicta API |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md) | Vue 3 + C# | כתבי הקודש — ממשק Vue, שכבות C# (ראה ארכיטקטורה למטה), סקריפטי נתונים |
-| [`ChromeTabs`](ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
+| [`ChromeTabs`](KitveiHakodesh/CSharpBackend/ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
 | [`WpfLib`](KleiKodeshVsto/WpfLib/WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
 | `WpfLib.Gallery` / `WpfLib.Gallery.Tests` | WPF + xUnit | גלריית הפקדים של WpfLib ובדיקות ויזואליות/התנהגות עליה |
 | `SearchExpansion-models` | נתונים (לא במעקב git) | מודלים וקבצי עבודה מקומיים של SearchExpansion |

@@ -31,8 +31,8 @@ const projectRoot = path.resolve(frontendDir, '..', '..')
 const argv = process.argv.slice(2)
 const flag = (name) => argv.includes(name)
 const option = (name, fallback) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback }
-const textDoc = path.resolve(option('--doc', path.join(projectRoot, 'FastDocView', 'samples', 'dor-hamelaktim-shabbat.docx')))
-const pictureDoc = path.resolve(option('--pictures', path.join(projectRoot, 'FastDocView', 'test-data', 'apache-poi', 'VariousPictures.docx')))
+const textDoc = path.resolve(option('--doc', path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'samples', 'dor-hamelaktim-shabbat.docx')))
+const pictureDoc = path.resolve(option('--pictures', path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'test-data', 'apache-poi', 'VariousPictures.docx')))
 const serviceBuildDir = path.resolve(option('--service-dir', path.join(backendDir, 'KitveiHakodeshService', 'bin', 'Release', 'net10.0-windows')))
 const keep = flag('--keep')
 
