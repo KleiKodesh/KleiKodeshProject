@@ -30,7 +30,7 @@
 | [`KleiKodeshVsto/Nakdan`](KleiKodeshVsto/Nakdan/README.md) | .NET Library | ניקוד — OOXML + Dicta API |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md) | Vue 3 + C# | כתבי הקודש — ממשק Vue, שכבות C# (ראה ארכיטקטורה למטה), סקריפטי נתונים |
 | [`ChromeTabs`](ChromeTabs/README.md) | WinForms (.NET 4.8) | `FluentChromeTabs` — לשוניות בסגנון Chrome לתוכנה העצמאית |
-| [`WpfLib`](WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
+| [`WpfLib`](KleiKodeshVsto/WpfLib/WpfLib/README.md) | WPF Class Library | כלי WPF משותפים לכל החלוניות — ערכת צבעים, פקדים, converters |
 | `WpfLib.Gallery` / `WpfLib.Gallery.Tests` | WPF + xUnit | גלריית הפקדים של WpfLib ובדיקות ויזואליות/התנהגות עליה |
 | `SearchExpansion-models` | נתונים (לא במעקב git) | מודלים וקבצי עבודה מקומיים של SearchExpansion |
 | `packages` | NuGet | חבילות NuGet של פרויקטי `packages.config` |
@@ -126,7 +126,7 @@ npm run dev
 | Change task pane behavior | `KleiKodeshVsto/Helpers/TaskpaneManager.cs` |
 | Change startup/shutdown logic | `KleiKodeshVsto/ThisAddIn.cs` |
 | Change a tool's UI | The tool's own library under `KleiKodeshVsto/` (DocDesign, RegexInWord, WebSitesLib, Kiwix, Nakdan) |
-| Change shared WPF styles | `WpfLib/Themes/OfficePalette.xaml` |
+| Change shared WPF styles | `KleiKodeshVsto/WpfLib/WpfLib/Themes/OfficePalette.xaml` |
 | Change installer pages | `Build/Installer/Pages/` |
 
 ### Common Changes — KitveiHakodesh

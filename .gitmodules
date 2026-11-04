@@ -7,3 +7,6 @@
 [submodule "TextEncodingDetection"]
 	path = TextEncodingDetection
 	url = https://github.com/KleiKodesh/TextEncodingDetection.git
+[submodule "KleiKodeshVsto/WpfLib"]
+	path = KleiKodeshVsto/WpfLib
+	url = https://github.com/KleiKodesh/WpfLib.git

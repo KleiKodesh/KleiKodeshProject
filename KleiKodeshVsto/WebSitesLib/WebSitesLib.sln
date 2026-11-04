@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSitesLib", "WebSitesLib\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSitesDemo", "WebSitesDemo\WebSitesDemo.csproj", "{A5B8C9D1-E2F3-4A5B-8C9D-1E2F3A5B8C9D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfLib", "..\..\..\..\..\Admin\source\repos\WpfLib\WpfLib\WpfLib.csproj", "{494B02C1-54F2-4244-9A90-23C9984970E7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfLib", "..\WpfLib\WpfLib\WpfLib.csproj", "{494B02C1-54F2-4244-9A90-23C9984970E7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
