@@ -35,3 +35,4 @@ Ops go through `serviceCall` (MessagePack envelope, camelCase keys) - see `webvi
 - `fastDocViewClose` `{ documentId }` -> nothing.
 - Errors: the file changed on disk, or an unknown / idle-closed `documentId`, must fail with a message containing `FastDocViewSourceChanged`; the page reopens the path and retries once.
 - `stylesheet` is plain CSS for the rendered blocks; the page scopes it, so it must not rely on `html` / `body` selectors.
+- **fastDocViewFontwork.ts** (`v-fast-doc-view-fontwork` on the block HTML): finishes WordArt text effects with the browser's font metrics, as LibreOffice's Fontwork does - the single-outline fit factor from measured text widths, and glyphs bent between paired outlines (drawn once in a canvas, copied column by column between the curves); the library marks each line with `data-fontwork-*` attributes.
