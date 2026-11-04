@@ -1,5 +1,6 @@
 using KitveiHakodesh.Core.Common;
 using global::FastDocView;
+using global::FastDocView.Html;
 
 namespace KitveiHakodesh.Core.FastDocView;
 
@@ -9,6 +10,7 @@ namespace KitveiHakodesh.Core.FastDocView;
 /// 10 minutes, the shared sidecar cache in <see cref="IndexCacheDirectory"/>. A call on a closed or changed
 /// document throws <see cref="FastDocViewSourceChangedException"/> and the page reopens.
 /// Data is windowed: only rendered windows of blocks leave here, never the whole document.
+/// Block and note HTML leave here theme-aware (explicit colours as light-dark(), WordHtmlColor.ThemeAwareMarkup).
 /// </summary>
 public sealed class FastDocViewOpenDocuments : IDisposable
 {
@@ -75,8 +77,8 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             {
                 var notes = new List<FastDocViewNote>(block.Notes.Count);
                 foreach (WordDocumentNoteHtml note in block.Notes)
-                    notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
-                blocks.Add(new FastDocViewBlock { Index = block.BlockIndex, Kind = BlockKindName(block.Kind), Html = block.Html, Notes = notes, Provisional = block.IsProvisional });
+                    notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = WordHtmlColor.ThemeAwareMarkup(note.Html) });
+                blocks.Add(new FastDocViewBlock { Index = block.BlockIndex, Kind = BlockKindName(block.Kind), Html = WordHtmlColor.ThemeAwareMarkup(block.Html), Notes = notes, Provisional = block.IsProvisional });
             }
             return blocks;
         });
@@ -89,7 +91,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             IReadOnlyList<WordDocumentNoteHtml> rendered = document.RenderNotes(Math.Max(0, first), Math.Clamp(count, 0, MaxBlocksPerRequest));
             var notes = new List<FastDocViewNote>(rendered.Count);
             foreach (WordDocumentNoteHtml note in rendered)
-                notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = note.Html });
+                notes.Add(new FastDocViewNote { Kind = NoteKindName(note.Kind), Number = note.Number, Label = note.Label, Html = WordHtmlColor.ThemeAwareMarkup(note.Html) });
             return notes;
         });
 
