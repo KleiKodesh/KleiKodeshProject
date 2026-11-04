@@ -8,6 +8,25 @@ async function flush() {
 }
 
 describe('useFastDocViewPictures', () => {
+  it('withLoadedPictureSources resolves with the sources in place (the note tooltip, shown once)', async () => {
+    let release: (value: string) => void = () => {}
+    const scope = effectScope()
+    const pictures = scope.run(() => useFastDocViewPictures(
+      { pictureSource: () => new Promise<string>((resolve) => { release = resolve }) }, () => 'd1'))!
+    const html = '<p>note<img data-word-picture="f:rId1"></p>'
+    let result: string | null = null
+    void pictures.withLoadedPictureSources(html).then((value) => { result = value })
+    await flush()
+    expect(result).toBeNull()                                       // waits for the picture's source
+    release('/p/d1/f%3ArId1')
+    await flush()
+    await flush()
+    expect(result).toContain('data-word-picture="f:rId1" src="/p/d1/f%3ArId1"')
+    expect(await pictures.withLoadedPictureSources('<p>none</p>')).toBe('<p>none</p>')
+    expect(await pictures.withLoadedPictureSources(html)).toContain('src="/p/d1/f%3ArId1"')   // known: at once
+    scope.stop()
+  })
+
   it('requests each picture once and puts its source on the img', async () => {
     const requested: string[] = []
     const documentId = ref<string | undefined>('d1')
