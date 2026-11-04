@@ -1,32 +1,46 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
+import { IconFolder20Filled, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
-import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
-const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+const props = defineProps<{
+  items: FsItem[]
+  /** UserSpace only: which folders carry a remove action (its roots). */
+  canRemove?: (node: CategoryNode) => boolean
+}>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  enterFolder: [CategoryNode]
+  /** UserSpace only: a file from a computer folder. */
+  selectFile: [LocalFileItem, boolean?]
+  /** UserSpace only: the remove action on a folder that canRemove allows. */
+  removeFolder: [CategoryNode]
+}>()
 
 const tilesEl = ref<HTMLElement | null>(null)
 
 function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder'
-    ? emit('enterFolder', item.node)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'folder') emit('enterFolder', item.node)
+  else if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
 
 function getTitle(item: FsItem) {
+  if (item.kind === 'file') return fileTitle(item.file)
   return item.kind === 'folder' ? item.node.title : item.book.title
 }
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
@@ -84,12 +98,29 @@ function selectItem(i: number, event?: MouseEvent) {
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
     >
-      <div class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
+      <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }">
+          <component :is="fileIcon(item.file).icon20" />
+        </div>
+        <div v-else class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
         <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBookRtl20 v-else />
       </div>
       <span class="tile-label"><span class="tile-label-text">{{ getTitle(item) }}</span></span>
+      <!-- A span, not a button: the tile itself is a <button>, and buttons cannot nest. -->
+      <span
+        v-if="item.kind === 'folder' && canRemove?.(item.node)"
+        class="tile-remove"
+        role="button"
+        :title="$t('userSpace.removeRoot')"
+        @mousedown.prevent
+        @click.stop="emit('removeFolder', item.node)"
+      >
+        <IconDelete16Regular />
+      </span>
       <span v-if="focusedIndex === i" class="tile-expanded" aria-hidden="true">
-        <div class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
+        <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }">
+          <component :is="fileIcon(item.file).icon20" />
+        </div>
+        <div v-else class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
           <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBookRtl20 v-else />
         </div>
         <span class="tile-label"><span class="tile-label-text">{{ getTitle(item) }}</span></span>
@@ -175,6 +206,40 @@ function selectItem(i: number, event?: MouseEvent) {
 }
 .tile .book-icon svg {
   color: #c1440e;
+}
+/* The file's own colour is set on the box; the theme pins svg colour, so inherit it. */
+.tile .file-icon svg {
+  color: inherit;
+}
+/* UserSpace roots: remove in the tile's corner, shown on hover or keyboard highlight. */
+.tile {
+  position: relative;
+}
+.tile-remove {
+  position: absolute;
+  top: 2px;
+  inset-inline-end: 2px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+.tile:hover .tile-remove,
+.tile.is-focused .tile-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tile-remove:hover {
+  color: var(--status-danger);
 }
 .tile-label {
   display: block;

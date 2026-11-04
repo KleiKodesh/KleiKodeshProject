@@ -108,7 +108,7 @@ watch(hasNavOverflow, (has) => {
         :key="item.label"
         class="nav-btn"
         tabindex="-1"
-        :title="`${item.text} (${item.shortcut})
+        :title="`${item.text}${item.shortcut ? ` (${item.shortcut})` : ''}
 ${item.description}`"
         @click="navigateInNewTab(item.label)"
       >

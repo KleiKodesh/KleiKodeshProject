@@ -5,9 +5,11 @@ import {
   IconChevronLeft16Regular,
   IconFolder20Filled,
   IconFolderOpen20Filled,
+  IconDelete16Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
-import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
@@ -22,12 +24,25 @@ const props = defineProps<{
   root: CategoryNode
   /** The page's path. Arriving at a folder (home card, crumb) unfolds the tree to it. */
   path: CategoryNode[]
+  /** UserSpace only: which folders carry a remove action (its roots). */
+  canRemove?: (node: CategoryNode) => boolean
 }>()
-const emit = defineEmits<{ selectBook: [BookRow, boolean?] }>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  /** UserSpace only: a file from a computer folder. */
+  selectFile: [LocalFileItem, boolean?]
+  /** A folder was unfolded - UserSpace loads a computer folder's contents on it. */
+  expandFolder: [CategoryNode]
+  /** A folder was folded up - UserSpace drops a computer folder's contents on it. */
+  collapseFolder: [CategoryNode]
+  /** UserSpace only: the remove action on a folder that canRemove allows. */
+  removeFolder: [CategoryNode]
+}>()
 
 type TreeRow =
   | { uid: string; kind: 'folder'; node: CategoryNode; level: number; expanded: boolean }
   | { uid: string; kind: 'book'; book: BookRow; level: number }
+  | { uid: string; kind: 'file'; file: LocalFileItem; level: number }
 
 const scrollEl = ref<HTMLElement | null>(null)
 // Category ids that are open. A fresh Set on every change so the rows recompute.
@@ -39,7 +54,10 @@ function setExpanded(id: number, open: boolean) {
   expanded.value = next
 }
 function toggle(node: CategoryNode) {
-  setExpanded(node.id, !expanded.value.has(node.id))
+  const open = !expanded.value.has(node.id)
+  setExpanded(node.id, open)
+  if (open) emit('expandFolder', node)
+  else emit('collapseFolder', node)
 }
 
 // Only the open branches are flattened, so a collapsed catalog is a few dozen rows
@@ -53,6 +71,7 @@ const rows = computed((): TreeRow[] => {
       if (isOpen) walk(child, level + 1)
     }
     for (const book of node.books) out.push({ uid: `b-${book.id}`, kind: 'book', book, level })
+    for (const file of node.files ?? []) out.push({ uid: `p-${file.path}`, kind: 'file', file, level })
   }
   walk(props.root, 0)
   return out
@@ -61,13 +80,17 @@ const rows = computed((): TreeRow[] => {
 function activateIndex(index: number, openInNewTab = false) {
   const row = rows.value[index]
   if (!row) return
-  row.kind === 'folder' ? toggle(row.node) : emit('selectBook', row.book, openInNewTab)
+  if (row.kind === 'folder') toggle(row.node)
+  else if (row.kind === 'file') emit('selectFile', row.file, openInNewTab)
+  else emit('selectBook', row.book, openInNewTab)
 }
 
 function getTitle(row: TreeRow) {
+  if (row.kind === 'file') return fileTitle(row.file)
   return row.kind === 'folder' ? row.node.title : titleWithAuthor(row.book.title, row.book.authors)
 }
 function getTooltip(row: TreeRow) {
+  if (row.kind === 'file') return withNewTabHint(row.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   return row.kind === 'folder' ? row.node.title : withNewTabHint(row.book.title, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
@@ -97,7 +120,10 @@ watch(
     const chain = path.slice(1)
     if (!chain.length) return
     const next = new Set(expanded.value)
-    for (const node of chain) next.add(node.id)
+    for (const node of chain) {
+      next.add(node.id)
+      emit('expandFolder', node)
+    }
     expanded.value = next
     const target = chain[chain.length - 1]!
     const index = rows.value.findIndex((r) => r.kind === 'folder' && r.node.id === target.id)
@@ -153,7 +179,10 @@ function selectRow(index: number, event?: MouseEvent) {
             <IconChevronLeft16Regular v-else class="dir-icon" />
           </template>
         </span>
-        <span class="icon" :class="row.kind === 'folder' ? 'folder-icon' : 'book-icon'">
+        <span v-if="row.kind === 'file'" class="icon file-icon" :style="{ color: fileIcon(row.file).color }">
+          <component :is="fileIcon(row.file).icon20" />
+        </span>
+        <span v-else class="icon" :class="row.kind === 'folder' ? 'folder-icon' : 'book-icon'">
           <template v-if="row.kind === 'folder'">
             <IconFolderOpen20Filled v-if="row.expanded" />
             <IconFolder20Filled v-else />
@@ -161,6 +190,17 @@ function selectRow(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(row) }}</span>
+        <button
+          v-if="row.kind === 'folder' && canRemove?.(row.node)"
+          type="button"
+          class="row-remove"
+          tabindex="-1"
+          :title="$t('userSpace.removeRoot')"
+          @mousedown.prevent
+          @click.stop="emit('removeFolder', row.node)"
+        >
+          <IconDelete16Regular />
+        </button>
       </div>
     </div>
   </div>
@@ -222,6 +262,34 @@ function selectRow(index: number, event?: MouseEvent) {
 }
 .book-icon svg {
   color: #c1440e;
+}
+/* The file's own colour is set on the span; the theme pins svg colour, so inherit it. */
+.file-icon svg {
+  color: inherit;
+}
+/* UserSpace roots: remove, shown on hover or keyboard highlight. */
+.row-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-inline-start: auto;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+}
+.fs-item:hover .row-remove,
+.fs-item.is-focused .row-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+.row-remove:hover {
+  color: var(--status-danger);
+  background: var(--hover-bg);
 }
 .title {
   font-size: var(--item-title);

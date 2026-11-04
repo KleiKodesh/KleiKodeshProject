@@ -122,7 +122,7 @@ function onInstallUpdate() {
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === index }"
       data-nav-item
-      :title="`${item.text} (${item.shortcut})
+      :title="`${item.text}${item.shortcut ? ` (${item.shortcut})` : ''}
 ${item.description}`"
       @click="onTap(item.label)"
     >

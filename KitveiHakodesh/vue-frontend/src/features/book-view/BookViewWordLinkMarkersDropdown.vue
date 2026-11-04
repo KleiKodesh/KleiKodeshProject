@@ -184,7 +184,7 @@ function toggleOne(c: MarkerCommentary) {
 }
 
 function toggleAll() {
-  // Shared with the Ctrl+U shortcut — all visible → hide all listed; else show all.
+  // Shared with the Ctrl+Shift+U shortcut — all visible → hide all listed; else show all.
   settingsStore.toggleWordLinkMarkers(commentaries.value.map((c) => c.bookId))
 }
 </script>

@@ -69,6 +69,7 @@ export type TabRoute =
   | '/dictionary'
   | '/midot'
   | '/file-search'
+  | '/user-space'
 
 export interface Tab {
   id: string
@@ -396,6 +397,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/dictionary',
     '/midot',
     '/file-search',
+    '/user-space',
   ]
   const DESTINATION_TITLES: Record<string, string> = {
     '/settings': t('stores.tabTitle.settings'),
@@ -405,6 +407,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/dictionary': t('stores.tabTitle.dictionary'),
     '/midot': t('stores.tabTitle.midot'),
     '/file-search': t('stores.tabTitle.fileSearch'),
+    '/user-space': t('stores.tabTitle.userSpace'),
   }
 
   // ── Tab list persistence ──────────────────────────────────────────────────

@@ -5,12 +5,14 @@ import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import BookCatalogSearchTiles from './BookCatalogSearch.Tiles.vue'
-import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
+import type { FileSearchFsItem, SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
 import { titleWithAuthor } from './titleWithAuthor'
+import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
+import type { LocalFileItem } from './bookCatalogTree'
 
 const props = defineProps<{
   items: SearchFsItem[]
@@ -20,6 +22,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   selectBook: [BookRow, boolean?]
   selectToc: [TocFsItem, boolean?]
+  /** UserSpace only: a computer file. */
+  selectFile: [LocalFileItem, boolean?]
 }>()
 
 const windowedScroller = ref<WindowedScrollerApi | null>(null)
@@ -77,11 +81,14 @@ watch(
 )
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc'
+  item.kind === 'file'
+    ? fileTitle(item.file)
+    : item.kind === 'toc'
     ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(item.book.title, item.book.authors)
 
 function itemTooltip(item: SearchFsItem): string {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   const title = item.kind === 'toc' ? `${item.book.title} / ${item.tocPath}` : item.book.title
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
@@ -90,10 +97,13 @@ function itemTooltip(item: SearchFsItem): string {
 }
 
 function onSelect(item: SearchFsItem, openInNewTab = false) {
-  item.kind === 'toc'
-    ? emit('selectToc', item, openInNewTab)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else if (item.kind === 'toc') emit('selectToc', item, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
+
+/** Second line: the book's catalog folder, or the file's folder on disk. */
+const itemPath = (item: SearchFsItem) => (item.kind === 'file' ? fileFolder(item.file) : item.book.parentPath ?? '')
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) =>
@@ -123,10 +133,13 @@ function selectListItem(i: number, event?: MouseEvent) {
           @click="selectListItem(index, $event)"
           @auxclick.middle="selectListItem(index, $event)"
         >
-          <span class="icon"><IconBookRtl20 /></span>
+          <span v-if="items[index]!.kind === 'file'" class="icon file-icon" :style="{ color: fileIcon((items[index] as FileSearchFsItem).file).color }">
+            <component :is="fileIcon((items[index] as FileSearchFsItem).file).icon20" />
+          </span>
+          <span v-else class="icon"><IconBookRtl20 /></span>
           <span class="item-text">
             <span class="item-title">{{ itemTitle(items[index]!) }}</span>
-            <span v-if="items[index]!.book.parentPath" class="item-path">{{ items[index]!.book.parentPath }}</span>
+            <span v-if="itemPath(items[index]!)" class="item-path">{{ itemPath(items[index]!) }}</span>
           </span>
         </div>
       </template>
@@ -183,6 +196,10 @@ function selectListItem(i: number, event?: MouseEvent) {
 }
 .icon svg {
   color: #c1440e;
+}
+/* The file's own colour is set on the span; the theme pins svg colour, so inherit it. */
+.file-icon svg {
+  color: inherit;
 }
 .item-text {
   display: flex;

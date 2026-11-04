@@ -22,6 +22,7 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { catalogTocSearch } from '@/webview-host/bridge'
 import { reportCatalogTocSearchResponse, reportSearchIndexStatus } from '@/composables/useSearchIndexStatus'
 import type { BookRow } from '@/webview-host/queries.types'
+import type { LocalFileItem } from './bookCatalogTree'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }
@@ -34,7 +35,9 @@ export type TocFsItem = {
   tocTitle: string
   tocPath: string
 }
-export type SearchFsItem = BookFsItem | TocFsItem
+/** UserSpace only: a computer file under one of its folders. The catalog search never returns these. */
+export type FileSearchFsItem = { uid: string; kind: 'file'; file: LocalFileItem }
+export type SearchFsItem = BookFsItem | TocFsItem | FileSearchFsItem
 
 // ─── Lucene service search (dev) ──────────────────────────────────────────────
 

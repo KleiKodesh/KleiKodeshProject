@@ -96,6 +96,7 @@ const KEYS = {
 
   // Per-feature preferences
   SETTINGS_BOOKS_VIEW: 'books.view',
+  SETTINGS_USER_SPACE_VIEW: 'userSpace.view',
   SETTINGS_HOME_VIEW: 'home.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
@@ -194,6 +195,8 @@ const DEFAULTS = {
   dictionarySourceFilter: [] as string[],
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'cards' as BooksView,
+  // The UserSpace page's own view, never linked to the catalog's. Cards by default, like the catalog and home.
+  userSpaceView: 'cards' as BooksView,
   homeView: 'cards' as HomeView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
@@ -395,6 +398,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
   const booksView = ref<BooksView>(DEFAULTS.booksView)
+  const userSpaceView = ref<BooksView>(DEFAULTS.userSpaceView)
   /** Which layout the home page renders its suggestion cards in. */
   const homeView = ref<HomeView>(DEFAULTS.homeView)
 
@@ -563,6 +567,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
     const storedBooksView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_BOOKS_VIEW))
     if (storedBooksView != null) booksView.value = storedBooksView
+    const storedUserSpaceView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_USER_SPACE_VIEW))
+    if (storedUserSpaceView != null) userSpaceView.value = storedUserSpaceView
     const storedHomeView = lsGet<HomeView>(KEYS.SETTINGS_HOME_VIEW)
     if (storedHomeView === 'list' || storedHomeView === 'cards' || storedHomeView === 'tiles') homeView.value = storedHomeView
     applyCSSVariables()
@@ -651,6 +657,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
+  persistSetting(userSpaceView, KEYS.SETTINGS_USER_SPACE_VIEW)
   persistSetting(homeView, KEYS.SETTINGS_HOME_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -680,7 +687,7 @@ export const useSettingsStore = defineStore('settings', () => {
   /**
    * Flip a set of word-link marker commentaries at once: all currently visible →
    * hide them all, otherwise show them all. The dropdown's select-all row and the
-   * Ctrl+U shortcut share this, so the semantics can never drift apart.
+   * Ctrl+Shift+U shortcut share this, so the semantics can never drift apart.
    */
   function toggleWordLinkMarkers(bookIds: number[]) {
     if (!bookIds.length) return
@@ -693,7 +700,7 @@ export const useSettingsStore = defineStore('settings', () => {
     hiddenWordLinkMarkerBookIds.value = [...hidden]
   }
 
-  /** Ctrl+U: toggle all point markers of one book. No-op on books without markers,
+  /** Ctrl+Shift+U: toggle all point markers of one book. No-op on books without markers,
    *  on schema-v1 DBs (empty target list), and on transient failures — including a
    *  dev service transport error, which rejects rather than resolving null. */
   async function toggleWordLinkMarkersForBook(bookId: number) {
@@ -824,6 +831,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
     errorReportSenderEmail.value = DEFAULTS.errorReportSenderEmail
     booksView.value = DEFAULTS.booksView
+    userSpaceView.value = DEFAULTS.userSpaceView
     homeView.value = DEFAULTS.homeView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
@@ -863,6 +871,7 @@ export const useSettingsStore = defineStore('settings', () => {
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,
+    userSpaceView,
     homeView,
     init, toggleCleanText, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,

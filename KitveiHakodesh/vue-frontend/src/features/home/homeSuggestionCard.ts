@@ -16,6 +16,9 @@ export interface HomeSuggestionCard {
   /** External destination that can't be reached right now: broken-connection badge. */
   unreachable?: boolean
   open: (openInNewTab: boolean) => void
+  /** A remove-only action (no pin), e.g. a UserSpace root. Called at once, no exit
+   *  animation: the caller may still ask to confirm. */
+  remove?: () => void
   /** Present only on history cards — they can be pinned and removed. */
   pinning?: {
     pinned: boolean

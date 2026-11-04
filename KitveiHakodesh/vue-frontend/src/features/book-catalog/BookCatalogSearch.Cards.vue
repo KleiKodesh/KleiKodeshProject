@@ -7,6 +7,7 @@ import type { SearchFsItem } from './useBookCatalogSearch'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
 import { stripCommentaryTarget } from './stripCommentaryTarget'
+import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
 
 // Drop-in replacement for BookCatalogSearch.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the browse view's card look
@@ -19,7 +20,9 @@ const CARD_CELL = ':scope > *'
 const BOOK_ICON = markRaw(IconBookRtl20)
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc'
+  item.kind === 'file'
+    ? fileTitle(item.file)
+    : item.kind === 'toc'
     ? `${item.book.title} / ${item.tocPath}`
     : titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
 
@@ -28,9 +31,9 @@ const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
     title: itemTitle(item),
-    path: item.book.parentPath ?? '',
-    icon: BOOK_ICON,
-    color: '#c1440e',
+    path: item.kind === 'file' ? fileFolder(item.file) : item.book.parentPath ?? '',
+    icon: item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
+    color: item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
     open: (openInNewTab) => {
       focusedIndex.value = i
       emit('select', item, openInNewTab)

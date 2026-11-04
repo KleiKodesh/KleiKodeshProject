@@ -4,9 +4,19 @@ import type { BookRow, CategoryRow } from '@/webview-host/queries.types'
 // Consumers import the rows from queries.types directly — no re-export here, so there
 // is exactly one path to each type.
 
+/** A file on disk under a user-space computer folder. The catalog itself never has these. */
+export interface LocalFileItem {
+  /** Absolute path - also the item's identity. */
+  path: string
+  /** File name with its extension. */
+  name: string
+}
+
 export interface CategoryNode extends CategoryRow {
   children: CategoryNode[]
   books: BookRow[]
+  /** UserSpace only: the openable files of a computer folder, listed after its subfolders. */
+  files?: LocalFileItem[]
   /**
    * Ids of every book in this node's whole subtree, precomputed once at load.
    * The filter tree reads this for its checked/indeterminate/count state; without

@@ -207,10 +207,13 @@ export function useAppTitleBarShortcuts(options: {
         else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
         return true
       case 'KeyU':
-        // Ctrl+U — toggle the current book's word-link marker signs (all visible →
+        // Ctrl+U — UserSpace in a new tab, like the Ctrl+1..9 destinations (also keeps
+        // the browser's view-source away).
+        // Ctrl+Shift+U — toggle the current book's word-link marker signs (all visible →
         // hide all; otherwise show all). No-op on books without markers and on
-        // schema-v1 DBs; consumed anyway to suppress the browser's view-source.
-        if (isBookViewActive.value && activeTab.value?.bookId != null)
+        // schema-v1 DBs.
+        if (!e.shiftKey) navigateInNewTab('אזור אישי')
+        else if (isBookViewActive.value && activeTab.value?.bookId != null)
           void settingsStore.toggleWordLinkMarkersForBook(activeTab.value.bookId)
         return true
       case 'KeyF':

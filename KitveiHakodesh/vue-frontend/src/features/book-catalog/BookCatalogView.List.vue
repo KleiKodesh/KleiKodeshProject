@@ -1,33 +1,47 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
+import { IconFolder20Filled, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
-import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
+import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import { titleWithAuthor } from './titleWithAuthor'
 
-const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
+const props = defineProps<{
+  items: FsItem[]
+  /** UserSpace only: which folders carry a remove action (its roots). */
+  canRemove?: (node: CategoryNode) => boolean
+}>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  enterFolder: [CategoryNode]
+  /** UserSpace only: a file from a computer folder. */
+  selectFile: [LocalFileItem, boolean?]
+  /** UserSpace only: the remove action on a folder that canRemove allows. */
+  removeFolder: [CategoryNode]
+}>()
 
 const scrollEl = ref<HTMLElement | null>(null)
 
 function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder'
-    ? emit('enterFolder', item.node)
-    : emit('selectBook', item.book, openInNewTab)
+  if (item.kind === 'folder') emit('enterFolder', item.node)
+  else if (item.kind === 'file') emit('selectFile', item.file, openInNewTab)
+  else emit('selectBook', item.book, openInNewTab)
 }
 
 function getTitle(item: FsItem) {
+  if (item.kind === 'file') return fileTitle(item.file)
   return item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors)
 }
 
 // Books open in a tab (so they get the new-tab hint); folders just navigate in.
 function getTooltip(item: FsItem) {
+  if (item.kind === 'file') return withNewTabHint(item.file.path, OPEN_IN_NEW_TAB_HINT_HE)
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title, OPEN_IN_NEW_TAB_HINT_HE)
 }
 
@@ -79,11 +93,25 @@ function selectItem(index: number, event?: MouseEvent) {
         @click="selectItem(index, $event)"
         @auxclick.middle="selectItem(index, $event)"
       >
-        <span class="icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
+        <span v-if="item.kind === 'file'" class="icon file-icon" :style="{ color: fileIcon(item.file).color }">
+          <component :is="fileIcon(item.file).icon20" />
+        </span>
+        <span v-else class="icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
           <IconFolder20Filled v-if="item.kind === 'folder'" />
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
+        <button
+          v-if="item.kind === 'folder' && canRemove?.(item.node)"
+          type="button"
+          class="row-remove"
+          tabindex="-1"
+          :title="$t('userSpace.removeRoot')"
+          @mousedown.prevent
+          @click.stop="emit('removeFolder', item.node)"
+        >
+          <IconDelete16Regular />
+        </button>
       </div>
     </div>
   </div>
@@ -142,6 +170,34 @@ function selectItem(index: number, event?: MouseEvent) {
 }
 .book-icon svg {
   color: #c1440e;
+}
+/* The file's own colour is set on the span; the theme pins svg colour, so inherit it. */
+.file-icon svg {
+  color: inherit;
+}
+/* UserSpace roots: remove, shown on hover or keyboard highlight. */
+.row-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-inline-start: auto;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+}
+.fs-item:hover .row-remove,
+.fs-item.is-focused .row-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+.row-remove:hover {
+  color: var(--status-danger);
+  background: var(--hover-bg);
 }
 .title {
   font-size: var(--item-title);

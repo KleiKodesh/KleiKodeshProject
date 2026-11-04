@@ -338,7 +338,8 @@ function onSelectToc(item: TocFsItem, openInNewTab = false) {
   )
 }
 function onSearchEnter() {
-  if (isSearching.value && searchItems.value.length === 1) onSelectBook(searchItems.value[0]!.book)
+  const only = searchItems.value[0]
+  if (isSearching.value && searchItems.value.length === 1 && only && only.kind !== 'file') onSelectBook(only.book)
 }
 </script>
 

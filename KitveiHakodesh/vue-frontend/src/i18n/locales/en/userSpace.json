@@ -1,0 +1,28 @@
+{
+  "addComputerFolder": "Add a folder from this computer",
+  "addCatalogFolder": "Add a folder from the catalog",
+  "removeRoot": "Remove from UserSpace",
+  "removeConfirm": "Remove \"{title}\" from UserSpace?",
+  "removeConfirmDesc": "Only the link is removed. The books and files themselves are not deleted.",
+  "searchPlaceholder": "Search UserSpace",
+  "empty": "Your UserSpace is empty. Add a folder from the catalog or from this computer with the buttons in the top bar.",
+  "alreadyAdded": "This folder is already in UserSpace",
+  "folderReadError": "Cannot read this folder: {error}",
+  "picker": {
+    "title": "Choose a catalog folder",
+    "back": "Back",
+    "addThis": "Add \"{title}\"",
+    "noSubfolders": "No subfolders",
+    "addWholeCatalog": "Add the whole catalog"
+  },
+  "folderNotSupported": "For now, only folders covered by file search can be added, so search can reach them.",
+  "folderReason": {
+    "notFound": "The folder was not found.",
+    "notIndexedDrive": "This drive is not covered by file search (for example a network drive or a USB stick).",
+    "excluded": "This folder is excluded from file search in the settings.",
+    "systemFolder": "This is a system folder that file search skips."
+  },
+  "allRoots": "All",
+  "rootPills": "Filter by folder",
+  "wholeCatalog": "Book catalog"
+}

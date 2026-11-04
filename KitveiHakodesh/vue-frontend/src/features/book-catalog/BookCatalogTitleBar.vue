@@ -85,6 +85,8 @@ const VIEW_LABELS = {
       <IconSearch20Regular class="search-icon path-search-icon" />
     </div>
     <template #right>
+      <!-- Page-specific buttons beside the view menu (UserSpace's add/remove). -->
+      <slot name="actions" />
       <ViewModeDropdown
         class="pill-btn"
         :model-value="view"

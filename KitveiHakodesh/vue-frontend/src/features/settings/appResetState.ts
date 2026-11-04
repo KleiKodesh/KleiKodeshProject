@@ -98,6 +98,7 @@ const DRIVER_OWNED_DATABASES = [
   'app-dict-cache',
   'app-frequent-folders',
   'app-bookmarks',
+  'app-user-space',
 ]
 
 async function clearAllLocalStorage(): Promise<void> {

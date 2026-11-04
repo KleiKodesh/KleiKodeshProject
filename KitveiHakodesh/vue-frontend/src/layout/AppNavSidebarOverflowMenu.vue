@@ -97,7 +97,7 @@ function overflowRow(key: string): OverflowRow {
   }
   // A destination, keyed by its label - settings included.
   const item = APP_NAV_ITEMS.value.find((navItem) => navItem.label === key) ?? APP_NAV_SETTINGS_ITEM
-  return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color, unreachable: item.unreachable, title: `${item.text} (${item.shortcut})
+  return { key, label: item.text, shortcut: item.shortcut, icon: item.icon, color: item.color, unreachable: item.unreachable, title: `${item.text}${item.shortcut ? ` (${item.shortcut})` : ''}
 ${item.description}` }
 }
 
