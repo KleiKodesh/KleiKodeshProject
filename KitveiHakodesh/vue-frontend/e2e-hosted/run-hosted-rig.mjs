@@ -32,7 +32,9 @@ const argv = process.argv.slice(2)
 const flag = (name) => argv.includes(name)
 const option = (name, fallback) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback }
 const textDoc = path.resolve(option('--doc', path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'samples', 'dor-hamelaktim-shabbat.docx')))
-const pictureDoc = path.resolve(option('--pictures', path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'test-data', 'apache-poi', 'VariousPictures.docx')))
+// the missing-picture check deletes the PNGs of the default picture document (it mixes PNG and JPEG), whatever --pictures names
+const defaultPictureDoc = path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'test-data', 'apache-poi', 'VariousPictures.docx')
+const pictureDoc = path.resolve(option('--pictures', defaultPictureDoc))
 const serviceBuildDir = path.resolve(option('--service-dir', path.join(backendDir, 'KitveiHakodeshService', 'bin', 'Release', 'net10.0-windows')))
 const keep = flag('--keep')
 
@@ -165,7 +167,7 @@ const fdvState = (page) => page.evaluate(() => window.__fastDocViewTest?.state()
 function makeMissingPictureDoc() {
   const target = path.join(root, 'missing-picture.docx')
   const ps = `Add-Type -AssemblyName System.IO.Compression.FileSystem
-Copy-Item -LiteralPath '${pictureDoc}' -Destination '${target}'
+Copy-Item -LiteralPath '${defaultPictureDoc}' -Destination '${target}'
 $z = [System.IO.Compression.ZipFile]::Open('${target}', 'Update')
 $z.Entries | Where-Object { $_.FullName -like 'word/media/*.png' } | ForEach-Object { $_.Delete() }
 $z.Dispose()`
@@ -195,7 +197,8 @@ const pictureReport = (page) => page.evaluate(async () => {
     const r = img.getBoundingClientRect()
     let type = null
     if (img.src) {
-      if (!img.complete) await new Promise((res) => { img.onload = img.onerror = res })
+      // a lazy picture outside the viewport would never load: ask for it now (the product's lazy loading is not under test here)
+      if (!img.complete) { img.loading = 'eager'; await new Promise((res) => { img.onload = img.onerror = res }) }
       try { type = (await (await fetch(img.src)).blob()).type } catch { type = 'fetch-failed' }
     }
     out.push({ id: img.getAttribute('data-word-picture'), src: img.getAttribute('src') ?? '', type, naturalWidth: img.naturalWidth, w: r.width, h: r.height })
@@ -272,10 +275,11 @@ async function runChecks(page, consoleErrors) {
   await check('pictures load through the hosted picture path', async () => {
     pictureTabId = await openFastDocTab(page, pictureDoc)
     const errorsBefore = consoleErrors.length
+    let lastReport = []
     const pics = await waitFor('picture sources', async () => {
-      const r = await pictureReport(page)
+      const r = lastReport = await pictureReport(page)
       return r.length > 0 && r.some((p) => p.src) && r.every((p) => p.src || p.w > 0) ? r : false
-    }, 30_000)
+    }, 30_000).catch((error) => { throw new Error(`${error.message}: ${JSON.stringify(lastReport)}`) })
     const shown = pics.filter((p) => p.src)
     const notBlob = shown.filter((p) => !p.src.startsWith('blob:'))
     if (notBlob.length) throw new Error(`not an object URL: ${notBlob.map((p) => p.src).join(', ')}`)
