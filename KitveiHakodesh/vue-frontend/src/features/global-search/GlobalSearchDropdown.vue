@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
+import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
 import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
@@ -128,6 +129,13 @@ const visibleCatalogResults = computed(() => (isCollapsed('catalog') ? [] : prop
 const visibleCatalogTocResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogTocResults))
 const visibleHebrewBooksResults = computed(() => (isCollapsed('hebrewbooks') ? [] : props.hebrewBooksResults))
 const visibleFileResults = computed(() => (isCollapsed('files') ? [] : props.fileResults))
+
+// Torat Emet recents show their Hebrew title (Core, one batch; display only).
+watch(
+  () => props.tabs,
+  (tabs) => { void useLocalPathDisplayStore().request((tabs ?? []).map((t) => ({ path: t.localFilePath, isFolder: false }))) },
+  { immediate: true },
+)
 
 const allItems = computed(() => {
   const items: Array<

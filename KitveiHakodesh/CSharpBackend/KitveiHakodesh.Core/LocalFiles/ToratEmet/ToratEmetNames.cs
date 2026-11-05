@@ -27,7 +27,7 @@ public static class ToratEmetNames
         public readonly Dictionary<string, (string Title, string Forced)> BookTitles = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static readonly Lazy<Tables> Data = new(() => Parse(ToratEmetNamesData.Rows));
+    internal static readonly Lazy<Tables> Data = new(() => Parse(ToratEmetNamesData.Rows));
 
     internal static Tables Parse(string rows)
     {
@@ -96,7 +96,7 @@ public static class ToratEmetNames
     }
 
     /// <summary>The folder's token: its name without the leading sort number ("01_BERESHIT" -> "BERESHIT").</summary>
-    private static string FolderToken(string name)
+    internal static string FolderToken(string name)
     {
         int i = 0;
         while (i < name.Length && name[i] >= '0' && name[i] <= '9') i++;

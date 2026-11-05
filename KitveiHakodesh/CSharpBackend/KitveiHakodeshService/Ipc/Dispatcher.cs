@@ -1055,6 +1055,13 @@ public sealed class Dispatcher(
                         () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Titles(a.Values ?? [], null, ct), ct)));
                 }
 
+                // Hebrew title + path line of recent files/folders (Core LocalPathDisplay), one batch.
+                case "displayLocalPaths":
+                {
+                    var a = MsgPack.De<DisplayLocalPathsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(global::KitveiHakodesh.Core.LocalFiles.ToratEmet.LocalPathDisplay.Resolve(a.Paths ?? [], a.IsFolder ?? [])));
+                }
+
                 case "checkUserSpaceFolder":
                 {
                     var a = MsgPack.De<StringArg>(req.Args);

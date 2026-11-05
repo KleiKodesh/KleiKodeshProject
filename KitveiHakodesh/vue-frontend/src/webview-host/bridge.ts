@@ -1604,3 +1604,17 @@ export async function installReadyUpdate(): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Hebrew title and path line of recent files / folders, parallel to the asked paths ("" = show the stored value): Torat Emet
+ * books and folders, and the Books / MyBooks root names (Core LocalPathDisplay). One round trip; display only. Throws when
+ * the service is unreachable (the caller asks again later).
+ */
+export async function displayLocalPaths(items: { path: string; isFolder: boolean }[]): Promise<{ title: string; path: string }[]> {
+  if (!items.length) return []
+  const r = await serviceCall<{ titles?: string[]; paths?: string[] }>('displayLocalPaths', {
+    paths: items.map((i) => i.path),
+    isFolder: items.map((i) => i.isFolder),
+  })
+  return items.map((_, i) => ({ title: r?.titles?.[i] ?? '', path: r?.paths?.[i] ?? '' }))
+}
