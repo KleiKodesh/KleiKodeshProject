@@ -451,6 +451,11 @@ function describeFailure(failure: unknown, fallbackKey: string): { message: stri
 const openErrorText = computed(() => describeFailure(fastDocument.error.value, 'fastDocView.loadError'))
 const readErrorText = computed(() => describeFailure(fastDocument.readError.value, 'fastDocView.readError'))
 
+// A file that names itself (a Torat Emet book) gives its tab that name; one without a title keeps the file name.
+watch(() => fastDocument.summary.value?.title, (title) => {
+  if (title) tabStore.updateTab(tabId, { title })
+})
+
 async function retryOpen() {
   if (filePath) await fastDocument.open(filePath, { reachIndex: initialIndex.value })
 }
