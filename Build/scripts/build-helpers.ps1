@@ -103,6 +103,32 @@ function Set-Version {
     }
 }
 
+# -- Tracked files a build writes into ----------------------------------------
+# Set-Version / UpdateVersion.ps1 stamp the version and Update-SigningCertificate the
+# thumbprint into these tracked files. build-installer.ps1 snapshots them first and puts
+# them back unless the build created a GitHub release. Bytes, so BOMs and line endings
+# survive exactly.
+function Get-StampedFilePaths {
+    @(
+        $AddinInstallerPath,
+        $WpfProjectPath,
+        (Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\Properties\AssemblyInfo.cs"),
+        (Join-Path $ProjectRoot "KleiKodeshVsto\KleiKodeshVsto.csproj")
+    ) | Where-Object { Test-Path $_ }
+}
+
+function Save-StampedFiles {
+    $snapshot = @{}
+    foreach ($path in Get-StampedFilePaths) { $snapshot[$path] = [System.IO.File]::ReadAllBytes($path) }
+    return $snapshot
+}
+
+function Restore-StampedFiles {
+    param([Parameter(Mandatory)][hashtable]$Snapshot)
+    foreach ($path in $Snapshot.Keys) { [System.IO.File]::WriteAllBytes($path, $Snapshot[$path]) }
+    Write-Host "Version stamp and certificate thumbprint restored (no release was created)." -ForegroundColor Gray
+}
+
 # -- Add-in signing certificate ---------------------------------------------
 # The VSTO manifests must be signed, but any key will do: the installer registers the
 # manifest's own public key as trusted on every install. The key is a self-signed

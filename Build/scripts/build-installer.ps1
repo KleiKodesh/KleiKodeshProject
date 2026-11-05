@@ -75,6 +75,15 @@ if (Test-Path $DemoAppReleaseDir) {
     Write-Host "Deleted KitveiHakodeshDemoApp\bin\Release" -ForegroundColor Gray
 }
 
+# The version stamp and the signing-certificate thumbprint are written into tracked files.
+# A build that publishes no release (-NoRelease, gh missing, or a failure before the
+# release exists) puts them back as they were, so test builds never leave the checkout
+# dirty and the next build counts up from the last released version. A build that
+# creates the GitHub release keeps them: that version is now the released one.
+$stampedFilesSnapshot = Save-StampedFiles
+$releaseCreated = $false
+try {
+
 # ── 2. Update version ─────────────────────────────────────────────────────────
 Start-BuildStep "Stamp version"
 $versionBefore = Get-CurrentVersion
@@ -346,6 +355,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: GitHub release creation failed." -ForegroundColor Red
     exit 1
 }
+$releaseCreated = $true
 
 foreach ($asset in @($installerAny, $portableZip) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
@@ -379,3 +389,8 @@ gh workflow run release-issue-check.yml --repo KleiKodesh/KleiKodeshProject -f t
 if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: release-issue-check dispatch failed." -ForegroundColor Yellow }
 gh workflow run drive-upload.yml --repo KleiKodesh/KleiKodeshProject
 if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: Drive sync dispatch failed." -ForegroundColor Yellow }
+
+} finally {
+    # Runs on every exit path, including `exit` inside the block above.
+    if (-not $releaseCreated) { Restore-StampedFiles $stampedFilesSnapshot }
+}
