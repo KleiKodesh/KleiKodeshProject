@@ -7,9 +7,10 @@ import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
 import HomePageDateBar from '@/features/home/HomePageDateBar.vue'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useResizeObserver, useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUserSpaceStore } from '@/stores/userSpaceStore'
 import { SPLIT_VIEW_MIN_WIDTH } from '@/layout/useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -39,6 +40,10 @@ const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const { setupDone, termsAccepted, showClock } = storeToRefs(settingsStore)
+
+// The default UserSpace folders (Torat Emet books, when installed) are added once at app start, off the render path.
+const userSpaceStore = useUserSpaceStore()
+onMounted(() => { void userSpaceStore.claimDefaultFolders() })
 
 // ── Split view availability ───────────────────────────────────────────────────
 // Split view requires enough horizontal space for two usable panes. The threshold is

@@ -18,6 +18,8 @@ public sealed class UserSpaceSearchHit
     public int LineIndex { get; set; } = -1;
     public string TocPath { get; set; } = "";
     public string FilePath { get; set; } = "";
+    /// <summary>A file hit: the Hebrew name to show instead of the file name (Torat Emet books); empty = the file name.</summary>
+    public string Title { get; set; } = "";
 }
 
 /// <summary>Result of a UserSpace search (userSpaceSearch wire shape). The not-ready fields
@@ -162,7 +164,7 @@ public static class UserSpaceSearch
             var r = ranked[i];
             hits.Add(r.FilePath.Length == 0
                 ? new UserSpaceSearchHit { BookId = r.Hit.BookId, LineIndex = r.Hit.LineIndex, TocPath = r.Hit.TocPath }
-                : new UserSpaceSearchHit { BookId = 0, LineIndex = -1, FilePath = r.FilePath });
+                : new UserSpaceSearchHit { BookId = 0, LineIndex = -1, FilePath = r.FilePath, Title = LocalFiles.ToratEmet.ToratEmetNames.FileTitle(r.FilePath) ?? "" });
         }
         return hits;
     }

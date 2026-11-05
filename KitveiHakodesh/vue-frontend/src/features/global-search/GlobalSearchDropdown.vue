@@ -398,7 +398,7 @@ function getTabIcon(route: string): FileIconInfo {
             class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'file' && i.item.fullPath === item.fullPath) }"
             data-nav-item
-            :title="withNewTabHint(`${item.addinName || item.fileName}\n${item.fullPath}`)"
+            :title="withNewTabHint(`${item.addinName || item.displayName || item.fileName}\n${item.fullPath}`)"
             @click="emit('selectFile', item, wantsNewTab($event))"
             @auxclick.middle="emit('selectFile', item, wantsNewTab($event))"
           >
@@ -407,7 +407,7 @@ function getTabIcon(route: string): FileIconInfo {
               class="global-search-dropdown__item-icon"
               :style="{ color: getFileIcon(item).color }"
             />
-            <span class="global-search-dropdown__item-title">{{ item.addinName || item.fileName }}</span>
+            <span class="global-search-dropdown__item-title">{{ item.addinName || item.displayName || item.fileName }}</span>
             <span class="global-search-dropdown__item-path">{{ item.fullPath }}</span>
           </div>
         </template>

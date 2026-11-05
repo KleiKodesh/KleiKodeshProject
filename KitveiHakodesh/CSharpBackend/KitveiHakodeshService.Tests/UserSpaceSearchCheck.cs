@@ -222,7 +222,7 @@ internal static class UserSpaceSearchCheck
             using (var index = new LocalFileIndex(dir))
             {
                 Check(index.Count() == 0 && !File.Exists(Path.Combine(dir, "usn_cursor_C.bin"))
-                      && File.ReadAllText(Path.Combine(dir, "format-version.txt")) == "2",
+                      && File.ReadAllText(Path.Combine(dir, "format-version.txt")) == LocalFileIndex.IndexFormatVersion,
                     "old format: index emptied, cursors dropped, stamp rewritten");
             }
 

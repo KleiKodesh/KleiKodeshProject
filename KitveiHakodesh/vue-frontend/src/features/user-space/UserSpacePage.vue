@@ -158,6 +158,7 @@ function onGoHome() {
 }
 
 onMounted(() => {
+  void userSpaceStore.claimDefaultFolders()
   void load()
   focusSearchInput()
 })
@@ -185,7 +186,7 @@ function onSelectToc(item: TocFsItem, openInNewTab = false) {
 const thisTabId = paneNavigation.activeTabId
 async function onSelectFile(file: LocalFileItem, openInNewTab = false) {
   const dot = file.name.lastIndexOf('.')
-  const title = dot > 0 ? file.name.substring(0, dot) : file.name
+  const title = file.title || (dot > 0 ? file.name.substring(0, dot) : file.name)
   const ext = dot > 0 ? file.name.substring(dot).toLowerCase() : ''
   const route = opensInFastDocView(file.path) ? '/fast-doc-view' : ext === '.htm' || ext === '.html' ? '/html-view' : '/pdf-view'
   // Patched by id: the active tab may change while restoreLocalFile awaits.

@@ -91,6 +91,9 @@ public sealed class ListLocalFolderResult
 {
     public List<string> Folders { get; set; } = [];
     public List<string> Files { get; set; } = [];
+    /// <summary>Hebrew names parallel to Folders / Files ("" = show the name): Torat Emet folders (Core ToratEmetNames).</summary>
+    public List<string> FolderTitles { get; set; } = [];
+    public List<string> FileTitles { get; set; } = [];
     public string? Error { get; set; }
 }
 

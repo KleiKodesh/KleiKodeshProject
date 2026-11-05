@@ -31,6 +31,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const LuceneVersion VERSION        = LuceneVersion.LUCENE_48;
         private const string        FLD_PATH      = "path";
         private const string        FLD_DATE      = "date";       // last-write time as Unix ms (stored, not indexed)
+        private const string        FLD_ALIAS_TERMS = "alias_terms"; // indexed only: extra search words of a path (Torat Emet Hebrew names), one term each, lower-cased
         private const string        FLD_ADDIN_NAME = "addin_name"; // optional: "תוסף אוצריא: {name}" (indexed + stored, lower-cased)
         private const string        FLD_ADDIN_NAME_DISPLAY = "addin_name_display"; // same value, original case, stored only
 
@@ -50,8 +51,9 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// MakeDocument changes what it writes.
         /// v2: name_words / folder_words / name_shape_dv / path_sort_dv / date_dv (Lucene-side
         /// ordering and a doc-values window).
+        /// v3: alias_terms (extra search terms: the Hebrew names of Torat Emet files, see ToratEmetNames).
         /// </summary>
-        internal const string IndexFormatVersion = "2";
+        internal const string IndexFormatVersion = "3";
         // No "_" in the name: Lucene.Net's writer deletes, as a stale index file, any file whose
         // name CONTAINS "_x.y" (its codec-file pattern is not anchored) - "index_format.txt" went.
         private const string IndexFormatFileName = "format-version.txt";
@@ -596,6 +598,8 @@ namespace KitveiHakodesh.Core.LocalFiles
             if (lastSep > 0)
                 foreach (var word in new HashSet<string>(LocalFileNameWords.FolderTokens(lowerPath.Substring(0, lastSep)), StringComparer.Ordinal))
                     doc.Add(new Field(FLD_FOLDER_WORDS, word, WordFieldType));
+            foreach (var term in ToratEmet.ToratEmetNames.SearchTerms(fullPath))
+                doc.Add(new Field(FLD_ALIAS_TERMS, term, WordFieldType));
             var sortKey = PathSortKey(lowerPath);
             // The window reads the path back from the sort key (lower-casing it again) unless
             // that would not give this exact path back, or the doc has an add-in name: then it
@@ -671,6 +675,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                 var perWord = new BooleanQuery();
                 perWord.Add(new WildcardQuery(new Term(FLD_PATH, wordPattern)),      Occur.SHOULD);
                 perWord.Add(new WildcardQuery(new Term(FLD_ADDIN_NAME, wordPattern)), Occur.SHOULD);
+                perWord.Add(new WildcardQuery(new Term(FLD_ALIAS_TERMS, wordPattern)), Occur.SHOULD);
                 boolQuery.Add(perWord, Occur.MUST);
             }
 
@@ -1065,7 +1070,18 @@ namespace KitveiHakodesh.Core.LocalFiles
                 string head = EscapeWildcard(FolderPrefix(folder));
                 var allWords = new BooleanQuery();
                 foreach (var word in words)
-                    allWords.Add(new WildcardQuery(new Term(FLD_PATH, head + "*" + EscapeWildcard(word.ToLowerInvariant()) + "*")), Occur.MUST);
+                {
+                    string w = EscapeWildcard(word.ToLowerInvariant());
+                    // The word is in the path under the folder - or in the file's alias terms (the Hebrew names of
+                    // Torat Emet books: a tiny field, so its wildcard is cheap; the folder is still a path prefix).
+                    var perWord = new BooleanQuery();
+                    perWord.Add(new WildcardQuery(new Term(FLD_PATH, head + "*" + w + "*")), Occur.SHOULD);
+                    var aliasUnderFolder = new BooleanQuery();
+                    aliasUnderFolder.Add(new WildcardQuery(new Term(FLD_ALIAS_TERMS, "*" + w + "*")), Occur.MUST);
+                    aliasUnderFolder.Add(new PrefixQuery(new Term(FLD_PATH, FolderPrefix(folder))), Occur.MUST);
+                    perWord.Add(aliasUnderFolder, Occur.SHOULD);
+                    allWords.Add(perWord, Occur.MUST);
+                }
                 anyFolder.Add(allWords, Occur.SHOULD);
             }
             return anyFolder;

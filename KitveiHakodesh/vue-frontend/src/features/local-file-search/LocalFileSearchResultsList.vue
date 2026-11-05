@@ -145,7 +145,7 @@ defineExpose({
           <span class="item-text">
             <span class="item-title-row">
               <span class="item-title">{{
-                items[index]!.addinName || items[index]!.fileName
+                items[index]!.addinName || items[index]!.displayName || items[index]!.fileName
               }}</span>
             </span>
           </span>

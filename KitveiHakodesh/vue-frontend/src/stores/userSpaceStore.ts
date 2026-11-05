@@ -10,6 +10,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dbGet, dbSet } from '@/utils/persistence'
 import { folderDisplayName } from '@/utils/filePath'
+import { claimDefaultUserSpaceFolders } from '@/webview-host/bridge'
 
 export type UserSpaceRoot =
   | { kind: 'catalog'; categoryId: number; title: string }
@@ -73,10 +74,20 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
     return add({ kind: 'computer', path, title: folderDisplayName(path) })
   }
 
+  /**
+   * Adds the default computer folders (the Torat Emet books, when installed). The service hands each folder out ONCE, so one the
+   * user removed on purpose does not come back; one added by hand is not added twice (`add` ignores a duplicate). Never throws.
+   */
+  async function claimDefaultFolders(): Promise<void> {
+    await ensureLoaded()
+    const folders = await claimDefaultUserSpaceFolders()
+    for (const folder of folders) addComputerFolder(folder)
+  }
+
   function remove(key: string) {
     roots.value = roots.value.filter((r) => userSpaceRootKey(r) !== key)
     persist()
   }
 
-  return { roots, loaded, ensureLoaded, addCatalogCategory, addWholeCatalog, addComputerFolder, remove }
+  return { roots, loaded, ensureLoaded, addCatalogCategory, addWholeCatalog, addComputerFolder, claimDefaultFolders, remove }
 })

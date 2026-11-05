@@ -75,6 +75,8 @@ export interface FileSearchResult {
   fullPath: string
   /** Non-empty only for Otzaria addin entry points. Value is "תוסף אוצריא: {name}". */
   addinName: string
+  /** Hebrew name to show instead of the file name (Torat Emet books). */
+  displayName?: string
 }
 
 export type GlobalSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
@@ -446,6 +448,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
             fileName: item.fileName,
             fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
             addinName: item.addinName ?? '',
+            displayName: item.displayName ?? '',
           })))
         })
         .catch(() => {

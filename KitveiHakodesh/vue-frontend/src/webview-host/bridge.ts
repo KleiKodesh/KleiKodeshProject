@@ -605,7 +605,7 @@ export async function catalogTocSearch(query: string): Promise<CatalogTocSearchR
 export type UserSpaceSearchRoot = { categoryId?: number; folder?: string }
 
 /** One `userSpaceSearch` hit: a catalog hit (bookId > 0, tocPath "" for a book title) or a file (filePath). */
-export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string }
+export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string; title?: string }
 
 /** Result of `userSpaceSearch`. The not-ready fields mean what they mean on CatalogTocSearchResult. */
 export type UserSpaceSearchResult = Omit<CatalogTocSearchResult, 'results'> & { hits: UserSpaceSearchHit[] }
@@ -621,6 +621,19 @@ export async function userSpaceSearch(query: string, roots: UserSpaceSearchRoot[
 
 /** Why a computer folder cannot be a UserSpace root yet ("" when it can). */
 export type UserSpaceFolderReason = '' | 'notFound' | 'notIndexedDrive' | 'excluded' | 'systemFolder'
+
+/**
+ * Computer folders UserSpace has by default (the Torat Emet books, when installed). Each folder is handed out ONCE by the
+ * service (Core UserSpaceDefaultFolders), so one the user removed does not come back.
+ */
+export async function claimDefaultUserSpaceFolders(): Promise<string[]> {
+  try {
+    const r = await serviceCall<{ folders?: string[] }>('claimDefaultUserSpaceFolders', {})
+    return r?.folders ?? []
+  } catch {
+    return []
+  }
+}
 
 /** Whether file search covers a folder - UserSpace only accepts folders its search can reach. */
 export async function checkUserSpaceFolder(folderPath: string): Promise<{ covered: boolean; reason: UserSpaceFolderReason }> {
@@ -764,6 +777,8 @@ export interface FileSystemSearchHit {
   modifiedDate?: number
   /** Non-empty only for Otzaria addin entry points. Value is "תוסף אוצריא: {name}". */
   addinName?: string
+  /** Hebrew name to show instead of the file name (Torat Emet books); empty = the file name. */
+  displayName?: string
 }
 
 /**
@@ -1294,6 +1309,9 @@ export interface LocalFolderListing {
   folders: string[]
   /** Names of the files the app can open; everything else is left out. */
   files: string[]
+  /** Hebrew names parallel to folders / files ("" = show the name): Torat Emet folders (Core ToratEmetNames). */
+  folderTitles: string[]
+  fileTitles: string[]
   /** Set when the folder could not be read (missing, no access). */
   error?: string
 }
@@ -1305,9 +1323,9 @@ export interface LocalFolderListing {
 export async function listLocalFolder(folderPath: string): Promise<LocalFolderListing> {
   try {
     const r = await serviceCall<Partial<LocalFolderListing>>('listLocalFolder', { value: folderPath })
-    return { folders: r?.folders ?? [], files: r?.files ?? [], error: r?.error ?? undefined }
+    return { folders: r?.folders ?? [], files: r?.files ?? [], folderTitles: r?.folderTitles ?? [], fileTitles: r?.fileTitles ?? [], error: r?.error ?? undefined }
   } catch (err) {
-    return { folders: [], files: [], error: err instanceof Error ? err.message : String(err) }
+    return { folders: [], files: [], folderTitles: [], fileTitles: [], error: err instanceof Error ? err.message : String(err) }
   }
 }
 
