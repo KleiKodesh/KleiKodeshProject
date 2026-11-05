@@ -165,7 +165,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 
     // The addin name is known synchronously, so the placeholder tab gets it too —
     // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
-    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension
+    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : (item.displayName || titleWithoutExtension)
 
     // For a Ctrl/⌘-click, open a fresh tab up front and patch it by id. The PDF/
     // HTML path awaits restoreLocalFile, during which the active tab may change,

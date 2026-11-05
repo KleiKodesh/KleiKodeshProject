@@ -271,6 +271,8 @@ public sealed class Dispatcher(
                     {
                         Folders = listing.Folders,
                         Files = listing.Files,
+                        FolderTitles = listing.FolderTitles,
+                        FileTitles = listing.FileTitles,
                         Error = listing.Error,
                     }));
                 }
@@ -1037,6 +1039,10 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(await global::KitveiHakodesh.Core.UserSpace.UserSpaceSearch.SearchAsync(
                         a.Query ?? "", roots, catalogToc.Coordinator, locator.Coordinator, ct)));
                 }
+
+                // Torat Emet book folders UserSpace has by default - each handed out once (Core UserSpaceDefaultFolders).
+                case "claimDefaultUserSpaceFolders":
+                    return RpcResponse.Ok(MsgPack.Ser(global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Claim()));
 
                 case "checkUserSpaceFolder":
                 {

@@ -33,6 +33,8 @@ export interface LocalFileSearchResult {
   modifiedDate: number
   /** Non-empty only for Otzaria addin entry-point files. Value is "תוסף אוצריא: {name}". */
   addinName: string
+  /** Hebrew name to show instead of the file name (Torat Emet books); "" = the file name. */
+  displayName: string
 }
 
 export type LocalFileSearchSortOrder = 'relevance' | 'fileName' | 'fullPath' | 'date' | 'fileType'
@@ -165,6 +167,7 @@ export function useLocalFileSearch(
         fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
         modifiedDate: item.modifiedDate ?? 0,
         addinName: item.addinName ?? '',
+        displayName: item.displayName ?? '',
       }))
     } catch (error) {
       if (thisGeneration !== generation) return

@@ -86,7 +86,7 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     // The addin name is known synchronously, so the placeholder tab gets it too —
     // otherwise a Ctrl/⌘-clicked addin reads "index" for as long as restoreLocalFile
     // takes, which is the very title this treatment exists to replace.
-    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension
+    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : (item.displayName || titleWithoutExtension)
 
     // Capture the target tab id up front (a new tab for Ctrl/⌘-click, else the
     // current active tab) and patch it by id — restoreLocalFile awaits, and the

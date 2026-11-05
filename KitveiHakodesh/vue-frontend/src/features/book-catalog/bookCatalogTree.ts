@@ -10,6 +10,8 @@ export interface LocalFileItem {
   path: string
   /** File name with its extension. */
   name: string
+  /** Hebrew name to show instead of the file name (Torat Emet books); absent = the file name. */
+  title?: string
 }
 
 export interface CategoryNode extends CategoryRow {

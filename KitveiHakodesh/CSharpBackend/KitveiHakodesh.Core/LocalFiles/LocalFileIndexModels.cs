@@ -13,6 +13,8 @@ public sealed class FileHit
     public long   ModifiedDate { get; set; }
     /// <summary>Non-empty only for Otzaria addin entry-point files. "תוסף אוצריא: {name}".</summary>
     public string AddinName { get; set; } = "";
+    /// <summary>The Hebrew name to show instead of the file name (Torat Emet books under an install's Books folder); empty = show the file name.</summary>
+    public string DisplayName { get; set; } = "";
 }
 
 /// <summary>Result payload for <c>locateDocuments</c>.</summary>

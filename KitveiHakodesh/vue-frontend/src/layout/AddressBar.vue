@@ -435,7 +435,7 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
 
   // The addin name is known synchronously, so the placeholder tab gets it too —
   // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
-  const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension
+  const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : (item.displayName || titleWithoutExtension)
 
   // Capture the target tab id up front (a new tab for Ctrl/⌘-click, else the
   // active tab) and patch it by id — restoreLocalFile awaits, and the active tab

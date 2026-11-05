@@ -8,6 +8,7 @@ export function fileIcon(file: LocalFileItem): DocumentIcon {
 
 /** A computer file's title: its name without the extension. */
 export function fileTitle(file: LocalFileItem): string {
+  if (file.title) return file.title
   const dot = file.name.lastIndexOf('.')
   return dot > 0 ? file.name.substring(0, dot) : file.name
 }
