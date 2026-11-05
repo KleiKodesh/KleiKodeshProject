@@ -107,6 +107,8 @@ internal static class ToratEmetNamesCheck
             Check(string.CompareOrdinal(sub.FolderTitles[0], sub.FolderTitles[1]) < 0, "ordered by the Hebrew name");
             var book = LocalFolderListing.List(Path.Combine(books, "001_TORA", "01_BERESHIT"));
             Check(book.Files.Count == 1 && book.FileTitles[0] == BereshitHe, "file title");
+            // A book with no BooksConfig section: its own first title line (401_mishna_brura_smicha_lerabanut.txt).
+            Check(ToratEmetNames.FileTitle(@"C:\x\ToratEmetInstall\Books\042_HALACHA2\401_mishna_brura_smicha_lerabanut.txt") == "\u05DE\u05E9\u05E0\u05D4 \u05D1\u05E8\u05D5\u05E8\u05D4", "fallback: the book's own first $ title");
             string mine = Path.Combine(root, "ToratEmetUserData", "MyBooks", "001_TORA");
             Directory.CreateDirectory(mine);
             Check(LocalFolderListing.List(Path.Combine(root, "ToratEmetUserData", "MyBooks")).FolderTitles.All(t => t.Length == 0), "MyBooks untranslated");
@@ -158,21 +160,29 @@ internal static class ToratEmetNamesCheck
             var regDocs = ToratEmetFolders.Locate(ProbeFor(docs1, Path.Combine(docs1, "ToratEmetInstall")));
             Check(regDocs.Count == 2, "registry and defaults pointing to the same folders: no duplicates");
 
-            // Claimed once: a folder the user removed does not come back.
-            string state = Path.Combine(root, "state", "defaults.txt");
-            var first = UserSpaceDefaultFolders.Claim(state, ProbeFor(docs1));
-            Check(first.Folders.Count == 2, "first claim hands out both folders");
-            var second = UserSpaceDefaultFolders.Claim(state, ProbeFor(docs1));
-            Check(second.Folders.Count == 0, "second claim: nothing again (removed on purpose stays removed)");
+            // The service only FINDS the folders and keeps no state (the host remembers what it added, beside the roots).
+            Check(UserSpaceDefaultFolders.Find(ProbeFor(docs1)).Folders.Count == 2, "find lists both folders, every time (stateless)");
+            Check(UserSpaceDefaultFolders.Find(ProbeFor(docs1)).Folders.Count == 2, "a second find lists them again");
             string docs5 = Case("late");
             Directory.CreateDirectory(Path.Combine(docs5, "ToratEmetInstall", "Books"));
             Directory.CreateDirectory(Path.Combine(docs5, "ToratEmetUserData", "MyBooks"));
-            string state2 = Path.Combine(root, "state", "late.txt");
-            Check(UserSpaceDefaultFolders.Claim(state2, ProbeFor(docs5)).Folders.Count == 1, "MyBooks empty at first: only Books");
+            Check(UserSpaceDefaultFolders.Find(ProbeFor(docs5)).Folders.Count == 1, "MyBooks empty at first: only Books");
             File.WriteAllText(Path.Combine(docs5, "ToratEmetUserData", "MyBooks", "c.txt"), "x");
-            var late = UserSpaceDefaultFolders.Claim(state2, ProbeFor(docs5));
-            Check(late.Folders.Count == 1 && late.Folders[0].EndsWith("MyBooks"), "MyBooks is offered once it holds a .txt");
-            Check(UserSpaceDefaultFolders.Claim(state2, ProbeFor(Case("none"))).Folders.Count == 0, "nothing installed: nothing handed out");
+            var late = UserSpaceDefaultFolders.Find(ProbeFor(docs5));
+            Check(late.Folders.Count == 2 && late.Folders[1].EndsWith("MyBooks"), "MyBooks is listed once it holds a .txt");
+            Check(UserSpaceDefaultFolders.Find(ProbeFor(Case("none"))).Folders.Count == 0, "nothing installed: nothing listed");
+
+            // No cap: a .txt after many other entries is found; a cancelled walk stops.
+            string deep = Case("deep");
+            for (int i = 0; i < 25; i++) Directory.CreateDirectory(Path.Combine(deep, "d" + i, "s"));
+            for (int i = 0; i < 25; i++) File.WriteAllText(Path.Combine(deep, "d" + i, "s", "f.pdf"), "x");
+            File.WriteAllText(Path.Combine(deep, "d24", "s", "z.txt"), "x");
+            Check(ToratEmetFolders.ContainsTxtFile(deep), "a .txt after many other entries is found");
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            bool stopped = false;
+            try { ToratEmetFolders.ContainsTxtFile(deep, cancelled.Token); } catch (OperationCanceledException) { stopped = true; }
+            Check(stopped, "the walk is cancellable");
         }
         finally { try { Directory.Delete(root, true); } catch { } }
     }

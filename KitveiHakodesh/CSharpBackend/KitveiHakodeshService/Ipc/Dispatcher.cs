@@ -1040,9 +1040,11 @@ public sealed class Dispatcher(
                         a.Query ?? "", roots, catalogToc.Coordinator, locator.Coordinator, ct)));
                 }
 
-                // Torat Emet book folders UserSpace has by default - each handed out once (Core UserSpaceDefaultFolders).
+                // Torat Emet book folders found on this computer (Core UserSpaceDefaultFolders): the host decides which it has added.
+                // The directory walk runs on the pool, off the request thread, and stops when the request is cancelled.
                 case "claimDefaultUserSpaceFolders":
-                    return RpcResponse.Ok(MsgPack.Ser(global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Claim()));
+                    return RpcResponse.Ok(MsgPack.Ser(await Task.Run(
+                        () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Find(null, ct), ct)));
 
                 case "checkUserSpaceFolder":
                 {

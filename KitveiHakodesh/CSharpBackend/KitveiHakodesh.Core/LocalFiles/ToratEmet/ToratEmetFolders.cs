@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace KitveiHakodesh.Core.LocalFiles.ToratEmet;
@@ -28,11 +29,8 @@ public static class ToratEmetFolders
         public Func<IEnumerable<string>> RegisteredInstallRoots { get; set; } = ReadRegisteredInstallRoots;
     }
 
-    /// <summary>Bound of the .txt existence check: directory entries looked at before giving up.</summary>
-    public const int MaxEntriesLooked = 20000;
-
     /// <summary>Existing book folders in the order above. MyBooks only when it holds at least one .txt file.</summary>
-    public static List<string> Locate(Probe? probe = null)
+    public static List<string> Locate(Probe? probe = null, CancellationToken ct = default)
     {
         probe ??= new Probe();
         var found = new List<string>();
@@ -43,7 +41,7 @@ public static class ToratEmetFolders
             try { full = Path.GetFullPath(path).TrimEnd('\\', '/'); } catch (Exception) { return; }
             if (!seen.Add(full)) return;
             if (!Directory.Exists(full)) return;
-            if (needsTxt && !ContainsTxtFile(full)) { seen.Remove(full); return; }
+            if (needsTxt && !ContainsTxtFile(full, ct)) { seen.Remove(full); return; }
             found.Add(full);
         }
 
@@ -66,10 +64,10 @@ public static class ToratEmetFolders
         return found;
     }
 
-    /// <summary>True when the folder (any depth) holds a .txt file. Stops at the first one; looks at no more than <see cref="MaxEntriesLooked"/> entries.</summary>
-    public static bool ContainsTxtFile(string folder)
+    /// <summary>True when the folder (any depth) holds a .txt file. Stops at the first one, with no cap on what it looks at (a tree
+    /// with no .txt is walked whole); cancellable, and the host runs it off the startup path.</summary>
+    public static bool ContainsTxtFile(string folder, CancellationToken ct = default)
     {
-        int looked = 0;
         var pending = new Queue<string>();
         pending.Enqueue(folder);
         while (pending.Count > 0)
@@ -78,7 +76,7 @@ public static class ToratEmetFolders
             {
                 foreach (var entry in new DirectoryInfo(pending.Dequeue()).EnumerateFileSystemInfos())
                 {
-                    if (++looked > MaxEntriesLooked) return false;
+                    ct.ThrowIfCancellationRequested();
                     if (entry is DirectoryInfo) pending.Enqueue(entry.FullName);
                     else if (entry.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) return true;
                 }

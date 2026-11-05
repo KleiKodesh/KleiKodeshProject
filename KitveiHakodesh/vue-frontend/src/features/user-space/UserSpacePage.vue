@@ -158,7 +158,10 @@ function onGoHome() {
 }
 
 onMounted(() => {
-  void userSpaceStore.claimDefaultFolders()
+  void userSpaceStore.claimDefaultFolders().then((rejected) => {
+    // Same notice as a folder the user picked that file search cannot reach.
+    if (rejected.length > 0) notice.value = `${t('userSpace.folderNotSupported')} ${t(`userSpace.folderReason.${rejected[0]!.reason || 'notIndexedDrive'}`)}`
+  })
   void load()
   focusSearchInput()
 })

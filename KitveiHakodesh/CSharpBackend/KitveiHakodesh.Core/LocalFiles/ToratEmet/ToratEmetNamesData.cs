@@ -1341,6 +1341,7 @@ B	042_halacha2\304_seder_hayom.txt	סדר היום בהלכה ובאגדה
 B	042_halacha2\305_rosh_hodesh_bahalacha_ubaagada.txt	ראש חודש בהלכה ובאגדה
 B	042_halacha2\400_piskei_moshe_hagaala_lepesach.txt	הלכות הגעלת כלים לפסח	הלכות הגעלת כלים לפסח - פסקי משה
 B	042_halacha2\400_piskei_moshe_hagaala_lepesach.txt.notes.txt	הערות פסקי משה - הלכות הגעלת כלים לפסח
+B	042_halacha2\401_mishna_brura_smicha_lerabanut.txt	משנה ברורה
 B	042_halacha2\410_beyom_hashabat.txt	וביום השבת	וביום השבת - הלכות שבת
 B	042_halacha2\420_shay_basar_bechalav.txt	מנחת שי - הלכות בשר בחלב
 B	042_halacha2\421_shay_tvilat_kelim.txt	מנחת שי - הלכות טבילת כלים
