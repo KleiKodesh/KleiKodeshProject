@@ -20,6 +20,8 @@ export interface FastDocViewSummary {
   headingCount: number
   footnoteCount: number
   endnoteCount: number
+  /** The title the file declares itself (a Torat Emet book name); absent when it has none. */
+  title?: string | null
 }
 
 export interface FastDocViewNote {

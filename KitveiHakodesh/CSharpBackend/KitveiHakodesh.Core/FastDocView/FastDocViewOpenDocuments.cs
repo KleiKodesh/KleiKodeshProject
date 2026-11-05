@@ -74,6 +74,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
                 HeadingCount = document.Headings.Count,
                 FootnoteCount = footnotes,
                 EndnoteCount = endnotes,
+                Title = (document as global::FastDocView.Markup.MarkupWindowedDocument)?.DocumentTitle,
             };
         });
     }

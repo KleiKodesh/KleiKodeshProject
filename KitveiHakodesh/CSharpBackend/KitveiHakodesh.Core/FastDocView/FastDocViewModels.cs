@@ -55,6 +55,8 @@ public sealed class FastDocViewSummary
     public int HeadingCount { get; set; }
     public int FootnoteCount { get; set; }
     public int EndnoteCount { get; set; }
+    /// <summary>The title the file itself declares (a Torat Emet book name); null when it has none - the page then keeps the file name.</summary>
+    public string? Title { get; set; }
 }
 
 [MessagePackObject(keyAsPropertyName: true)]
