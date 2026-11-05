@@ -136,9 +136,19 @@ internal static class ToratEmetNamesCheck
             var top = LocalFolderListing.List(books);
             Check(top.Folders.Count == 1 && top.FolderTitles.Count == 1 && top.FolderTitles[0] == ToraHe, "Books listing: Hebrew folder title");
             var sub = LocalFolderListing.List(Path.Combine(books, "001_TORA"));
-            // Ordered by the Hebrew name: shemot (\u05E9) comes after bereshit (\u05D1) although SHEMOT < BERESHIT is false anyway; force a case where the orders differ.
             Check(sub.Folders.Count == 2 && sub.FolderTitles.All(t => t.Length > 0), "subfolders titled");
-            Check(string.CompareOrdinal(sub.FolderTitles[0], sub.FolderTitles[1]) < 0, "ordered by the Hebrew name");
+            // The order is the on-disk name order; the Hebrew title is display only.
+            Check(sub.Folders.SequenceEqual(sub.Folders.OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase)), "listing order = on-disk name order");
+            // Disk order and Hebrew order differ: 02_BAVLI < 10_AHAVAT_ISRAEL on disk, but the Hebrew name of AHAVAT_ISRAEL (alef) sorts before BAVLI (tav).
+            string odd = Path.Combine(books, "050_ODD");
+            Directory.CreateDirectory(Path.Combine(odd, "02_BAVLI"));
+            Directory.CreateDirectory(Path.Combine(odd, "10_AHAVAT_ISRAEL"));
+            File.WriteAllText(Path.Combine(odd, "b_file.txt"), "x");
+            File.WriteAllText(Path.Combine(odd, "a_file.txt"), "x");
+            var oddList = LocalFolderListing.List(odd);
+            Check(oddList.Folders.Count == 2 && oddList.Folders[0] == "02_BAVLI" && oddList.Folders[1] == "10_AHAVAT_ISRAEL", "disk order kept although the Hebrew names sort the other way");
+            Check(oddList.FolderTitles.Count == 2 && oddList.FolderTitles.All(t => t.Length > 0) && string.CompareOrdinal(oddList.FolderTitles[0], oddList.FolderTitles[1]) > 0, "the Hebrew titles are shown but do not set the order");
+            Check(oddList.Files.SequenceEqual(new[] { "a_file.txt", "b_file.txt" }), "files in disk name order");
             var book = LocalFolderListing.List(Path.Combine(books, "001_TORA", "01_BERESHIT"));
             Check(book.Files.Count == 1 && book.FileTitles[0] == BereshitHe, "file title");
             // A book with no BooksConfig section: its own first title line (401_mishna_brura_smicha_lerabanut.txt).

@@ -52,16 +52,16 @@ public static class LocalFolderListing
     }
 
     /// <summary>
-    /// Names the Hebrew title of each entry (ToratEmetNames) and orders by the name that is SHOWN: the title when there is one.
-    /// <paramref name="names"/> and <paramref name="titles"/> stay parallel.
+    /// Names the Hebrew title of each entry (ToratEmetNames) and orders by the REAL on-disk name, exactly as before the titles
+    /// existed: the shown title is display only and never influences the order. <paramref name="names"/> and
+    /// <paramref name="titles"/> stay parallel.
     /// </summary>
     internal static void FillTitlesAndSort(string folder, List<string> names, List<string> titles, bool isFolder)
     {
         var entries = new List<(string Name, string Title)>(names.Count);
         foreach (var name in names)
             entries.Add((name, ToratEmet.ToratEmetNames.Title(Path.Combine(folder, name), isFolder) ?? ""));
-        entries.Sort((a, b) => StringComparer.CurrentCultureIgnoreCase.Compare(
-            a.Title.Length > 0 ? a.Title : a.Name, b.Title.Length > 0 ? b.Title : b.Name));
+        entries.Sort((x, y) => StringComparer.CurrentCultureIgnoreCase.Compare(x.Name, y.Name));
         names.Clear(); titles.Clear();
         foreach (var (name, title) in entries) { names.Add(name); titles.Add(title); }
     }

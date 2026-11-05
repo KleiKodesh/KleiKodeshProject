@@ -66,7 +66,7 @@ export function useUserSpace() {
     const listing = await listLocalFolder(path)
     // Closed (or forgotten) while the read was in flight: its contents are not wanted any more.
     if (!loadingIds.delete(node.id)) return
-    // A Torat Emet folder or book shows its Hebrew name (Core ToratEmetNames); the listing arrives ordered by the shown name.
+    // A Torat Emet folder or book shows its Hebrew name (Core ToratEmetNames), for display only: the listing arrives in on-disk name order.
     node.children = listing.folders.map((name, i) => computerNode(joinPath(path, name), listing.folderTitles[i] || name, node.level + 1))
     node.files = listing.files.map((name, i) => ({ path: joinPath(path, name), name, title: listing.fileTitles[i] || undefined }))
     setError(node.id, listing.error)
