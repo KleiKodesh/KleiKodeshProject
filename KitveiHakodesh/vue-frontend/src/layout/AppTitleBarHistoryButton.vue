@@ -5,7 +5,7 @@ import { onLongPress } from '@vueuse/core'
 import { IconArrowRight20Regular, IconArrowLeft20Regular } from '@iconify-prerendered/vue-fluent'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { documentIcon, iconKeyForRoute } from '@/utils/documentIcons'
+import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -41,7 +41,7 @@ const title = computed(() => isBack.value
  *  table, so a frame looks the same here as in the address-bar dropdown. */
 const listItems = computed(() => {
   const items = pane.historyEntries.value.map((entry, index) => {
-    const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
+    const icon = documentIcon(iconKeyForEntry(entry))
     return {
       index,
       label: entry.tocPath ? catalogBookTitle(entry) + ' · ' + entry.tocPath : catalogBookTitle(entry),

@@ -4,7 +4,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
 import { rasterizeTabIcons } from './rasterizeTabIcons'
-import { iconKeyForRoute } from '@/utils/documentIcons'
+import { iconKeyForEntry } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
 import {
   activateTabAnyPane,
@@ -92,7 +92,7 @@ export function initTabMirror(): void {
           pane: t.pane === 2 ? 2 : 1,
           // Favicon key into the set pushed by sendTabIcons — same shared mapping
           // the in-page lists use, so the strip shows the identical glyph.
-          iconKey: iconKeyForRoute(t.route, t.isOtzariaAddin),
+          iconKey: iconKeyForEntry(t),
         })),
       activeTabId: tabStore.activeTabId,
       pane2ActiveTabId: splitOn ? tabStore.pane2ActiveTabId : '',

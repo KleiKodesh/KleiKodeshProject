@@ -1,7 +1,7 @@
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { documentIcon, iconKeyForRoute } from '@/utils/documentIcons'
+import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -84,7 +84,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
 
   const recentCards = computed<HomeSuggestionCard[]>(() =>
     visibleRecents.value.map((entry) => {
-      const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
+      const icon = documentIcon(iconKeyForEntry(entry))
       return {
         key: `recent:${entry.key}`,
         title: catalogBookTitle(entry),
