@@ -1,4 +1,5 @@
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
 
 /**
  * The title to SHOW for a tab / recent / history entry. A /book-view entry with a
@@ -7,7 +8,9 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
  * the moment before the catalog has loaded (it never waits for it: first paint
  * shows the stored title, then switches reactively once allBooksMap fills).
  */
-export function catalogBookTitle(entry: { route: string; bookId?: number; title: string }): string {
+export function catalogBookTitle(entry: { route: string; bookId?: number; title: string; localFilePath?: string }): string {
+  // A Torat Emet file shows its Hebrew title once Core has answered (stores/localPathDisplayStore); the stored title is not rewritten.
+  if (entry.route !== '/book-view' && entry.localFilePath) return useLocalPathDisplayStore().titleOf(entry.localFilePath, false) || entry.title
   if (entry.route !== '/book-view' || entry.bookId == null) return entry.title
   return useBooksDataStore().allBooksMap.get(entry.bookId)?.title ?? entry.title
 }

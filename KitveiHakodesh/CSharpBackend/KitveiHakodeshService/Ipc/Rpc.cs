@@ -395,6 +395,14 @@ public sealed class HbProgressResult
     public long Total { get; set; }
 }
 
+/// <summary>Args for <c>displayLocalPaths</c>: the paths and, parallel, whether each is a folder.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DisplayLocalPathsArgs
+{
+    public List<string>? Paths { get; set; }
+    public List<bool>? IsFolder { get; set; }
+}
+
 /// <summary>Generic list-of-strings arg (e.g. <c>userSpaceRootTitles</c>).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class StringListArg

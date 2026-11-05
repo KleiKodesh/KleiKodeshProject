@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { locationKey, type NavLocation } from '@/stores/navLocation'
@@ -43,6 +44,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
   const frequentFoldersStore = useFrequentFoldersStore()
   const booksDataStore = useBooksDataStore()
   const tabStore = useTabStore()
+  const pathDisplay = useLocalPathDisplayStore()
   const { showRecentlyOpened, showFrequentFolders } = storeToRefs(useSettingsStore())
 
   const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
@@ -79,7 +81,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
       const tocPath = tocPathByDocumentKey.value.get(locationKey(entry as unknown as NavLocation))
       return bookResumePath(booksDataStore.allBooksMap.get(entry.bookId), catalogBookTitle(entry), tocPath)
     }
-    return entry.localFilePath || entry.localFileName || ''
+    return pathDisplay.pathOf(entry.localFilePath, false) || entry.localFilePath || entry.localFileName || ''
   }
 
   const recentCards = computed<HomeSuggestionCard[]>(() =>
@@ -105,8 +107,8 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     const icon = documentIcon('folder')
     return visibleFolders.value.map((entry) => ({
       key: `folder:${entry.path}`,
-      title: entry.name,
-      path: isCatalogCategoryEntry(entry) ? entry.categoryTitles.join(HOME_CARD_PATH_SEPARATOR) : entry.path,
+      title: isCatalogCategoryEntry(entry) ? entry.name : pathDisplay.titleOf(entry.path, true) || entry.name,
+      path: isCatalogCategoryEntry(entry) ? entry.categoryTitles.join(HOME_CARD_PATH_SEPARATOR) : pathDisplay.pathOf(entry.path, true) || entry.path,
       icon: icon.icon24,
       color: icon.color,
       open: (openInNewTab) =>
@@ -120,6 +122,18 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
       },
     }))
   })
+
+  // Torat Emet names are Core's to give (display time, one batch for the visible cards); stored entries stay as they are.
+  watch(
+    [visibleFolders, visibleRecents],
+    ([folders, recents]) => {
+      void pathDisplay.request([
+        ...folders.filter((e) => !isCatalogCategoryEntry(e)).map((e) => ({ path: e.path, isFolder: true })),
+        ...recents.map((e) => ({ path: e.localFilePath, isFolder: false })),
+      ])
+    },
+    { immediate: true },
+  )
 
   // The category path needs the catalog; load it once a database is available.
   watch(dbReady, (ready) => { if (ready) void booksDataStore.ensureLoaded() }, { immediate: true })

@@ -34,8 +34,27 @@ internal static class ToratEmetNamesCheck
         Listing();
         Console.WriteLine("== Torat Emet default folders");
         Defaults();
+        Console.WriteLine("== Torat Emet recent-items display");
+        Display();
         Console.WriteLine(_failures == 0 ? "TORATEMET: PASS" : $"TORATEMET: FAIL ({_failures})");
         return _failures;
+    }
+
+    private static void Display()
+    {
+        string b = @"C:\x\ToratEmetInstall\Books", m = @"C:\x\ToratEmetUserData\MyBooks";
+        string root = ToratEmetFolders.BooksRootTitle, mine = ToratEmetFolders.MyBooksRootTitle;
+        var r = LocalPathDisplay.Resolve(
+            new[] { b + @"\001_TORA\01_BERESHIT\a01_Genesis.txt", b + @"\001_TORA\01_BERESHIT", b, m + @"\Sub\my.txt", m, @"C:\Docs\a.pdf", b + @"\001_TORA\NO_SUCH.txt" },
+            new[] { false, true, true, false, true, false, false });
+        Check(r.Titles.Count == 7 && r.Paths.Count == 7, "batch: one answer per path");
+        Check(r.Titles[0] == BereshitHe && r.Paths[0] == root + @"\" + ToraHe + @"\" + BereshitHe + (char)92 + BereshitHe, "book: Hebrew title, root + Hebrew folders, ends with the Hebrew title");
+        Check(r.Titles[1] == BereshitHe && r.Paths[1] == root + @"\" + ToraHe + @"\" + BereshitHe, "folder: Hebrew name and path");
+        Check(r.Titles[2] == root && r.Paths[2] == root, "Books root: root name");
+        Check(r.Titles[3] == "" && r.Paths[3] == mine + @"\Sub\my.txt", "MyBooks file: root name + raw rest, no title");
+        Check(r.Titles[4] == mine && r.Paths[4] == mine, "MyBooks root: root name");
+        Check(r.Titles[5] == "" && r.Paths[5] == "", "ordinary file untouched");
+        Check(r.Titles[6] == "" && r.Paths[6] == root + @"\" + ToraHe + @"\NO_SUCH.txt", "unknown book: no title, path still translated");
     }
 
     private static void Names()
