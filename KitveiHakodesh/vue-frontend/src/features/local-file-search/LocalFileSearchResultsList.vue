@@ -114,7 +114,7 @@ function formatDate(unixMs: number): string {
 
 function getTooltip(item: LocalFileSearchResult): string {
   return withNewTabHint(
-    [item.fileName, item.path, formatDate(item.modifiedDate)].filter(Boolean).join('\n'),
+    [item.fileName, item.displayFolder || item.path, formatDate(item.modifiedDate)].filter(Boolean).join('\n'),
   )
 }
 
@@ -188,7 +188,7 @@ defineExpose({
                 class="item-date-pill"
               >{{ formatDate(items[index]!.modifiedDate) }}</span>
             </span>
-            <span class="item-path" dir="ltr">{{ items[index]!.path }}</span>
+            <span class="item-path" dir="ltr">{{ items[index]!.displayFolder || items[index]!.path }}</span>
           </span>
         </div>
       </template>

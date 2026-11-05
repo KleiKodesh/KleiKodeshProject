@@ -372,6 +372,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
                 ModifiedDate = modified,
                 AddinName    = entry.AddinName,
                 DisplayName  = ToratEmet.ToratEmetNames.FileTitle(path) ?? "",
+                DisplayFolder = ToratEmet.ToratEmetNames.DisplayFolder(directory),
             });
         }
 

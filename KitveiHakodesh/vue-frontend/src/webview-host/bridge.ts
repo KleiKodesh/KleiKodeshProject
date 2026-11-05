@@ -605,7 +605,7 @@ export async function catalogTocSearch(query: string): Promise<CatalogTocSearchR
 export type UserSpaceSearchRoot = { categoryId?: number; folder?: string }
 
 /** One `userSpaceSearch` hit: a catalog hit (bookId > 0, tocPath "" for a book title) or a file (filePath). */
-export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string; title?: string }
+export type UserSpaceSearchHit = { bookId: number; lineIndex: number; tocPath: string; filePath: string; title?: string; displayFolder?: string }
 
 /** Result of `userSpaceSearch`. The not-ready fields mean what they mean on CatalogTocSearchResult. */
 export type UserSpaceSearchResult = Omit<CatalogTocSearchResult, 'results'> & { hits: UserSpaceSearchHit[] }
@@ -789,6 +789,8 @@ export interface FileSystemSearchHit {
   addinName?: string
   /** Hebrew name to show instead of the file name (Torat Emet books); empty = the file name. */
   displayName?: string
+  /** The folder line with Hebrew folder names (Torat Emet books); empty = show `path`. */
+  displayFolder?: string
 }
 
 /**

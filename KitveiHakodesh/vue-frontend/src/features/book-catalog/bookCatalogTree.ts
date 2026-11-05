@@ -12,6 +12,8 @@ export interface LocalFileItem {
   name: string
   /** Hebrew name to show instead of the file name (Torat Emet books); absent = the file name. */
   title?: string
+  /** The folder line with Hebrew folder names (Torat Emet books), in search results; absent = the real folder. */
+  folderTitle?: string
 }
 
 export interface CategoryNode extends CategoryRow {

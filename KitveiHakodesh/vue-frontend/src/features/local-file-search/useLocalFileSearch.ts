@@ -35,6 +35,7 @@ export interface LocalFileSearchResult {
   addinName: string
   /** Hebrew name to show instead of the file name (Torat Emet books); "" = the file name. */
   displayName: string
+  displayFolder: string
 }
 
 export type LocalFileSearchSortOrder = 'relevance' | 'fileName' | 'fullPath' | 'date' | 'fileType'
@@ -169,6 +170,7 @@ export function useLocalFileSearch(
         modifiedDate: item.modifiedDate ?? 0,
         addinName: item.addinName ?? '',
         displayName: item.displayName ?? '',
+        displayFolder: item.displayFolder ?? '',
       }))
     } catch (error) {
       if (thisGeneration !== generation) return

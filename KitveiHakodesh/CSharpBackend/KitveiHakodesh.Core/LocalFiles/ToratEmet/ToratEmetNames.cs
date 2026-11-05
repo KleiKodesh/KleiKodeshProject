@@ -71,6 +71,30 @@ public static class ToratEmetNames
         return null;
     }
 
+    /// <summary>
+    /// A folder path as the user should read it: under an install's Books folder, every folder below Books is replaced by its Hebrew
+    /// name (the raw name when it has none), the part up to and including Books stays as it is. "" when the path is not under an
+    /// install's Books (user data and every other folder keep their own path) or no folder below Books has a Hebrew name.
+    /// </summary>
+    public static string DisplayFolder(string? folderPath)
+    {
+        var rest = SegmentsUnderInstallBooks(folderPath);
+        if (rest == null || rest.Length == 0) return "";
+        var segments = folderPath!.Replace('/', '\\').Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        int prefix = segments.Length - rest.Length;
+        bool any = false;
+        var shown = new string[rest.Length];
+        for (int i = 0; i < rest.Length; i++)
+        {
+            if (Data.Value.FolderTitles.TryGetValue(FolderToken(rest[i]), out var title)) { shown[i] = title; any = true; }
+            else shown[i] = rest[i];
+        }
+        if (!any) return "";
+        // Same separator the page joins with (backslashes, as the index paths have).
+        string unc = folderPath.StartsWith("\\\\", StringComparison.Ordinal) || folderPath.StartsWith("//", StringComparison.Ordinal) ? "\\\\" : "";   // keep the leading \\ of a network path
+        return unc + string.Join("\\", segments, 0, prefix) + "\\" + string.Join("\\", shown);
+    }
+
     /// <summary>The folder's token: its name without the leading sort number ("01_BERESHIT" -> "BERESHIT").</summary>
     private static string FolderToken(string name)
     {

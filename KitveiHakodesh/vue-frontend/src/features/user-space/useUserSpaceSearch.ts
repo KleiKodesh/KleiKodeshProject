@@ -41,7 +41,7 @@ export function useUserSpaceSearch(searchQuery: Ref<string>, roots: Ref<UserSpac
     hits.forEach((hit, i) => {
       if (hit.filePath) {
         const cut = Math.max(hit.filePath.lastIndexOf('\\'), hit.filePath.lastIndexOf('/'))
-        items.push({ uid: `p-${hit.filePath}`, kind: 'file', file: { path: hit.filePath, name: hit.filePath.substring(cut + 1), title: hit.title || undefined } })
+        items.push({ uid: `p-${hit.filePath}`, kind: 'file', file: { path: hit.filePath, name: hit.filePath.substring(cut + 1), title: hit.title || undefined, folderTitle: hit.displayFolder || undefined } })
         return
       }
       const book = bookById.get(hit.bookId)
