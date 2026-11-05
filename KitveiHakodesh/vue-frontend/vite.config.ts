@@ -45,6 +45,14 @@ const KHS_CORE_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
   '../CSharpBackend/KitveiHakodesh.Core',
 )
+// FastDocView and its two submodule libraries, all compiled into the service through
+// KitveiHakodesh.Core. Without them here a library change (or a submodule pointer update)
+// never marked the exe stale, so dev kept starting the old service.
+const KHS_FASTDOCVIEW_DIRS = [
+  '../FastDocView/FastDocView',
+  '../FastDocView/SeekableDeflate/SeekableDeflate',
+  '../FastDocView/TextEncodingDetection/TextEncodingDetection',
+].map((p) => path.resolve(path.dirname(toPath(import.meta.url)), p))
 
 /**
  * Inserts the Otzaria addin SDK stub into an HTML byte stream, right after the
@@ -441,6 +449,7 @@ function newestSourceMtimeMs(): number {
   walk(KHS_DIR)
   walk(KHS_FTSLIB_DIR)
   walk(KHS_CORE_DIR)
+  for (const dir of KHS_FASTDOCVIEW_DIRS) walk(dir)
   return newest
 }
 
