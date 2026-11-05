@@ -2,6 +2,7 @@
 # Sources, both cp1255 text files of the install:
 #   Config.txt      [TranslateDictionary]  ENGLISH_FOLDER_TOKEN=hebrew folder name  (the program's own translation of its folder names)
 #   BooksConfig.txt [Books\<dir>\<file>_<hebrew title>]  sections: the title the program shows for each book file
+# A book file with no section there falls back to its own first '$ ' title line.
 # Output rows (tab separated):  F <token> <title>  and  B <path under Books, lower case, backslashes> <title> [<ForcedBookName>]
 import os, re, sys
 BS = chr(92)
@@ -35,6 +36,12 @@ for f in sorted(files, key=str.lower):
     prefix = ('Books' + chr(92) + f + '_').lower()
     hit = [k for k in sections if k.lower().startswith(prefix)]
     if not hit:
+        # No section in BooksConfig.txt: the book's own first '$ ' title line (a book file, never a .dat or other dummy).
+        if f.lower().endswith('.txt'):
+            for line in open(os.path.join(root, 'Books', f), encoding='cp1255', errors='replace').read().splitlines()[:100]:
+                if line.startswith('$ ') and line[2:].strip():
+                    rows.append('B	' + f.lower() + '	' + line[2:].strip())
+                    break
         continue
     title = hit[0][len(prefix):].strip()
     forced = sections[hit[0]].get('ForcedBookName', '').strip()

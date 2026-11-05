@@ -10,7 +10,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dbGet, dbSet } from '@/utils/persistence'
 import { folderDisplayName } from '@/utils/filePath'
-import { claimDefaultUserSpaceFolders } from '@/webview-host/bridge'
+import { checkUserSpaceFolder, claimDefaultUserSpaceFolders, type UserSpaceFolderReason } from '@/webview-host/bridge'
 
 export type UserSpaceRoot =
   | { kind: 'catalog'; categoryId: number; title: string }
@@ -20,6 +20,12 @@ export type UserSpaceRoot =
 
 const USER_SPACE_DB = 'app-user-space'
 const ROOTS_KEY = 'roots'
+/**
+ * Default folders already added (lower-cased paths). Kept in the SAME database as the roots on purpose: every reset that clears
+ * the roots clears this too, so the defaults come back after a reset - and a folder the user removes by hand stays removed
+ * (it is still listed here) until one.
+ */
+const DEFAULTS_ADDED_KEY = 'defaultsAdded'
 
 /** A root's identity: no two roots point at the same category or the same folder. */
 export function userSpaceRootKey(root: UserSpaceRoot): string {
@@ -30,13 +36,19 @@ export function userSpaceRootKey(root: UserSpaceRoot): string {
 export const useUserSpaceStore = defineStore('userSpace', () => {
   const roots = ref<UserSpaceRoot[]>([])
   const loaded = ref(false)
+  let defaultsAdded: string[] = []
   let loading: Promise<void> | null = null
 
   function ensureLoaded(): Promise<void> {
     if (loaded.value) return Promise.resolve()
-    loading ??= dbGet<UserSpaceRoot[]>(USER_SPACE_DB, ROOTS_KEY)
-      .then((stored) => {
+    loading ??= Promise.all([
+      dbGet<UserSpaceRoot[]>(USER_SPACE_DB, ROOTS_KEY),
+      // Separate fallbacks: an unreadable memory of the defaults must not blank the roots (the next add would overwrite them).
+      dbGet<string[]>(USER_SPACE_DB, DEFAULTS_ADDED_KEY).catch(() => null),
+    ])
+      .then(([stored, added]) => {
         roots.value = stored ?? []
+        defaultsAdded = added ?? []
       })
       .catch(() => {
         // An unreadable list is an empty one; the next add writes a fresh copy.
@@ -75,13 +87,35 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
   }
 
   /**
-   * Adds the default computer folders (the Torat Emet books, when installed). The service hands each folder out ONCE, so one the
-   * user removed on purpose does not come back; one added by hand is not added twice (`add` ignores a duplicate). Never throws.
+   * Adds the default computer folders (the Torat Emet books, when installed), each ONCE: the ones already added before are
+   * remembered in the roots' own database (see DEFAULTS_ADDED_KEY), so a folder the user removed by hand does not come back until
+   * a reset clears that database. A folder the file search does not cover is treated like a user-added one: not added (and not
+   * remembered, so it is checked again next time); it is returned so a page can show the same notice. One the user added by hand
+   * is not added twice. Never throws.
    */
-  async function claimDefaultFolders(): Promise<void> {
+  async function claimDefaultFolders(): Promise<{ folder: string; reason: UserSpaceFolderReason }[]> {
     await ensureLoaded()
-    const folders = await claimDefaultUserSpaceFolders()
-    for (const folder of folders) addComputerFolder(folder)
+    const rejected: { folder: string; reason: UserSpaceFolderReason }[] = []
+    let changed = false
+    for (const folder of await claimDefaultUserSpaceFolders()) {
+      const key = folder.toLowerCase()
+      if (defaultsAdded.includes(key)) continue
+      let check: Awaited<ReturnType<typeof checkUserSpaceFolder>>
+      try {
+        check = await checkUserSpaceFolder(folder)
+      } catch {
+        continue   // unknown: not added, not remembered - checked again next time
+      }
+      if (!check.covered) {
+        rejected.push({ folder, reason: check.reason })
+        continue
+      }
+      addComputerFolder(folder)   // false = already a root: remembered all the same
+      if (!defaultsAdded.includes(key)) defaultsAdded = [...defaultsAdded, key]   // a concurrent claim may have added it meanwhile
+      changed = true
+    }
+    if (changed) dbSet(USER_SPACE_DB, DEFAULTS_ADDED_KEY, [...defaultsAdded]).catch(() => {})
+    return rejected
   }
 
   function remove(key: string) {

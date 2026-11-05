@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using KitveiHakodesh.Core.LocalFiles.ToratEmet;
 
 namespace KitveiHakodesh.Core.UserSpace;
@@ -16,47 +17,16 @@ public sealed class DefaultUserSpaceFolders
 
 /// <summary>
 /// Folders UserSpace has by default: the Torat Emet books (<see cref="ToratEmetFolders"/>) when they exist on this computer.
-/// A folder is handed out ONCE: the first claim that finds it records it in the state file and returns it; the host adds it as a
-/// root. Later claims never return it again, so a folder the user removed on purpose does not come back, and one the user added by
-/// hand is not added twice (the host's root list ignores a duplicate; the folder is simply recorded as handed out).
-/// State: plain text, one lower-cased full path per line, in <see cref="DefaultStateFile"/> (beside the other app data).
+/// This only FINDS them; it keeps no state. Which of them the host has already added is the host's to remember, in the SAME store
+/// as the user's roots (the frontend's app-user-space database), so every reset that clears the roots also clears that memory and
+/// the defaults come back, while a folder the user removes by hand stays removed until such a reset.
 /// </summary>
 public static class UserSpaceDefaultFolders
 {
-    public static string DefaultStateFile => Path.Combine(Common.AppFileLocator.DataRoot, "userspace-default-folders.txt");
-
-    private static readonly object Gate = new();
-
-    public static DefaultUserSpaceFolders Claim(string? stateFile = null, ToratEmetFolders.Probe? probe = null)
+    public static DefaultUserSpaceFolders Find(ToratEmetFolders.Probe? probe = null, CancellationToken ct = default)
     {
         var result = new DefaultUserSpaceFolders();
-        stateFile ??= DefaultStateFile;
-        lock (Gate)
-        {
-            var located = ToratEmetFolders.Locate(probe);
-            if (located.Count == 0) return result;
-            var handedOut = ReadState(stateFile);
-            var fresh = located.Where(f => !handedOut.Contains(f.ToLowerInvariant())).ToList();
-            if (fresh.Count == 0) return result;
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
-                File.AppendAllLines(stateFile, fresh.Select(f => f.ToLowerInvariant()));
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return result;   // state not saved: hand nothing out (it would come back after a removal)
-            }
-            result.Folders.AddRange(fresh);
-        }
+        result.Folders.AddRange(ToratEmetFolders.Locate(probe, ct));
         return result;
-    }
-
-    private static HashSet<string> ReadState(string stateFile)
-    {
-        var set = new HashSet<string>(StringComparer.Ordinal);
-        try { if (File.Exists(stateFile)) foreach (var line in File.ReadAllLines(stateFile)) if (line.Length > 0) set.Add(line.Trim()); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        return set;
     }
 }

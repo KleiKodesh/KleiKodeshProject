@@ -623,8 +623,8 @@ export async function userSpaceSearch(query: string, roots: UserSpaceSearchRoot[
 export type UserSpaceFolderReason = '' | 'notFound' | 'notIndexedDrive' | 'excluded' | 'systemFolder'
 
 /**
- * Computer folders UserSpace has by default (the Torat Emet books, when installed). Each folder is handed out ONCE by the
- * service (Core UserSpaceDefaultFolders), so one the user removed does not come back.
+ * Computer folders UserSpace has by default (the Torat Emet books, when installed), as found by the service (Core
+ * UserSpaceDefaultFolders). It keeps no state: the user-space store remembers which it already added.
  */
 export async function claimDefaultUserSpaceFolders(): Promise<string[]> {
   try {
