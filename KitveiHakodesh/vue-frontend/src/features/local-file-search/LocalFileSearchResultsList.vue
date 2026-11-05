@@ -3,15 +3,11 @@ import { ref, watch } from 'vue'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import {
-  IconDocument20Filled,
-  IconDocumentPdf20Filled,
-  IconDocumentText20Filled,
-  IconDocumentGlobe20Filled,
   IconWindowArrowUp20Regular,
-  IconPuzzlePiece20Regular,
   IconFolderOpen20Regular,
   IconCopy20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { documentIcon, iconKeyForFileName } from '@/utils/documentIcons'
 import { useI18n } from 'vue-i18n'
 import { showToast } from '@/composables/useToast'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
@@ -85,22 +81,10 @@ async function copyPath(item: LocalFileSearchResult, event: MouseEvent) {
 
 type FileIconInfo = { component: unknown; color: string }
 
+// The shared table (utils/documentIcons), so this list can never drift from the rest of the app.
 function getFileIcon(item: LocalFileSearchResult): FileIconInfo {
-  if (item.addinName) return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
-  const extension = item.fileName.toLowerCase().split('.').pop()
-  switch (extension) {
-    case 'pdf':
-      return { component: IconDocumentPdf20Filled, color: '#F40F02' }
-    case 'html':
-    case 'htm':
-    case 'mht':
-    case 'mhtml':
-      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
-    case 'txt':
-      return { component: IconDocumentText20Filled, color: '#9e9e9e' }
-    default:
-      return { component: IconDocument20Filled, color: '#3478f6' }
-  }
+  const icon = documentIcon(iconKeyForFileName(item.fileName, !!item.addinName))
+  return { component: icon.icon20, color: icon.color }
 }
 
 // One formatter for every row: toLocaleDateString builds a new Intl formatter per call,
