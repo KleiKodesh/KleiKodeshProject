@@ -1,7 +1,7 @@
 import type { Component } from 'vue'
 import {
-  IconDocumentPdf20Filled,
-  IconDocumentText20Filled,
+  IconDocumentPdf20Regular,
+  IconDocumentText20Regular,
   IconDocumentGlobe20Filled,
   IconDocument20Filled,
   IconPuzzlePiece20Regular,
@@ -14,8 +14,8 @@ import {
   IconApps20Filled,
   IconFolder20Filled,
   IconChatSparkle20Regular,
-  IconDocumentPdf24Filled,
-  IconDocumentText24Filled,
+  IconDocumentPdf24Regular,
+  IconDocumentText24Regular,
   IconDocumentGlobe24Filled,
   IconDocument24Filled,
   IconPuzzlePiece24Regular,
@@ -82,9 +82,9 @@ export interface DocumentIcon {
 
 const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   book:     { key: 'book',     color: '#c1440e', icon20: IconBookRtl20,             icon24: IconBookRtl24 },
-  pdf:      { key: 'pdf',      color: '#F40F02', icon20: IconDocumentPdf20Filled,   icon24: IconDocumentPdf24Filled },
+  pdf:      { key: 'pdf',      color: '#E53935', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
   html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Filled, icon24: IconDocumentGlobe24Filled },
-  txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Filled,  icon24: IconDocumentText24Filled },
+  txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Regular,  icon24: IconDocumentText24Regular },
   // Office blue; the glyph is the book view toolbar's export-to-Word one.
   word:     { key: 'word',     color: '#2B579A', icon20: IconWordDocument,         icon24: IconWordDocument },
   addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
