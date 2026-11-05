@@ -635,6 +635,16 @@ export async function claimDefaultUserSpaceFolders(): Promise<string[]> {
   }
 }
 
+/**
+ * The Hebrew names of the default roots (the Torat Emet folders) among the given computer folders, parallel to them, "" for
+ * any other folder. Core decides (UserSpaceDefaultFolders.Titles). Throws when the service is unreachable (the caller asks again later).
+ */
+export async function userSpaceRootTitles(folders: string[]): Promise<string[]> {
+  if (!folders.length) return []
+  const r = await serviceCall<{ titles?: string[] }>('userSpaceRootTitles', { values: folders })
+  return folders.map((_, i) => r?.titles?.[i] ?? '')
+}
+
 /** Whether file search covers a folder - UserSpace only accepts folders its search can reach. */
 export async function checkUserSpaceFolder(folderPath: string): Promise<{ covered: boolean; reason: UserSpaceFolderReason }> {
   const r = await serviceCall<{ covered?: boolean; reason?: UserSpaceFolderReason }>('checkUserSpaceFolder', { value: folderPath })
@@ -784,7 +794,7 @@ export interface FileSystemSearchHit {
 /**
  * Search the file system using the DocumentLocator service.
  * Starts the service on demand if it has stopped and waits until the index is ready before returning results.
- * Vue's loading animation covers the wait. Returns up to `max` results (default 200).
+ * Vue's loading animation covers the wait. Returns up to `max` results (default 200); a negative `max` returns every match.
  */
 export function fileSystemSearch(
   query: string,

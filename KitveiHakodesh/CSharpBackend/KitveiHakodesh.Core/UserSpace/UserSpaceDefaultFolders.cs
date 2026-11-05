@@ -15,6 +15,13 @@ public sealed class DefaultUserSpaceFolders
     public List<string> Folders { get; set; } = new();
 }
 
+/// <summary>Result of <c>userSpaceRootTitles</c>: the Hebrew name of each asked folder that is a default root, "" for the others (parallel).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserSpaceRootTitles
+{
+    public List<string> Titles { get; set; } = new();
+}
+
 /// <summary>
 /// Folders UserSpace has by default: the Torat Emet books (<see cref="ToratEmetFolders"/>) when they exist on this computer.
 /// This only FINDS them; it keeps no state. Which of them the host has already added is the host's to remember, in the SAME store
@@ -27,6 +34,14 @@ public static class UserSpaceDefaultFolders
     {
         var result = new DefaultUserSpaceFolders();
         result.Folders.AddRange(ToratEmetFolders.Locate(probe, ct));
+        return result;
+    }
+
+    /// <summary>The names to show for the user's computer roots (parallel to <paramref name="folders"/>): the Hebrew name of a default root, else "".</summary>
+    public static UserSpaceRootTitles Titles(IEnumerable<string> folders, ToratEmetFolders.Probe? probe = null, CancellationToken ct = default)
+    {
+        var result = new UserSpaceRootTitles();
+        foreach (var folder in folders) result.Titles.Add(ToratEmetFolders.RootTitle(folder, probe, ct));
         return result;
     }
 }

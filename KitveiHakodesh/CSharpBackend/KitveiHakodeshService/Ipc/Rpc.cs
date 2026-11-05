@@ -24,6 +24,7 @@ public sealed class RpcRequest
 public sealed class LocateDocumentsArgs
 {
     public string? Query { get; set; }
+    /// <summary>Results wanted: above 0 that many, 0 = 200, below 0 = every match.</summary>
     public int Max { get; set; }
 }
 
@@ -392,6 +393,13 @@ public sealed class HbProgressResult
     public bool Active { get; set; }
     public long Received { get; set; }
     public long Total { get; set; }
+}
+
+/// <summary>Generic list-of-strings arg (e.g. <c>userSpaceRootTitles</c>).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class StringListArg
+{
+    public List<string>? Values { get; set; }
 }
 
 /// <summary>Generic single-string arg (e.g. <c>setHbLocalFolder</c>).</summary>

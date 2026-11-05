@@ -119,7 +119,11 @@ export function useUserSpace() {
   const rootKeyById = new Map<number, string>()
 
   function rootNode(root: UserSpaceRoot): CategoryNode {
-    if (root.kind === 'computer') return computerNode(root.path, root.title, 0)
+    if (root.kind === 'computer') {
+      const node = computerNode(root.path, store.rootTitle(root), 0)
+      node.title = store.rootTitle(root)   // the Hebrew name may arrive after the node was made
+      return node
+    }
     // The catalog's own shelves, as the catalog page browses them (hidden ones left out).
     if (root.kind === 'catalogAll')
       return { ...CATALOG_ROOT.value, id: WHOLE_CATALOG_ID, title: root.title, level: 0, children: withoutHiddenCategories(CATALOG_ROOT.value.children) }

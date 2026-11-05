@@ -164,6 +164,7 @@ function selectRow(index: number, event?: MouseEvent) {
         :key="row.uid"
         class="fs-item"
         data-nav-item
+        :data-testid="`tree-${row.kind}`"
         :class="{ 'is-focused': focusedIndex === index }"
         :style="{ '--level': row.level }"
         :title="getTooltip(row)"
@@ -189,11 +190,12 @@ function selectRow(index: number, event?: MouseEvent) {
           </template>
           <IconBookRtl20 v-else />
         </span>
-        <span class="title">{{ getTitle(row) }}</span>
+        <span class="title" data-testid="tree-title">{{ getTitle(row) }}</span>
         <button
           v-if="row.kind === 'folder' && canRemove?.(row.node)"
           type="button"
           class="row-remove"
+          data-testid="tree-remove"
           tabindex="-1"
           :title="$t('userSpace.removeRoot')"
           @mousedown.prevent

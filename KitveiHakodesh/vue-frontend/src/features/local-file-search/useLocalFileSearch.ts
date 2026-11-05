@@ -40,7 +40,8 @@ export interface LocalFileSearchResult {
 export type LocalFileSearchSortOrder = 'relevance' | 'fileName' | 'fullPath' | 'date' | 'fileType'
 
 const DEBOUNCE_MS = 200
-const MAX_RESULTS = 5000
+/** Every match: the page lists them in a windowed list, so nothing is cut off (a cap hid whole folders behind others). */
+const ALL_RESULTS = -1
 const LOADING_ANIMATION_DELAY_MS = 200
 
 /**
@@ -148,7 +149,7 @@ export function useLocalFileSearch(
     startIndexStatusPolling(thisGeneration)
 
     try {
-      const response = await fileSystemSearch(normalizedQuery, MAX_RESULTS)
+      const response = await fileSystemSearch(normalizedQuery, ALL_RESULTS)
       if (thisGeneration !== generation) return
 
       if (response.error) {

@@ -10,7 +10,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dbGet, dbSet } from '@/utils/persistence'
 import { folderDisplayName } from '@/utils/filePath'
-import { checkUserSpaceFolder, claimDefaultUserSpaceFolders, type UserSpaceFolderReason } from '@/webview-host/bridge'
+import { checkUserSpaceFolder, claimDefaultUserSpaceFolders, userSpaceRootTitles, type UserSpaceFolderReason } from '@/webview-host/bridge'
 
 export type UserSpaceRoot =
   | { kind: 'catalog'; categoryId: number; title: string }
@@ -37,6 +37,8 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
   const roots = ref<UserSpaceRoot[]>([])
   const loaded = ref(false)
   let defaultsAdded: string[] = []
+  /** Hebrew names Core gives the default roots, by lower-cased folder path (see rootTitle). */
+  const coreTitles = ref<Record<string, string>>({})
   let loading: Promise<void> | null = null
 
   function ensureLoaded(): Promise<void> {
@@ -57,8 +59,30 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
       .finally(() => {
         loaded.value = true
         loading = null
+        void resolveRootTitles()
       })
     return loading
+  }
+
+  /** Asks Core for the names of the computer roots it has not been asked about yet. Never throws. */
+  async function resolveRootTitles(): Promise<void> {
+    const paths = roots.value.flatMap((r) => (r.kind === 'computer' && !(r.path.toLowerCase() in coreTitles.value) ? [r.path] : []))
+    if (!paths.length) return
+    let titles: string[]
+    try { titles = await userSpaceRootTitles(paths) } catch { return }   // service not ready: not remembered, asked again next time
+    const next = { ...coreTitles.value }
+    paths.forEach((p, i) => { next[p.toLowerCase()] = titles[i] ?? '' })
+    coreTitles.value = next
+  }
+
+  /**
+   * The name a root shows: the Hebrew name Core gives a default root (Torat Emet), unless the stored title is no longer the
+   * folder's own name (the root was renamed); every other root shows its stored title.
+   */
+  function rootTitle(root: UserSpaceRoot): string {
+    if (root.kind !== 'computer') return root.title
+    const own = coreTitles.value[root.path.toLowerCase()]
+    return own && root.title === folderDisplayName(root.path) ? own : root.title
   }
 
   function persist() {
@@ -71,6 +95,7 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
     if (roots.value.some((r) => userSpaceRootKey(r) === key)) return false
     roots.value = [...roots.value, root]
     persist()
+    if (root.kind === 'computer') void resolveRootTitles()
     return true
   }
 
@@ -123,5 +148,5 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
     persist()
   }
 
-  return { roots, loaded, ensureLoaded, addCatalogCategory, addWholeCatalog, addComputerFolder, claimDefaultFolders, remove }
+  return { roots, loaded, ensureLoaded, rootTitle, addCatalogCategory, addWholeCatalog, addComputerFolder, claimDefaultFolders, remove }
 })

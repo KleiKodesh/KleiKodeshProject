@@ -4,13 +4,14 @@ import appResetSource from '@/features/settings/appResetState.ts?raw'
 import dbSwitchSource from '@/webview-host/dbSwitchCleanup.ts?raw'
 
 // The default Torat Emet folders: added once, remembered in the roots' own database, back after a reset.
-const db = vi.hoisted(() => ({ data: new Map<string, unknown>(), found: [] as string[], covered: true, throws: false }))
+const db = vi.hoisted(() => ({ data: new Map<string, unknown>(), found: [] as string[], covered: true, throws: false, titles: {} as Record<string, string> }))
 vi.mock('@/utils/persistence', () => ({
   dbGet: async (_db: string, key: string) => db.data.get(key) ?? null,
   dbSet: async (_db: string, key: string, value: unknown) => { db.data.set(key, value) },
 }))
 vi.mock('@/webview-host/bridge', () => ({
   claimDefaultUserSpaceFolders: async () => db.found,
+  userSpaceRootTitles: async (folders: string[]) => folders.map((f) => db.titles[f] ?? ''),
   checkUserSpaceFolder: async () => {
     if (db.throws) throw new Error('service down')
     return { covered: db.covered, reason: db.covered ? '' : 'notIndexedDrive' }
@@ -25,7 +26,7 @@ const fresh = () => { setActivePinia(createPinia()); return useUserSpaceStore() 
 const paths = (store: ReturnType<typeof useUserSpaceStore>) => store.roots.map((r) => (r as { path: string }).path)
 
 describe('default Torat Emet folders', () => {
-  beforeEach(() => { db.data.clear(); db.found = [BOOKS, MY]; db.covered = true; db.throws = false })
+  beforeEach(() => { db.data.clear(); db.found = [BOOKS, MY]; db.covered = true; db.throws = false; db.titles = {} })
 
   it('adds both once, then not again after a restart', async () => {
     let store = fresh()
@@ -53,6 +54,18 @@ describe('default Torat Emet folders', () => {
     store = fresh()
     await store.claimDefaultFolders()
     expect(store.roots.length).toBe(2)
+  })
+
+  it('a default root shows the name Core gives it; a renamed or other root keeps its own', async () => {
+    db.titles = { [BOOKS]: 'HE-BOOKS', [MY]: 'HE-MY' }
+    const store = fresh()
+    await store.claimDefaultFolders()
+    await vi.waitFor(() => expect(store.rootTitle(store.roots[0]!)).toBe('HE-BOOKS'))
+    expect(store.rootTitle(store.roots[1]!)).toBe('HE-MY')
+    store.addComputerFolder('C:/Other/Books')
+    store.roots[1]!.title = 'My own name'
+    expect(store.rootTitle(store.roots[1]!)).toBe('My own name')
+    await vi.waitFor(() => expect(store.rootTitle(store.roots[2]!)).toBe('Books'))
   })
 
   it('a folder added by hand is not added twice', async () => {
