@@ -2,8 +2,8 @@ import type { Component } from 'vue'
 import {
   IconDocumentPdf20Regular,
   IconDocumentText20Regular,
-  IconDocumentGlobe20Filled,
-  IconDocument20Filled,
+  IconDocumentGlobe20Regular,
+  IconDocument20Regular,
   IconPuzzlePiece20Regular,
   IconHome20Regular,
   IconLibrary20Filled,
@@ -16,8 +16,8 @@ import {
   IconChatSparkle20Regular,
   IconDocumentPdf24Regular,
   IconDocumentText24Regular,
-  IconDocumentGlobe24Filled,
-  IconDocument24Filled,
+  IconDocumentGlobe24Regular,
+  IconDocument24Regular,
   IconPuzzlePiece24Regular,
   IconHome24Regular,
   IconLibrary24Filled,
@@ -34,7 +34,8 @@ import {
 import { IconSearchSparkle24, IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import IconBookRtl24 from '@/components/IconBookRtl24.vue'
-import IconWordDocument from '@/components/IconWordDocument.vue'
+import IconWordDocument20 from '@/components/IconWordDocument20.vue'
+import IconWordDocument24 from '@/components/IconWordDocument24.vue'
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 
 /**
@@ -83,12 +84,12 @@ export interface DocumentIcon {
 const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   book:     { key: 'book',     color: '#c1440e', icon20: IconBookRtl20,             icon24: IconBookRtl24 },
   pdf:      { key: 'pdf',      color: '#E53935', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
-  html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Filled, icon24: IconDocumentGlobe24Filled },
+  html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Regular, icon24: IconDocumentGlobe24Regular },
   txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Regular,  icon24: IconDocumentText24Regular },
-  // Office blue; the glyph is the book view toolbar's export-to-Word one.
-  word:     { key: 'word',     color: '#2B579A', icon20: IconWordDocument,         icon24: IconWordDocument },
+  // Office blue; Fluent's outline page with a W, same stroke as the other file-type icons.
+  word:     { key: 'word',     color: '#2B579A', icon20: IconWordDocument20,       icon24: IconWordDocument24 },
   addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
-  document: { key: 'document', color: '#3478f6', icon20: IconDocument20Filled,      icon24: IconDocument24Filled },
+  document: { key: 'document', color: '#3478f6', icon20: IconDocument20Regular,      icon24: IconDocument24Regular },
   // Destination routes. These mirror the home page's navigation cards
   // (useHomeNavCards) glyph-for-glyph and colour-for-colour, so a tab for one of them
   // is recognisably the same thing as its card.
