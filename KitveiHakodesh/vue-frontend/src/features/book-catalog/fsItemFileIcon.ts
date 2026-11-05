@@ -15,6 +15,7 @@ export function fileTitle(file: LocalFileItem): string {
 
 /** The folder a computer file sits in - a file search result's second line. */
 export function fileFolder(file: LocalFileItem): string {
+  if (file.folderTitle) return file.folderTitle
   const cut = Math.max(file.path.lastIndexOf('\\'), file.path.lastIndexOf('/'))
   return cut > 0 ? file.path.substring(0, cut) : ''
 }

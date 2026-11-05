@@ -15,6 +15,8 @@ public sealed class FileHit
     public string AddinName { get; set; } = "";
     /// <summary>The Hebrew name to show instead of the file name (Torat Emet books under an install's Books folder); empty = show the file name.</summary>
     public string DisplayName { get; set; } = "";
+    /// <summary>The folder line with the Hebrew folder names (Torat Emet under an install's Books folder); empty = show <see cref="Path"/>.</summary>
+    public string DisplayFolder { get; set; } = "";
 }
 
 /// <summary>Result payload for <c>locateDocuments</c>.</summary>

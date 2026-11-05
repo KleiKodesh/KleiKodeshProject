@@ -49,6 +49,15 @@ internal static class ToratEmetNamesCheck
             Check(ToratEmetNames.FileTitle((install + @"\books\001_tora\01_bereshit\A01_GENESIS.TXT")) == BereshitHe, "case-insensitive");
             Check(ToratEmetNames.FolderTitle(install + @"\Books") == null, "the Books folder itself has no title");
         }
+        foreach (string install in new[] { @"C:\Users\x\Documents\ToratEmetInstall", @"d:\apps\mytoratemet2" })
+        {
+            Check(ToratEmetNames.DisplayFolder(install + @"\Books\001_TORA\01_BERESHIT") == install + @"\Books\" + ToraHe + @"\" + BereshitHe, "display folder under " + install);
+            Check(ToratEmetNames.DisplayFolder(install + @"\Books\001_TORA\NO_SUCH_FOLDER") == install + @"\Books\" + ToraHe + @"\NO_SUCH_FOLDER", "display folder: unknown folder keeps its name");
+            Check(ToratEmetNames.DisplayFolder(install + @"\Books") == "", "display folder: the Books folder itself");
+        }
+        Check(ToratEmetNames.DisplayFolder(@"\\srv\share\ToratEmetInstall\Books\001_TORA") == @"\\srv\share\ToratEmetInstall\Books\" + ToraHe, "display folder: network path keeps its leading backslashes");
+        Check(ToratEmetNames.DisplayFolder(@"C:\x\ToratEmetUserData\MyBooks\001_TORA") == "", "display folder: user data untouched");
+        Check(ToratEmetNames.DisplayFolder(@"C:\Other\Books\001_TORA") == "", "display folder: other Books untouched");
         Check(ToratEmetNames.FolderTitle(@"C:\x\ToratEmetUserData\MyBooks\001_TORA") == null, "user data stays untranslated (folder)");
         Check(ToratEmetNames.FileTitle(@"C:\x\ToratEmetUserData\MyBooks\001_TORA\01_BERESHIT\a01_Genesis.txt") == null, "user data stays untranslated (file)");
         Check(ToratEmetNames.FolderTitle(@"C:\x\Other\Books\001_TORA") == null, "a Books folder outside ToratEmet is not translated");

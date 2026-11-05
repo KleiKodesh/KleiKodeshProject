@@ -77,6 +77,8 @@ export interface FileSearchResult {
   addinName: string
   /** Hebrew name to show instead of the file name (Torat Emet books). */
   displayName?: string
+  /** Folder line with Hebrew folder names (Torat Emet books); '' = show fullPath. */
+  displayPath?: string
 }
 
 export type GlobalSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
@@ -449,6 +451,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
             fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
             addinName: item.addinName ?? '',
             displayName: item.displayName ?? '',
+            displayPath: item.displayFolder ? `${item.displayFolder}\\${item.fileName}` : '',
           })))
         })
         .catch(() => {
