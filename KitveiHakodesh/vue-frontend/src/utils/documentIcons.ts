@@ -34,6 +34,7 @@ import {
 import { IconSearchSparkle24, IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import IconBookRtl24 from '@/components/IconBookRtl24.vue'
+import IconWordDocument from '@/components/IconWordDocument.vue'
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 
 /**
@@ -54,6 +55,7 @@ export type DocumentIconKey =
   | 'pdf'
   | 'html'
   | 'txt'
+  | 'word'
   | 'addin'
   | 'document'
   | 'library'
@@ -83,6 +85,8 @@ const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   pdf:      { key: 'pdf',      color: '#F40F02', icon20: IconDocumentPdf20Filled,   icon24: IconDocumentPdf24Filled },
   html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Filled, icon24: IconDocumentGlobe24Filled },
   txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Filled,  icon24: IconDocumentText24Filled },
+  // Office blue; the glyph is the book view toolbar's export-to-Word one.
+  word:     { key: 'word',     color: '#2B579A', icon20: IconWordDocument,         icon24: IconWordDocument },
   addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
   document: { key: 'document', color: '#3478f6', icon20: IconDocument20Filled,      icon24: IconDocument24Filled },
   // Destination routes. These mirror the home page's navigation cards
@@ -158,6 +162,18 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
   }
 }
 
+/**
+ * A tab / recents entry's icon: a computer file shows its file type's icon (txt, Word, ...),
+ * anything else its route's. One rule for home cards, history list and the tab strip.
+ */
+export function iconKeyForEntry(
+  entry: { route: string; isOtzariaAddin?: boolean; localFileName?: string; localFilePath?: string },
+): DocumentIconKey {
+  const fileName = entry.localFileName || entry.localFilePath
+  if (entry.route !== '/book-view' && fileName && !entry.isOtzariaAddin) return iconKeyForFileName(fileName)
+  return iconKeyForRoute(entry.route, entry.isOtzariaAddin)
+}
+
 /** File name (+ addin flag) → icon key, for file-search results. */
 export function iconKeyForFileName(fileName: string, isAddin = false): DocumentIconKey {
   if (isAddin) return 'addin'
@@ -171,6 +187,14 @@ export function iconKeyForFileName(fileName: string, isAddin = false): DocumentI
       return 'html'
     case 'txt':
       return 'txt'
+    // Every MS Word file type.
+    case 'doc':
+    case 'docx':
+    case 'docm':
+    case 'dot':
+    case 'dotx':
+    case 'dotm':
+      return 'word'
     default:
       return 'document'
   }
