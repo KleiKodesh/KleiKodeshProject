@@ -188,7 +188,11 @@ export function iconKeyForFileName(fileName: string, isAddin = false): DocumentI
       return 'html'
     case 'txt':
       return 'txt'
-    // Every MS Word file type.
+    // Every file Word opens: its own types, plus rtf and the OpenDocument text types.
+    case 'rtf':
+    case 'odt':
+    case 'ott':
+    case 'fodt':
     case 'doc':
     case 'docx':
     case 'docm':
