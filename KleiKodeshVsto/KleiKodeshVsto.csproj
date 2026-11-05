@@ -448,7 +448,7 @@
     <ManifestKeyFile>KleiKodesh_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>1E1E8386DF21999BCD28810D21430C0FC1F88394</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>4F2FC16DEDCBEC0DECCA42A58D2C06F231B01177</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>

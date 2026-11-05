@@ -113,6 +113,9 @@ namespace KitveiHakodeshDemoApp
             // uses the same folder and picks this environment up.
             AppViewer.StartSharedEnvironment(MainForm.WebCacheFolder);
             KitveiHakodeshLib.LocalFile.WindowsRecentDocuments.Enabled = true;
+            // Test: does the standalone window need DarkNet at all? Our own chrome draws the
+            // title bar. Remove this line to restore the old behaviour.
+            AppViewer.UseDarkNet = false;
             // Before the form: the receiver must exist the moment the mutex is ours, so
             // launches that race our startup (a multi-file Explorer open) find it.
             _receiver = new OpenRequestReceiver();

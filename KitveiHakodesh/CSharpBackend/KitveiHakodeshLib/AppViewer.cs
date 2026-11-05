@@ -188,6 +188,13 @@ namespace KitveiHakodeshLib
         /// </summary>
         public Action<IntPtr> SetPopupOwner { get; private set; }
 
+        /// <summary>
+        /// Master switch for every DarkNet call (process theme and per-window title-bar theme).
+        /// On by default (VSTO relies on it); the standalone app turns it off to test whether
+        /// its own chrome needs it.
+        /// </summary>
+        public static bool UseDarkNet { get; set; } = true;
+
         public void SetPopupOwnerAction(Action<IntPtr> action)
         {
             SetPopupOwner = action;
@@ -408,7 +415,7 @@ namespace KitveiHakodeshLib
             // SetCurrentProcessTheme(Auto) must be called before any window in this
             // process is shown — do it here unconditionally so it runs in both the
             // standalone demo app and the VSTO (Word) process.
-            DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
+            if (UseDarkNet) DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
             ParentChanged += OnParentChanged;
             Controls.Add(_webView);
             _InitSplash();
@@ -640,7 +647,9 @@ namespace KitveiHakodeshLib
             // each call is a browser-process round-trip, so one call is faster than two.
             // Only HOST facts are injected; the database path and folder settings are the
             // service's and the page asks it for them.
-            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            // Both registrations are sent before either is awaited, so their round-trips
+            // overlap instead of queueing; they are still sent (and so registered) in order.
+            var bridgeScriptTask = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + HostFactsScript());
 
             // IframeScrollScript runs in every frame including local file iframes.
@@ -653,8 +662,10 @@ namespace KitveiHakodeshLib
             // window.Otzaria stub must exist BEFORE the addin's own scripts run. Those
             // frames are cross-origin from the Vue app, so the Vue side cannot inject it —
             // document-created injection is the only path that reaches them.
-            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            var frameScriptTask = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
+            _dbInjectionScriptId = await bridgeScriptTask;
+            await frameScriptTask;
 
             _bridge = new WebBridge(_webView, this);
             // The service is a hard dependency: the channel starts it when no instance is

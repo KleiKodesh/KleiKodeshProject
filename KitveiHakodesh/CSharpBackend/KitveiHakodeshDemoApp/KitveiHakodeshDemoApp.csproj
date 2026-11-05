@@ -176,6 +176,9 @@
   <ItemGroup>
     <Content Include="KitveiHakodesh.ico" />
     <Content Include="KitveiHakodeshLarge.ico" />
+    <EmbeddedResource Include="KitveiHakodeshLarge.ico">
+      <LogicalName>WindowIcon.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\KitveiHakodesh.targets" />
