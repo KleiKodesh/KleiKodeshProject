@@ -153,6 +153,13 @@ defineExpose({
   content-visibility: auto;
   contain-intrinsic-size: auto 49px;
 }
+/* Long titles wrap to the next line instead of an ellipsis. */
+.catalog-cards :deep(.card-title) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
 .is-focused :deep(.card-action) {
   opacity: 1;
   pointer-events: auto;
