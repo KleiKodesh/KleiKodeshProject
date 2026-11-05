@@ -117,6 +117,7 @@ namespace KitveiHakodeshLib
         // (Light) unless SetCurrentProcessTheme(Auto) runs right before it.
         private void SetPopupTheme(Form form, bool isDark)
         {
+            if (!UseDarkNet) return;
             try
             {
                 if (SetPopupOwner != null) DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto); // VSTO only

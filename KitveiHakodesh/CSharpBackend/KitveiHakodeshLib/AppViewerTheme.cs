@@ -78,7 +78,7 @@ namespace KitveiHakodeshLib
             {
                 // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
                 // for DarkNet's initial registration of the window handle.
-                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
+                if (UseDarkNet) DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
             }
             catch { /* best-effort — VSTO or other hosts may not support this */ }
         }
@@ -110,7 +110,7 @@ namespace KitveiHakodeshLib
                 if (hostForm == null) return;
                 // SetWindowThemeForms is safe to call multiple times after the window
                 // is shown — this is the documented live-toggle API per the DarkNet README.
-                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
+                if (UseDarkNet) DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
             }
             catch { /* best-effort — no-op if DarkNet can't apply the theme */ }
         }
@@ -126,7 +126,7 @@ namespace KitveiHakodeshLib
         {
             if (form == null) return;
             bool isDark = AppSettingsRegistry.GetDarkMode();
-            try { DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
+            try { if (UseDarkNet) DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
             catch { /* best-effort */ }
             // Track this form so live toggles from HandleSetTheme also update it.
             _extraThemeForm = form;
@@ -181,7 +181,7 @@ namespace KitveiHakodeshLib
             // That form hosts the WebView2 directly and is not reachable via FindForm().
             if (_extraThemeForm != null && !_extraThemeForm.IsDisposed)
             {
-                try { DarkNet.Instance.SetWindowThemeForms(_extraThemeForm, isDark ? Theme.Dark : Theme.Light); }
+                try { if (UseDarkNet) DarkNet.Instance.SetWindowThemeForms(_extraThemeForm, isDark ? Theme.Dark : Theme.Light); }
                 catch { }
             }
 

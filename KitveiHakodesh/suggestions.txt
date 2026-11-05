@@ -1,15 +1,55 @@
+ask otzria to get certificate signing
+
+pdf files:
+ery slow to load from teh computer
+
+linker:
+שם not recognized
+add linker report tool
+otrai / zyit:
+add inline links of chvrauta links easy peasy
+per lien chavruta links of ffotnotes?
+
+bookview:
+add no line breaks mode
+
+bookview links:
+check if costume links toltip is sizing diwn to conetent in new versions
+
 fts:
 ai search with api?
 symantic search
 aramaic to Hebrew?
+test of search is slower due to saving more meta data in verification stage
+long snippets might be cut off at highlight point in narrow vp
+
+look into automatic reader of msedge
+
+fts:
+כי ביצחק עם נטיות didint highlights teh result wrds!
+is teh sniipet highlited in c# or in teh vue?
+on closer isnepction it did except when in small view prt so teh part with the highlight got hidden!
+
+home page limit the width of teh tiles and have teh search bar match its total width
+
+bookview
+מפרשים נוספים על is slow to load
+
+chromtabs:
+needs to use darker colors?
 
 bokview:
 search: option for side panel
-bookview create a flow mode now that we have windwoed rendering.
-bookmarks
+
+bookview:
+continuos view
+th scrollbar tooltip now isn't showng at all!? when wcrolling with mouse wheel r touch
+why am i not seeing end of parsha smach and pe
 
 homepage tiles:
 some of teh descriptions are teriible some ar vrbose
+add option for list
+think about drop down icon fro cards
 
 speculative
 ------------
@@ -35,4 +75,9 @@ bookview:
 search:
 needs to validate selected result is in view if not then scroll again into view
 Hebrew books parlel open by searching for opening sentence using a sliding window till it matches
+
+local files 
+converting options
+
+change the Hebrew ooks icon to a pdf icon?
 

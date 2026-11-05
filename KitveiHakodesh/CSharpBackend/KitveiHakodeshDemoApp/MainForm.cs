@@ -121,13 +121,13 @@ namespace KitveiHakodeshDemoApp
         {
             try
             {
-                using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))
-                    return executableIcon == null ? null : (Icon)executableIcon.Clone();
+                // The .ico is embedded (WindowIcon.ico), so no shell lookup of the exe at startup.
+                using (var stream = typeof(MainForm).Assembly.GetManifestResourceStream("WindowIcon.ico"))
+                    return stream == null ? null : new Icon(stream);
             }
             catch
             {
-                // ExtractAssociatedIcon throws on UNC paths (documented limitation) —
-                // running from a network share must not crash startup. Default icon.
+                // A missing icon must not crash startup. Default icon.
                 return null;
             }
         }
