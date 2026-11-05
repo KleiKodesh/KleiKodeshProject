@@ -3,7 +3,9 @@
  * Hosted end-to-end rig: drives the REAL desktop host (KitveiHakodeshDemoApp, WebView2) through
  * the real relay -> service -> Core path with Playwright over CDP. See README.md beside this file.
  *
- *   node e2e-hosted/run-hosted-rig.mjs [--host-dir <folder>] [--keep] [--doc <file.docx>] [--pictures <file.docx>]
+ *   node e2e-hosted/run-hosted-rig.mjs [--aot] [--host-dir <folder>] [--keep] [--doc <file.docx>] [--pictures <file.docx>]
+ *
+ *   --aot: publish and test the native AOT service (what the app ships) instead of the JIT build.
  *
  * Isolation (never touches the user's app, service, data or port 5173):
  *   - everything lives in a fresh temp folder (host build, frontend build, service shadow copy,
@@ -35,10 +37,15 @@ const textDoc = path.resolve(option('--doc', path.join(projectRoot, 'KitveiHakod
 // the missing-picture check deletes the PNGs of the default picture document (it mixes PNG and JPEG), whatever --pictures names
 const defaultPictureDoc = path.join(projectRoot, 'KitveiHakodesh', 'FastDocView', 'test-data', 'apache-poi', 'VariousPictures.docx')
 const pictureDoc = path.resolve(option('--pictures', defaultPictureDoc))
-const serviceBuildDir = path.resolve(option('--service-dir', path.join(backendDir, 'KitveiHakodeshService', 'bin', 'Release', 'net10.0-windows')))
 const keep = flag('--keep')
+// --aot: publish the service as native AOT (what the app ships) into the rig folder and test that.
+// The JIT build passes things AOT cannot do (e.g. reflection-made MessagePack formatters).
+const aot = flag('--aot')
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kh-hosted-rig-'))
+const serviceBuildDir = aot
+  ? path.join(root, 'aot-service')
+  : path.resolve(option('--service-dir', path.join(backendDir, 'KitveiHakodeshService', 'bin', 'Release', 'net10.0-windows')))
 const hostDir = path.join(root, 'host')
 const log = (msg) => console.log(`[rig ${new Date().toISOString().slice(11, 19)}] ${msg}`)
 const started = [] // { name, child }
@@ -88,6 +95,15 @@ function buildFrontend() {
     path.join(frontendDir, 'node_modules', 'vite', 'bin', 'vite.js'), 'build',
     '--outDir', path.join(hostDir, 'KitveiHakodesh'), '--emptyOutDir',
   ], { cwd: frontendDir, env: { ...process.env, VITE_KH_TEST_HOOKS: '1' } })
+}
+
+function publishAotService() {
+  // The ILCompiler's link step runs vswhere by name, so its folder must be on PATH.
+  const vsInstaller = 'C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer'
+  runStep('service AOT publish', 'dotnet', [
+    'publish', path.join(backendDir, 'KitveiHakodeshService', 'KitveiHakodeshService.csproj'),
+    '-c', 'Release', '-r', 'win-x64', '-o', serviceBuildDir, '-nologo', '-v', 'q',
+  ], { env: { ...process.env, PATH: `${process.env.PATH};${vsInstaller}` } })
 }
 
 function shadowService() {
@@ -333,6 +349,7 @@ async function runChecks(page, consoleErrors) {
 
 // ── main ────────────────────────────────────────────────────────────────────
 async function main() {
+  if (aot) publishAotService()
   for (const f of [textDoc, pictureDoc, path.join(serviceBuildDir, 'KitveiHakodeshService.exe')])
     if (!fs.existsSync(f)) throw new Error(`missing ${f}`)
   log(`rig folder ${root}`)
