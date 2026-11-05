@@ -64,6 +64,29 @@ public static class ToratEmetFolders
         return found;
     }
 
+    /// <summary>Hebrew name of the install's Books root: "Torat Emet".</summary>
+    public const string BooksRootTitle = "תורת אמת";
+    /// <summary>Hebrew name of the MyBooks root: "Torat Emet - personal books".</summary>
+    public const string MyBooksRootTitle = "תורת אמת - ספרים אישיים";
+
+    /// <summary>
+    /// The Hebrew name to show for a folder that is one of the default roots <see cref="Locate"/> finds (wherever the program is
+    /// installed); "" for any other folder, which keeps its own name.
+    /// </summary>
+    public static string RootTitle(string? folder, Probe? probe = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return "";
+        string full;
+        try { full = Path.GetFullPath(folder!).TrimEnd('\\', '/'); } catch (Exception) { return ""; }
+        string name = Path.GetFileName(full);
+        bool books = string.Equals(name, "Books", StringComparison.OrdinalIgnoreCase);
+        bool mine = string.Equals(name, "MyBooks", StringComparison.OrdinalIgnoreCase);
+        if (!books && !mine) return "";
+        foreach (var found in Locate(probe, ct))
+            if (string.Equals(found, full, StringComparison.OrdinalIgnoreCase)) return books ? BooksRootTitle : MyBooksRootTitle;
+        return "";
+    }
+
     /// <summary>True when the folder (any depth) holds a .txt file. Stops at the first one, with no cap on what it looks at (a tree
     /// with no .txt is walked whole); cancellable, and the host runs it off the startup path.</summary>
     public static bool ContainsTxtFile(string folder, CancellationToken ct = default)

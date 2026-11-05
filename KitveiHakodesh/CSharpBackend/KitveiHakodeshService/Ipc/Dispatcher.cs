@@ -533,7 +533,8 @@ public sealed class Dispatcher(
                 case "locateDocuments":
                 {
                     var args = MsgPack.De<LocateDocumentsArgs>(req.Args);
-                    int max = args.Max > 0 ? args.Max : 200;
+                    // Max > 0: that many; 0 (not given): 200; below 0: every match (the file-search page lists them all, windowed).
+                    int max = args.Max > 0 ? args.Max : args.Max < 0 ? int.MaxValue : 200;
                     var result = await locator.LocateAsync(args.Query ?? "", max, ct);
                     return RpcResponse.Ok(
                         MsgPack.Ser(result));
@@ -1045,6 +1046,14 @@ public sealed class Dispatcher(
                 case "claimDefaultUserSpaceFolders":
                     return RpcResponse.Ok(MsgPack.Ser(await Task.Run(
                         () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Find(null, ct), ct)));
+
+                // The Hebrew names of the default roots among the given computer folders (Core UserSpaceDefaultFolders.Titles).
+                case "userSpaceRootTitles":
+                {
+                    var a = MsgPack.De<StringListArg>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(await Task.Run(
+                        () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Titles(a.Values ?? [], null, ct), ct)));
+                }
 
                 case "checkUserSpaceFolder":
                 {

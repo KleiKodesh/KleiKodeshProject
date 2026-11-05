@@ -308,10 +308,11 @@ function confirmRemove() {
         :key="userSpaceRootKey(root)"
         class="root-pill"
         :class="{ active: selectedRootKeys.includes(userSpaceRootKey(root)) }"
-        :title="root.kind === 'computer' ? root.path : root.title"
+        :title="root.kind === 'computer' ? root.path : userSpaceStore.rootTitle(root)"
+        data-testid="user-space-root-pill"
         @mousedown.prevent
         @click="toggleRootPill(userSpaceRootKey(root))"
-      >{{ root.title }}</button>
+      >{{ userSpaceStore.rootTitle(root) }}</button>
     </div>
     <MessageBanner v-if="notice" class="notice" :message="notice" @dismiss="notice = null" />
     <div ref="contentRef" class="user-space-content">
