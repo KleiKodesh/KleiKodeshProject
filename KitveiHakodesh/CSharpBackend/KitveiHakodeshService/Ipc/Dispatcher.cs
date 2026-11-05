@@ -184,17 +184,17 @@ public sealed class Dispatcher(
                 case "fastDocViewBlocks":
                 {
                     var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Blocks(a.DocumentId, a.First, a.Count)));
+                    return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Blocks(a.DocumentId, a.First, a.Count)));
                 }
                 case "fastDocViewNotes":
                 {
                     var a = MsgPack.De<FastDocViewBlocksArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Notes(a.DocumentId, a.First, a.Count)));
+                    return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Notes(a.DocumentId, a.First, a.Count)));
                 }
                 case "fastDocViewNoteBlocks":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.NoteBlocks(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewHeadings":
-                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                    return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Headings(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewSearch":
                 {
                     var a = MsgPack.De<FastDocViewSearchArgs>(req.Args);
@@ -218,7 +218,7 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(picture is null ? null : MsgPack.Ser(picture));
                 }
                 case "fastDocViewSections":
-                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
+                    return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewWeights":
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Weights(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewScan":

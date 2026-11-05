@@ -24,6 +24,19 @@ internal static class MsgPack
     /// <summary>Serialize a DTO to MessagePack bytes.</summary>
     public static byte[] Ser<T>(T value) => MessagePackSerializer.Serialize(value, Options);
 
+    /// <summary>Serialize a bare list result (a top-level msgpack array). Native AOT cannot build
+    /// StandardResolver's List&lt;T&gt; formatter (it is made by reflection: "No parameterless
+    /// constructor ... ListFormatter`1"), so the formatter is created here directly; the element
+    /// type's formatter still comes from the generated resolvers. Same bytes as Ser.</summary>
+    public static byte[] SerList<T>(List<T> value)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        var writer = new MessagePackWriter(buffer);
+        new MessagePack.Formatters.ListFormatter<T>().Serialize(ref writer, value, Options);
+        writer.Flush();
+        return buffer.WrittenSpan.ToArray();
+    }
+
     /// <summary>Deserialize a DTO from MessagePack bytes (null/empty → default new()).</summary>
     public static T De<T>(byte[]? bytes) where T : new()
         => bytes is null || bytes.Length == 0
