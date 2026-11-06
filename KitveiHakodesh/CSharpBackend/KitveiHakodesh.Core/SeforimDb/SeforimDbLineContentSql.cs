@@ -60,9 +60,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// which is SQLite's rowid, so it costs a direct row lookup rather than an index
         /// search - measured at about 0.02 ms for a page of lines.
         /// </summary>
-        internal static string ContentJoin(SeforimDbSchema schema, string lineTableAlias)
+        internal static string ContentJoin(SeforimDbSchema schema, string lineTableAlias, string dbSchema = "main")
             => schema.HasSplitLineContent
-                ? " LEFT JOIN line_content " + SidecarAlias(lineTableAlias) +
+                ? " LEFT JOIN " + (dbSchema == "main" ? "" : dbSchema + ".") + "line_content " + SidecarAlias(lineTableAlias) +
                   " ON " + SidecarAlias(lineTableAlias) + ".id = " + lineTableAlias + ".id"
                 : string.Empty;
 

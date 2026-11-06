@@ -18,15 +18,14 @@ namespace KitveiHakodeshService.Hosting;
 /// and started. That first request is held and answered by the data host once it is up, so
 /// the first caller sees an ordinary (slightly slower) reply.
 ///
-/// When the data host stops itself (it restarts after a database-path change), the service
-/// stops with it; the SCM shows it stopped and the next host to need it starts it again.
+/// When the data host asks to be reloaded (a database-path or additional-library change) it is
+/// rebuilt IN THIS PROCESS (<see cref="DataHostSupervisor"/>): the service keeps running, so
+/// nothing has to start it again. Only a stop that is not a reload ends the service.
 /// </summary>
 public sealed class UserSessionBinding(
     IHostApplicationLifetime serviceLifetime,
     ILogger<UserSessionBinding> logger) : BackgroundService
 {
-    private IHost? _dataHost;
-
     /// <summary>A service started but never contacted (a host that died before its window,
     /// a start nobody followed up) has no OwnerWatcher yet - that lives in the data host. Bound
     /// the wait so it does not sit as a SYSTEM process forever; same limit as the data host's
@@ -79,25 +78,35 @@ public sealed class UserSessionBinding(
             return;
         }
 
-        _dataHost = Program.BuildDataHost(Array.Empty<string>());
-        await _dataHost.StartAsync(stoppingToken);
-        // The request that told us who we serve is answered like any other, once the data host
-        // is up - the first caller sees nothing special.
-        _ = AnswerAsync(_dataHost.Services.GetRequiredService<Dispatcher>(), firstConnection, firstRequest, stoppingToken);
-        try
-        {
-            // Ends when the data host stops itself or the SCM stops us.
-            await _dataHost.WaitForShutdownAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) { }
+        // The data host runs - and is rebuilt in this process on a reload request (an added or
+        // removed library, a switched database) - until the SCM stops us or something stops it
+        // without asking for a reload (the installer's "shutdown", a host that cannot be built).
+        logger.LogWarning("data host: supervisor starting");
+        var supervisor = new DataHostSupervisor(
+            () => WindowsServiceMode.CreatePipe(pipeName),
+            () => Program.BuildDataHost(Array.Empty<string>()),
+            (host, pipe, request, ct) => AnswerAsync(host.Services.GetRequiredService<Dispatcher>(), pipe, request, ct),
+            DataHostReload.Consume,
+            logger,
+            endProcess: () => Environment.Exit(0));
+        try { await supervisor.RunAsync(firstConnection, firstRequest!, stoppingToken); }
         finally
         {
-            try { await _dataHost.StopAsync(CancellationToken.None); } catch { }
-            _dataHost.Dispose();
-            _dataHost = null;
-            // The data host restarted itself: let the SCM see us stopped so the next host
-            // start brings a fresh instance up against the new database.
-            if (!stoppingToken.IsCancellationRequested) serviceLifetime.StopApplication();
+            // The data host stopped for good (or never started): the service stops with it, and
+            // the next client starts a fresh one. Not when the SCM itself is stopping us.
+            if (!stoppingToken.IsCancellationRequested)
+            {
+                serviceLifetime.StopApplication();
+                // A stop that never completes leaves a service the SCM reports as running with no
+                // pipe behind it, and nothing can start it again. End the process instead, so the
+                // next client starts a fresh one.
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(60));
+                    logger.LogError("The service did not stop within 60s; ending the process");
+                    Environment.Exit(1);
+                });
+            }
         }
     }
 

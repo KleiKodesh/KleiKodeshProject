@@ -9,6 +9,9 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
 import { fileIcon, fileTitle } from './fsItemFileIcon'
 import type { BookRow } from '@/webview-host/queries.types'
+import { getCatalogCardLines, getLibraryName, hasLibraryBadges } from './catalogCardLines'
+import { storeToRefs } from 'pinia'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
 import { stripCommentaryTarget } from './stripCommentaryTarget'
@@ -42,12 +45,17 @@ function activateIndex(index: number, openInNewTab = false) {
   else emit('selectBook', item.book, openInNewTab)
 }
 
-/** Secondary line: book count for a folder; a book's author is in its title. */
-function getSecondaryLine(item: FsItem): string {
-  if (item.kind !== 'folder') return ''
-  const count = item.node.subtreeBookIds?.length ?? 0
-  return count ? t('bookCatalog.bookCount', { n: count }) : ''
-}
+/**
+ * Cards carry the source library as a separate badge line, not as a suffix of the
+ * secondary line: without it a same-named folder/book from an attached library is
+ * visually identical to the main library's, and a user who clicks the wrong one
+ * finds none of their content and gives up. See catalogCardLines for why it must
+ * not share a line with the count/authors.
+ */
+const { showLibraryBadge } = storeToRefs(useSettingsStore())
+// With the badge hidden by preference no card has the line at all, so there is nothing to
+// reserve and the cards stay one uniform height (shorter), rather than keeping an empty row.
+const reserveBadge = computed(() => hasLibraryBadges(props.items, showLibraryBadge.value))
 
 function getTitle(item: FsItem): string {
   if (item.kind === 'folder') return item.node.title
@@ -56,18 +64,26 @@ function getTitle(item: FsItem): string {
 }
 
 const cards = computed((): CardData[] =>
-  props.items.map((item, i) => ({
-    key: item.uid,
-    title: getTitle(item),
-    path: getSecondaryLine(item),
-    icon: item.kind === 'folder' ? FOLDER_ICON : item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
-    color: item.kind === 'folder' ? 'var(--status-warning)' : item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
-    remove: item.kind === 'folder' && props.canRemove?.(item.node) ? () => emit('removeFolder', item.node) : undefined,
-    open: (openInNewTab) => {
-      focusedIndex.value = i
-      activateIndex(i, openInNewTab)
-    },
-  })),
+  props.items.map((item, i) => {
+    const { path, badge } = getCatalogCardLines(item, showLibraryBadge.value)
+    return {
+      key: item.uid,
+      title: getTitle(item),
+      // A book's author rides on its title; the second line is the folder's book count only.
+      path: item.kind === 'folder' ? path : '',
+      badge,
+      sourceLibrary: getLibraryName(item),
+      reserveBadge: reserveBadge.value,
+      singleLine: true,
+      icon: item.kind === 'folder' ? FOLDER_ICON : item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
+      color: item.kind === 'folder' ? 'var(--status-warning)' : item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
+      remove: item.kind === 'folder' && props.canRemove?.(item.node) ? () => emit('removeFolder', item.node) : undefined,
+      open: (openInNewTab) => {
+        focusedIndex.value = i
+        activateIndex(i, openInNewTab)
+      },
+    }
+  }),
 )
 
 // Combobox model (see useInputListNavigation): DOM focus stays in the page's

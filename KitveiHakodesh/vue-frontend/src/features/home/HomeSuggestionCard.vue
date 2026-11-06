@@ -42,9 +42,19 @@ const shortPath = computed(() => {
 
 // Tooltip: title + full path, plus the open-in-new-tab hint (every card honours
 // Ctrl+click / Ctrl+Enter).
-const cardTooltip = computed(() =>
-  [props.card.title, props.card.path, OPEN_IN_NEW_TAB_HINT].filter(Boolean).join('\n'),
-)
+const cardTooltip = computed(() => {
+  // Named even when the badge is hidden by preference, so the origin is never lost.
+  const library = props.card.sourceLibrary ?? props.card.badge
+  return [
+    props.card.title,
+    props.card.path,
+    library ? `ספרייה נוספת: ${library}` : '',
+    OPEN_IN_NEW_TAB_HINT,
+  ]
+    .filter(Boolean)
+    .join('\n')
+})
+const showBadgeLine = computed(() => !!props.card.badge || !!props.card.reserveBadge)
 
 // ── Touch: long-press reveals the actions (touch has no hover) ──────────────────
 // Detected via Pointer Events at runtime rather than an @media (hover) query, so
@@ -112,7 +122,16 @@ function hideActions() {
   isTouch.value = false
 }
 
-useDropdownClose(wrapRef, hideActions, { enabled: () => isRevealed.value, closeOnBlur: false, fitToViewport: false })
+// fitToViewport: false — the card wrapper is NOT a popup. Left on (the default), the
+// viewport-fit helper treats a card that extends past the window edge (any card in a
+// scrolling grid, e.g. the 30 catalog folders) as a dropdown that spills out of the
+// window and shifts it up with an inline `translate`, so every card below the fold
+// piles onto the last visible row and their text overprints.
+useDropdownClose(wrapRef, hideActions, {
+  enabled: () => isRevealed.value,
+  closeOnBlur: false,
+  fitToViewport: false,
+})
 
 function onPin() {
   props.card.pinning?.togglePin()
@@ -162,7 +181,13 @@ function onRemove() {
       </span>
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
-        <span v-if="card.path && layout === 'cards'" class="card-path">{{ shortPath }}</span>
+        <span v-if="card.path && layout === 'cards'" class="card-path" :class="{ 'is-single-line': card.singleLine }">{{ shortPath }}</span>
+        <!-- Own line, fixed height. dir="auto" gives a Latin library name its own
+             left-to-right run inside the right-to-left card, so Hebrew and Latin
+             text never interleave, and the ellipsis lands at the end of the name. -->
+        <span v-if="showBadgeLine" class="card-badge-line">
+          <span v-if="card.badge" class="card-badge" dir="auto">{{ card.badge }}</span>
+        </span>
       </span>
     </button>
     <div
@@ -289,6 +314,43 @@ function onRemove() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Fixed-height mode (catalog): one line, clipped. Height is a function of the
+   style alone, never of how the text happens to wrap. */
+.card-path.is-single-line {
+  display: block;
+  height: 1.3em;
+  min-height: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+}
+
+/* Library tag line: always exactly one line tall, whatever the name is. */
+.card-badge-line {
+  display: block;
+  height: 16px;
+  line-height: 16px;
+  font-size: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.card-badge {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: 16px;
+  padding: 0 5px;
+  vertical-align: top;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  unicode-bidi: isolate;
+  border-radius: 4px;
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
 }
 
 /* ── Actions (pin / delete), in the card's end corner ─────────────────────── */

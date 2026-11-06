@@ -8,8 +8,9 @@ public sealed class FtsIndexingStarter(FullTextSearchService fts) : BackgroundSe
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        fts.EnsureIndexing();
-        return Task.CompletedTask;
+        // Off the host's start: validating a large additional library reads it end to end, and
+        // while StartAsync waits the pipe holds every request - the data host would look hung.
+        return Task.Run(fts.EnsureIndexing, CancellationToken.None);
     }
 
     /// <summary>On host shutdown, cancel the background build cleanly (aborting any

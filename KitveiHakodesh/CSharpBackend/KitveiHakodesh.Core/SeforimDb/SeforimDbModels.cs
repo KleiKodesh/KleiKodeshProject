@@ -83,6 +83,12 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int? ParentId { get; set; }
         public string Title { get; set; } = "";
         public int Level { get; set; }
+
+        /// <summary>Null for the primary seforim.db. Set to the configured label of an
+        /// additional library (see <see cref="KitveiHakodesh.Core.Settings.SeforimDbAdditionalLibraries"/>)
+        /// when this row came from one — for display only; <see cref="Id"/> is already unique
+        /// across every attached library (see SeforimDbAttachedLibraries).</summary>
+        public string? LibraryLabel { get; set; }
     }
 
     /// <summary>A catalog book row — matches BookRow in webview-host/queries.types.ts (query subset).</summary>
@@ -94,6 +100,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Title { get; set; } = "";
         public int? HasTeamim { get; set; }
         public string? Authors { get; set; }
+
+        /// <summary>See <see cref="CategoryRow.LibraryLabel"/>.</summary>
+        public string? LibraryLabel { get; set; }
         /// <summary>The book's precedence in the library (<see cref="SeforimDbBookTreeOrder"/>):
         /// the one order every ranking — catalog search, full-text results, commentary
         /// panel — ties on. Rows are returned sorted by it.</summary>
