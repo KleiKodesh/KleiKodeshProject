@@ -68,6 +68,14 @@ foreach ($folder in @("bin\Release")) {
     }
 }
 
+# Wipe the service's bin: the AOT publish payload (bin\LibPayload) is copied into every
+# output, and a dev run of the published exe leaves its FtsIndex there (700+ MB shipped).
+$serviceBin = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshService\bin"
+if (Test-Path $serviceBin) {
+    Remove-Item $serviceBin -Recurse -Force
+    Write-Host "Deleted KitveiHakodeshService\bin" -ForegroundColor Gray
+}
+
 # Wipe DemoApp Release folder so the rebuild is clean
 if (Test-Path $DemoAppReleaseDir) {
     Remove-Item $DemoAppReleaseDir -Recurse -Force
