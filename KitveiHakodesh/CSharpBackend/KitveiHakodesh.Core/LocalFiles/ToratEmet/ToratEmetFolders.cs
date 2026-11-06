@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Win32;
 
 namespace KitveiHakodesh.Core.LocalFiles.ToratEmet;
@@ -23,8 +24,8 @@ public static class ToratEmetFolders
     /// <summary>The host-side facts the search needs; tests supply fakes.</summary>
     public sealed class Probe
     {
-        /// <summary>The user's Documents folder (Environment.SpecialFolder.MyDocuments: also a redirected one).</summary>
-        public Func<string> DocumentsFolder { get; set; } = () => TestDocuments ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        /// <summary>The user's Documents folder (a redirected one too): the user's own via UserProfile, also when the service runs as SYSTEM.</summary>
+        public Func<string> DocumentsFolder { get; set; } = () => TestDocuments ?? UserProfile.Documents;
         /// <summary>Folders the program's install records point at (install roots: the folder that holds bh3.exe and Books).</summary>
         public Func<IEnumerable<string>> RegisteredInstallRoots { get; set; } = () => TestDocuments != null ? Array.Empty<string>() : ReadRegisteredInstallRoots();
 
@@ -118,23 +119,33 @@ public static class ToratEmetFolders
     private static IEnumerable<string> ReadRegisteredInstallRoots()
     {
         var roots = new List<string>();
-        foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
-            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        // The user's records come from the bound user's hive (UserProfile.Hive): under a SYSTEM service the process's own HKCU is not theirs.
+        foreach (string software in new[] { @"Software", @"Software\WOW6432Node" })
+        {
+            try { ReadRecords(UserProfile.Hive, software, roots); }
+            catch (Exception) { /* a hive that cannot be read has no records for us */ }
+        }
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            try
             {
-                try
-                {
-                    using var baseKey = RegistryKey.OpenBaseKey(hive, view);
-                    ReadUninstallEntries(baseKey, roots);
-                    ReadAppPaths(baseKey, roots);
-                }
-                catch (Exception) { /* a hive or view that cannot be read has no records for us */ }
+                using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+                ReadRecords(baseKey, "Software", roots);
             }
+            catch (Exception) { }
+        }
         return roots;
     }
 
-    private static void ReadUninstallEntries(RegistryKey baseKey, List<string> roots)
+    private static void ReadRecords(RegistryKey baseKey, string software, List<string> roots)
     {
-        using var uninstall = baseKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall");
+        ReadUninstallEntries(baseKey, software, roots);
+        ReadAppPaths(baseKey, software, roots);
+    }
+
+    private static void ReadUninstallEntries(RegistryKey baseKey, string software, List<string> roots)
+    {
+        using var uninstall = baseKey.OpenSubKey(software + @"\Microsoft\Windows\CurrentVersion\Uninstall");
         if (uninstall == null) return;
         foreach (var name in uninstall.GetSubKeyNames())
         {
@@ -151,11 +162,11 @@ public static class ToratEmetFolders
         }
     }
 
-    private static void ReadAppPaths(RegistryKey baseKey, List<string> roots)
+    private static void ReadAppPaths(RegistryKey baseKey, string software, List<string> roots)
     {
         foreach (var exe in new[] { "bh3.exe", "bh3_unicode.exe" })
         {
-            using var key = baseKey.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\" + exe);
+            using var key = baseKey.OpenSubKey(software + @"\Microsoft\Windows\CurrentVersion\App Paths\" + exe);
             AddIfFolder(roots, FolderOfCommand(key?.GetValue(null) as string));
         }
     }

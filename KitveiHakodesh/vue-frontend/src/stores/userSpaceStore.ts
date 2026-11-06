@@ -26,6 +26,11 @@ const ROOTS_KEY = 'roots'
  * (it is still listed here) until one.
  */
 const DEFAULTS_ADDED_KEY = 'defaultsAdded'
+/**
+ * Computer folders the user removed on purpose (lower-cased paths): recorded as a removal, never inferred from absence, so a
+ * default root that is missing for any other reason (a lost write, a stale memory) comes back while a removed one stays removed.
+ */
+const DEFAULTS_REMOVED_KEY = 'defaultsRemoved'
 
 /** A root's identity: no two roots point at the same category or the same folder. */
 export function userSpaceRootKey(root: UserSpaceRoot): string {
@@ -37,6 +42,8 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
   const roots = ref<UserSpaceRoot[]>([])
   const loaded = ref(false)
   let defaultsAdded: string[] = []
+  let removedFolders: string[] = []
+  let loadFailed = false
   /** Hebrew names Core gives the default roots, by lower-cased folder path (see rootTitle). */
   const coreTitles = ref<Record<string, string>>({})
   let loading: Promise<void> | null = null
@@ -47,14 +54,19 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
       dbGet<UserSpaceRoot[]>(USER_SPACE_DB, ROOTS_KEY),
       // Separate fallbacks: an unreadable memory of the defaults must not blank the roots (the next add would overwrite them).
       dbGet<string[]>(USER_SPACE_DB, DEFAULTS_ADDED_KEY).catch(() => null),
+      dbGet<string[]>(USER_SPACE_DB, DEFAULTS_REMOVED_KEY).catch(() => null),
     ])
-      .then(([stored, added]) => {
+      .then(([stored, added, removed]) => {
         roots.value = stored ?? []
         defaultsAdded = added ?? []
+        removedFolders = removed ?? []
       })
       .catch(() => {
         // An unreadable list is an empty one; the next add writes a fresh copy.
         roots.value = []
+        // The memory of removals may be unread too: claiming defaults now could bring back
+        // a folder the user removed, so no default is claimed this session.
+        loadFailed = true
       })
       .finally(() => {
         loaded.value = true
@@ -89,13 +101,22 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
     dbSet(USER_SPACE_DB, ROOTS_KEY, roots.value.map((r) => ({ ...r }))).catch(() => {})
   }
 
+  function forgetRemoval(path: string) {
+    if (!removedFolders.includes(path)) return
+    removedFolders = removedFolders.filter((p) => p !== path)
+    dbSet(USER_SPACE_DB, DEFAULTS_REMOVED_KEY, [...removedFolders]).catch(() => {})
+  }
+
   /** Adds a root at the end. False when it is already there. */
   function add(root: UserSpaceRoot): boolean {
     const key = userSpaceRootKey(root)
     if (roots.value.some((r) => userSpaceRootKey(r) === key)) return false
     roots.value = [...roots.value, root]
     persist()
-    if (root.kind === 'computer') void resolveRootTitles()
+    if (root.kind === 'computer') {
+      forgetRemoval(root.path.toLowerCase())   // added again on purpose: no longer a removed folder
+      void resolveRootTitles()
+    }
     return true
   }
 
@@ -121,10 +142,16 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
   async function claimDefaultFolders(): Promise<{ folder: string; reason: UserSpaceFolderReason }[]> {
     await ensureLoaded()
     const rejected: { folder: string; reason: UserSpaceFolderReason }[] = []
+    if (loadFailed) return rejected
     let changed = false
     for (const folder of await claimDefaultUserSpaceFolders()) {
       const key = folder.toLowerCase()
-      if (defaultsAdded.includes(key)) continue
+      if (removedFolders.includes(key)) continue   // the user removed it on purpose
+      if (roots.value.some((r) => r.kind === 'computer' && r.path.toLowerCase() === key)) {
+        if (!defaultsAdded.includes(key)) { defaultsAdded = [...defaultsAdded, key]; changed = true }
+        continue
+      }
+      // Not a root and not removed on purpose: new, or a root that went missing (a stale memory) - it is added (again).
       let check: Awaited<ReturnType<typeof checkUserSpaceFolder>>
       try {
         check = await checkUserSpaceFolder(folder)
@@ -135,8 +162,8 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
         rejected.push({ folder, reason: check.reason })
         continue
       }
-      addComputerFolder(folder)   // false = already a root: remembered all the same
-      if (!defaultsAdded.includes(key)) defaultsAdded = [...defaultsAdded, key]   // a concurrent claim may have added it meanwhile
+      addComputerFolder(folder)   // false = a concurrent claim added it meanwhile
+      if (!defaultsAdded.includes(key)) defaultsAdded = [...defaultsAdded, key]
       changed = true
     }
     if (changed) dbSet(USER_SPACE_DB, DEFAULTS_ADDED_KEY, [...defaultsAdded]).catch(() => {})
@@ -144,6 +171,11 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
   }
 
   function remove(key: string) {
+    const gone = roots.value.find((r) => userSpaceRootKey(r) === key)
+    if (gone?.kind === 'computer' && !removedFolders.includes(gone.path.toLowerCase())) {
+      removedFolders = [...removedFolders, gone.path.toLowerCase()]
+      dbSet(USER_SPACE_DB, DEFAULTS_REMOVED_KEY, [...removedFolders]).catch(() => {})
+    }
     roots.value = roots.value.filter((r) => userSpaceRootKey(r) !== key)
     persist()
   }

@@ -46,6 +46,20 @@ describe('default Torat Emet folders', () => {
     expect(paths(store)).toEqual([BOOKS])
   })
 
+  it('a default missing from the roots without a removal (stale memory) comes back; a removed one does not', async () => {
+    let store = fresh()
+    await store.claimDefaultFolders()
+    store.remove(`computer:${MY.toLowerCase()}`)
+    db.data.set('roots', [])   // the roots store lost both; the memory still says they were handed out
+    store = fresh()
+    await store.claimDefaultFolders()
+    expect(paths(store)).toEqual([BOOKS])
+    store.addComputerFolder(MY)   // picked again on purpose: no longer removed
+    store.remove(`computer:${MY.toLowerCase()}`)
+    store.addComputerFolder(MY)
+    expect(paths(store)).toEqual([BOOKS, MY])
+  })
+
   it('a reset (the roots database wiped) brings them back', async () => {
     let store = fresh()
     await store.claimDefaultFolders()
