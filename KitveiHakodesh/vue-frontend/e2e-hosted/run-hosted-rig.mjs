@@ -23,6 +23,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { makeFixtures } from './torat-emet-fixtures.mjs'
+import { runToratEmetChecks, toratEmetEnv } from './torat-emet-scenario.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const frontendDir = path.resolve(here, '..')
@@ -50,6 +52,7 @@ const hostDir = path.join(root, 'host')
 const log = (msg) => console.log(`[rig ${new Date().toISOString().slice(11, 19)}] ${msg}`)
 const started = [] // { name, child }
 const results = []
+let toratFixtures = null // the Torat Emet scenario's fake Documents tree (made in main, before the service starts)
 
 function idle(child) {
   try { os.setPriority(child.pid, os.constants.priority.PRIORITY_LOW) } catch { /* best effort */ }
@@ -157,6 +160,8 @@ function teardown() {
     log(`kill ${name} (pid ${child.pid}, tree)`)
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
   }
+  // the Torat Emet scenario's test index lives beside the service data (outside the rig folder in JIT mode)
+  for (let i = 0; i < 10; i++) { try { fs.rmSync(path.join(serviceBuildDir, 'filesystemindex-rig-test'), { recursive: true, force: true }); break } catch { spawnSync('cmd', ['/c', 'timeout', '/t', '1', '/nobreak'], { stdio: 'ignore' }) } }
   if (keep) { log(`kept ${root}`); return }
   for (let i = 0; i < 20; i++) {
     try { fs.rmSync(root, { recursive: true, force: true }); return } catch { spawnSync('cmd', ['/c', 'timeout', '/t', '1', '/nobreak'], { stdio: 'ignore' }) }
@@ -341,6 +346,8 @@ async function runChecks(page, consoleErrors) {
     return `${r.created} created, all revoked`
   })
 
+  if (toratFixtures) await runToratEmetChecks({ page, check, fx: toratFixtures, backendDir, waitFor })
+
   await check('no console errors during the run', async () => {
     if (consoleErrors.length) throw new Error(consoleErrors.join(' | '))
     return 'none'
@@ -361,8 +368,9 @@ async function main() {
   const hostExe = fs.readdirSync(hostDir).filter((n) => n.endsWith('.exe') && !n.includes('vshost')).map((n) => path.join(hostDir, n))[0]
   if (!hostExe) throw new Error('host exe not found')
 
+  toratFixtures = makeFixtures(path.join(root, 'torat-emet'))
   const serviceExe = shadowService()
-  startProcess('service', serviceExe, [], { KHS_PIPE_NAME: pipeName, KHS_DATA_DIR: serviceBuildDir, KHS_OWNER_PID: String(process.pid) })
+  startProcess('service', serviceExe, [], { ...toratEmetEnv(toratFixtures), KHS_PIPE_NAME: pipeName, KHS_DATA_DIR: serviceBuildDir, KHS_OWNER_PID: String(process.pid) })
   await waitFor(`service pipe ${pipeName}`, async () => pipeListed(), 120_000)
   log(`service up on ${pipeName}`)
 

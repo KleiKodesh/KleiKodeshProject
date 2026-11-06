@@ -9,6 +9,7 @@
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { restoreLocalFile } from '@/webview-host/bridge'
+import { serviceCall } from '@/webview-host/serviceClient'
 import { useUpdateNavState } from '@/composables/useUpdateNavState'
 
 export function installDevTestHook() {
@@ -42,6 +43,7 @@ export function installDevTestHook() {
 
   ;(window as unknown as Record<string, unknown>).__khTest = {
     openLocalFile,
+    serviceCall,   // a raw service op, for the hosted rig's AOT checks
     fakeUpdate,
     tabStore,
     bookViewStore,

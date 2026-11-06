@@ -84,7 +84,8 @@ namespace KitveiHakodesh.Core.LocalFiles
         public static readonly string DefaultIndexPath =
             System.IO.Path.Combine(
                 Common.AppFileLocator.DataRoot,
-                "filesystemindex");
+                // the hosted rig's test index (KHS_TEST_INDEX_FOLDER) lives apart: it must never touch a real index
+                string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KHS_TEST_INDEX_FOLDER")) ? "filesystemindex" : "filesystemindex-rig-test");
 
         private readonly string          _indexPath;
         private readonly FSDirectory     _directory;
@@ -170,6 +171,16 @@ namespace KitveiHakodesh.Core.LocalFiles
 
         // ── Build / Update ────────────────────────────────────────────────────────
 
+        /// <summary>KHS_TEST_INDEX_FOLDER: the one folder the hosted rig indexes instead of the drives (null when unset).</summary>
+        private static string TestIndexFolder
+        {
+            get
+            {
+                string v = Environment.GetEnvironmentVariable("KHS_TEST_INDEX_FOLDER");
+                return string.IsNullOrWhiteSpace(v) ? null : v;
+            }
+        }
+
         /// <summary>
         /// Smart startup: if a USN cursor exists for every drive, applies only the
         /// delta since the last run (fast — seconds). Falls back to a full MFT
@@ -186,6 +197,20 @@ namespace KitveiHakodesh.Core.LocalFiles
                           Action<string> fullCrawlReason = null,
                           Action<int> progressPercent = null)
         {
+            // Test seam (hosted rig): index only this folder tree, never the drives; no live updates then.
+            string onlyFolder = TestIndexFolder;
+            if (onlyFolder != null && string.Equals(_indexPath, DefaultIndexPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _writer.DeleteAll();
+                foreach (var path in LocalFileIndexDirectoryCrawler.EnumeratePathsUnder(onlyFolder, null, ct))
+                    _writer.AddDocument(MakeDocument(path));
+                progressPercent?.Invoke(100);
+                _writer.Commit();
+                _searcherManager.MaybeRefreshBlocking();
+                progress?.Invoke($"Index ready - {Count():N0} total paths (test folder)");
+                return;
+            }
+
             var drives = LocalFileIndexMftCrawler.GetNtfsDrives();
             if (drives.Count == 0)
             {
@@ -1300,7 +1325,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// </summary>
         public void StartLiveUpdates(CancellationToken ct, Action<string, Exception> onError = null)
         {
-            if (_liveUpdatesStopped) return;
+            if (_liveUpdatesStopped || (TestIndexFolder != null && string.Equals(_indexPath, DefaultIndexPath, StringComparison.OrdinalIgnoreCase))) return;
             ct = CancellationTokenSource.CreateLinkedTokenSource(ct, _stopCts.Token).Token;
             lock (_liveThreads)
             {

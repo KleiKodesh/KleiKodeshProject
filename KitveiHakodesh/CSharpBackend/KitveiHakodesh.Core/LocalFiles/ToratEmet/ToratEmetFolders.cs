@@ -24,9 +24,15 @@ public static class ToratEmetFolders
     public sealed class Probe
     {
         /// <summary>The user's Documents folder (Environment.SpecialFolder.MyDocuments: also a redirected one).</summary>
-        public Func<string> DocumentsFolder { get; set; } = () => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        public Func<string> DocumentsFolder { get; set; } = () => TestDocuments ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         /// <summary>Folders the program's install records point at (install roots: the folder that holds bh3.exe and Books).</summary>
-        public Func<IEnumerable<string>> RegisteredInstallRoots { get; set; } = ReadRegisteredInstallRoots;
+        public Func<IEnumerable<string>> RegisteredInstallRoots { get; set; } = () => TestDocuments != null ? Array.Empty<string>() : ReadRegisteredInstallRoots();
+
+        /// <summary>KHS_TEST_DOCUMENTS_DIR: the hosted rig's fake Documents folder (and no registry records), so the rig never reads the real ones.</summary>
+        private static string? TestDocuments
+        {
+            get { string? v = Environment.GetEnvironmentVariable("KHS_TEST_DOCUMENTS_DIR"); return string.IsNullOrWhiteSpace(v) ? null : v; }
+        }
     }
 
     /// <summary>Existing book folders in the order above. MyBooks only when it holds at least one .txt file.</summary>
