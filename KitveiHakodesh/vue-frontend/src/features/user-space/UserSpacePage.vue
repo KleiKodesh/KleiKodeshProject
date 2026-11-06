@@ -17,7 +17,7 @@ import UserSpaceCatalogPicker from './UserSpaceCatalogPicker.vue'
 import BookCatalogSearch from '@/features/book-catalog/BookCatalogSearch.vue'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import { useUserSpaceSearch } from './useUserSpaceSearch'
-import { useSearchIndexStatus } from '@/composables/useSearchIndexStatus'
+import { useSearchIndexStatus, useLocalFileIndexBuildPolling } from '@/composables/useSearchIndexStatus'
 import { useUserSpace } from './useUserSpace'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
@@ -98,7 +98,14 @@ watch(roots, (list) => {
 })
 
 const { results: searchItems, searching: searchBusy, isSearching } = useUserSpaceSearch(searchQuery, searchRoots)
-const { statusText: indexStatusText, isUnavailable: isIndexUnavailable } = useSearchIndexStatus('catalogToc', t)
+const { statusText: catalogStatusText, isUnavailable: isCatalogUnavailable } = useSearchIndexStatus('catalogToc', t)
+// UserSpace searches the same file index as the local file search, so it says the same
+// "index is being built (NN%)" while that index is not ready.
+const { status: fileIndexStatus, statusText: fileStatusText } = useSearchIndexStatus('localFiles', t)
+useLocalFileIndexBuildPolling(searchBusy)
+const isIndexUnavailable = computed(() => isCatalogUnavailable.value)
+const indexStatusText = computed(() =>
+  catalogStatusText.value ?? (fileIndexStatus.value.kind === 'building' ? fileStatusText.value : null))
 const searchResultsRef = ref<InstanceType<typeof BookCatalogSearch> | null>(null)
 // Search results have no tree shape: in tree mode they list (as on the catalog page).
 const searchResultsView = computed(() => (view.value === 'tree' ? 'list' : view.value))
