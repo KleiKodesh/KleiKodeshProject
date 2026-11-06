@@ -163,7 +163,8 @@ onMounted(() => {
     if (rejected.length > 0) notice.value = `${t('userSpace.folderNotSupported')} ${t(`userSpace.folderReason.${rejected[0]!.reason || 'notIndexedDrive'}`)}`
   })
   void load()
-  focusSearchInput()
+  // The field only exists while showSearch is true, so swap it in before focusing.
+  openSearch()
 })
 
 // ── Opening ──────────────────────────────────────────────────────────────────
