@@ -1044,8 +1044,23 @@ public sealed class Dispatcher(
                 // Torat Emet book folders found on this computer (Core UserSpaceDefaultFolders): the host decides which it has added.
                 // The directory walk runs on the pool, off the request thread, and stops when the request is cancelled.
                 case "claimDefaultUserSpaceFolders":
-                    return RpcResponse.Ok(MsgPack.Ser(await Task.Run(
-                        () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Find(null, ct), ct)));
+                {
+                    var defaults = await Task.Run(
+                        () => global::KitveiHakodesh.Core.UserSpace.UserSpaceDefaultFolders.Find(null, ct), ct);
+                    // Everything that decides what the lookup sees, so "nothing shows up" can be read off the console.
+                    var exe = Environment.ProcessPath;
+                    logger.LogInformation(
+                        "claimDefaultUserSpaceFolders: service exe {Exe} built {Built:u}, running as {Account}; user profile bound={Bound}, documents={Documents}; found {Count}: {Folders}",
+                        exe, exe is null ? default : File.GetLastWriteTimeUtc(exe), Environment.UserName,
+                        global::KitveiHakodesh.Core.Settings.UserProfile.IsBound, global::KitveiHakodesh.Core.Settings.UserProfile.Documents,
+                        defaults.Folders.Count, string.Join(" | ", defaults.Folders));
+                    var documents = global::KitveiHakodesh.Core.Settings.UserProfile.Documents;
+                    logger.LogInformation(
+                        "claimDefaultUserSpaceFolders: default paths under that Documents folder: ToratEmetInstall\\Books exists={Books}, ToratEmetUserData\\MyBooks exists={MyBooks}",
+                        Directory.Exists(Path.Combine(documents, "ToratEmetInstall", "Books")),
+                        Directory.Exists(Path.Combine(documents, "ToratEmetUserData", "MyBooks")));
+                    return RpcResponse.Ok(MsgPack.Ser(defaults));
+                }
 
                 // The Hebrew names of the default roots among the given computer folders (Core UserSpaceDefaultFolders.Titles).
                 case "userSpaceRootTitles":
