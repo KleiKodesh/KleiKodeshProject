@@ -140,26 +140,20 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
    * is not added twice. Never throws.
    */
   async function claimDefaultFolders(): Promise<{ folder: string; reason: UserSpaceFolderReason }[]> {
-    const log = (message: string, ...details: unknown[]) => console.info('[user-space defaults]', message, ...details)
     await ensureLoaded()
     const rejected: { folder: string; reason: UserSpaceFolderReason }[] = []
-    log('claim started; roots=', roots.value.length, 'defaultsAdded=', [...defaultsAdded], 'removedFolders=', [...removedFolders], 'loadFailed=', loadFailed)
-    if (loadFailed) { log('skipped: the saved lists could not be read this session'); return rejected }
+    if (loadFailed) return rejected
     let found: string[]
     try {
       found = await claimDefaultUserSpaceFolders()
-    } catch (error) {
-      // An older service does not know this call; the page must say so instead of showing nothing.
-      console.warn('[user-space defaults] the service call claimDefaultUserSpaceFolders FAILED - an installed service older than this app answers it with an error:', error)
-      return rejected
+    } catch {
+      return rejected   // a service that does not know the call (older than the app): no defaults, no error
     }
-    log('the service found', found.length, 'default folder(s):', found)
     let changed = false
     for (const folder of found) {
       const key = folder.toLowerCase()
-      if (removedFolders.includes(key)) { log('not added, the user removed it on purpose:', folder); continue }
+      if (removedFolders.includes(key)) continue   // the user removed it on purpose
       if (roots.value.some((r) => r.kind === 'computer' && r.path.toLowerCase() === key)) {
-        log('already a root:', folder)
         if (!defaultsAdded.includes(key)) { defaultsAdded = [...defaultsAdded, key]; changed = true }
         continue
       }
@@ -167,22 +161,18 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
       let check: Awaited<ReturnType<typeof checkUserSpaceFolder>>
       try {
         check = await checkUserSpaceFolder(folder)
-      } catch (error) {
-        console.warn('[user-space defaults] checkUserSpaceFolder failed for', folder, '- not added, checked again next time:', error)
+      } catch {
         continue   // unknown: not added, not remembered - checked again next time
       }
-      log('search coverage of', folder, '-> covered =', check.covered, 'reason =', check.reason)
       if (!check.covered) {
         rejected.push({ folder, reason: check.reason })
         continue
       }
-      const added = addComputerFolder(folder)   // false = a concurrent claim added it meanwhile
-      log(added ? 'ADDED as a root:' : 'not added, a concurrent claim already added it:', folder)
+      addComputerFolder(folder)   // false = a concurrent claim added it meanwhile
       if (!defaultsAdded.includes(key)) defaultsAdded = [...defaultsAdded, key]
       changed = true
     }
     if (changed) dbSet(USER_SPACE_DB, DEFAULTS_ADDED_KEY, [...defaultsAdded]).catch(() => {})
-    log('claim finished; roots=', roots.value.length, 'rejected=', rejected.length)
     return rejected
   }
 
