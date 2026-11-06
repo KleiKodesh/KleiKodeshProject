@@ -25,8 +25,7 @@ function onFocusIn(e: FocusEvent) {
 }
 const isPinPopping = ref(false)
 
-// Cards' second line: only the nearest step of the path (parent folder / last
-// category), like Explorer's short location line; the full path is in the tooltip.
+// Cards' second line: the nearest three steps of the path; the full path is in the tooltip.
 const shortPath = computed(() => {
   const parts = props.card.path
     .split(HOME_CARD_PATH_SEPARATOR)
@@ -37,7 +36,8 @@ const shortPath = computed(() => {
   // Folder / file / category paths end with the item itself (file name may add an extension).
   const last = parts.at(-1)
   if (last?.startsWith(props.card.title)) parts.pop()
-  return parts.at(-1) ?? ''
+  // Three levels up (parent, grandparent, great-grandparent), nearest last.
+  return parts.slice(-3).join('\\')
 })
 
 // Tooltip: title + full path, plus the open-in-new-tab hint (every card honours
