@@ -632,7 +632,7 @@ namespace KitveiHakodesh.Core.LocalFiles
             bool storedRead = !string.IsNullOrEmpty(addinName)
                               || sortKey.Utf8ToString().ToLowerInvariant() != lowerPath;
             doc.Add(new NumericDocValuesField(FLD_NAME_SHAPE_DV,
-                Math.Min(nameTokens.Count, 0xFFFF)
+                (long)Math.Min(nameTokens.Count, 0xFFFF)
                 | ((long)Math.Min(distinctName.Count, 0xFFFF) << 16)
                 | (storedRead ? ShapeStoredRead : 0)));
             doc.Add(new SortedDocValuesField(FLD_PATH_SORT_DV, sortKey));

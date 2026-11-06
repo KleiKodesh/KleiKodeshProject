@@ -191,7 +191,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             // read as a span cut into pieces; one whose ranges are a scattered few lines (a
             // commentary panel: hundreds of lines spread through a whole book) is read by the
             // listed line indexes instead, so the lines between them are never decoded.
-            var pieces = new List<(int BookId, int First, int Last, List<int> Indexes)>();
+            var pieces = new List<(int BookId, int First, int Last, List<int>? Indexes)>();
             foreach (int bookId in bookOrder)
             {
                 var list = wanted[bookId];
