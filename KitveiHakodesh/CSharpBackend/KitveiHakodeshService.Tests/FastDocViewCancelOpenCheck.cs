@@ -1,4 +1,4 @@
-using KitveiHakodesh.Core.FastDocView;
+﻿using KitveiHakodesh.Core.FastDocView;
 
 namespace KitveiHakodeshService.Tests;
 
@@ -22,7 +22,8 @@ public static class FastDocViewCancelOpenCheck
         void DropSidecars()
         {
             if (!Directory.Exists(IndexCache())) return;
-            foreach (string file in Directory.GetFiles(IndexCache(), Path.GetFileNameWithoutExtension(source) + "*")) File.Delete(file);
+            string sidecar = Path.GetFileNameWithoutExtension(global::FastDocView.WordDocumentIndexCacheLocation.IndexPathFor(source, IndexCache()));
+            foreach (string file in Directory.GetFiles(IndexCache(), sidecar + "*")) File.Delete(file);
         }
 
         using var documents = new FastDocViewOpenDocuments();
