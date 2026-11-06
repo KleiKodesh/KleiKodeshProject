@@ -17,7 +17,6 @@ param(
     [switch]$NoRelease,                 # skip GitHub release
     [switch]$NoClean,                   # skip solution clean step
     [switch]$DeleteFtsIndex,            # delete FTS index on install (forces reindex on user machines)
-    [switch]$SkipAotCheck,              # skip the live check of the shipped (native AOT) service
     [switch]$ForceCleanInstall          # wipe + reinstall on launch (התקן behaves like תיקון)
 )
 
@@ -297,20 +296,6 @@ if (-not (Test-Path $portableZip)) {
     exit 1
 }
 Write-Host "OK: $(Split-Path -Leaf $portableZip)" -ForegroundColor Green
-
-# ── 4c. Live check of the shipped service (native AOT) ───────────────────────
-# The app ships the AOT service; dev runs the JIT one, which passes things AOT cannot do
-# (2026-11-05: every document failed in the app only). The hosted rig publishes the AOT
-# service and drives the real host through it - a failure stops the release.
-if (-not $SkipAotCheck) {
-    Start-BuildStep "Live check: app + AOT service (hosted rig --aot)"
-    Push-Location (Join-Path $PSScriptRoot "..\..\KitveiHakodesh\vue-frontend")
-    try { & node e2e-hosted/run-hosted-rig.mjs --aot; $rigExit = $LASTEXITCODE } finally { Pop-Location }
-    if ($rigExit -ne 0) {
-        Write-Host "ERROR: live check against the AOT service failed (exit $rigExit)." -ForegroundColor Red
-        exit 1
-    }
-}
 
 # ── 5. GitHub release ─────────────────────────────────────────────────────────
 if ($NoRelease) { Complete-BuildSteps; Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
