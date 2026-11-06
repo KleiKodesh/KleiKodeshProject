@@ -1,5 +1,6 @@
 using KitveiHakodesh.Core.LocalFiles;
 using KitveiHakodesh.Core.LocalFiles.ToratEmet;
+using KitveiHakodesh.Core.Settings;
 using KitveiHakodesh.Core.UserSpace;
 
 namespace KitveiHakodeshService.Tests;
@@ -38,6 +39,22 @@ internal static class ToratEmetNamesCheck
         Display();
         Console.WriteLine(_failures == 0 ? "TORATEMET: PASS" : $"TORATEMET: FAIL ({_failures})");
         return _failures;
+    }
+
+    /// <summary>--toratemet-realcheck: what the defaults find on THIS computer (this user's real Documents and registry) and whether
+    /// the file index covers each. Prints ASCII only; fails when nothing is found or a folder is not covered.</summary>
+    public static int RealCheck()
+    {
+        var found = UserSpaceDefaultFolders.Find().Folders;
+        Console.WriteLine("found " + found.Count);
+        int bad = found.Count == 0 ? 1 : 0;
+        foreach (var folder in found)
+        {
+            var r = UserSpaceFolderCheck.Check(folder, new string[0]);
+            Console.WriteLine($"  {Path.GetFileName(folder)}: covered={r.Covered} reason='{r.Reason}'");
+            if (!r.Covered) bad++;
+        }
+        return bad;
     }
 
     private static void Display()
@@ -229,6 +246,19 @@ internal static class ToratEmetNamesCheck
             Check(reg.Count == 2 && reg[0].EndsWith(@"TE\Books"), $"registered install + sibling user data, no duplicates ({reg.Count})");
             var regDocs = ToratEmetFolders.Locate(ProbeFor(docs1, Path.Combine(docs1, "ToratEmetInstall")));
             Check(regDocs.Count == 2, "registry and defaults pointing to the same folders: no duplicates");
+
+            // The service runs as SYSTEM: the SYSTEM profile's Documents holds nothing, the bound user's holds the books.
+            string systemDocs = Case(@"systemprofile\Documents");
+            Check(ToratEmetFolders.Locate(ProbeFor(systemDocs)).Count == 0, "SYSTEM profile Documents: nothing found (the bug)");
+            Check(ToratEmetFolders.Locate(ProbeFor(docs1)).Count == 2, "the bound user's Documents: both found");
+            if (Environment.GetEnvironmentVariable("KHS_TEST_DOCUMENTS_DIR") == null)
+            {
+                Check(new ToratEmetFolders.Probe().DocumentsFolder() == UserProfile.Documents, "default probe reads the bound profile's Documents");
+                using var self = System.Security.Principal.WindowsIdentity.GetCurrent(
+                    System.Security.Principal.TokenAccessLevels.Query | System.Security.Principal.TokenAccessLevels.Impersonate | System.Security.Principal.TokenAccessLevels.Duplicate);
+                Check(string.Equals(UserProfile.DocumentsOf(self.AccessToken), Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), StringComparison.OrdinalIgnoreCase),
+                    "Documents resolved from a user token equals that user's Documents");
+            }
 
             // The service only FINDS the folders and keeps no state (the host remembers what it added, beside the roots).
             Check(UserSpaceDefaultFolders.Find(ProbeFor(docs1)).Folders.Count == 2, "find lists both folders, every time (stateless)");

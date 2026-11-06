@@ -29,6 +29,7 @@ namespace KitveiHakodesh.Core.Settings
 #endif
         private static string _roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private static string _localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        private static string _documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
         /// <summary>The user's HKEY_CURRENT_USER.</summary>
 #if NET
@@ -41,6 +42,9 @@ namespace KitveiHakodesh.Core.Settings
 
         /// <summary>The user's %LocalAppData%.</summary>
         public static string LocalAppData => _localAppData;
+
+        /// <summary>The user's Documents folder (a redirected one included). Under the service this is the bound user's, never SYSTEM's.</summary>
+        public static string Documents => _documents;
 
         /// <summary>True once <see cref="BindToUser"/> has pointed this at another user.</summary>
         public static bool IsBound { get; private set; }
@@ -66,19 +70,36 @@ namespace KitveiHakodesh.Core.Settings
             _hive = RegistryKey.FromHandle(hiveHandle);
             _roamingAppData = KnownFolder(FolderIdRoamingAppData, userToken) ?? _roamingAppData;
             _localAppData = KnownFolder(FolderIdLocalAppData, userToken) ?? _localAppData;
+            _documents = DocumentsOf(userToken) ?? _documents;
             IsBound = true;
         }
+
+        /// <summary>The Documents folder of the user behind a token (null when Windows cannot say).</summary>
+#if NET
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
+        public static string? DocumentsOf(SafeAccessTokenHandle userToken) => KnownFolder(FolderIdDocuments, userToken);
 
         private const int KeyAllAccess = 0xF003F;
         private static readonly Guid FolderIdRoamingAppData = new("3EB685DB-65F9-4CF6-A03A-E3EF65729F3D");
         private static readonly Guid FolderIdLocalAppData = new("F1B32785-6FBA-4FCF-9D55-7B8E7F157091");
 
+        private static readonly Guid FolderIdDocuments = new("FDD39AD0-238F-46AF-ADB4-6C85480369C7");
+
         private static string? KnownFolder(Guid folderId, SafeAccessTokenHandle token)
         {
-            int hr = SHGetKnownFolderPath(ref folderId, 0, token.DangerousGetHandle(), out IntPtr pathPointer);
-            if (hr != 0 || pathPointer == IntPtr.Zero) return null;
-            try { return Marshal.PtrToStringUni(pathPointer); }
-            finally { Marshal.FreeCoTaskMem(pathPointer); }
+            // The handle is held for the duration of the call, so a token disposed by another thread
+            // cannot be used after free (DocumentsOf is public).
+            bool added = false;
+            try
+            {
+                token.DangerousAddRef(ref added);
+                int hr = SHGetKnownFolderPath(ref folderId, 0, token.DangerousGetHandle(), out IntPtr pathPointer);
+                if (hr != 0 || pathPointer == IntPtr.Zero) return null;
+                try { return Marshal.PtrToStringUni(pathPointer); }
+                finally { Marshal.FreeCoTaskMem(pathPointer); }
+            }
+            finally { if (added) token.DangerousRelease(); }
         }
 
         [DllImport("advapi32.dll", SetLastError = false)]

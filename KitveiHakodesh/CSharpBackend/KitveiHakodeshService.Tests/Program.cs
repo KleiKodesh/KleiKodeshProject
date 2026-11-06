@@ -54,6 +54,7 @@ for (int i = 0; i < args.Length; i++)
         case "--abbrev": abbrevMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
+        case "--toratemet-realcheck": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.RealCheck();
         case "--toratemet-selftest": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.Run() == 0 ? 0 : 1;
         case "--userspace-selftest": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Run() == 0 ? 0 : 1;
         case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
