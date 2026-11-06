@@ -45,7 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { addressBarPath, isDiskPath, looksLikeFile, resolveCatalogPath } from './addressBarPath'
+import { addressBarPath, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
 
@@ -337,7 +337,7 @@ function onKeydown(e: KeyboardEvent) {
  * so the caller falls back to full-text search.
  */
 function openTypedPath(): boolean {
-  const text = searchQuery.value.trim()
+  const text = normalizePastedPath(searchQuery.value)
   if (!text || text === initialPath) { close(); return true }
   const bookLink = parseBookLink(text)
   if (bookLink) {

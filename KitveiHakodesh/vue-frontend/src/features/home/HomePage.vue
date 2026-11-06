@@ -10,6 +10,8 @@ import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.
 import HomePageDateBar from './HomePageDateBar.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
+import type { FileSearchResult } from '@/features/global-search/useGlobalSearch'
+import { isDiskPath, looksLikeFile, normalizePastedPath } from '@/layout/addressBarPath'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
@@ -68,7 +70,15 @@ const searchBar = useHomeSearchBar({
   hasAnyResults: () => hasAnyResults() || hasIndexFailureToShow(),
   isLoadingAny,
   clearResults,
-  onSubmit: (query) => navigation.openFullTextSearch(query),
+  onSubmit: (query) => {
+    // A pasted disk path to a file opens it (html → the html page) instead of searching.
+    const path = normalizePastedPath(query)
+    if (isDiskPath(path) && looksLikeFile(path)) {
+      void navigation.onSelectFile({ fullPath: path, fileName: path.split(/[\\/]/).pop()! } as FileSearchResult)
+      return
+    }
+    navigation.openFullTextSearch(query)
+  },
   // Combobox model: focus stays in the input; keydowns are forwarded to the
   // dropdown, which moves its highlight. Once the user is arrowing through
   // results, pause the async sources so late arrivals don't reshuffle the list

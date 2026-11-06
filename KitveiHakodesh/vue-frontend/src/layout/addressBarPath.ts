@@ -27,6 +27,23 @@ export function isDiskPath(text: string): boolean {
   return /^[a-zA-Z]:[\\/]|^\\\\/.test(text)
 }
 
+/**
+ * Normalises pasted text into a disk path: strips quotes ("Copy as path") and
+ * converts file:/// URLs. Returns the text trimmed when it is neither.
+ */
+export function normalizePastedPath(text: string): string {
+  let s = text.trim().replace(/^"(.*)"$/, '$1').trim()
+  if (/^file:\/\//i.test(s)) {
+    try {
+      const u = new URL(s)
+      let p = decodeURIComponent(u.pathname).replace(/^\/(?=[a-zA-Z]:)/, '')
+      if (u.host) p = `\\\\${u.host}${p}`
+      s = p.replace(/\//g, '\\')
+    } catch { /* keep as typed */ }
+  }
+  return s
+}
+
 /** Disk path ending in a file name with an extension — anything else is treated as a folder. */
 export function looksLikeFile(path: string): boolean {
   const last = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? ''
