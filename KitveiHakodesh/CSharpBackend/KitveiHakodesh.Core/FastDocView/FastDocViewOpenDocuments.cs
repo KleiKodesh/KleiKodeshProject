@@ -1,4 +1,4 @@
-using KitveiHakodesh.Core.Common;
+﻿using KitveiHakodesh.Core.Common;
 using global::FastDocView;
 
 namespace KitveiHakodesh.Core.FastDocView;
@@ -21,8 +21,9 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     /// this budget: calls median 23-27 ms, p95 33-43 ms, full build 2.5-4.2 s live (library alone ~3 s).</summary>
     public static readonly TimeSpan ScanTimeBudget = TimeSpan.FromMilliseconds(20);
 
-    /// <summary>Sidecar index cache under the app's per-user data root.</summary>
-    public static string IndexCacheDirectory => Path.Combine(AppFileLocator.UserInstallRoot, "FastDocViewIndexCache");
+    /// <summary>Sidecar index cache in the app's own data folder (beside the exe, like FtsIndex and
+    /// convert-cache), so the portable app keeps it beside itself and never writes to a fixed path.</summary>
+    public static string IndexCacheDirectory => Path.Combine(AppFileLocator.DataRoot, "FastDocViewIndexCache");
 
     private readonly WordWindowedDocumentSet _documents = new(IndexCacheDirectory);
     private readonly Action<string, Exception>? _logError;
