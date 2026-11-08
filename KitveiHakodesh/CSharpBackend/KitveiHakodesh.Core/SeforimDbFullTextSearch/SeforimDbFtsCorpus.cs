@@ -83,7 +83,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsGetLineContent(_schema);
             command.Parameters.AddWithValue("@id", id);
-            return _codec.Decode(command.ExecuteScalar());
+            return _codec.Decode(command.ExecuteScalar(), id);
         }
 
         public IEnumerable<(int Id, string Text)> ReadDocuments(int limit, CancellationToken ct = default)
@@ -96,7 +96,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)));
             }
         }
 
@@ -127,7 +127,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 while (reader.Read())
                 {
                     ct.ThrowIfCancellationRequested();
-                    yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                    yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)));
                 }
             }
         }
@@ -189,7 +189,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)));
             }
         }
 
@@ -228,7 +228,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), "");
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)), "");
         }
 
         /// <summary>
@@ -316,7 +316,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 var placement = new FtsDocumentPlacement(
                     bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
                     lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3));
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), placement);
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)), placement);
             }
         }
 
@@ -364,7 +364,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 {
                     int id = reader.GetInt32(0);
                     int delta = reader.GetInt32(1);
-                    string text = _codec.DecodeColumnOrEmpty(reader, 2);
+                    string text = _codec.DecodeColumnOrEmpty(reader, 2, id);
                     if (delta == 0) { texts[id] = text; continue; }
                     if (text.Length == 0) continue;   // empty neighbours are skipped, not joined
                     var side = delta < 0 ? before : after;
@@ -431,7 +431,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     {
                         int matchedId = reader.GetInt32(0);
                         int delta = reader.GetInt32(1);
-                        string text = _codec.DecodeColumnOrEmpty(reader, 2);
+                        string text = _codec.DecodeColumnOrEmpty(reader, 2, reader.GetInt32(3));
                         if (text.Length == 0) continue;
                         int neighbourId = reader.GetInt32(3);
 

@@ -62,6 +62,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// </summary>
         private readonly Dictionary<uint, Decompressor>? _decompressorsByDictionaryId;
 
+        /// <summary>
+        /// Re-reads `zstd_dict` from the connection this codec belongs to (issue #8): a writer in
+        /// WAL mode can append a dictionary without touching the main file, so a frame naming an
+        /// id this codec lacks triggers ONE re-read and a retry, as Otzaria does. Null on the
+        /// plain codec.
+        /// </summary>
+        private readonly Func<byte[][]>? _reloadDictionaries;
+
         private bool _isDisposed;
 
         private SeforimDbLineContentCodec()
@@ -69,9 +77,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             _decompressorsByDictionaryId = null;
         }
 
-        private SeforimDbLineContentCodec(Dictionary<uint, Decompressor> decompressorsByDictionaryId)
+        private SeforimDbLineContentCodec(
+            Dictionary<uint, Decompressor> decompressorsByDictionaryId, Func<byte[][]>? reloadDictionaries)
         {
             _decompressorsByDictionaryId = decompressorsByDictionaryId;
+            _reloadDictionaries = reloadDictionaries;
         }
 
         /// <summary>True when this database compresses line content.</summary>
@@ -132,7 +142,49 @@ namespace KitveiHakodesh.Core.SeforimDb
                 throw;
             }
 
-            return new SeforimDbLineContentCodec(decompressorsByDictionaryId);
+            return new SeforimDbLineContentCodec(decompressorsByDictionaryId, () => RereadDictionaries(connection));
+        }
+
+        /// <summary>
+        /// Reads `zstd_dict` again, bypassing the cache, and refreshes the cache entry of the
+        /// file, so the next codec built for it starts with the new dictionaries too.
+        /// </summary>
+        private static byte[][] RereadDictionaries(DbConnection connection)
+        {
+            var dictionaries = ReadDictionaries(connection);
+            string? cacheKey = CacheKeyFor(connection);
+            if (cacheKey != null) DictionaryBytesByDatabase[cacheKey] = dictionaries;
+            return dictionaries;
+        }
+
+        /// <summary>
+        /// Loads the dictionaries `zstd_dict` holds now that this codec does not have yet. True
+        /// when at least one was added (the caller retries its frame once).
+        /// </summary>
+        private bool TryLoadNewDictionaries()
+        {
+            var decompressorsByDictionaryId = _decompressorsByDictionaryId;
+            if (_reloadDictionaries == null || decompressorsByDictionaryId == null || _isDisposed) return false;
+
+            bool added = false;
+            foreach (var dictionaryBytes in _reloadDictionaries())
+            {
+                uint dictionaryId = ReadDictionaryId(dictionaryBytes);
+                if (decompressorsByDictionaryId.ContainsKey(dictionaryId)) continue;
+                var decompressor = new Decompressor();
+                try
+                {
+                    decompressor.LoadDictionary(dictionaryBytes);
+                }
+                catch
+                {
+                    decompressor.Dispose();
+                    throw;
+                }
+                decompressorsByDictionaryId[dictionaryId] = decompressor;
+                added = true;
+            }
+            return added;
         }
 
         /// <summary>
@@ -240,7 +292,26 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// would surface as mojibake or as blank lines in the reader's text, which is far
         /// harder to trace back than an exception naming the database.
         /// </summary>
-        public string? Decode(object? value)
+        public string? Decode(object? value) => Decode(value, -1);
+
+        /// <summary>
+        /// <see cref="Decode(object)"/> for the line <paramref name="lineId"/>: a value that
+        /// cannot be decoded raises an error naming that line (issue #8). A negative id names
+        /// no line.
+        /// </summary>
+        public string? Decode(object? value, long lineId)
+        {
+            try
+            {
+                return DecodeValue(value);
+            }
+            catch (SeforimDbContentCodecException exception) when (lineId >= 0)
+            {
+                throw new SeforimDbContentCodecException("Line " + lineId + ": " + exception.Message);
+            }
+        }
+
+        private string? DecodeValue(object? value)
         {
             if (value == null || value == DBNull.Value) return null;
 
@@ -250,7 +321,8 @@ namespace KitveiHakodesh.Core.SeforimDb
                 // a string is not wrong by itself - most of them ARE the line. But some rows
                 // in the shipped library hold the frame as BASE64 TEXT rather than as a blob,
                 // and returning one verbatim prints base64 in the middle of the page. Recover
-                // those; anything else is the text it claims to be.
+                // those (valid base64 AND a valid zstd frame header); anything else is the text
+                // it claims to be. A real frame that fails to decode throws (issue #8).
                 if (_decompressorsByDictionaryId != null && TryDecodeBase64Frame(text, out var recovered))
                     return recovered;
 
@@ -276,7 +348,11 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Reads column <paramref name="ordinal"/> as decoded text. The common path for query
         /// code, which would otherwise repeat the GetValue/Decode pair at every call site.
         /// </summary>
-        public string? DecodeColumn(DbDataReader reader, int ordinal)
+        public string? DecodeColumn(DbDataReader reader, int ordinal) => DecodeColumn(reader, ordinal, -1);
+
+        /// <summary><see cref="DecodeColumn(DbDataReader, int)"/> for the line
+        /// <paramref name="lineId"/>, named by the error a bad value raises.</summary>
+        public string? DecodeColumn(DbDataReader reader, int ordinal, long lineId)
         {
             if (reader == null) throw new ArgumentNullException(nameof(reader));
             // GetValue is the cheapest read Microsoft.Data.Sqlite offers for a blob: one copy
@@ -284,7 +360,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             // (then copy again) unless the blob table's own rowid is in the SELECT, which the
             // sidecar join does not have. The decode below is what no longer copies: it
             // decompresses into a pooled buffer and builds the string straight from it.
-            return reader.IsDBNull(ordinal) ? null : Decode(reader.GetValue(ordinal));
+            return reader.IsDBNull(ordinal) ? null : Decode(reader.GetValue(ordinal), lineId);
         }
 
         /// <summary>
@@ -294,7 +370,12 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// a meaningful value rather than an absence.
         /// </summary>
         public string DecodeColumnOrEmpty(DbDataReader reader, int ordinal)
-            => DecodeColumn(reader, ordinal) ?? string.Empty;
+            => DecodeColumn(reader, ordinal, -1) ?? string.Empty;
+
+        /// <summary><see cref="DecodeColumnOrEmpty(DbDataReader, int)"/> for the line
+        /// <paramref name="lineId"/>, named by the error a bad value raises.</summary>
+        public string DecodeColumnOrEmpty(DbDataReader reader, int ordinal, long lineId)
+            => DecodeColumn(reader, ordinal, lineId) ?? string.Empty;
 
         /// <summary>Decodes one frame. Only reachable on a compressed codec. The decompressed
         /// bytes live in a pooled buffer only as long as it takes to build the string.</summary>
@@ -306,7 +387,9 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             uint dictionaryId = ReadFrameDictionaryId(frame);
 
-            if (!decompressorsByDictionaryId.TryGetValue(dictionaryId, out var decompressor))
+            // A dictionary appended since this codec was built (WAL writer): re-read once, retry.
+            if (!decompressorsByDictionaryId.TryGetValue(dictionaryId, out var decompressor)
+                && !(TryLoadNewDictionaries() && decompressorsByDictionaryId.TryGetValue(dictionaryId, out decompressor)))
                 throw new SeforimDbContentCodecException(
                     "A line was compressed with dictionary " + dictionaryId +
                     ", which is not present in the database's zstd_dict table.");
@@ -396,21 +479,32 @@ namespace KitveiHakodesh.Core.SeforimDb
                     return false;
                 }
 
-                try
-                {
-                    decoded = DecodeFrame(frame.AsSpan(0, frameLength));
-                    return true;
-                }
-                catch (SeforimDbContentCodecException)
-                {
-                    // Decoded to bytes that are not a frame this database can read. Treat the
-                    // value as the text it claimed to be rather than failing the whole page.
-                    return false;
-                }
+                // Valid base64 but no valid zstd frame header: genuinely text.
+                if (!HasFrameHeader(frame.AsSpan(0, frameLength))) return false;
+
+                // A real frame: decode it, and let a failure (missing dictionary, bad data)
+                // raise instead of printing base64 as the line's text (issue #8).
+                decoded = DecodeFrame(frame.AsSpan(0, frameLength));
+                return true;
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(frame);
+            }
+        }
+
+        /// <summary>True when <paramref name="bytes"/> start with a valid zstd frame header
+        /// carrying a dictionary id (the base64 test of issue #8).</summary>
+        private static bool HasFrameHeader(ReadOnlySpan<byte> bytes)
+        {
+            try
+            {
+                ReadFrameDictionaryId(bytes);
+                return true;
+            }
+            catch (SeforimDbContentCodecException)
+            {
+                return false;
             }
         }
 
