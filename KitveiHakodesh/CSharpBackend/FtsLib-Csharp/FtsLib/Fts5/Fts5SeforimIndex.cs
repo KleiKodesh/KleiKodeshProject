@@ -85,8 +85,16 @@ namespace FtsLib.Fts5
 
         public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
                                                      int contextWords = DefaultContextWords,
-                                                     int maxWordDistance = int.MaxValue)
-            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords, maxWordDistance);
+                                                     int maxWordDistance = int.MaxValue,
+                                                     SnippetMatchMode matchMode = SnippetMatchMode.BestWindow)
+            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords, maxWordDistance, matchMode);
+
+        /// <summary>Every occurrence of <paramref name="words"/> in an open text (no index; see
+        /// <see cref="SnippetWindowLocator.FindAllMatches"/>): flat (start, length, term ordinal: first-seen distinct word)
+        /// triples, UTF-16 offsets. The words are normalized by the same tokenizer.</summary>
+        public static int[] FindAllMatches(string text, IReadOnlyList<string> words, bool phrase = false,
+                                           bool ignoreQuotes = false)
+            => SnippetDescriptorPipeline.FindAllMatches(text, words, phrase, ignoreQuotes);
 
         public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)
         {

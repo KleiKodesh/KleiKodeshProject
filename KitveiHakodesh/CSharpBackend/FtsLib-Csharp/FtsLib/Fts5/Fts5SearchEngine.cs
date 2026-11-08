@@ -276,11 +276,12 @@ namespace FtsLib.Fts5
         /// snippet that keep it (issue #4). int.MaxValue = no filter.</param>
         public static SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
                                                             int contextWords = SnippetDescriptorPipeline.DefaultContextWords,
-                                                            int maxWordDistance = int.MaxValue)
+                                                            int maxWordDistance = int.MaxValue,
+                                                            SnippetMatchMode matchMode = SnippetMatchMode.BestWindow)
         {
             if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
             var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords, maxWordDistance);
+            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords, maxWordDistance, matchMode);
         }
 
         // ── Pipeline ──────────────────────────────────────────────────
