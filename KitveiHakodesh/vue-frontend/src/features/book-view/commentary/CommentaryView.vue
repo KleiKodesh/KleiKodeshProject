@@ -27,6 +27,8 @@ import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
 import WordLinkTooltip from '../lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '../lines/useWordLinkTooltip'
+import { useLineNotesTooltip } from '../lines/useLineNotes'
+import type { LineNote } from '@/webview-host/queries.types'
 import { useNoteTooltip } from '../lines/useNoteTooltip'
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { WordLinkTargetContent } from '../lines/wordLinkExport'
@@ -71,6 +73,9 @@ const props = defineProps<{
   scheduleNotesLoad: (lineIds: number[]) => void
   // Viewport-driven lazy load of word-level link anchors (link_anchor, schema v2+ DBs).
   scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
+  // Inline notes (line_note, Otzaria schema 7+) - hover preview of their markers.
+  getLineNotesForLine?: (lineId: number) => LineNote[]
+  scheduleLineNotesLoad?: (lineIds: number[]) => void
   // Copy-with-notes needs the notes and citations of lines never scrolled into view,
   // plus the target lines the citations point at — see useCopyExportData.
   prepareExportData?: (lineIds: number[]) => Promise<void>
@@ -298,6 +303,7 @@ watch(
     const ids = lineIdsIn(range.start, range.end)
     props.scheduleNotesLoad(ids)
     props.scheduleWordLinkAnchorsLoad?.(ids)
+    props.scheduleLineNotesLoad?.(ids)
   },
   { immediate: true },
 )
@@ -578,6 +584,22 @@ const {
 // replaces the native title tooltip the marker used to have.
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
+// Inline notes (footnotes): hover preview of a marker's note, as in the lines view.
+const {
+  lineNoteTooltip,
+  closeLineNoteTooltip,
+  keepLineNoteTooltipOpen,
+  releaseLineNoteTooltip,
+  beginLineNoteTooltipSelection,
+} = useLineNotesTooltip(
+  scrollerEl,
+  (marker) => {
+    const row = marker.closest<HTMLElement>('[data-line-id]')
+    return row ? { row, lineId: Number(row.dataset.lineId) } : null
+  },
+  (lineId) => props.getLineNotesForLine?.(lineId) ?? [],
+)
+
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 
 // Hovering the scrollbar names the commentary and section there, as the lines view
@@ -637,6 +659,15 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
       @close="closeWordLinkTooltip"
+    />
+    <WordLinkTooltip
+      v-if="lineNoteTooltip"
+      :key="`line-note-${lineNoteTooltip.id}`"
+      :data="lineNoteTooltip"
+      @pointer-enter="keepLineNoteTooltipOpen"
+      @pointer-leave="releaseLineNoteTooltip"
+      @select-start="beginLineNoteTooltipSelection"
+      @close="closeLineNoteTooltip"
     />
     <WordLinkTooltip
       v-if="noteTooltip"
@@ -930,6 +961,21 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   transition: color 100ms;
 }
 /* The mark is drawn by CSS so the marker holds no text — see applyUserNoteMarkers. */
+/* Inline notes (lines/lineNotes.ts) - same look as the lines view. */
+.line :deep(sup.footnote-marker),
+.line :deep(.line-note-marker) {
+  color: var(--accent-color);
+  cursor: pointer;
+}
+.line :deep(.line-note-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  font-style: normal;
+}
+.line :deep(.line-note-marker)::before {
+  content: '*';
+}
 .line :deep(.user-note-marker)::before {
   content: '✎︎';
 }

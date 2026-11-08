@@ -28,7 +28,7 @@ import type { CommentaryGroup } from './useCommentary'
 import type { CommentarySlot, CommentaryTreeState } from '../bookViewTypes'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
-import type { WordLinkAnchor } from '@/webview-host/queries.types'
+import type { LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
 
 /**
  * Default divider position per slot: fraction of the pane the panel takes.
@@ -93,6 +93,7 @@ export interface SharedCommentaryDeps {
   getHighlightsForLine: (lineId: number) => Highlight[]
   getNotesForLine: (lineId: number) => Note[]
   getWordLinkAnchorsForLine: (lineId: number) => WordLinkAnchor[]
+  getLineNotesForLine: (lineId: number) => LineNote[]
 }
 
 export function useCommentaryPanelSlot(
@@ -185,6 +186,7 @@ export function useCommentaryPanelSlot(
     shared.getHighlightsForLine,
     shared.getNotesForLine,
     shared.getWordLinkAnchorsForLine,
+    shared.getLineNotesForLine,
   )
 
   const search = useCommentarySearch(

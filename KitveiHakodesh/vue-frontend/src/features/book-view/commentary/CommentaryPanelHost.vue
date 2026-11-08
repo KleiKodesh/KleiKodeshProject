@@ -23,6 +23,7 @@ import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
+import type { LineNote } from '@/webview-host/queries.types'
 import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 
 const props = defineProps<{
@@ -51,6 +52,8 @@ const props = defineProps<{
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
   scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
+  getLineNotesForLine?: (lineId: number) => LineNote[]
+  scheduleLineNotesLoad?: (lineIds: number[]) => void
   // Copy-with-notes needs the notes and citations of lines never scrolled into view,
   // plus the target lines the citations point at — see useCopyExportData.
   prepareExportData?: (lineIds: number[]) => Promise<void>
@@ -142,6 +145,8 @@ defineExpose({ view })
       :get-notes-for-line="getNotesForLine"
       :schedule-notes-load="scheduleNotesLoad"
       :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
+      :get-line-notes-for-line="getLineNotesForLine"
+      :schedule-line-notes-load="scheduleLineNotesLoad"
       :prepare-export-data="prepareExportData"
       :prepare-export-targets="prepareExportTargets"
       :resolve-word-link-target="resolveWordLinkTarget"

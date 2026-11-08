@@ -5,7 +5,8 @@ import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, annotationOffsetLength, contentInAnnotationOffsetSpace } from '../lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from '../lines/wordLinkAnchors'
-import type { WordLinkAnchor } from '@/webview-host/queries.types'
+import { appendUnmarkedNotesMarker, lineNotesSig } from '../lines/lineNotes'
+import type { LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 
@@ -24,6 +25,7 @@ export function useCommentaryRender(
   getHighlightsForLine?: (lineId: number) => Highlight[],
   getNotesForLine?: (lineId: number) => Note[],
   getWordLinkAnchorsForLine?: (lineId: number) => WordLinkAnchor[],
+  getLineNotesForLine?: (lineId: number) => LineNote[],
 ) {
   const settingsStore = useSettingsStore()
 
@@ -59,7 +61,8 @@ export function useCommentaryRender(
           .join(',')
       : ''
     const anchorsSig = wordLinkAnchorsSig(getWordLinkAnchorsForLine?.(lineId) ?? [])
-    return `${highlightsSig}|${notesSig}|${anchorsSig}`
+    const lineNotesKey = lineNotesSig(getLineNotesForLine?.(lineId) ?? [])
+    return `${highlightsSig}|${notesSig}|${anchorsSig}|${lineNotesKey}`
   }
 
   function highlightMatches(
@@ -184,6 +187,9 @@ export function useCommentaryRender(
     }
 
     if (searchQuery?.trim()) result = highlightMatches(result, searchQuery)
+
+    // Inline notes without a marker: one empty end-of-line marker, after every offset walk.
+    if (lineId != null) result = appendUnmarkedNotesMarker(result, getLineNotesForLine?.(lineId) ?? [])
 
     renderCache.set(flatIndex, result)
     return result

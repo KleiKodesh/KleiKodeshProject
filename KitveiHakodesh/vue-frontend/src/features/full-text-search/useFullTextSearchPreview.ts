@@ -12,7 +12,9 @@
  * in the loaded lines.
  */
 import { reactive } from 'vue'
-import { getLineContents, getLineIndexFromLineId, getLinesPaged, getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import { getLineContents, getLineIndexFromLineId, getLineNotesForLines, getLinesPaged, getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import { appendUnmarkedNotesMarker } from '@/features/book-view/lines/lineNotes'
+import type { LineNote } from '@/webview-host/queries.types'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
@@ -23,6 +25,8 @@ export interface PreviewLine {
   id: number
   lineIndex: number
   html: string
+  /** Inline notes (line_note) of the line - previewed by hovering their markers. */
+  notes: LineNote[]
 }
 
 export interface PreviewState {
@@ -66,12 +70,28 @@ export function useFullTextSearchPreview() {
     // Word-level link anchors for the fetched window — one batched call, [] on
     // schema-v1 DBs (probe short-circuits inside seforimApi). Best-effort: the
     // preview renders fine without them.
-    const anchorsByLine = await fetchAnchors(rows.map((row) => row.id))
-    return rows.map((row) => ({
-      id: row.id,
-      lineIndex: row.lineIndex,
-      html: highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), snippetHtmlOf(result) ?? ''),
-    }))
+    const ids = rows.map((row) => row.id)
+    const [anchorsByLine, notesByLine] = await Promise.all([fetchAnchors(ids), fetchNotes(ids)])
+    return rows.map((row) => {
+      const notes = notesByLine.get(row.id) ?? []
+      const html = highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), snippetHtmlOf(result) ?? '')
+      // The end-of-line marker of notes without one goes on last: it holds no text.
+      return { id: row.id, lineIndex: row.lineIndex, html: appendUnmarkedNotesMarker(html, notes), notes }
+    })
+  }
+
+  /** Inline notes for the fetched window - one batched call, [] on DBs without line_note. */
+  async function fetchNotes(lineIds: number[]): Promise<Map<number, LineNote[]>> {
+    const byLine = new Map<number, LineNote[]>()
+    if (!lineIds.length) return byLine
+    try {
+      for (const row of await getLineNotesForLines(lineIds)) {
+        let list = byLine.get(row.lineId)
+        if (!list) byLine.set(row.lineId, (list = []))
+        list.push(row)
+      }
+    } catch { /* best-effort */ }
+    return byLine
   }
 
   async function fetchAnchors(lineIds: number[]): Promise<Map<number, WordLinkAnchor[]>> {

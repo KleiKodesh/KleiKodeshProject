@@ -15,6 +15,7 @@ import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
+import { useLineNotes } from './lines/useLineNotes'
 import { useCopyExportData } from './lines/useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
@@ -51,6 +52,9 @@ export function useBookViewCommentaryAnnotations(
   const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad, loadWordLinkAnchorsForLines } =
     useWordLinkAnchors()
 
+  // Inline notes (line_note) of commentary lines - schedule-driven, same as word links.
+  const { getLineNotesForLine, scheduleLineNotesLoad } = useLineNotes()
+
   // What copy-with-notes needs beyond the rendered markup — built here because this
   // is where the commentary's lazy note/citation stores live. CommentaryView receives
   // the two entry points as props and hands them to its copy menu.
@@ -84,6 +88,7 @@ export function useBookViewCommentaryAnnotations(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
+    getLineNotesForLine, scheduleLineNotesLoad,
     prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget,
     commentaryTocPaths,
     buildExportHtml,
