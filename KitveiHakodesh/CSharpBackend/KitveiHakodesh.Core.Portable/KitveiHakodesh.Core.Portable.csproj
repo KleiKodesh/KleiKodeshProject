@@ -26,6 +26,7 @@
     <Compile Include="$(CoreDir)SeforimDb\**\*.cs" LinkBase="SeforimDb" Exclude="$(CoreDir)SeforimDb\SeforimDbIndexRefreshWatcher.cs" />
     <Compile Include="$(CoreDir)SeforimDbCatalog\**\*.cs" LinkBase="SeforimDbCatalog" />
     <Compile Include="$(CoreDir)Settings\**\*.cs" LinkBase="Settings" Exclude="$(CoreDir)Settings\SeforimDbLibrarySwitcher.cs" />
+    <Compile Include="$(CoreDir)SeforimLibraryDownload\SeforimLibraryDownloadLocations.cs" LinkBase="SeforimLibraryDownload" />
     <Compile Include="$(CoreDir)Common\**\*.cs" LinkBase="Common" Exclude="$(CoreDir)Common\ShellRegistration.cs;$(CoreDir)Common\RegistryValueWatcher.cs;$(CoreDir)Common\RecycleBin.cs;$(CoreDir)Common\HebrewFonts.cs" />
   </ItemGroup>
 
