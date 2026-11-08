@@ -11,7 +11,7 @@ namespace FtsLib.Indexing
     /// process kills and are easy to find after a crash.  Thread-safe via lock.
     /// Never throws — logging failures are silently swallowed.
     ///
-    /// The log path defaults to %TEMP%\FtsLib.log but can be overridden by
+    /// The log path defaults to AppRoot\logs\FtsLib.log (AppRootFolder) but can be overridden by
     /// setting <see cref="LogPath"/> before the first call.
     /// </summary>
     public static class FtsLog
@@ -20,10 +20,11 @@ namespace FtsLib.Indexing
 
         /// <summary>
         /// Full path of the log file.  Set this before calling any other member
-        /// if you want the log next to the index directory rather than in %TEMP%.
+        /// if you want the log next to the index directory rather than in the app root's logs folder.
         /// </summary>
         public static string LogPath { get; set; } =
-            Path.Combine(Path.GetTempPath(), "FtsLib.log");
+            Path.Combine(KitveiHakodesh.Core.Common.AppRootFolder.Path,
+                KitveiHakodesh.Core.Common.AppRootFolder.Logs, "FtsLib.log");
 
         /// <summary>Write a plain message.</summary>
         public static void Write(string message)
@@ -34,7 +35,11 @@ namespace FtsLib.Indexing
                               "  [T" + Thread.CurrentThread.ManagedThreadId + "]" +
                               "  " + message;
                 lock (_lock)
+                {
+                    string folder = Path.GetDirectoryName(LogPath);
+                    if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
                     File.AppendAllText(LogPath, line + Environment.NewLine);
+                }
             }
             catch { }
         }

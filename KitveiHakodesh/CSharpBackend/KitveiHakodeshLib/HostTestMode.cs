@@ -50,9 +50,5 @@ namespace KitveiHakodeshLib
                 return dir;
             }
         }
-
-        /// <summary>Where a host file that normally lives under LocalAppData\KleiKodesh goes.</summary>
-        public static string KleiKodeshLocalFolder => ProfileDir
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KleiKodesh");
     }
 }

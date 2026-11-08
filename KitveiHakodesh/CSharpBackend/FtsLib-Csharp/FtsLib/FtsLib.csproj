@@ -60,4 +60,9 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The app-root rule (the app never writes outside its own folder), shared with Core. -->
+    <Compile Include="..\..\KitveiHakodesh.Core\Common\AppRootFolder.cs" Link="Common\AppRootFolder.cs" />
+  </ItemGroup>
+
 </Project>

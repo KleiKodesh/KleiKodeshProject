@@ -399,8 +399,7 @@ public static unsafe partial class AotWordConverter
         // CONSTANT — so exporting twice used to resolve to the same path, and the second
         // WriteAllText threw a sharing violation because Word still had the first one open. A
         // successful export must never be what blocks the next one.
-        string exportDir = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(), "KitveiHakodesh", Guid.NewGuid().ToString("N"));
+        string exportDir = System.IO.Path.Combine(ExportsRoot, Guid.NewGuid().ToString("N"));
         System.IO.Directory.CreateDirectory(exportDir);
 
         string tempFile = System.IO.Path.Combine(exportDir, BuildSafeFileName(title) + ".html");
@@ -478,6 +477,10 @@ public static unsafe partial class AotWordConverter
         }
     }
 
+    // Inside the app's own folder (the app never writes outside it).
+    private static string ExportsRoot => System.IO.Path.Combine(
+        KitveiHakodesh.Core.Common.AppRootFolder.Path, KitveiHakodesh.Core.Common.AppRootFolder.WordExports);
+
     /// <summary>
     /// Deletes export directories from previous runs, skipping <paramref name="keep"/> and
     /// anything recent enough that Word may still hold it. Mirrors KitveiHakodeshLib
@@ -488,7 +491,7 @@ public static unsafe partial class AotWordConverter
     {
         try
         {
-            string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "KitveiHakodesh");
+            string root = ExportsRoot;
             if (!System.IO.Directory.Exists(root)) return;
 
             DateTime cutoff = DateTime.UtcNow.AddDays(-1);

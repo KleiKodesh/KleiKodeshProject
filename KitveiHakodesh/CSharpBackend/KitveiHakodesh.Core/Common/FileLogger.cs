@@ -30,10 +30,9 @@ namespace KitveiHakodesh.Core.Common
             _logPath = logPath;
         }
 
-        /// <summary>A log named after the app, in the temp folder. Temp because this exists for
-        /// problems that happen before a real location is known to be writable.</summary>
-        public static FileLogger InTempFolder(string fileName) =>
-            new FileLogger(Path.Combine(Path.GetTempPath(), fileName));
+        /// <summary>A log in the app root's logs\ folder (the app never writes outside its folder).</summary>
+        public static FileLogger InLogsFolder(string fileName) =>
+            new FileLogger(Path.Combine(AppRootFolder.Path, AppRootFolder.Logs, fileName));
 
         public string LogPath => _logPath;
 

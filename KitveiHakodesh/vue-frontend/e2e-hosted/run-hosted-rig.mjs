@@ -370,14 +370,16 @@ async function main() {
 
   toratFixtures = makeFixtures(path.join(root, 'torat-emet'))
   const serviceExe = shadowService()
-  startProcess('service', serviceExe, [], { ...toratEmetEnv(toratFixtures), KHS_PIPE_NAME: pipeName, KHS_DATA_DIR: serviceBuildDir, KHS_OWNER_PID: String(process.pid) })
+  // One app root for both processes (AppRootFolder): the rig's own folder, never the user's.
+  const appRoot = path.join(root, 'app-root')
+  startProcess('service', serviceExe, [], { ...toratEmetEnv(toratFixtures), KHS_PIPE_NAME: pipeName, KHS_DATA_DIR: serviceBuildDir, KHS_APP_ROOT: appRoot, KHS_OWNER_PID: String(process.pid) })
   await waitFor(`service pipe ${pipeName}`, async () => pipeListed(), 120_000)
   log(`service up on ${pipeName}`)
 
   const port = await freePort()
   const profile = path.join(root, 'profile')
   startProcess('host', hostExe, [textDoc], {
-    KH_TEST_CDP_PORT: String(port), KH_TEST_PROFILE_DIR: profile, KHS_PIPE_NAME: pipeName,
+    KH_TEST_CDP_PORT: String(port), KH_TEST_PROFILE_DIR: profile, KHS_PIPE_NAME: pipeName, KHS_APP_ROOT: appRoot,
   })
   await waitFor('DevTools endpoint', async () => (await fetch(`http://127.0.0.1:${port}/json/version`)).ok, 90_000, 500)
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
