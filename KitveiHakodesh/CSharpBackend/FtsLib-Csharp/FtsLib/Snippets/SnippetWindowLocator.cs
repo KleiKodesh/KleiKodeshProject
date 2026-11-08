@@ -37,6 +37,9 @@ namespace FtsLib.Snippets
         private          int[]       _groupCount  = new int[8];
         private readonly List<int>   _markRanges  = new List<int>(24);
         private          bool[]      _markMask    = new bool[32];   // occurrence marks (issue #4)
+        private          int[]       _last        = new int[8];     // in order: latest chain start per group
+        private          int[]       _starts      = new int[32];    // in order: per (group, token) prefix start
+        private          int[]       _ends        = new int[32];    // in order: per (group, token) suffix end
 
         public SnippetWindowLocator(int contextWords = 8)
         {
@@ -65,7 +68,14 @@ namespace FtsLib.Snippets
             if (tokens.Count == 0)
                 return SnippetDescriptor.NoMatch;
 
-            var (iLeft, iRight, score) = FindWindow(tokens, prepared);
+            // In order: the best window is the tightest ORDERED covering window and the marks
+            // the tokens of ordered occurrences; the order check is this window's existence.
+            // Order off: unchanged.
+            bool ordered = requireOrdered && prepared.GroupCount > 1;
+            var (iLeft, iRight, score) = ordered ? OrderedCoverWindow(tokens, prepared) : (-1, -1, int.MaxValue);
+            bool orderedFound = score != int.MaxValue;
+            if (!orderedFound)
+                (iLeft, iRight, score) = FindWindow(tokens, prepared);
             if (score == int.MaxValue)
                 return SnippetDescriptor.NoMatch;
 
@@ -82,16 +92,18 @@ namespace FtsLib.Snippets
             // Marks: the tokens of full occurrences (issue #4). Without a distance every
             // term token in the snippet is in a covering window, so only the caller's
             // distance filter narrows them.
-            bool masked = maxWordDistance != int.MaxValue
-                && OccurrenceMarks(tokens, prepared, sIdx, eIdx, iLeft, iRight,
-                                   (long)maxWordDistance + (denominator - 1));
+            long maxSpan = (long)maxWordDistance + (denominator - 1);
+            bool masked = orderedFound
+                ? OrderedOccurrenceMarks(tokens, prepared, sIdx, eIdx, iLeft, iRight, maxSpan)
+                : maxWordDistance != int.MaxValue
+                  && OccurrenceMarks(tokens, prepared, sIdx, eIdx, iLeft, iRight, maxSpan);
             CollectMarkRanges(tokens, prepared, snapStart, snapEnd, masked ? sIdx : -1);
             // Words between the ends, by position (a paired reading's second reading shares
             // its first reading's position).
             int wordDist = tokens[iRight].Position - tokens[iLeft].Position - (denominator - 1);
             if (wordDist < 0) wordDist = 0;
 
-            bool isMatch = !(requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared));
+            bool isMatch = !ordered || orderedFound;
 
             return new SnippetDescriptor(isMatch, score, wordDist, windowWords, snapStart, snapEnd,
                 leadingEllipsis: snapStart > 0, trailingEllipsis: snapEnd < rawHtml.Length,
@@ -197,39 +209,37 @@ namespace FtsLib.Snippets
         // ── Ordered-match validation ──────────────────────────────────
 
         /// <summary>
-        /// Returns true when there exists a position in <paramref name="tokens"/>
-        /// where each query group is satisfied by a token appearing strictly after
-        /// the token satisfying the previous group (left-to-right order).
-        /// Uses a greedy forward scan: O(n) in token count.
+        /// In order: the tightest (iLeft, iRight, raw-char span) window holding one token per
+        /// group in query order (by token index, a token in one slot), the earliest on a tie;
+        /// score int.MaxValue without one. Per group the latest chain start so far; a chain
+        /// ending at a token of the last group starts there. One pass, O(tokens x groups).
         /// </summary>
-        private static bool HasOrderedMatch(List<TextToken> tokens, PreparedQueryGroups prepared)
+        private (int iLeft, int iRight, int score) OrderedCoverWindow(
+            List<TextToken> tokens, PreparedQueryGroups prepared)
         {
-            int numGroups = prepared.GroupCount;
-            if (numGroups <= 1) return true; // single group — order is trivially satisfied
-
-            // Try every starting token that belongs to group 0.
-            for (int start = 0; start < tokens.Count; start++)
+            int k = prepared.GroupCount;
+            if (_last.Length < k) _last = new int[k * 2];
+            for (int g = 0; g < k; g++) _last[g] = -1;
+            int bestL = -1, bestR = -1, bestScore = int.MaxValue;
+            for (int t = 0; t < tokens.Count; t++)
             {
-                if (!prepared.TryGetGroups(tokens[start].NormSpan, out int[] startGroups)
-                    || System.Array.IndexOf(startGroups, 0) < 0)
-                    continue;
-
-                // Greedily advance through groups 1..numGroups-1.
-                int pos       = start + 1;
-                int nextGroup = 1;
-                while (nextGroup < numGroups && pos < tokens.Count)
+                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
+                if (_starts.Length < gs.Length) _starts = new int[gs.Length * 2];
+                // read the previous group's state before this token updates it
+                for (int i = 0; i < gs.Length; i++) _starts[i] = gs[i] == 0 ? t : _last[gs[i] - 1];
+                for (int i = 0; i < gs.Length; i++)
                 {
-                    if (prepared.TryGetGroups(tokens[pos].NormSpan, out int[] tGroups)
-                        && System.Array.IndexOf(tGroups, nextGroup) >= 0)
-                        nextGroup++;
-                    pos++;
+                    int g = gs[i], v = _starts[i];
+                    if (v < 0) continue;
+                    if (g == k - 1)
+                    {
+                        int span = tokens[t].RawEnd - tokens[v].RawStart;
+                        if (span < bestScore) { bestScore = span; bestL = v; bestR = t; }
+                    }
+                    else if (v > _last[g]) _last[g] = v;
                 }
-
-                if (nextGroup == numGroups)
-                    return true;
             }
-
-            return false;
+            return (bestL, bestR, bestScore);
         }
 
         // ── Window expansion ──────────────────────────────────────────
@@ -325,6 +335,74 @@ namespace FtsLib.Snippets
         }
 
         // ── Occurrence marks (issue #4) ───────────────────────────────
+
+        /// <summary>
+        /// In order: marks in <see cref="_markMask"/> every term token of sIdx..eIdx in an
+        /// ordered chain (one token per group, query order) lying in sIdx..eIdx whose ends are
+        /// at most <paramref name="maxSpan"/> positions apart: t in slot g qualifies when the
+        /// latest prefix chain start ending at t and the earliest suffix chain end starting at
+        /// t are within the span. False when every term token qualifies anyway (none outside
+        /// the best window, exactly one per group: the best window's own chain).
+        /// </summary>
+        private bool OrderedOccurrenceMarks(
+            List<TextToken> tokens, PreparedQueryGroups prepared,
+            int sIdx, int eIdx, int iLeft, int iRight, long maxSpan)
+        {
+            int k = prepared.GroupCount, nTerms = 0;
+            bool outside = false;
+            for (int t = sIdx; t <= eIdx; t++)
+                if (prepared.TryGetGroups(tokens[t].NormSpan, out _))
+                {
+                    nTerms++;
+                    if (t < iLeft || t > iRight) outside = true;
+                }
+            if (!outside && nTerms == k) return false;
+
+            int w = eIdx - sIdx + 1;
+            if (_markMask.Length < w) _markMask = new bool[w * 2];
+            System.Array.Clear(_markMask, 0, _markMask.Length);
+            if (_starts.Length < k * w) _starts = new int[k * w * 2];
+            if (_ends.Length < k * w) _ends = new int[k * w * 2];
+            for (int i = 0; i < k * w; i++) { _starts[i] = -1; _ends[i] = -1; }
+            if (_last.Length < k) _last = new int[k * 2];
+
+            for (int g = 0; g < k; g++) _last[g] = -1;
+            for (int t = sIdx; t <= eIdx; t++)
+            {
+                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
+                foreach (int g in gs) _starts[g * w + t - sIdx] = g == 0 ? t : _last[g - 1];
+                foreach (int g in gs)
+                {
+                    int v = _starts[g * w + t - sIdx];
+                    if (v > _last[g]) _last[g] = v;
+                }
+            }
+            for (int g = 0; g < k; g++) _last[g] = -1;
+            for (int t = eIdx; t >= sIdx; t--)
+            {
+                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
+                foreach (int g in gs) _ends[g * w + t - sIdx] = g == k - 1 ? t : _last[g + 1];
+                foreach (int g in gs)
+                {
+                    int v = _ends[g * w + t - sIdx];
+                    if (v >= 0 && (_last[g] < 0 || v < _last[g])) _last[g] = v;
+                }
+            }
+            for (int t = sIdx; t <= eIdx; t++)
+            {
+                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
+                foreach (int g in gs)
+                {
+                    int a = _starts[g * w + t - sIdx], z = _ends[g * w + t - sIdx];
+                    if (a >= 0 && z >= 0 && tokens[z].Position - tokens[a].Position <= maxSpan)
+                    {
+                        _markMask[t - sIdx] = true;
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
 
         /// <summary>
         /// Marks in <see cref="_markMask"/> (index t - sIdx) every term token of tokens
