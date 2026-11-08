@@ -722,7 +722,7 @@ public sealed class Dispatcher(
 
                 // Automatic update of the library this app downloaded. true = turned OFF.
                 case "isOwnSeforimLibraryInUse":
-                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = KitveiHakodesh.Core.SeforimLibraryDownload.SeforimLibraryDownloader.IsOwnLibraryInUse }));
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = global::KitveiHakodesh.Core.SeforimLibraryDownload.SeforimLibraryDownloader.IsOwnLibraryInUse }));
 
                 case "getTurnOffLibraryUpdates":
                     return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffLibraryUpdates() }));
