@@ -58,8 +58,28 @@ namespace FtsLibTest
             Check("find: marks ignored", Starts(m).SequenceEqual(new[] { 0 }) && m[1] == 3);
             string q = "אב\"ג";
             m = Fts5SeforimIndex.FindAllMatches($"x {q}", new[] { "אבג" });
-            // FtsLib's snippet tokenizer drops quotes from a token's normalized form: matched anyway
-            Check("find: quote-free token", Starts(m).SequenceEqual(new[] { 2 }));
+            // quotes as the Rust engine's walks read them: a quote-free word finds the quoted token
+            Check("find: quote-free word, quoted token", Starts(m).SequenceEqual(new[] { 2 }));
+            m = Fts5SeforimIndex.FindAllMatches("x אבג", new[] { q });
+            Check("find: a typed quote needs the quote", m.Length == 0);
+            m = Fts5SeforimIndex.FindAllMatches("x אבג", new[] { q }, ignoreQuotes: true);
+            Check("find: a typed quote, quotes ignored", Starts(m).SequenceEqual(new[] { 2 }));
+            string voc = "אָב";
+            m = Fts5SeforimIndex.FindAllMatches($"{A} {voc}", new[] { voc }, matchMarks: true);
+            Check("find: marks kept, vocalized word", Starts(m).SequenceEqual(new[] { 3 }));
+            m = Fts5SeforimIndex.FindAllMatches($"{A} {voc}", new[] { A }, matchMarks: true);
+            Check("find: marks kept, plain word", Starts(m).SequenceEqual(new[] { 0 }));
+            // canonical order: two marks of one letter in either order
+            m = Fts5SeforimIndex.FindAllMatches("בָּא x", new[] { "בָּא" }, matchMarks: true);
+            Check("find: marks kept, canonical order", Starts(m).SequenceEqual(new[] { 0 }));
+
+            // AllMatches marks follow the best window's occurrence rule (issue #4)
+            string dl = $"{A} {B} x x {A} x x x {B} {B} {A} y";
+            var occ = Occ(dl, A, B).ToArray();
+            var d0 = new SnippetWindowLocator(1).Locate(dl, prepared, false, 0, 0, SnippetMatchMode.AllMatches);
+            Check("all: distance 0, only full occurrences", Starts(d0.MarkRanges).SequenceEqual(new[] { occ[0], occ[1], occ[4], occ[5] }));
+            var dOrd = new SnippetWindowLocator(1).Locate(dl, prepared, true, 0, 0, SnippetMatchMode.AllMatches);
+            Check("all: in order, distance 0", Starts(dOrd.MarkRanges).SequenceEqual(new[] { occ[0], occ[1] }));
             m = Fts5SeforimIndex.FindAllMatches($"x {q}", new[] { "אבג" }, ignoreQuotes: true);
             Check("find: quotes ignored", Starts(m).SequenceEqual(new[] { 2 }) && m[1] == 4);
             m = Fts5SeforimIndex.FindAllMatches("\U0001F600 " + A, new[] { A });

@@ -93,8 +93,8 @@ namespace FtsLib.Fts5
         /// <see cref="SnippetWindowLocator.FindAllMatches"/>): flat (start, length, term ordinal: first-seen distinct word)
         /// triples, UTF-16 offsets. The words are normalized by the same tokenizer.</summary>
         public static int[] FindAllMatches(string text, IReadOnlyList<string> words, bool phrase = false,
-                                           bool ignoreQuotes = false)
-            => SnippetDescriptorPipeline.FindAllMatches(text, words, phrase, ignoreQuotes);
+                                           bool ignoreQuotes = false, bool matchMarks = false)
+            => SnippetDescriptorPipeline.FindAllMatches(text, words, phrase, ignoreQuotes, matchMarks);
 
         public Dictionary<long, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<long> lineIds, int radius)
         {

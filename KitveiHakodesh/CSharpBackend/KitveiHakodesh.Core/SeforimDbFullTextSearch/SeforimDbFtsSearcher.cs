@@ -97,6 +97,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <param name="afterPosition">Resume: only lines after this index position
         /// (<see cref="SeforimDbFtsEngine.PositionOfLine"/>); 0 = from the start. A resumed
         /// search seeds no snippet texts — the caller already shows its first screen.</param>
+        /// <param name="matchMode">What each hit's snippet holds: the best window (default) or
+        /// the whole line with every full occurrence marked (SnippetMatchMode.AllMatches; which
+        /// hits pass does not change).</param>
         public IEnumerable<SeforimDbFtsHitBatch> SearchInBatches(
             SeforimDbFtsEngine engine,
             string query,
@@ -107,7 +110,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             CancellationToken cancellationToken = default,
             Action<string>? onStage = null,
             long afterPosition = 0,
-            SeforimDbFtsUnreadableRows? unreadable = null)
+            SeforimDbFtsUnreadableRows? unreadable = null,
+            SnippetMatchMode matchMode = SnippetMatchMode.BestWindow)
         {
             if (engine == null) throw new ArgumentNullException(nameof(engine));
             if (terms == null) throw new ArgumentNullException(nameof(terms));
@@ -149,7 +153,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
                     SeforimDbFtsHitBatch built;
                     using (unreadable.Enter())
-                        built = BuildBatch(index, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage);
+                        built = BuildBatch(index, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage, matchMode);
                     built.UnreadableLineIds = unreadable.TakeNew();
                     batch.Clear();
                     batchIndex++;
@@ -162,7 +166,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     SeforimDbFtsHitBatch built;
                     using (unreadable.Enter())
                         built = batch.Count > 0
-                            ? BuildBatch(index, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage)
+                            ? BuildBatch(index, Corpus, batch, requireOrdered, contextWords, maxWordDistance, terms, seedLeft, cancellationToken, stage, matchMode)
                             : new SeforimDbFtsHitBatch(new List<FtsHit>(), new List<FtsSnippetText>());
                     built.UnreadableLineIds = unreadable.TakeNew();
                     if (built.Hits.Count > 0 || built.UnreadableLineIds.Count > 0) yield return built;
@@ -195,14 +199,15 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             FtsTermTable terms,
             int seedSnippetTextHitCount,
             CancellationToken cancellationToken,
-            Action<string>? onStage = null)
+            Action<string>? onStage = null,
+            SnippetMatchMode matchMode = SnippetMatchMode.BestWindow)
         {
             onStage?.Invoke("snippets");   // before Parallel.For: never call onStage from a worker
             var built = new FtsHit?[results.Count];
 
             Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, terms, out FtsHit? hit))
+                if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, terms, out FtsHit? hit, matchMode))
                     built[i] = hit;
             });
 
@@ -275,11 +280,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             int contextWords,
             int maxWordDistance,
             FtsTermTable terms,
-            out FtsHit? built)
+            out FtsHit? built,
+            SnippetMatchMode matchMode = SnippetMatchMode.BestWindow)
         {
             built = null;
 
-            var window = index.LocateSnippetWindow(hit, requireOrdered, contextWords, maxWordDistance);
+            var window = index.LocateSnippetWindow(hit, requireOrdered, contextWords, maxWordDistance, matchMode);
             if (!window.IsMatch) return false;
             if (window.WordDistance > maxWordDistance) return false;
 
