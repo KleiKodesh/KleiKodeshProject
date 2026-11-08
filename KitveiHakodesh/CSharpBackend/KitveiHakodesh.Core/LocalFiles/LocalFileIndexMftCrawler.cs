@@ -134,6 +134,29 @@ namespace KitveiHakodesh.Core.LocalFiles
             "ShaderCache",
             "ScriptCache",
             "CacheStorage",
+            "Service Worker",
+            "IndexedDB",
+            "Local Storage",
+            "Session Storage",
+            "Crashpad",
+            "DawnCache",
+            "DawnGraphiteCache",
+            "DawnWebGPUCache",
+            "GrShaderCache",
+            "Media Cache",
+            "cache2",                     // Firefox disk cache
+            "startupCache",               // Firefox
+            "OfflineCache",
+            "jumpListCache",
+            "INetCache",                  // Edge/IE: AppData\Local\Microsoft\Windows\INetCache
+            "Temporary Internet Files",
+            "WebCache",
+
+            // Windows upgrade leftovers
+            "Windows.old",
+            "$Windows.~BT",
+            "$Windows.~WS",
+            "$WinREAgent",
 
             // Source control internals
             ".git",
@@ -145,6 +168,15 @@ namespace KitveiHakodesh.Core.LocalFiles
             ".npm",
             ".yarn",
             ".pnpm-store",
+
+            // Developer tool caches
+            ".nuget",
+            ".gradle",
+            ".m2",
+            ".cache",
+            "__pycache__",
+            ".vs",
+            "bower_components",
 
             // Recycling
             "$Recycle.Bin",

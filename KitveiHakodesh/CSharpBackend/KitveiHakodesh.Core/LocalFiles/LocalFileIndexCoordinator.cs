@@ -66,6 +66,19 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     private readonly SemaphoreSlim _buildGate = new(1, 1);
     private Task<LocalFileIndex>? _buildTask;
 
+    // The current build's "index opened" signal: searches wait on this, not on the build.
+    private Task<LocalFileIndex>? _openedTask;
+
+    // Bumped (under _useLock) by every new build and every Reindex, so a replaced build never
+    // publishes itself.
+    private int _generation;
+
+    // Cancels the current build on shutdown (Dispose). Replaced with each new build, under _buildGate.
+    private CancellationTokenSource? _buildCts;
+
+    // Whether the current index already held files when it opened (a previous run's index).
+    private volatile bool _indexHadFilesAtOpen;
+
     // Guards the hand-off between searches and an idle release: a search registers itself
     // on the CURRENT index under this lock, and ReleaseIdleResources detaches the index
     // under the same lock only when no search is registered. So a search never runs on an
@@ -118,14 +131,16 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// </summary>
     public LocalFileIndexStatusResult GetIndexStatus()
     {
-        // _index is assigned only after the build completes, so a non-null index means
-        // ready. Checking it first keeps the common (warm) case a single field read.
-        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false, BuildReason = _lastBuildReason };
-
         // Read the task ONCE: it can be replaced (by a reindex) or nulled (by a faulted
         // build being dropped) between reads, and a torn view here would be reported as a
         // state that never existed.
         var build = _buildTask;
+
+        // An index that is open and already held files is searchable: a build running behind it
+        // is a background job the user is not told about. Only an empty index (first build, or
+        // a format reset) reports "building", since its searches find nothing yet.
+        if (_index is not null && (build is null || build.IsCompleted || _indexHadFilesAtOpen))
+            return new LocalFileIndexStatusResult { IsBuilding = false, BuildReason = _lastBuildReason };
 
         // The TASK is what says whether a build is running — not the progress message.
         // Deriving it from the message instead would strand the flag on when a build dies
@@ -143,7 +158,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Ensures the index is open and fully built, then returns it.
+    /// Ensures the index is open (searchable), then returns it; its build goes on in the background.
     /// The build is run once; subsequent calls return the already-open instance.
     /// Progress is published to <see cref="_buildStatusMessage"/> so a waiting caller can be
     /// told the index is being built rather than just watching a "searching" spinner.
@@ -154,69 +169,88 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     /// </summary>
     private async Task<LocalFileIndex> EnsureIndexAsync(CancellationToken ct)
     {
-        if (_index is not null) return _index;
+        while (true)
+        {
+            var current = _index;
+            if (current is not null) return current;
 
-        Task<LocalFileIndex> build;
-        await _buildGate.WaitAsync(ct);
-        try
-        {
-            if (_index is not null) return _index;
-            // Run the (potentially slow) build on a thread-pool thread so we
-            // don't block the host's async machinery.
-            // Assigning the task is also what makes the status report "building": it covers
-            // the build from the moment it is QUEUED, so a status poll landing before the
-            // thread-pool actually starts it still sees a build in progress.
-            _buildTask ??= Task.Run(BuildIndex);
-            build = _buildTask;
-        }
-        finally
-        {
-            _buildGate.Release();
-        }
-
-        LocalFileIndex built;
-        try
-        {
-            built = await build.WaitAsync(ct);
-        }
-        catch when (build.IsFaulted)
-        {
-            // The BUILD failed (not our wait). Drop the memo so a later search starts a fresh
-            // attempt instead of replaying this exception for the rest of the process lifetime.
-            await _buildGate.WaitAsync(CancellationToken.None);
+            Task<LocalFileIndex> build;
+            Task<LocalFileIndex> opened;
+            await _buildGate.WaitAsync(ct);
             try
             {
-                if (ReferenceEquals(_buildTask, build)) _buildTask = null;
+                current = _index;
+                if (current is not null) return current;
+                // Run the (potentially slow) build on a thread-pool thread so we
+                // don't block the host's async machinery.
+                // Assigning the task is also what makes the status report "building": it covers
+                // the build from the moment it is QUEUED, so a status poll landing before the
+                // thread-pool actually starts it still sees a build in progress.
+                if (_buildTask is null)
+                {
+                    var openedSource = new TaskCompletionSource<LocalFileIndex>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    int generation;
+                    lock (_useLock) generation = ++_generation;
+                    _openedTask = openedSource.Task;
+                    var cts = new CancellationTokenSource();
+                    _buildCts?.Dispose();
+                    _buildCts = cts;
+                    _buildTask = Task.Run(() => BuildIndex(generation, openedSource, cts.Token));
+                }
+                build = _buildTask;
+                opened = _openedTask!;
             }
             finally
             {
                 _buildGate.Release();
             }
-            throw;
-        }
 
-        bool ours;
-        await _buildGate.WaitAsync(ct);
+            // The build is a BACKGROUND job: the caller waits only for the index to OPEN (its
+            // previous contents on disk), never for the crawl. Searches during the build read
+            // the snapshot from before it (see LocalFileIndex.Build).
+            await Task.WhenAny(opened, build).WaitAsync(ct);
+            if (opened.Status == TaskStatus.RanToCompletion)
+            {
+                var index = opened.Result;
+                if (ReferenceEquals(_index, index)) return index;
+                // Not (or no longer) the published index - a Reindex replaced it, or its build
+                // failed. Loop: take the current one, or start a fresh attempt.
+                if (build.IsCompleted) await DropFinishedBuildAsync(build);
+                continue;
+            }
+
+            try
+            {
+                await build;
+            }
+            catch when (build.IsFaulted)
+            {
+                // The BUILD failed before the index opened. Drop the memo so a later search starts a
+                // fresh attempt instead of replaying this exception for the rest of the process lifetime.
+                await DropFinishedBuildAsync(build);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Forgets a finished build that left no published index, so the next call starts again.</summary>
+    private async Task DropFinishedBuildAsync(Task<LocalFileIndex> build)
+    {
+        await _buildGate.WaitAsync(CancellationToken.None);
         try
         {
-            ours = ReferenceEquals(_buildTask, build);
-            if (ours) lock (_useLock) _index = built;
+            if (ReferenceEquals(_buildTask, build) && _index is null) _buildTask = null;
         }
         finally
         {
             _buildGate.Release();
         }
-        if (ours) return built;
-
-        // A Reindex dropped this build while we were waiting on it, so this instance is nobody's
-        // index - dispose it (it has its own watcher threads) and take the current one instead.
-        try { built.Dispose(); } catch { /* best effort */ }
-        return await EnsureIndexAsync(ct);
     }
 
-    /// <summary>Opens and builds the index, then starts the live/periodic update loops. Runs
-    /// exactly once per index instance, memoized in <c>_buildTask</c>.</summary>
-    private LocalFileIndex BuildIndex()
+    /// <summary>Opens the index, publishes it for searching at once, then builds it and starts
+    /// the live/periodic update loops. Runs exactly once per index instance, memoized in
+    /// <c>_buildTask</c>; <paramref name="generation"/> says whether a Reindex replaced it.</summary>
+    private LocalFileIndex BuildIndex(int generation, TaskCompletionSource<LocalFileIndex> opened, CancellationToken ct)
     {
         _lastBuildFailure = null;
         LocalFileIndex index;
@@ -229,23 +263,53 @@ public sealed class LocalFileIndexCoordinator : IDisposable
             _lastBuildFailure = ex.Message;
             throw;
         }
+
+        // Searchable from now on. Whether it already holds files decides if the status shows a
+        // build at all: with a previous index the user never notices the background rebuild.
+        bool hadFiles;
+        try { hadFiles = index.Count() > 0; } catch { hadFiles = false; }
+        lock (_useLock)
+        {
+            if (generation == _generation)
+            {
+                _indexHadFilesAtOpen = hadFiles;
+                _index = index;
+            }
+        }
+        opened.TrySetResult(index);
+
         try
         {
-            return BuildAndStartWatchers(index);
+            BuildAndStartWatchers(index, ct);
         }
         catch (Exception ex)
         {
-            _lastBuildFailure = ex.Message;
-            // Anything past the ctor throwing (starting the USN watchers, the rescan timer)
-            // leaves an index nobody will ever be handed: dispose it here or its Lucene write
-            // lock is held for the process lifetime. The faulted task is dropped by
-            // EnsureIndexAsync, so the next search builds again from scratch.
+            // Cancelled on shutdown: not a failure.
+            if (ex is not OperationCanceledException) _lastBuildFailure = ex.Message;
+            // The index is already published and searches may be running on it, so a published
+            // index is never disposed here: it stays searchable (without live updates), and the
+            // failure is only logged. An index nobody holds is disposed, or its Lucene write lock
+            // would be held for the process lifetime.
+            bool published;
+            lock (_useLock) published = ReferenceEquals(_index, index);
+            if (published)
+            {
+                _log(LocalFileIndexLogLevel.Error, "[LocalFileIndex] Build/watcher start failed; index stays searchable", ex);
+                return index;
+            }
             try { index.Dispose(); } catch { /* best effort */ }
             throw;
         }
+
+        // A Reindex replaced this instance while it was building: nobody uses it, dispose it
+        // (it has its own watcher threads).
+        bool orphaned;
+        lock (_useLock) orphaned = generation != _generation && !ReferenceEquals(_index, index);
+        if (orphaned) { try { index.Dispose(); } catch { /* best effort */ } }
+        return index;
     }
 
-    private LocalFileIndex BuildAndStartWatchers(LocalFileIndex index)
+    private LocalFileIndex BuildAndStartWatchers(LocalFileIndex index, CancellationToken ct)
     {
         // Publish the crawler's progress so GetIndexStatus can report "building" to the UI.
         // The flag was already raised by EnsureIndexAsync when it queued this build; here we
@@ -261,7 +325,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
                     _buildStatusMessage = msg;
                     _log(LocalFileIndexLogLevel.Debug, "[LocalFileIndex] " + msg, null);
                 },
-                CancellationToken.None,
+                ct,
                 crawlReasons.Add,
                 percent => _buildProgressPercent = percent);
         }
@@ -500,20 +564,33 @@ public sealed class LocalFileIndexCoordinator : IDisposable
 
     /// <summary>
     /// Wipe the index and trigger a full rebuild. Fire-and-forget — the rebuild
-    /// runs in the background; the next search call will block until it finishes.
+    /// runs in the background; searches meanwhile wait only for the new index to open.
     /// </summary>
     /// <param name="reason">Why, for the log and the status (<see cref="LastBuildReason"/>).</param>
     public async Task ReindexAsync(CancellationToken ct, string reason = "reindex requested")
     {
-        Volatile.Write(ref _pendingBuildReason, reason);
         // Dispose the current index so the writer lock is released, then rebuild.
         await _buildGate.WaitAsync(ct);
         try
         {
+            var oldBuild = _buildTask;
+            bool buildRunning = oldBuild is not null && !oldBuild.IsCompleted;
+
+            // A reindex only reruns Build (journal catch-up, else full crawl per drive), which is
+            // exactly what a running build already does: drop the request. Never cancelling and
+            // restarting also means repeated triggers cannot loop.
+            if (buildRunning)
+            {
+                _log(LocalFileIndexLogLevel.Information, "[LocalFileIndex] build already running - reindex request ignored: " + reason, null);
+                return;
+            }
+
+            Volatile.Write(ref _pendingBuildReason, reason);
+
             // Under _useLock so a search registering itself sees the index gone (it then
             // reopens) rather than racing the dispose.
             LocalFileIndex? old;
-            lock (_useLock) { old = _index; _index = null; }
+            lock (_useLock) { old = _index; _index = null; _generation++; }
             old?.Dispose();
             _buildTask = null;
             // Stale the moment the index it described is gone. The rebuild republishes as
@@ -552,6 +629,7 @@ public sealed class LocalFileIndexCoordinator : IDisposable
 
     public void Dispose()
     {
+        try { _buildCts?.Cancel(); } catch (ObjectDisposedException) { }
         _index?.Dispose();
         _index = null;
         _buildGate.Dispose();
