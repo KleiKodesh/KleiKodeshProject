@@ -583,6 +583,43 @@ namespace KitveiHakodesh.Core.SeforimDb
             return result;
         }
 
+        // Whether the line_note table exists (Otzaria schema 7+; Zayit and older Otzaria DBs lack it).
+        private bool? _hasLineNoteTable;
+
+        /// <summary>Inline notes (footnotes) for a batch of lines, one query. Bodies are stored like
+        /// line text (zstd frames with the line_content dictionaries) and decoded with the same codec.
+        /// Returns Supported=false (and no rows) on DBs without line_note.</summary>
+        public LineNotesResult GetLineNotesForLines(List<int> lineIds)
+        {
+            var result = new LineNotesResult();
+            if (lineIds is null || lineIds.Count == 0)
+            {
+                result.Supported = _hasLineNoteTable ?? true;
+                return result;
+            }
+            using var conn = Open();
+            _hasLineNoteTable ??= TableExists(conn, "line_note");
+            result.Supported = _hasLineNoteTable.Value;
+            if (!result.Supported) return result;
+            using var codec = CodecFor(conn);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLineNotesForLines(lineIds.Count);
+            BindList(cmd, "p", lineIds);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                result.Rows.Add(new LineNoteRow
+                {
+                    LineId = r.GetInt32(0),
+                    NoteIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    CharPos = r.IsDBNull(2) ? -1 : r.GetInt32(2),
+                    HasMarker = !r.IsDBNull(3) && r.GetInt64(3) != 0,
+                    Body = codec.DecodeColumnOrEmpty(r, 4),
+                });
+            }
+            return result;
+        }
+
         /// <summary>Distinct word-link targets (commentary book id + anchor label) for one source
         /// book. Returns Supported=false (and no rows) on DBs whose schema predates link_anchor.</summary>
         public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId)
