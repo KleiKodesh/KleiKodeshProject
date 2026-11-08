@@ -147,6 +147,7 @@ const {
   holdAnchor,
   holdAnchorThroughScroll,
   landAt,
+  cancelLanding,
   refreshRows,
   snapToBlocks,
   fill,
@@ -237,7 +238,8 @@ const bar = useWindowedScrollerBarMapping({
   windowEnd,
   rowElement,
   findRowIndexAt,
-  landAt: (index) => scrollToIndex(index),
+  landAt: (index, align) => scrollToIndex(index, { align }),
+  cancelLanding,
   landmarkTiers: () => props.landmarkTiers ?? [],
   rowWeights: () => props.rowWeights,
   flowPlan: () => flowPlan.value,
@@ -267,7 +269,9 @@ function onTrackStep() {
   if (target == null || heldTargetReached || !viewport) return
   const page = viewport.clientHeight * PAGE_FRACTION
   const row = isRowRendered(target) ? rowElement(target) : null
-  if (row && Math.abs(row.offsetTop - viewport.scrollTop) <= page) {
+  // Beyond the mounted window, paging a screen per tick takes minutes on a long
+  // list (measured: ~170 rows/s against a target 30k rows away): land on it.
+  if (!row || Math.abs(row.offsetTop - viewport.scrollTop) <= page) {
     heldTargetReached = true
     void scrollToIndex(target)
     return

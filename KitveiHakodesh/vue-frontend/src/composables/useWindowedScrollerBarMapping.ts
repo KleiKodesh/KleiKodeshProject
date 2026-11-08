@@ -13,21 +13,19 @@
  * Two estimates, the first when the list provides it:
  *
  * - Per-row, from `rowWeights` (a text line's character count): a row's height is
- *   `lineHeight × max(1, ceil(weight / capacity)) + padding`, where capacity is the
- *   weight that fits on one visual line. The three parameters are FITTED to the
- *   mounted rows — their real heights against their weights — and re-fitted as the
- *   reader scrolls, smoothed so a window of odd rows cannot swing them. The weights
+ *   `padding + weight × rate` (see WeightCalibration for why linear). Both are
+ *   FITTED to the rows measured so far (a bounded sample), real heights against real text lengths,
+ *   so a window of odd rows cannot swing them. The weights
  *   themselves never change, so once the fit settles the estimate is static: the
  *   thumb stops creeping and a drag lands where the row really is. Prefix sums make
  *   both directions O(log n); they are rebuilt only when the fit has drifted.
  *
  *   In flow mode a row flowing inline with its neighbours takes no line of its own:
- *   its extent is `weight × pxPerWeight`, a rate fitted over the window's flowing
- *   rows beside the line model (`isFlowRow`).
+ *   its extent is `weight × pxPerWeight`, a rate fitted over the measured flowing
+ *   rows beside the block model.
  *
  * - One average, from the mounted rows, smoothed: the fallback while the weights
- *   have not arrived, when the list has none, or until a fit is possible (a window
- *   of equal-height rows cannot tell line height from padding).
+ *   have not arrived, when the list has none, or until enough rows are measured.
  *
  * The same position space carries the scroller's landmarks (section starts, as row
  * indexes) to the bar, which gives each a minimum span of track.
@@ -43,7 +41,9 @@ export interface WindowedScrollerBarMappingOptions {
   rowElement: (index: number) => HTMLElement | null
   /** The mounted row at a viewport-content offset — the window's own lookup. */
   findRowIndexAt: (top: number, fully: boolean) => number | null
-  landAt: (index: number) => Promise<void>
+  landAt: (index: number, align: 'start' | 'end') => Promise<void>
+  /** Abandons a landing in flight: the reader has since moved within the window. */
+  cancelLanding?: () => void
   /** Row indexes of the list's section starts, coarse tier first. */
   landmarkTiers: () => readonly (readonly number[])[]
   /** A size weight per row, `count` long, or nothing — see the file comment. */
@@ -59,27 +59,34 @@ export interface WindowedScrollerBarMappingOptions {
 
 /** How much of each fresh window average flows into the average estimate. */
 const ESTIMATE_SMOOTHING = 0.1
-/** How much of each fresh fit flows into the weight calibration. */
-const CALIBRATION_SMOOTHING = 0.2
 /** A calibration parameter must move this much (relative) before the prefix sums are rebuilt. */
-const CALIBRATION_REBUILD_DRIFT = 0.01
-/** Fewer mounted rows than this cannot be fitted. */
+const CALIBRATION_REBUILD_DRIFT = 0.03
+/** Fewer measured rows of a kind than this cannot be fitted. */
 const MIN_ROWS_TO_FIT = 4
-/** The line width assumed for block rows before any has been fitted, in weight units. */
-const ASSUMED_LINE_CAPACITY = 100
+/** Measured block rows needed before the line is trusted over the average. */
+const MIN_BLOCK_ROWS_TO_FIT = 30
+/** Measured block rows kept for the fit. */
+const MAX_BLOCK_SAMPLES = 2000
+/** Huber's constant, in residual standard deviations, and the reweighting rounds. */
+const HUBER_K = 1.5
+const HUBER_ROUNDS = 3
 
-/** The weight-estimate's parameters, in viewport pixels and weight units. */
+/**
+ * The weight estimate: a row's extent is LINEAR in its weight: `padding +
+ * weight x rate` for a block row, `weight x pxPerWeight` for a flowing one.
+ *
+ * Linear on purpose. A list's weights may be estimates (FastDocView gives every
+ * block of a 64-block group the group's average), and only a linear model is right
+ * on averages: the group's estimated total is the real one whatever the split. The
+ * earlier per-line model (`ceil(weight / capacity)` lines) rounded averages up and
+ * swung 3-50x on a title page of short tall rows and one hard-broken block.
+ */
 interface WeightCalibration {
-  /** Weight that fits on one visual line. */
-  capacity: number
-  lineHeight: number
   padding: number
+  rate: number
   /** Pixels per weight unit of a flowing row; null until flowing rows have been measured. */
   pxPerWeight: number | null
 }
-
-/** The line model before any block rows have been fitted: lineHeight 0 marks it. */
-const UNFITTED_LINE_MODEL = { capacity: ASSUMED_LINE_CAPACITY, lineHeight: 0, padding: 0 }
 
 export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappingOptions) {
   /** The estimated height of the whole list. */
@@ -112,15 +119,6 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return weights && weights.length === options.count() ? weights : null
   }
 
-  function visualLines(weight: number, capacity: number) {
-    return Math.max(1, Math.ceil(weight / capacity))
-  }
-
-  /** Whether the plan lets a row flow — for rows that are not mounted. */
-  function isFlowRow(index: number) {
-    return options.flowPlan?.().isFlowRow(index) ?? false
-  }
-
   /**
    * Whether a MOUNTED row is rendered flowing: inside a paragraph element. The
    * caller may make a row within a flowing stretch a block (an empty line), and a
@@ -130,127 +128,162 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return row.parentElement?.classList.contains('windowed-scroller-paragraph') ?? false
   }
 
-  /**
-   * A row's estimated extent under a calibration, by its kind. Until block rows
-   * have been fitted, a block row is a run of text at the flowing rate rounded up
-   * to whole lines of an assumed width — only until the first real fit replaces it.
-   */
-  function estimatedExtent(index: number, weight: number, applied: WeightCalibration) {
-    const rate = applied.pxPerWeight
-    if (rate != null && (isFlowRow(index) || applied.lineHeight === 0)) {
-      if (isFlowRow(index)) return weight * rate
-      return visualLines(weight, ASSUMED_LINE_CAPACITY) * ASSUMED_LINE_CAPACITY * rate
-    }
-    return visualLines(weight, applied.capacity) * applied.lineHeight + applied.padding
+  /** A row's estimated extent; `plan` is read once by the caller for a whole rebuild. */
+  function estimatedExtent(index: number, weight: number, applied: WeightCalibration, plan: WindowedScrollerFlowPlan | undefined) {
+    if (applied.pxPerWeight != null && (plan?.isFlowRow(index) ?? false)) return weight * applied.pxPerWeight
+    return applied.padding + weight * applied.rate
+  }
+
+  // ── Measurements, accumulated ──────────────────────────────────────────────────
+  //
+  // The fit runs over the rows measured so far, not just the mounted window: each
+  // row is measured once, kept in a bounded fair sample (2000), so a fit costs a
+  // few passes over the sample whatever the list's length. A width or zoom change
+  // re-wraps every row, so the measurements start over.
+
+  /** Measured block rows (bounded, a fair random sample past the cap): weight = real text length. */
+  let blockWeights = new Float64Array(MAX_BLOCK_SAMPLES)
+  let blockExtents = new Float64Array(MAX_BLOCK_SAMPLES)
+  let blockCount = 0
+  let blockSeen = 0
+  let flowSumWeight = 0
+  let flowSumExtent = 0
+  let flowCount = 0
+  let measuredRows: Uint8Array | null = null
+  let measuredWeights: ArrayLike<number> | null = null
+  let measuredWidth = 0
+  let measuredFontSize = ''
+
+  function resetMeasurements(weights: ArrayLike<number>, width: number, fontSize: string) {
+    blockCount = blockSeen = 0
+    flowSumWeight = flowSumExtent = flowCount = 0
+    measuredRows = new Uint8Array(weights.length)
+    measuredWeights = weights
+    measuredWidth = width
+    measuredFontSize = fontSize
+    // The old fit described the old wrapping: the average stands in until a new one.
+    calibration = null
+    appliedCalibration = null
+    prefixSums = null
+    prefixSumsWeights = null
   }
 
   /**
-   * The mounted rows' real extents against their weights — top to next top, so the
-   * gap between rows is in the extent — split by kind. Flowing rows share visual
-   * lines, so a flowing row's extent is wherever the line breaks fell: only the
-   * rate over many of them means anything, fitted in `fitCalibration`.
+   * Adds the window's not-yet-measured rows. Extent is top to next top, so the gap
+   * between rows is in it. A mounted block row is measured against its REAL text
+   * length (its weight may be only a group average), which estimates the same
+   * quantity the weights do, so the rate carries over to the unmounted rows.
+   * True when the measurements started over (a new list, width or zoom).
    */
-  function measureWindow(weights: ArrayLike<number>) {
-    const start = options.windowStart.value
+  function accumulateWindow(weights: ArrayLike<number>): boolean {
+    let isReset = false
+    const viewport = options.viewport()
+    if (!viewport) return false
+    const width = viewport.clientWidth
+    const fontSize = getComputedStyle(viewport).fontSize
+    if (!measuredRows || measuredWeights !== weights || width !== measuredWidth || fontSize !== measuredFontSize) {
+      resetMeasurements(weights, width, fontSize)
+      isReset = true
+    }
+    const seen = measuredRows!
     const end = options.windowEnd.value
-    const lineWeights: number[] = []
-    const lineExtents: number[] = []
-    let flowWeight = 0
-    let flowExtent = 0
-    let flowRows = 0
-    for (let index = start; index < end - 1; index++) {
+    for (let index = options.windowStart.value; index < end - 1; index++) {
+      if (seen[index]) continue
       const row = options.rowElement(index)
       const next = options.rowElement(index + 1)
       if (!row || !next) continue
+      seen[index] = 1
       const extent = next.offsetTop - row.offsetTop
       if (isRenderedFlowing(row)) {
-        flowWeight += weights[index]!
-        flowExtent += extent
-        flowRows++
-      } else {
-        lineWeights.push(weights[index]!)
-        lineExtents.push(extent)
+        flowSumWeight += weights[index]!
+        flowSumExtent += extent
+        flowCount++
+        continue
+      }
+      const weight = row.textContent!.length
+      blockSeen++
+      const slot = blockCount < MAX_BLOCK_SAMPLES ? blockCount++ : Math.floor(Math.random() * blockSeen)
+      if (slot < MAX_BLOCK_SAMPLES) {
+        blockWeights[slot] = weight
+        blockExtents[slot] = extent
       }
     }
-    return { lineWeights, lineExtents, flowWeight, flowExtent, flowRows }
+    return isReset
+  }
+
+  /** Weighted least squares of extent on weight, both parameters kept non-negative. */
+  function weightedLine(robustness: Float64Array | null) {
+    let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0
+    for (let k = 0; k < blockCount; k++) {
+      const w = robustness ? robustness[k]! : 1
+      const x = blockWeights[k]!
+      const y = blockExtents[k]!
+      sw += w; sx += w * x; sy += w * y; sxx += w * x * x; sxy += w * x * y
+    }
+    const determinant = sw * sxx - sx * sx
+    let rate = determinant > 0 ? (sw * sxy - sx * sy) / determinant : 0
+    let padding = sw > 0 ? (sy - rate * sx) / sw : 0
+    if (rate < 0) {
+      rate = 0
+      padding = sw > 0 ? sy / sw : 0
+    } else if (padding < 0) {
+      // Summed over every row of a long list a negative padding drove the total
+      // below zero (the thumb vanished): through the origin instead.
+      padding = 0
+      rate = sxx > 0 ? sxy / sxx : 0
+    }
+    return { padding, rate }
   }
 
   /**
-   * Least squares of the line rows' extents against their weights, over a geometric
-   * grid of capacities (the one non-linear parameter), plus the flowing rows' rate.
-   * Null when neither can be told from the window; a part that cannot be fitted
-   * keeps its previous value.
+   * A robust line through every measured block row (Huber weights, a few rounds):
+   * one hard-broken block of 166 short lines (2.7 px per character against 0.28 in
+   * prose) pulled plain least squares 4.5x high over the whole list. Plus the
+   * flowing rows' rate. Null until enough rows are measured: the average estimate
+   * stands in meanwhile.
    */
   function fitCalibration(weights: ArrayLike<number>): WeightCalibration | null {
-    const measured = measureWindow(weights)
-    const pxPerWeight =
-      measured.flowRows >= MIN_ROWS_TO_FIT && measured.flowWeight > 0
-        ? measured.flowExtent / measured.flowWeight
-        : (calibration?.pxPerWeight ?? null)
-    const rowWeights = measured.lineWeights
-    const rowExtents = measured.lineExtents
-    const n = rowWeights.length
-    if (n < MIN_ROWS_TO_FIT) {
-      // Only flowing rows to learn from: the line model stays unfitted (never a
-      // guess, which later fits would only be smoothed away from).
-      if (pxPerWeight == null) return null
-      return calibration ? { ...calibration, pxPerWeight } : { ...UNFITTED_LINE_MODEL, pxPerWeight }
+    const before = blockSeen + flowCount
+    const reset = accumulateWindow(weights)
+    // Nothing new measured (a window revisited): the fit would be the same.
+    if (!reset && blockSeen + flowCount === before && calibration) return calibration
+    const pxPerWeight = flowCount >= MIN_ROWS_TO_FIT && flowSumWeight > 0 ? flowSumExtent / flowSumWeight : null
+    if (blockCount < MIN_BLOCK_ROWS_TO_FIT) return pxPerWeight == null ? null : { padding: 0, rate: pxPerWeight, pxPerWeight }
+    let line = weightedLine(null)
+    const robustness = new Float64Array(blockCount)
+    const residuals = new Float64Array(blockCount)
+    for (let round = 0; round < HUBER_ROUNDS; round++) {
+      for (let k = 0; k < blockCount; k++) {
+        residuals[k] = Math.abs(blockExtents[k]! - line.padding - line.rate * blockWeights[k]!)
+      }
+      // Scale: the median absolute residual (1.4826 makes it a standard deviation).
+      // A typed copy sorts numerically and natively: the spread-and-comparator sort
+      // cost up to 45 ms on 2000 rows.
+      const scale = Math.max(1, 1.4826 * residuals.slice().sort()[blockCount >> 1]!)
+      const limit = HUBER_K * scale
+      for (let k = 0; k < blockCount; k++) robustness[k] = residuals[k]! <= limit ? 1 : limit / residuals[k]!
+      line = weightedLine(robustness)
     }
-    let best: WeightCalibration | null = null
-    let bestError = Infinity
-    for (let capacity = 10; capacity <= 400; capacity = Math.ceil(capacity * 1.06)) {
-      let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0
-      for (let k = 0; k < n; k++) {
-        const x = visualLines(rowWeights[k]!, capacity)
-        const y = rowExtents[k]!
-        sumX += x; sumY += y; sumXX += x * x; sumXY += x * y
-      }
-      const determinant = n * sumXX - sumX * sumX
-      if (determinant === 0) continue
-      const lineHeight = (n * sumXY - sumX * sumY) / determinant
-      const padding = (sumY - lineHeight * sumX) / n
-      if (!(lineHeight > 0)) continue
-      let error = 0
-      for (let k = 0; k < n; k++) {
-        const residual = lineHeight * visualLines(rowWeights[k]!, capacity) + padding - rowExtents[k]!
-        error += residual * residual
-      }
-      if (error < bestError) {
-        bestError = error
-        best = { capacity, lineHeight, padding, pxPerWeight }
-      }
-    }
-    return best
+    return { padding: line.padding, rate: line.rate, pxPerWeight }
   }
 
   function driftExceeds(previous: WeightCalibration, next: WeightCalibration) {
-    const relative = (before: number, after: number) => Math.abs(after - before) / Math.max(1, Math.abs(before))
+    const relative = (before: number, after: number) => Math.abs(after - before) / Math.max(1e-9, Math.abs(before))
     return (
-      relative(previous.capacity, next.capacity) > CALIBRATION_REBUILD_DRIFT ||
-      relative(previous.lineHeight, next.lineHeight) > CALIBRATION_REBUILD_DRIFT ||
       relative(previous.padding, next.padding) > CALIBRATION_REBUILD_DRIFT ||
+      relative(previous.rate, next.rate) > CALIBRATION_REBUILD_DRIFT ||
       relative(previous.pxPerWeight ?? 0, next.pxPerWeight ?? 0) > CALIBRATION_REBUILD_DRIFT
     )
-  }
-
-  /** One parameter set: smoothed toward the fit, or taken as it is when there is nothing yet to smooth. */
-  function smoothLineModel(current: WeightCalibration, fitted: WeightCalibration): Omit<WeightCalibration, 'pxPerWeight'> {
-    if (fitted.lineHeight === 0) return current
-    if (current.lineHeight === 0) return fitted
-    return {
-      capacity: current.capacity + (fitted.capacity - current.capacity) * CALIBRATION_SMOOTHING,
-      lineHeight: current.lineHeight + (fitted.lineHeight - current.lineHeight) * CALIBRATION_SMOOTHING,
-      padding: current.padding + (fitted.padding - current.padding) * CALIBRATION_SMOOTHING,
-    }
   }
 
   function rebuildPrefixSums(weights: ArrayLike<number>, applied: WeightCalibration) {
     const count = weights.length
     const sums = new Float64Array(count + 1)
+    const plan = options.flowPlan?.()
     let total = 0
     for (let index = 0; index < count; index++) {
       sums[index] = total
-      total += estimatedExtent(index, weights[index]!, applied)
+      total += estimatedExtent(index, weights[index]!, applied, plan)
     }
     sums[count] = total
     prefixSums = sums
@@ -258,7 +291,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     appliedCalibration = applied
   }
 
-  /** Fits on a new window, smooths, and rebuilds the sums once the fit has drifted enough. */
+  /** Fits on a new window and rebuilds the sums once the fit has drifted enough. */
   function updateWeightEstimate() {
     const weights = usableWeights()
     if (!weights) {
@@ -273,17 +306,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
       fittedWindowStart = start
       fittedWindowEnd = end
       const fitted = fitCalibration(weights)
-      if (fitted) {
-        calibration = calibration
-          ? {
-              ...smoothLineModel(calibration, fitted),
-              pxPerWeight:
-                calibration.pxPerWeight == null || fitted.pxPerWeight == null
-                  ? fitted.pxPerWeight ?? calibration.pxPerWeight
-                  : calibration.pxPerWeight + (fitted.pxPerWeight - calibration.pxPerWeight) * CALIBRATION_SMOOTHING,
-            }
-          : fitted
-      }
+      if (fitted) calibration = fitted
     }
     if (!calibration) return
     const plan = options.flowPlan?.() ?? null
@@ -448,6 +471,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
   // is, only for the landing to throw it forward again.
   let isLanding = false
   let pendingIndex: number | null = null
+  let pendingAlign: 'start' | 'end' = 'start'
 
   async function landPending() {
     if (isLanding) return
@@ -455,8 +479,9 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     try {
       while (pendingIndex != null) {
         const index = pendingIndex
+        const align = pendingAlign
         pendingIndex = null
-        await options.landAt(index)
+        await options.landAt(index, align)
       }
     } finally {
       isLanding = false
@@ -470,16 +495,42 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     const viewport = options.viewport()
     if (!viewport || (!estimatedRowHeight && !prefixSums)) return
     const above = pixelsAboveWindow()
+    const count = options.count()
     const liveMax = above + viewport.scrollHeight - viewport.clientHeight
-    if (barTop >= above && barTop <= liveMax) {
+    // The track's ends are the list's REAL ends, never an estimated row near them:
+    // the estimate below the window is only that, and a seek to "the last pixel"
+    // through it lands rows short of the end — then re-estimates, and the thumb
+    // creeps while the reader holds it there.
+    const totalMax = above + viewport.scrollHeight + estimatedHeightBetween(options.windowEnd.value, count) - viewport.clientHeight
+    // Top first: on a list that barely scrolls the two ends meet, and a seek to 0
+    // must not land at the bottom.
+    const atTop = barTop <= 0
+    const atBottom = !atTop && barTop >= totalMax - 1
+    if (atBottom && options.windowEnd.value >= count) {
+      pendingIndex = null
+      pendingPosition = null
+      options.cancelLanding?.()
+      viewport.scrollTop = viewport.scrollHeight
+      return
+    }
+    if (atTop && options.windowStart.value === 0) {
+      pendingIndex = null
+      pendingPosition = null
+      options.cancelLanding?.()
+      viewport.scrollTop = 0
+      return
+    }
+    if (!atBottom && !atTop && barTop >= above && barTop <= liveMax) {
       // A landing queued by an earlier seek outside the window is stale now: the
       // drag came back inside, and landing it afterwards would yank the view away.
       pendingIndex = null
       pendingPosition = null
+      options.cancelLanding?.()
       viewport.scrollTop = barTop - above
       return
     }
-    pendingIndex = indexForPosition(barTop)
+    pendingIndex = atBottom ? count - 1 : atTop ? 0 : indexForPosition(barTop)
+    pendingAlign = atBottom ? 'end' : 'start'
     pendingPosition = Math.round(barTop)
     position.value = pendingPosition
     void landPending()
