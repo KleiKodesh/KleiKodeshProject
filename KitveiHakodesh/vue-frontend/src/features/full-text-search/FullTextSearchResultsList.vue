@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
+import { sourceBookOf } from './noteIds'
 import { ref, shallowRef, computed, watch, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -559,7 +560,7 @@ onBeforeUnmount(() => {
 })
 
 function scrollToBook(bookId: number) {
-  const index = props.results.findIndex((r) => r.bookId === bookId)
+  const index = props.results.findIndex((r) => sourceBookOf(r.bookId) === bookId)
   if (index >= 0) void landOn(index)
 }
 

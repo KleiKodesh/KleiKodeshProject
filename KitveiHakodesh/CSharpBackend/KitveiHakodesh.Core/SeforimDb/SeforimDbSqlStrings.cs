@@ -884,6 +884,34 @@ namespace KitveiHakodesh.Core.SeforimDb
             C_ContentJoin(schema, "n") +
             " WHERE m.id IN (" + InPlaceholders("p", count) + ")";
 
+        // ── Notes books (issue #13, SeforimDbNoteIds) ───────────────────────────────
+        // A database with line_note gets a virtual notes book after each book with notes:
+        // one line per note, in source order (source lineIndex, source id, noteIndex). A note
+        // whose line row is gone is left out everywhere (every read JOINs line).
+
+        internal const string FtsCountNotes =
+            "SELECT COUNT(*) FROM line_note n JOIN line l ON l.id = n.lineId";
+
+        /// <summary>Notes per SOURCE book — the notes book's line count.</summary>
+        internal const string FtsNoteCountsByBook =
+            "SELECT l.bookId, COUNT(*) FROM line_note n JOIN line l ON l.id = n.lineId GROUP BY l.bookId";
+
+        /// <summary>One source book's notes in notes-book order, from the @skip-th on.</summary>
+        internal const string FtsReadBookNotes =
+            "SELECT n.lineId, n.noteIndex, n.body FROM line_note n JOIN line l ON l.id = n.lineId" +
+            " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id, n.noteIndex LIMIT -1 OFFSET @skip";
+
+        /// <summary>Every note of the given source lines with the source placement:
+        /// lineId, noteIndex, body, bookId, lineIndex. The caller keeps the notes it asked for.</summary>
+        internal static string FtsFetchNotes(int count) =>
+            "SELECT n.lineId, n.noteIndex, n.body, l.bookId, l.lineIndex FROM line_note n JOIN line l ON l.id = n.lineId" +
+            " WHERE n.lineId IN (" + InPlaceholders("p", count) + ")";
+
+        /// <summary>A note's rank inside its notes book (exactly <see cref="FtsReadBookNotes"/>'s order).</summary>
+        internal const string FtsNoteRankInBook =
+            "SELECT COUNT(*) FROM line_note n JOIN line l ON l.id = n.lineId WHERE l.bookId = @b" +
+            " AND (l.lineIndex < @li OR (l.lineIndex = @li AND (l.id < @id OR (l.id = @id AND n.noteIndex < @ni))))";
+
         // ── Catalog index build (SeforimDbCatalogIndex) ───────────────────────────────
         // The reads the Lucene catalog index is built from. Here rather than beside the
         // indexer because SQL belongs to the DATABASE, not the feature (rule 9) — these read

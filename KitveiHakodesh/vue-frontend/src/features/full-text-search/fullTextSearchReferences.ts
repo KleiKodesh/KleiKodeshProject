@@ -11,10 +11,16 @@ import { shallowRef } from 'vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { getTocPathsForLines } from '@/webview-host/seforimApi'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
+import { isNoteId, sourceBookOf, sourceLineOf } from './noteIds'
 
-/** The hit's book title from the catalog; '' for a book the catalog does not list. */
+/** Title prefix of a virtual notes book (issue #13): the Hebrew word for "notes". */
+const NOTES_BOOK_PREFIX = '\u05D4\u05E2\u05E8\u05D5\u05EA '
+
+/** The hit's book title from the catalog; '' for a book the catalog does not list. A hit in a
+ *  notes book reads "notes " + its source book's title. */
 export function bookTitleOf(hit: FullTextSearchResult): string {
-  return useBooksDataStore().allBooksMap.get(hit.bookId)?.title ?? ''
+  const title = useBooksDataStore().allBooksMap.get(sourceBookOf(hit.bookId))?.title ?? ''
+  return isNoteId(hit.bookId) && title ? NOTES_BOOK_PREFIX + title : title
 }
 
 // ── On-demand TOC path cache ─────────────────────────────────────────────────────────
@@ -42,8 +48,10 @@ function touch<K, V>(map: Map<K, V>, key: K, value: V, cap: number) {
  */
 export function tocPathOf(hit: FullTextSearchResult): string | undefined {
   void referencesVersion.value
-  const cached = tocPaths.get(hit.lineId)
-  if (cached !== undefined) touch(tocPaths, hit.lineId, cached, TOC_PATH_CAP)
+  // A note's TOC path is its source line's.
+  const lineId = sourceLineOf(hit.lineId)
+  const cached = tocPaths.get(lineId)
+  if (cached !== undefined) touch(tocPaths, lineId, cached, TOC_PATH_CAP)
   return cached
 }
 
@@ -55,9 +63,10 @@ export function tocPathOf(hit: FullTextSearchResult): string | undefined {
 export function requestReferences(hits: readonly FullTextSearchResult[]): void {
   const lineIds: number[] = []
   for (const hit of hits) {
-    if (tocPaths.has(hit.lineId) || inFlight.has(hit.lineId)) continue
-    inFlight.add(hit.lineId)
-    lineIds.push(hit.lineId)
+    const lineId = sourceLineOf(hit.lineId)
+    if (tocPaths.has(lineId) || inFlight.has(lineId)) continue
+    inFlight.add(lineId)
+    lineIds.push(lineId)
   }
   for (let i = 0; i < lineIds.length; i += FETCH_BATCH) {
     const batch = lineIds.slice(i, i + FETCH_BATCH)

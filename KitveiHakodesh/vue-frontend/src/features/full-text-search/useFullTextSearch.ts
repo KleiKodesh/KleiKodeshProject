@@ -26,6 +26,7 @@ import { SNIPPET_MARK_STRIDE, matchedTermIdsOf } from './fullTextSearchTypes'
 import { WORD_OPTIONS, applyWordOptions } from './queryWordSyntax'
 import type { AllWords, PerWord, WordOption } from './queryWordSyntax'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
+import { sourceBookOf } from './noteIds'
 
 // Flush cadence. A flush publishes the hits appended since the last one: the result
 // array is ONE array grown in place for the whole stream, and `resultsVersion` is what
@@ -43,6 +44,11 @@ interface SearchStreamChunk {
   /** First frame of a resumed search whose resume line could not be placed: the service
    *  runs it from the start, so the hits already held are dropped. */
   restarted?: boolean
+  /** Matched rows the service could not decode in this frame (skipped, issue #13). */
+  unreadableLineIds?: number[]
+  /** Done frame: total unreadable rows and the first error (names the line). */
+  unreadableRowCount?: number
+  unreadableError?: string | null
   /** Snippet texts for the search's first hits, riding on the frame (not on the hits):
    *  seeded into the snippet cache so the first screen paints without a fetch. Later frames
    *  carry none. */
@@ -239,7 +245,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
 
     const sorted = streamedOrder.slice()
     const bookMap = booksStore.allBooksMap
-    const titleOf = (id: number) => bookMap.get(id)?.title ?? ''
+    const titleOf = (id: number) => bookMap.get(sourceBookOf(id))?.title ?? ''  // a notes book sorts with its source
     const byTitle = (a: number, b: number) => titleOf(a).localeCompare(titleOf(b), 'he')
     const byRank = (ranks: Map<number, number>) =>
       (a: FullTextSearchResult, b: FullTextSearchResult) => ranks.get(a.bookId)! - ranks.get(b.bookId)!
@@ -435,6 +441,9 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
           break
         }
         if (chunk.done) {
+          if (chunk.unreadableRowCount) {
+            console.warn(`[useFullTextSearch] ${chunk.unreadableRowCount} rows unreadable, results may be incomplete: ${chunk.unreadableError ?? ''}`)
+          }
           if (dirty) flush() // final trailing flush before sorting
           // Search complete — apply the sort now (no-op for 'catalogOrder').
           // Done here rather than in `finally` so it runs only on genuine completion,

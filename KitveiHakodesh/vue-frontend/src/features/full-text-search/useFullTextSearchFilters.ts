@@ -8,6 +8,7 @@ import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf } from './fullTextSearchReferences'
+import { sourceBookOf, sourceLineOf } from './noteIds'
 import type { CategoryNode } from '../book-catalog/bookCatalogTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
@@ -126,7 +127,8 @@ export function useFullTextSearchFilters(
   /** Adds the hits in raw[from..) to the per-book tallies (a fresh Map, counts carried over). */
   function countInto(raw: FullTextSearchResult[], from: number) {
     const m = from === 0 ? new Map<number, number>() : new Map(resultCounts.value)
-    for (let i = from; i < raw.length; i++) m.set(raw[i]!.bookId, (m.get(raw[i]!.bookId) ?? 0) + 1)
+    // A note hit counts toward its source book (the tree lists real books only).
+    for (let i = from; i < raw.length; i++) { const b = sourceBookOf(raw[i]!.bookId); m.set(b, (m.get(b) ?? 0) + 1) }
     resultCounts.value = m
   }
 
@@ -140,7 +142,7 @@ export function useFullTextSearchFilters(
   function applyFilter(ids: Set<number>, mode: 'rebuild' | 'append') {
     const raw = results()
     const isEffectivelyAll = atFilters.value.length === 0 && ids.size === booksStore.allBooks.length
-    const keep = (r: FullTextSearchResult) => isEffectivelyAll || ids.has(r.bookId)
+    const keep = (r: FullTextSearchResult) => isEffectivelyAll || ids.has(r.bookId) || ids.has(sourceBookOf(r.bookId))
     const from = mode === 'append' ? filteredThrough : 0
 
     if (mode === 'append') {
@@ -266,12 +268,13 @@ export function useFullTextSearchFilters(
     try {
       // Capture the target tab up front and patch it by id: the lookup below awaits,
       // and the active tab may change during that await (same reasoning as AddressBar).
-      const title = bookTitleOf(result)
+      const title = bookTitleOf({ ...result, bookId: sourceBookOf(result.bookId) })  // a note opens its source book
       const targetTabId = openInNewTab
         ? paneNavigation.openTab({ title, route: '/book-view' }).id
         : paneNavigation.activeTabId
 
-      const rows = await getLineIndexFromLineId(result.lineId)
+      // A footnote hit (issue #13) opens its SOURCE line, where the viewer shows the note.
+      const rows = await getLineIndexFromLineId(sourceLineOf(result.lineId))
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
       if (lineIndex == null || bookId == null) return
