@@ -630,6 +630,9 @@ public sealed class LocalFileIndexCoordinator : IDisposable
     public void Dispose()
     {
         try { _buildCts?.Cancel(); } catch (ObjectDisposedException) { }
+        // Let a running build reach its next cancellation check before the writer is closed
+        // under it. Bounded: one drive's write does not check the token, and shutdown must not hang.
+        try { _buildTask?.Wait(TimeSpan.FromSeconds(5)); } catch { /* cancelled or failed */ }
         _index?.Dispose();
         _index = null;
         _buildGate.Dispose();
