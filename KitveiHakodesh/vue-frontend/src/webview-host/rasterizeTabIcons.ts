@@ -48,7 +48,7 @@ function renderIconSvg(component: Component, color: string): { svg: SVGElement; 
   // merely inherited from an ancestor — every icon would rasterize grey. An inline
   // style on the element outranks it. Empty means "no brand colour", so fall back
   // to a neutral that reads on both light and dark strips, since a PNG holds one.
-  ;(svg as SVGElement & { style: CSSStyleDeclaration }).style.color = color || '#605e5c'
+  ;(svg as SVGElement & { style: CSSStyleDeclaration }).style.color = color || '#9a9895'
   return {
     svg,
     dispose: () => {

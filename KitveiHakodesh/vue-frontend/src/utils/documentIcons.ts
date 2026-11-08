@@ -86,8 +86,8 @@ const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   pdf:      { key: 'pdf',      color: '#E53935', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
   html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Regular, icon24: IconDocumentGlobe24Regular },
   txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Regular,  icon24: IconDocumentText24Regular },
-  // Office blue; Fluent's outline page with a W, same stroke as the other file-type icons.
-  word:     { key: 'word',     color: '#2B579A', icon20: IconWordDocument20,       icon24: IconWordDocument24 },
+  // Lighter Office blue (the dark #2B579A vanished on dark backgrounds); Fluent's outline page with a W.
+  word:     { key: 'word',     color: '#2F7DE1', icon20: IconWordDocument20,       icon24: IconWordDocument24 },
   addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
   document: { key: 'document', color: '#3478f6', icon20: IconDocument20Regular,      icon24: IconDocument24Regular },
   // Destination routes. These mirror the home page's navigation cards
