@@ -429,5 +429,15 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
     }
   })
 
-  return { linkPreview: wordLinkTooltip, closeLinkPreview: closeWordLinkTooltip, keepOpen, releaseOpen, beginSelection }
+  /**
+   * Opens the preview of `el` now, without a hover - e.g. a search hit on a footnote pops
+   * its note open on arrival. It then closes like any preview (scroll, click, Escape).
+   */
+  function openLinkPreview(el: Element) {
+    closeWordLinkTooltip()
+    hoverEl = el
+    void show(el, ++hoverToken)
+  }
+
+  return { linkPreview: wordLinkTooltip, closeLinkPreview: closeWordLinkTooltip, keepOpen, releaseOpen, beginSelection, openLinkPreview }
 }

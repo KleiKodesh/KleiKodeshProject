@@ -111,6 +111,9 @@ export interface Tab {
   searchHighlightQuery?: string
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
+  // A search hit on a footnote (issue #13): the note of the opened line to pop open on
+  // arrival (its index in line_note). Consumed and cleared on open.
+  openNoteIndex?: number
   searchQuery?: string
   // Where in the RESULTS LIST an incoming /search navigation should land, carried
   // from the location record that supplied searchQuery (a recents row, or Back).
@@ -203,6 +206,7 @@ const POSITION_FIELDS = [
   'searchHighlightQuery',
   'searchHighlightSnippet',
   'searchHighlightTerms',
+  'openNoteIndex',
   'searchRestore',
 ] as const satisfies readonly (keyof Tab)[]
 

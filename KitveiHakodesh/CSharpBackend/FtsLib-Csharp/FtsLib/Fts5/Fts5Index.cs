@@ -100,10 +100,10 @@ namespace FtsLib.Fts5
 
         internal readonly struct BuildState
         {
-            public readonly int LastLineId;
+            public readonly long LastLineId;
             public readonly long LinesDone, TotalLines;
             public readonly bool Complete;
-            public BuildState(int lastLineId, long linesDone, long totalLines, bool complete)
+            public BuildState(long lastLineId, long linesDone, long totalLines, bool complete)
             { LastLineId = lastLineId; LinesDone = linesDone; TotalLines = totalLines; Complete = complete; }
         }
 
@@ -173,7 +173,7 @@ namespace FtsLib.Fts5
                 var state = ReadState(conn);
                 if (state.Complete) return;
                 Execute(conn, BuildTuning);   // after the check: a finished index keeps its defaults
-                int lastLineId = state.LastLineId;
+                long lastLineId = state.LastLineId;
                 long linesDone = state.LinesDone;
                 if (linesDone > 0 && !HasPositions(conn))
                     throw new IndexNoLongerMatchesCorpusException("line table predates line_position");
@@ -256,7 +256,7 @@ namespace FtsLib.Fts5
                     using (var corpus = openCorpus())
                     {
                         // Result order: the corpus's own when it has one; else ascending ids.
-                        IEnumerable<(int Id, string Text)> source =
+                        IEnumerable<(long Id, string Text)> source =
                             corpus is IFtsOrderedCorpus ordered
                                 ? ResumeInResultOrder(ordered, linesDone, lastLineId, ct)
                                 : lastLineId > 0 ? corpus.ReadDocumentsAfter(lastLineId, 0, ct)
@@ -405,13 +405,13 @@ namespace FtsLib.Fts5
         {
             long covered = Fts5TermDictionaries.Read(dir).CoveredPosition;
             if (covered >= committedPosition) return;
-            var ids = new System.Collections.Generic.List<int>();
+            var ids = new System.Collections.Generic.List<long>();
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "SELECT line_id FROM line_position WHERE position > $covered ORDER BY position";
                 cmd.Parameters.AddWithValue("$covered", covered);
                 using var r = cmd.ExecuteReader();
-                while (r.Read()) ids.Add(r.GetInt32(0));
+                while (r.Read()) ids.Add(r.GetInt64(0));
             }
             var counts = new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
             using (var corpus = openCorpus())
@@ -455,8 +455,8 @@ namespace FtsLib.Fts5
         /// everything the order depends on (category and book order, lineIndex). So the last
         /// committed position is read again first: it must still be the line it was.
         /// </summary>
-        static IEnumerable<(int Id, string Text)> ResumeInResultOrder(
-            IFtsOrderedCorpus corpus, long linesDone, int lastLineId, CancellationToken ct)
+        static IEnumerable<(long Id, string Text)> ResumeInResultOrder(
+            IFtsOrderedCorpus corpus, long linesDone, long lastLineId, CancellationToken ct)
         {
             if (linesDone == 0)
             {

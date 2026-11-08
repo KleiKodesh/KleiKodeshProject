@@ -287,9 +287,9 @@ public sealed class FtsSearchArgs
 public sealed class FtsSnippetTextsArgs
 {
     /// <summary>Lines whose own text is wanted.</summary>
-    public List<int>? LineIds { get; set; }
+    public List<long>? LineIds { get; set; }
     /// <summary>Lines flagged short: their text plus neighbour context.</summary>
-    public List<int>? ShortLineIds { get; set; }
+    public List<long>? ShortLineIds { get; set; }
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -300,7 +300,7 @@ public sealed class FtsSearchStreamArgs
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
     /// <summary>Resume after this line (the last hit the caller holds); 0 = from the start.</summary>
-    public int ResumeAfterLineId { get; set; }
+    public long ResumeAfterLineId { get; set; }
     // Spelling variants / related forms are per word, in the query: '^' / '+'.
 }
 

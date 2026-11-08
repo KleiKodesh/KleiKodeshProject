@@ -42,6 +42,21 @@ export function notesForMarker(marker: Element, row: Element, notes: LineNote[])
   return note ? [note] : []
 }
 
+/**
+ * The marker that stands for note `noteIndex` of a rendered line - the inverse of
+ * notesForMarker, used to pop a note open when a search hit on it opens the book (issue #13):
+ * a note with a marker -> the footnote marker at its ordinal; a note without one -> the
+ * end-of-line marker. Null when the line has no such note or the marker is not rendered.
+ */
+export function markerForNote(row: Element, notes: LineNote[], noteIndex: number): Element | null {
+  const target = notes.find((note) => note.noteIndex === noteIndex)
+  if (!target) return null
+  if (!target.hasMarker) return row.querySelector(`sup.${UNMARKED_NOTES_MARKER_CLASS}`)
+  const ordinal = notes.filter((note) => note.hasMarker).indexOf(target)
+  const markers = [...row.querySelectorAll(FOOTNOTE_MARKER_SELECTOR)].filter((element) => !isInlineBodyMarker(element))
+  return markers[ordinal] ?? null
+}
+
 /** A marker whose body follows it inline (older format): not one of line_note's markers. */
 function isInlineBodyMarker(marker: Element): boolean {
   let next = marker.nextSibling

@@ -68,8 +68,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // fts11 (2026-11-01): catalog order (= rowid) counts a book as a base text only by its
         // isBaseBook flag; a book titled like its folder is no longer moved ahead of the subfolders.
         // fts12 (2026-11-08): footnotes (line_note, schema 7) are indexed as virtual notes books, one
-        // right after each book with notes (ids >= 2^30, SeforimDbNoteIds); a leading U+FEFF is stripped.
-        public const string IndexFormatVersion = "fts12";
+        // right after each book with notes (ids >= R, SeforimDbNoteIds); a leading U+FEFF is stripped.
+        // fts13 (2026-11-08): notes ids are 64-bit and JS-safe (R = 2^52, lineId << 16, SeforimDbNoteIds);
+        // line_position stores the new virtual line ids.
+        public const string IndexFormatVersion = "fts13";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

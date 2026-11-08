@@ -231,7 +231,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private static void FetchPassingBookIds(
             Func<SeforimDbFtsCorpus> corpus, IReadOnlyList<SearchResult> results, FtsHit?[] built)
         {
-            var passingIds = new List<int>(results.Count);
+            var passingIds = new List<long>(results.Count);
             for (int i = 0; i < built.Length; i++)
                 if (built[i] != null) passingIds.Add(results[i].LineId);
             if (passingIds.Count == 0) return;
@@ -251,14 +251,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             Func<SeforimDbFtsCorpus> corpus, IReadOnlyList<SearchResult> results, FtsHit?[] built, List<int> seeded)
         {
             var texts = new List<FtsSnippetText>(seeded.Count);
-            List<int>? shortIds = null;
+            List<long>? shortIds = null;
             foreach (int i in seeded)
             {
                 var hit = built[i]!;
-                if ((hit.SnippetFlags & FtsHit.SnippetFlagShort) != 0) (shortIds ??= new List<int>()).Add(hit.LineId);
+                if ((hit.SnippetFlags & FtsHit.SnippetFlagShort) != 0) (shortIds ??= new List<long>()).Add(hit.LineId);
                 else texts.Add(new FtsSnippetText { LineId = hit.LineId, Text = results[i].Content });
             }
-            if (shortIds != null) texts.AddRange(corpus().FetchSnippetTexts(Array.Empty<int>(), shortIds));
+            if (shortIds != null) texts.AddRange(corpus().FetchSnippetTexts(Array.Empty<long>(), shortIds));
             return texts;
         }
 

@@ -201,6 +201,8 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
+  /** Rows the last search could not decode (skipped, issue #13): the page shows a notice. 0 = none. */
+  const unreadableRowCount = ref(0)
   // The in-flight stream — aborting it closes the connection, which is the service's
   // cancel signal (no cancel op, no polling).
   let _streamAbort: AbortController | null = null
@@ -353,6 +355,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
     searchTerms = resumeFrom ? resumeFrom.terms : []
     sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
+    unreadableRowCount.value = 0
     executedQuery.value = q
 
     const normalizedQuery = q.trim().toLowerCase()
@@ -442,6 +445,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
         }
         if (chunk.done) {
           if (chunk.unreadableRowCount) {
+            unreadableRowCount.value = chunk.unreadableRowCount
             console.warn(`[useFullTextSearch] ${chunk.unreadableRowCount} rows unreadable, results may be incomplete: ${chunk.unreadableError ?? ''}`)
           }
           if (dirty) flush() // final trailing flush before sorting
@@ -491,6 +495,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
+    unreadableRowCount.value = 0
     rerunWhenIndexed = null
   }
 
@@ -556,6 +561,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
     hasSearched,
     executedQuery,
     searchError,
+    unreadableRowCount,
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
     allWords,

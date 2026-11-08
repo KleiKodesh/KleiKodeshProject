@@ -36,6 +36,7 @@ import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import WordLinkTooltip from './WordLinkTooltip.vue'
 import { useWordLinkTooltip } from './useWordLinkTooltip'
 import { useLineNotes, useLineNotesTooltip } from './useLineNotes'
+import { markerForNote } from './lineNotes'
 import { useNoteTooltip } from './useNoteTooltip'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
@@ -97,6 +98,8 @@ const props = defineProps<
      * the column; the bar then estimates from the rows it measures.
      */
     lineCharacterCounts?: ArrayLike<number> | null
+    /** Pop this note of the opening line open on arrival (a search hit on a footnote, issue #13). */
+    openNoteIndex?: number
   }
 >()
 
@@ -383,6 +386,7 @@ const {
   keepLineNoteTooltipOpen,
   releaseLineNoteTooltip,
   beginLineNoteTooltipSelection,
+  openLineNoteTooltip,
 } = useLineNotesTooltip(
   scrollerEl,
   (marker) => {
@@ -391,6 +395,36 @@ const {
   },
   getLineNotesForLine,
 )
+
+// A search hit on a footnote (issue #13) opens its source line (initialLineIndex) with that
+// note popped open: once the line's notes have loaded and its row shows their markers, the
+// note's marker opens its preview as a hover would. One-shot.
+if (props.openNoteIndex != null && props.initialLineIndex != null) {
+  const noteIndex = props.openNoteIndex
+  const lineIndex = props.initialLineIndex
+  let done = false
+  let stop: (() => void) | null = null
+  stop = watch(
+    () => {
+      void props.linesRevision
+      const lineId = lineIndex < props.lines.length ? props.lines.idAt(lineIndex) : 0
+      return lineId ? getLineNotesForLine(lineId) : []
+    },
+    async (notes) => {
+      if (done || !notes.length) return
+      done = true
+      stop?.()
+      await nextTick()
+      requestAnimationFrame(() => {
+        const row = scroller()?.rowElement(lineIndex)
+        const marker = row ? markerForNote(row, notes, noteIndex) : null
+        if (marker) openLineNoteTooltip(marker)
+      })
+    },
+    { immediate: true },
+  )
+  if (done) stop()
+}
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.

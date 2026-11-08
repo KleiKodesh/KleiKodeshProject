@@ -127,7 +127,7 @@ namespace FtsLib.Fts5
         /// <summary>From this many ranges on, one MATCH over their span beats one per range.</summary>
         private const int ManyRanges = 16;
 
-        public List<(int Range, long Position, int LineId)> FindSubstringCandidates(
+        public List<(int Range, long Position, long LineId)> FindSubstringCandidates(
             string query, IReadOnlyList<(long First, long Last)> ranges, int maxTermsPerFragment, CancellationToken ct)
         {
             var tokenizer = new Tokenization.Tokenizer();
@@ -149,7 +149,7 @@ namespace FtsLib.Fts5
                             if (terms.Count > maxTermsPerFragment) return null;
                         }
                     }
-                    if (terms.Count == 0) return new List<(int, long, int)>();   // no line holds it
+                    if (terms.Count == 0) return new List<(int, long, long)>();   // no line holds it
                     groups.Add(terms);
                 }
             }
@@ -159,7 +159,7 @@ namespace FtsLib.Fts5
             // planning (~2 ms with a wide term expression). A few ranges: one MATCH each. Many
             // (a commentary panel's books): ONE MATCH over their whole span, and each row
             // assigned to its range here, or dropped when it falls between ranges.
-            var found = new List<(int, long, int)>();
+            var found = new List<(int, long, long)>();
             using var cmd = _lines.CreateCommand();
             cmd.CommandText = "SELECT line_fts.rowid, p.line_id FROM line_fts JOIN line_position p ON p.position = line_fts.rowid " +
                               "WHERE line_fts MATCH $q AND line_fts.rowid BETWEEN $first AND $last ORDER BY line_fts.rowid";
@@ -176,7 +176,7 @@ namespace FtsLib.Fts5
                     while (r.Read())
                     {
                         ct.ThrowIfCancellationRequested();
-                        found.Add((range, r.GetInt64(0), (int)r.GetInt64(1)));
+                        found.Add((range, r.GetInt64(0), r.GetInt64(1)));
                     }
                 }
                 return found;
@@ -197,7 +197,7 @@ namespace FtsLib.Fts5
                     long position = r.GetInt64(0);
                     while (cursor < order.Length && ranges[order[cursor]].Last < position) cursor++;
                     if (cursor == order.Length) break;
-                    if (ranges[order[cursor]].First <= position) found.Add((order[cursor], position, (int)r.GetInt64(1)));
+                    if (ranges[order[cursor]].First <= position) found.Add((order[cursor], position, r.GetInt64(1)));
                 }
             }
             return found;
@@ -206,12 +206,12 @@ namespace FtsLib.Fts5
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.
         /// A quoted phrase needs the text: here its words are only required (a superset);
         /// <see cref="Search"/> checks the phrase.</summary>
-        public IEnumerable<int> SearchIds(string query,
-                                          IEnumerable<int> filterIds = null, CancellationToken ct = default)
+        public IEnumerable<long> SearchIds(string query,
+                                          IEnumerable<long> filterIds = null, CancellationToken ct = default)
         {
             var plan = Plan(query, filterIds, ct);
             if (plan == null) yield break;
-            foreach (int id in StreamIds(plan, ct)) yield return id;
+            foreach (long id in StreamIds(plan, ct)) yield return id;
         }
 
         /// <summary>
@@ -233,7 +233,7 @@ namespace FtsLib.Fts5
         /// one (0 = from the start). Positions are the result order, so a search resumed after
         /// its last delivered line continues exactly where it stopped.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                IEnumerable<long> filterIds = null, CancellationToken ct = default,
                                                 Action<string> onStage = null, Func<int, int> batchSizeAt = null,
                                                 bool withPlacement = true, long afterPosition = 0)
         {
@@ -247,9 +247,9 @@ namespace FtsLib.Fts5
             {
                 int batchIndex = 0;
                 int batchSize = Math.Max(1, batchSizeAt?.Invoke(batchIndex) ?? DefaultContentBatchSize);
-                var batch = new List<int>(batchSize);
+                var batch = new List<long>(batchSize);
                 int taken = 0;              // cap counts ids
-                foreach (int id in StreamIds(plan, ct, afterPosition))
+                foreach (long id in StreamIds(plan, ct, afterPosition))
                 {
                     batch.Add(id);
                     bool capReached = cap > 0 && ++taken >= cap;
@@ -292,25 +292,25 @@ namespace FtsLib.Fts5
             public string MatchExpression;
             public IReadOnlyList<IReadOnlyCollection<string>> MatchedGroups;
             public int OriginalGroupCount;
-            public HashSet<int> Filter;   // null = no filter
+            public HashSet<long> Filter;   // null = no filter
             /// <summary>Quoted phrases a line must carry (adjacent, in order), checked on its text.</summary>
             public List<PreparedQueryGroups> Phrases;
             public SnippetWindowLocator PhraseLocator;
         }
 
         /// <summary>Parse + expand. Null when the query can match nothing.</summary>
-        QueryPlan Plan(string query, IEnumerable<int> filterIds, CancellationToken ct,
+        QueryPlan Plan(string query, IEnumerable<long> filterIds, CancellationToken ct,
                        Action<string> onStage = null)
         {
             onStage?.Invoke("parse");
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) return null;
 
-            HashSet<int> filter = null;   // null = everything, empty = nothing, negatives ignored
+            HashSet<long> filter = null;   // null = everything, empty = nothing, negatives ignored
             if (filterIds != null)
             {
-                filter = new HashSet<int>();
-                foreach (int id in filterIds) if (id >= 0) filter.Add(id);
+                filter = new HashSet<long>();
+                foreach (long id in filterIds) if (id >= 0) filter.Add(id);
                 if (filter.Count == 0) return null;
             }
 
@@ -357,7 +357,7 @@ namespace FtsLib.Fts5
         /// One FTS5 MATCH for the whole query — FTS5 does the AND across groups and the OR
         /// within each — read lazily. Each call has its own command, so streams may overlap.
         /// </summary>
-        IEnumerable<int> StreamIds(QueryPlan plan, CancellationToken ct, long afterPosition = 0)
+        IEnumerable<long> StreamIds(QueryPlan plan, CancellationToken ct, long afterPosition = 0)
         {
             using var cmd = _lines.CreateCommand();
             // rowid is the line's position in result order (catalog order); line_position maps
@@ -372,12 +372,12 @@ namespace FtsLib.Fts5
             while (r.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                int id = (int)r.GetInt64(0);
+                long id = r.GetInt64(0);
                 if (plan.Filter == null || plan.Filter.Contains(id)) yield return id;
             }
         }
 
-        static IEnumerable<SearchResult> Fetch(IFtsCorpus corpus, List<int> ids, QueryPlan plan,
+        static IEnumerable<SearchResult> Fetch(IFtsCorpus corpus, List<long> ids, QueryPlan plan,
                                                PreparedQueryGroups prepared, bool withPlacement, CancellationToken ct)
         {
             if (ids.Count == 0) yield break;
@@ -385,14 +385,14 @@ namespace FtsLib.Fts5
             // index's order, which is the order of ids.
             // A placed corpus gives each line's book / position in the same read,
             // unless the caller reads placement itself (withPlacement: false).
-            var byId = new Dictionary<int, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
+            var byId = new Dictionary<long, (string Content, string Title, FtsDocumentPlacement Placement)>(ids.Count);
             if (withPlacement && corpus is IFtsPlacedCorpus placed)
                 foreach (var (lineId, content, placement) in placed.FetchPlacedDocuments(ids))
                     byId[lineId] = (content, "", placement);
             else
                 foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
                     byId[lineId] = (content, bookTitle, default);
-            foreach (int lineId in ids)
+            foreach (long lineId in ids)
             {
                 ct.ThrowIfCancellationRequested();
                 if (byId.TryGetValue(lineId, out var row) && CarriesPhrases(plan, row.Content))

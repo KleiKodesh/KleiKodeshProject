@@ -46,7 +46,8 @@
     "indexBuildFailed": "Building the search index failed — in Settings, click \"{button}\"",
     "indexNotReady": "The index is not ready for search — try again in a few moments",
     "indexMerging": "The index is merging — try again in a few moments",
-    "searchFailed": "An error occurred while searching"
+    "searchFailed": "An error occurred while searching",
+    "unreadableRows": "{count} rows could not be read; the results may be incomplete"
   },
   "noResults": "No results found",
   "list": {

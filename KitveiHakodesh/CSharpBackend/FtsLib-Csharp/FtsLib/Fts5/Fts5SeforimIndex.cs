@@ -46,7 +46,7 @@ namespace FtsLib.Fts5
         /// <param name="withPlacement">See <see cref="Fts5SearchEngine.Search"/>.</param>
         /// <param name="afterPosition">See <see cref="Fts5SearchEngine.Search"/>.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                IEnumerable<long> filterIds = null, CancellationToken ct = default,
                                                 Action<string> onStage = null, Func<int, int> batchSizeAt = null,
                                                 bool withPlacement = true, long afterPosition = 0)
         {
@@ -56,12 +56,12 @@ namespace FtsLib.Fts5
                 yield return result;
         }
 
-        public IEnumerable<int> SearchIds(string query,
-                                          IEnumerable<int> filterIds = null, CancellationToken ct = default)
+        public IEnumerable<long> SearchIds(string query,
+                                          IEnumerable<long> filterIds = null, CancellationToken ct = default)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (int id in engine.SearchIds(query, filterIds, ct))
+            foreach (long id in engine.SearchIds(query, filterIds, ct))
                 yield return id;
         }
 
@@ -71,7 +71,7 @@ namespace FtsLib.Fts5
         /// cannot answer exactly, including while it is still being built: only a complete
         /// index has every committed line's terms in its dictionary.
         /// </summary>
-        public List<(int Range, long Position, int LineId)> FindSubstringCandidates(
+        public List<(int Range, long Position, long LineId)> FindSubstringCandidates(
             string query, IReadOnlyList<(long First, long Last)> ranges, int maxTermsPerFragment, CancellationToken ct = default)
         {
             if (!IsBuilt) return null;
@@ -96,9 +96,9 @@ namespace FtsLib.Fts5
                                            bool ignoreQuotes = false)
             => SnippetDescriptorPipeline.FindAllMatches(text, words, phrase, ignoreQuotes);
 
-        public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)
+        public Dictionary<long, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<long> lineIds, int radius)
         {
-            var neighbours = new Dictionary<int, (string Prev, string Next)>();
+            var neighbours = new Dictionary<long, (string Prev, string Next)>();
             if (lineIds == null || lineIds.Count == 0 || radius <= 0) return neighbours;
             using var corpus = _openCorpus();
             foreach (var entry in corpus.FetchNeighbourText(lineIds, radius))
@@ -116,7 +116,7 @@ namespace FtsLib.Fts5
 
         /// <summary>Where an interrupted build stopped: last committed line, the corpus size
         /// it recorded, and how many lines were done. All 0 when there is nothing to resume.</summary>
-        public void GetResumeState(out int lineId, out long totalLines, out long resumeOffset)
+        public void GetResumeState(out long lineId, out long totalLines, out long resumeOffset)
         {
             lineId = 0; totalLines = 0; resumeOffset = 0;
             var state = Fts5Index.ReadBuildState(_indexPath);

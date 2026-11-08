@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.Data.Sqlite;
 using Microsoft.VisualBasic;
 using System;
@@ -495,21 +496,25 @@ namespace FtsLib.SeforimDb
 
         long IFtsCorpus.CountDocuments() => CountLines();
 
-        long IFtsCorpus.CountDocumentsUpTo(int upToId) => CountLinesUpTo(upToId);
+        // The interface carries 64-bit ids (virtual notes ids, issue #13); this test corpus
+        // holds real line ids only, which fit int.
+        long IFtsCorpus.CountDocumentsUpTo(long upToId) => CountLinesUpTo(checked((int)upToId));
 
-        string IFtsCorpus.GetDocumentText(int id) => GetLineContent(id);
+        string IFtsCorpus.GetDocumentText(long id) => GetLineContent(checked((int)id));
 
-        IEnumerable<(int Id, string Text)> IFtsCorpus.ReadDocuments(int limit, CancellationToken ct) =>
-            ReadLines(limit, ct);
+        IEnumerable<(long Id, string Text)> IFtsCorpus.ReadDocuments(int limit, CancellationToken ct) =>
+            ReadLines(limit, ct).Select(r => ((long)r.Id, r.Content));
 
-        IEnumerable<(int Id, string Text)> IFtsCorpus.ReadDocumentsAfter(int afterId, int limit, CancellationToken ct) =>
-            ReadLinesFrom(afterId, limit, ct);
+        IEnumerable<(long Id, string Text)> IFtsCorpus.ReadDocumentsAfter(long afterId, int limit, CancellationToken ct) =>
+            ReadLinesFrom(checked((int)afterId), limit, ct).Select(r => ((long)r.Id, r.Content));
 
-        IEnumerable<(int Id, string Text, string Title)> IFtsCorpus.FetchDocuments(IEnumerable<int> ids) =>
-            FetchSearchResultsStreaming(ids);
+        IEnumerable<(long Id, string Text, string Title)> IFtsCorpus.FetchDocuments(IEnumerable<long> ids) =>
+            FetchSearchResultsStreaming(ids.Select(id => checked((int)id))).Select(r => ((long)r.Id, r.Content, r.BookTitle));
 
-        IDictionary<int, (string Previous, string Next)> IFtsCorpus.FetchNeighbourText(
-            IReadOnlyList<int> ids, int radius) => FetchNeighborContext(ids, radius);
+        IDictionary<long, (string Previous, string Next)> IFtsCorpus.FetchNeighbourText(
+            IReadOnlyList<long> ids, int radius) =>
+            FetchNeighborContext(ids.Select(id => checked((int)id)).ToList(), radius)
+                .ToDictionary(e => (long)e.Key, e => (e.Value.Item1, e.Value.Item2));
 
         public void Dispose()
         {

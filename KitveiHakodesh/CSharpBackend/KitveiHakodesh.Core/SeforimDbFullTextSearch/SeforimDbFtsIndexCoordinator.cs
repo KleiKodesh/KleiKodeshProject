@@ -776,7 +776,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             result.Answered = true;
             result.BookIds = new int[candidates.Count];
             result.LineIndexes = new int[candidates.Count];
-            result.LineIds = new int[candidates.Count];
+            result.LineIds = new long[candidates.Count];
             for (int i = 0; i < candidates.Count; i++)
                 (result.BookIds[i], result.LineIndexes[i], result.LineIds[i]) = candidates[i];
         }
@@ -797,7 +797,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// (<see cref="SeforimDbFtsCorpus.FetchSnippetTexts"/>). No index, no query, no locate:
     /// the descriptor already rode on the hit. Works while the index is still building.
     /// </summary>
-    public List<FtsSnippetText> SnippetTexts(IReadOnlyList<int> lineIds, IReadOnlyList<int> shortLineIds)
+    public List<FtsSnippetText> SnippetTexts(IReadOnlyList<long> lineIds, IReadOnlyList<long> shortLineIds)
     {
         if (!HasDb || (lineIds.Count == 0 && shortLineIds.Count == 0)) return new List<FtsSnippetText>();
         try
@@ -842,7 +842,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// (<see cref="FtsStreamChunk.Restarted"/> on the first frame).</param>
     public async Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, int resumeAfterLineId = 0)
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, long resumeAfterLineId = 0)
     {
         EnsureIndexing();
         if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
@@ -951,7 +951,7 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, long afterPosition,
-        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, List<int>, Task> onBatch,
+        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, List<long>, Task> onBatch,
         Action<string>? onStage = null, SeforimDbFtsUnreadableRows? unreadable = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is

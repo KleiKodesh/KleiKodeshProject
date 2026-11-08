@@ -69,6 +69,7 @@ const {
 const {
   toolbarPosition, toolbarVisible,
   searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+  openNoteIndex,
   searchVisible,
   selectedLineId, searchMode,
   activeTocEntryId, activeAltTocEntryId,
@@ -654,6 +655,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :search-highlight-query="searchHighlightQuery"
                     :search-highlight-snippet="searchHighlightSnippet"
                     :search-highlight-terms="searchHighlightTerms"
+                    :open-note-index="openNoteIndex"
                     :search-bar-visible="searchVisible"
                     :search-query="searchVisible && searchMode === 'content' ? contentSearch.query.value : ''"
                     :current-match-line-index="searchVisible && searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
