@@ -78,10 +78,75 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         private SeforimDbLineContentCodec(
-            Dictionary<uint, Decompressor> decompressorsByDictionaryId, Func<byte[][]>? reloadDictionaries)
+            Dictionary<uint, Decompressor> decompressorsByDictionaryId, Func<byte[][]>? reloadDictionaries,
+            string? poolKey)
         {
             _decompressorsByDictionaryId = decompressorsByDictionaryId;
             _reloadDictionaries = reloadDictionaries;
+            _poolKey = poolKey;
+        }
+
+        /// <summary>The <see cref="CacheKeyFor"/> key this codec's decompressors go back to on
+        /// Dispose; null = not pooled (in-memory database).</summary>
+        private readonly string? _poolKey;
+
+        /// <summary>
+        /// Built decompressor sets kept for reuse, per database file (same key as the bytes
+        /// cache). Loading the 2 MB dictionary into a decompressor costs milliseconds and every
+        /// book read / search builds a codec, so finished codecs park theirs here instead of
+        /// throwing them away. A set is used by ONE codec at a time (decompressors are not
+        /// thread-safe), and at most <see cref="MaxPooledDecompressorSets"/> are kept per file:
+        /// each holds a dictionary copy plus its tables (~4-5 MB), so the cap is the RAM bound.
+        /// Guarded by <see cref="DecompressorPoolLock"/>.
+        /// </summary>
+        private static readonly Dictionary<string, Stack<Dictionary<uint, Decompressor>>> PooledDecompressorSets =
+            new Dictionary<string, Stack<Dictionary<uint, Decompressor>>>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object DecompressorPoolLock = new object();
+        private const int MaxPooledDecompressorSets = 2;
+
+        private static Dictionary<uint, Decompressor>? TakePooledSet(string cacheKey)
+        {
+            lock (DecompressorPoolLock)
+            {
+                if (!PooledDecompressorSets.TryGetValue(cacheKey, out var stack))
+                {
+                    // Created here so Dispose knows the key is current; a cleared or evicted
+                    // key has no entry and its sets are simply disposed.
+                    PooledDecompressorSets[cacheKey] = new Stack<Dictionary<uint, Decompressor>>();
+                    return null;
+                }
+                return stack.Count > 0 ? stack.Pop() : null;
+            }
+        }
+
+        /// <summary>Parks a set for reuse; false when the pool is full or the key is gone
+        /// (the caller then disposes it).</summary>
+        private static bool TryReturnPooledSet(string cacheKey, Dictionary<uint, Decompressor> set)
+        {
+            lock (DecompressorPoolLock)
+            {
+                if (!PooledDecompressorSets.TryGetValue(cacheKey, out var stack)
+                    || stack.Count >= MaxPooledDecompressorSets) return false;
+                stack.Push(set);
+                return true;
+            }
+        }
+
+        /// <summary>Drops (and disposes) the pooled sets of every key <paramref name="evict"/> matches.</summary>
+        private static void EvictPooledSets(Func<string, bool> evict)
+        {
+            var dropped = new List<Dictionary<uint, Decompressor>>();
+            lock (DecompressorPoolLock)
+            {
+                foreach (var key in new List<string>(PooledDecompressorSets.Keys))
+                {
+                    if (!evict(key)) continue;
+                    dropped.AddRange(PooledDecompressorSets[key]);
+                    PooledDecompressorSets.Remove(key);
+                }
+            }
+            foreach (var set in dropped)
+                foreach (var decompressor in set.Values) decompressor.Dispose();
         }
 
         /// <summary>True when this database compresses line content.</summary>
@@ -94,8 +159,8 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Bytes, not decompressors: a `Decompressor` holds a reusable working buffer and must
         /// stay with the one codec that owns it, but the dictionary it is loaded from is
         /// immutable and costs a table read and a multi-megabyte copy to fetch. Caching that
-        /// half is both safe to share and the part worth saving - building a decompressor from
-        /// bytes already in memory is microseconds. An empty array marks a database with no
+        /// half is safe to share. Building a decompressor from the bytes still costs ~3 ms (2 MB
+        /// dictionary, measured), which is what PooledDecompressorSets saves. An empty array marks a database with no
         /// `zstd_dict` table, so repeat opens of a legacy file skip the probe too.
         ///
         /// The key carries the file's write time and length as well as its path, so a library
@@ -118,8 +183,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
 
-            var dictionaries = DictionariesFor(connection);
+            string? cacheKey = CacheKeyFor(connection);
+            var dictionaries = DictionariesFor(connection, cacheKey);
             if (dictionaries.Length == 0) return Plain;
+
+            var pooled = cacheKey != null ? TakePooledSet(cacheKey) : null;
+            if (pooled != null)
+                return new SeforimDbLineContentCodec(pooled, () => RereadDictionaries(connection), cacheKey);
 
             var decompressorsByDictionaryId = new Dictionary<uint, Decompressor>();
             try
@@ -142,7 +212,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 throw;
             }
 
-            return new SeforimDbLineContentCodec(decompressorsByDictionaryId, () => RereadDictionaries(connection));
+            return new SeforimDbLineContentCodec(decompressorsByDictionaryId, () => RereadDictionaries(connection), cacheKey);
         }
 
         /// <summary>
@@ -191,11 +261,10 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Every dictionary in the database behind <paramref name="connection"/>, read once per
         /// file and cached. An empty array means the database stores plain text.
         /// </summary>
-        private static byte[][] DictionariesFor(DbConnection connection)
+        private static byte[][] DictionariesFor(DbConnection connection, string? cacheKey)
         {
-            // An in-memory database has no file to key on, and two of them share a connection
-            // string while holding different data - so never cache one.
-            string? cacheKey = CacheKeyFor(connection);
+            // An in-memory database has no file to key on (null key), and two of them share a
+            // connection string while holding different data - so never cache one.
             if (cacheKey != null && DictionaryBytesByDatabase.TryGetValue(cacheKey, out var cached))
                 return cached;
 
@@ -212,6 +281,8 @@ namespace KitveiHakodesh.Core.SeforimDb
                         && !string.Equals(key, cacheKey, StringComparison.OrdinalIgnoreCase))
                         DictionaryBytesByDatabase.TryRemove(key, out _);
                 }
+                EvictPooledSets(key => key.StartsWith(filePrefix, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(key, cacheKey, StringComparison.OrdinalIgnoreCase));
                 DictionaryBytesByDatabase[cacheKey] = dictionaries;
             }
             return dictionaries;
@@ -222,7 +293,11 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// the LOH). Thread-safe: codecs already built keep their own decompressors, and the next
         /// <see cref="Create"/> simply re-reads `zstd_dict` once and re-caches it.
         /// </summary>
-        public static void ClearDictionaryCache() => DictionaryBytesByDatabase.Clear();
+        public static void ClearDictionaryCache()
+        {
+            DictionaryBytesByDatabase.Clear();
+            EvictPooledSets(_ => true);
+        }
 
         private static byte[][] ReadDictionaries(DbConnection connection)
         {
@@ -384,6 +459,9 @@ namespace KitveiHakodesh.Core.SeforimDb
             var decompressorsByDictionaryId = _decompressorsByDictionaryId
                 ?? throw new SeforimDbContentCodecException(
                     "A line holds compressed content but no dictionary is loaded.");
+            // After Dispose the set may already belong to another codec (pooled): a late call
+            // here would drive the same decompressor from two places.
+            if (_isDisposed) throw new ObjectDisposedException(nameof(SeforimDbLineContentCodec));
 
             uint dictionaryId = ReadFrameDictionaryId(frame);
 
@@ -598,6 +676,9 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (_decompressorsByDictionaryId == null) return;
             if (_isDisposed) return;
             _isDisposed = true;
+            // Reuse the loaded decompressors (see PooledDecompressorSets); the set is handed
+            // over, never shared - this codec is done with it.
+            if (_poolKey != null && TryReturnPooledSet(_poolKey, _decompressorsByDictionaryId)) return;
             foreach (var decompressor in _decompressorsByDictionaryId.Values) decompressor.Dispose();
             _decompressorsByDictionaryId.Clear();
         }

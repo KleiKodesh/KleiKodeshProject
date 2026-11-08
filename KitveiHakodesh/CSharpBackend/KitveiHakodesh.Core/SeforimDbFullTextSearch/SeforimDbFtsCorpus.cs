@@ -483,7 +483,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             // The codec holds the database's zstd dictionary, which is megabytes - release it
             // with the connection it belongs to rather than waiting for a collection.
             _codec.Dispose();
-            _connection.Dispose();
+            // The connection goes back to the SAME pool book reads draw from, and pragmas stay
+            // on the pooled handle: put back the standard read policy, or a later book read
+            // inherits this scan's 64 MB page cache.
+            try { SqliteConnectionFactory.RestoreCorpusReadPragmas(_connection); }
+            finally { _connection.Dispose(); }
         }
     }
 

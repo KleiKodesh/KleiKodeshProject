@@ -87,6 +87,18 @@ namespace KitveiHakodesh.Core.Common
         }
 
         /// <summary>
+        /// Puts a corpus-read connection back on the standard read policy before it returns to
+        /// the pool. For a caller that tuned its own connection (the search corpus raises the
+        /// page cache): pragmas live on the pooled handle, so the next borrower would inherit them.
+        /// </summary>
+        public static void RestoreCorpusReadPragmas(SqliteConnection connection)
+        {
+            Execute(connection,
+                "PRAGMA cache_size=" + CorpusCacheSizeKib + ";" +
+                "PRAGMA temp_store=DEFAULT;");
+        }
+
+        /// <summary>
         /// A shipped database, opened to be looked at rather than read from: read-only,
         /// unpooled, and no pragmas at all.
         ///
