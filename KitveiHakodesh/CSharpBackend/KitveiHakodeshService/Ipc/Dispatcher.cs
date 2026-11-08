@@ -720,6 +720,20 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffUpdates() }));
                 }
 
+                // Automatic update of the library this app downloaded. true = turned OFF.
+                case "isOwnSeforimLibraryInUse":
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = KitveiHakodesh.Core.SeforimLibraryDownload.SeforimLibraryDownloader.IsOwnLibraryInUse }));
+
+                case "getTurnOffLibraryUpdates":
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffLibraryUpdates() }));
+
+                case "setTurnOffLibraryUpdates":
+                {
+                    var a = MsgPack.De<BoolArg>(req.Args);
+                    AppSettingsRegistry.SetTurnOffLibraryUpdates(a.Value);
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffLibraryUpdates() }));
+                }
+
                 // ── Dictionary (Dictionary.db) ──────────────────
                 case "dictExact":
                     return RpcResponse.Ok(MsgPack.Ser(dictionary.Exact(Term(req.Args))));

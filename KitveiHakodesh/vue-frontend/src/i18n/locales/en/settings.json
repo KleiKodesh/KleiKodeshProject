@@ -150,7 +150,10 @@
     "checkNow": "Check now",
     "disableNav": "Turn off update checks",
     "disable": "Turn off automatic update checks",
-    "disableHint": "When set to Yes the app will not check for or download new versions. Shared with the Word add-in."
+    "disableHint": "When set to Yes the app will not check for or download new versions. Shared with the Word add-in.",
+    "disableLibrary": "Turn off automatic library updates",
+    "disableLibraryNav": "Library updates",
+    "disableLibraryHint": "When set to Yes the books library the app downloaded will not be updated automatically."
   },
   "tint": {
     "asTheme": "As in theme",

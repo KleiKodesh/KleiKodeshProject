@@ -1526,6 +1526,34 @@ export async function getTurnOffUpdates(): Promise<boolean | null> {
   }
 }
 
+/** True when the library in use is the copy this app downloaded. False when the service cannot answer. */
+export async function isOwnSeforimLibraryInUse(): Promise<boolean> {
+  try {
+    const res = await serviceCall<{ value?: boolean }>('isOwnSeforimLibraryInUse')
+    return res?.value ?? false
+  } catch {
+    return false
+  }
+}
+
+/** Whether automatic updates of the downloaded library are turned off. Null when the service cannot answer. */
+export async function getTurnOffLibraryUpdates(): Promise<boolean | null> {
+  try {
+    const res = await serviceCall<{ value?: boolean }>('getTurnOffLibraryUpdates')
+    return res?.value ?? false
+  } catch {
+    return null
+  }
+}
+
+export async function setTurnOffLibraryUpdates(value: boolean): Promise<void> {
+  try {
+    await serviceCall('setTurnOffLibraryUpdates', { value })
+  } catch {
+    /* the service banner covers an unreachable service */
+  }
+}
+
 /**
  * Persist the "turn off automatic updates" flag to the shared VSTO registry key.
  */
