@@ -125,6 +125,17 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
 
   /** The first visible row, where it was within the content, and where the viewport was, as of the last look. */
   let anchor: { index: number; offsetTop: number; offsetHeight: number; scrollTop: number } | null = null
+  /**
+   * The reader is at the list's REAL bottom (last row mounted, viewport scrolled to
+   * its end). Then the bottom is what is held, not the top row: rows above
+   * re-wrapping or arriving would otherwise push the end out of view, and "End"
+   * would not stay at the end.
+   */
+  let isPinnedToEnd = false
+
+  function isViewportAtListEnd(viewport: HTMLElement) {
+    return windowEnd.value >= options.count() && viewport.scrollTop >= viewport.scrollHeight - viewport.clientHeight - 1
+  }
 
   /**
    * The row's top in content coordinates, measured (fractional). offsetTop is rounded:
@@ -145,6 +156,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
   function rememberAnchor() {
     const viewport = options.viewport()
     if (!viewport) return
+    isPinnedToEnd = isViewportAtListEnd(viewport)
     const index = findRowIndexAt(viewport.scrollTop, false)
     const row = index != null ? options.rowElement(index) : null
     if (row && index != null) {
@@ -237,7 +249,14 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
    */
   function holdAnchor() {
     const viewport = options.viewport()
-    if (!viewport || !anchor) return
+    if (!viewport) return
+    if (isPinnedToEnd && windowEnd.value >= options.count()) {
+      viewport.scrollTop = viewport.scrollHeight
+      heldScrollTop = viewport.scrollTop
+      rememberAnchor()
+      return
+    }
+    if (!anchor) return
     const row = options.rowElement(anchor.index)
     if (!row) return
     const height = row.offsetHeight
@@ -306,6 +325,11 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     return true
   }
 
+  /** Abandons any landing in flight: it will not move the view when its rows arrive. */
+  function cancelLanding() {
+    landingGeneration++
+  }
+
   /**
    * Puts the row at the top of the viewport (or its bottom at the bottom, for
    * 'end'), rebuilding the window around it first when it is not mounted — after
@@ -330,6 +354,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         if (target >= options.count()) { isTargetPastEnd = true; return }
         // Nothing to hold through the rebuild: the view is leaving wherever it was.
         anchor = null
+        isPinnedToEnd = false
         windowStart.value = start
         windowEnd.value = Math.min(wantEnd, options.count())
       })
@@ -344,6 +369,13 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
       })
       if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
       if (!applied) return
+    }
+    // Cancelled (or superseded) after the window moved: the reader moved on, but
+    // the new rows still need an anchor to hold and their neighbours filled.
+    if (generation !== landingGeneration) {
+      rememberAnchor()
+      fill()
+      return
     }
     const viewport = options.viewport()
     const row = options.rowElement(target)
@@ -515,6 +547,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     holdAnchor,
     holdAnchorThroughScroll,
     landAt,
+    cancelLanding,
     refreshRows,
     snapToBlocks,
     fill,
