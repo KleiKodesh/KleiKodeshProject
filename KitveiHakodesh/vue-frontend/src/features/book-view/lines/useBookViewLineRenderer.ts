@@ -5,7 +5,8 @@ import { highlightSearchMatches as highlightMatches } from '@/utils/searchMatchH
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from './wordLinkAnchors'
-import type { WordLinkAnchor } from '@/webview-host/queries.types'
+import type { LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
+import { appendUnmarkedNotesMarker, lineNotesSig } from './lineNotes'
 import type { useSettingsStore } from '@/stores/settingsStore'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
@@ -25,6 +26,7 @@ interface LineRenderProps {
   getHighlightsForLine?: (lineId: number) => Highlight[]
   getNotesForLine?: (lineId: number) => Note[]
   getWordLinkAnchorsForLine?: (lineId: number) => WordLinkAnchor[]
+  getLineNotesForLine?: (lineId: number) => LineNote[]
 }
 
 // Precompiled diacritic range check — faster than /[\u0591-\u05C7]/.test(ch) in tight loops.
@@ -452,7 +454,8 @@ export function useBookViewLineRenderer(
     const lineNotes = p.getNotesForLine?.(lineId) ?? []
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
     const anchorsSig = wordLinkAnchorsSig(p.getWordLinkAnchorsForLine?.(lineId) ?? [])
-    return `${highlightsSig}|${notesSig}|${anchorsSig}`
+    const lineNotesKey = lineNotesSig(p.getLineNotesForLine?.(lineId) ?? [])
+    return `${highlightsSig}|${notesSig}|${anchorsSig}|${lineNotesKey}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -503,6 +506,10 @@ export function useBookViewLineRenderer(
         content = highlightMatches(content, p.searchHighlightQuery)
       }
     }
+
+    // Inline notes without a marker in the text get one empty marker at the line's end,
+    // AFTER every offset walk: it holds no text, so no offset before it moves.
+    content = appendUnmarkedNotesMarker(content, p.getLineNotesForLine?.(lineId) ?? [])
 
     renderCache.set(lineIndex, { raw, html: content })
     return content

@@ -159,6 +159,10 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds) =>
         Run(() => _queries.GetWordLinkAnchorsForLines(lineIds), new WordLinkAnchorsResult { Supported = true }, "getWordLinkAnchorsForLines");
 
+    // Same contract as GetWordLinkAnchorsForLines: a failure answers Supported = true, no rows.
+    public LineNotesResult GetLineNotesForLines(List<int> lineIds) =>
+        Run(() => _queries.GetLineNotesForLines(lineIds), new LineNotesResult { Supported = true }, "getLineNotesForLines");
+
     public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId) =>
         Run(() => _queries.GetWordLinkAnchorTargetsForBook(bookId), new WordLinkTargetsResult { Supported = true }, "getWordLinkAnchorTargetsForBook");
 

@@ -883,6 +883,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(seforim.GetWordLinkAnchorsForLines(a.LineIds)));
                 }
 
+                case "getLineNotesForLines":
+                {
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetLineNotesForLines(a.LineIds)));
+                }
+
                 case "getWordLinkAnchorTargetsForBook":
                 {
                     var a = MsgPack.De<BookIdArgs>(req.Args);

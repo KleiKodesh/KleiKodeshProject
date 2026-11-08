@@ -328,6 +328,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Guard the call behind a TableExists("link_anchor") probe. Same targetLineIndex variant
         /// split as GetCommentaryLinksForSourceLineRange — schema v2 always has the column, but the
         /// probe, not the schema doc, decides.</summary>
+        /// <summary>Inline notes (Otzaria `line_note`, schema 7+) for a batch of lines, in note
+        /// order. Guard the call behind a TableExists("line_note") probe.</summary>
+        public static string GetLineNotesForLines(int count) => $@"
+            SELECT lineId, noteIndex, charPos, hasMarker, body
+            FROM line_note
+            WHERE lineId IN ({InPlaceholders("p", count)})
+            ORDER BY lineId, noteIndex";
+
         public static string GetWordLinkAnchorsForLines(int count, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,

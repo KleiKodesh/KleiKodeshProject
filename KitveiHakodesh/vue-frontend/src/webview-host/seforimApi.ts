@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -250,6 +250,23 @@ export async function getWordLinkTargetsForBook(bookId: number): Promise<WordLin
     // cache "none" when the real answer is "could not ask".
     _hasLinkAnchors = null
     return null
+  }
+}
+
+// line_note (Otzaria schema 7+) probe: null = unknown, false = this DB has no inline notes.
+let _hasLineNotes: boolean | null = null
+
+/** Inline notes (footnotes) for a batch of lines, one query. [] on DBs without line_note. */
+export async function getLineNotesForLines(lineIds: number[]): Promise<LineNote[]> {
+  if (_hasLineNotes === false || lineIds.length === 0) return []
+  try {
+    const res = await seforimOp<{ supported: boolean; rows: LineNote[] }>('getLineNotesForLines', { lineIds })
+    _hasLineNotes = res.supported
+    return res.rows
+  } catch {
+    // Transient (DB not ready or swapped) - re-probe next time; same contract as word links.
+    _hasLineNotes = null
+    throw new Error('getLineNotesForLines failed')
   }
 }
 

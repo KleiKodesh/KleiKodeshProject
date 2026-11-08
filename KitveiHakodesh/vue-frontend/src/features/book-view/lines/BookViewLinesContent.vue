@@ -34,7 +34,10 @@ import BookViewNoteBubble from './BookViewNoteBubble.vue'
 import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import WordLinkTooltip from './WordLinkTooltip.vue'
-import { useWordLinkTooltip } from './useWordLinkTooltip'
+import { useLinkPreviewTooltip, useWordLinkTooltip } from './useWordLinkTooltip'
+import { useLineNotes } from './useLineNotes'
+import { LINE_NOTE_SELECTOR, notesForMarker } from './lineNotes'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useNoteTooltip } from './useNoteTooltip'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
@@ -272,6 +275,8 @@ const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, read
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
 // a no-op on DBs without the table.
 const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds)
+// Inline notes (line_note, Otzaria schema 7+) - lazy, viewport-driven, a no-op on DBs without the table.
+const { getLineNotesForLine, evictLineNotesForLines } = useLineNotes(renderedLineIds)
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
@@ -283,6 +288,7 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, (
   getHighlightsForLine,
   getNotesForLine,
   getWordLinkAnchorsForLine,
+  getLineNotesForLine,
 }))
 
 // Apply .current class via DOM toggle — no re-render needed when only occurrence changes.
@@ -371,6 +377,39 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 // User-note hover preview — the marker carries its text in data-note-text, so this
 // replaces the native title tooltip the marker used to have.
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
+
+// Inline notes (footnotes): hovering a footnote marker of the text, or the end-of-line
+// marker of notes without one, previews the note in the link-preview panel (selectable,
+// scrollable, stays open while the pointer is inside). The marker's line and ordinal pick
+// the note (see lineNotes.ts). A click does nothing beyond the preview.
+function lineNotesHtmlForMarker(marker: Element): string | null {
+  const row = marker.closest<HTMLElement>('[data-index]')
+  if (!row) return null
+  const lineId = props.lines.idAt(Number(row.dataset.index))
+  const notes = notesForMarker(marker, row, getLineNotesForLine(lineId))
+  if (!notes.length) return null
+  return notes.map((note) => `<div class="line-note-body">${cleanHebrewText(note.body, cleanTextFlags.value)}</div>`).join('')
+}
+const {
+  linkPreview: lineNoteTooltip,
+  closeLinkPreview: closeLineNoteTooltip,
+  keepOpen: keepLineNoteTooltipOpen,
+  releaseOpen: releaseLineNoteTooltip,
+  beginSelection: beginLineNoteTooltipSelection,
+} = useLinkPreviewTooltip(scrollerEl, {
+  selector: LINE_NOTE_SELECTOR,
+  linkKey: (element) => {
+    const row = element.closest<HTMLElement>('[data-index]')
+    if (!row) return null
+    const index = [...row.querySelectorAll(LINE_NOTE_SELECTOR)].indexOf(element)
+    return `${row.dataset.index}:${index}`
+  },
+  preview: async (element) => {
+    const html = lineNotesHtmlForMarker(element)
+    return html == null ? null : { bookTitle: '', tocPath: '', html }
+  },
+  activate: () => {},
+})
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.
@@ -537,6 +576,7 @@ function retainedLineRanges(): ReadonlyArray<readonly [number, number]> {
 /** Lines whose text the store just released: their per-line annotation caches go with it. */
 function onLinesTextEvicted(lineIds: number[]) {
   evictWordLinkAnchorsForLines(lineIds)
+  evictLineNotesForLines(lineIds)
 }
 
 defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
@@ -580,6 +620,15 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
       @close="closeWordLinkTooltip"
+    />
+    <WordLinkTooltip
+      v-if="lineNoteTooltip"
+      :key="`line-note-${lineNoteTooltip.id}`"
+      :data="lineNoteTooltip"
+      @pointer-enter="keepLineNoteTooltipOpen"
+      @pointer-leave="releaseLineNoteTooltip"
+      @select-start="beginLineNoteTooltipSelection"
+      @close="closeLineNoteTooltip"
     />
     <WordLinkTooltip
       v-if="noteTooltip"
@@ -658,6 +707,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
    Vue's scoped-CSS compiler replaces the whole selector with the `:global()`
    argument and discards the rest. */
 html[data-fixed-line-height='true'] .line :deep(.user-note-marker),
+html[data-fixed-line-height='true'] .line :deep(.line-note-marker),
 html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   line-height: 1;
 }
@@ -770,6 +820,26 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   content: '✎︎';
 }
 .line :deep(.user-note-marker:hover) {
+  color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
+}
+/* Inline notes (lineNotes.ts): the text's own footnote markers preview their note on hover;
+   notes without a marker get one empty end-of-line marker, its glyph drawn here. */
+.line :deep(sup.footnote-marker),
+.line :deep(.line-note-marker) {
+  color: var(--accent-color);
+  cursor: pointer;
+}
+.line :deep(.line-note-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  font-style: normal;
+}
+.line :deep(.line-note-marker)::before {
+  content: '*';
+}
+.line :deep(sup.footnote-marker:hover),
+.line :deep(.line-note-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
 }
 .line :deep(.word-link) {

@@ -206,6 +206,20 @@ export interface CommentaryLinkGroups {
 }
 
 /** Per-word link anchor (schema v2+ `link_anchor` table; absent in current v1 DBs). */
+/**
+ * One inline note (footnote) of a line, from Otzaria's `line_note` table (schema 7+).
+ * `hasMarker`: the line keeps a `<sup class="footnote-marker">` for it, and the k-th note
+ * with a marker belongs to the k-th such marker of the line (Otzaria's matching). A note
+ * without a marker has no place in the text. `body` is the note's HTML.
+ */
+export interface LineNote {
+  lineId: number
+  noteIndex: number
+  charPos: number
+  hasMarker: boolean
+  body: string
+}
+
 export interface WordLinkAnchor {
   lineId: number
   charStart: number

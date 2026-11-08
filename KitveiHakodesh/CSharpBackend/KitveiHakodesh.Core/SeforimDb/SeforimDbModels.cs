@@ -225,6 +225,28 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int SourceBookId { get; set; }
     }
 
+    /// <summary>One inline note (footnote) of a line, from Otzaria's `line_note` table (schema 7+).
+    /// HasMarker = the line keeps a `&lt;sup class="footnote-marker"&gt;` for it: the k-th note with a
+    /// marker belongs to the k-th such marker of the line (Otzaria's own matching). CharPos = UTF-16
+    /// offset in the rehydrated line, -1 when unknown. Body = the decoded note HTML.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class LineNoteRow
+    {
+        public int LineId { get; set; }
+        public int NoteIndex { get; set; }
+        public int CharPos { get; set; }
+        public bool HasMarker { get; set; }
+        public string Body { get; set; } = "";
+    }
+
+    /// <summary>Supported=false → the open DB has no line_note table; callers should stop asking.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class LineNotesResult
+    {
+        public bool Supported { get; set; }
+        public List<LineNoteRow> Rows { get; set; } = new();
+    }
+
     /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class WordLinkAnchorsResult
