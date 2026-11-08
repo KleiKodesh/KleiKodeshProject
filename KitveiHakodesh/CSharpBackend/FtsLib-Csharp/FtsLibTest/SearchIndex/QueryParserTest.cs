@@ -69,6 +69,14 @@ namespace FtsLibTest
                 checkFuzzyDist: new[] { 2 });
 
             Check(ref passed, ref failed,
+                "fuzzy suffix before a closing quote",
+                // (one closing quote: inside a quoted phrase the words are literal)
+                query: "אב משה~2\"",
+                expected: new[] { new[] { "אב" }, new[] { "משה" } },
+                checkFuzzy: new[] { false, true },
+                checkFuzzyDist: new[] { 0, 2 });
+
+            Check(ref passed, ref failed,
                 "nikud stripped",
                 query: "שָׁלוֹם",
                 expected: new[] { new[] { "שלום" } });
