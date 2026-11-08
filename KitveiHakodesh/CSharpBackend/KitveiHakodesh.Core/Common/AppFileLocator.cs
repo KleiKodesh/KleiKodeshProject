@@ -170,37 +170,17 @@ namespace KitveiHakodesh.Core.Common
         }
 
         /// <summary>
-        /// Where to WRITE <paramref name="relativePath"/> — a different question from where to
-        /// read it. Prefers a root that already holds the item, so an existing index is updated
-        /// in place instead of a second one appearing elsewhere; otherwise the first root that
-        /// is genuinely writable; finally the per-user install root.
-        ///
-        /// Writability is TESTED, not assumed: a portable app may be running from a USB stick,
-        /// a network share or a read-only folder, and only trying reveals which.
+        /// Where to WRITE <paramref name="relativePath"/>: always inside the app folder
+        /// (<see cref="AppRoot"/>), never anywhere else (user, 2026-11-08 - the portable app
+        /// carries everything with it). When the app folder is read-only (a locked USB stick, a
+        /// network share) nothing is saved: the write fails at its first attempt and the caller's
+        /// own error path handles it. There is deliberately no fallback outside the app folder.
         /// </summary>
         public static string ResolveWritablePath(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath))
                 throw new ArgumentException("relativePath is required", nameof(relativePath));
-
-            string? existing = FindFile(relativePath) ?? FindDirectory(relativePath);
-            if (existing != null && IsWritable(Path.GetDirectoryName(existing)))
-                return existing;
-
-            foreach (string root in CandidateRoots())
-            {
-                string candidate;
-                try { candidate = Path.Combine(root, relativePath); }
-                catch { continue; }
-
-                if (IsWritable(Path.GetDirectoryName(candidate))) return candidate;
-            }
-
-            // Everything else was read-only or unreachable. %LocalAppData% is ours by
-            // definition; let a failure surface here rather than at first write.
-            string fallback = Path.Combine(UserInstallRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(fallback)!);
-            return fallback;
+            return Path.Combine(AppRoot, relativePath);
         }
 
         /// <summary>
