@@ -705,7 +705,8 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// unlimited; a positive cap is only honoured if a caller ever explicitly asks for one.
     /// Words marked '+' (inflections) or '=' (synonyms) are expanded first; '^' (spelling variants) is the engine's.</summary>
     public FtsSearchResult Search(
-        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords)
+        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords,
+        FtsLib.Snippets.SnippetMatchMode matchMode = FtsLib.Snippets.SnippetMatchMode.BestWindow)
     {
         EnsureIndexing();
         if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query)) query = RewriteRelated(query);
@@ -727,7 +728,8 @@ public sealed class SeforimDbFtsIndexCoordinator
             var terms = new FtsTermTable();
             var unreadable = new SeforimDbFtsUnreadableRows();
             foreach (var batch in Searcher.SearchInBatches(
-                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, unreadable: unreadable))
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, unreadable: unreadable,
+                         matchMode: matchMode))
             {
                 result.Results.AddRange(batch.Hits);
                 result.SnippetTexts.AddRange(batch.SnippetTexts);
@@ -840,9 +842,12 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// last one the caller already holds from an earlier, unfinished run of the same search.
     /// 0 = from the start. A line that cannot be placed any more restarts the search
     /// (<see cref="FtsStreamChunk.Restarted"/> on the first frame).</param>
+    /// <param name="matchMode">Each hit's snippet: the best window (default) or the whole line
+    /// with every full occurrence marked (SeforimLibrarySearchEngine #14).</param>
     public async Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, long resumeAfterLineId = 0)
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, long resumeAfterLineId = 0,
+        FtsLib.Snippets.SnippetMatchMode matchMode = FtsLib.Snippets.SnippetMatchMode.BestWindow)
     {
         EnsureIndexing();
         if (SeforimDbFtsRelatedFormExpander.HasRelatedMarker(query))
@@ -915,7 +920,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                     {
                         if (resultsSent) stageSinceLastResults = stage;
                         else emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult();
-                    }, unreadable);
+                    }, unreadable, matchMode);
                 if (unreadable.Count > 0)
                     _log(FtsIndexLogLevel.Warning, "FTS search: " + unreadable.Count + " rows unreadable (" + unreadable.FirstError + ")", null);
                 await emit(new FtsStreamChunk { Done = true, UnreadableRowCount = unreadable.Count, UnreadableError = unreadable.FirstError });
@@ -952,7 +957,8 @@ public sealed class SeforimDbFtsIndexCoordinator
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, long afterPosition,
         CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, List<long>, Task> onBatch,
-        Action<string>? onStage = null, SeforimDbFtsUnreadableRows? unreadable = null)
+        Action<string>? onStage = null, SeforimDbFtsUnreadableRows? unreadable = null,
+        FtsLib.Snippets.SnippetMatchMode matchMode = FtsLib.Snippets.SnippetMatchMode.BestWindow)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built. Each batch goes out with
@@ -961,7 +967,8 @@ public sealed class SeforimDbFtsIndexCoordinator
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition, unreadable))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition, unreadable,
+                     matchMode))
         {
             await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts, batch.UnreadableLineIds);
         }
