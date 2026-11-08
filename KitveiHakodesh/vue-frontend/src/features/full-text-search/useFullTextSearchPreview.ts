@@ -19,6 +19,7 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
+import { sourceBookOf, sourceLineOf } from './noteIds'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 
 export interface PreviewLine {
@@ -66,7 +67,7 @@ export function useFullTextSearchPreview() {
   }
 
   async function fetchLines(result: FullTextSearchResult, lo: number, count: number): Promise<PreviewLine[]> {
-    const rows = await getLinesPaged(result.bookId, count, lo)
+    const rows = await getLinesPaged(sourceBookOf(result.bookId), count, lo)  // a note previews its source book
     // Word-level link anchors for the fetched window — one batched call, [] on
     // schema-v1 DBs (probe short-circuits inside seforimApi). Best-effort: the
     // preview renders fine without them.
@@ -143,7 +144,7 @@ export function useFullTextSearchPreview() {
     })
     previews.set(result.lineId, st)
     try {
-      const idxRows = await getLineIndexFromLineId(result.lineId)
+      const idxRows = await getLineIndexFromLineId(sourceLineOf(result.lineId))
       st.lineIndex = idxRows[0]?.lineIndex ?? -1
       if (st.lineIndex >= 0) await seedWindow(st, result)
       if (!st.lines.length) {

@@ -58,6 +58,19 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public const int SnippetFlagLeadingEllipsis = 1;
         public const int SnippetFlagTrailingEllipsis = 2;
         public const int SnippetFlagShort = 4;
+
+        // Hit -> source (issue #13): a hit in a virtual notes book (LineId >= 2^30, see
+        // SeforimDb.SeforimDbNoteIds) opens its SOURCE line with the note shown. Derived from
+        // the ids, so not on the wire (the page decodes the same way).
+
+        /// <summary>The hit is a footnote (a line of a virtual notes book).</summary>
+        [IgnoreMember] public bool IsNote => SeforimDb.SeforimDbNoteIds.IsVirtual(LineId);
+        /// <summary>The line to open: the note's source line, else <see cref="LineId"/>.</summary>
+        [IgnoreMember] public int SourceLineId => SeforimDb.SeforimDbNoteIds.SourceLineOf(LineId);
+        /// <summary>The note's index in its source line; -1 for a plain line.</summary>
+        [IgnoreMember] public int NoteIndex => SeforimDb.SeforimDbNoteIds.TryDecodeLine(LineId, out _, out int n) ? n : -1;
+        /// <summary>The book to open: the notes book's source book, else <see cref="BookId"/>.</summary>
+        [IgnoreMember] public int SourceBookId => SeforimDb.SeforimDbNoteIds.SourceBookOf(BookId);
     }
 
     /// <summary>
@@ -73,6 +86,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public string Text { get; set; } = "";
         public string Before { get; set; } = "";
         public string After { get; set; } = "";
+        /// <summary>The line's row could not be decoded: <see cref="Text"/> is empty (issue #13).</summary>
+        public bool Unreadable { get; set; }
     }
 
     /// <summary>
@@ -201,6 +216,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// without a fetch. Per result set, never per hit — hits stay numbers only. See
         /// <see cref="FtsStreamChunk.SnippetTexts"/>.</summary>
         public List<FtsSnippetText> SnippetTexts { get; set; } = new List<FtsSnippetText>();
+        /// <summary>Matched rows the search could not decode (skipped as empty, issue #13): a
+        /// count above 0 means the hits may be incomplete ("N rows unreadable").</summary>
+        public int UnreadableRowCount { get; set; }
+        /// <summary>Their line ids (virtual ids for notes).</summary>
+        public List<int> UnreadableLineIds { get; set; } = new List<int>();
+        /// <summary>The first decode error, naming its line.</summary>
+        public string? UnreadableError { get; set; }
     }
 
     /// <summary>One pushed frame of a streaming search. The final frame has <c>Done</c> true
@@ -231,5 +253,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// stage change is a frame of its own carrying no results; after it, the latest stage
         /// rides on the next results frame.</summary>
         public string? Stage { get; set; }
+        /// <summary>Matched rows first found undecodable in this frame (skipped as empty, issue
+        /// #13); the receiver sums them. The Done frame carries the total in
+        /// <see cref="UnreadableRowCount"/> with the first error.</summary>
+        public List<int> UnreadableLineIds { get; set; } = new List<int>();
+        public int UnreadableRowCount { get; set; }
+        public string? UnreadableError { get; set; }
     }
 }

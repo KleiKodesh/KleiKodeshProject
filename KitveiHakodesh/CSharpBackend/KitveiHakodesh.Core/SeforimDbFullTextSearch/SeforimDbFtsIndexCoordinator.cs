@@ -725,8 +725,9 @@ public sealed class SeforimDbFtsIndexCoordinator
             // it gets exactly the same parallel snippeting, short-snippet flagging and
             // enrichment as the streaming path.
             var terms = new FtsTermTable();
+            var unreadable = new SeforimDbFtsUnreadableRows();
             foreach (var batch in Searcher.SearchInBatches(
-                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms))
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, unreadable: unreadable))
             {
                 result.Results.AddRange(batch.Hits);
                 result.SnippetTexts.AddRange(batch.SnippetTexts);
@@ -735,6 +736,11 @@ public sealed class SeforimDbFtsIndexCoordinator
             if (cap > 0 && result.Results.Count > cap)
                 result.Results.RemoveRange(cap, result.Results.Count - cap);
             result.Terms = terms.All();
+            result.UnreadableRowCount = unreadable.Count;
+            result.UnreadableLineIds = unreadable.LineIds();
+            result.UnreadableError = unreadable.FirstError;
+            if (unreadable.Count > 0)
+                _log(FtsIndexLogLevel.Warning, "FTS search: " + unreadable.Count + " rows unreadable (" + unreadable.FirstError + ")", null);
         }
         catch (Exception ex)
         {
@@ -895,21 +901,24 @@ public sealed class SeforimDbFtsIndexCoordinator
                 // this cannot deadlock.
                 bool resultsSent = false;
                 string? stageSinceLastResults = null;
+                var unreadable = new SeforimDbFtsUnreadableRows();
                 await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, afterPosition,
                     linked.Token,
-                    (built, newTerms, snippetTexts) =>
+                    (built, newTerms, snippetTexts, unreadableIds) =>
                     {
                         resultsSent = true;
                         string? stage = stageSinceLastResults;
                         stageSinceLastResults = null;
-                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, SnippetTexts = snippetTexts, Stage = stage });
+                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, SnippetTexts = snippetTexts, Stage = stage, UnreadableLineIds = unreadableIds });
                     },
                     stage =>
                     {
                         if (resultsSent) stageSinceLastResults = stage;
                         else emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult();
-                    });
-                await emit(new FtsStreamChunk { Done = true });
+                    }, unreadable);
+                if (unreadable.Count > 0)
+                    _log(FtsIndexLogLevel.Warning, "FTS search: " + unreadable.Count + " rows unreadable (" + unreadable.FirstError + ")", null);
+                await emit(new FtsStreamChunk { Done = true, UnreadableRowCount = unreadable.Count, UnreadableError = unreadable.FirstError });
             }
             catch (OperationCanceledException) { /* superseded, reset, or client left */ }
             catch (IOException) { /* client disconnected mid-stream — that IS the cancel signal */ }
@@ -942,8 +951,8 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// enriched batch is handed to <paramref name="onBatch"/> in order.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, long afterPosition,
-        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, Task> onBatch,
-        Action<string>? onStage = null)
+        CancellationToken ct, Func<List<FtsHit>, List<string>, List<FtsSnippetText>, List<int>, Task> onBatch,
+        Action<string>? onStage = null, SeforimDbFtsUnreadableRows? unreadable = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built. Each batch goes out with
@@ -952,9 +961,9 @@ public sealed class SeforimDbFtsIndexCoordinator
         // so the first screen paints without a fetch. Frames past that carry no texts.
         var terms = new FtsTermTable();
         foreach (var batch in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, terms, ct, onStage, afterPosition, unreadable))
         {
-            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts);
+            await onBatch(batch.Hits, terms.TakeNewTerms(), batch.SnippetTexts, batch.UnreadableLineIds);
         }
     }
 

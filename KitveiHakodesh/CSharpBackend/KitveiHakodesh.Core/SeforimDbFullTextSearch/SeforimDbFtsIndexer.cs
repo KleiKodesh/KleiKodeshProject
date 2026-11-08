@@ -67,7 +67,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // one mark, Hebrew letter or mark on both sides) is transparent; other sups still end the word.
         // fts11 (2026-11-01): catalog order (= rowid) counts a book as a base text only by its
         // isBaseBook flag; a book titled like its folder is no longer moved ahead of the subfolders.
-        public const string IndexFormatVersion = "fts11";
+        // fts12 (2026-11-08): footnotes (line_note, schema 7) are indexed as virtual notes books, one
+        // right after each book with notes (ids >= 2^30, SeforimDbNoteIds); a leading U+FEFF is stripped.
+        public const string IndexFormatVersion = "fts12";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

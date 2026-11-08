@@ -378,13 +378,18 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             try
             {
-                return DecodeValue(value);
+                return StripBom(DecodeValue(value));
             }
             catch (SeforimDbContentCodecException exception) when (lineId >= 0)
             {
                 throw new SeforimDbContentCodecException("Line " + lineId + ": " + exception.Message);
             }
         }
+
+        /// <summary>Drops one leading U+FEFF (byte order mark) a row may carry (issue #13), so
+        /// it neither reaches the index nor shifts the offsets the page reads.</summary>
+        private static string? StripBom(string? text)
+            => text != null && text.Length > 0 && text[0] == '\uFEFF' ? text.Substring(1) : text;
 
         private string? DecodeValue(object? value)
         {

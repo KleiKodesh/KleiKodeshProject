@@ -46,11 +46,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly SeforimDbSchema _schema;
         private readonly SeforimDbLineContentCodec _codec;
 
+        /// <summary>The database has a <c>line_note</c> table (Otzaria schema 7): each book with
+        /// footnotes gets a virtual notes book right after it (<see cref="SeforimDbNoteIds"/>,
+        /// issue #13). False = every read is exactly as before.</summary>
+        private readonly bool _hasNotes;
+
         public SeforimDbFtsCorpus(string databasePath)
         {
             _connection = SqliteConnectionFactory.OpenCorpusRead(databasePath);
             _schema = SeforimDbSchema.ForDatabase(_connection, databasePath);
             _codec = SeforimDbLineContentCodec.Create(_connection);
+            _hasNotes = SeforimDbSchema.TableExists(_connection, "line_note");
 
             // Scan tuning on top of the standard corpus-read policy, per connection: an index
             // build reads every line of a multi-gigabyte file in one pass, which earns a bigger
@@ -67,7 +73,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsCountLines;
-            return (long)command.ExecuteScalar()!;
+            long lines = (long)command.ExecuteScalar()!;
+            if (!_hasNotes) return lines;
+            command.CommandText = SeforimDbSqlStrings.FtsCountNotes;
+            return lines + (long)command.ExecuteScalar()!;
         }
 
         public long CountDocumentsUpTo(int upToId)
@@ -80,6 +89,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         public string? GetDocumentText(int id)
         {
+            if (_hasNotes && SeforimDbNoteIds.IsVirtual(id))
+            {
+                foreach (var note in FetchNotes(new[] { id })) return DecodeNote(note.Body, id);
+                return null;
+            }
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsGetLineContent(_schema);
             command.Parameters.AddWithValue("@id", id);
@@ -110,16 +124,38 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public IEnumerable<(int Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default)
         {
+            // The guard, once per build: an id the notes encoding cannot hold fails the build
+            // here, naming it, instead of colliding silently.
+            if (_hasNotes) SeforimDbNoteIds.EnsureRepresentable(_connection);
             var (bookOrder, lineCounts) = BooksInResultOrder();
 
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsReadBookLines(_schema);
             var pBook = command.Parameters.Add("@b", SqliteType.Integer);
             var pSkip = command.Parameters.Add("@skip", SqliteType.Integer);
+            using var notes = _connection.CreateCommand();
+            notes.CommandText = SeforimDbSqlStrings.FtsReadBookNotes;
+            var pNotesBook = notes.Parameters.Add("@b", SqliteType.Integer);
+            var pNotesSkip = notes.Parameters.Add("@skip", SqliteType.Integer);
             foreach (int bookId in bookOrder)
             {
                 long lines = lineCounts[bookId];
                 if (skip >= lines) { skip -= lines; continue; }
+                if (SeforimDbNoteIds.TryDecodeBook(bookId, out int sourceBookId))
+                {
+                    // A notes book: the source book's notes in source order, the body alone.
+                    pNotesBook.Value = sourceBookId;
+                    pNotesSkip.Value = skip;
+                    skip = 0;
+                    using var noteReader = notes.ExecuteReader();
+                    while (noteReader.Read())
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        int id = SeforimDbNoteIds.EncodeLine(noteReader.GetInt32(0), noteReader.GetInt32(1));
+                        yield return (id, DecodeNote(noteReader.IsDBNull(2) ? null : noteReader.GetValue(2), id));
+                    }
+                    continue;
+                }
                 pBook.Value = bookId;
                 pSkip.Value = skip;
                 skip = 0;
@@ -156,7 +192,27 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 if (hasA != hasB) return hasA ? -1 : 1;
                 return hasA ? rankA.CompareTo(rankB) : a.CompareTo(b);
             });
-            return (bookOrder, lineCounts);
+            if (!_hasNotes) return (bookOrder, lineCounts);
+
+            // Each book with notes is followed by its notes book (issue #13).
+            var noteCounts = new Dictionary<int, long>();
+            using (var count = _connection.CreateCommand())
+            {
+                count.CommandText = SeforimDbSqlStrings.FtsNoteCountsByBook;
+                using var r = count.ExecuteReader();
+                while (r.Read()) noteCounts[r.GetInt32(0)] = r.GetInt64(1);
+            }
+            if (noteCounts.Count == 0) return (bookOrder, lineCounts);
+            var withNotes = new List<int>(bookOrder.Count + noteCounts.Count);
+            foreach (int bookId in bookOrder)
+            {
+                withNotes.Add(bookId);
+                if (!noteCounts.TryGetValue(bookId, out long notes)) continue;
+                int notesBook = SeforimDbNoteIds.EncodeBook(bookId);
+                withNotes.Add(notesBook);
+                lineCounts[notesBook] = notes;
+            }
+            return (withNotes, lineCounts);
         }
 
         /// <summary>
@@ -202,11 +258,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
         {
             var chunk = new List<int>(SqliteInListChunkSize);
+            List<int>? noteIds = null;
             using var command = _connection.CreateCommand();
             string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
 
             foreach (int id in ids)
             {
+                if (_hasNotes && SeforimDbNoteIds.IsVirtual(id)) { (noteIds ??= new List<int>()).Add(id); continue; }
                 chunk.Add(id);
                 if (chunk.Count == SqliteInListChunkSize)
                 {
@@ -217,6 +275,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             if (chunk.Count > 0)
                 foreach (var row in FetchTextChunk(command, parameterNames, chunk)) yield return row;
+
+            if (noteIds != null)
+                foreach (var note in FetchNotes(noteIds))
+                    yield return (note.Id, DecodeNoteForSearch(note.Body, note.Id), "");
         }
 
         private IEnumerable<(int Id, string Text, string Title)> FetchTextChunk(
@@ -228,7 +290,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)), "");
+                yield return (reader.GetInt32(0), DecodeForSearch(reader, 1, reader.GetInt32(0)), "");
         }
 
         /// <summary>
@@ -240,6 +302,22 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         {
             var placements = new Dictionary<int, FtsDocumentPlacement>(ids?.Count ?? 0);
             if (ids == null || ids.Count == 0) return placements;
+
+            // A note is placed in its notes book; lineIndex = its source line's.
+            if (_hasNotes)
+            {
+                List<int>? noteIds = null, realIds = null;
+                foreach (int id in ids)
+                    if (SeforimDbNoteIds.IsVirtual(id)) (noteIds ??= new List<int>()).Add(id);
+                    else (realIds ??= new List<int>()).Add(id);
+                if (noteIds != null)
+                {
+                    foreach (var note in FetchNotes(noteIds))
+                        placements[note.Id] = new FtsDocumentPlacement(SeforimDbNoteIds.EncodeBook(note.BookId), note.LineIndex);
+                    ids = realIds ?? (IReadOnlyList<int>)Array.Empty<int>();
+                    if (ids.Count == 0) return placements;
+                }
+            }
 
             using var command = _connection.CreateCommand();
             string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
@@ -267,6 +345,22 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public long? PositionOfLine(int lineId, Dictionary<int, (long First, long Count)> books)
         {
+            if (SeforimDbNoteIds.TryDecodeLine(lineId, out int sourceLineId, out int noteIndex))
+            {
+                foreach (var note in FetchNotes(new[] { lineId }))
+                {
+                    if (!books.TryGetValue(SeforimDbNoteIds.EncodeBook(note.BookId), out var notesBook)) return null;
+                    using var rankCommand = _connection.CreateCommand();
+                    rankCommand.CommandText = SeforimDbSqlStrings.FtsNoteRankInBook;
+                    rankCommand.Parameters.AddWithValue("@b", note.BookId);
+                    rankCommand.Parameters.AddWithValue("@li", note.LineIndex);
+                    rankCommand.Parameters.AddWithValue("@id", sourceLineId);
+                    rankCommand.Parameters.AddWithValue("@ni", noteIndex);
+                    long noteRank = (long)rankCommand.ExecuteScalar()!;
+                    return noteRank < notesBook.Count ? notesBook.First + noteRank : null;
+                }
+                return null;
+            }
             var placement = FetchPlacements(new[] { lineId });
             if (!placement.TryGetValue(lineId, out var at) || !books.TryGetValue(at.BookId, out var book)) return null;
             using var command = _connection.CreateCommand();
@@ -285,12 +379,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids)
         {
             var chunk = new List<int>(SqliteInListChunkSize);
+            List<int>? noteIds = null;
 
             using var command = _connection.CreateCommand();
             string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
 
             foreach (int id in ids)
             {
+                if (_hasNotes && SeforimDbNoteIds.IsVirtual(id)) { (noteIds ??= new List<int>()).Add(id); continue; }
                 chunk.Add(id);
                 if (chunk.Count == SqliteInListChunkSize)
                 {
@@ -301,6 +397,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             if (chunk.Count > 0)
                 foreach (var row in FetchPlacedChunk(command, parameterNames, chunk)) yield return row;
+
+            if (noteIds != null)
+                foreach (var note in FetchNotes(noteIds))
+                    yield return (note.Id, DecodeNoteForSearch(note.Body, note.Id),
+                                  new FtsDocumentPlacement(SeforimDbNoteIds.EncodeBook(note.BookId), note.LineIndex));
         }
 
         private IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedChunk(
@@ -316,7 +417,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 var placement = new FtsDocumentPlacement(
                     bookId: reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
                     lineIndex: reader.IsDBNull(3) ? 0 : reader.GetInt32(3));
-                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1, reader.GetInt32(0)), placement);
+                yield return (reader.GetInt32(0), DecodeForSearch(reader, 1, reader.GetInt32(0)), placement);
             }
         }
 
@@ -341,6 +442,22 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             var shortIds = new List<int>(shortSet);
 
             var texts = new Dictionary<int, string>(plain.Count + shortIds.Count);
+            var unreadable = new HashSet<int>();
+
+            // A note's snippet is its text alone: no neighbour context (issue #13).
+            List<int>? noteIds = null;
+            if (_hasNotes)
+            {
+                foreach (int id in plain) if (SeforimDbNoteIds.IsVirtual(id)) (noteIds ??= new List<int>()).Add(id);
+                foreach (int id in shortIds) if (SeforimDbNoteIds.IsVirtual(id)) (noteIds ??= new List<int>()).Add(id);
+                if (noteIds != null)
+                {
+                    plain.RemoveAll(SeforimDbNoteIds.IsVirtual);
+                    shortIds.RemoveAll(SeforimDbNoteIds.IsVirtual);
+                    foreach (var note in FetchNotes(noteIds))
+                        texts[note.Id] = DecodeNoteForSearch(note.Body, note.Id, unreadable);
+                }
+            }
             var before = new Dictionary<int, SortedList<int, string>>();
             var after = new Dictionary<int, SortedList<int, string>>();
 
@@ -364,7 +481,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 {
                     int id = reader.GetInt32(0);
                     int delta = reader.GetInt32(1);
-                    string text = _codec.DecodeColumnOrEmpty(reader, 2, id);
+                    // A neighbour that cannot be read is context only: it is left out, and
+                    // only the matched line itself is reported unreadable.
+                    string text = delta == 0
+                        ? DecodeForSearch(reader, 2, id, unreadable, alwaysLenient: true)
+                        : DecodeForSearch(reader, 2, -1, null, alwaysLenient: true);
                     if (delta == 0) { texts[id] = text; continue; }
                     if (text.Length == 0) continue;   // empty neighbours are skipped, not joined
                     var side = delta < 0 ? before : after;
@@ -382,6 +503,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     Text = entry.Value,
                     Before = before.TryGetValue(entry.Key, out var b) ? string.Join(" ", b.Values) : "",
                     After = after.TryGetValue(entry.Key, out var a) ? string.Join(" ", a.Values) : "",
+                    Unreadable = unreadable.Contains(entry.Key),
                 });
             }
             return result;
@@ -462,6 +584,89 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     texts.Add(part.Text);
                 }
                 joined = string.Join(" ", texts);
+            }
+        }
+
+        /// <summary>
+        /// The notes behind the given virtual line ids, with their source placement (book id,
+        /// lineIndex) and RAW body; the caller decodes. A note with no row (or no line row) is
+        /// absent. One statement per chunk of distinct source lines.
+        /// </summary>
+        private IEnumerable<(int Id, object? Body, int BookId, int LineIndex)> FetchNotes(IEnumerable<int> virtualIds)
+        {
+            if (!_hasNotes) yield break;
+            var wanted = new HashSet<int>();
+            var sourceLines = new List<int>();
+            var seenLines = new HashSet<int>();
+            foreach (int id in virtualIds)
+            {
+                if (!SeforimDbNoteIds.TryDecodeLine(id, out int lineId, out _) || !wanted.Add(id)) continue;
+                if (seenLines.Add(lineId)) sourceLines.Add(lineId);
+            }
+            for (int start = 0; start < sourceLines.Count; start += SqliteInListChunkSize)
+            {
+                int count = Math.Min(SqliteInListChunkSize, sourceLines.Count - start);
+                using var command = _connection.CreateCommand();
+                command.CommandText = SeforimDbSqlStrings.FtsFetchNotes(count);
+                for (int i = 0; i < count; i++) command.Parameters.AddWithValue("@p" + i, sourceLines[start + i]);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    int lineId = reader.GetInt32(0), noteIndex = reader.GetInt32(1);
+                    if (lineId < 0 || lineId > SeforimDbNoteIds.MaxSourceLineId || noteIndex < 0 || noteIndex > SeforimDbNoteIds.MaxNoteIndex) continue;
+                    int id = SeforimDbNoteIds.EncodeLine(lineId, noteIndex);
+                    if (!wanted.Contains(id)) continue;
+                    yield return (id, reader.IsDBNull(2) ? null : reader.GetValue(2),
+                                  reader.IsDBNull(3) ? 0 : reader.GetInt32(3), reader.IsDBNull(4) ? 0 : reader.GetInt32(4));
+                }
+            }
+        }
+
+        /// <summary>A note body, strict (the index build): an undecodable body throws an error
+        /// naming the note and its line.</summary>
+        private string DecodeNote(object? body, int virtualId)
+        {
+            try { return _codec.Decode(body) ?? string.Empty; }
+            catch (SeforimDbContentCodecException exception)
+            {
+                SeforimDbNoteIds.TryDecodeLine(virtualId, out int lineId, out int noteIndex);
+                throw new SeforimDbContentCodecException("Note " + noteIndex + " of line " + lineId + ": " + exception.Message);
+            }
+        }
+
+        /// <summary>
+        /// A line's text on the SEARCH path. Inside a search's
+        /// <see cref="SeforimDbFtsUnreadableRows"/> scope (or with <paramref name="alwaysLenient"/>)
+        /// an undecodable row reads as empty and is recorded with its id (in the scope and in
+        /// <paramref name="unreadable"/>); otherwise it throws, naming the line (issue #8).
+        /// </summary>
+        private string DecodeForSearch(SqliteDataReader reader, int ordinal, int lineId,
+                                       HashSet<int>? unreadable = null, bool alwaysLenient = false)
+        {
+            try { return _codec.DecodeColumnOrEmpty(reader, ordinal, lineId); }
+            catch (SeforimDbContentCodecException exception)
+                when (alwaysLenient || SeforimDbFtsUnreadableRows.Current != null)
+            {
+                if (lineId >= 0)
+                {
+                    SeforimDbFtsUnreadableRows.Current?.Add(lineId, exception.Message);
+                    unreadable?.Add(lineId);
+                }
+                return string.Empty;
+            }
+        }
+
+        /// <summary>DecodeForSearch for a note body. Snippet texts (<paramref name="unreadable"/>
+        /// given) are always lenient.</summary>
+        private string DecodeNoteForSearch(object? body, int virtualId, HashSet<int>? unreadable = null)
+        {
+            try { return DecodeNote(body, virtualId); }
+            catch (SeforimDbContentCodecException exception)
+                when (unreadable != null || SeforimDbFtsUnreadableRows.Current != null)
+            {
+                SeforimDbFtsUnreadableRows.Current?.Add(virtualId, exception.Message);
+                unreadable?.Add(virtualId);
+                return string.Empty;
             }
         }
 
