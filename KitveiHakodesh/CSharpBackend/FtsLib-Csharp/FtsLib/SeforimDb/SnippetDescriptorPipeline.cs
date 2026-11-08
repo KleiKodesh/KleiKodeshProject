@@ -95,12 +95,13 @@ namespace FtsLib.SeforimDb
             bool                requireOrdered     = false,
             int                 originalGroupCount = 0,
             int                 contextWords       = DefaultContextWords,
-            int                 maxWordDistance    = int.MaxValue)
+            int                 maxWordDistance    = int.MaxValue,
+            SnippetMatchMode    matchMode          = SnippetMatchMode.BestWindow)
         {
             if (string.IsNullOrEmpty(content) || prepared == null || prepared.IsEmpty)
                 return SnippetDescriptor.NoMatch;
 
-            var descriptor = GetLocator(contextWords).Locate(content, prepared, requireOrdered, originalGroupCount, maxWordDistance);
+            var descriptor = GetLocator(contextWords).Locate(content, prepared, requireOrdered, originalGroupCount, maxWordDistance, matchMode);
             ReleaseLocatorIfOversized(content);
             return descriptor;
         }
@@ -118,5 +119,33 @@ namespace FtsLib.SeforimDb
             return descriptor;
         }
 
+        /// <summary>
+        /// Find in an open text (issues #14 / #23): each word is normalized by the line
+        /// tokenizer (its words, in order, each its own group; quotes removed with
+        /// <paramref name="ignoreQuotes"/>), then <see cref="SnippetWindowLocator.FindAllMatches"/>
+        /// runs over the text. A copy of the (start, length, ordinal) triples.
+        /// </summary>
+        internal static int[] FindAllMatches(string text, IReadOnlyList<string> words, bool phrase, bool ignoreQuotes)
+        {
+            if (string.IsNullOrEmpty(text) || words == null) return System.Array.Empty<int>();
+            var terms = new List<string>();
+            var stream = new TokenStream();
+            foreach (var w in words)
+            {
+                if (string.IsNullOrEmpty(w)) continue;
+                foreach (var t in stream.Tokenize(w))
+                {
+                    var norm = t.Normalized;
+                    if (ignoreQuotes) norm = norm.Replace("\"", "").Replace("'", "");
+                    if (norm.Length > 0) terms.Add(norm);
+                }
+            }
+            if (terms.Count == 0) return System.Array.Empty<int>();
+            var marks = GetLocator(DefaultContextWords).FindAllMatches(text, PreparedQueryGroups.FromLiteralTerms(terms), phrase, ignoreQuotes);
+            var copy = new int[marks.Count];
+            for (int i = 0; i < copy.Length; i++) copy[i] = marks[i];
+            ReleaseLocatorIfOversized(text);
+            return copy;
+        }
     }
 }

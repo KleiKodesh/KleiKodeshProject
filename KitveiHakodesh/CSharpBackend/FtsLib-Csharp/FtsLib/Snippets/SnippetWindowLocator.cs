@@ -59,7 +59,8 @@ namespace FtsLib.Snippets
             PreparedQueryGroups prepared,
             bool                requireOrdered     = false,
             int                 originalGroupCount = 0,
-            int                 maxWordDistance    = int.MaxValue)
+            int                 maxWordDistance    = int.MaxValue,
+            SnippetMatchMode    matchMode          = SnippetMatchMode.BestWindow)
         {
             if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
                 return SnippetDescriptor.NoMatch;
@@ -105,6 +106,17 @@ namespace FtsLib.Snippets
 
             bool isMatch = !ordered || orderedFound;
 
+            // All matches (issues #14 / #23): a passing line returns the whole text and every
+            // query-term token in it; the pass decision, score and distance stay the best
+            // window's.
+            if (matchMode == SnippetMatchMode.AllMatches && isMatch)
+            {
+                CollectMarkRanges(tokens, prepared, 0, rawHtml.Length, -1);
+                return new SnippetDescriptor(true, score, wordDist, tokens.Count, 0, rawHtml.Length,
+                    leadingEllipsis: false, trailingEllipsis: false,
+                    markRanges: _markRanges, terms: prepared);
+            }
+
             return new SnippetDescriptor(isMatch, score, wordDist, windowWords, snapStart, snapEnd,
                 leadingEllipsis: snapStart > 0, trailingEllipsis: snapEnd < rawHtml.Length,
                 markRanges: _markRanges, terms: prepared);
@@ -129,6 +141,104 @@ namespace FtsLib.Snippets
             int                                        originalGroupCount = 0)
             => Locate(rawHtml, PreparedQueryGroups.FromGroups(queryGroups),
                       requireOrdered, originalGroupCount);
+
+        /// <summary>
+        /// Every occurrence of <paramref name="prepared"/>'s terms in <paramref name="rawHtml"/>
+        /// (find in an open text, no index, issues #14 / #23), as flat (start, length, term
+        /// ordinal) triples, document order, UTF-16 offsets; the same word rules as
+        /// <see cref="Locate(string, PreparedQueryGroups, bool, int, int, SnippetMatchMode)"/>.
+        /// <paramref name="phrase"/>: only tokens of a run of consecutive positions holding
+        /// groups 0, 1, ... in order (repeated and overlapping runs all count; a token is
+        /// listed once, with its first run's ordinal); else every term token.
+        /// <paramref name="ignoreQuotes"/>: a token is looked up with its quotes removed (the
+        /// prepared terms must then be quote-free too). The view is valid until the next call.
+        /// </summary>
+        public IReadOnlyList<int> FindAllMatches(string rawHtml, PreparedQueryGroups prepared,
+                                                 bool phrase = false, bool ignoreQuotes = false)
+        {
+            _markRanges.Clear();
+            if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
+                return _markRanges;
+            var tokens = _tokenStream.Tokenize(rawHtml);
+            int n = tokens.Count;
+            if (_allOrdinals.Length < n)
+            {
+                _allOrdinals = new int[System.Math.Max(n, _allOrdinals.Length * 2)];
+                _allGroups   = new int[_allOrdinals.Length][];
+            }
+            for (int t = 0; t < n; t++)
+            {
+                bool found = LookupTerm(tokens[t].NormSpan, prepared, ignoreQuotes, out var term);
+                _allOrdinals[t] = found ? term.Ordinal : -1;
+                _allGroups[t]   = found ? term.Groups : null;
+            }
+            int k = prepared.GroupCount;
+            if (!phrase || k <= 1)
+            {
+                for (int t = 0; t < n; t++)
+                    if (_allOrdinals[t] >= 0) AddMark(tokens[t], _allOrdinals[t]);
+                return _markRanges;
+            }
+            // Phrase: a run starts at token t when group g sits at position p + g for every g.
+            // Tokens of one position (a paired reading) are all candidates for it.
+            if (_markMask.Length < n) _markMask = new bool[System.Math.Max(n, _markMask.Length * 2)];
+            System.Array.Clear(_markMask, 0, n);
+            for (int t = 0; t < n; t++)
+            {
+                if (_allOrdinals[t] < 0 || System.Array.IndexOf(_allGroups[t], 0) < 0) continue;
+                int p = tokens[t].Position;
+                int u = t; // first token at or after the current position
+                bool ok = true;
+                for (int g = 1; g < k && ok; g++)
+                {
+                    while (u < n && tokens[u].Position < p + g) u++;
+                    int v = u;
+                    while (v < n && tokens[v].Position == p + g
+                           && (_allOrdinals[v] < 0 || System.Array.IndexOf(_allGroups[v], g) < 0)) v++;
+                    ok = v < n && tokens[v].Position == p + g;
+                }
+                if (!ok) continue;
+                _markMask[t] = true;
+                u = t;
+                for (int g = 1; g < k; g++)
+                {
+                    while (u < n && tokens[u].Position < p + g) u++;
+                    while (u < n && tokens[u].Position == p + g
+                           && (_allOrdinals[u] < 0 || System.Array.IndexOf(_allGroups[u], g) < 0)) u++;
+                    _markMask[u] = true;
+                }
+            }
+            for (int t = 0; t < n; t++)
+                if (_markMask[t]) AddMark(tokens[t], _allOrdinals[t]);
+            return _markRanges;
+        }
+
+        private int[]   _allOrdinals = new int[32];
+        private int[][] _allGroups   = new int[32][];
+        private char[] _unquoted    = new char[64];
+
+        private bool LookupTerm(System.ReadOnlySpan<char> norm, PreparedQueryGroups prepared, bool ignoreQuotes,
+                                out PreparedQueryGroups.PreparedTerm term)
+        {
+            term = default;
+            if (ignoreQuotes && (System.MemoryExtensions.IndexOf(norm, '"') >= 0 || System.MemoryExtensions.IndexOf(norm, '\'') >= 0))
+            {
+                if (_unquoted.Length < norm.Length) _unquoted = new char[norm.Length * 2];
+                int len = 0;
+                foreach (char c in norm)
+                    if (c != '"' && c != '\'')_unquoted[len++] = c;
+                if (len == 0) return false;
+                norm = new System.ReadOnlySpan<char>(_unquoted, 0, len);
+            }
+            return prepared.TryGetTerm(norm, out term);
+        }
+
+        private void AddMark(TextToken tok, int ordinal)
+        {
+            _markRanges.Add(tok.RawStart);
+            _markRanges.Add(tok.RawEnd - tok.RawStart);
+            _markRanges.Add(ordinal);
+        }
 
         // ── Window finding ────────────────────────────────────────────
         // Returns (iLeft, iRight, score) — token indices, not raw positions.
