@@ -11,6 +11,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
+import { useLineNotesTooltip } from '@/features/book-view/lines/useLineNotes'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import type { PreviewState } from './useFullTextSearchPreview'
@@ -140,6 +141,22 @@ const {
 })
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
+
+// Inline notes (footnotes): hover preview of a marker's note, as in the book view.
+const {
+  lineNoteTooltip,
+  closeLineNoteTooltip,
+  keepLineNoteTooltipOpen,
+  releaseLineNoteTooltip,
+  beginLineNoteTooltipSelection,
+} = useLineNotesTooltip(
+  boxEl,
+  (marker) => {
+    const row = marker.closest<HTMLElement>('[data-line-id]')
+    return row ? { row, lineId: Number(row.dataset.lineId) } : null
+  },
+  (lineId) => props.state.lines.find((line) => line.id === lineId)?.notes ?? [],
+)
 </script>
 
 <template>
@@ -153,6 +170,15 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
       @select-start="beginWordLinkTooltipSelection"
       @close="closeWordLinkTooltip"
     />
+    <WordLinkTooltip
+      v-if="lineNoteTooltip"
+      :key="`line-note-${lineNoteTooltip.id}`"
+      :data="lineNoteTooltip"
+      @pointer-enter="keepLineNoteTooltipOpen"
+      @pointer-leave="releaseLineNoteTooltip"
+      @select-start="beginLineNoteTooltipSelection"
+      @close="closeLineNoteTooltip"
+    />
     <BookViewAbbrevTooltip
       v-if="abbrevTooltip"
       :key="abbrevTooltip.id"
@@ -164,6 +190,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
       v-for="line in state.lines"
       :key="line.id"
       class="preview-line"
+      :data-line-id="line.id"
       :class="{ matched: line.lineIndex === state.lineIndex }"
       :data-matched="line.lineIndex === state.lineIndex ? '' : undefined"
       :style="teamimFontStyle(line.html)"
@@ -173,6 +200,20 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 </template>
 
 <style scoped>
+/* Inline notes (book-view/lines/lineNotes.ts) - same look as the book view. */
+.preview-line :deep(sup.footnote-marker),
+.preview-line :deep(.line-note-marker) {
+  color: var(--accent-color);
+  cursor: pointer;
+}
+.preview-line :deep(.line-note-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+}
+.preview-line :deep(.line-note-marker)::before {
+  content: '*';
+}
 .preview-box {
   position: relative; /* line offsetTop must be box-relative for the seed scroll */
   height: calc(var(--line-height, 1.5) * 4.5em);

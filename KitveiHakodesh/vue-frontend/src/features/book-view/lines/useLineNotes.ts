@@ -5,13 +5,22 @@
  * fires ONE batched query for the line ids not yet requested. On DBs without line_note
  * the seforimApi layer short-circuits to [] after the first probe, so this is a no-op there.
  */
-import { onScopeDispose, ref, watch } from 'vue'
+import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { getLineNotesForLines } from '@/webview-host/seforimApi'
 import type { LineNote } from '@/webview-host/queries.types'
+import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useLinkPreviewTooltip } from './useWordLinkTooltip'
+import { LINE_NOTE_SELECTOR, notesForMarker } from './lineNotes'
 
 const EMPTY: LineNote[] = []
 
-export function useLineNotes(getVisibleLineIds: () => number[]) {
+/**
+ * Two wiring modes, like useWordLinkAnchors: pass `getVisibleLineIds` and loading is
+ * watch-driven (lines view); omit it and call `scheduleLineNotesLoad` from the view's
+ * virtualizer watcher (commentary view).
+ */
+export function useLineNotes(getVisibleLineIds?: () => number[]) {
   const notesByLine = ref<Map<number, LineNote[]>>(new Map())
   // Line ids already sent to (or in flight toward) the DB - each is queried once.
   const requested = new Set<number>()
@@ -22,13 +31,15 @@ export function useLineNotes(getVisibleLineIds: () => number[]) {
     debounceTimer = null
   })
 
+  let latest: number[] = []
   function scheduleLoad(lineIds: number[]) {
+    latest = lineIds
     if (!lineIds.some((id) => id > 0 && !requested.has(id))) return
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = null
-      // Re-read the window: it may have moved during the debounce.
-      const pending = getVisibleLineIds().filter((id) => id > 0 && !requested.has(id))
+      // The latest window: it may have moved during the debounce.
+      const pending = latest.filter((id) => id > 0 && !requested.has(id))
       if (!pending.length) return
       for (const id of pending) {
         requested.add(id)
@@ -60,7 +71,7 @@ export function useLineNotes(getVisibleLineIds: () => number[]) {
     }
   }
 
-  watch(getVisibleLineIds, (ids) => scheduleLoad(ids), { immediate: true })
+  if (getVisibleLineIds) watch(getVisibleLineIds, (ids) => scheduleLoad(ids), { immediate: true })
 
   function getLineNotesForLine(lineId: number): LineNote[] {
     return notesByLine.value.get(lineId) ?? EMPTY
@@ -77,5 +88,44 @@ export function useLineNotes(getVisibleLineIds: () => number[]) {
     if (next) notesByLine.value = next
   }
 
-  return { getLineNotesForLine, evictLineNotesForLines }
+  return { getLineNotesForLine, evictLineNotesForLines, scheduleLineNotesLoad: scheduleLoad }
+}
+
+/**
+ * Hover preview of inline notes, shared by every view that renders seforim.db lines:
+ * hovering a footnote marker of the text, or the end-of-line marker of notes without
+ * one, shows the note in the link-preview panel (selectable, scrollable, stays open while
+ * the pointer is inside). `rowOf` names the rendered line a marker sits in and its id; the
+ * marker's ordinal in that line picks the note (lineNotes.ts). A click only previews.
+ */
+export function useLineNotesTooltip(
+  scrollerEl: Ref<HTMLElement | null>,
+  rowOf: (marker: Element) => { row: Element; lineId: number } | null,
+  getLineNotesForLine: (lineId: number) => LineNote[],
+) {
+  const settingsStore = useSettingsStore()
+  const {
+    linkPreview: lineNoteTooltip,
+    closeLinkPreview: closeLineNoteTooltip,
+    keepOpen: keepLineNoteTooltipOpen,
+    releaseOpen: releaseLineNoteTooltip,
+    beginSelection: beginLineNoteTooltipSelection,
+  } = useLinkPreviewTooltip(scrollerEl, {
+    selector: LINE_NOTE_SELECTOR,
+    linkKey: (marker) => {
+      const at = rowOf(marker)
+      return at ? `${at.lineId}:${[...at.row.querySelectorAll(LINE_NOTE_SELECTOR)].indexOf(marker)}` : null
+    },
+    preview: async (marker) => {
+      const at = rowOf(marker)
+      const notes = at ? notesForMarker(marker, at.row, getLineNotesForLine(at.lineId)) : []
+      if (!notes.length) return null
+      const html = notes
+        .map((note) => `<div class="line-note-body">${cleanHebrewText(note.body, settingsStore.cleanTextFlags)}</div>`)
+        .join('')
+      return { bookTitle: '', tocPath: '', html }
+    },
+    activate: () => {},
+  })
+  return { lineNoteTooltip, closeLineNoteTooltip, keepLineNoteTooltipOpen, releaseLineNoteTooltip, beginLineNoteTooltipSelection }
 }

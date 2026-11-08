@@ -55,7 +55,7 @@ import type {
 import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 import type { Highlight } from './lines/useBookViewHighlights'
 import type { Note } from './lines/useBookViewNotes'
-import type { WordLinkAnchor } from '@/webview-host/queries.types'
+import type { LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -193,6 +193,7 @@ export function useBookView(
     getHighlightsForLine: (_lineId: number): Highlight[] => [],
     getNotesForLine: (_lineId: number): Note[] => [],
     getWordLinkAnchorsForLine: (_lineId: number): WordLinkAnchor[] => [],
+    getLineNotesForLine: (_lineId: number): LineNote[] => [],
   }
 
   // ── Line selection ────────────────────────────────────────────────────────
@@ -238,6 +239,7 @@ export function useBookView(
     getHighlightsForLine: (lineId: number) => annotationFns.getHighlightsForLine(lineId),
     getNotesForLine: (lineId: number) => annotationFns.getNotesForLine(lineId),
     getWordLinkAnchorsForLine: (lineId: number) => annotationFns.getWordLinkAnchorsForLine(lineId),
+    getLineNotesForLine: (lineId: number) => annotationFns.getLineNotesForLine(lineId),
   }
 
   const panels = Object.fromEntries(
@@ -408,6 +410,7 @@ export function useBookView(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
+    getLineNotesForLine: getCommentaryLineNotesForLine, scheduleLineNotesLoad,
     prepareForLines: prepareCommentaryExportData,
     prepareForRenderedHtml: prepareCommentaryExportTargets,
     resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
@@ -423,6 +426,7 @@ export function useBookView(
   annotationFns.getHighlightsForLine = getHighlightsForLine
   annotationFns.getNotesForLine = getNotesForLine
   annotationFns.getWordLinkAnchorsForLine = getWordLinkAnchorsForLine
+  annotationFns.getLineNotesForLine = getCommentaryLineNotesForLine
 
   // ── Search panel ──────────────────────────────────────────────────────────
 
@@ -792,6 +796,7 @@ export function useBookView(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     scheduleWordLinkAnchorsLoad,
+    getCommentaryLineNotesForLine, scheduleLineNotesLoad,
     prepareCommentaryExportData, prepareCommentaryExportTargets, resolveCommentaryWordLinkTarget,
     commentaryTocPaths,
     // export

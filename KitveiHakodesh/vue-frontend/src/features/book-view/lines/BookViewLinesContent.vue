@@ -34,10 +34,8 @@ import BookViewNoteBubble from './BookViewNoteBubble.vue'
 import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import WordLinkTooltip from './WordLinkTooltip.vue'
-import { useLinkPreviewTooltip, useWordLinkTooltip } from './useWordLinkTooltip'
-import { useLineNotes } from './useLineNotes'
-import { LINE_NOTE_SELECTOR, notesForMarker } from './lineNotes'
-import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { useWordLinkTooltip } from './useWordLinkTooltip'
+import { useLineNotes, useLineNotesTooltip } from './useLineNotes'
 import { useNoteTooltip } from './useNoteTooltip'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
@@ -378,38 +376,21 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 // replaces the native title tooltip the marker used to have.
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
-// Inline notes (footnotes): hovering a footnote marker of the text, or the end-of-line
-// marker of notes without one, previews the note in the link-preview panel (selectable,
-// scrollable, stays open while the pointer is inside). The marker's line and ordinal pick
-// the note (see lineNotes.ts). A click does nothing beyond the preview.
-function lineNotesHtmlForMarker(marker: Element): string | null {
-  const row = marker.closest<HTMLElement>('[data-index]')
-  if (!row) return null
-  const lineId = props.lines.idAt(Number(row.dataset.index))
-  const notes = notesForMarker(marker, row, getLineNotesForLine(lineId))
-  if (!notes.length) return null
-  return notes.map((note) => `<div class="line-note-body">${cleanHebrewText(note.body, cleanTextFlags.value)}</div>`).join('')
-}
+// Inline notes (footnotes): hover preview of a marker's note (useLineNotesTooltip).
 const {
-  linkPreview: lineNoteTooltip,
-  closeLinkPreview: closeLineNoteTooltip,
-  keepOpen: keepLineNoteTooltipOpen,
-  releaseOpen: releaseLineNoteTooltip,
-  beginSelection: beginLineNoteTooltipSelection,
-} = useLinkPreviewTooltip(scrollerEl, {
-  selector: LINE_NOTE_SELECTOR,
-  linkKey: (element) => {
-    const row = element.closest<HTMLElement>('[data-index]')
-    if (!row) return null
-    const index = [...row.querySelectorAll(LINE_NOTE_SELECTOR)].indexOf(element)
-    return `${row.dataset.index}:${index}`
+  lineNoteTooltip,
+  closeLineNoteTooltip,
+  keepLineNoteTooltipOpen,
+  releaseLineNoteTooltip,
+  beginLineNoteTooltipSelection,
+} = useLineNotesTooltip(
+  scrollerEl,
+  (marker) => {
+    const row = marker.closest<HTMLElement>('[data-index]')
+    return row ? { row, lineId: props.lines.idAt(Number(row.dataset.index)) } : null
   },
-  preview: async (element) => {
-    const html = lineNotesHtmlForMarker(element)
-    return html == null ? null : { bookTitle: '', tocPath: '', html }
-  },
-  activate: () => {},
-})
+  getLineNotesForLine,
+)
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.
