@@ -18,6 +18,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
 import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
 import { WORD_OPTIONS } from './queryWordSyntax'
@@ -78,6 +79,7 @@ const {
   hasSearched,
   executedQuery,
   searchError,
+  unreadableRowCount,
   maxWordDistance,
   requireOrdered,
   allWords,
@@ -648,6 +650,14 @@ onBeforeUnmount(() => {
             {{ $t('fullTextSearch.results') }}
           </span>
         </div>
+        <!-- Rows the search could not decode were skipped (issue #13): say so, the results may be incomplete. -->
+        <MessageBanner
+          v-if="unreadableRowCount > 0"
+          class="unreadable-banner"
+          severity="warning"
+          :message="$t('fullTextSearch.error.unreadableRows', { count: unreadableRowCount.toLocaleString() })"
+          @dismiss="unreadableRowCount = 0"
+        />
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
@@ -691,6 +701,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.unreadable-banner {
+  flex: none;
+  margin: 4px 8px;
+}
 .search-stage-row {
   /* Text sits at the left edge (the row is RTL, so `end` = left). */
   text-align: end;

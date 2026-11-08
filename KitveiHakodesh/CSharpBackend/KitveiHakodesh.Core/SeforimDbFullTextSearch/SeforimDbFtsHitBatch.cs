@@ -21,6 +21,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public List<FtsSnippetText> SnippetTexts { get; }
 
         /// <summary>Matched rows of this batch that could not be decoded (issue #13).</summary>
-        public List<int> UnreadableLineIds { get; set; } = new List<int>();
+        public List<long> UnreadableLineIds { get; set; } = new List<long>();
     }
 }

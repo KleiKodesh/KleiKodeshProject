@@ -214,6 +214,13 @@ const {
 .preview-line :deep(.line-note-marker)::before {
   content: '*';
 }
+/* A footnote hit's note text, under its source line (useFullTextSearchPreview). */
+.preview-line :deep(.preview-note) {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 0.92em;
+}
 .preview-box {
   position: relative; /* line offsetTop must be box-relative for the seed scroll */
   height: calc(var(--line-height, 1.5) * 4.5em);

@@ -110,6 +110,7 @@ export function useLineNotesTooltip(
     keepOpen: keepLineNoteTooltipOpen,
     releaseOpen: releaseLineNoteTooltip,
     beginSelection: beginLineNoteTooltipSelection,
+    openLinkPreview: openLineNoteTooltip,
   } = useLinkPreviewTooltip(scrollerEl, {
     selector: LINE_NOTE_SELECTOR,
     linkKey: (marker) => {
@@ -127,5 +128,5 @@ export function useLineNotesTooltip(
     },
     activate: () => {},
   })
-  return { lineNoteTooltip, closeLineNoteTooltip, keepLineNoteTooltipOpen, releaseLineNoteTooltip, beginLineNoteTooltipSelection }
+  return { lineNoteTooltip, closeLineNoteTooltip, keepLineNoteTooltipOpen, releaseLineNoteTooltip, beginLineNoteTooltipSelection, openLineNoteTooltip }
 }

@@ -18,6 +18,6 @@ namespace FtsLib
         /// Every document in result order, skipping the first <paramref name="skip"/>. Streamed;
         /// each document exactly once.
         /// </summary>
-        IEnumerable<(int Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default);
+        IEnumerable<(long Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default);
     }
 }

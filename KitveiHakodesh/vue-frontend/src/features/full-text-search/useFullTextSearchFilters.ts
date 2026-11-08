@@ -8,7 +8,7 @@ import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf } from './fullTextSearchReferences'
-import { sourceBookOf, sourceLineOf } from './noteIds'
+import { noteIndexOf, sourceBookOf, sourceLineOf } from './noteIds'
 import type { CategoryNode } from '../book-catalog/bookCatalogTree'
 
 // ── Query parsing ─────────────────────────────────────────────────────────────
@@ -284,6 +284,7 @@ export function useFullTextSearchFilters(
         route: '/book-view',
         bookId,
         openTocLineIndex: lineIndex,
+        openNoteIndex: noteIndexOf(result.lineId) ?? undefined,  // a footnote hit pops its note open
         searchHighlightLineIndex: lineIndex,
         searchHighlightQuery: executedQuery(),
         searchHighlightSnippet: snippetHtmlOf(result) ?? '',  // the clicked row is rendered, so built

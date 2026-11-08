@@ -8,13 +8,13 @@ namespace FtsLib
     /// </summary>
     public readonly struct FtsDocumentPlacement
     {
-        public FtsDocumentPlacement(int bookId, int lineIndex)
+        public FtsDocumentPlacement(long bookId, int lineIndex)
         {
             BookId = bookId;
             LineIndex = lineIndex;
         }
 
-        public int BookId { get; }
+        public long BookId { get; }
         public int LineIndex { get; }
     }
 
@@ -31,6 +31,6 @@ namespace FtsLib
         /// <see cref="IFtsCorpus.FetchDocuments"/> with each document's placement: same
         /// contract (ascending id order, ids with no document skipped, streamed).
         /// </summary>
-        IEnumerable<(int Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<int> ids);
+        IEnumerable<(long Id, string Text, FtsDocumentPlacement Placement)> FetchPlacedDocuments(IEnumerable<long> ids);
     }
 }

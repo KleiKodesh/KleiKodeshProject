@@ -47,10 +47,10 @@ namespace FtsLib
         /// <summary>How many documents have an id at or below <paramref name="upToId"/>. This is
         /// what turns a resume point — the highest id already indexed — into "documents done so
         /// far", so a resumed build reports honest progress instead of restarting at zero.</summary>
-        long CountDocumentsUpTo(int upToId);
+        long CountDocumentsUpTo(long upToId);
 
         /// <summary>One document's text, or null when there is no such id.</summary>
-        string GetDocumentText(int id);
+        string GetDocumentText(long id);
 
         /// <summary>
         /// Every document, ascending by id, for a build from scratch.
@@ -60,7 +60,7 @@ namespace FtsLib
         /// depends on.
         /// </summary>
         /// <param name="limit">Stop after this many. 0 means no limit.</param>
-        IEnumerable<(int Id, string Text)> ReadDocuments(int limit, CancellationToken ct = default);
+        IEnumerable<(long Id, string Text)> ReadDocuments(int limit, CancellationToken ct = default);
 
         /// <summary>
         /// Documents after <paramref name="afterId"/>, ascending, for RESUMING a build. The
@@ -68,7 +68,7 @@ namespace FtsLib
         /// exactly what is left — the id itself is never handed out twice.
         /// </summary>
         /// <param name="limit">Stop after this many. 0 means no limit.</param>
-        IEnumerable<(int Id, string Text)> ReadDocumentsAfter(int afterId, int limit = 0, CancellationToken ct = default);
+        IEnumerable<(long Id, string Text)> ReadDocumentsAfter(long afterId, int limit = 0, CancellationToken ct = default);
 
         /// <summary>
         /// Text and display title for a set of ids, for turning search hits into results.
@@ -83,7 +83,7 @@ namespace FtsLib
         /// An id with no document is skipped rather than yielded empty; a caller comparing counts
         /// should not assume one result per id.
         /// </summary>
-        IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids);
+        IEnumerable<(long Id, string Text, string Title)> FetchDocuments(IEnumerable<long> ids);
 
         /// <summary>
         /// The text immediately before and after each of <paramref name="ids"/>, up to
@@ -94,6 +94,6 @@ namespace FtsLib
         /// read a match in. Ids with no neighbours are absent from the result rather than
         /// present with empty strings.
         /// </summary>
-        IDictionary<int, (string Previous, string Next)> FetchNeighbourText(IReadOnlyList<int> ids, int radius);
+        IDictionary<long, (string Previous, string Next)> FetchNeighbourText(IReadOnlyList<long> ids, int radius);
     }
 }

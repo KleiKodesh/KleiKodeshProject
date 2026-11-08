@@ -85,9 +85,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// (<see cref="SeforimDbFtsCorpus.PositionOfLine"/>). Null when the line cannot be placed
         /// (gone from the library, or a book this index does not hold): the caller then starts over.
         /// </summary>
-        public long? PositionOfLine(int lineId)
+        public long? PositionOfLine(long lineId)
         {
-            Dictionary<int, (long First, long Count)> books;
+            Dictionary<long, (long First, long Count)> books;
             lock (_lock)
             {
                 if (_bookPositions == null)
@@ -115,7 +115,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         // Each book's block of index positions — read once per engine (one index build), as
         // it takes a pass over the whole line table. Dropped with the engine on Invalidate.
-        private Dictionary<int, (long First, long Count)>? _bookPositions;
+        private Dictionary<long, (long First, long Count)>? _bookPositions;
 
         /// <summary>
         /// The lines inside the given (book, first lineIndex, last lineIndex) ranges whose
@@ -125,10 +125,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// too common): the caller reads the lines itself. A book the index does not hold
         /// contributes nothing.
         /// </summary>
-        public List<(int BookId, int LineIndex, int LineId)>? SubstringCandidates(
+        public List<(int BookId, int LineIndex, long LineId)>? SubstringCandidates(
             string query, IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> lineRanges, CancellationToken ct = default)
         {
-            Dictionary<int, (long First, long Count)> books;
+            Dictionary<long, (long First, long Count)> books;
             lock (_lock)
             {
                 if (_bookPositions == null)
@@ -160,7 +160,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
                 wanted[bookId].Add((first, last));
             }
-            if (spans.Count == 0) return new List<(int, int, int)>();
+            if (spans.Count == 0) return new List<(int, int, long)>();
             var ranges = new List<(long First, long Last)>(spans.Count);
             var owners = new List<(int BookId, long First, List<(long First, long Last)> Wanted)>(spans.Count);
             foreach (var (bookId, span) in spans)
@@ -172,7 +172,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
             var found = Index.FindSubstringCandidates(query, ranges, MaxTermsPerSubstringFragment, ct);
             if (found == null) return null;
-            var result = new List<(int, int, int)>(found.Count);
+            var result = new List<(int, int, long)>(found.Count);
             foreach (var (range, position, lineId) in found)
             {
                 var owner = owners[range];
@@ -212,7 +212,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// resuming never rescans the library just to size a progress bar; it is 0 when nothing
         /// has been built yet.
         /// </summary>
-        public void GetResumeState(out int lineId, out long totalLines, out long resumeOffset)
+        public void GetResumeState(out long lineId, out long totalLines, out long resumeOffset)
             => Index.GetResumeState(out lineId, out totalLines, out resumeOffset);
 
         /// <summary>

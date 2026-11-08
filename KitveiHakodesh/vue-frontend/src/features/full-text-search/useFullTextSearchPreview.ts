@@ -19,7 +19,7 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
-import { sourceBookOf, sourceLineOf } from './noteIds'
+import { decodeNoteLine, isNoteId, sourceBookOf, sourceLineOf } from './noteIds'
 import { snippetHtmlOf } from './fullTextSearchSnippets'
 
 export interface PreviewLine {
@@ -73,11 +73,20 @@ export function useFullTextSearchPreview() {
     // preview renders fine without them.
     const ids = rows.map((row) => row.id)
     const [anchorsByLine, notesByLine] = await Promise.all([fetchAnchors(ids), fetchNotes(ids)])
+    // A footnote hit (issue #13): its source line carries the note's text under it, with the
+    // matched words marked - the words the search found are in the note, not the line.
+    const hitNote = decodeNoteLine(result.lineId)
+    const snippet = snippetHtmlOf(result) ?? ''
     return rows.map((row) => {
       const notes = notesByLine.get(row.id) ?? []
-      const html = highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), snippetHtmlOf(result) ?? '')
+      const html = highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), snippet)
       // The end-of-line marker of notes without one goes on last: it holds no text.
-      return { id: row.id, lineIndex: row.lineIndex, html: appendUnmarkedNotesMarker(html, notes), notes }
+      let lineHtml = appendUnmarkedNotesMarker(html, notes)
+      if (hitNote && row.id === hitNote.sourceLineId) {
+        const body = notes.find((note) => note.noteIndex === hitNote.noteIndex)?.body
+        if (body != null) lineHtml += `<div class="preview-note">${highlightFromSnippet(body, snippet)}</div>`
+      }
+      return { id: row.id, lineIndex: row.lineIndex, html: lineHtml, notes }
     })
   }
 
@@ -149,8 +158,9 @@ export function useFullTextSearchPreview() {
       if (st.lineIndex >= 0) await seedWindow(st, result)
       if (!st.lines.length) {
         // Line not reachable through the line table (e.g. custom books) — fall
-        // back to a fixed single-line window over the full matched line.
-        const contents = await getLineContents([result.lineId])
+        // back to a fixed single-line window over the full matched line. A note hit has
+        // no line row of its own: its snippet stands in.
+        const contents = isNoteId(result.lineId) ? [] : await getLineContents([result.lineId])
         const content = contents[0]?.content
         const anchorsByLine = content != null ? await fetchAnchors([result.lineId]) : new Map<number, WordLinkAnchor[]>()
         st.lines = [{
@@ -159,6 +169,7 @@ export function useFullTextSearchPreview() {
           html: content != null
             ? highlightFromSnippet(spliceAnchors(content, anchorsByLine.get(result.lineId)), snippetHtmlOf(result) ?? '')
             : snippetHtmlOf(result) ?? '',
+          notes: [],
         }]
         st.atStart = true
         st.atEnd = true

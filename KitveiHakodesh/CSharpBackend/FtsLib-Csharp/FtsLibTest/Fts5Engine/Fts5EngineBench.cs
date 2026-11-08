@@ -39,7 +39,7 @@ namespace FtsLibTest.Fts5Engine
                 string dbPath = args[2], dir = args[3];
                 int limit = args.Length > 4 ? int.Parse(args[4]) : 0;
                 var index = new Fts5SeforimIndex(dir, () => new ZayitDb(dbPath));
-                index.GetResumeState(out int lastId, out _, out long offset);
+                index.GetResumeState(out long lastId, out _, out long offset);
                 Console.WriteLine($"START resume after line {lastId} ({offset} lines done)");
                 index.BuildIndex(limit, n => { if ((offset + n) % 50_000 == 0) Console.WriteLine($"lines {offset + n}"); },
                                  onMergeProgress: (d, e) => Console.WriteLine($"final phase {d}/{e}"));
@@ -84,7 +84,7 @@ namespace FtsLibTest.Fts5Engine
                         }
                         catch (OperationCanceledException) { Console.WriteLine($"  [{clock.Elapsed.TotalSeconds,5:F1}s] build INTERRUPTED after {commits} commits"); }
                     }
-                    index.GetResumeState(out int lastId, out _, out long offset);
+                    index.GetResumeState(out long lastId, out _, out long offset);
                     Console.WriteLine($"  [{clock.Elapsed.TotalSeconds,5:F1}s] resuming after line {lastId:N0} ({offset:N0} lines already done)");
                     index.BuildIndex(limit, n => done = offset + n, () => commits++);
                 }

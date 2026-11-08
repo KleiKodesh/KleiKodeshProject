@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect } from 'vitest'
-import { appendUnmarkedNotesMarker, lineNotesSig, notesForMarker } from './lineNotes'
+import { appendUnmarkedNotesMarker, lineNotesSig, markerForNote, notesForMarker } from './lineNotes'
 import type { LineNote } from '@/webview-host/queries.types'
 
 const note = (noteIndex: number, hasMarker: boolean, body = `body${noteIndex}`): LineNote => ({
@@ -54,5 +54,14 @@ describe('lineNotes', () => {
   it('signature changes when notes arrive', () => {
     expect(lineNotesSig([])).toBe('')
     expect(lineNotesSig([note(0, true)])).not.toBe('')
+  })
+  it('finds the marker of a note (inverse of notesForMarker)', () => {
+    const line = row('ab<sup class="footnote-marker">1</sup>cd<sup class="footnote-marker">2</sup><sup class="line-note-marker"></sup>')
+    const notes = [note(0, true), note(1, false), note(2, true)]
+    const markers = line.querySelectorAll('sup.footnote-marker')
+    expect(markerForNote(line, notes, 0)).toBe(markers[0])
+    expect(markerForNote(line, notes, 2)).toBe(markers[1])
+    expect(markerForNote(line, notes, 1)).toBe(line.querySelector('sup.line-note-marker'))
+    expect(markerForNote(line, notes, 7)).toBeNull()
   })
 })

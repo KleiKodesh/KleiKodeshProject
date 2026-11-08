@@ -16,8 +16,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class FtsHit
     {
-        public int LineId { get; set; }
-        public int BookId { get; set; }
+        public long LineId { get; set; }
+        public long BookId { get; set; }
 
         public int Score { get; set; }
 
@@ -59,18 +59,18 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public const int SnippetFlagTrailingEllipsis = 2;
         public const int SnippetFlagShort = 4;
 
-        // Hit -> source (issue #13): a hit in a virtual notes book (LineId >= 2^30, see
+        // Hit -> source (issue #13): a hit in a virtual notes book (LineId >= 2^52, see
         // SeforimDb.SeforimDbNoteIds) opens its SOURCE line with the note shown. Derived from
         // the ids, so not on the wire (the page decodes the same way).
 
         /// <summary>The hit is a footnote (a line of a virtual notes book).</summary>
         [IgnoreMember] public bool IsNote => SeforimDb.SeforimDbNoteIds.IsVirtual(LineId);
         /// <summary>The line to open: the note's source line, else <see cref="LineId"/>.</summary>
-        [IgnoreMember] public int SourceLineId => SeforimDb.SeforimDbNoteIds.SourceLineOf(LineId);
+        [IgnoreMember] public long SourceLineId => SeforimDb.SeforimDbNoteIds.SourceLineOf(LineId);
         /// <summary>The note's index in its source line; -1 for a plain line.</summary>
         [IgnoreMember] public int NoteIndex => SeforimDb.SeforimDbNoteIds.TryDecodeLine(LineId, out _, out int n) ? n : -1;
         /// <summary>The book to open: the notes book's source book, else <see cref="BookId"/>.</summary>
-        [IgnoreMember] public int SourceBookId => SeforimDb.SeforimDbNoteIds.SourceBookOf(BookId);
+        [IgnoreMember] public long SourceBookId => SeforimDb.SeforimDbNoteIds.SourceBookOf(BookId);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class FtsSnippetText
     {
-        public int LineId { get; set; }
+        public long LineId { get; set; }
         public string Text { get; set; } = "";
         public string Before { get; set; } = "";
         public string After { get; set; } = "";
@@ -191,7 +191,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public int[] BookIds { get; set; } = System.Array.Empty<int>();
         public int[] LineIndexes { get; set; } = System.Array.Empty<int>();
         /// <summary>The same lines' ids — to fetch their text by.</summary>
-        public int[] LineIds { get; set; } = System.Array.Empty<int>();
+        public long[] LineIds { get; set; } = System.Array.Empty<long>();
     }
 
     /// <summary>One (book, first lineIndex, last lineIndex) range of a scoped substring search, inclusive.</summary>
@@ -220,7 +220,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// count above 0 means the hits may be incomplete ("N rows unreadable").</summary>
         public int UnreadableRowCount { get; set; }
         /// <summary>Their line ids (virtual ids for notes).</summary>
-        public List<int> UnreadableLineIds { get; set; } = new List<int>();
+        public List<long> UnreadableLineIds { get; set; } = new List<long>();
         /// <summary>The first decode error, naming its line.</summary>
         public string? UnreadableError { get; set; }
     }
@@ -256,7 +256,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <summary>Matched rows first found undecodable in this frame (skipped as empty, issue
         /// #13); the receiver sums them. The Done frame carries the total in
         /// <see cref="UnreadableRowCount"/> with the first error.</summary>
-        public List<int> UnreadableLineIds { get; set; } = new List<int>();
+        public List<long> UnreadableLineIds { get; set; } = new List<long>();
         public int UnreadableRowCount { get; set; }
         public string? UnreadableError { get; set; }
     }

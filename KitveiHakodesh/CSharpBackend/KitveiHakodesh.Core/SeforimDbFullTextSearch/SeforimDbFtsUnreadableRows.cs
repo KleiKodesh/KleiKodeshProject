@@ -20,8 +20,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         [ThreadStatic] private static SeforimDbFtsUnreadableRows? t_current;
 
         private readonly object _lock = new object();
-        private readonly List<int> _lineIds = new List<int>();
-        private readonly HashSet<int> _seen = new HashSet<int>();
+        private readonly List<long> _lineIds = new List<long>();
+        private readonly HashSet<long> _seen = new HashSet<long>();
         private int _taken;
 
         /// <summary>The scope of the current thread; null = strict reads.</summary>
@@ -34,10 +34,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public string? FirstError { get; private set; }
 
         /// <summary>Every unreadable line id so far (virtual ids for notes), in first-seen order.</summary>
-        public List<int> LineIds() { lock (_lock) return new List<int>(_lineIds); }
+        public List<long> LineIds() { lock (_lock) return new List<long>(_lineIds); }
 
         /// <summary>The ids recorded since the previous call.</summary>
-        public List<int> TakeNew()
+        public List<long> TakeNew()
         {
             lock (_lock)
             {
@@ -47,7 +47,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
-        internal void Add(int lineId, string message)
+        internal void Add(long lineId, string message)
         {
             lock (_lock)
             {

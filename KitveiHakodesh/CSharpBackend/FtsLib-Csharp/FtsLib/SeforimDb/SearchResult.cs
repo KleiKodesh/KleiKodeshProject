@@ -7,7 +7,7 @@ namespace FtsLib.SeforimDb
     public sealed class SearchResult
     {
         /// <summary>The line ID in the seforim database.</summary>
-        public int LineId { get; }
+        public long LineId { get; }
 
         /// <summary>Title of the book this line belongs to.</summary>
         public string BookTitle { get; }
@@ -45,7 +45,7 @@ namespace FtsLib.SeforimDb
         /// </summary>
         public FtsDocumentPlacement Placement { get; }
 
-        public SearchResult(int lineId, string bookTitle, string content,
+        public SearchResult(long lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
             int originalGroupCount = 0)
@@ -60,7 +60,7 @@ namespace FtsLib.SeforimDb
                 : MatchedGroups.Count;
         }
 
-        internal SearchResult(int lineId, string bookTitle, string content,
+        internal SearchResult(long lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
             int originalGroupCount,
@@ -70,7 +70,7 @@ namespace FtsLib.SeforimDb
             Prepared = prepared;
         }
 
-        internal SearchResult(int lineId, string bookTitle, string content,
+        internal SearchResult(long lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
             int originalGroupCount,

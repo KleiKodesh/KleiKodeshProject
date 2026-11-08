@@ -122,6 +122,9 @@ export function useBookView(
   const searchHighlightQuery = paneNavigation.activeTab.searchHighlightQuery ?? ''
   const searchHighlightSnippet = paneNavigation.activeTab.searchHighlightSnippet
   const searchHighlightTerms = paneNavigation.activeTab.searchHighlightTerms
+  const openNoteIndex = paneNavigation.activeTab.openNoteIndex
+  // One-shot: a later remount of this tab must not pop the note open again.
+  if (openNoteIndex != null) paneNavigation.updateActiveTab({ openNoteIndex: undefined })
 
   // A deep-link open (flashOpenLine) sets openTocLineIndex without openTocEntryId, so
   // include it in the clear gate — otherwise the flash flag would survive a remount.
@@ -765,6 +768,7 @@ export function useBookView(
     toolbarVisible: computed(() => bookViewStore.getToolbarVisible(paneId)),
     // tab data
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+    openNoteIndex,
     // book metadata
     bookHasTeamim,
     // alternate versions (empty for most books — the toolbar control hides)
