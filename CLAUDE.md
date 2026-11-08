@@ -28,3 +28,16 @@ User-facing-he: <Hebrew: save a bookmark at the exact place in the text (Ctrl+Sh
 - Reproduced by their own repos, cloned as gitignored sibling folders when needed:
   KleiKodesh/KitveiHakodeshDictionary (public) and KleiKodesh/SearchExpansion (private).
   Their builds write straight over the copies here. See the README.md next to each DB.
+
+# Files live beside the app - never anywhere else (VITAL)
+
+There is a portable app, so the app never writes a file outside its own folder: every index,
+cache, download, snapshot, log and temp file goes in a subfolder beside the app.
+
+- Never use %LocalAppData%, %AppData%, %TEMP% (`Path.GetTempPath`), Documents, `SpecialFolder`
+  or any fixed path for app files. Resolve every location through
+  `KitveiHakodesh.Core.Common.AppFileLocator`.
+- Before adding any new storage, grep for those calls and check where the file will land in the
+  installed app, the portable app and dev.
+- Registry settings and file associations are not files and are outside this rule; ask before
+  changing them.
