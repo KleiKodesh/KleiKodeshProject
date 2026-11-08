@@ -40,6 +40,14 @@ namespace KitveiHakodesh.Core.Common
                 "KleiKodesh");
 
         /// <summary>
+        /// THE APP ROOT: the one folder everything the app writes lives under (subfolders only;
+        /// the app never saves outside it). The folder that holds KitveiHakodeshService\ - the
+        /// same answer for the host, the service, installed, portable and dev. The full rule,
+        /// with KHS_APP_ROOT as the explicit override, is on <see cref="AppRootFolder"/>.
+        /// </summary>
+        public static string AppRoot => AppRootFolder.Path;
+
+        /// <summary>
         /// The folder that holds the data kept "beside the exe" (FtsIndex, CatalogTocIndex,
         /// hb-cache, convert-cache, updates, Dictionary, HebrewBooks, SearchExpansion,
         /// filesystemindex ...). Normally AppContext.BaseDirectory — the installed service

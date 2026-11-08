@@ -4,18 +4,19 @@ using KitveiHakodesh.Core.Common;
 namespace KitveiHakodesh.Core.SeforimLibraryDownload
 {
     /// <summary>
-    /// Where a library the app downloads itself lives: %LocalAppData%\KleiKodesh\books.
+    /// Where a library the app downloads itself lives: AppRoot\books
+    /// (<see cref="AppFileLocator.AppRoot"/>), so the host and the service see the same file.
     ///
     /// This is the THIRD default database location, after Otzaria's and Zayit's — see
-    /// <see cref="Settings.SeforimDbPathResolver.DefaultLocations"/>. It sits under the
-    /// installer's per-user root, so it needs no elevation and goes away with a full uninstall.
+    /// <see cref="Settings.SeforimDbPathResolver.DefaultLocations"/>. It sits inside the
+    /// app's own folder, so a portable copy carries it and an uninstall takes it away.
     ///
     /// Every in-flight file sits beside the database, on the same drive, so promoting the
     /// finished file is a rename, never a 4 GB copy.
     /// </summary>
     public static class SeforimLibraryDownloadLocations
     {
-        public static string Folder => Path.Combine(AppFileLocator.UserInstallRoot, "books");
+        public static string Folder => Path.Combine(AppFileLocator.AppRoot, AppRootFolder.Books);
 
         /// <summary>The finished database.</summary>
         public static string DatabasePath => Path.Combine(Folder, "seforim.db");

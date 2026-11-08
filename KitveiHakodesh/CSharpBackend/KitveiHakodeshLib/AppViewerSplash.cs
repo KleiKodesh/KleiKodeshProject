@@ -21,10 +21,13 @@ namespace KitveiHakodeshLib
         private readonly bool _snapshotSplash;
 
         // The page as it looked when the window last closed, shown in place of the logo
-        // splash. Under LocalAppData, not the exe's KitveiHakodesh\ folder: the dev build
-        // mirrors the Vue dist over that folder and deletes anything extra.
+        // splash. In the app root's page-snapshots\ folder (the app never writes outside its
+        // folder), not the exe's KitveiHakodesh\ folder: the dev build mirrors the Vue dist over
+        // that folder and deletes anything extra. The hosted test rig's profile folder still wins.
         private string SnapshotPath => Path.Combine(
-            HostTestMode.KleiKodeshLocalFolder, _webCacheFolder + "-snapshot.png");
+            HostTestMode.ProfileDir ?? KitveiHakodesh.Core.Common.AppRootFolder.Subfolder(
+                KitveiHakodesh.Core.Common.AppRootFolder.PageSnapshots),
+            _webCacheFolder + "-snapshot.png");
 
         private void _InitSplash()
         {
