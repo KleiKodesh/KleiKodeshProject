@@ -238,7 +238,11 @@ namespace FtsLib.Search
             int tildePos = raw.LastIndexOf('~');
             if (tildePos >= 0)
             {
+                // a closing quote after the suffix ("a b~1") is punctuation
                 string suffix = raw.Substring(tildePos + 1);
+                int quotes = suffix.Length;
+                while (quotes > 0 && HebrewChars.IsQuote(suffix[quotes - 1])) quotes--;
+                suffix = suffix.Substring(0, quotes);
                 if (suffix.Length == 0 || (suffix.Length == 1 && suffix[0] >= '1' && suffix[0] <= '9'))
                 {
                     isFuzzy = true;
