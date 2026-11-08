@@ -111,7 +111,13 @@ namespace FtsLib.Snippets
             // window's.
             if (matchMode == SnippetMatchMode.AllMatches && isMatch)
             {
-                CollectMarkRanges(tokens, prepared, 0, rawHtml.Length, -1);
+                // every full occurrence in the text, by the best window's own rule (issue #4)
+                int last = tokens.Count - 1;
+                bool maskedAll = orderedFound
+                    ? OrderedOccurrenceMarks(tokens, prepared, 0, last, iLeft, iRight, maxSpan)
+                    : maxWordDistance != int.MaxValue
+                      && OccurrenceMarks(tokens, prepared, 0, last, iLeft, iRight, maxSpan);
+                CollectMarkRanges(tokens, prepared, 0, rawHtml.Length, maskedAll ? 0 : -1);
                 return new SnippetDescriptor(true, score, wordDist, tokens.Count, 0, rawHtml.Length,
                     leadingEllipsis: false, trailingEllipsis: false,
                     markRanges: _markRanges, terms: prepared);
@@ -151,10 +157,14 @@ namespace FtsLib.Snippets
         /// groups 0, 1, ... in order (repeated and overlapping runs all count; a token is
         /// listed once, with its first run's ordinal); else every term token.
         /// <paramref name="ignoreQuotes"/>: a token is looked up with its quotes removed (the
-        /// prepared terms must then be quote-free too). The view is valid until the next call.
+        /// prepared terms must then be quote-free too). <paramref name="forms"/> (by term ordinal,
+        /// null = any): the surface forms (<see cref="SurfaceForm"/>) a token of that term must
+        /// have, as written or without its quotes (unless <paramref name="ignoreQuotes"/>); with
+        /// <paramref name="keepMarks"/> they carry marks. The view is valid until the next call.
         /// </summary>
         public IReadOnlyList<int> FindAllMatches(string rawHtml, PreparedQueryGroups prepared,
-                                                 bool phrase = false, bool ignoreQuotes = false)
+                                                 bool phrase = false, bool ignoreQuotes = false,
+                                                 HashSet<string>[] forms = null, bool keepMarks = false)
         {
             _markRanges.Clear();
             if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
@@ -169,6 +179,12 @@ namespace FtsLib.Snippets
             for (int t = 0; t < n; t++)
             {
                 bool found = LookupTerm(tokens[t].NormSpan, prepared, ignoreQuotes, out var term);
+                if (found && forms != null && term.Ordinal < forms.Length && forms[term.Ordinal] != null)
+                {
+                    var set = forms[term.Ordinal];
+                    string f = SurfaceForm.Of(rawHtml, tokens[t].RawStart, tokens[t].RawEnd, !ignoreQuotes, keepMarks);
+                    found = set.Contains(f) || (!ignoreQuotes && set.Contains(SurfaceForm.WithoutQuotes(f)));
+                }
                 _allOrdinals[t] = found ? term.Ordinal : -1;
                 _allGroups[t]   = found ? term.Groups : null;
             }

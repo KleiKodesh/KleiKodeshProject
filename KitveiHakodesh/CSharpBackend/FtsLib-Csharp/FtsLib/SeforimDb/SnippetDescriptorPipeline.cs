@@ -123,12 +123,17 @@ namespace FtsLib.SeforimDb
         /// Find in an open text (issues #14 / #23): each word is normalized by the line
         /// tokenizer (its words, in order, each its own group; quotes removed with
         /// <paramref name="ignoreQuotes"/>), then <see cref="SnippetWindowLocator.FindAllMatches"/>
-        /// runs over the text. A copy of the (start, length, ordinal) triples.
+        /// runs over the text. A copy of the (start, length, ordinal) triples. Quotes as the
+        /// Rust engine's walks read them (its terms keep quotes): a word typed with a quote
+        /// needs it (unless <paramref name="ignoreQuotes"/>), a quote-free word finds a quoted
+        /// token. <paramref name="matchMarks"/>: nikud / te'amim must match as typed.
         /// </summary>
-        internal static int[] FindAllMatches(string text, IReadOnlyList<string> words, bool phrase, bool ignoreQuotes)
+        internal static int[] FindAllMatches(string text, IReadOnlyList<string> words, bool phrase, bool ignoreQuotes,
+                                             bool matchMarks = false)
         {
             if (string.IsNullOrEmpty(text) || words == null) return System.Array.Empty<int>();
             var terms = new List<string>();
+            var wordForms = new List<string>(); // per term: its surface form, null = any
             var stream = new TokenStream();
             foreach (var w in words)
             {
@@ -136,12 +141,27 @@ namespace FtsLib.SeforimDb
                 foreach (var t in stream.Tokenize(w))
                 {
                     var norm = t.Normalized;
-                    if (ignoreQuotes) norm = norm.Replace("\"", "").Replace("'", "");
-                    if (norm.Length > 0) terms.Add(norm);
+                    if (norm.Length == 0) continue;
+                    terms.Add(norm);
+                    string form = SurfaceForm.Of(w, t.RawStart, t.RawEnd, !ignoreQuotes, matchMarks);
+                    bool constrains = matchMarks || form != SurfaceForm.WithoutQuotes(form);
+                    wordForms.Add(constrains ? form : null);
                 }
             }
             if (terms.Count == 0) return System.Array.Empty<int>();
-            var marks = GetLocator(DefaultContextWords).FindAllMatches(text, PreparedQueryGroups.FromLiteralTerms(terms), phrase, ignoreQuotes);
+            var prepared = PreparedQueryGroups.FromLiteralTerms(terms);
+            // per ordinal: the forms its words allow (null when one of them allows any)
+            var forms = new HashSet<string>[prepared.TermCount];
+            var free = new bool[prepared.TermCount];
+            for (int i = 0; i < terms.Count; i++)
+            {
+                if (!prepared.TryGetTerm(terms[i].AsSpan(), out var entry)) continue;
+                int o = entry.Ordinal;
+                if (wordForms[i] == null) free[o] = true;
+                else (forms[o] ??= new HashSet<string>(System.StringComparer.Ordinal)).Add(wordForms[i]);
+            }
+            for (int o = 0; o < forms.Length; o++) if (free[o]) forms[o] = null;
+            var marks = GetLocator(DefaultContextWords).FindAllMatches(text, prepared, phrase, ignoreQuotes, forms, matchMarks);
             var copy = new int[marks.Count];
             for (int i = 0; i < copy.Length; i++) copy[i] = marks[i];
             ReleaseLocatorIfOversized(text);
