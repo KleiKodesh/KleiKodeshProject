@@ -52,8 +52,10 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// v2: name_words / folder_words / name_shape_dv / path_sort_dv / date_dv (Lucene-side
         /// ordering and a doc-values window).
         /// v3: alias_terms (extra search terms: the Hebrew names of Torat Emet files, see ToratEmetNames).
+        /// v4: no new fields - more skipped folders (browser storage, dev caches); the re-crawl drops
+        /// what the older index still held from them.
         /// </summary>
-        internal const string IndexFormatVersion = "3";
+        internal const string IndexFormatVersion = "4";
         // No "_" in the name: Lucene.Net's writer deletes, as a stale index file, any file whose
         // name CONTAINS "_x.y" (its codec-file pattern is not anchored) - "index_format.txt" went.
         private const string IndexFormatFileName = "format-version.txt";
@@ -113,6 +115,15 @@ namespace KitveiHakodesh.Core.LocalFiles
 
         /// <summary>True while a live USN delta or a periodic rescan is writing the index.</summary>
         public bool IsWriting => Volatile.Read(ref _backgroundWrites) > 0;
+
+        // True while Build runs: searches keep the snapshot from before the build (see Build).
+        private volatile bool _searchViewFrozen;
+
+        /// <summary>Refreshes the search view to the latest writes, unless a build is running.</summary>
+        private void RefreshSearchView()
+        {
+            if (!_searchViewFrozen) _searcherManager.MaybeRefresh();
+        }
 
         // Drives indexed WITHOUT a live USN watcher (volume handle refused — not elevated).
         // Guarded by the _liveThreads lock, which already serialises live-update state.
@@ -196,6 +207,18 @@ namespace KitveiHakodesh.Core.LocalFiles
         public void Build(Action<string> progress = null, CancellationToken ct = default,
                           Action<string> fullCrawlReason = null,
                           Action<int> progressPercent = null)
+        {
+            // The build runs in the background while searches go on: they keep reading the
+            // snapshot the index had when Build started (a drive rebuild deletes then re-adds,
+            // so a mid-build refresh would show it half empty). Build's own blocking refresh at
+            // the end swaps every search to the finished index at once.
+            _searchViewFrozen = true;
+            try { BuildCore(progress, ct, fullCrawlReason, progressPercent); }
+            finally { _searchViewFrozen = false; }
+        }
+
+        private void BuildCore(Action<string> progress, CancellationToken ct,
+                               Action<string> fullCrawlReason, Action<int> progressPercent)
         {
             // Test seam (hosted rig): index only this folder tree, never the drives; no live updates then.
             string onlyFolder = TestIndexFolder;
@@ -359,7 +382,18 @@ namespace KitveiHakodesh.Core.LocalFiles
             // ── Rebuild threshold ─────────────────────────────────────────────────
             // If the delta is large relative to the index size, a full MFT rebuild
             // is cheaper than resolving and applying thousands of individual changes.
-            int totalDelta   = deleted.Count + upserted.Count;
+            // Counts the work the update really does, not raw journal records: each file once
+            // (the same file created, renamed and deleted is one change), folder creations not at
+            // all (they are not applied), and folder deletions only outside the skipped folders
+            // (nothing under a skipped folder is indexed). Raw records from browser caches and
+            // temp-file churn used to push a normal day of use over the threshold.
+            var distinctChanges = new HashSet<ulong>();
+            foreach (var rec in upserted)
+                if (!rec.IsDirectory) distinctChanges.Add(rec.Frn);
+            foreach (var rec in deleted)
+                if (!rec.IsDirectory || !LocalFileIndexMftCrawler.IsSkippedDirectoryName(rec.Name))
+                    distinctChanges.Add(rec.Frn);
+            int totalDelta   = distinctChanges.Count;
             int currentCount = Count();
             if (currentCount > 0 &&
                 totalDelta > currentCount * RebuildThresholdFraction)
@@ -375,6 +409,8 @@ namespace KitveiHakodesh.Core.LocalFiles
 
             foreach (var rec in deleted)
             {
+                if (rec.IsDirectory && LocalFileIndexMftCrawler.IsSkippedDirectoryName(rec.Name))
+                    continue;   // nothing under a skipped folder is indexed
                 if (rec.IsDirectory)
                     RemoveByPathPrefix(char.ToLower(driveLetter) + ":", rec.Name);
                 else
@@ -712,7 +748,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                     Occur.MUST);
             }
 
-            _searcherManager.MaybeRefresh();
+            RefreshSearchView();
             var searcher = _searcherManager.Acquire();
             try
             {
@@ -796,7 +832,7 @@ namespace KitveiHakodesh.Core.LocalFiles
             foreach (var folder in folders) prefixes.Add(FolderPrefix(folder));
             int cap = limit > 0 && limit < MaterializeCap ? limit : MaterializeCap;
 
-            _searcherManager.MaybeRefresh();
+            RefreshSearchView();
             var searcher = _searcherManager.Acquire();
             try
             {
@@ -1137,7 +1173,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// <summary>Returns the number of documents currently in the index.</summary>
         public int Count()
         {
-            _searcherManager.MaybeRefresh();
+            RefreshSearchView();
             var searcher = _searcherManager.Acquire();
             try   { return searcher.IndexReader.NumDocs; }
             finally { _searcherManager.Release(searcher); }
@@ -1704,6 +1740,8 @@ namespace KitveiHakodesh.Core.LocalFiles
 
             foreach (var rec in deleted)
             {
+                if (rec.IsDirectory && LocalFileIndexMftCrawler.IsSkippedDirectoryName(rec.Name))
+                    continue;   // nothing under a skipped folder is indexed
                 if (rec.IsDirectory)
                     RemoveByPathPrefix(char.ToLower(driveLetter) + ":", rec.Name);
                 else
