@@ -116,6 +116,17 @@ namespace KitveiHakodesh.Core.Settings
         public static void SetTurnOffUpdates(bool turnedOff) =>
             Set(AppKleiKodesh, "UpdateChecker", "TurnOffUpdates", turnedOff ? "True" : "False");
 
+        // ── Automatic update of the library this app downloaded ───────────────────────
+
+        /// <summary>True when the user has turned OFF automatic updates of the downloaded library.</summary>
+        public static bool GetTurnOffLibraryUpdates() => string.Equals(
+            Get(AppKitveiHakodesh, "Database", "TurnOffLibraryUpdates", "False"),
+            "True",
+            StringComparison.OrdinalIgnoreCase);
+
+        public static void SetTurnOffLibraryUpdates(bool turnedOff) =>
+            Set(AppKitveiHakodesh, "Database", "TurnOffLibraryUpdates", turnedOff ? "True" : "False");
+
         // ── Window state ──────────────────────────────────────────────────────────────
 
         public static bool GetMainWindowMaximized() =>

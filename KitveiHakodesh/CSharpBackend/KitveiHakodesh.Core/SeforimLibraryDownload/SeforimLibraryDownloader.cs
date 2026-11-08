@@ -151,12 +151,22 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// has passed since the last check. A no-op otherwise, and while another run is going.</summary>
         public Task UpdateIfDueAsync(CancellationToken hostStopping)
         {
+            if (AppSettingsRegistry.GetTurnOffLibraryUpdates()) return Task.CompletedTask;
+            if (!IsOwnLibraryInUse) return Task.CompletedTask;
             string ours = SeforimLibraryDownloadLocations.DatabasePath;
-            string? inUse = SeforimDbPathResolver.Resolve().Path;
-            if (inUse == null || !string.Equals(Path.GetFullPath(inUse), ours, StringComparison.OrdinalIgnoreCase)) return Task.CompletedTask;
             if (SeforimLibraryStagedDatabase.Exists) return Task.CompletedTask; // a newer one is already waiting
             if (DateTime.UtcNow - LastUpdateCheck() < UpdateCheckInterval) return Task.CompletedTask;
             return RunExclusiveAsync(ct => UpdateAsync(ours, ct), hostStopping);
+        }
+
+        /// <summary>True when the library in use is the copy this app downloaded (not Otzaria's or Zayit's).</summary>
+        public static bool IsOwnLibraryInUse
+        {
+            get
+            {
+                string? inUse = SeforimDbPathResolver.Resolve().Path;
+                return inUse != null && string.Equals(Path.GetFullPath(inUse), SeforimLibraryDownloadLocations.DatabasePath, StringComparison.OrdinalIgnoreCase);
+            }
         }
 
         private async Task UpdateAsync(string dbPath, CancellationToken cancellationToken)

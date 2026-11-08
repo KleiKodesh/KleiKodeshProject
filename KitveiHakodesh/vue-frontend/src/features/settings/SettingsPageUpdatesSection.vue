@@ -7,6 +7,7 @@ import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
 import { useUpdateDownloadProgress } from '@/composables/useUpdateDownloadProgress'
 import { useI18n } from 'vue-i18n'
+import { isOwnSeforimLibraryInUse, getTurnOffLibraryUpdates, setTurnOffLibraryUpdates } from '@/webview-host/bridge'
 import {
   updatePromptBody,
   UPDATE_INSTALL_LABEL,
@@ -43,8 +44,23 @@ const isDownloading = computed(() => !readyVersion.value && downloadProgress.val
 
 const isUpdateStatusLoaded = ref(false)
 
+// Library auto-update toggle: shown only when the library in use is the copy this app downloaded.
+const isOwnLibraryInUse = ref(false)
+const isLibraryUpdateTurnedOff = ref(false)
+
+async function loadLibraryUpdateSetting() {
+  const [own, off] = await Promise.all([isOwnSeforimLibraryInUse(), getTurnOffLibraryUpdates()])
+  isOwnLibraryInUse.value = own
+  if (off !== null) isLibraryUpdateTurnedOff.value = off
+}
+
+async function applyLibraryUpdateTurnedOff(value: boolean) {
+  isLibraryUpdateTurnedOff.value = value
+  await setTurnOffLibraryUpdates(value)
+}
+
 onMounted(async () => {
-  await Promise.all([loadAutomaticUpdateTurnedOff(), loadUpdateStatus()])
+  await Promise.all([loadAutomaticUpdateTurnedOff(), loadUpdateStatus(), loadLibraryUpdateSetting()])
   isUpdateStatusLoaded.value = true
 })
 
@@ -123,6 +139,23 @@ const isCheckNowVisible = computed(
           { label: $t('settings.no'), value: false },
         ]"
         @update:model-value="applyAutomaticUpdateTurnedOff"
+      />
+    </SettingRow>
+
+    <SettingRow
+      v-if="isOwnLibraryInUse"
+      id="nav-turn-off-library-updates"
+      :data-nav-label="$t('settings.updates.disableLibraryNav')"
+      :label="$t('settings.updates.disableLibrary')"
+      :hint="$t('settings.updates.disableLibraryHint')"
+    >
+      <ToggleGroup
+        :model-value="isLibraryUpdateTurnedOff"
+        :options="[
+          { label: $t('settings.yes'), value: true },
+          { label: $t('settings.no'), value: false },
+        ]"
+        @update:model-value="applyLibraryUpdateTurnedOff"
       />
     </SettingRow>
 
