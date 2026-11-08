@@ -83,7 +83,7 @@ export interface DocumentIcon {
 
 const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   book:     { key: 'book',     color: '#c1440e', icon20: IconBookRtl20,             icon24: IconBookRtl24 },
-  pdf:      { key: 'pdf',      color: '#E53935', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
+  pdf:      { key: 'pdf',      color: '#F2564F', icon20: IconDocumentPdf20Regular,   icon24: IconDocumentPdf24Regular },
   html:     { key: 'html',     color: '#0097fb', icon20: IconDocumentGlobe20Regular, icon24: IconDocumentGlobe24Regular },
   txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Regular,  icon24: IconDocumentText24Regular },
   // Lighter Office blue (the dark #2B579A vanished on dark backgrounds); Fluent's outline page with a W.
