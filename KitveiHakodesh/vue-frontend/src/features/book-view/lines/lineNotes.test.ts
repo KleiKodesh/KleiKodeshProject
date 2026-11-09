@@ -24,20 +24,20 @@ describe('lineNotes', () => {
     const line = row('ab<sup class="footnote-marker">1</sup>cd<sup>x</sup>ef<sup class="footnote-marker">2</sup>')
     const notes = [note(0, true), note(1, false), note(2, true)]
     const markers = line.querySelectorAll('sup.footnote-marker')
-    expect(notesForMarker(markers[0], line, notes).map((n) => n.noteIndex)).toEqual([0])
-    expect(notesForMarker(markers[1], line, notes).map((n) => n.noteIndex)).toEqual([2])
+    expect(notesForMarker(markers[0]!, line, notes).map((n) => n.noteIndex)).toEqual([0])
+    expect(notesForMarker(markers[1]!, line, notes).map((n) => n.noteIndex)).toEqual([2])
   })
 
   it('skips a marker whose body follows inline', () => {
     const line = row('a<sup class="footnote-marker">1</sup> <i class="footnote">inline</i>b<sup class="footnote-marker">2</sup>')
     const markers = line.querySelectorAll('sup.footnote-marker')
-    expect(notesForMarker(markers[0], line, [note(0, true)])).toEqual([])
-    expect(notesForMarker(markers[1], line, [note(0, true)]).map((n) => n.noteIndex)).toEqual([0])
+    expect(notesForMarker(markers[0]!, line, [note(0, true)])).toEqual([])
+    expect(notesForMarker(markers[1]!, line, [note(0, true)]).map((n) => n.noteIndex)).toEqual([0])
   })
 
   it('a marker with no note left shows nothing', () => {
     const line = row('<sup class="footnote-marker">1</sup><sup class="footnote-marker">2</sup>')
-    expect(notesForMarker(line.querySelectorAll('sup.footnote-marker')[1], line, [note(0, true)])).toEqual([])
+    expect(notesForMarker(line.querySelectorAll('sup.footnote-marker')[1]!, line, [note(0, true)])).toEqual([])
   })
 
   it('appends one empty marker for unmarked notes, after all text', () => {
