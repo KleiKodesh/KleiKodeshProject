@@ -336,7 +336,14 @@ watch(
 // The opening is only taken while nothing has moved yet. A saved index that
 // arrives after the reader has already scrolled or jumped must not pull them back
 // to it; any landing (a TOC click, a bar seek) or reader input ends the opening.
-useEventListener(viewportElement, ['wheel', 'touchstart', 'pointerdown', 'keydown'], () => { hasOpened = true }, { passive: true })
+// A bare modifier is not the reader moving: Ctrl is still held (and auto-repeating)
+// when a Ctrl+click opens a new tab and its viewport takes focus, which would
+// otherwise cancel the opening before the rows arrive.
+const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta'])
+useEventListener(viewportElement, ['wheel', 'touchstart', 'pointerdown', 'keydown'], (e: Event) => {
+  if (e instanceof KeyboardEvent && MODIFIER_KEYS.has(e.key)) return
+  hasOpened = true
+}, { passive: true })
 
 watch(() => props.rowSourceVersion, () => { void refreshRows() })
 watch(flowPlan, () => { void snapToBlocks() })
