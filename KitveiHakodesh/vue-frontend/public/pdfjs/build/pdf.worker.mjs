@@ -52185,6 +52185,15 @@ class AnnotationFactory {
         case AnnotationEditorType.SIGNATURE:
           promises.push(StampAnnotation.createNewAnnotation(xref, annotation, changes, {}));
           break;
+        default:
+          // [KleiKodesh] PATCH: a comment added to / edited on an existing annotation that has no editor (square, text, underline...): keep its dict, update /Contents and /Popup.
+          if (annotation.oldAnnotation && annotation.popup) {
+            if (!annotation.popupRef) {
+              annotation.popup.rect ??= annotation.oldAnnotation.getArray("Rect");
+            }
+            promises.push(MarkupAnnotation.createNewAnnotation.call(KhExistingAnnotation, xref, annotation, changes, {}));
+          }
+          break;
       }
     }
     return {
@@ -53037,6 +53046,19 @@ class MarkupAnnotation extends Annotation {
         annotationDict.delete("Contents");
         annotationDict.delete("RC");
         return retRef;
+      }
+      // [KleiKodesh] PATCH: an existing annotation that already has a popup keeps it (with its other keys) instead of getting a second one that orphans the old one.
+      if (!popup.ref && annotation.popupRef) {
+        const oldPopupRef = Ref.fromString(annotation.popupRef);
+        if (oldPopupRef) {
+          try {
+            const oldPopup = await xref.fetchAsync(oldPopupRef);
+            if (oldPopup instanceof Dict) {
+              popup.ref = oldPopupRef;
+              popup.oldAnnotation = oldPopup.clone();
+            }
+          } catch {}
+        }
       }
       const popupRef = popup.ref ||= xref.getNewTemporaryRef();
       popup.parent = annotationRef;
@@ -54524,6 +54546,17 @@ class PopupAnnotation extends Annotation {
     return null;
   }
 }
+// [KleiKodesh] PATCH: saves only the comment of an existing annotation without an editor (see AnnotationFactory.saveNewAnnotations).
+const KhExistingAnnotation = {
+  async createNewAppearanceStream() {
+    return null;
+  },
+  createNewDict(annotation) {
+    const dict = annotation.oldAnnotation;
+    dict.set("M", `D:${getModificationDate(annotation.modificationDate)}`);
+    return dict;
+  }
+};
 class FreeTextAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
@@ -58016,7 +58049,8 @@ class Page {
     for (const {
       ref
     } of newData.annotations) {
-      if (ref instanceof Ref && !existingAnnotations.has(ref)) {
+      // [KleiKodesh] PATCH: a reused popup (already in /Annots) is not added twice.
+      if (ref instanceof Ref && !existingAnnotations.has(ref) && !annotationsArray.some(a => isRefsEqual(a, ref))) {
         annotationsArray.push(ref);
       }
     }
