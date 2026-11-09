@@ -7082,6 +7082,8 @@ class PDFFindController {
     this._pageContents = [];
     this._pageDiffs = [];
     this._hasDiacritics = [];
+    this._khTextGen = (this._khTextGen || 0) + 1;
+    this._khTextDone = [];
     this._matchesCountTotal = 0;
     this._pagesToSearch = null;
     this._pendingFindMatches = new Set();
@@ -7279,23 +7281,36 @@ class PDFFindController {
     if (this._extractTextPromises.length > 0) {
       return;
     }
-    let deferred = Promise.resolve();
+    this._khTextDone = [];
+    this._khTextQueue = Promise.resolve();
+    for (let i = 0, ii = this._linkService.pagesCount; i < ii; i++) {
+      this.#khQueueExtract(i);
+    }
+  }
+  // [KleiKodesh] PATCH: one page's text extraction, queued behind the others.
+  // Extractions are tied to the page ORDER they started in (_khTextGen):
+  // when pages are reorganised before a page was extracted, its result would
+  // be written at its old index of the new arrays (and an unextracted moved
+  // page kept "" for good, so find missed it). A stale extraction now writes
+  // nothing and #onPagesEdited queues the unextracted pages again.
+  #khQueueExtract(i) {
     const textOptions = {
       disableNormalization: true
     };
     const pdfDoc = this._pdfDocument;
-    for (let i = 0, ii = this._linkService.pagesCount; i < ii; i++) {
-      const {
-        promise,
-        resolve
-      } = Promise.withResolvers();
-      this._extractTextPromises[i] = promise;
-      deferred = deferred.then(async () => {
-        if (pdfDoc !== this._pdfDocument) {
-          resolve();
-          return;
-        }
-        await pdfDoc.getPage(i + 1).then(pdfPage => pdfPage.getTextContent(textOptions)).then(textContent => {
+    const gen = this._khTextGen;
+    const {
+      promise,
+      resolve
+    } = Promise.withResolvers();
+    this._extractTextPromises[i] = promise;
+    this._khTextQueue = this._khTextQueue.then(async () => {
+      if (pdfDoc !== this._pdfDocument || gen !== this._khTextGen) {
+        resolve();
+        return;
+      }
+      await pdfDoc.getPage(i + 1).then(pdfPage => pdfPage.getTextContent(textOptions)).then(textContent => {
+        if (gen === this._khTextGen) {
           const strBuf = [];
           for (const textItem of textContent.items) {
             strBuf.push(textItem.str);
@@ -7304,16 +7319,20 @@ class PDFFindController {
             }
           }
           [this._pageContents[i], this._pageDiffs[i], this._hasDiacritics[i]] = normalize(strBuf.join(""));
-          resolve();
-        }, reason => {
+          this._khTextDone[i] = true;
+        }
+        resolve();
+      }, reason => {
+        if (gen === this._khTextGen) {
           console.error(`Unable to get text content for page ${i + 1}`, reason);
           this._pageContents[i] = "";
           this._pageDiffs[i] = null;
           this._hasDiacritics[i] = false;
-          resolve();
-        });
+          this._khTextDone[i] = true;
+        }
+        resolve();
       });
-    }
+    });
   }
   #updatePage(index) {
     if (this._scrollMatches && this._selected.pageIdx === index) {
@@ -7455,17 +7474,20 @@ class PDFFindController {
       const contents = new Map();
       const diffs = new Map();
       const diacritics = new Map();
+      const done = new Map();
       for (const pageNum of pageNumbers) {
         promises.set(pageNum, this._extractTextPromises[pageNum - 1]);
         contents.set(pageNum, this._pageContents[pageNum - 1]);
         diffs.set(pageNum, this._pageDiffs[pageNum - 1]);
         diacritics.set(pageNum, this._hasDiacritics[pageNum - 1]);
+        done.set(pageNum, this._khTextDone[pageNum - 1]);
       }
       this.#copiedPageData = {
         promises,
         contents,
         diffs,
-        diacritics
+        diacritics,
+        done
       };
       return;
     }
@@ -7478,7 +7500,8 @@ class PDFFindController {
         promises: this._extractTextPromises,
         contents: this._pageContents,
         diffs: this._pageDiffs,
-        diacritics: this._hasDiacritics
+        diacritics: this._hasDiacritics,
+        done: this._khTextDone
       };
     }
     if (type === "cancelDelete") {
@@ -7486,6 +7509,8 @@ class PDFFindController {
       this._pageContents = this.#savedPageData.contents;
       this._pageDiffs = this.#savedPageData.diffs;
       this._hasDiacritics = this.#savedPageData.diacritics;
+      this._khTextDone = this.#savedPageData.done;
+      this.#khRequeueMissingText();
       return;
     }
     if (type === "cleanSavedData") {
@@ -7506,6 +7531,8 @@ class PDFFindController {
     const pageContents = this._pageContents = [];
     const pageDiffs = this._pageDiffs = [];
     const hasDiacritics = this._hasDiacritics = [];
+    const prevDone = this._khTextDone;
+    const textDone = this._khTextDone = [];
     for (let i = 1, ii = pagesMapper.pagesNumber; i <= ii; i++) {
       const prevPageNumber = pagesMapper.getPrevPageNumber(i);
       if (prevPageNumber < 0) {
@@ -7514,15 +7541,29 @@ class PDFFindController {
         pageContents.push(this.#copiedPageData?.contents.get(src) ?? "");
         pageDiffs.push(this.#copiedPageData?.diffs.get(src) ?? null);
         hasDiacritics.push(this.#copiedPageData?.diacritics.get(src) ?? false);
+        textDone.push(this.#copiedPageData?.done.get(src) === true);
         continue;
       }
       extractTextPromises.push(prevPromises[prevPageNumber - 1] || Promise.resolve());
       pageContents.push(prevContents[prevPageNumber - 1] ?? "");
       pageDiffs.push(prevDiffs[prevPageNumber - 1] ?? null);
       hasDiacritics.push(prevDiacritics[prevPageNumber - 1] ?? false);
+      textDone.push(prevDone[prevPageNumber - 1] === true);
     }
+    this.#khRequeueMissingText();
     if (this.#state) {
       this.#nextMatch();
+    }
+  }
+  // [KleiKodesh] PATCH: see #khQueueExtract — drop the extractions queued for
+  // the old page order and queue every page not extracted yet at its new index.
+  #khRequeueMissingText() {
+    this._khTextGen++;
+    this._khTextQueue = Promise.resolve();
+    for (let i = 0, ii = this._extractTextPromises.length; i < ii; i++) {
+      if (this._khTextDone[i] !== true) {
+        this.#khQueueExtract(i);
+      }
     }
   }
   #onFindBarClose(evt) {
@@ -19017,7 +19058,7 @@ const PDFViewerApplication = {
       // which writes the ORIGINAL bytes — dispatching kh-save-complete for
       // that would clear the unsaved-edits state while the edits were in fact
       // discarded. Same for plain downloads and the page-organizer path.
-      window.__khSaveDataPending = true;
+      this._khArmSave(false);
       this.downloadManager.download(data, this._downloadUrl, this._docFilename);
     } catch (reason) {
       console.error(`Error when saving the document:`, reason);
@@ -19049,6 +19090,9 @@ const PDFViewerApplication = {
           action: "save"
         }
       });
+      // [KleiKodesh] PATCH: only this call saves the whole document; the
+      // same handler also serves "save the selected pages as a new file".
+      this._khSavingDocument = true;
       await this.onSavePages({
         data: this.pdfThumbnailViewer.getStructuralChanges()
       });
@@ -19438,8 +19482,33 @@ const PDFViewerApplication = {
       });
     }
   },
+  // [KleiKodesh] PATCH: "unsaved" used to mean "annotationStorage is not
+  // empty" / "the pages were ever reorganised", which stays true after a
+  // completed save, so the title kept its "* " and closing still warned.
+  // Track edits since the last COMPLETED save instead (kh-save-complete).
   _hasChanges() {
-    return this.pdfDocument?.annotationStorage.size > 0 || this.pdfThumbnailViewer?.hasStructuralChanges() || this._mergedDocumentNeedsSaving === true;
+    return this._khEditsUnsaved === true || this.pdfThumbnailViewer?.hasStructuralChanges() && this._khStructureSaved !== true || this._mergedDocumentNeedsSaving === true;
+  },
+  _khArmSave(structure) {
+    this._khSaveArm = {
+      seq: this._khEditSeq || 0,
+      structure
+    };
+    window.__khSaveDataPending = true;
+  },
+  _khOnSaveComplete() {
+    const arm = this._khSaveArm;
+    this._khSaveArm = null;
+    if (arm) {
+      // An edit made while the save dialog was open is not in the file.
+      if ((this._khEditSeq || 0) === arm.seq) {
+        this._khEditsUnsaved = false;
+      }
+      if (arm.structure) {
+        this._khStructureSaved = true;
+      }
+    }
+    this.setTitle();
   },
   _initializeAnnotationStorageCallbacks(pdfDocument) {
     if (pdfDocument !== this.pdfDocument) {
@@ -19450,7 +19519,16 @@ const PDFViewerApplication = {
     } = pdfDocument;
     annotationStorage.onSetModified = () => {
       this._annotationStorageModified = true;
+      this._khEditsUnsaved = true;
+      this._khEditSeq = (this._khEditSeq || 0) + 1;
     };
+    this._khEditsUnsaved = false;
+    this._khStructureSaved = false;
+    this._khSaveArm = null;
+    if (!this._khSaveCompleteBound) {
+      this._khSaveCompleteBound = true;
+      document.addEventListener("kh-save-complete", () => this._khOnSaveComplete());
+    }
     annotationStorage.onResetModified = () => {
       delete this._annotationStorageModified;
     };
@@ -19780,18 +19858,33 @@ const PDFViewerApplication = {
     await Promise.all([this.l10n?.destroy(), this.close()]);
   },
   onPagesEdited(data) {
+    // [KleiKodesh] PATCH: move cached page proxies with their pages first.
+    this.pdfDocument?._transport?.khPagesEdited?.(data.pagesMapper, data.type);
+    if (data.type !== "copy" && data.type !== "cancelCopy" && data.type !== "cleanSavedData") {
+      this._khStructureSaved = false;
+      if (this._khSaveArm) {
+        this._khSaveArm.structure = false;
+      }
+    }
     this.pdfViewer.onPagesEdited(data);
   },
   async onSavePages({
     data: extractParams
   }) {
+    const khWholeDocument = this._khSavingDocument === true;
+    this._khSavingDocument = false;
     if (!this.pdfDocument) {
       return;
     }
-    const modifiedPdfBytes = await this.pdfDocument.extractPages(extractParams);
+    // [KleiKodesh] PATCH: a whole-document save carries the outline edits;
+    // extracting selected pages keeps the outline as loaded.
+    const modifiedPdfBytes = await this.pdfDocument.extractPages(extractParams, khWholeDocument);
     if (!modifiedPdfBytes) {
       console.error("Something wrong happened when saving the edited PDF.\nPlease file a bug.");
       return;
+    }
+    if (khWholeDocument) {
+      this._khArmSave(true);
     }
     this.downloadManager.download(modifiedPdfBytes, this._downloadUrl, this._docFilename);
   },

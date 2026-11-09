@@ -15072,8 +15072,8 @@ class PDFDocumentProxy {
   saveDocument() {
     return this._transport.saveDocument();
   }
-  extractPages(pageInfos) {
-    return this._transport.extractPages(pageInfos);
+  extractPages(pageInfos, khWithEditedOutline = false) {
+    return this._transport.extractPages(pageInfos, khWithEditedOutline);
   }
   getDownloadInfo() {
     return this._transport.downloadInfoCapability.promise;
@@ -15797,6 +15797,54 @@ class WorkerTransport {
     this.#pageCache.set(_pageIndex, page);
     this.#pagePromises.set(_pageIndex, Promise.resolve(page));
   }
+  // [KleiKodesh] PATCH: page proxies are cached by POSITION, and a proxy
+  // asks for the page now at its position while keeping what it already
+  // loaded (size, rotation, operator lists). Reorganising pages only moved
+  // the proxies of rendered page views (updatePageNumber), so a proxy loaded
+  // for an off-screen page (thumbnail, find) stayed at its old position and
+  // the page moved there showed the old page's content. Move every cached
+  // proxy with its page; pages edits pass through here before the viewers.
+  #khPagesGen = 0;
+  #khSavedPages = null;
+  khPagesEdited(pagesMapper, type) {
+    if (type === "copy" || type === "cancelCopy") {
+      return;
+    }
+    if (type === "cleanSavedData") {
+      this.#khSavedPages = null;
+      return;
+    }
+    this.#khPagesGen++;
+    let entries;
+    if (type === "cancelDelete") {
+      entries = this.#khSavedPages;
+      this.#khSavedPages = null;
+      if (!entries) {
+        return;
+      }
+    } else {
+      const prevCache = new Map(this.#pageCache);
+      if (type === "delete" || type === "cut") {
+        this.#khSavedPages = [...prevCache];
+      }
+      entries = [];
+      const placed = new Set();
+      for (let i = 1, ii = pagesMapper.pagesNumber; i <= ii; i++) {
+        const page = prevCache.get(pagesMapper.getPrevPageNumber(i) - 1);
+        if (page && !placed.has(page)) {
+          placed.add(page);
+          entries.push([i - 1, page]);
+        }
+      }
+    }
+    this.#pageCache.clear();
+    this.#pagePromises.clear();
+    for (const [index, page] of entries) {
+      page._pageIndex = index;
+      this.#pageCache.set(index, page);
+      this.#pagePromises.set(index, Promise.resolve(page));
+    }
+  }
   #cacheSimpleMethod(name, data = null) {
     return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, data));
   }
@@ -16146,9 +16194,12 @@ class WorkerTransport {
       this.annotationStorage.resetModified();
     });
   }
-  extractPages(pageInfos) {
+  extractPages(pageInfos, khWithEditedOutline = false) {
     const params = {
-      pageInfos
+      pageInfos,
+      // [KleiKodesh] PATCH: saving reorganised pages writes the edited outline
+      // (as saveDocument does) instead of the one loaded from the file.
+      editedOutline: khWithEditedOutline ? this.editedOutline ?? null : null
     };
     let transfer;
     if (this.annotationStorage.size > 0) {
@@ -16173,6 +16224,7 @@ class WorkerTransport {
     if (cachedPromise) {
       return cachedPromise;
     }
+    const khGen = this.#khPagesGen;
     const promise = this.messageHandler.sendWithPromise("GetPage", {
       pageIndex: newPageIndex
     }).then(pageInfo => {
@@ -16182,8 +16234,19 @@ class WorkerTransport {
       if (pageInfo.refStr) {
         this.#pageRefCache.set(pageInfo.refStr, newPageIndex);
       }
-      const page = new PDFPageProxy(pageIndex, pageInfo, this, this.pagesMapper, this._params.pdfBug);
-      this.#pageCache.set(pageIndex, page);
+      // [KleiKodesh] PATCH: the pages were reorganised while this page was
+      // loading. The proxy is keyed by position, so place it where its page
+      // is now (or leave it uncached) instead of at the old position.
+      let index = pageIndex;
+      if (khGen !== this.#khPagesGen) {
+        index = this.pagesMapper.getPageNumber(newPageIndex + 1) - 1;
+        if (index < 0 || this.#pageCache.has(index)) {
+          return new PDFPageProxy(Math.max(index, 0), pageInfo, this, this.pagesMapper, this._params.pdfBug);
+        }
+        this.#pagePromises.set(index, promise);
+      }
+      const page = new PDFPageProxy(index, pageInfo, this, this.pagesMapper, this._params.pdfBug);
+      this.#pageCache.set(index, page);
       return page;
     });
     this.#pagePromises.set(pageIndex, promise);
