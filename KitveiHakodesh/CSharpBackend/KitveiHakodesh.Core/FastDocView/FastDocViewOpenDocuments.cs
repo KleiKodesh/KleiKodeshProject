@@ -76,6 +76,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
                 FootnoteCount = footnotes,
                 EndnoteCount = endnotes,
                 Title = (document as global::FastDocView.Markup.MarkupWindowedDocument)?.DocumentTitle,
+                Sections = SectionsOf(document),
             };
         });
     }
@@ -160,14 +161,15 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             : null);
 
     /// <summary>Page text width per section (index-time data); the known ones while the index builds.</summary>
-    public List<FastDocViewSection> Sections(string documentId) =>
-        Use(documentId, document =>
-        {
-            var sections = new List<FastDocViewSection>(document.Sections.Count);
-            foreach (WordDocumentSection section in document.Sections)
-                sections.Add(new FastDocViewSection { FirstBlockIndex = section.FirstBlockIndex, TextWidthTwips = section.TextWidthTwips });
-            return sections;
-        });
+    public List<FastDocViewSection> Sections(string documentId) => Use(documentId, SectionsOf);
+
+    private static List<FastDocViewSection> SectionsOf(IWordWindowedDocument document)
+    {
+        var sections = new List<FastDocViewSection>(document.Sections.Count);
+        foreach (WordDocumentSection section in document.Sections)
+            sections.Add(new FastDocViewSection { FirstBlockIndex = section.FirstBlockIndex, TextWidthTwips = section.TextWidthTwips });
+        return sections;
+    }
 
     /// <summary>Int32 little-endian per known block: the estimated text length (index-time data, no file access).</summary>
     public byte[] Weights(string documentId) =>
@@ -193,6 +195,7 @@ public sealed class FastDocViewOpenDocuments : IDisposable
                 IsIndexComplete = document.IsIndexComplete,
                 FootnoteCount = footnotes,
                 EndnoteCount = endnotes,
+                Sections = SectionsOf(document),
             };
         });
 

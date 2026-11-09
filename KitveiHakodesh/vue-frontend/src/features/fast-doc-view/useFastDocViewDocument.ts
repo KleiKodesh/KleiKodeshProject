@@ -160,21 +160,19 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     summary.value = opened
     blockCount.value = opened.blockCount
     isIndexComplete.value = opened.isIndexComplete
+    // The margins come with the open reply, so the first paint already has them (no jump).
+    if (opened.sections?.length) sections.value = opened.sections
     cache.clear()
     cacheRevision.value++
   }
 
   async function loadOutline(documentId: string, generation: number) {
     try {
-      const [loadedHeadings, loadedWeights, loadedSections] = await Promise.all([
-        api.headings(documentId),
-        api.weights(documentId),
-        api.sections(documentId).catch(() => [] as FastDocViewSection[]),
-      ])
+      // Sections (the margins) are not fetched here: they arrive with the open and scan replies.
+      const [loadedHeadings, loadedWeights] = await Promise.all([api.headings(documentId), api.weights(documentId)])
       if (generation !== openGeneration || summary.value?.documentId !== documentId) return
       headings.value = loadedHeadings
       weights.value = loadedWeights
-      sections.value = loadedSections
     } catch {
       // The outline is a convenience: the text reads without it.
     }
@@ -194,6 +192,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       isIndexComplete: state.isIndexComplete,
       footnoteCount: state.footnoteCount,
       endnoteCount: state.endnoteCount,
+      sections: state.sections?.length ? state.sections : current.sections,
     }
   }
 
@@ -225,6 +224,7 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
       // The count only grows: never move it back for a stale answer. Note counts grow too.
       if (state.knownBlockCount > blockCount.value) blockCount.value = state.knownBlockCount
       if (summary.value) summary.value = withScanState(summary.value, state)
+      if (state.sections?.length) sections.value = state.sections
       if (state.isIndexComplete) {
         isIndexComplete.value = true
         // Blocks drawn with what only the final index knows: dropped, so the scroller asks for

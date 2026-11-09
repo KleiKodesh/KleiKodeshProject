@@ -57,6 +57,8 @@ public sealed class FastDocViewSummary
     public int EndnoteCount { get; set; }
     /// <summary>The title the file itself declares (a Torat Emet book name); null when it has none - the page then keeps the file name.</summary>
     public string? Title { get; set; }
+    /// <summary>Page text width per section known so far, so the first paint already has the margins (grows with the index).</summary>
+    public List<FastDocViewSection> Sections { get; set; } = [];
 }
 
 [MessagePackObject(keyAsPropertyName: true)]
@@ -158,4 +160,6 @@ public sealed class FastDocViewScanResult
     /// <summary>Note counts grow with the index, like the block count.</summary>
     public int FootnoteCount { get; set; }
     public int EndnoteCount { get; set; }
+    /// <summary>Page text width per section known so far - a scan can find new sections.</summary>
+    public List<FastDocViewSection> Sections { get; set; } = [];
 }
