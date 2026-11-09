@@ -316,9 +316,11 @@ export function contourPolygon(outlines: Point[][], width: number, height: numbe
     if (y >= height) break
   }
   if (polygon.length < 2) return null
+  // percentages of the border box, as the library writes them: the outline shrinks with a float drawn narrower than its size
   const edge = textOnRight ? 0 : width
   const points = [{ x: edge, y: polygon[0]!.y }, ...polygon, { x: edge, y: polygon[polygon.length - 1]!.y }]
-  return `polygon(${points.map(p => `${+p.x.toFixed(2)}pt ${+p.y.toFixed(2)}pt`).join(',')}) border-box`
+  const percent = (value: number, size: number) => +(size > 0 ? (value / size) * 100 : 0).toFixed(3)
+  return `polygon(${points.map(p => `${percent(p.x, width)}% ${percent(p.y, height)}%`).join(',')}) border-box`
 }
 
 function layoutFrame(frame: HTMLElement) {
@@ -366,7 +368,7 @@ function layoutFrame(frame: HTMLElement) {
   }
   // the contour wrap, swept again from the new outlines (in the frame's new coordinates)
   if (frame.style.shapeOutside.startsWith('polygon')) {
-    const textOnRight = /^polygon\(\s*0(pt|px)?\s/.test(frame.style.shapeOutside)
+    const textOnRight = /^polygon\(\s*0(pt|px|%)?\s/.test(frame.style.shapeOutside)
     const outlines = [...frame.querySelectorAll<SVGGElement>(':scope > svg.word-shape-geometry > g[data-shape-box]')]
       .flatMap(sampledOutlines).map(outline => outline.map(p => ({ x: p.x - left, y: p.y - top })))
     const polygon = contourPolygon(outlines, width, height, textOnRight)
