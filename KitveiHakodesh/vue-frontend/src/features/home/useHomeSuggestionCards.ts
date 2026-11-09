@@ -18,11 +18,19 @@ export function useHomeSuggestionCards(
   const historyCards = useHomeHistoryCards(historyActions)
   const dailyLearningCards = useHomeDailyLearning()
   const navCards = useHomeNavCards(navigate)
-  return computed(() => {
+  const cards = computed(() => {
     // Nav rail hidden → nav cards fill the page; daily learning is dropped.
-    if (navCards.value.length) return [...navCards.value, ...historyCards.value]
+    if (navCards.value.length) return [...navCards.value, ...historyCards.cards.value]
     // Daily learning only pads a short history up to FILLED_CARD_COUNT.
-    const room = Math.max(0, FILLED_CARD_COUNT - historyCards.value.length)
-    return [...historyCards.value, ...dailyLearningCards.value.slice(0, room)]
+    const room = Math.max(0, FILLED_CARD_COUNT - historyCards.cards.value.length)
+    return [...historyCards.cards.value, ...dailyLearningCards.cards.value.slice(0, room)]
   })
+  // The whole collection is known: show it in one step, so the centered search bar
+  // never jumps as cards trickle in. Daily learning only matters when it can show.
+  const ready = computed(
+    () =>
+      historyCards.loaded.value &&
+      (navCards.value.length > 0 || dailyLearningCards.settled.value),
+  )
+  return { cards, ready }
 }

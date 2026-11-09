@@ -257,6 +257,11 @@ function ensureLoaded(): Promise<RecentlyOpenedEntry[]> {
   return _loadPromise
 }
 
+/** The list right now (pinned first), or null before the first IDB read finishes. */
+export function peekRecentlyOpenedList(): RecentlyOpenedEntry[] | null {
+  return _cache === null ? null : sortPinnedFirst(_cache)
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const TRACKABLE_ROUTES = new Set<TabRoute>([

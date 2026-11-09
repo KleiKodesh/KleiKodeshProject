@@ -8,9 +8,10 @@ import { useLocalPathDisplayStore } from '@/stores/localPathDisplayStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { locationKey, type NavLocation } from '@/stores/navLocation'
-import { useRecentlyOpenedStore, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
+import { useRecentlyOpenedStore, peekRecentlyOpenedList, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import {
   useFrequentFoldersStore,
+  peekFrequentFolders,
   isCatalogCategoryEntry,
   type FrequentFolderEntry,
 } from '@/stores/frequentFoldersStore'
@@ -47,8 +48,10 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
   const pathDisplay = useLocalPathDisplayStore()
   const { showRecentlyOpened, showFrequentFolders } = storeToRefs(useSettingsStore())
 
-  const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
-  const frequentFolderList = ref<FrequentFolderEntry[]>([])
+  // Already in memory (any visit after the first): render the cards in the first frame.
+  const recentlyOpenedList = ref<RecentlyOpenedEntry[]>(peekRecentlyOpenedList() ?? [])
+  const frequentFolderList = ref<FrequentFolderEntry[]>(peekFrequentFolders() ?? [])
+  const loaded = ref(peekRecentlyOpenedList() !== null && peekFrequentFolders() !== null)
 
   // Folders get half the budget or MAX_FOLDER_CARDS, whichever is lower — a
   // ceiling, not a reservation; the documents take whatever is left.
@@ -140,9 +143,11 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
 
   onMounted(() => {
     // Not awaited by the page's focus logic — a cold first IndexedDB read is slow.
-    recentlyOpenedStore.getList().then((list) => (recentlyOpenedList.value = list))
-    frequentFoldersStore.getList().then((list) => (frequentFolderList.value = list))
+    void Promise.all([
+      recentlyOpenedStore.getList().then((list) => (recentlyOpenedList.value = list)),
+      frequentFoldersStore.getList().then((list) => (frequentFolderList.value = list)),
+    ]).finally(() => (loaded.value = true))
   })
 
-  return computed(() => [...folderCards.value, ...recentCards.value])
+  return { cards: computed(() => [...folderCards.value, ...recentCards.value]), loaded }
 }

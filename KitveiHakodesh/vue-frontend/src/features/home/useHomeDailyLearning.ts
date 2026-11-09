@@ -37,7 +37,8 @@ export interface HomeDailyLearningEntry {
  * the library are left out, so the home collection just shows fewer cards.
  */
 export function useHomeDailyLearning() {
-  return useDailyLearningState().cards
+  const { cards, settled } = useDailyLearningState()
+  return { cards, settled }
 }
 
 /** Every cycle for today, including ones whose book is missing (not navigable). */
@@ -110,6 +111,8 @@ function useDailyLearningState() {
   const resolvedItems = computed(() =>
     allItems.value.filter((item): item is ResolvedDailyLearningItem => item.resolved !== null),
   )
+  // True once today's items are known (or there is no library to resolve them in).
+  const settled = shallowRef(todayItems?.dateKey === todayKey.value)
   let generation = 0
 
   watch(
@@ -121,15 +124,20 @@ function useDailyLearningState() {
         todayItems = null
         todayItemsPending = null
         libraryEpoch++
+        allItems.value = []
+        settled.value = true
         return
       }
       const cached = todayItems?.dateKey === todayKey.value ? todayItems.items : null
       if (cached) {
         allItems.value = cached
+        settled.value = true
         return
       }
-      const items = await loadTodayItems(todayKey.value)
-      if (currentGeneration === generation) allItems.value = items
+      const items = await loadTodayItems(todayKey.value).catch(() => [])
+      if (currentGeneration !== generation) return
+      allItems.value = items
+      settled.value = true
     },
     { immediate: true },
   )
@@ -177,5 +185,5 @@ function useDailyLearningState() {
       open: (openInNewTab) => open(item, openInNewTab),
     })),
   )
-  return { cards, entries }
+  return { cards, entries, settled }
 }
