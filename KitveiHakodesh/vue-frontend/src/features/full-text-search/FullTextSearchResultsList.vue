@@ -657,6 +657,7 @@ defineExpose({
               :load-above="() => loadAbove(shownResults[index]!)"
               :load-below="() => loadBelow(shownResults[index]!)"
               :reseed="() => reseedPreview(shownResults[index]!)"
+              :snippet-html="snippetHtmlOf(shownResults[index]!) ?? ''"
             />
             <!-- Never a placeholder: the scroller fetched this row's snippet before mounting it. -->
             <FullTextSearchSnippet
