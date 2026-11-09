@@ -102,7 +102,7 @@ searchBar.openWhenAsyncResultsArrive([catalogTocResults, hebrewBooksResults, fil
 useDropdownClose(searchBarRef, searchBar.close, { ignore: [searchDropdownEl], fitToViewport: false })
 
 // History, today's learning and the destinations — one collection, one card style.
-const cards = useHomeSuggestionCards(
+const { cards, ready: cardsReady } = useHomeSuggestionCards(
   {
     openRecent: (entry, openInNewTab) => navigation.openRecentEntry(entry, openInNewTab),
     openFolder: (path, openInNewTab) => openFolderPicker(path, openInNewTab),
@@ -140,7 +140,7 @@ onMounted(focusSearchInput)
 
 <template>
   <div class="home-page">
-    <div ref="homeInnerRef" class="home-inner" :style="{ '--home-content-width': `${contentLayout.width}px`, '--home-columns': contentLayout.columns }">
+    <div ref="homeInnerRef" class="home-inner" :class="{ 'home-inner--pending': !cardsReady }" :style="{ '--home-content-width': `${contentLayout.width}px`, '--home-columns': contentLayout.columns }">
       <div class="home-search-blanket">
         <div
           ref="searchBarRef"
@@ -261,6 +261,12 @@ onMounted(focusSearchInput)
 
    A container query, not a media query, so a split pane is judged on ITS OWN
    width — half a wide monitor is a narrow pane and gets the top layout. */
+/* Until every card is known: laid out but unseen (opacity, not visibility, so the
+   search input can still take focus and typing). */
+.home-inner--pending {
+  opacity: 0;
+}
+
 @container (min-width: 480px) {
   .home-inner {
     justify-content: safe center;

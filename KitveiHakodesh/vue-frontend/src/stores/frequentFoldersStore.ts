@@ -113,6 +113,11 @@ function ensureLoaded(): Promise<FrequentFolderEntry[]> {
   return _loadPromise
 }
 
+/** The list right now, or null before the first IDB read finishes. */
+export function peekFrequentFolders(): FrequentFolderEntry[] | null {
+  return _cache
+}
+
 function save(list: FrequentFolderEntry[]): void {
   dbSet(FREQUENT_FOLDERS_DB, LIST_KEY, list).catch(() => {
     // Losing a visit count is not worth surfacing to the user.
