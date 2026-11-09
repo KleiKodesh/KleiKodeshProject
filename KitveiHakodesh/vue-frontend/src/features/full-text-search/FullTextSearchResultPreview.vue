@@ -25,6 +25,8 @@ const props = defineProps<{
   loadBelow: () => Promise<number>
   /** Reload the seed window around the matched line (it may have been trimmed out). */
   reseed: () => Promise<void>
+  /** The result card's snippet HTML — the preview centres on this exact text. */
+  snippetHtml: string
 }>()
 
 const boxEl = ref<HTMLElement | null>(null)
@@ -77,7 +79,7 @@ watch(
       box.scrollTop = props.state.scrollTop
     } else {
       const matched = box.querySelector<HTMLElement>('[data-matched]')
-      if (matched) box.scrollTop = matched.offsetTop
+      if (matched) box.scrollTop = hitTop(box, matched)
     }
     ready.value = true
     // Nudge the edge checks awake — arrivedState only refreshes on scroll events,
@@ -91,9 +93,92 @@ function onScroll() {
   if (ready.value && boxEl.value) props.state.scrollTop = boxEl.value.scrollTop
 }
 
-/** Scroll the matched result line back to the top of the window (header recenter button).
- *  If the capped window has trimmed the matched line out, reload the seed around it first.
- *  2px headroom — smooth scrolling settles a hair past the target on fractional DPRs. */
+// ── Locating the result card's snippet inside the matched line ─────────────────
+// Compared on a folded stream: niqqud/teamim dropped, whitespace collapsed, "…" dropped
+// (the card's cut marks). Each folded char keeps its DOM text node + offset, so the
+// found span becomes a Range we can measure.
+
+const isFoldedOut = (c: number) => (c >= 0x0591 && c <= 0x05c7 && c !== 0x05be) || c === 0x2026
+
+function foldText(text: string): string {
+  let out = ''
+  for (const ch of text) {
+    const c = ch.charCodeAt(0)
+    if (isFoldedOut(c)) continue
+    if (/\s/.test(ch)) { if (out && !out.endsWith(' ')) out += ' '; continue }
+    out += ch
+  }
+  return out.trim()
+}
+
+/** The card snippet's [start, end) inside the matched line as a measurable Range, or null. */
+function snippetRange(matched: HTMLElement): Range | null {
+  const holder = document.createElement('div')
+  holder.innerHTML = props.snippetHtml
+  const words = foldText(holder.textContent ?? '').split(' ').filter(Boolean)
+  if (!words.length) return null
+
+  const chars: string[] = []
+  const at: Array<[Text, number]> = []
+  const walker = document.createTreeWalker(matched, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    const t = node.data
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i)
+      if (isFoldedOut(c)) continue
+      if (/\s/.test(t[i]!)) {
+        if (chars.length && chars[chars.length - 1] !== ' ') { chars.push(' '); at.push([node, i]) }
+        continue
+      }
+      chars.push(t[i]!); at.push([node, i])
+    }
+  }
+  const line = chars.join('')
+
+  // The card may add a few context words from neighbouring lines, so try the full
+  // snippet first, then shave words off its ends until both ends are found in order.
+  for (let cut = 0; cut < Math.min(words.length, 8); cut++) {
+    for (let lead = 0; lead <= cut; lead++) {
+      const core = words.slice(lead, words.length - (cut - lead))
+      if (!core.length) continue
+      const head = core.slice(0, 3).join(' ')
+      const tail = core.slice(-3).join(' ')
+      const start = line.indexOf(head)
+      if (start < 0) continue
+      const tailAt = line.indexOf(tail, start)
+      if (tailAt < 0) continue
+      const end = tailAt + tail.length - 1
+      const range = document.createRange()
+      range.setStart(at[start]![0], at[start]![1])
+      range.setEnd(at[end]![0], at[end]![1] + 1)
+      return range
+    }
+  }
+  return null
+}
+
+/** Scroll target for the hit: the card snippet's text centred in the box (a long line
+ *  would otherwise park its opening, far from the hit, at the top). A snippet taller than
+ *  the box keeps its start in view. Falls back to the highlighted words, then to the
+ *  line start. */
+function hitTop(box: HTMLElement, matched: HTMLElement): number {
+  let rect: { top: number; bottom: number } | null = snippetRange(matched)?.getBoundingClientRect() ?? null
+  if (!rect || (!rect.top && !rect.bottom)) {
+    const marks = matched.querySelectorAll<HTMLElement>('mark')
+    if (!marks.length) return Math.max(0, matched.offsetTop - 2)
+    const first = marks[0]!.getBoundingClientRect()
+    const last = marks[marks.length - 1]!.getBoundingClientRect()
+    rect = { top: Math.min(first.top, last.top), bottom: Math.max(first.bottom, last.bottom) }
+  }
+  const base = box.getBoundingClientRect().top - box.scrollTop
+  const top = rect.top - base
+  const bottom = rect.bottom - base
+  if (bottom - top > box.clientHeight) return Math.max(0, top - 2)
+  return Math.max(0, (top + bottom) / 2 - box.clientHeight / 2)
+}
+
+/** Scroll the hit back to the middle of the window (header recenter button).
+ *  If the capped window has trimmed the matched line out, reload the seed around it first. */
 async function recenter() {
   const box = boxEl.value
   if (!box) return
@@ -107,13 +192,13 @@ async function recenter() {
     matched = box.querySelector<HTMLElement>('[data-matched]')
     if (!matched) return
     // The window was replaced wholesale — jump, don't glide from an unrelated spot.
-    box.scrollTop = Math.max(0, matched.offsetTop - 2)
+    box.scrollTop = hitTop(box, matched)
     // Refresh saved scrollTop + edge state even if the assignment landed on the
     // current value (no native scroll event fires then).
     box.dispatchEvent(new Event('scroll'))
     return
   }
-  box.scrollTo({ top: Math.max(0, matched.offsetTop - 2), behavior: 'smooth' })
+  box.scrollTo({ top: hitTop(box, matched), behavior: 'smooth' })
 }
 
 defineExpose({ recenter })
@@ -242,8 +327,6 @@ const {
    glance among the muted context lines however far the window has been scrolled. */
 .preview-line.matched {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-color) 7%, transparent);
-  border-radius: 4px;
   border-inline-start: 3px solid var(--accent-color);
   padding-inline-start: 6px;
 }
