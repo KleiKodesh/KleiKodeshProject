@@ -43,9 +43,9 @@ const HOVER_DELAY_MS = 120
 /** A scroll this soon after wheel/touch/key input is the reader's own. */
 const USER_SCROLL_WINDOW_MS = 400
 /** How long the scroll-follow label stays after the scrolling stops. */
-const SCROLL_LINGER_MS = 800
+const SCROLL_LINGER_MS = 700
 /** Scroll-follow shows once one run (no pause) has travelled this many screens. */
-const JOURNEY_SCREENS = 3
+const JOURNEY_SCREENS = 5
 /** A gap longer than this between scroll steps ends the run (wheel notches ~100 ms apart). */
 const SCROLL_PAUSE_MS = 250
 /** Books shorter than this many screens never get the scroll-follow label. */

@@ -251,6 +251,7 @@ namespace KleiKodesh.Ribbon
         /// without relaunching. The viewer is built through a factory so an open pane
         /// does not pay for a discarded WebView2 on every context-menu search.
         /// </summary>
+
         public static KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
         {
             AddinUiLanguage.Apply();
