@@ -90,7 +90,18 @@ namespace KitveiHakodeshLib
                 // _alpha = Math.Min(1f, _alpha + 0.035f);
             }
 
-            Invalidate();
+            // Only the dots move: repainting the whole overlay (background fill, scaled
+            // logo, version text) 60 times a second kept the UI thread in GDI+ for most
+            // of the startup window, which is the thread WebView2 init and the first
+            // service replies run on.
+            Invalidate(DotsBounds());
+        }
+
+        private Rectangle DotsBounds()
+        {
+            float cx = Width / 2f, dotsY = Height / 2f + 108f;
+            float half = (DotCount - 1) * DotSpacing / 2f + DotBaseR + 2f;
+            return Rectangle.Round(new RectangleF(cx - half, dotsY - DotBaseR - 2f, half * 2f, (DotBaseR + 2f) * 2f));
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -118,10 +129,13 @@ namespace KitveiHakodeshLib
             // ── Background ───────────────────────────────────────────────────────
             Color bg = BackColor;
             using (var b = new SolidBrush(Color.FromArgb(a, bg)))
-                g.FillRectangle(b, ClientRectangle);
+                g.FillRectangle(b, e.ClipRectangle);
 
             // ── Logo ─────────────────────────────────────────────────────────────
-            if (_logo != null)
+            // A dots-only repaint (see OnTick) never touches the logo or the version text.
+            bool dotsOnly = DotsBounds().Contains(e.ClipRectangle);
+
+            if (_logo != null && !dotsOnly)
             {
                 int sz = Math.Min(148, Math.Min(w, h) / 3);
                 var cm = new ColorMatrix { Matrix33 = _alpha };
@@ -142,7 +156,7 @@ namespace KitveiHakodeshLib
             // Unobtrusive current-version line at the bottom edge — updates install
             // silently, so this is where the user can passively see what they're on.
             // Muted 55%-alpha text, white on dark backgrounds / black on light.
-            if (!string.IsNullOrEmpty(_versionText))
+            if (!string.IsNullOrEmpty(_versionText) && !dotsOnly)
             {
                 bool darkBg = BackColor.GetBrightness() < 0.5f;
                 var baseCol = darkBg ? Color.White : Color.Black;
