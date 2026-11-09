@@ -17203,6 +17203,8 @@ class AnnotationElement {
         id: data.id,
         annotationType: data.annotationType,
         page: this.parent.page,
+        // [KleiKodesh] PATCH: the worker groups saved values by pageIndex; with only `page` this comment was never saved.
+        pageIndex: this.parent.page._pageIndex,
         popup,
         popupRef: data.popupRef,
         modificationDate: new Date()
