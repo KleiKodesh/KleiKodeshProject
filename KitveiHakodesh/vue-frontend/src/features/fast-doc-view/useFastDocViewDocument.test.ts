@@ -15,6 +15,8 @@ function block(index: number): FastDocViewBlock {
   return { index, kind: 'paragraph', html: `<p>${index}</p>`, notes: index === 5 ? [{ kind: 'footnote', number: 1, label: '1', html: 'n' }] : [] }
 }
 
+const SECTIONS = [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }]
+
 function fakeApi(total: number) {
   const calls: { op: string; args: unknown[] }[] = []
   let generation = 0
@@ -26,6 +28,7 @@ function fakeApi(total: number) {
       return {
         documentId: `doc${generation}`, blockCount: total, knownBlockCount: total, isIndexComplete: true,
         isRightToLeft: true, stylesheet: '', headingCount: 2, footnoteCount: 1, endnoteCount: 0,
+        sections: SECTIONS,
       }
     },
     blocks: async (documentId, first, count) => {
@@ -52,7 +55,7 @@ function fakeApi(total: number) {
     noteBlocks: async () => Int32Array.from([5]),
     bookmark: async () => null,
     search: async () => ({ hitBlocks: [], hitCounts: [], nextBlock: -1, reachedEnd: true }),
-    sections: async () => [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }],
+    sections: async () => SECTIONS,
     scan: async (documentId, blocks) => {
       calls.push({ op: 'scan', args: [documentId, blocks] })
       return { knownBlockCount: total, isIndexComplete: true, footnoteCount: 1, endnoteCount: 0 }

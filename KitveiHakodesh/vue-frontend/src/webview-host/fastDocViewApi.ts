@@ -22,6 +22,8 @@ export interface FastDocViewSummary {
   endnoteCount: number
   /** The title the file declares itself (a Torat Emet book name); absent when it has none. */
   title?: string | null
+  /** Page text width per section known so far, so the first paint already has the margins. */
+  sections?: FastDocViewSection[]
 }
 
 export interface FastDocViewNote {
@@ -49,6 +51,8 @@ export interface FastDocViewScanState {
   /** Note counts grow with the index, like the block count. */
   footnoteCount: number
   endnoteCount: number
+  /** Page text width per section known so far - a scan can find new sections. */
+  sections?: FastDocViewSection[]
 }
 
 export interface FastDocViewHeading {
