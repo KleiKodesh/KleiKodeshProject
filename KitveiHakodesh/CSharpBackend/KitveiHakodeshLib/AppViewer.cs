@@ -469,10 +469,37 @@ namespace KitveiHakodeshLib
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            _handleReady.TrySetResult(true);
             // Title bar theme is applied via OnHostFormHandleCreated (host Form's
             // HandleCreated event), which fires before the form is visible — the
             // correct moment for DarkNet. Nothing to do here.
         }
+
+        // Completed once this control has its window; InitAsyncCore waits on it.
+        private readonly TaskCompletionSource<bool> _handleReady = new TaskCompletionSource<bool>();
+
+        /// <summary>
+        /// Creates the WebView2's window as a child of this control's window, in this
+        /// window's DPI awareness context. Creating it any earlier puts it on WinForms'
+        /// hidden parking window instead, and Windows then refuses to move it under a
+        /// parent of a different DPI context (SetParent fails with ERROR_INVALID_STATE,
+        /// 5023): Word hosts a task pane in a system-DPI window, while a macro-launched
+        /// command runs under the thread's per-monitor context. The pane was then
+        /// shown with the page loaded, but the browser sat invisible on the parking
+        /// window (issue #331, the white pane).
+        /// </summary>
+        private void CreateWebViewWindowUnderThis()
+        {
+            if (_webView.IsHandleCreated) return;
+            IntPtr previous = IntPtr.Zero;
+            try { previous = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(Handle)); }
+            catch (EntryPointNotFoundException) { /* before Windows 10 1607: one context per process */ }
+            try { var _ = _webView.Handle; }
+            finally { if (previous != IntPtr.Zero) SetThreadDpiAwarenessContext(previous); }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetWindowDpiAwarenessContext(IntPtr h);
 
         private async Task InitAsync()
         {
@@ -568,6 +595,10 @@ namespace KitveiHakodeshLib
         private async Task InitAsyncCore()
         {
             var env = await GetSharedEnv(UserDataFolderFor(_webCacheFolder));
+
+            // The browser window must be born under ours - see CreateWebViewWindowUnderThis.
+            if (!IsHandleCreated) await _handleReady.Task;
+            CreateWebViewWindowUnderThis();
 
             await _webView.EnsureCoreWebView2Async(env);
 
