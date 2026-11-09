@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import FilterPills from '@/components/FilterPills.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { censorDivineNames } from '@/utils/censorDivineNames'
@@ -158,12 +159,12 @@ const sourcePills = computed(() => {
     for (const item of group.items) families.add(item.family)
   for (const item of specialEntries.value) families.add(item.family)
   families.delete('')  // a row with no source label gets no pill
-  return [...families].map(family => ({ family }))
+  return [...families].map(family => ({ key: family, label: family }))
 })
 
 // The saved pick narrowed to sources this word has; none of them here = show everything.
 const activeFamilies = computed(() => {
-  const present = new Set(sourcePills.value.map(p => p.family))
+  const present = new Set(sourcePills.value.map(p => p.key))
   return new Set(settings.dictionarySourceFilter.filter(f => present.has(f)))
 })
 
@@ -171,19 +172,17 @@ function isShown(family: string): boolean {
   return activeFamilies.value.size === 0 || activeFamilies.value.has(family)
 }
 
-function toggleFamily(family: string) {
-  // Built from the saved pick, not activeFamilies, so sources this word lacks stay picked.
-  const current = settings.dictionarySourceFilter
-  settings.dictionarySourceFilter = current.includes(family)
-    ? current.filter(f => f !== family)
-    : [...current, family]
-}
-
-// "All" clears only this word's sources, so picks for other sources survive.
-function showAllFamilies() {
-  const present = new Set(sourcePills.value.map(p => p.family))
-  settings.dictionarySourceFilter = settings.dictionarySourceFilter.filter(f => !present.has(f))
-}
+// Pills edit only this word's sources; picks for sources this word lacks are kept.
+const activeFamilyList = computed<string[]>({
+  get: () => [...activeFamilies.value],
+  set: (picked) => {
+    const present = new Set(sourcePills.value.map(p => p.key))
+    settings.dictionarySourceFilter = [
+      ...settings.dictionarySourceFilter.filter(f => !present.has(f)),
+      ...picked,
+    ]
+  },
+})
 
 const visibleSenseGroups = computed((): SenseGroup[] => {
   const groups = senseGroups.value
@@ -232,20 +231,13 @@ const allRelated = computed(() => [
 
     <h1 class="word-title">{{ data.headword }}</h1>
 
-    <div v-if="sourcePills.length > 1" class="source-pills ui-chrome">
-      <button
-        class="source-pill"
-        :class="{ 'source-pill--active': activeFamilies.size === 0 }"
-        @click="showAllFamilies"
-      >{{ $t('dictionary.allSources') }}</button>
-      <button
-        v-for="pill in sourcePills"
-        :key="pill.family"
-        class="source-pill"
-        :class="{ 'source-pill--active': activeFamilies.has(pill.family) }"
-        @click="toggleFamily(pill.family)"
-      >{{ pill.family }}</button>
-    </div>
+    <FilterPills
+      v-if="sourcePills.length > 1"
+      v-model="activeFamilyList"
+      class="source-pills ui-chrome"
+      :items="sourcePills"
+      :all-label="$t('dictionary.allSources')"
+    />
 
     <!-- All definitions grouped by word form, followed by מחברת מנחם and הערוך -->
     <section v-if="senseGroups.length || specialEntries.length" class="defs-section">
@@ -316,35 +308,9 @@ const allRelated = computed(() => [
 }
 
 .source-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   padding-inline: 16px;
   margin-bottom: 8px;
   flex-shrink: 0;
-}
-
-.source-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-family: inherit;
-  line-height: 1;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.source-pill:hover { background: var(--hover-bg); color: var(--text-primary); }
-/* Same active look as the toolbar / commentary-nav toggle buttons. */
-.source-pill--active,
-.source-pill--active:hover {
-  background: var(--active-bg);
-  color: var(--text-primary);
 }
 
 .section-title {

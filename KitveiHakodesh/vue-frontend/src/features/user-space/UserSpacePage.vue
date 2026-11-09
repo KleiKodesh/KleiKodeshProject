@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useElementSize } from '@vueuse/core'
+import FilterPills from '@/components/FilterPills.vue'
 import { IconFolderAdd20Regular, IconLibrary20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import BookCatalogTitleBar from '@/features/book-catalog/BookCatalogTitleBar.vue'
@@ -86,11 +87,13 @@ const searchRoots = computed(() =>
     ? roots.value.filter((r) => selectedRootKeys.value.includes(userSpaceRootKey(r)))
     : roots.value,
 )
-function toggleRootPill(key: string) {
-  selectedRootKeys.value = selectedRootKeys.value.includes(key)
-    ? selectedRootKeys.value.filter((k) => k !== key)
-    : [...selectedRootKeys.value, key]
-}
+const rootPillItems = computed(() =>
+  roots.value.map((root) => ({
+    key: userSpaceRootKey(root),
+    label: userSpaceStore.rootTitle(root),
+    title: root.kind === 'computer' ? root.path : userSpaceStore.rootTitle(root),
+  })),
+)
 // A removed root drops out of the selection, so it cannot leave the search narrowed to nothing.
 watch(roots, (list) => {
   const keys = new Set(list.map(userSpaceRootKey))
@@ -304,24 +307,15 @@ function confirmRemove() {
       </template>
     </BookCatalogTitleBar>
     <!-- Shown while searching, with more than one root to choose between. -->
-    <div v-if="isSearching && roots.length > 1" class="root-pills" role="group" :aria-label="$t('userSpace.rootPills')">
-      <button
-        class="root-pill"
-        :class="{ active: !selectedRootKeys.length }"
-        @mousedown.prevent
-        @click="selectedRootKeys = []"
-      >{{ $t('userSpace.allRoots') }}</button>
-      <button
-        v-for="root in roots"
-        :key="userSpaceRootKey(root)"
-        class="root-pill"
-        :class="{ active: selectedRootKeys.includes(userSpaceRootKey(root)) }"
-        :title="root.kind === 'computer' ? root.path : userSpaceStore.rootTitle(root)"
-        data-testid="user-space-root-pill"
-        @mousedown.prevent
-        @click="toggleRootPill(userSpaceRootKey(root))"
-      >{{ userSpaceStore.rootTitle(root) }}</button>
-    </div>
+    <FilterPills
+      v-if="isSearching && roots.length > 1"
+      v-model="selectedRootKeys"
+      class="root-pills"
+      :aria-label="$t('userSpace.rootPills')"
+      :items="rootPillItems"
+      :all-label="$t('userSpace.allRoots')"
+      item-test-id="user-space-root-pill"
+    />
     <MessageBanner v-if="notice" class="notice" :message="notice" @dismiss="notice = null" />
     <div ref="contentRef" class="user-space-content">
       <LoadingAnimation v-if="catalogLoading || !rootsLoaded" />
@@ -399,37 +393,9 @@ function confirmRemove() {
   font-size: 14px;
   text-align: center;
 }
-/* Root pills: the halachic-units page's chip look, in a wrapping row under the bar. */
+/* Root pills: shared .filter-pills look (main.css), in a row under the bar. */
 .root-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   padding: 6px 12px 2px;
-}
-.root-pill {
-  height: 26px;
-  max-width: 220px;
-  padding: 0 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 13px;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.root-pill:hover {
-  color: var(--text-primary);
-  border-color: var(--text-secondary);
-}
-.root-pill.active {
-  background: color-mix(in srgb, var(--accent-color) 15%, var(--bg-primary));
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-  font-weight: 600;
 }
 .notice {
   margin: 8px 12px 0;
