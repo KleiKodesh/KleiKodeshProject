@@ -36,7 +36,7 @@ bool treeOrderSelfTest = false;
 bool expanderSelfTest = false;
 string? treeOrderDump = null;
 string? exhaustiveOut = null;
-string? goldenDir = null, goldenTag = null, goldenCold = null;
+string? goldenDir = null, goldenTag = null, goldenCold = null, goldenExplain = null;
 int exhLevels = 2, exhEvery = 1, exhShard = 0, exhShards = 1;
 for (int i = 0; i < args.Length; i++)
 {
@@ -59,11 +59,13 @@ for (int i = 0; i < args.Length; i++)
         case "--userspace-selftest": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Run() == 0 ? 0 : 1;
         case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
         case "--userspace-bench": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Bench(args[++i], args[++i], args.Skip(i + 1).ToArray());
+        case "--files-golden": return KitveiHakodeshService.Tests.FilesGoldenRig.Run(args[++i], args[++i], args[++i]);
         case "--notesbook-selftest": return KitveiHakodeshService.Tests.NotesBookCheck.Run() == 0 ? 0 : 1;
         case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
         case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;
         case "--golden-cold": goldenDir = args[++i]; goldenTag = args[++i]; goldenCold = args[++i]; break;
+        case "--golden-explain": goldenDir = args[++i]; goldenTag = args[++i]; goldenExplain = args[++i]; break;
         case "--exhaustive": exhaustiveOut = args[++i]; break;
         case "--fastdocview-cancel-open": cancelOpenFile = args[++i]; break;
         case "--fastdocview-picture-rpc": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pictureRpcFiles.Add(args[++i]); break;
@@ -122,6 +124,8 @@ if (treeOrderDump is not null)
 if (exhaustiveOut is not null)
     return ExhaustiveRecall.Run(dbPath, indexPath, exhaustiveOut, exhLevels, exhEvery, exhShard, exhShards);
 
+if (goldenDir is not null && goldenExplain is not null)
+    return KitveiHakodeshService.Tests.GoldenExplain.Run(dbPath, goldenDir, goldenTag!, goldenExplain);
 if (goldenDir is not null)
     return goldenCold is null ? GoldenRig.Run(dbPath, goldenDir, goldenTag!) : GoldenRig.Cold(dbPath, goldenDir, goldenTag!, goldenCold);
 if (abbrevMode)
@@ -629,7 +633,7 @@ if (compareQuery is not null)
     for (int i = 0; i < Math.Min(30, lucene.Count); i++)
     {
         var h = lucene[i];
-        Console.WriteLine($"  L#{i + 1,-4} lvl={h.Level} ord={(h.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
+        Console.WriteLine($"  L#{i + 1,-4} lvl={h.Level} ord={(h.Keys.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
     }
     if (lucene.Count > 30) Console.WriteLine($"  … {lucene.Count - 30} more");
 
@@ -637,7 +641,7 @@ if (compareQuery is not null)
     // contain BOTH in-order and out-of-order hits.
     var mixed = lucene
         .GroupBy(h => (h.BookId, h.Level))
-        .Where(g => g.Any(h => h.QueryInOrder) && g.Any(h => !h.QueryInOrder))
+        .Where(g => g.Any(h => h.Keys.QueryInOrder) && g.Any(h => !h.Keys.QueryInOrder))
         .Take(5)
         .ToList();
     Console.WriteLine();
@@ -646,7 +650,7 @@ if (compareQuery is not null)
     {
         Console.WriteLine($"  book {g.Key.BookId} lvl={g.Key.Level}:");
         foreach (var h in g.Take(6))
-            Console.WriteLine($"    ord={(h.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
+            Console.WriteLine($"    ord={(h.Keys.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
     }
     return 0;
 }
@@ -908,10 +912,10 @@ for (int qi = 0; qi < corpus.Count; qi++)
             bool ok =
                 (prev.IsLiteral && !cur.IsLiteral) ||                    // literal block ends before variant block
                 (prev.IsLiteral == cur.IsLiteral && (
-                    (prev.QuotedFormMatch && !cur.QuotedFormMatch) ||    // quoted-form block ends
-                    (prev.QuotedFormMatch == cur.QuotedFormMatch && (
-                        (prev.MatchesTitleOrAuthor && !cur.MatchesTitleOrAuthor) || // title/author block ends
-                        (prev.MatchesTitleOrAuthor == cur.MatchesTitleOrAuthor && ( // same block: (Level, TreeOrder)
+                    (prev.Keys.QuotedFormMatch && !cur.Keys.QuotedFormMatch) ||    // quoted-form block ends
+                    (prev.Keys.QuotedFormMatch == cur.Keys.QuotedFormMatch && (
+                        (prev.Keys.MatchesTitleOrAuthor && !cur.Keys.MatchesTitleOrAuthor) || // title/author block ends
+                        (prev.Keys.MatchesTitleOrAuthor == cur.Keys.MatchesTitleOrAuthor && ( // same block: (Level, TreeOrder)
                             prev.Level < cur.Level ||
                             (prev.Level == cur.Level && prev.TreeOrder <= cur.TreeOrder)))))));
             if (!ok)

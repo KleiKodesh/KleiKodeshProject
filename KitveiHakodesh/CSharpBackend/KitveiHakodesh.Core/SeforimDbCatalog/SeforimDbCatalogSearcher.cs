@@ -146,20 +146,19 @@ public sealed partial class SeforimDbCatalogIndex
     /// <summary>
     /// Contains-all search: every query token (same normalization pipeline as indexing)
     /// must appear in ONE of the document's indexed fields — TOC path, catalog path, or
-    /// author. Results are NEVER capped. Lucene relevance is ignored — ordering is
-    /// accuracy first, then catalog position: IsLiteral descending (a hit that matched
-    /// every word LITERALLY, i.e. without any כתיב/ה-prefix variant or fuzzy edit, ranks
-    /// ahead of one that needed a variant to match), then Level ascending (book title =
-    /// 0, then TOC depth), then TreeOrder ascending (catalog book position, then the
-    /// original TOC order). Nothing else affects ordering.
+    /// author. Matching and ranking are NEVER capped. Lucene relevance is ignored: every
+    /// match is collected with its ranking keys read from index data alone (postings,
+    /// positions, doc-values — see <see cref="RankCollector"/>), ordered by
+    /// <see cref="SeforimDbCatalogRankingKeys.Compare"/> and then catalog position (Level,
+    /// then TreeOrder), and only the ordered top <see cref="MaterializeCap"/> are read from
+    /// stored fields. No key is ever measured on stored text.
     ///
-    /// Query token order (final tie-breaker, never a relevance score): the test runs
-    /// against the TOC-PATH FIELD ONLY — query tokens present among the path's tokens
-    /// must appear there in typed order; tokens that aren't in the path (catalog terms,
-    /// authors) don't participate by construction. When a (level, book) group contains
-    /// BOTH an in-order and an out-of-order hit, the out-of-order hits are DISCARDED
-    /// ("תנך בראשית ד יד" keeps פרק ד / פסוק יד and drops פרק יד / פסוק ד). Groups with
-    /// no in-order hit are kept untouched, so title/catalog word order (משנה תורה vs
+    /// Query token order: the test runs against the TOC-PATH FIELD ONLY — query tokens present
+    /// among the path's tokens must appear there in typed order; tokens that aren't in the
+    /// path (catalog terms, authors) don't participate by construction. When a (level, book)
+    /// group contains BOTH an in-order and an out-of-order hit, the out-of-order hits are
+    /// DISCARDED ("תנך בראשית ד יד" keeps פרק ד / פסוק יד and drops פרק יד / פסוק ד). Groups
+    /// with no in-order hit are kept untouched, so title/catalog word order (משנה תורה vs
     /// תורה משנה) never filters anything.
     ///
     /// Per-structure level truncation (after the discard): within each book's each TOC
@@ -167,7 +166,8 @@ public sealed partial class SeforimDbCatalogIndex
     /// its deeper-level hits are dropped. Scoped that narrowly on purpose: a structure
     /// whose sole matches are deep keeps them, and neither another book nor another
     /// structure of the SAME book (alt structures are independent address spaces) can
-    /// truncate it.
+    /// truncate it — except that a book whose own title row is its best match collapses
+    /// whole, every structure, to that row.
     /// </summary>
     public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
         => Search(query, null, ct);
@@ -220,33 +220,33 @@ public sealed partial class SeforimDbCatalogIndex
         IndexSearcher searcher, VariantLookup variants,
         List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, string query, Query? scope, CancellationToken ct)
     {
-        // The words the ranking treats as typed, and the books those words name — both
-        // decided once per search, the latter feeding the collector's pre-cap order.
+        // The query-side word sets every key is measured against, decided once per search.
         var queryWords = SeforimDbCatalogRankingKeys.QueryWordSet(tokens, variants);
-        var coveredRanks = CoveredBookRanks(searcher.IndexReader, queryWords);
+        var queryCounts = SeforimDbCatalogRankingKeys.QueryWordCounts(tokens);
+        int queryWordCount = 0;
+        foreach (var n in queryCounts.Values) queryWordCount += n;
+        // The typed words, not an expansion: "bamidbar" typed is the word bamidbar, and
+        // ordering on its expansion "Bamidbar Rabbah" put a second "rabbah" in the sequence
+        // that no path has — every hit failed the order test, so word order decided nothing.
+        var orderWords = SeforimDbCatalogRankingKeys.OrderWords(tokens);
+        // The quoted acronyms the user actually typed, if any: matched against the keys the
+        // index holds per book (FieldQuotedKey).
+        var queryQuotedKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(query);
+        // The books the query names — CoveredTitles stays unscoped on purpose: it only marks
+        // books, and a book outside the scope never reaches the collector to be marked.
+        var coveredTitles = CoveredTitles(searcher.IndexReader, queryWords, queryWordCount);
 
-        // Accuracy-first ranking (see SortKeyCollector): literal (exact / non-variant)
-        // matches rank ahead of variant/fuzzy-only ones. To tag each hit BEFORE the
-        // materialization cap, run the strict literal query (no variants, no fuzzy) into
-        // a doc-ID set; a hit is literal iff it is in that set.
+        // Accuracy-first ranking: literal (exact / non-variant) matches rank ahead of
+        // variant/fuzzy-only ones. To tag each hit, run the strict literal query (no
+        // variants, no fuzzy) into a doc-ID set; a hit is literal iff it is in that set.
         var litCollector = new DocIdSetCollector(ct, searcher.IndexReader.MaxDoc);
         searcher.Search(Scoped(BuildQuery(tokens, fuzzy: false, variants: null), scope), litCollector);
         FixedBitSet? literalDocIds = litCollector.Ids;
 
-        // Word list for the query-token-order tiebreak (see RunPass).
-        var orderWords = new List<string>(tokens.Count);
-        // The typed words, not an expansion: "bamidbar" typed is the word bamidbar, and
-        // ordering on its expansion "Bamidbar Rabbah" put a second "rabbah" in the sequence
-        // that no path has — every hit failed the order test, so word order decided nothing.
-        foreach (var t in tokens) orderWords.AddRange(t.RankingWords);
-
-        // The quoted acronyms the user actually typed, if any. Measured against each HIT's own
-        // STORED text at materialization — the stored strings keep their quote glyphs, only the
-        // indexed tokens were stripped — so no index-side field and no rebuild is involved.
-        var queryQuotedKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(query);
+        var pass = new PassInputs(tokens, variants, literalDocIds, coveredTitles, queryWords, queryCounts, orderWords, queryQuotedKeys, scope);
 
         // Normal pass: exact + כתיב/ה-prefix variants (never fuzzy).
-        var hits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: false, literalDocIds, orderWords, queryQuotedKeys, scope, ct);
+        var hits = RunPass(searcher, pass, fuzzy: false, ct);
 
         // SPARSE-FUZZY APPEND: when the normal result set is sparse (fewer than
         // SparseFuzzyThreshold hits — which subsumes the old "exact found nothing"
@@ -255,11 +255,11 @@ public sealed partial class SeforimDbCatalogIndex
         // the TOC path, where a one-letter edit is a different chapter/verse — and only
         // for tokens of 3+ characters. The appended hits are fuzzy-only (never literal),
         // so they sit strictly AFTER every normal hit; ordered among themselves by
-        // (Level, TreeOrder). This is a "did you mean" tail, not a reranking of the
+        // the same rules. This is a "did you mean" tail, not a reranking of the
         // confident results above it.
         if (hits.Count < SparseFuzzyThreshold && tokens.Any(HasFuzzyableWord))
         {
-            var fuzzyHits = RunPass(searcher, tokens, variants, queryWords, coveredRanks, fuzzy: true, literalDocIds, orderWords, queryQuotedKeys, scope, ct);
+            var fuzzyHits = RunPass(searcher, pass, fuzzy: true, ct);
             var seen = new HashSet<(int, string)>(hits.Count);
             foreach (var h in hits) seen.Add((h.BookId, h.FullTocPath));
             foreach (var fh in fuzzyHits)
@@ -274,130 +274,43 @@ public sealed partial class SeforimDbCatalogIndex
     /// covers the count==0 case the old fuzzy fallback handled).</summary>
     private const int SparseFuzzyThreshold = 10;
 
+    /// <summary>What both passes of one search share: the query-side sets and the per-search
+    /// index tables, built once.</summary>
+    private sealed record PassInputs(
+        List<SeforimDbCatalogTextNormalizer.QueryToken> Tokens, VariantLookup Variants, FixedBitSet? LiteralDocIds,
+        Dictionary<int, CoveredTitle> CoveredTitles, HashSet<string> QueryWords, Dictionary<string, int> QueryCounts,
+        List<string> OrderWords, HashSet<string>? QueryQuotedKeys, Query? Scope);
+
     /// <summary>
-    /// One search pass: run the query (optionally fuzzy), order by (IsLiteral desc,
-    /// Level asc, TreeOrder asc), materialize the ordered top <see cref="MaterializeCap"/>,
-    /// and apply the query-token-order discard and the per-structure level truncation
-    /// (each book's each TOC structure keeps only its shallowest-level hits). Returns the
-    /// resulting hit list (empty when nothing matched). Used for both the normal pass and
-    /// the fuzzy append pass.
+    /// One search pass: run the query (optionally fuzzy) through <see cref="RankCollector"/>,
+    /// which hands back EVERY match with its full ranking keys (index data only — nothing is
+    /// capped and no stored field is read); apply the two per-book set rules — the query-token-
+    /// order discard and the per-structure level truncation — over that whole set; order it by
+    /// the ranking keys, then catalog order; and materialize (read stored fields — the only
+    /// expensive step) the ordered top <see cref="MaterializeCap"/>. The cap is a PERFORMANCE
+    /// bound and nothing more: matching, the set rules and the ordering above are uncapped, so
+    /// it only limits how many already-ordered documents are turned into full hit objects (no
+    /// one scrolls past ~1000). Used for both the normal pass and the fuzzy append pass.
     /// </summary>
-    private List<CatalogTocHit> RunPass(
-        IndexSearcher searcher, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants,
-        HashSet<string> queryWords, HashSet<long> coveredRanks,
-        bool fuzzy, FixedBitSet? literalDocIds, List<string> orderWords, HashSet<string>? queryQuotedKeys,
-        Query? scope, CancellationToken ct)
+    private List<CatalogTocHit> RunPass(IndexSearcher searcher, PassInputs pass, bool fuzzy, CancellationToken ct)
     {
-        var collector = new SortKeyCollector(ct, literalDocIds, coveredRanks);
-        searcher.Search(Scoped(BuildQuery(tokens, fuzzy, variants), scope), collector);
-        if (collector.Count == 0) return [];
+        var collector = new RankCollector(ct, pass.Tokens, pass.Variants, pass.LiteralDocIds, pass.CoveredTitles,
+            pass.QueryWords, pass.QueryCounts, pass.OrderWords, pass.QueryQuotedKeys);
+        searcher.Search(Scoped(BuildQuery(pass.Tokens, fuzzy, pass.Variants), pass.Scope), collector);
+        var entries = collector.Entries;
+        if (entries.Count == 0) return [];
 
-        // Order EVERY match by (IsLiteral, Level, TreeOrder): literal (exact / non-
-        // variant) matches first, then catalog order within each block. The keys come
-        // from column-stored doc-values + the literal doc-ID set captured during
-        // collection — no stored-field decompression yet, so this stays cheap even for
-        // tens of thousands of hits.
-        var ordered = collector.Ordered();
-
-        // Materialize (read stored fields — the expensive step) only the ordered top
-        // MaterializeCap. The cap is a PERFORMANCE bound and nothing more: matching and
-        // ordering above are uncapped, so this only limits how many already-ordered
-        // documents are turned into full hit objects (no one scrolls past ~1000).
-        int take = Math.Min(MaterializeCap, ordered.Count);
-        var hits = new List<CatalogTocHit>(take);
-        var queryCounts = SeforimDbCatalogRankingKeys.QueryWordCounts(tokens);
-        int queryWordCount = 0;
-        foreach (var n in queryCounts.Values) queryWordCount += n;
-        for (int i = 0; i < take; i++)
+        // Query-token-order discard: within each (level, book) group that has at least one
+        // in-order hit, drop the out-of-order ones. Groups with no in-order hit are kept
+        // untouched, so title/catalog word order (משנה תורה vs תורה משנה) never filters anything.
+        if (pass.OrderWords.Count >= 2)
         {
-            ct.ThrowIfCancellationRequested();
-            int docId = ordered[i].DocId;
-            var doc = searcher.Doc(docId);
-            string fullTocPath = doc.Get(FieldFullTocPath) ?? "";
-            // Tokenize the path ONCE; title and leaf are short re-tokenizations of its ends.
-            var pathTokens = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
-            var titleTokens = ordered[i].Level == 0 ? pathTokens : SeforimDbCatalogTextNormalizer.Tokenize(TitleOf(doc, fullTocPath, ordered[i].Level));
-            string tocPath = PathWithoutTitle(doc, fullTocPath, ordered[i].Level);
-            var leafTokens = ordered[i].Level == 0 ? titleTokens : SeforimDbCatalogTextNormalizer.Tokenize(SeforimDbCatalogRankingKeys.LastSegment(tocPath));
-            hits.Add(new CatalogTocHit
-            {
-                BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
-                LineIndex = doc.GetField(FieldLineIndex)?.GetInt32Value() ?? -1,
-                FullTocPath = fullTocPath,
-                PathTokens = pathTokens,
-                TocPath = tocPath,
-                Level = ordered[i].Level,
-                TreeOrder = ordered[i].TreeOrder,
-                IsLiteral = ordered[i].IsLiteral,
-                StructureId = ordered[i].StructureId,
-                QuotedFormMatch = ordered[i].Level == 0 && queryQuotedKeys != null && HitCarriesQuotedKey(doc, queryQuotedKeys),
-                MatchesTitleOrAuthor = MatchesOnTitleOrAuthor(doc, pathTokens, tokens, variants),
-                TitleCovered = SeforimDbCatalogRankingKeys.IsCovered(titleTokens, queryWords),
-                TitleDistinctWords = SeforimDbCatalogRankingKeys.DistinctFound(titleTokens, queryWords),
-                TitleLengthGap = Math.Abs(titleTokens.Count - queryWordCount),
-                LeafCovered = SeforimDbCatalogRankingKeys.IsCovered(leafTokens, queryWords),
-                LeafAddsWord = ordered[i].Level > 0 && SeforimDbCatalogRankingKeys.IsCovered(leafTokens, queryWords) && leafTokens.Exists(w => !titleTokens.Contains(w)),
-                WordsMatched = SeforimDbCatalogRankingKeys.CountMatched(pathTokens, queryCounts, variants),
-                // Read only for a scoped search (UserSpace needs it to find the hit's root).
-                CategoryAncestors = scope is null ? [] : CategoryAncestorsOf(doc),
-            });
-        }
-
-        // Query-token-order tiebreak: within each (level, book) group that has at least
-        // one in-order hit, drop the out-of-order ones. The order test runs on the flat
-        // word sequence (an abbreviation contributes its first/canonical alternative's
-        // words in order); ambiguity in an alternative doesn't change the typed order.
-        if (orderWords.Count >= 2)
-        {
-            // One tokenization per hit serves BOTH the order test and the proximity
-            // measurement; measuring them separately tokenized every path twice, on every
-            // keystroke.
-            var scratch = new SeforimDbCatalogRankingKeys.PathScratch(orderWords.Count);
-            foreach (var h in hits) scratch.Measure(h.PathTokens, orderWords, h);
-
-            var groupsWithInOrder = new HashSet<(int Level, long Book)>();
-            foreach (var h in hits)
-                if (h.QueryInOrder) groupsWithInOrder.Add((h.Level, h.TreeOrder >> 24));
-
+            var groupsWithInOrder = new HashSet<(int Level, int Book)>();
+            foreach (var e in entries)
+                if (e.Keys.QueryInOrder) groupsWithInOrder.Add((e.Level, e.BookId));
             if (groupsWithInOrder.Count > 0)
-                hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
+                entries.RemoveAll(e => !e.Keys.QueryInOrder && groupsWithInOrder.Contains((e.Level, e.BookId)));
         }
-
-        // Field-accuracy rank over the materialized window, on keys that can only be read from
-        // STORED text (so SortKeyCollector, which sees only doc-values, cannot carry them):
-        //   MatchesTitleOrAuthor - every query word landed in the title/path or author, not
-        //                          merely in a category name shared by every book filed under it
-        //   TitleCovered         - the query names the book: every title word is a query word.
-        //                          "Tur" is the book Tur before "Kapei Aharon al Tur"; "Tur Orach
-        //                          Chaim" is Tur's own section before that commentary. Among
-        //                          covered titles the one explaining more of the query wins, then
-        //                          the shorter ("X" before "X (Y)").
-        //   LeafCovered /        - the typed address IS this entry's own segment: "Shemini" before
-        //   WordsMatched           "Shemini Atzeret"; "mishnah 5" before a "perek 5" sharing one word
-        //   QuotedFormMatch      - a book title written the way the query was typed, quote and
-        //                          all, rather than being the ordinary word the acronym strips to
-        //                          (below TitleCovered: the book the acronym NAMES comes first)
-        //
-        // Unconditional, unlike the proximity sort below which guards on a 2+ word query: an
-        // acronym is typically ONE word, and a category collision needs no particular length
-        // either. Stable, and below IsLiteral throughout, so a variant match never overtakes a
-        // literal one.
-        SeforimDbCatalogRankingKeys.StableSortByFieldAccuracy(hits);
-
-        // Word-proximity rank: how tightly the query's words sit together in the path (keys
-        // already measured in the fused pass above). Reordering the materialized window rather
-        // than the full match set is deliberate: the accuracy-first block order from
-        // SortKeyCollector already decided WHICH hits are worth showing, and proximity only
-        // reorders within that.
-        //
-        // Sorted with a STABLE comparison chain, so hits equal on every key keep the
-        // (Level, TreeOrder) order they arrived in. Proximity sits BELOW IsLiteral — a variant
-        // match never overtakes a literal one however tightly its words cluster — and ABOVE
-        // Level/TreeOrder, which would otherwise let catalog position bury the tighter address.
-        // WordsFound outranks WordSpan: finding more of the query in the path beats packing
-        // fewer words closer together.
-        if (orderWords.Count >= 2)
-            SeforimDbCatalogRankingKeys.StableSortByProximity(hits);
 
         // Per-structure level truncation: within ONE book's ONE TOC structure, a hit at a
         // shallower level is the more accurate address for the query, so that structure's
@@ -418,24 +331,66 @@ public sealed partial class SeforimDbCatalogIndex
         // words — the deeper one is the address typed, and keeping the shallower one would
         // have hidden it. A plain title query ties every entry with the book (each holds the
         // title words once), and the book, shallowest, is what stays.
-        var bestByStructure = new Dictionary<(bool IsLiteral, int BookId, int StructureId), (int Matched, int Level)>();
-        foreach (var h in hits)
+        //
+        // The book's TITLE row, when it is the book's best match, is the shallowest address of
+        // the WHOLE book: every structure collapses to it, also an alt structure that has no row
+        // of its own at level 0 ("Tur" is the book, not six hundred of its hilchot headings).
+        var bestByStructure = new Dictionary<(bool IsLiteral, int Book, int StructureId), (int Matched, int Level)>();
+        var titleMatched = new Dictionary<(bool IsLiteral, int Book), int>();
+        foreach (var e in entries)
         {
-            var key = (h.IsLiteral, h.BookId, h.StructureId);
+            var key = (e.Keys.IsLiteral, e.BookId, e.StructureId);
             if (!bestByStructure.TryGetValue(key, out var best)
-                || h.WordsMatched > best.Matched
-                || (h.WordsMatched == best.Matched && h.Level < best.Level))
-                bestByStructure[key] = (h.WordsMatched, h.Level);
+                || e.Keys.WordsMatched > best.Matched
+                || (e.Keys.WordsMatched == best.Matched && e.Level < best.Level))
+                bestByStructure[key] = (e.Keys.WordsMatched, e.Level);
+            if (e.Level == 0) titleMatched[(e.Keys.IsLiteral, e.BookId)] = e.Keys.WordsMatched;
         }
         // An entry whose OWN name holds a typed word beyond the title (LeafAddsWord) is never trimmed: a book with
         // "daf 8" in its first edition and again under "second edition" must show both.
-        hits.RemoveAll(h =>
+        entries.RemoveAll(e =>
         {
-            if (h.LeafAddsWord) return false;
-            var best = bestByStructure[(h.IsLiteral, h.BookId, h.StructureId)];
-            return h.WordsMatched < best.Matched || h.Level > best.Level;
+            if (e.Keys.LeafAddsWord) return false;
+            var best = bestByStructure[(e.Keys.IsLiteral, e.BookId, e.StructureId)];
+            if (e.Keys.WordsMatched < best.Matched || e.Level > best.Level) return true;
+            return e.Level > 0 && titleMatched.TryGetValue((e.Keys.IsLiteral, e.BookId), out int byTitle) && byTitle >= e.Keys.WordsMatched;
         });
 
+        // The order: the ranking keys (proximity included for a 2+ word query — how tightly
+        // the query's words sit together in the path, below the accuracy keys so a variant
+        // match never overtakes a literal one however tightly its words cluster), then the
+        // catalog's own order (Level, then TreeOrder) among hits that tie on every key.
+        bool proximity = pass.OrderWords.Count >= 2;
+        entries.Sort((a, b) =>
+        {
+            int c = SeforimDbCatalogRankingKeys.Compare(a.Keys, b.Keys, proximity);
+            if (c != 0) return c;
+            c = a.Level.CompareTo(b.Level);   // the keys rank title-or-not only; depth is catalog order
+            return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
+        });
+
+        int take = Math.Min(MaterializeCap, entries.Count);
+        var hits = new List<CatalogTocHit>(take);
+        for (int i = 0; i < take; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var e = entries[i];
+            var doc = searcher.Doc(e.DocId);
+            string fullTocPath = doc.Get(FieldFullTocPath) ?? "";
+            hits.Add(new CatalogTocHit
+            {
+                BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
+                LineIndex = doc.GetField(FieldLineIndex)?.GetInt32Value() ?? -1,
+                FullTocPath = fullTocPath,
+                TocPath = PathWithoutTitle(doc, fullTocPath, e.Level),
+                Level = e.Level,
+                TreeOrder = e.TreeOrder,
+                StructureId = e.StructureId,
+                Keys = e.Keys,
+                // Read only for a scoped search (UserSpace needs it to find the hit's root).
+                CategoryAncestors = pass.Scope is null ? [] : CategoryAncestorsOf(doc),
+            });
+        }
         return hits;
     }
 
@@ -509,7 +464,7 @@ public sealed partial class SeforimDbCatalogIndex
     }
 
     /// <summary>The any-of category clause for a scoped search; null when unscoped.
-    /// <see cref="CoveredBookRanks"/> stays unscoped on purpose: it only marks books the query
+    /// <see cref="CoveredTitles"/> stays unscoped on purpose: it only marks books the query
     /// names, and a book outside the scope never reaches the collector to be marked.</summary>
     private static Query? CategoryFilter(IReadOnlyCollection<int>? categoryIds)
     {
@@ -549,24 +504,6 @@ public sealed partial class SeforimDbCatalogIndex
         return false;
     }
 
-    /// <summary>True when this hit's own stored text carries any of the quoted acronyms the
-    /// query was typed with.</summary>
-    private static bool HitCarriesQuotedKey(Document doc, HashSet<string> queryQuotedKeys)
-    {
-        // IndexedFields is the same three stored fields, reused so this allocates no array per
-        // hit. Their ORDER does not matter — any one match answers the question — though
-        // path-first means the common case returns soonest.
-        foreach (var field in IndexedFields)
-        {
-            var text = doc.Get(field);
-            if (string.IsNullOrEmpty(text)) continue;
-            var keys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(text);
-            if (keys == null) continue;
-            foreach (var key in queryQuotedKeys) if (keys.Contains(key)) return true;
-        }
-        return false;
-    }
-
     /// <summary>The stored path minus its book-title head (and the " / " after it). A pre-v21
     /// segment has no title-length field; it splits at the first " / " instead, which is only
     /// wrong for a title that itself contains " / ", and only until the rebuild lands.</summary>
@@ -579,39 +516,10 @@ public sealed partial class SeforimDbCatalogIndex
         return titleLength >= 0 && cut <= fullTocPath.Length ? fullTocPath.Substring(cut) : fullTocPath;
     }
 
-    /// <summary>The book title at the head of a stored path (the whole path for a level-0
-    /// hit); same split as <see cref="PathWithoutTitle"/>.</summary>
-    private static string TitleOf(Document doc, string fullTocPath, int level)
-    {
-        if (level == 0) return fullTocPath;
-        int titleLength = doc.GetField(FieldTitleLength)?.GetInt32Value()
-            ?? fullTocPath.IndexOf(" / ", StringComparison.Ordinal);
-        return titleLength > 0 && titleLength <= fullTocPath.Length ? fullTocPath.Substring(0, titleLength) : fullTocPath;
-    }
-
-    /// <summary>
-    /// True when EVERY query token landed in the book's own title/TOC path or its author,
-    /// rather than only in the category path.
-    ///
-    /// The membership test MIRRORS <see cref="BuildQuery"/>: per token, satisfied when SOME
-    /// alternative is fully present, each word by its own form or any variant. Testing only the
-    /// canonical alternative demotes exactly the hits this key exists to promote — many
-    /// abbreviation keys are ambiguous, and some carry their self-alternative in a later slot.
-    /// </summary>
-    private static bool MatchesOnTitleOrAuthor(
-        Document doc, List<string> pathTokens, List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, VariantLookup? variants)
-    {
-        var authorText = doc.Get(FieldAuthor);
-        var authorTokens = string.IsNullOrEmpty(authorText)
-            ? null
-            : SeforimDbCatalogTextNormalizer.Tokenize(authorText);
-        return SeforimDbCatalogRankingKeys.EveryTokenPresent(tokens, pathTokens, authorTokens, variants);
-    }
-
     /// <summary>Collects just the global doc-IDs a query matched, into a set. Used to
     /// run the strict LITERAL query (no כתיב/ה-prefix variants, no fuzzy) alongside the
     /// full one, so each hit can be tagged literal-or-variant BEFORE the materialization
-    /// cap is applied — see <see cref="SortKeyCollector"/> and the accuracy-first sort.</summary>
+    /// cap is applied — see <see cref="RankCollector"/>.</summary>
     private sealed class DocIdSetCollector(CancellationToken ct, int maxDoc) : ICollector
     {
         private readonly FixedBitSet _ids = new(maxDoc);
@@ -631,123 +539,7 @@ public sealed partial class SeforimDbCatalogIndex
         }
     }
 
-    /// <summary>
-    /// Collects every matching doc together with its (Level, TreeOrder) sort keys read
-    /// from column-stored doc-values — no stored-field decompression, so it scales to
-    /// tens of thousands of hits. <see cref="Ordered"/> returns the hits sorted by
-    /// (IsLiteral desc, Level asc, TreeOrder asc): every literal (exact / non-variant)
-    /// match ranks ahead of every variant/fuzzy-only match — the accuracy-first rule —
-    /// and within each block the catalog order (Level, then TreeOrder) is preserved.
-    /// Ranking happens BEFORE the materialization cap, so a literal hit deep in catalog
-    /// order is still promoted (and materialized) ahead of earlier variant hits. No cap
-    /// on matching/ordering, no relevance scores.
-    /// </summary>
-    private sealed class SortKeyCollector(CancellationToken ct, FixedBitSet? literalDocIds, HashSet<long> coveredRanks) : ICollector
-    {
-        public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral, int structureId, bool titleCovered)
-        {
-            public readonly int DocId = docId;
-            public readonly int Level = level;
-            public readonly long TreeOrder = treeOrder;
-            public readonly bool IsLiteral = isLiteral;
-            public readonly int StructureId = structureId;
-            /// <summary>The query names this doc's book (see GetTitleTokensLocked) — known
-            /// here, before the cap, from the book rank alone.</summary>
-            public readonly bool TitleCovered = titleCovered;
-        }
-
-        private readonly List<Entry> _entries = [];
-        private int _docBase;
-        private NumericDocValues? _levels;
-        private NumericDocValues? _treeOrders;
-        private NumericDocValues? _structures;
-
-        public int Count => _entries.Count;
-
-        public void SetScorer(Scorer scorer) { /* scores are ignored by design */ }
-
-        public void SetNextReader(AtomicReaderContext context)
-        {
-            _docBase = context.DocBase;
-            _levels = context.AtomicReader.GetNumericDocValues(FieldLevelDv);
-            _treeOrders = context.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
-            _structures = context.AtomicReader.GetNumericDocValues(FieldStructureDv);
-        }
-
-        public bool AcceptsDocsOutOfOrder => true;
-
-        public void Collect(int doc)
-        {
-            if ((_entries.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
-            int globalDoc = _docBase + doc;
-            int level = (int)(_levels?.Get(doc) ?? 0);
-            long treeOrder = _treeOrders?.Get(doc) ?? long.MaxValue;
-            // Literal when there is no literal set (variant search never ran, so every
-            // hit is by definition literal) or the doc is in it.
-            bool isLiteral = literalDocIds is null || literalDocIds.Get(globalDoc);
-            int structureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId);
-            bool titleCovered = coveredRanks.Count > 0 && coveredRanks.Contains(treeOrder >> 24);
-            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral, structureId, titleCovered));
-        }
-
-        public List<Entry> Ordered()
-        {
-            _entries.Sort(static (a, b) =>
-            {
-                // Accuracy-first: literal matches (exact / non-variant) ahead of variant-
-                // or fuzzy-only matches. Then the existing catalog order within each block.
-                if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
-                // The books the query NAMES come next, whatever their catalog position: the
-                // materialization cap below must never cut them off behind earlier books
-                // that merely share the words.
-                if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
-                int c = a.Level.CompareTo(b.Level);
-                return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
-            });
-            return _entries;
-        }
-    }
-
     // ── Query-time variant lookup (ה-prefix + חסר/מלא skeleton) ──────────────────
-
-    /// <summary>
-    /// The books <paramref name="queryWords"/> NAME: the catalog ranks (TreeOrder >> 24) of the
-    /// level-0 docs whose every distinct title word is a query word. Read straight off the
-    /// index — the title-only field's postings count each book's matched title words, and the
-    /// book's distinct-title-word doc-value says how many it needs — so nothing is built per
-    /// reader. Lets a search know, BEFORE the materialization cap, whether the query names a
-    /// hit's book: a late-catalog book typed by name is never cut off behind a thousand earlier
-    /// hits that merely share its words.
-    /// </summary>
-    private static HashSet<long> CoveredBookRanks(IndexReader reader, HashSet<string> queryWords)
-    {
-        var ranks = new HashSet<long>();
-        var counts = new Dictionary<int, int>();
-        foreach (var leaf in reader.Leaves)
-        {
-            var atomic = leaf.AtomicReader;
-            var terms = atomic.GetTerms(FieldBookTitle);
-            if (terms is null) continue;
-            counts.Clear();
-            var te = terms.GetEnumerator();
-            DocsEnum? docs = null;
-            foreach (var word in queryWords)
-            {
-                if (!te.SeekExact(new BytesRef(word))) continue;
-                docs = te.Docs(atomic.LiveDocs, docs, DocsFlags.NONE);
-                int d;
-                while ((d = docs.NextDoc()) != DocIdSetIterator.NO_MORE_DOCS)
-                    counts[d] = counts.GetValueOrDefault(d) + 1;
-            }
-            if (counts.Count == 0) continue;
-            var needed = atomic.GetNumericDocValues(FieldBookTitleWordsDv);
-            var orders = atomic.GetNumericDocValues(FieldTreeOrderDv);
-            if (needed is null || orders is null) continue;
-            foreach (var (doc, found) in counts)
-                if (found == needed.Get(doc)) ranks.Add(orders.Get(doc) >> 24);
-        }
-        return ranks;
-    }
 
     /// <summary>
     /// Query-time port of the Vue frontend's book-catalog search normalization (ported from
