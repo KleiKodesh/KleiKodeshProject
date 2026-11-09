@@ -14,6 +14,7 @@ import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import { wantsPreviewToggle } from './resultsKeyboard'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
+import FullTextSearchSnippet, { shownSnippetHtml } from './FullTextSearchSnippet.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import { INDEX_REBUILD_BUTTON_LABELS } from '@/composables/useSearchIndexStatus'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
@@ -284,7 +285,7 @@ function buildSelectedResultsCopyHtml(): string | null {
   return buildSelectedResultsHtml(
     props.results,
     rowIndexRange,
-    (result) => renderSnippet(snippetHtmlOf(result) ?? ''),
+    (result) => shownSnippetHtml(renderSnippet(snippetHtmlOf(result) ?? '')),
     referenceOf,
     settingsStore.copyCleanText,
   )
@@ -658,8 +659,11 @@ defineExpose({
               :reseed="() => reseedPreview(shownResults[index]!)"
             />
             <!-- Never a placeholder: the scroller fetched this row's snippet before mounting it. -->
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div v-else class="snippet" :style="teamimFontStyle(snippetHtmlOf(shownResults[index]!) ?? '')" v-html="renderSnippet(snippetHtmlOf(shownResults[index]!) ?? '')" />
+            <FullTextSearchSnippet
+              v-else
+              :style="teamimFontStyle(snippetHtmlOf(shownResults[index]!) ?? '')"
+              :html="renderSnippet(snippetHtmlOf(shownResults[index]!) ?? '')"
+            />
           </div>
         </template>
       </WindowedScroller>
@@ -821,30 +825,5 @@ defineExpose({
   height: 1.1em;
   display: block;
   color: inherit; /* theme.css pins svg color globally — restore inheritance so hover shows */
-}
-.snippet {
-  font-family: var(--text-font);
-  font-size: 1em;
-  line-height: var(--line-height, 1.5);
-  color: var(--text-secondary);
-  direction: rtl;
-  text-align: justify;
-  text-align-last: right;
-  user-select: text;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.snippet :deep(.match) {
-  color: var(--accent-color);
-  font-weight: 600;
-  user-select: text;
-}
-.snippet :deep(mark) {
-  background: transparent;
-  color: var(--accent-color);
-  font-weight: 600;
-  user-select: text;
 }
 </style>
