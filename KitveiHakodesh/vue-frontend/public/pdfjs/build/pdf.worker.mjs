@@ -60809,6 +60809,9 @@ class PDFEditor {
       }
     } = documentData;
     await Promise.all([pdfManager.ensureCatalog("destinations").then(destinations => documentData.destinations = destinations), pdfManager.ensureCatalog("rawPageLabels").then(pageLabels => documentData.pageLabels = pageLabels), pdfManager.ensureCatalog("structTreeRoot").then(structTreeRoot => documentData.structTreeRoot = structTreeRoot), pdfManager.ensureCatalog("acroForm").then(acroForm => documentData.acroForm = acroForm), pdfManager.ensureCatalog("documentOutlineForEditor").then(outline => documentData.outline = outline), pdfManager.ensureCatalog("rawEmbeddedFiles").then(ef => documentData.embeddedFiles = ef)]);
+    if (this.khEditedOutline && documentData.document === this.khEditedOutline.document) {
+      documentData.outline = await this.#khApplyEditedOutline(documentData);
+    }
     const structTreeRoot = documentData.structTreeRoot;
     if (structTreeRoot) {
       const rootDict = structTreeRoot.dict;
@@ -60832,6 +60835,67 @@ class PDFEditor {
       documentData.structTreeAF = rootDict.get("AF") || null;
       documentData.structTreePronunciationLexicon = rootDict.get("PronunciationLexicon") || null;
     }
+  }
+  // [KleiKodesh] PATCH: the sidebar's edited outline ([{title, page, src?,
+  // items}], see SaveDocument) as outline items of this document. An entry
+  // with `src` is that item of the loaded outline (BFS order) with the new
+  // title and children, so its destination or action, bold/italic, colour
+  // and closed state carry over; other entries point at the top of `page`.
+  // #filterOutlineItems then drops targets on pages that were not kept.
+  async #khApplyEditedOutline(documentData) {
+    const {
+      items
+    } = this.khEditedOutline;
+    const flat = [];
+    const bfs = documentData.outline ? [documentData.outline] : [];
+    while (bfs.length > 0) {
+      for (const item of bfs.shift()) {
+        flat.push(item);
+        if (item.items?.length) {
+          bfs.push(item.items);
+        }
+      }
+    }
+    const document = documentData.document;
+    const convert = async entries => {
+      const out = [];
+      for (const entry of entries) {
+        const children = Array.isArray(entry.items) ? await convert(entry.items) : [];
+        const orig = Number.isInteger(entry.src) ? flat[entry.src] : undefined;
+        const count = children.length > 0 ? orig?.count < 0 ? -1 : 1 : undefined;
+        const title = String(entry.title || "");
+        if (orig) {
+          out.push({
+            ...orig,
+            title,
+            count,
+            items: children
+          });
+          continue;
+        }
+        let dest = null;
+        try {
+          const page = await document.getPage((entry.page | 0) - 1);
+          if (page.ref) {
+            dest = [page.ref, Name.get("XYZ"), null, null, null];
+          }
+        } catch {}
+        out.push({
+          action: null,
+          dest,
+          url: null,
+          title,
+          count,
+          bold: false,
+          italic: false,
+          items: children,
+          rawDict: null
+        });
+      }
+      return out;
+    };
+    const outline = await convert(items);
+    return outline.length > 0 ? outline : null;
   }
   async #postCollectPageData(pageData) {
     const {
@@ -61316,10 +61380,19 @@ class PDFEditor {
   }
   #buildOutline(allDocumentData) {
     const outlineItems = [];
+    // [KleiKodesh] PATCH: a document listed more than once (a copied page
+    // lands in a second entry for the same document) contributes its outline
+    // once, not once per entry. Its destinations resolve through the first
+    // entry's pages, like before.
+    const khSeen = new Set();
     for (const documentData of allDocumentData) {
       const {
         outline
       } = documentData;
+      if (khSeen.has(documentData.document)) {
+        continue;
+      }
+      khSeen.add(documentData.document);
       if (!outline?.length) {
         continue;
       }
@@ -62812,7 +62885,8 @@ class WorkerMessageHandler {
     });
     handler.on("ExtractPages", async function ({
       pageInfos,
-      annotationStorage
+      annotationStorage,
+      editedOutline
     }) {
       if (!pageInfos) {
         warn("extractPages: nothing to extract.");
@@ -62891,6 +62965,14 @@ class WorkerMessageHandler {
       let task;
       try {
         const pdfEditor = new PDFEditor();
+        // [KleiKodesh] PATCH: the sidebar's edited outline replaces this
+        // document's own outline in the new file (see #khApplyEditedOutline).
+        if (editedOutline != null) {
+          pdfEditor.khEditedOutline = {
+            document: pdfManager.pdfDocument,
+            items: editedOutline
+          };
+        }
         task = new WorkerTask(`ExtractPages: ${pageInfos.length} page(s)`);
         startWorkerTask(task);
         const buffer = await pdfEditor.extractPages(pageInfos, annotationStorage, handler, task);
