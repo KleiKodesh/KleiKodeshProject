@@ -72,7 +72,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // Field names. THREE indexed fields: the full TOC path (also stored — it is the
     // display path AND the text the query-token-order rule runs against), the catalog
     // (category) path, and the author names — both matchable but order-exempt.
-    private const string FieldFullTocPath = "fullTocPath";  // indexed + stored
+    private const string FieldFullTocPath = "fullTocPath";  // indexed WITH positions + stored: the ranking's word order, proximity and repeat counts come off its postings
     private const string FieldCatalog = "catalogPath";      // indexed + stored
     private const string FieldAuthor = "authors";           // indexed + stored
     private const string FieldBookId = "bookId";
@@ -88,7 +88,12 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldBookTitle = "bookTitleWords";           // level 0 only: the title's words (title ranking, "query names the book")
     private const string FieldBookTitleJoined = "bookTitleJoined";    // level 0 only: the title's words joined by spaces, untokenized (starts-with)
     private const string FieldBookTitleWordsDv = "bookTitleDistinctWords"; // level 0 only: distinct title word count
-    private const string FieldBookIdDv = "bookIdValue";               // level 0 only: book id as doc-values
+    private const string FieldBookIdDv = "bookIdValue";               // every row: book id as doc-values (per-book grouping; the title search reads level 0)
+    private const string FieldBookTitleWordCountDv = "bookTitleWordCount"; // level 0 only: title word count WITH repeats (the title-length ranking key)
+    private const string FieldQuotedKey = "quotedAbbreviationKey";    // level 0 only: every quoted acronym key the stored texts carry, one untokenized term each (QuotedFormMatch)
+    private const string FieldLeafWords = "leafWords";                // level 1+ only: the entry's own (last) segment's words (LeafCovered)
+    private const string FieldLeafDistinctWordsDv = "leafDistinctWords"; // level 1+ only: distinct leaf word count
+    private const string FieldLeafAddsTitleWordDv = "leafAddsTitleWord"; // level 1+ only: 1 when the leaf has a word the title lacks (LeafAddsWord)
     private const string FieldCategoryAncestor = "categoryAncestor";  // every category id from the book's own up to the root (untokenized, stored; scope filter)
     internal const string VariantSkeletonField = FieldVariantSkeleton;
     internal const char SkeletonSeparator = '\u0001';
@@ -212,7 +217,10 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     //      searches are pure index queries with no per-reader tables.
     // v27: tree order counts a base text by the isBaseBook flag only (no title-equals-folder rule).
     // v28: category-ancestor ids per doc, so a search can be scoped to catalog categories.
-    public const string IndexFormatVersion = "v28";
+    // v29: every ranking key is index data — positions on the TOC path, leaf-segment words,
+    //      title word count, quoted-acronym keys, book id on every row — so the search never
+    //      measures stored text.
+    public const string IndexFormatVersion = "v29";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -584,12 +592,17 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// are only ever matched (term existence / postings), never scored or displayed.</summary>
     private static readonly FieldType DocsOnlyText = CreateDocsOnlyText(stored: false);
 
-    /// <summary>The three matchable fields (path, catalog, author): stored for display, and
-    /// indexed docs-only too — every query on them is term/prefix/fuzzy matching whose score
-    /// is ignored, so positions, freqs and norms were pure build cost.</summary>
+    /// <summary>Catalog path and author: stored for display, and indexed docs-only — every
+    /// query on them is term/prefix/fuzzy matching whose score is ignored, so positions, freqs
+    /// and norms were pure build cost.</summary>
     private static readonly FieldType StoredDocsOnlyText = CreateDocsOnlyText(stored: true);
 
-    private static FieldType CreateDocsOnlyText(bool stored)
+    /// <summary>The TOC path: stored for display, indexed with frequencies and positions. The
+    /// ranking reads a hit's word order, word proximity and repeat counts straight off these
+    /// postings, so no key is ever measured on the stored text. No norms: scores are ignored.</summary>
+    private static readonly FieldType StoredPositionedText = CreateDocsOnlyText(stored: true, IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+
+    private static FieldType CreateDocsOnlyText(bool stored, IndexOptions options = IndexOptions.DOCS_ONLY)
     {
         var type = new FieldType
         {
@@ -597,7 +610,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             IsTokenized = true,
             IsStored = stored,
             OmitNorms = true,
-            IndexOptions = IndexOptions.DOCS_ONLY,
+            IndexOptions = options,
         };
         type.Freeze();
         return type;
@@ -612,7 +625,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     {
         var doc = new Document
         {
-            new Field(FieldFullTocPath, fullTocPath, StoredDocsOnlyText),
+            new Field(FieldFullTocPath, fullTocPath, StoredPositionedText),
             new StoredField(FieldBookId, bookId),
             new StoredField(FieldLineIndex, lineIndex),
             new Int32Field(FieldLevel, level, Field.Store.YES), // indexed: the book-title search filters level 0
@@ -628,6 +641,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             // alongside the sort keys so the per-book level truncation can scope itself
             // to one structure without materializing stored fields.
             new NumericDocValuesField(FieldStructureDv, structureId),
+            // The book, per row: the grouping key of the search's per-book passes (the tree
+            // order is not one - every book the rank map lacks shares one rank).
+            new NumericDocValuesField(FieldBookIdDv, bookId),
         };
         // Each indexed text once more into the skeleton field (the analyzer maps every word
         // to "skeleton + U+0001 + word"), one value per text so each tokenizes on its own.
@@ -652,9 +668,37 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             doc.Add(new Field(FieldBookTitle, fullTocPath, DocsOnlyText));
             doc.Add(new StringField(FieldBookTitleJoined, string.Join(" ", titleWords), Field.Store.NO));
             doc.Add(new NumericDocValuesField(FieldBookTitleWordsDv, new HashSet<string>(titleWords, StringComparer.Ordinal).Count));
-            doc.Add(new NumericDocValuesField(FieldBookIdDv, bookId));
+            doc.Add(new NumericDocValuesField(FieldBookTitleWordCountDv, titleWords.Count));
+            // The quoted acronyms the book's texts carry (the stored strings keep their quote
+            // glyphs; the indexed words have them stripped), one term each, so a search can
+            // tell a title written as the typed acronym from the ordinary word it strips to.
+            foreach (string key in QuotedKeysOf(fullTocPath, catalogPath, authors))
+                doc.Add(new StringField(FieldQuotedKey, key, Field.Store.NO));
+        }
+        else
+        {
+            // The entry's own segment and how it relates to the title: both ranking keys the
+            // search reads per hit (LeafCovered / LeafAddsWord), now index data.
+            string leaf = SeforimDbCatalogRankingKeys.LastSegment(fullTocPath);
+            var leafWords = SeforimDbCatalogTextNormalizer.Tokenize(leaf);
+            var titleWords = SeforimDbCatalogTextNormalizer.Tokenize(titleLength > 0 && titleLength <= fullTocPath.Length ? fullTocPath.Substring(0, titleLength) : fullTocPath);
+            doc.Add(new Field(FieldLeafWords, leaf, DocsOnlyText));
+            doc.Add(new NumericDocValuesField(FieldLeafDistinctWordsDv, new HashSet<string>(leafWords, StringComparer.Ordinal).Count));
+            doc.Add(new NumericDocValuesField(FieldLeafAddsTitleWordDv, leafWords.Exists(w => !titleWords.Contains(w)) ? 1 : 0));
         }
         return doc;
+    }
+
+    /// <summary>The distinct quoted-acronym keys of the given texts (null entries skipped).</summary>
+    private static HashSet<string> QuotedKeysOf(params string?[] texts)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var text in texts)
+        {
+            var found = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(text);
+            if (found is not null) keys.UnionWith(found);
+        }
+        return keys;
     }
 
     /// <summary>Index one TOC tree (regular or alt): title-variant roots are dropped

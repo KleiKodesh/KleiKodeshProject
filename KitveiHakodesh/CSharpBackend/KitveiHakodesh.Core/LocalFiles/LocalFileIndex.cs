@@ -13,6 +13,7 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
+using KitveiHakodesh.Core.SeforimDbCatalog;
 
 namespace KitveiHakodesh.Core.LocalFiles
 {
@@ -24,7 +25,8 @@ namespace KitveiHakodesh.Core.LocalFiles
     /// Searching splits the query on whitespace and requires every word to appear
     /// somewhere in the path as a substring — equivalent to:
     ///   paths.Where(p => p.Contains(word1) && p.Contains(word2) && ...)
-    /// Each word becomes a *word* WildcardQuery so mid-word matches are included.
+    /// Each word is looked up by its trigrams (path_trigrams), and candidates are re-checked
+    /// against the path from doc-values, so mid-word matches are included without a term scan.
     /// </summary>
     public sealed class LocalFileIndex : IDisposable
     {
@@ -42,6 +44,9 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const string FLD_NAME_SHAPE_DV = "name_shape_dv"; // NumericDocValues: name word count | distinct count << 16
         private const string FLD_PATH_SORT_DV = "path_sort_dv";  // SortedDocValues: the path UPPER-cased (see PathSortKey)
         private const string FLD_DATE_DV      = "date_dv";       // NumericDocValues: FLD_DATE as a number
+        private const string FLD_PATH_TRIGRAMS = "path_trigrams"; // every distinct 3-char piece of the lower-cased path, one term each (see PathTrigrams)
+        private const string FLD_NAME_SEQ     = "name_seq";       // the file-name words in order, WITH frequencies and positions (repeats, typed order, proximity)
+        private const string FLD_QUOTED_KEYS  = "quoted_keys";    // every quoted acronym key the file name carries, one term each (QuotedFormMatch)
         private const long   ShapeStoredRead  = 1L << 32;        // name_shape_dv flag: window reads stored fields
 
         /// <summary>
@@ -54,8 +59,10 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// v3: alias_terms (extra search terms: the Hebrew names of Torat Emet files, see ToratEmetNames).
         /// v4: no new fields - more skipped folders (browser storage, dev caches); the re-crawl drops
         /// what the older index still held from them.
+        /// v5: path_trigrams (substring search by exact term lookups instead of a *word* scan);
+        /// name_seq and quoted_keys, so every ranking key is index data (no re-rank on paths).
         /// </summary>
-        internal const string IndexFormatVersion = "4";
+        internal const string IndexFormatVersion = "5";
         // No "_" in the name: Lucene.Net's writer deletes, as a stale index file, any file whose
         // name CONTAINS "_x.y" (its codec-file pattern is not anchored) - "index_format.txt" went.
         private const string IndexFormatFileName = "format-version.txt";
@@ -622,6 +629,23 @@ namespace KitveiHakodesh.Core.LocalFiles
         // never sees them - each Field instance is exactly one term. No norms, no frequencies.
         private static readonly FieldType WordFieldType = BuildWordFieldType();
 
+        // name_seq: tokenized (on spaces, by PathAnalyzer) with frequencies and positions, so the
+        // ranking reads repeats, typed order and proximity straight off the postings. No norms.
+        private static readonly FieldType PositionedWordsFieldType = BuildPositionedWordsFieldType();
+
+        private static FieldType BuildPositionedWordsFieldType()
+        {
+            var ft = new FieldType();
+            ft.IsIndexed        = true;
+            ft.IsStored         = false;
+            ft.IsTokenized      = true;
+            ft.IndexOptions     = IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
+            ft.OmitNorms        = true;
+            ft.StoreTermVectors = false;
+            ft.Freeze();
+            return ft;
+        }
+
         private static FieldType BuildWordFieldType()
         {
             var ft = new FieldType();
@@ -639,6 +663,18 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// byte order is the ranking's OrdinalIgnoreCase path order (which compares upper-cased
         /// chars: "\" sorts AFTER letters there, before them in raw lower-case order).</summary>
         private static BytesRef PathSortKey(string lowerPath) => new BytesRef(lowerPath.ToUpperInvariant());
+
+        /// <summary>Every distinct 3-char piece of <paramref name="text"/>. A path holding a word
+        /// of 3+ chars holds all of the word's pieces, so requiring them all finds every match
+        /// by exact term lookups (a *word* wildcard walks every path in the index instead).
+        /// Words longer than 3 can still give false candidates ("abcd" vs "abc..bcd");
+        /// PathContainsCheck drops those.</summary>
+        private static HashSet<string> PathTrigrams(string text)
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i + 3 <= text.Length; i++) set.Add(text.Substring(i, 3));
+            return set;
+        }
 
         private static Document MakeDocument(string fullPath, string addinName = null)
         {
@@ -661,6 +697,19 @@ namespace KitveiHakodesh.Core.LocalFiles
                     doc.Add(new Field(FLD_FOLDER_WORDS, word, WordFieldType));
             foreach (var term in ToratEmet.ToratEmetNames.SearchTerms(fullPath))
                 doc.Add(new Field(FLD_ALIAS_TERMS, term, WordFieldType));
+            foreach (var trigram in PathTrigrams(lowerPath))
+                doc.Add(new Field(FLD_PATH_TRIGRAMS, trigram, WordFieldType));
+            // The same name words once more as ONE positioned sequence (the analyzer splits it
+            // on spaces): word counts, typed order and proximity are read off its postings.
+            if (nameTokens.Count > 0)
+                doc.Add(new Field(FLD_NAME_SEQ, string.Join(" ", nameTokens), PositionedWordsFieldType));
+            // The quoted acronyms the ORIGINAL file name carries (the indexed words have the
+            // quote glyphs stripped), one term each.
+            var quotedKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(
+                LocalFileNameWords.SeparatorsToSpaces(System.IO.Path.GetFileNameWithoutExtension(fullPath)));
+            if (quotedKeys != null)
+                foreach (var key in quotedKeys)
+                    doc.Add(new Field(FLD_QUOTED_KEYS, key, WordFieldType));
             var sortKey = PathSortKey(lowerPath);
             // The window reads the path back from the sort key (lower-casing it again) unless
             // that would not give this exact path back, or the doc has an add-in name: then it
@@ -687,119 +736,47 @@ namespace KitveiHakodesh.Core.LocalFiles
         // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Returns path+date pairs where ALL words in <paramref name="input"/> appear as
-        /// substrings — equivalent to:
-        ///   paths.Where(p => p.Contains(word1) && p.Contains(word2) && ...)
+        /// Files whose path holds EVERY word of <paramref name="input"/> as a substring —
+        /// equivalent to paths.Where(p => p.Contains(word1) &amp;&amp; p.Contains(word2) &amp;&amp; ...) — or
+        /// matches it through the add-in name / alias terms, optionally on one drive. Ordered by
+        /// the catalog's ranking keys (<see cref="FolderRankCollector"/>), then the path.
         ///
-        /// Each word is wrapped as *word* so mid-word matches are included.
-        /// Optionally scope to a single drive letter (e.g. 'C').
-        ///
-        /// <paramref name="limit"/> caps the number of entries returned.
-        /// 0 (default) means unlimited — every matching document is returned.
-        /// When a limit is active, <paramref name="total"/> receives the full
-        /// match count so callers can report "showing X of Y results".
+        /// <paramref name="limit"/> caps the entries returned (0 = every match); <paramref name="total"/>
+        /// is always the full match count, so callers can say "showing X of Y".
         /// </summary>
         public List<PathEntry> Search(string input, char? drive, int limit, out int total)
             => Search(input, drive, folders: null, limit, out total);
 
-        /// <summary>
-        /// <see cref="Search(string, char?, int, out int)"/> scoped to files under any of
-        /// <paramref name="folders"/> (null = unscoped; an empty list matches nothing). The path
-        /// field is the whole lower-cased path as ONE term, so each folder is a PrefixQuery on
-        /// "folder\" — an index-level filter, no post-filtering.
-        /// </summary>
+        /// <summary><see cref="Search(string, char?, int, out int)"/> scoped to files under any of
+        /// <paramref name="folders"/> (null = unscoped; an empty list matches nothing).</summary>
         public List<PathEntry> Search(string input, char? drive, IReadOnlyCollection<string> folders, int limit, out int total)
-        {
-            if (folders != null)
-                return SearchUnderFolders(input, drive, folders, excludedFolders: null, limit, out total);
-
-            total = 0;
-            var results = new List<PathEntry>();
-            if (string.IsNullOrWhiteSpace(input)) return results;
-
-            string[] words = input.Trim().Split(
-                new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-
-            var boolQuery = new BooleanQuery();
-
-            foreach (var word in words)
-            {
-                // Backslash is the ESCAPE character in Lucene wildcard syntax, so a literal
-                // path separator has to be doubled. Without this, a query like
-                // "otzaria\plugins" escapes the 'p' and silently matches nothing — even
-                // though both "otzaria" and "plugins" match on their own.
-                string w = EscapeWildcard(word.ToLowerInvariant());
-                // Each word must appear somewhere in EITHER the path OR the addin_name.
-                // A sub-query ORing both fields ensures addin names are searched without
-                // requiring the word to also appear in the file path.
-                var wordPattern = "*" + w + "*";
-                var perWord = new BooleanQuery();
-                perWord.Add(new WildcardQuery(new Term(FLD_PATH, wordPattern)),      Occur.SHOULD);
-                perWord.Add(new WildcardQuery(new Term(FLD_ADDIN_NAME, wordPattern)), Occur.SHOULD);
-                perWord.Add(new WildcardQuery(new Term(FLD_ALIAS_TERMS, wordPattern)), Occur.SHOULD);
-                boolQuery.Add(perWord, Occur.MUST);
-            }
-
-            // Scope to drive: require path to start with "c:\" etc.
-            if (drive.HasValue)
-            {
-                boolQuery.Add(
-                    new WildcardQuery(new Term(FLD_PATH, char.ToLower(drive.Value) + ":*")),
-                    Occur.MUST);
-            }
-
-            RefreshSearchView();
-            var searcher = _searcherManager.Acquire();
-            try
-            {
-                var topDocs = searcher.Search(boolQuery, int.MaxValue);
-                total = topDocs.TotalHits;
-
-                int take = (limit > 0 && limit != int.MaxValue)
-                    ? Math.Min(limit, topDocs.ScoreDocs.Length)
-                    : topDocs.ScoreDocs.Length;
-                for (int i = 0; i < take; i++)
-                {
-                    var doc       = searcher.Doc(topDocs.ScoreDocs[i].Doc);
-                    string path      = doc.Get(FLD_PATH);
-                    string date      = doc.Get(FLD_DATE) ?? "0";
-                    // Prefer the original-case copy; fall back to the lower-cased searchable
-                    // one so an index built before that field existed still returns a name.
-                    string addinName = doc.Get(FLD_ADDIN_NAME_DISPLAY)
-                                    ?? doc.Get(FLD_ADDIN_NAME)
-                                    ?? "";
-                    results.Add(new PathEntry(path, date, addinName));
-                }
-            }
-            finally
-            {
-                _searcherManager.Release(searcher);
-            }
-
-            return results;
-        }
+            => SearchUnderFolders(input, drive, folders, excludedFolders: null, limit, out total);
 
         /// <summary>
-        /// The folder-scoped (UserSpace) search: files under any of <paramref name="folders"/>
-        /// whose path holds every word of <paramref name="input"/> as a substring, minus files
-        /// under <paramref name="excludedFolders"/> (applied in the query, so the total and the
-        /// window below are already exclusion-free).
+        /// The search: files under any of <paramref name="folders"/> (null = unscoped; an empty
+        /// list matches nothing) whose path holds every word of <paramref name="input"/> as a
+        /// substring, minus files under <paramref name="excludedFolders"/> (applied in the query,
+        /// so the total and the window below are already exclusion-free).
         ///
-        /// UNCAPPED matching and ordering: <see cref="FolderRankCollector"/> visits EVERY match and
-        /// orders it by the catalog's primary accuracy keys, approximated from index data alone
-        /// (word terms + doc-values, no stored-field read per hit): literal (every query token a
-        /// whole word of the name or of a folder on the path), every token in the name, name
-        /// covered by the query (then more distinct query words, then the length gap), more
-        /// query words in the name, the first matching folder in the caller's order, then the
-        /// path (OrdinalIgnoreCase). <paramref name="total"/> is the FULL match count.
+        /// Matching is index-level throughout: each folder is a PrefixQuery on "folder\" (the
+        /// path field is the whole lower-cased path as ONE term), each word a trigram lookup on
+        /// the path (<see cref="PathSubstringQuery"/>) or a wildcard over the small add-in-name
+        /// / alias-term fields. The word may sit anywhere on the path, the folder's own name and
+        /// its parents included — as a catalog category's whole chain matches a scoped catalog
+        /// search.
         ///
-        /// Only MATERIALIZATION is bounded: the ordered top <see cref="MaterializeCap"/> (or
-        /// <paramref name="limit"/> when smaller and positive) are returned, best first. The
-        /// caller re-ranks that window on the exact keys (UserSpaceSearch).
+        /// UNCAPPED matching and ordering: <see cref="FolderRankCollector"/> visits EVERY match
+        /// (dropping the trigram false candidates) and orders it by the catalog's ranking keys,
+        /// read from index data alone: literal (every query token a whole word of the name or of
+        /// a folder on the path), every token in the name, name covered by the query (then more
+        /// distinct query words, then the length gap), more query words in the name (with
+        /// repeats), the quoted acronym as typed, and for a 2+ word query the words found, in
+        /// typed order, closest together; then the first matching folder in the caller's order,
+        /// then the path (OrdinalIgnoreCase). <paramref name="total"/> is the FULL match count.
         ///
-        /// Known approximations (they only decide which ties reach the window): every folder on
-        /// the path counts toward literal, also those above the root; a repeated query word
-        /// counts once; proximity and quoted-form keys are left to the exact re-rank.
+        /// Only MATERIALIZATION is bounded: the ordered top <paramref name="limit"/> (0 = every
+        /// match for the unscoped search; the folder-scoped UserSpace search passes 0 and takes
+        /// <see cref="MaterializeCap"/>) are returned, best first, each with its keys.
         /// </summary>
         public List<PathEntry> SearchUnderFolders(
             string input, char? drive, IReadOnlyCollection<string> folders, IList<string> excludedFolders,
@@ -807,15 +784,49 @@ namespace KitveiHakodesh.Core.LocalFiles
         {
             total = 0;
             var results = new List<PathEntry>();
-            if (string.IsNullOrWhiteSpace(input) || folders == null || folders.Count == 0) return results;
+            if (string.IsNullOrWhiteSpace(input) || (folders != null && folders.Count == 0)) return results;
 
             string[] words = input.Trim().Split(
                 new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
-            // The folder any-of is ONE required clause: beside a MUST, bare SHOULDs turn optional.
-            var query = new BooleanQuery { { FolderScopedQuery(words, folders), Occur.MUST } };
+            var query = new BooleanQuery();
+            // Words of 4+ chars: their trigrams can match a path that lacks the word itself,
+            // so PathContainsCheck re-checks those candidates.
+            var checkWords = new List<string>();
+            foreach (var word in words)
+            {
+                string lower = word.ToLowerInvariant();
+                // Backslash is the ESCAPE character in Lucene wildcard syntax, so a literal
+                // path separator has to be doubled. Without this, a query like
+                // "otzaria\plugins" escapes the 'p' and silently matches nothing — even
+                // though both "otzaria" and "plugins" match on their own.
+                var wordPattern = "*" + EscapeWildcard(lower) + "*";
+                // Each word must appear somewhere in the path, the addin_name OR an alias term.
+                // addin_name / alias_terms hold few terms, so a wildcard over them stays cheap;
+                // the path uses its trigrams (a *word* wildcard there walks every path).
+                var perWord = new BooleanQuery();
+                perWord.Add(PathSubstringQuery(lower), Occur.SHOULD);
+                perWord.Add(new WildcardQuery(new Term(FLD_ADDIN_NAME, wordPattern)), Occur.SHOULD);
+                perWord.Add(new WildcardQuery(new Term(FLD_ALIAS_TERMS, wordPattern)), Occur.SHOULD);
+                query.Add(perWord, Occur.MUST);
+                if (lower.Length > 3) checkWords.Add(lower);
+            }
+
+            var prefixes = new List<string>();
+            if (folders != null)
+            {
+                // The folder any-of is ONE required clause: beside a MUST, bare SHOULDs turn optional.
+                var anyFolder = new BooleanQuery();
+                foreach (var folder in folders)
+                {
+                    prefixes.Add(FolderPrefix(folder));
+                    anyFolder.Add(new PrefixQuery(new Term(FLD_PATH, FolderPrefix(folder))), Occur.SHOULD);
+                }
+                query.Add(anyFolder, Occur.MUST);
+            }
+            // Scope to drive: require path to start with "c:\" etc.
             if (drive.HasValue)
-                query.Add(new WildcardQuery(new Term(FLD_PATH, char.ToLower(drive.Value) + ":*")), Occur.MUST);
+                query.Add(new PrefixQuery(new Term(FLD_PATH, char.ToLower(drive.Value) + ":")), Occur.MUST);
             if (excludedFolders != null)
                 foreach (var excluded in excludedFolders)
                 {
@@ -828,42 +839,34 @@ namespace KitveiHakodesh.Core.LocalFiles
                     query.Add(new PrefixQuery(new Term(FLD_PATH, lower + "\\")), Occur.MUST_NOT);
                 }
 
-            var prefixes = new List<string>(folders.Count);
-            foreach (var folder in folders) prefixes.Add(FolderPrefix(folder));
-            int cap = limit > 0 && limit < MaterializeCap ? limit : MaterializeCap;
+            int cap = limit > 0 ? limit : folders != null ? MaterializeCap : int.MaxValue;
 
             RefreshSearchView();
             var searcher = _searcherManager.Acquire();
             try
             {
-                var collector = new FolderRankCollector(
-                    SeforimDbCatalog.SeforimDbCatalogTextNormalizer.TokenizeQuery(input), prefixes);
+                // Per check word: the docs the word reaches through addin_name / alias_terms.
+                // Those pass the re-check whatever their path holds. Few docs have either field.
+                var otherFieldDocs = new List<HashSet<int>>(checkWords.Count);
+                foreach (var lower in checkWords)
+                {
+                    var pattern = "*" + EscapeWildcard(lower) + "*";
+                    var other = new BooleanQuery
+                    {
+                        { new WildcardQuery(new Term(FLD_ADDIN_NAME, pattern)), Occur.SHOULD },
+                        { new WildcardQuery(new Term(FLD_ALIAS_TERMS, pattern)), Occur.SHOULD },
+                    };
+                    var docs = new DocSetCollector();
+                    searcher.Search(other, docs);
+                    otherFieldDocs.Add(docs.Docs);
+                }
+
+                var collector = new FolderRankCollector(input,
+                    SeforimDbCatalog.SeforimDbCatalogTextNormalizer.TokenizeQuery(input), prefixes,
+                    checkWords.Count > 0 ? new PathContainsCheck(checkWords, otherFieldDocs) : null);
                 searcher.Search(query, collector);
                 total = collector.Count;
-                var top = collector.Top(cap, searcher.IndexReader.Leaves);
-
-                // Materialize the window from doc-values; stored fields only for flagged docs.
-                var leaves = searcher.IndexReader.Leaves;
-                var scratch = new BytesRef();
-                foreach (int docId in top)
-                {
-                    int leaf = ReaderUtil.SubIndex(docId, leaves);
-                    var reader = leaves[leaf].AtomicReader;
-                    int local = docId - leaves[leaf].DocBase;
-                    var shape = reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
-                    var pathSort = reader.GetSortedDocValues(FLD_PATH_SORT_DV);
-                    var date = reader.GetNumericDocValues(FLD_DATE_DV);
-                    if (shape == null || pathSort == null || date == null || (shape.Get(local) & ShapeStoredRead) != 0)
-                    {
-                        var doc = searcher.Doc(docId);
-                        results.Add(new PathEntry(doc.Get(FLD_PATH), doc.Get(FLD_DATE) ?? "0",
-                            doc.Get(FLD_ADDIN_NAME_DISPLAY) ?? doc.Get(FLD_ADDIN_NAME) ?? ""));
-                        continue;
-                    }
-                    pathSort.Get(local, scratch);
-                    results.Add(new PathEntry(scratch.Utf8ToString().ToLowerInvariant(),
-                        date.Get(local).ToString(System.Globalization.CultureInfo.InvariantCulture)));
-                }
+                Materialize(searcher, collector.Top(cap, searcher.IndexReader.Leaves), results);
             }
             finally
             {
@@ -872,48 +875,190 @@ namespace KitveiHakodesh.Core.LocalFiles
             return results;
         }
 
+
+        /// <summary>Reads <paramref name="top"/> into entries, in order, each carrying its ranking
+        /// keys: from doc-values, and from stored fields only for flagged docs (ShapeStoredRead:
+        /// add-ins, odd casing).</summary>
+        private static void Materialize(IndexSearcher searcher, List<(int Doc, RankKeys Keys)> top, List<PathEntry> results)
+        {
+            var leaves = searcher.IndexReader.Leaves;
+            var scratch = new BytesRef();
+            foreach (var (docId, keys) in top)
+            {
+                int leaf = ReaderUtil.SubIndex(docId, leaves);
+                var reader = leaves[leaf].AtomicReader;
+                int local = docId - leaves[leaf].DocBase;
+                var shape = reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
+                var pathSort = reader.GetSortedDocValues(FLD_PATH_SORT_DV);
+                var date = reader.GetNumericDocValues(FLD_DATE_DV);
+                if (shape == null || pathSort == null || date == null || (shape.Get(local) & ShapeStoredRead) != 0)
+                {
+                    var doc = searcher.Doc(docId);
+                    // Prefer the original-case add-in name; the lower-cased searchable copy is the fallback.
+                    results.Add(new PathEntry(doc.Get(FLD_PATH), doc.Get(FLD_DATE) ?? "0",
+                        doc.Get(FLD_ADDIN_NAME_DISPLAY) ?? doc.Get(FLD_ADDIN_NAME) ?? "") { Keys = keys });
+                    continue;
+                }
+                pathSort.Get(local, scratch);
+                results.Add(new PathEntry(scratch.Utf8ToString().ToLowerInvariant(),
+                    date.Get(local).ToString(System.Globalization.CultureInfo.InvariantCulture)) { Keys = keys });
+            }
+        }
+
+        /// <summary>Docs whose path holds <paramref name="lowerWord"/>: words of 3+ chars by
+        /// their trigrams (exact term lookups), shorter ones by a *word* wildcard (no trigram to
+        /// look up). For 4+ chars this over-matches; PathContainsCheck re-checks.</summary>
+        private static Query PathSubstringQuery(string lowerWord)
+        {
+            if (lowerWord.Length < 3)
+                return new WildcardQuery(new Term(FLD_PATH, "*" + EscapeWildcard(lowerWord) + "*"));
+            var all = new BooleanQuery();
+            foreach (var trigram in PathTrigrams(lowerWord))
+                all.Add(new TermQuery(new Term(FLD_PATH_TRIGRAMS, trigram)), Occur.MUST);
+            return all;
+        }
+
+        /// <summary>Collects the global doc ids of every match (scores ignored).</summary>
+        private sealed class DocSetCollector : ICollector
+        {
+            public readonly HashSet<int> Docs = new HashSet<int>();
+            private int _docBase;
+            public void SetScorer(Scorer scorer) { }
+            public bool AcceptsDocsOutOfOrder => true;
+            public void SetNextReader(AtomicReaderContext context) => _docBase = context.DocBase;
+            public void Collect(int doc) => Docs.Add(_docBase + doc);
+        }
+
         /// <summary>
-        /// Collects every folder-scoped match with ONE packed ordering key (lower = better),
-        /// computed from per-segment word bit sets (name_words / folder_words postings of the
-        /// query's words) and doc-values. Nothing is capped here; <see cref="Top"/> picks the
-        /// ordered best few. The key's low half is the doc's path ORD in its segment, which is
-        /// path order there, so within a segment the key alone is the whole order.
+        /// Drops trigram false candidates of the unscoped search: a doc passes when every check
+        /// word is in its path, or reaches it through addin_name / alias_terms. The path comes
+        /// from path_sort_dv (no stored-field read), or from the stored path when the doc-values
+        /// copy does not lower-case back to it (ShapeStoredRead).
+        /// </summary>
+        private sealed class PathContainsCheck
+        {
+            private readonly List<string> _words;
+            private readonly List<HashSet<int>> _otherFieldDocs;
+            private readonly BytesRef _scratch = new BytesRef();
+            private AtomicReader _reader;
+            private SortedDocValues _pathSort;
+            private NumericDocValues _shape;
+            private int _docBase;
+
+            public PathContainsCheck(List<string> words, List<HashSet<int>> otherFieldDocs)
+            {
+                _words = words;
+                _otherFieldDocs = otherFieldDocs;
+                _upperWords = new byte[words.Count][];
+                for (int i = 0; i < words.Count; i++)
+                    _upperWords[i] = System.Text.Encoding.UTF8.GetBytes(words[i].ToUpperInvariant());
+            }
+
+            private readonly byte[][] _upperWords;   // each word as the sort key spells it (see PathSortKey)
+
+            public void SetNextReader(AtomicReaderContext context)
+            {
+                _reader = context.AtomicReader;
+                _docBase = context.DocBase;
+                _pathSort = _reader.GetSortedDocValues(FLD_PATH_SORT_DV);
+                _shape = _reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
+            }
+
+            public bool Matches(int doc)
+            {
+                // The doc-values path is the UPPER-cased path's UTF-8: the words are compared as
+                // upper-cased bytes, with no string decoded per candidate. A doc whose sort key
+                // does not lower-case back to its path (ShapeStoredRead) is checked on the
+                // stored path instead.
+                bool fromDocValues = _pathSort != null && _shape != null && (_shape.Get(doc) & ShapeStoredRead) == 0;
+                string storedPath = null;
+                if (fromDocValues) _pathSort.Get(doc, _scratch);
+                for (int i = 0; i < _words.Count; i++)
+                {
+                    if (_otherFieldDocs[i].Contains(_docBase + doc)) continue;
+                    if (fromDocValues)
+                    {
+                        if (!ContainsBytes(_scratch, _upperWords[i])) return false;
+                        continue;
+                    }
+                    storedPath ??= _reader.Document(doc).Get(FLD_PATH);
+                    if (storedPath == null || storedPath.IndexOf(_words[i], StringComparison.Ordinal) < 0) return false;
+                }
+                return true;
+            }
+
+            private static bool ContainsBytes(BytesRef hay, byte[] needle)
+            {
+                int last = hay.Offset + hay.Length - needle.Length;
+                for (int start = hay.Offset; start <= last; start++)
+                {
+                    int k = 0;
+                    while (k < needle.Length && hay.Bytes[start + k] == needle[k]) k++;
+                    if (k == needle.Length) return true;
+                }
+                return false;
+            }
+        }
+        /// <summary>
+        /// Collects every match with its FULL catalog ranking keys (<see cref="RankKeys"/>),
+        /// read from index data alone: per-segment word bit sets (name_words / folder_words
+        /// postings of the query's words), the name_seq postings (word counts and positions:
+        /// repeats, typed order, proximity), the quoted_keys postings and the doc-values.
+        /// Nothing is capped here; <see cref="Top"/> orders every match - keys, then the first
+        /// matching folder in the caller's order, then the path - and hands back the best few.
         /// </summary>
         private sealed class FolderRankCollector : ICollector
         {
-            // Key layout, most significant first (each "not" bit: 0 = has it = better).
-            //   62 not literal | 61 not all-tokens-in-name | 60 not name-covered
-            //   59..54 63 - distinct query words in the name (covered only)
-            //   53..46 |name word count - query word count| (covered only, capped 255)
-            //   45..40 63 - query words in the name | 39..32 first matching folder index (cap 255)
-            //   31..0  path_sort_dv ord + 1 (0 = none): the path order inside the segment
+            private struct Entry
+            {
+                public int Doc;        // global doc id
+                public int Root;       // first matching folder's index in the caller's order (0xFF = none)
+                public int Ord;        // path_sort_dv ord in the segment: path order there
+                public RankKeys Keys;
+            }
+
             private const int MaxWords = 64;
 
             private readonly List<string> _words = new List<string>();  // distinct, index = bit
+            private readonly Dictionary<string, int> _wordIndex = new Dictionary<string, int>(StringComparer.Ordinal);
             private readonly int[][][] _tokenAlternatives;              // per token, per alt: word bits
             private readonly ulong _queryWordMask;                      // QueryWordSet
-            private readonly ulong _countWordMask;                      // QueryWordCounts keys
+            private readonly int[] _countWord;                          // per QueryWordCounts entry: the word's index
+            private readonly int[] _countWanted;                        //   ...and how many times it was typed
             private readonly int _queryWordCount;
+            private readonly int[] _orderWord;                          // per order word: the word's index
+            private readonly List<string> _quotedKeys;
+            private readonly SeforimDbCatalog.SeforimDbCatalogRankingKeys.ProximityScratch _proximity;
+            private readonly bool _measureProximity;
             private readonly List<string> _prefixes;
+            private readonly PathContainsCheck _check;   // null: every match is real (no trigram query)
 
-            private readonly List<long> _keys = new List<long>();
-            private readonly List<int> _docs = new List<int>();
-            private readonly List<int> _segmentStarts = new List<int>();   // index into _keys
-            private readonly List<int> _segmentLeaves = new List<int>();   // leaf ord of that segment
+            private readonly List<List<Entry>> _segments = new List<List<Entry>>();
+            private readonly List<int> _segmentLeaves = new List<int>();   // leaf ord of each segment
 
             // Per segment.
             private int _docBase;
+            private List<Entry> _entries;
             private FixedBitSet[] _nameBits;
             private FixedBitSet[] _folderBits;
+            private DocsEnum[] _nameSeq;     // per word: name_seq postings (freq + positions)
+            private DocsEnum[] _quoted;      // per quoted key: quoted_keys postings
             private NumericDocValues _shape;
             private SortedDocValues _pathSort;
             private int[] _prefixLo, _prefixHi;
 
-            public int Count => _keys.Count;
+            // Per doc.
+            private readonly int[] _nameFreq;
+            private readonly List<int>[] _positions;
+            private readonly Func<int, List<int>> _positionsOfOrderWord;
 
-            public FolderRankCollector(List<SeforimDbCatalog.SeforimDbCatalogTextNormalizer.QueryToken> tokens, List<string> prefixes)
+            public int Count { get; private set; }
+
+            public FolderRankCollector(string query, List<SeforimDbCatalog.SeforimDbCatalogTextNormalizer.QueryToken> tokens, List<string> prefixes,
+                PathContainsCheck check = null)
             {
                 _prefixes = prefixes;
+                _check = check;
                 _tokenAlternatives = new int[tokens.Count][][];
                 for (int t = 0; t < tokens.Count; t++)
                 {
@@ -925,19 +1070,39 @@ namespace KitveiHakodesh.Core.LocalFiles
                         for (int w = 0; w < alts[a].Length; w++) _tokenAlternatives[t][a][w] = WordIndex(alts[a][w]);
                     }
                 }
+                // No VariantLookup: it reads the catalog index's term dictionary, which knows
+                // nothing of file names - file keys match words literally.
                 foreach (var word in SeforimDbCatalog.SeforimDbCatalogRankingKeys.QueryWordSet(tokens, null))
                     _queryWordMask |= Bit(WordIndex(word));
-                foreach (var pair in SeforimDbCatalog.SeforimDbCatalogRankingKeys.QueryWordCounts(tokens))
+                var counts = SeforimDbCatalog.SeforimDbCatalogRankingKeys.QueryWordCounts(tokens);
+                _countWord = new int[counts.Count];
+                _countWanted = new int[counts.Count];
+                int c = 0;
+                foreach (var pair in counts)
                 {
-                    _countWordMask |= Bit(WordIndex(pair.Key));
+                    _countWord[c] = WordIndex(pair.Key);
+                    _countWanted[c++] = pair.Value;
                     _queryWordCount += pair.Value;
                 }
+                var orderWords = SeforimDbCatalog.SeforimDbCatalogRankingKeys.OrderWords(tokens);
+                _orderWord = new int[orderWords.Count];
+                for (int i = 0; i < orderWords.Count; i++) _orderWord[i] = WordIndex(orderWords[i]);
+                _measureProximity = orderWords.Count >= 2;
+                _proximity = new SeforimDbCatalog.SeforimDbCatalogRankingKeys.ProximityScratch(orderWords);
+                var quoted = SeforimDbCatalog.SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(query);
+                _quotedKeys = quoted == null ? new List<string>() : new List<string>(quoted);
+
+                _nameFreq = new int[_words.Count];
+                _positions = new List<int>[_words.Count];
+                for (int i = 0; i < _positions.Length; i++) _positions[i] = new List<int>();
+                _positionsOfOrderWord = i => _positions[_orderWord[i]];
             }
 
             private int WordIndex(string word)
             {
-                int i = _words.IndexOf(word);
-                if (i >= 0) return i;
+                int i;
+                if (_wordIndex.TryGetValue(word, out i)) return i;
+                _wordIndex[word] = _words.Count;
                 _words.Add(word);
                 return _words.Count - 1;
             }
@@ -946,13 +1111,17 @@ namespace KitveiHakodesh.Core.LocalFiles
             private static ulong Bit(int index) => index < MaxWords ? 1UL << index : 0;
 
             public void SetScorer(Scorer scorer) { /* scores are ignored by design */ }
-            public bool AcceptsDocsOutOfOrder => true;
+
+            /// <summary>In doc order: the name_seq / quoted_keys postings enums are forward-only.</summary>
+            public bool AcceptsDocsOutOfOrder => false;
 
             public void SetNextReader(AtomicReaderContext context)
             {
                 var reader = context.AtomicReader;
                 _docBase = context.DocBase;
-                _segmentStarts.Add(_keys.Count);
+                _check?.SetNextReader(context);
+                _entries = new List<Entry>();
+                _segments.Add(_entries);
                 _segmentLeaves.Add(context.Ord);
                 int n = Math.Min(_words.Count, MaxWords);
                 _nameBits = new FixedBitSet[n];
@@ -962,6 +1131,8 @@ namespace KitveiHakodesh.Core.LocalFiles
                     _nameBits[i] = TermBits(reader, FLD_NAME_WORDS, _words[i]);
                     _folderBits[i] = TermBits(reader, FLD_FOLDER_WORDS, _words[i]);
                 }
+                _nameSeq = Common.LucenePostings.Open(reader, FLD_NAME_SEQ, _words, positions: true);
+                _quoted = Common.LucenePostings.Open(reader, FLD_QUOTED_KEYS, _quotedKeys, positions: false);
                 _shape = reader.GetNumericDocValues(FLD_NAME_SHAPE_DV);
                 _pathSort = reader.GetSortedDocValues(FLD_PATH_SORT_DV);
 
@@ -992,15 +1163,18 @@ namespace KitveiHakodesh.Core.LocalFiles
 
             public void Collect(int doc)
             {
+                if (_check != null && !_check.Matches(doc)) return;
                 ulong inName = 0, inFolders = 0;
                 for (int i = 0; i < _nameBits.Length; i++)
                 {
                     if (_nameBits[i] != null && _nameBits[i].Get(doc)) inName |= 1UL << i;
                     if (_folderBits[i] != null && _folderBits[i].Get(doc)) inFolders |= 1UL << i;
                 }
+                // name_seq holds the same words as name_words: no query word in the name (a
+                // substring-only match, the common case) means nothing to read there.
+                for (int i = 0; i < _words.Count; i++)
+                    _nameFreq[i] = inName == 0 ? ClearPositions(i) : Common.LucenePostings.FreqAndPositions(_nameSeq[i], doc, _positions[i]);
 
-                bool literal = EveryToken(inName | inFolders);
-                bool inTitle = EveryToken(inName);
                 // No query word in the name (a substring-only match, the common case): the name
                 // shape cannot matter, so its doc-value is not read.
                 long shape = inName == 0 ? 0 : _shape?.Get(doc) ?? 0;
@@ -1009,7 +1183,23 @@ namespace KitveiHakodesh.Core.LocalFiles
                 int distinctFound = PopCount(inName & _queryWordMask);
                 // Covered: every distinct name word is a query word.
                 bool covered = titleDistinct > 0 && distinctFound == titleDistinct;
-                int wordsMatched = PopCount(inName & _countWordMask);
+
+                var keys = new RankKeys
+                {
+                    // Literal = every query word is a whole word of the name or of a folder on the
+                    // path; a file matched only by substrings is a non-literal match.
+                    IsLiteral = EveryToken(inName | inFolders),
+                    // The file's name plays the title; there is no author.
+                    MatchesTitleOrAuthor = EveryToken(inName),
+                    TitleCovered = covered,
+                    TitleDistinctWords = distinctFound,
+                    TitleLengthGap = Math.Abs(titleWords - _queryWordCount),
+                    LeafCovered = covered,   // a file is a level-0 hit: the leaf IS the title
+                    WordsMatched = WordsMatched(),
+                };
+                foreach (var q in _quoted)
+                    if (Common.LucenePostings.At(q, doc)) { keys.QuotedFormMatch = true; break; }
+                if (_measureProximity) _proximity.Measure(_positionsOfOrderWord, ref keys);
 
                 int root = 0xFF, ord = -1;
                 if (_pathSort != null)
@@ -1019,21 +1209,23 @@ namespace KitveiHakodesh.Core.LocalFiles
                         if (ord >= _prefixLo[i] && ord < _prefixHi[i]) { root = Math.Min(i, 0xFF); break; }
                 }
 
-                long key = 0;
-                if (!literal) key |= 1L << 62;
-                if (!inTitle) key |= 1L << 61;
-                if (!covered) key |= 1L << 60;
-                else
-                {
-                    key |= (long)(63 - Math.Min(distinctFound, 63)) << 54;
-                    key |= (long)Math.Min(Math.Abs(titleWords - _queryWordCount), 255) << 46;
-                }
-                key |= (long)(63 - Math.Min(wordsMatched, 63)) << 40;
-                key |= (long)root << 32;
-                key |= (uint)(ord + 1);
+                _entries.Add(new Entry { Doc = _docBase + doc, Root = root, Ord = ord, Keys = keys });
+                Count++;
+            }
 
-                _keys.Add(key);
-                _docs.Add(_docBase + doc);
+            private int ClearPositions(int word)
+            {
+                _positions[word].Clear();
+                return 0;
+            }
+
+            /// <summary>Per typed word, min(times typed, times in the name).</summary>
+            private int WordsMatched()
+            {
+                int matched = 0;
+                for (int c = 0; c < _countWord.Length; c++)
+                    matched += Math.Min(_nameFreq[_countWord[c]], _countWanted[c]);
+                return matched;
             }
 
             /// <summary>Per token, SOME alternative has all its words in <paramref name="present"/>
@@ -1063,26 +1255,34 @@ namespace KitveiHakodesh.Core.LocalFiles
                 return c;
             }
 
-            /// <summary>The global doc ids of the best <paramref name="cap"/> matches, best first.
-            /// Each segment's entries are sorted by key (which ends in the path ord, so that is
-            /// path order); the segments are then merged on the key's rank half and, on a tie,
-            /// the path bytes - read only for the current head of each segment, so about
-            /// cap + segments path reads however many matches tie.</summary>
-            public List<int> Top(int cap, IList<AtomicReaderContext> leaves)
+            /// <summary>The ranking keys, then the first matching folder in the caller's order.
+            /// 0 = tie, which the path order decides.</summary>
+            private int CompareRank(Entry a, Entry b)
             {
-                int n = _keys.Count;
-                var keys = _keys.ToArray();
-                var docs = _docs.ToArray();
-                int segments = _segmentStarts.Count;
+                int c = SeforimDbCatalog.SeforimDbCatalogRankingKeys.Compare(a.Keys, b.Keys, _measureProximity);
+                return c != 0 ? c : a.Root.CompareTo(b.Root);
+            }
+
+            /// <summary>The best <paramref name="cap"/> matches, best first, each with its keys.
+            /// Each segment's entries are sorted by rank, then by path ord (path order there);
+            /// the segments are then merged on rank and, on a tie, the path bytes - read only
+            /// for the current head of each segment, so about cap + segments path reads however
+            /// many matches tie.</summary>
+            public List<(int Doc, RankKeys Keys)> Top(int cap, IList<AtomicReaderContext> leaves)
+            {
+                int segments = _segments.Count;
                 var heads = new int[segments];
-                var ends = new int[segments];
                 var sortValues = new SortedDocValues[segments];
                 var headPaths = new BytesRef[segments];
+                int n = 0;
                 for (int s = 0; s < segments; s++)
                 {
-                    heads[s] = _segmentStarts[s];
-                    ends[s] = s + 1 < segments ? _segmentStarts[s + 1] : n;
-                    Array.Sort(keys, docs, heads[s], ends[s] - heads[s]);
+                    _segments[s].Sort((a, b) =>
+                    {
+                        int c = CompareRank(a, b);
+                        return c != 0 ? c : a.Ord.CompareTo(b.Ord);
+                    });
+                    n += _segments[s].Count;
                     sortValues[s] = leaves[_segmentLeaves[s]].AtomicReader.GetSortedDocValues(FLD_PATH_SORT_DV);
                     headPaths[s] = new BytesRef();
                     ReadHeadPath(s);
@@ -1090,65 +1290,33 @@ namespace KitveiHakodesh.Core.LocalFiles
 
                 void ReadHeadPath(int s)
                 {
-                    if (segments < 2 || heads[s] >= ends[s]) return;   // one segment: never compared
-                    long ord = (keys[heads[s]] & 0xFFFFFFFFL) - 1;
+                    if (segments < 2 || heads[s] >= _segments[s].Count) return;   // one segment: never compared
+                    int ord = _segments[s][heads[s]].Ord;
                     if (ord < 0 || sortValues[s] == null) headPaths[s].Length = 0;
-                    else sortValues[s].LookupOrd((int)ord, headPaths[s]);
+                    else sortValues[s].LookupOrd(ord, headPaths[s]);
                 }
 
-                var top = new List<int>(Math.Min(cap, n));
+                var top = new List<(int Doc, RankKeys Keys)>(Math.Min(cap, n));
                 while (top.Count < cap)
                 {
                     int best = -1;
                     for (int s = 0; s < segments; s++)
                     {
-                        if (heads[s] >= ends[s]) continue;
+                        if (heads[s] >= _segments[s].Count) continue;
                         if (best < 0) { best = s; continue; }
-                        long a = keys[heads[s]] >> 32, b = keys[heads[best]] >> 32;
-                        int c = a != b ? a.CompareTo(b) : headPaths[s].CompareTo(headPaths[best]);
+                        int c = CompareRank(_segments[s][heads[s]], _segments[best][heads[best]]);
+                        if (c == 0) c = headPaths[s].CompareTo(headPaths[best]);
                         if (c < 0) best = s;
                     }
                     if (best < 0) break;
-                    top.Add(docs[heads[best]]);
+                    var e = _segments[best][heads[best]];
+                    top.Add((e.Doc, e.Keys));
                     heads[best]++;
                     ReadHeadPath(best);
                 }
                 return top;
             }
         }
-        /// <summary>
-        /// Any-of the folders, each requiring every word under it. The folder is the LITERAL
-        /// head of each word's pattern ("c:\talmud\*word*"), so Lucene seeks straight to that
-        /// folder's paths in the term dictionary and walks only them - an unscoped "*word*"
-        /// walks every path on the machine. (Add-in names are not searched here: they are not
-        /// under a folder prefix, and the add-in folder's own path is matched like any other.)
-        /// </summary>
-        private static BooleanQuery FolderScopedQuery(string[] words, IReadOnlyCollection<string> folders)
-        {
-            var anyFolder = new BooleanQuery();
-            foreach (var folder in folders)
-            {
-                string head = EscapeWildcard(FolderPrefix(folder));
-                var allWords = new BooleanQuery();
-                foreach (var word in words)
-                {
-                    string w = EscapeWildcard(word.ToLowerInvariant());
-                    // The word is in the path under the folder - or in the file's alias terms (the Hebrew names of
-                    // Torat Emet books: a tiny field, so its wildcard is cheap; the folder is still a path prefix).
-                    var perWord = new BooleanQuery();
-                    perWord.Add(new WildcardQuery(new Term(FLD_PATH, head + "*" + w + "*")), Occur.SHOULD);
-                    var aliasUnderFolder = new BooleanQuery();
-                    aliasUnderFolder.Add(new WildcardQuery(new Term(FLD_ALIAS_TERMS, "*" + w + "*")), Occur.MUST);
-                    aliasUnderFolder.Add(new PrefixQuery(new Term(FLD_PATH, FolderPrefix(folder))), Occur.MUST);
-                    perWord.Add(aliasUnderFolder, Occur.SHOULD);
-                    allWords.Add(perWord, Occur.MUST);
-                }
-                anyFolder.Add(allWords, Occur.SHOULD);
-            }
-            return anyFolder;
-        }
-
-        /// <summary>The path-field prefix of everything under <paramref name="folder"/>:
         /// lower-cased, one trailing backslash.</summary>
         internal static string FolderPrefix(string folder)
             => folder.ToLowerInvariant().Replace('/', '\\').TrimEnd('\\') + "\\";
@@ -1822,6 +1990,9 @@ namespace KitveiHakodesh.Core.LocalFiles
         public string AddinName { get; }
         public PathEntry(string path, string dateMs, string addinName = "")
         { Path = path; DateMs = dateMs; AddinName = addinName ?? ""; }
+        /// <summary>The entry's catalog ranking keys, read from the index while collecting
+        /// (the order the search returned it in; the UserSpace merge reuses them).</summary>
+        internal RankKeys Keys { get; set; }
     }
 
     // ── PathAnalyzer ──────────────────────────────────────────────────────────
@@ -1830,11 +2001,49 @@ namespace KitveiHakodesh.Core.LocalFiles
 
     internal sealed class PathAnalyzer : Analyzer
     {
+        // The one field that is a word SEQUENCE (name_seq: positions) splits on spaces.
+        private const string WordSequenceField = "name_seq";
+
+        public PathAnalyzer() : base(PER_FIELD_REUSE_STRATEGY) { }
+
         protected override TokenStreamComponents CreateComponents(
             string fieldName, System.IO.TextReader reader)
         {
-            var tok = new PathTokenizer(Lucene.Net.Util.AttributeSource.AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY, reader);
+            Tokenizer tok = fieldName == WordSequenceField
+                ? new SpaceTokenizer(Lucene.Net.Util.AttributeSource.AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY, reader)
+                : new PathTokenizer(Lucene.Net.Util.AttributeSource.AttributeFactory.DEFAULT_ATTRIBUTE_FACTORY, reader);
             return new TokenStreamComponents(tok, tok);
+        }
+    }
+
+    /// <summary>One token per space-separated word, in order (positions follow). The words
+    /// come pre-normalized from LocalFileNameWords, so nothing else is done to them.</summary>
+    internal sealed class SpaceTokenizer : Tokenizer
+    {
+        private readonly ICharTermAttribute _termAtt;
+        private string[] _words;
+        private int _next;
+
+        public SpaceTokenizer(Lucene.Net.Util.AttributeSource.AttributeFactory factory, System.IO.TextReader input)
+            : base(factory, input)
+        {
+            _termAtt = AddAttribute<ICharTermAttribute>();
+        }
+
+        public override bool IncrementToken()
+        {
+            _words ??= m_input.ReadToEnd().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (_next >= _words.Length) return false;
+            ClearAttributes();
+            _termAtt.SetEmpty().Append(_words[_next++]);
+            return true;
+        }
+
+        public override void Reset()
+        {
+            base.Reset();
+            _words = null;
+            _next = 0;
         }
     }
 

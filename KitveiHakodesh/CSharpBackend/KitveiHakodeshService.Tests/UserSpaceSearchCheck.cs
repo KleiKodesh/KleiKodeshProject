@@ -270,12 +270,24 @@ internal static class UserSpaceSearchCheck
 
     // ── Ranking ──────────────────────────────────────────────────────────────
 
+    /// <summary>The files through the REAL path: a fresh index over them (the keys are read
+    /// from index data while collecting), the folder-scoped search, then the merge.</summary>
     private static List<string> RankFiles(string query, string[] rootFolders, params string[] files)
     {
         var roots = rootFolders.Select(f => new UserSpaceRoot(null, f)).ToList();
-        var entries = files.Select(f => new PathEntry(f.ToLowerInvariant(), "0")).ToList();
-        return UserSpaceSearch.Rank(query, roots, null, entries, CancellationToken.None)
-            .Select(h => h.FilePath).ToList();
+        string dir = Path.Combine(Path.GetTempPath(), $"userspace-rank-{Environment.ProcessId}");
+        try
+        {
+            using var index = new LocalFileIndex(dir);
+            index.RebuildFrom(files.Select(f => f.ToLowerInvariant()).ToList());
+            var entries = index.Search(query, null, rootFolders, 0, out _);
+            return UserSpaceSearch.Rank(query, roots, null, entries, CancellationToken.None)
+                .Select(h => h.FilePath).ToList();
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
     }
 
     private static void Order(string name, string query, string[] roots, string[] expected, params string[] input)
@@ -359,14 +371,19 @@ internal static class UserSpaceSearchCheck
         // Synthetic catalog hit (exact book title, root 1) vs the same exact title as a file
         // (root 0): equal accuracy, so root order decides.
         var roots = new List<UserSpaceRoot> { new(null, @"C:\Lib"), new(7, null) };
+        // Every hit arrives KEYED by its own index; the merge only compares the keys.
+        var exactTitle = new RankKeys
+        {
+            IsLiteral = true, MatchesTitleOrAuthor = true, TitleCovered = true, TitleDistinctWords = 1,
+            TitleLengthGap = 0, LeafCovered = true, WordsMatched = 1,
+        };
+        var titleAndMore = new RankKeys { IsLiteral = true, MatchesTitleOrAuthor = true, WordsMatched = 1 };
         var catalogHit = new CatalogTocHit
         {
-            BookId = 42, Level = 0, TreeOrder = 1, TocPath = "", IsLiteral = true, MatchesTitleOrAuthor = true,
-            TitleCovered = true, TitleDistinctWords = 1, TitleLengthGap = 0, LeafCovered = true, WordsMatched = 1,
-            CategoryAncestors = [7, 1],
+            BookId = 42, Level = 0, TreeOrder = 1, TocPath = "", Keys = exactTitle, CategoryAncestors = [7, 1],
         };
         var mixed = UserSpaceSearch.Rank("berachot", roots, [catalogHit],
-            [new PathEntry(@"c:\lib\berachot notes.pdf", "0"), new PathEntry(@"c:\lib\berachot.pdf", "0")], CancellationToken.None);
+            [new PathEntry(@"c:\lib\berachot notes.pdf", "0") { Keys = titleAndMore }, new PathEntry(@"c:\lib\berachot.pdf", "0") { Keys = exactTitle }], CancellationToken.None);
         string Desc(UserSpaceSearchHit h) => h.BookId > 0 ? $"book{h.BookId}" : h.FilePath;
         var seq = mixed.Select(Desc).ToList();
         Check(seq.SequenceEqual([@"c:\lib\berachot.pdf", "book42", @"c:\lib\berachot notes.pdf"]),
