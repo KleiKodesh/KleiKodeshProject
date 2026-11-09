@@ -33,6 +33,20 @@ CODEPAGE = 'cp1255'   # VBA stores source in the ANSI code page; Hebrew names ne
 NOT_ACTIVE_HE = 'התוסף כלי קודש אינו פעיל'
 
 
+# Commands that act on the Kitvei Hakodesh pane; the rest belong to the add-in.
+KITVEI_HAKODESH_COMMANDS = ('SearchText', 'SearchBook', 'CompareText', 'OpenLink')
+
+
+def macro_name(member):
+    """KitveiHakodesh stays bare; Kitvei Hakodesh commands get KitveiHakodesh_, the
+    rest KleiKodesh_ - so the Macros dialog groups them and no name clashes."""
+    if member == 'KitveiHakodesh':
+        return member
+    if member in KITVEI_HAKODESH_COMMANDS:
+        return 'KitveiHakodesh_' + member
+    return 'KleiKodesh_' + member
+
+
 def module_source():
     code = io.open(SOURCE, encoding='utf-8-sig').read()
     lines = ['Attribute VB_Name = "%s"' % MODULE,
@@ -61,8 +75,8 @@ def module_source():
     for name, twin in re.findall(r'public void (\w+)\(\) => (\w+)', code):
         if not name.isascii():
             continue
-        member = name if twin == 'AddinCommands' else twin
-        lines += ['', 'Public Sub %s()' % name, '    KleiKodeshAddin.%s' % member, 'End Sub']
+        member = name if twin in ('AddinCommands', 'Post') else twin
+        lines += ['', 'Public Sub %s()' % macro_name(member), '    KleiKodeshAddin.%s' % member, 'End Sub']
     if len(lines) < 10:
         raise SystemExit('No commands found in ' + SOURCE)
     return ('\r\n'.join(lines) + '\r\n').encode(CODEPAGE)
