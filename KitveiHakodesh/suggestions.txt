@@ -3,6 +3,56 @@ ai search with api?
 symantic search
 aramaic to Hebrew?
 
+fts in small view teh ighlighted part of te snippet might get hidden
+homepage history tiles / sperators lack sapcers also maybe allow flow to next line??
+
+local ile search is not isnatnt why?
+
+
+address bar go back need tos ave satet
+
+local file search still rebuilding teh index every time teh program has launched? 
+אנא המתם בעת בניית האינדקס 99%
+also sometimes when returning to the tab
+also why cant i search while teh index is bing built?
+
+scroll tollti still t sensitive?
+
+fast doc view the margins are applied slowly it causes the ui to jump firt sneed to apply teh margins and tehn load conetnt
+
+limit he hoght of teh title fo cards al over to three rows
+
+home page still takes a moment to load teh place holders
+
+usespace page focus in teh input ahne it loads just like teh ctalog page
+catalog page and user page when address bar go back then load to the last pos
+
+in start menu search kitvei hakodesh wil also show restls
+
+windowed scroller tooltip shows at 600 ms rais the bar
+
+fts page
+pravie of search result dont hoghligt the result line with backgound just with the border
+also חזור לשורת התורצאה needs to be changed to גלול לתוצאה המסומנת
+
+fts result bug ctnrl click didint navigate to teh result but then when switching to another tab and back it corrected itself this only happen in one case only
+
+
+pils in the user space should mathc the pills in the milon page
+pill sin both need to be better organized so tehy fil teh width dynamically
+
+homepage is not hswing full path in the tiels mode
+
+interleave files in torat emet?
+
+relative boks for local files in teh same folder
+
+
+fastdocview:
+refresh button
+
+app bug icon isn't showing in windows taskbar
+
 bokview:
 search: option for side panel
 bookview create a flow mode now that we have windwoed rendering.
