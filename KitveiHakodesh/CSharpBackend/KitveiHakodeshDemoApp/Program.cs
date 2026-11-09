@@ -108,6 +108,7 @@ namespace KitveiHakodeshDemoApp
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            StartServiceEarly();
             // The browser process is the long pole of a cold start: launch it before the form
             // is built, so it comes up while the rest of startup runs. MainForm's AppViewer
             // uses the same folder and picks this environment up.
@@ -124,6 +125,22 @@ namespace KitveiHakodeshDemoApp
             Application.Run(form);
         }
 
+        // The service stops itself soon after the last window closes, so a normal launch has to
+        // start it again. Started here, first thing, it is up (~170 ms) long before the page asks
+        // for data; started only after WebView2 is ready, as the viewer does, the page's first
+        // requests waited ~1.3 s for it. Never elevates: the viewer's own call, after the window
+        // exists, is the one that may show the install prompt, and it returns at once when this
+        // start already succeeded (the launcher serialises both).
+        private static void StartServiceEarly()
+        {
+            var launcher = new KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher();
+            System.Threading.Tasks.Task.Run(async () =>
+            {
+                try { await launcher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false); }
+                catch { /* the viewer's own attempt reports it */ }
+            });
+        }
+
         // BCL only, like the rest of Main before the first-instance check (HostTestMode.IsOn
         // would load KitveiHakodeshLib on every second launch).
         private static bool IsHostTestMode()
@@ -134,6 +151,7 @@ namespace KitveiHakodeshDemoApp
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            StartServiceEarly();
             AppViewer.StartSharedEnvironment(MainForm.WebCacheFolder);
             var form = new MainForm(GetOpenRequestArgument());
             lock (EarlyRequestsLock) _mainForm = form;

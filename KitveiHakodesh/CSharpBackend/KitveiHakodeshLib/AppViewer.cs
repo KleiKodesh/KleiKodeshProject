@@ -1,4 +1,4 @@
-using Dark.Net;
+﻿using Dark.Net;
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
@@ -277,7 +277,9 @@ namespace KitveiHakodeshLib
             // the selection safely.
             string json = await _webView.CoreWebView2.ExecuteScriptAsync(
                 "window.getSelection().toString()");
-            return JsonSerializer.Deserialize<string>(json) ?? string.Empty;
+            // Reader only: the serializer's metadata machinery is not loaded for one string.
+            using (var doc = JsonDocument.Parse(json))
+                return doc.RootElement.ValueKind == JsonValueKind.String ? doc.RootElement.GetString() ?? string.Empty : string.Empty;
         }
 
         /// <summary>
@@ -761,7 +763,7 @@ namespace KitveiHakodeshLib
             }
             if (events.Count == 0) return;
             _startupEventsScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                "if(window===window.top)window.__webviewStartupEvents=" + JsonSerializer.Serialize(events) + ";");
+                "if(window===window.top)window.__webviewStartupEvents=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(events) + ";");
         }
 
         /// <summary>

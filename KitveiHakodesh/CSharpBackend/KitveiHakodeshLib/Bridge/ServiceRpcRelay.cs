@@ -331,7 +331,7 @@ namespace KitveiHakodeshLib.Bridge
             long size = 4;
             foreach (byte[] frame in frames) size += 4 + frame.Length;
 
-            string tag = System.Text.Json.JsonSerializer.Serialize(new { @event = "serviceStreamFrames", streamId, ended, error = endError });
+            string tag = JsonPayloadWriter.ToJson(new { @event = "serviceStreamFrames", streamId, ended, error = endError });
             try
             {
                 using (CoreWebView2SharedBuffer buffer = _core.Environment.CreateSharedBuffer((ulong)size))

@@ -1,6 +1,5 @@
 using Microsoft.Web.WebView2.WinForms;
 using System;
-using System.Text.Json;
 using System.Windows.Forms;
 
 namespace KitveiHakodeshLib.Bridge
@@ -22,7 +21,7 @@ namespace KitveiHakodeshLib.Bridge
 
         public void Reply(string id, object payload)
         {
-            string json = JsonSerializer.Serialize(payload);
+            string json = JsonPayloadWriter.ToJson(payload);
             string withId = json.Length > 2
                 ? "{\"id\":\"" + id + "\"," + json.Substring(1)
                 : "{\"id\":\"" + id + "\"}";
@@ -31,7 +30,7 @@ namespace KitveiHakodeshLib.Bridge
 
         public void PushEvent(object payload)
         {
-            Post(JsonSerializer.Serialize(payload));
+            Post(JsonPayloadWriter.ToJson(payload));
         }
 
         private void Post(string json)
