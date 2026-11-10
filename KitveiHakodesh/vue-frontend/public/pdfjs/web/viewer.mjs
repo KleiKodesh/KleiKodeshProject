@@ -5738,6 +5738,10 @@ class DownloadManager extends BaseDownloadManager {
         } catch {
           // User cancelled or a mid-write FSA error — no anchor fallback runs
           // here (the outer function already returned); nothing was saved.
+        } finally {
+          // PATCH: the dialog is done either way; a waiting saveAs resolves
+          // now instead of at its timeout (a cancelled picker stalled it 120s).
+          document.dispatchEvent(new CustomEvent("kh-save-settled"));
         }
       })();
       return;
@@ -5748,6 +5752,7 @@ class DownloadManager extends BaseDownloadManager {
       // download starts immediately, so a successful save's bytes are on disk.
       document.dispatchEvent(new CustomEvent("kh-save-complete"));
     }
+    if (!isAttachment) document.dispatchEvent(new CustomEvent("kh-save-settled"));
   }
   _defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
     if (!blobUrl && !isAttachment) {
