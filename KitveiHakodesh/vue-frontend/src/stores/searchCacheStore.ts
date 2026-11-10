@@ -65,8 +65,9 @@ interface SearchCacheMeta {
  */
 interface PackedChunk {
   n: number
-  lineId: Int32Array
-  bookId: Int32Array
+  /** Float64: a footnote hit's line and book ids are 2^52-based and do not fit 32 bits (integers are exact to 2^53). */
+  lineId: Float64Array
+  bookId: Float64Array
   score: Int32Array
   wordDistance: Int32Array
   snippetStart: Int32Array
@@ -79,7 +80,7 @@ interface PackedChunk {
 function pack(hits: readonly FullTextSearchResult[]): PackedChunk {
   const n = hits.length
   const columns = {
-    lineId: new Int32Array(n), bookId: new Int32Array(n), score: new Int32Array(n),
+    lineId: new Float64Array(n), bookId: new Float64Array(n), score: new Int32Array(n),
     wordDistance: new Int32Array(n), snippetStart: new Int32Array(n), snippetEnd: new Int32Array(n),
     snippetFlags: new Int32Array(n), markEnds: new Int32Array(n),
   }
@@ -105,7 +106,8 @@ function pack(hits: readonly FullTextSearchResult[]): PackedChunk {
 }
 
 function packedBytes(chunk: PackedChunk): number {
-  return chunk.lineId.byteLength * 8 + chunk.marks.byteLength
+  // Two 8-byte id columns, six 4-byte columns, and the marks.
+  return chunk.lineId.byteLength * 2 + chunk.score.byteLength * 6 + chunk.marks.byteLength
 }
 
 function unpackInto(chunk: PackedChunk, out: FullTextSearchResult[]): void {
@@ -355,6 +357,9 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     const chunks = await Promise.all(
       Array.from({ length: meta.chunks }, (_, i) => idbGet<PackedChunk>(chunkKey(meta.id, i))),
     )
+    // Chunks written before the id columns were widened hold footnote hits with their
+    // ids cut to 32 bits (such a result opened nothing): a miss, the caller searches.
+    if (chunks.some((chunk) => chunk && !(chunk.lineId instanceof Float64Array))) return null
     const results: FullTextSearchResult[] = []
     for (const chunk of chunks) {
       if (!chunk) break   // a missing chunk ends the readable prefix
