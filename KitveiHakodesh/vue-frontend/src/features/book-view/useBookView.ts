@@ -114,6 +114,7 @@ export function useBookView(
 
   const openTocEntryId = paneNavigation.activeTab.openTocEntryId
   const openTocLineIndex = paneNavigation.activeTab.openTocLineIndex
+  const openTocLineOffsetPx = paneNavigation.activeTab.openTocLineOffsetPx
   const flashOpenLine = paneNavigation.activeTab.flashOpenLine ?? false
   const searchHighlightLineIndex = paneNavigation.activeTab.searchHighlightLineIndex
   const searchHighlightQuery = paneNavigation.activeTab.searchHighlightQuery ?? ''
@@ -123,13 +124,21 @@ export function useBookView(
   // One-shot: a later remount of this tab must not pop the note open again.
   if (openNoteIndex != null) paneNavigation.updateActiveTab({ openNoteIndex: undefined })
 
-  // A deep-link open (flashOpenLine) sets openTocLineIndex without openTocEntryId, so
-  // include it in the clear gate — otherwise the flash flag would survive a remount.
-  if (openTocEntryId != null || flashOpenLine)
+  // Where to open is ONE navigation's argument: it is consumed here, whatever set it
+  // (a TOC entry, a search result, a deep link, Back, a recents row). Left on the tab,
+  // the next remount of this tab (a tab switch) would open at that line again
+  // instead of where the reader has since got to.
+  if (openTocEntryId != null || openTocLineIndex != null || flashOpenLine)
     paneNavigation.updateActiveTab({
       openTocEntryId: undefined,
       openTocLineIndex: undefined,
+      openTocLineOffsetPx: undefined,
       flashOpenLine: undefined,
+    })
+  // The search highlight goes with a TOC or deep-link open (it belongs to an earlier
+  // navigation); after a search-result open it stays until the reader scrolls.
+  if (openTocEntryId != null || flashOpenLine)
+    paneNavigation.updateActiveTab({
       searchHighlightLineIndex: undefined,
       searchHighlightQuery: undefined,
       searchHighlightSnippet: undefined,
@@ -623,7 +632,7 @@ export function useBookView(
     initialLineIndex, initialScrollTop, initialScrollOffset,
     idbResolved, restoredVersionTitle, restoredSideEdition, restore: restoreSession,
   } = useBookViewSessionRestore(
-    tabId, bookId, openTocLineIndex,
+    tabId, bookId, openTocLineIndex, openTocLineOffsetPx,
     panels,
     selectedLineId, commentaryLineId,
     {

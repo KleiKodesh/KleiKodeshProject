@@ -61,6 +61,11 @@ export function useBookViewSessionRestore(
   tabId: string,
   bookId: number | undefined,
   openTocLineIndex: number | undefined,
+  /**
+   * Pixels into that line, when the navigation is a return to an exact place (Back,
+   * a recents row) rather than a jump to a line's start. Undefined = the line's start.
+   */
+  openTocLineOffsetPx: number | undefined,
   panels: Record<CommentarySlot, RestorableCommentaryPanel>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
@@ -70,9 +75,13 @@ export function useBookViewSessionRestore(
   const bookViewStore = useBookViewStore()
   const settingsStore = useSettingsStore()
 
-  const initialLineIndex = ref<number | undefined>(openTocLineIndex)
-  const initialScrollTop = ref<number | undefined>()
-  const initialScrollOffset = ref<number>(0)
+  // A requested LINE opens at its start (`initialLineIndex`); an exact PLACE to return
+  // to opens like a saved place does (`initialScrollTop` + offset). Either way the
+  // saved state below does not override it.
+  const isExactPlace = openTocLineIndex != null && openTocLineOffsetPx != null
+  const initialLineIndex = ref<number | undefined>(isExactPlace ? undefined : openTocLineIndex)
+  const initialScrollTop = ref<number | undefined>(isExactPlace ? openTocLineIndex : undefined)
+  const initialScrollOffset = ref<number>(isExactPlace ? openTocLineOffsetPx! : 0)
   /**
    * The saved state has been read (or could not be): the lines pane's start row is
    * final. BookViewPage creates the lines pane on this - see the file comment.

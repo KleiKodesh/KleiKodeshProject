@@ -111,7 +111,7 @@ export function useBookViewLinesScroll(
 
   // ── Position-save suppression ───────────────────────────────────────────────
 
-  let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
+  let saveSuppressFrame = 0
   // The row this pane opens at: a requested line (TOC, search result, deep link) or
   // the saved one; undefined = the top. FINAL at setup — BookViewPage creates the
   // pane only once the saved position has been read, and the scroller is created
@@ -122,10 +122,18 @@ export function useBookViewLinesScroll(
   // the top sets nothing — the top is the reader's place from the start.
   let saveSuppressed = startRow != null
 
+  /**
+   * The app is about to set the scroll itself (a jump to a line, a nudge to a mark):
+   * the scroll event that write causes is not the reader moving, and its position is
+   * not to be persisted. Call it right before the write. The event is dispatched at
+   * the start of the next frame, ahead of that frame's animation callbacks — so the
+   * hold is released by one, exactly after the event. Not a timer: a fixed window
+   * either ends before a slow frame's event or swallows the reader's next scroll.
+   */
   function suppressPositionSave() {
     saveSuppressed = true
-    if (saveSuppressTimer) clearTimeout(saveSuppressTimer)
-    saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
+    cancelAnimationFrame(saveSuppressFrame)
+    saveSuppressFrame = requestAnimationFrame(() => { saveSuppressed = false })
   }
 
   // ── Once the first window is on screen ──────────────────────────────────────
@@ -270,10 +278,7 @@ export function useBookViewLinesScroll(
     unregisterHostFlush()
     cancelOpeningFollowUps()
     saveSuppressed = false
-    if (saveSuppressTimer) {
-      clearTimeout(saveSuppressTimer)
-      saveSuppressTimer = null
-    }
+    cancelAnimationFrame(saveSuppressFrame)
     // A view leaving while its tab stays open (tab switch, navigation within the
     // tab) has only this save. A closed tab's view unmounts after the tab has left
     // the list, and the close already captured this same position (disposeClosedTab
