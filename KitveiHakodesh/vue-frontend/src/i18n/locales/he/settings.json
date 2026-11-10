@@ -400,6 +400,20 @@
     "showHideScrollbars": "הצג / הסתר פסי גלילה",
     "readingModeHideShowAllBarsAndScrollbars": "מצב קריאה — הסתר / הצג את כל הסרגלים ופסי הגלילה",
     "fullScreen": "מסך מלא",
-    "caretBrowsingForNavigationAndSelection": "הפעלת סמן טקסט לניווט ובחירה"
+    "caretBrowsingForNavigationAndSelection": "הפעלת סמן טקסט לניווט ובחירה",
+    "keepScreenOn": "השאר מסך דלוק (הפעלה/כיבוי)"
+  },
+  "keepScreenOn": {
+    "label": "השאר מסך דלוק",
+    "hint": "מונע מהמסך להתעמעם או להיכבות. F4 מפעיל ומכבה.",
+    "off": "כבוי",
+    "reading": "בזמן קריאה",
+    "fullscreen": "במסך מלא",
+    "always": "תמיד",
+    "idleLabel": "לאפשר למסך להיכבות אחרי (דקות בלי גלילה)",
+    "idleHint": "אם אין גלילה, מקש או לחיצה למשך זמן זה, המסך יכול להיכבות שוב",
+    "never": "אף פעם",
+    "toastOn": "השאר מסך דלוק: פעיל",
+    "toastOff": "השאר מסך דלוק: כבוי"
   }
 }

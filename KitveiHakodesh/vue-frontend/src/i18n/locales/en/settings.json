@@ -400,6 +400,20 @@
     "showHideScrollbars": "Show / hide scrollbars",
     "readingModeHideShowAllBarsAndScrollbars": "Reading mode: hide / show all bars and scrollbars",
     "fullScreen": "Full screen",
-    "caretBrowsingForNavigationAndSelection": "Caret browsing for navigation and selection"
+    "caretBrowsingForNavigationAndSelection": "Caret browsing for navigation and selection",
+    "keepScreenOn": "Keep screen on (on/off)"
+  },
+  "keepScreenOn": {
+    "label": "Keep screen on",
+    "hint": "Stop the screen from dimming or sleeping. F4 turns it on/off.",
+    "off": "Off",
+    "reading": "While reading",
+    "fullscreen": "In full screen",
+    "always": "Always",
+    "idleLabel": "Let the screen sleep after (minutes without scrolling)",
+    "idleHint": "No scroll, key or click for this long and the screen may sleep again",
+    "never": "Never",
+    "toastOn": "Keep screen on: ON",
+    "toastOff": "Keep screen on: OFF"
   }
 }

@@ -92,6 +92,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>H</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideAppBar') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>H</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideScrollbars') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F9</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.readingModeHideShowAllBarsAndScrollbars') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F4</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.keepScreenOn') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F11</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.fullScreen') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F7</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.caretBrowsingForNavigationAndSelection') }}</span></div>
   </div>

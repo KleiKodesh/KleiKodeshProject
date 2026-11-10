@@ -17,6 +17,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { storeToRefs } from 'pinia'
 import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { useIndexBuildReasonLog } from '@/composables/useIndexBuildReasonLog'
+import { useKeepScreenOn } from '@/composables/useKeepScreenOn'
 import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
@@ -35,6 +36,7 @@ useTabSwipeNavigation()
 startErrorReportRetries()
 // Why each service index last rebuilt, to the console (diagnostics).
 useIndexBuildReasonLog()
+useKeepScreenOn()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
