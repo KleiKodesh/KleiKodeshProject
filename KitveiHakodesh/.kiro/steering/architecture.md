@@ -247,9 +247,9 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `useBookViewKeyboardShortcuts.ts` — book-view-scoped shortcuts
 - `copyFlagExclusivity.ts` — mutual exclusivity rules for copy options (has unit tests)
 
-**lines/ subfolder** — main text rendering with virtual scroller and line selection:
-- `BookViewLinesContent.vue` — main text (virtual scroller, line selection)
-- `useBookViewLinesTable.ts` — paginated line fetching in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
+**lines/ subfolder** — main text rendering with a `WindowedScroller` and line selection:
+- `BookViewLinesContent.vue` — main text (a `WindowedScroller`, line selection). Created by `BookViewPage` only once the saved position has been read: the scroller opens AT its start row (see `preferences.md`, "Virtual Scroller Rules")
+- `useBookViewLinesTable.ts` (`useLines`) — the lines' text, fetched on demand: `ensureLines(start, end)` is the scroller's row source and resolves once that range has its text. Nothing is fetched on spec and no placeholder rows exist
 - `useBookViewLineRenderer.ts` — line rendering logic
 - `useBookViewLineCopyMenu.ts` — context menu for line copying
 - `useBookViewLineLink.ts` — "copy link to this section" menu action; copies the deep link built by `buildLineLink` in `utils/appDeepLink.ts` — the single definition of this app's link format, `kitveihakodeshapp://book/<bookId>?index=<lineIndex>`, shaped to match the `otzaria://` links `HostLink.cs` parses (the app opens such a link when it is launched with one — `Program.GetOpenRequestArgument` / `MainForm.OpenRequest` route it through the same single-instance pipe as a file path, so it lands as a new tab; registering the scheme with Windows is an installer step, specified in `Build/Installer/README.md`)
@@ -276,7 +276,6 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `commentaryNavigation.ts` — pure navigation helpers (no `use` prefix: no reactivity)
 - `uncheckedCommentaryBooks.ts` — persisted set of hidden commentary books
 - `useCommentarySearch.ts`, `useCommentaryNavigation.ts`, `useCommentaryRender.ts`, `useCommentaryScroll.ts`, `useCommentaryTocPaths.ts`, `useCommentaryTreeSearch.ts`, `useCommentaryCopy.ts`, `useCommentaryHighlights.ts`, `useCommentaryNotes.ts`
-- `DEBUG_NOTES.md` — scroll/positioning debugging notes
 
 ### full-text-search/
 
@@ -294,7 +293,7 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 - `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress`; handles `ftsIndexInvalidated` (automatic rebuild when the DB changes or the index is corrupt)
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, result click handler
 - `ftsChronology.ts` — chronological ordering/period metadata for results
-- `scrollRestore.ts` — scroll position restore (has unit tests). Scroll saves fire only on `visibilitychange` / `beforeunload` / unmount — never on `scroll`; see the rule in `preferences.md`.
+- The results list creates its `WindowedScroller` AT the saved row (read synchronously from the localStorage mirror in `FullTextSearchPage.vue`); its row source waits for streamed rows. No restore step — see "Where the list opens" in `FullTextSearchResultsList.vue`.
 - `fullTextSearchTypes.ts` — TypeScript types
 
 Results must never be capped or limited. The term-expansion cap inside FtsLib is a separate, sanctioned mechanism — do not confuse the two.
@@ -620,8 +619,6 @@ It deliberately holds **no** schemas, retention policies, key names or reset wor
 **segmentSearchTree.ts** — generic segment-aware search tree for any hierarchical node list. `SegmentSearchTree` matches query words as an ordered subsequence across ancestor path segments. Used by `TreeView.vue`, commentary filter panels, and search utilities.
 
 **detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed. Used by `FontSelector.vue`.
-
-**scrollToIndexWithRetry.ts** — virtual scroller scroll-to-index with retry for async rendering.
 
 **hebrewKetivExpander.ts** — Hebrew text expansion utilities for ketiv/keri handling.
 

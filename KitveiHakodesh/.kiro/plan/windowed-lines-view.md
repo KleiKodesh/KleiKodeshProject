@@ -3,6 +3,11 @@ inclusion: fileMatch
 fileMatchPattern: '**/book-view/lines/**|**/useBookViewSearch.ts|**/BookViewLinesContent.vue'
 ---
 
+
+> **HISTORICAL PLAN (2026-10).** This was the plan written before `WindowedScroller` was built, and parts of it
+> (a synthetic total height, rebasing on idle, the comparison with TanStack) are NOT how it works. The model as
+> built and as it must stay is in `.kiro/steering/preferences.md` ("Virtual Scroller Rules" -> "The model") and
+> at the top of `src/components/WindowedScroller.vue`. Read those, not this, before changing the scroller.
 # Windowed Lines View
 
 ## Goal

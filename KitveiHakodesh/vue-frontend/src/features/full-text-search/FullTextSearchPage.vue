@@ -126,11 +126,11 @@ const {
 const searchBarRef = ref<InstanceType<typeof FullTextSearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
 const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null>(null)
-// Seed the restore target from the localStorage mirror SYNCHRONOUSLY at setup — it's
-// available before the first render, unlike the async IDB read in onMounted. This is what
-// lets the results list scroll to the target before its first paint (no flash of the list
-// top followed by a jump). The IDB value in onMounted remains as fallback for saves that
-// predate the mirror.
+// The saved position is the row the results scroller is CREATED at (a windowed scroller
+// takes its start row as an argument; it is never opened at the top and moved
+// afterwards), so it has to be known here, at setup, before the list exists. That is
+// what the localStorage mirror is for: it is read synchronously, where the IndexedDB
+// copy would only arrive after mount. There is deliberately no IndexedDB fallback.
 const _scrollMirror = lsGet<{ i: number; o: number }>(scrollMirrorKey)
 const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
@@ -512,22 +512,11 @@ onMounted(async () => {
     zoom.value = saved.searchZoom
   }
 
-  // The localStorage mirror was already read synchronously at setup (see initialScrollIndex
-  // declaration) — it's always at least as fresh as IDB, because every save writes the
-  // mirror synchronously while the IDB write is async and dies on reload teardown (this was
-  // the "reload restores the PREVIOUS position" bug). IDB is only the fallback for saves
-  // that predate the mirror.
-  if (_scrollMirror == null && saved?.searchScrollIndex != null) {
-    initialScrollIndex.value = saved.searchScrollIndex
-    initialScrollOffset.value = saved.searchScrollOffset ?? 0
-    // Do NOT seed lastScrollIndex/lastScrollOffset from the saved state.
-    // Those track the current session's live position (via onSaveScroll / captureScrollPos).
-    // Seeding them here means onBeforeUnmount would fall back to the stale restored value
-    // and overwrite whatever visibilitychange correctly saved for the current session.
-  }
+  // The saved scroll position was read from the localStorage mirror at setup - it is the
+  // row the results scroller is created at. Nothing here restores it after the fact.
 
-  // Restore search query and results from cache/session. The scroll position
-  // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
+  // Restore search query and results from cache/session. The results list creates its
+  // scroller AT the saved row once that row is among the results - nothing scrolls to it.
   await restoreFromTab()
 
   // Restore the per-tab sort AFTER restoreFromTab: executeSearch() resets sortOrder to

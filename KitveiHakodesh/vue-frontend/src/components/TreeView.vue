@@ -69,8 +69,8 @@ function scrollIntoView(id: number) {
  * whole gate.
  *
  * It has to be a gate on identity rather than a flag on timing because the syncs
- * do not arrive once. A jump makes the virtualizer settle over many frames, and
- * each settle re-derives the active entry and re-announces the SAME node. A
+ * do not arrive once. A jump is followed by several scroll and window updates, and
+ * each of them re-derives the active entry and re-announces the SAME node. A
  * one-shot flag is consumed by the first of those and lets every later one
  * through, which is why suppression worked only some of the time. Comparing
  * against the node we are on ignores all of them, however many arrive.

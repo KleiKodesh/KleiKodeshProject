@@ -105,38 +105,48 @@ async function landNote(index: number) {
   }
 }
 
-/** Waits (bounded) until the scroller exists and knows row `index` - the note list may still be loading. */
-async function whenRowKnown(index: number): Promise<boolean> {
-  for (let attempt = 0; attempt < 50 && (!scroller.value || props.noteCount <= index); attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  return !!scroller.value && props.noteCount > index
+/** Resolves once the scroller exists and note `index` is in the list - the note list may still be indexing. */
+function whenNoteExists(index: number): Promise<void> {
+  const exists = () => !!scroller.value && props.noteCount > index
+  if (exists()) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const stop = watch(exists, (there) => {
+      if (!there) return
+      stop()
+      resolve()
+    })
+  })
 }
+
+// The pane's scroller is CREATED at the note to show (`initial-index` below: the clicked
+// reference's note, else the note in sync with the text) - a windowed scroller takes its
+// start row as an argument, so nothing here runs when the pane opens. These two watchers are
+// for LATER changes only, on a scroller that is already showing notes.
 
 // Keep notes in sync with the text: the first note at or after the first block in view (instant).
 watch(
   () => props.followIndex,
   async (index) => {
     // A click landing in progress wins.
-    if (index == null || isLanding || !(await whenRowKnown(index))) return
+    if (index == null || isLanding) return
+    await whenNoteExists(index)
     if (isLanding || props.followIndex !== index || rowOffset(index) === 0) return
     void scroller.value?.scrollToIndex(index)
   },
-  { immediate: true, flush: 'post' },
+  { flush: 'post' },
 )
 
-// The clicked reference's note lands in view. `immediate` + post flush: a click on a reference
-// also OPENS the pane (SplitPane mounts its bottom slot then), so the index is set before this
-// component exists.
+// Another reference clicked while the pane is open: its note eases into view.
 watch(
   () => [props.landIndex, props.landingNonce] as const,
-  async ([index]) => {
+  async ([index, nonce]) => {
     if (index == null) return
-    isLanding = true
-    if (!(await whenRowKnown(index))) { isLanding = false; return }
+    await whenNoteExists(index)
+    // A newer click owns the pane by now.
+    if (props.landIndex !== index || props.landingNonce !== nonce) return
     void landNote(index)
   },
-  { immediate: true, flush: 'post' },
+  { flush: 'post' },
 )
 
 /** The library marks a note's own number (Word's footnoteRef / ODF citation / RTF chftn / .doc

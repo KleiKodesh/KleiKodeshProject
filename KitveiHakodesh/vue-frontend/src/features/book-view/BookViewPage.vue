@@ -90,7 +90,7 @@ const {
   prepareCommentaryExportData, prepareCommentaryExportTargets, resolveCommentaryWordLinkTarget,
   commentaryTocPaths,
   currentScrollLineIndex,
-  scrollStateReady, idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
+  idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
   flashOpenLine,
   activeMatchCount, activeMatchIdx, contentSearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
@@ -393,18 +393,15 @@ function onCancelExportToWord() {
 }
 
 // Opening or closing EITHER side commentary column re-wraps the text, so the lines
-// scroller is re-keyed and restored from the position captured just before the
-// swap. Without the capture the remounted instance would re-apply
-// initialLineIndex/initialScrollTop — values frozen at session-restore time — and
-// jump back to a stale position (or to the top when nothing was saved).
+// pane is re-keyed: a NEW scroller is created, and its start row is the position
+// captured from the old one just before the swap. Without the capture the new
+// instance would be given initialLineIndex/initialScrollTop as session restore left
+// them and open at a stale place (or at the top when nothing was saved).
 watch(sideColumnsKey, () => {
-  // Session restore opens the side panel BEFORE idbResolved flips (the visible
-  // watchers flush first), so this fires against a lines instance that has not
-  // applied its restore yet - capturing would read {0,0} and overwrite the seeded
-  // initialScrollTop, landing the whole view at the top. Skip: the seeded values
-  // are exactly what the remounted instance should restore from. (The old
-  // single-panel code dodged this by deferring the layout flip until after
-  // restoreSession, which let the pre-flip instance finish its stage-1 scroll.)
+  // Session restore opens the side panel BEFORE idbResolved flips, when no lines
+  // pane exists yet: nothing to capture, and the restored values are exactly what
+  // the pane should be created with. The same holds while a pane exists but has no
+  // rows yet (captureScrollPos is null).
   if (!idbResolved.value) return
   const pos = linesContentRef.value?.captureScrollPos?.()
   if (!pos) return
@@ -628,8 +625,11 @@ function getSideEditionOutlineTarget(): string | undefined {
             <div class="side-lines">
               <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value">
                 <template #top>
+                  <!-- Created only once the saved position has been read: a windowed
+                       scroller takes its start row as an argument of its creation,
+                       it is never opened at the top and moved afterwards. -->
                   <BookViewLinesContent
-                    v-if="scrollStateReady"
+                    v-if="idbResolved"
                     :key="sideColumnsKey"
                     ref="linesContentRef"
                     @create-bookmark="createBookmark"
@@ -650,7 +650,6 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :initial-scroll-index="initialScrollTop"
                     :initial-scroll-offset="initialScrollOffset"
                     :flash-line-on-open="flashOpenLine"
-                    :idb-resolved="idbResolved"
                     :search-highlight-line-index="searchHighlightLineIndex"
                     :search-highlight-query="searchHighlightQuery"
                     :search-highlight-snippet="searchHighlightSnippet"

@@ -13,7 +13,7 @@ const MIN_VISIBLE_PX = 24
 
 /**
  * Collapses the document selection onto the first text visible at `viewport`'s top.
- * False when no line is rendered yet, so the caller tries again next frame.
+ * False when no line is rendered. Call it once the rows are in the DOM (the scroller's `opened`).
  */
 export function placeCaretAtViewportStart(viewport: HTMLElement | null | undefined): boolean {
   if (!viewport || hasActiveTextSelection()) return true
@@ -54,10 +54,4 @@ export function mayTakeFocus(element: HTMLElement | null | undefined): boolean {
   if (!element) return false
   const active = document.activeElement
   return !active || active === document.body || element.contains(active)
-}
-
-/** Seats the caret as soon as the viewport has a line to seat it on (frame by frame). */
-export function placeCaretWhenRendered(viewport: HTMLElement | null | undefined, framesLeft = 30): void {
-  if (placeCaretAtViewportStart(viewport) || framesLeft <= 0) return
-  requestAnimationFrame(() => placeCaretWhenRendered(viewport, framesLeft - 1))
 }

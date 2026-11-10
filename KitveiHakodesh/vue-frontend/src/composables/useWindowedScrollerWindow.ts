@@ -444,10 +444,15 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     return Math.max(MIN_EDGE_PX, viewport.clientHeight)
   }
 
-  /** Extends the window toward an edge the viewport is near. Call on scroll and on content resize. */
+  /**
+   * Extends the window toward an edge the viewport is near. Call on scroll and on content resize.
+   * Never before the first window exists: that window is built AT the start row (an argument of
+   * the scroller's creation), and growing an empty window would grow it from row 0 - the top of
+   * the list painted first, then replaced.
+   */
   function fill() {
     const viewport = options.viewport()
-    if (!viewport || changesPending) return
+    if (!viewport || changesPending || windowEnd.value <= windowStart.value) return
     const count = options.count()
     const edge = edgePx(viewport)
     const belowViewport = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
