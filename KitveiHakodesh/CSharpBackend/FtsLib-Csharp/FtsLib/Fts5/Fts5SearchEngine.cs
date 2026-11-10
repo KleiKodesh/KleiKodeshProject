@@ -140,10 +140,23 @@ namespace FtsLib.Fts5
                 {
                     ct.ThrowIfCancellationRequested();
                     var terms = new HashSet<string>(StringComparer.Ordinal);
+                    // Decline on the COUNT, before a single term is read: the FM-index answers
+                    // with distinct term rows, and reading them all to then refuse cost a
+                    // two-letter fragment (41,190 terms) 200-850 ms for nothing. Across several
+                    // dictionaries (a build still running) the sum is an upper bound of the union.
+                    var rowIdsByDictionary = new List<(TermDictionary Dictionary, int[] RowIds)>(_dictionaries.Count);
+                    long termRows = 0;
                     foreach (var d in _dictionaries)
                     {
                         if (d.Fm == null) return null;
-                        foreach (var t in TermsByRowId(d, d.Fm.FindRowIds(fragment, false)))
+                        int[] rowIds = d.Fm.FindRowIds(fragment, false);
+                        termRows += rowIds.Length;
+                        if (_dictionaries.Count == 1 && termRows > maxTermsPerFragment) return null;
+                        rowIdsByDictionary.Add((d, rowIds));
+                    }
+                    foreach (var (d, rowIds) in rowIdsByDictionary)
+                    {
+                        foreach (var t in TermsByRowId(d, rowIds))
                         {
                             terms.Add(t.Term);
                             if (terms.Count > maxTermsPerFragment) return null;

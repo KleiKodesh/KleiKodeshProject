@@ -91,6 +91,20 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE l.bookId = @bookId AND l.lineIndex IN ({indexList})
             ORDER BY l.lineIndex";
 
+        /// <summary>Lines by id, any books: (id, bookId, lineIndex, content). One statement for a
+        /// whole candidate list - the in-book and commentary search's confirm step.</summary>
+        public static string GetLinesByIdList(SeforimDbSchema schema, string idList) => $@"
+            SELECT l.id, l.bookId, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}
+            WHERE l.id IN ({idList})";
+
+        /// <summary>Lines by (bookId, lineIndex) pairs, any books: (id, bookId, lineIndex, content).
+        /// Each pair is one seek on idx_line_book_index.</summary>
+        public static string GetLinesByBookIndexPairs(SeforimDbSchema schema, string pairList) => $@"
+            WITH wanted(b, i) AS (VALUES {pairList})
+            SELECT l.id, l.bookId, l.lineIndex, {SeforimDbLineContentSql.ContentColumn(schema, "l")}
+            FROM wanted w JOIN line l ON l.bookId = w.b AND l.lineIndex = w.i{SeforimDbLineContentSql.ContentJoin(schema, "l")}";
+
         /// <summary>Like <see cref="GetVersionLinesPaged"/>, for lineIndex in a list.</summary>
         public static string GetVersionLinesByIndexList(SeforimDbSchema schema, string indexList) => $@"
             SELECT l.id, l.lineIndex,
