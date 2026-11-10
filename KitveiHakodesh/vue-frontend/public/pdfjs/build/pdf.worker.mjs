@@ -60116,6 +60116,9 @@ function getTrailerDict(xrefInfo, changes, useXrefStream) {
   newXref.setIfDefined("Root", xrefInfo?.rootRef);
   newXref.setIfDefined("Info", xrefInfo?.infoRef);
   newXref.setIfDefined("Encrypt", xrefInfo?.encryptRef);
+  // [KleiKodesh] PATCH: hybrid file whose replaced last section pointed at an
+  // /XRefStm in the bytes before it (see khLastSection).
+  newXref.setIfDefined("XRefStm", xrefInfo?.khXRefStm);
   return newXref;
 }
 async function writeChanges(changes, xref, buffer = []) {
@@ -63020,10 +63023,17 @@ class WorkerMessageHandler {
         }
       }
     });
-    // [KleiKodesh] Parse a trailing "%KH-TOC start=<S> prev=<P>" marker (see
-    // the SaveDocument patch). Null unless the marker PROVABLY describes our
-    // own last section — a forged/stale marker or another tool's in-place edit
-    // must never make the save truncate the file (it then just appends).
+    // [KleiKodesh] PATCH: an incremental save MERGES INTO THE FILE'S LAST
+    // UPDATE SECTION instead of stacking a new one (see the SaveDocument
+    // patch). khLastSection reads that section from the standard structure
+    // only: the final startxref's xref table or xref stream (plus a hybrid
+    // /XRefStm), its /Prev, and the previous revision's "startxref <Prev>
+    // %%EOF" right before it. Null when there is no previous revision or the
+    // structure is not provably standard (linearized, broken, ...): the save
+    // then appends. `signed` = the section holds a signature (/ByteRange),
+    // which must never be rewritten. Files with an old trailing
+    // "%KH-TOC start= prev= sha=" marker are just a normal last section; the
+    // marker line goes away with it.
     function khLatin1(bytes, from, to) {
       let s = "";
       for (let i = from; i < to; i += 8192) {
@@ -63031,76 +63041,135 @@ class WorkerMessageHandler {
       }
       return s;
     }
-    function khSha256Hex(bytes, from, to) {
-      const h = calculateSHA256(bytes.subarray(from, to), 0, to - from);
-      let hex = "";
-      for (const b of h) {
-        hex += b.toString(16).padStart(2, "0");
-      }
-      return hex;
-    }
-    function khReadTocMarker(bytes) {
-      const from = Math.max(0, bytes.length - 256);
-      const tail = khLatin1(bytes, from, bytes.length);
-      const m = /(?:^|[\r\n])%KH-TOC start=(\d+) prev=(\d+)(?: sha=([0-9a-f]{64}))?[ \t]*[\r\n]?[\0\t\n\f\r ]*$/.exec(tail);
-      if (!m) {
+    function khLastSection(bytes, xref, startXRef) {
+      if (!Number.isInteger(startXRef) || startXRef <= 0 || startXRef >= bytes.length) {
         return null;
       }
-      const start = Number(m[1]);
-      const prev = Number(m[2]);
-      const sha = m[3] || null;
-      // Marker line begins right after the optional leading EOL.
-      const markerPos = from + m.index + (m[0][0] === "%" ? 0 : 1);
-      if (!(Number.isSafeInteger(start) && Number.isSafeInteger(prev) && start > 0 && start < markerPos && prev >= 0 && prev < start)) {
-        return null;
-      }
-      // (b) prev is a real xref start: a table or an xref stream object.
-      const atPrev = khLatin1(bytes, prev, Math.min(start, prev + 512));
-      if (!/^xref\s/.test(atPrev) && !/^\d+\s+\d+\s+obj\s*<<[\s\S]*\/Type\s*\/XRef\b/.test(atPrev)) {
-        return null;
-      }
-      // The bytes before S end a previous revision.
-      if (!/%%EOF[\0\t\n\f\r ]*$/.test(khLatin1(bytes, Math.max(0, start - 64), start))) {
-        return null;
-      }
-      // (a) [S, marker) is exactly ONE incremental section chaining to prev.
-      const section = khLatin1(bytes, start, markerPos);
-      if (!/^\s*(?:\d+\s+\d+\s+obj\b|xref\s)/.test(section)) {
-        return null;
-      }
-      if (section.split("%%EOF").length !== 2 || section.split("startxref").length !== 2) {
-        return null;
-      }
-      const end = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(section);
-      if (!end) {
-        return null;
-      }
-      const xrefAt = Number(end[1]);
-      if (!(xrefAt >= start && xrefAt < start + end.index)) {
-        return null;
-      }
-      const xrefPart = section.slice(xrefAt - start, end.index);
-      let dict;
-      if (/^xref\s/.test(xrefPart)) {
-        const t = xrefPart.indexOf("trailer");
-        if (t < 0) {
-          return null;
+      // A scratch XRef: its table/stream readers fill only `entries`.
+      const scratch = Object.create(XRef.prototype);
+      scratch.entries = [];
+      const read = at => {
+        const parser = new Parser({
+          lexer: new Lexer(new Stream(bytes, at)),
+          xref,
+          allowStreams: true
+        });
+        const obj = parser.getObj();
+        if (isCmd(obj, "xref")) {
+          return scratch.processXRefTable(parser);
         }
-        dict = xrefPart.slice(t);
-      } else if (/^\d+\s+\d+\s+obj\s*<</.test(xrefPart) && /\/Type\s*\/XRef\b/.test(xrefPart)) {
-        dict = xrefPart.slice(0, Math.max(0, xrefPart.indexOf("stream")) || xrefPart.length);
+        if (Number.isInteger(obj) && Number.isInteger(parser.getObj()) && isCmd(parser.getObj(), "obj")) {
+          const xrefStream = parser.getObj();
+          if (xrefStream instanceof BaseStream && isName(xrefStream.dict.get("Type"), "XRef")) {
+            return scratch.processXRefStream(xrefStream);
+          }
+        }
+        throw new FormatError("not an xref section");
+      };
+      let top;
+      try {
+        top = read(startXRef);
+      } catch (ex) {
+        info(`khLastSection: "${ex}".`);
+        return null;
+      }
+      const prev = top.get("Prev");
+      if (!Number.isInteger(prev) || prev < 0 || prev >= startXRef) {
+        return null;
+      }
+      let eof = -1;
+      for (let i = startXRef - 5; i >= 0; i--) {
+        if (bytes[i] === 0x25 && bytes[i + 1] === 0x25 && bytes[i + 2] === 0x45 && bytes[i + 3] === 0x4f && bytes[i + 4] === 0x46) {
+          eof = i;
+          break;
+        }
+      }
+      if (eof < 0) {
+        return null;
+      }
+      const before = /startxref[\0\t\n\f\r ]+(\d+)[\0\t\n\f\r ]*$/.exec(khLatin1(bytes, Math.max(0, eof - 64), eof));
+      if (!before || Number(before[1]) !== prev) {
+        return null;
+      }
+      let start = eof + 5;
+      if (bytes[start] === 0x0d) {
+        start++;
+      }
+      if (bytes[start] === 0x0a) {
+        start++;
+      }
+      // Hybrid file: an /XRefStm inside the section is part of it (its
+      // objects are carried over); one in the bytes before it (Word writes an
+      // empty last table whose /XRefStm points back) stays where it is and
+      // the new trailer keeps pointing at it.
+      let xrefStm = top.get("XRefStm");
+      if (Number.isInteger(xrefStm) && xrefStm >= 0 && xrefStm < bytes.length) {
+        if (xrefStm >= start) {
+          try {
+            read(xrefStm);
+          } catch (ex) {
+            info(`khLastSection: "${ex}".`);
+            return null;
+          }
+          xrefStm = undefined;
+        }
       } else {
-        return null;
+        xrefStm = undefined;
       }
-      const prevs = dict.match(/\/Prev\s+(\d+)/g);
-      if (!prevs || prevs.length !== 1 || Number(/\d+/.exec(prevs[0])[0]) !== prev) {
-        return null;
+      const signed = /\/ByteRange[\0\t\n\f\r ]*\[/.test(khLatin1(bytes, start, bytes.length));
+      return {
+        start,
+        prev,
+        entries: scratch.entries,
+        xrefStm,
+        signed
+      };
+    }
+    // Every object the last section defines, as `changes` entries — newer
+    // (already in `changes`) wins per object number. Object streams and xref
+    // streams are containers, not content: their objects are written out
+    // one by one. Strings/streams come decrypted from fetch and are
+    // re-encrypted for their own numbers by the writer; the /Encrypt dict
+    // itself is never encrypted. A free entry stays free.
+    async function khLastSectionObjects(section, changes, xref, encryptRef, skipNums) {
+      const changed = new Set();
+      for (const ref of changes.keys()) {
+        changed.add(ref.num);
       }
-      // (d) the section hash, when the marker carries one.
-      if (sha && khSha256Hex(bytes, start, markerPos) !== sha) {
-        return null;
+      const out = [];
+      const entries = section.entries;
+      for (let num = 1; num < entries.length; num++) {
+        const entry = entries[num];
+        if (!entry || changed.has(num) || skipNums.has(num)) {
+          continue;
+        }
+        if (entry.free) {
+          out.push([Ref.get(num, Math.max(0, entry.gen - 1)), {
+            data: null
+          }]);
+          continue;
+        }
+        const ref = Ref.get(num, entry.uncompressed ? entry.gen : 0);
+        const obj = await xref.fetchAsync(ref, ref === encryptRef);
+        if (obj === null || obj === undefined) {
+          continue;
+        }
+        if (obj instanceof BaseStream && (isName(obj.dict.get("Type"), "ObjStm") || isName(obj.dict.get("Type"), "XRef"))) {
+          continue;
+        }
+        if (ref === encryptRef) {
+          const buffer = [];
+          await writeObject(ref, obj, buffer, {});
+          out.push([ref, {
+            data: buffer.join("")
+          }]);
+          continue;
+        }
+        out.push([ref, {
+          data: obj
+        }]);
       }
-      return { start, prev };
+      return out;
     }
     handler.on("SaveDocument", async function ({
       isPureXfa,
@@ -63176,10 +63245,6 @@ class WorkerMessageHandler {
         }
       }
       const refs = await Promise.all(promises);
-      // [KleiKodesh] PATCH: outline-only sections replace each other (see the
-      // "KH-TOC marker" block below) — remember whether anything but the outline
-      // changed.
-      const khOnlyOutline = changes.size === 0 && !isPureXfa;
       // PATCH: write a user-edited outline (תוכן עניינים) into the incremental
       // update. `editedOutline` is [{title, page, items}] serialized from the
       // sidebar editor (outline-search.js); null means no outline edits. New
@@ -63188,63 +63253,10 @@ class WorkerMessageHandler {
       // trailer's Root stays valid. This block MUST run before the
       // `changes.size === 0` early return below, or an outline-only save would
       // return the original bytes unchanged.
-      // [KleiKodesh] PATCH: when this save replaces a KH-TOC section (see the
-      // "KH-TOC marker" block below), the bytes from its start are dropped. A
-      // value copied from the loaded outline may reference an object defined
-      // only inside that section (another writer's section can keep an item's
-      // action or destination in an object of its own): such references are
-      // resolved and written inline, or re-emitted as a new object when they
-      // are streams, so the new section never points at a missing object.
-      const khDropFrom = editedOutline != null ? khReadTocMarker(stream.bytes)?.start ?? null : null;
-      const khLocation = num => {
-        const entry = xref.getEntry(num);
-        if (!entry) {
-          return -1;
-        }
-        if (entry.uncompressed) {
-          return entry.offset;
-        }
-        const container = xref.getEntry(entry.offset);
-        return container ? container.offset : -1;
-      };
-      const khDetach = async (value, seen = new Set()) => {
-        if (khDropFrom === null) {
-          return value;
-        }
-        if (value instanceof Ref) {
-          const key = value.toString();
-          if (seen.has(key) || khLocation(value.num) < khDropFrom) {
-            return value;
-          }
-          const target = await xref.fetchAsync(value);
-          if (target instanceof BaseStream) {
-            const copyRef = xref.getNewTemporaryRef();
-            changes.put(copyRef, {
-              data: target
-            });
-            return copyRef;
-          }
-          seen.add(key);
-          const inline = await khDetach(target, seen);
-          seen.delete(key);
-          return inline;
-        }
-        if (Array.isArray(value)) {
-          const out = [];
-          for (const element of value) {
-            out.push(await khDetach(element, seen));
-          }
-          return out;
-        }
-        if (value instanceof Dict) {
-          const out = new Dict(xref);
-          for (const [k, v] of value.getRawEntries()) {
-            out.set(k, await khDetach(v, seen));
-          }
-          return out;
-        }
-        return value;
-      };
+      // [KleiKodesh] PATCH: the replaced outline's objects (root + items) are
+      // dead after this save; they are not carried over from the last update
+      // section (see khLastSectionObjects), so repeated TOC saves don't grow it.
+      const khOldOutline = new Set();
       if (editedOutline != null && catalogRef && !isPureXfa) {
         // Entries carry `src` — their index into the ORIGINAL outline flattened
         // in the same BFS order the viewer uses — so everything the editor does
@@ -63303,22 +63315,22 @@ class WorkerMessageHandler {
             if (rawDict) {
               const rawDest = rawDict.getRaw("Dest");
               if (rawDest !== undefined) {
-                dict.set("Dest", await khDetach(rawDest));
+                dict.set("Dest", rawDest);
                 targetSet = true;
               } else {
                 const rawAction = rawDict.getRaw("A");
                 if (rawAction !== undefined) {
-                  dict.set("A", await khDetach(rawAction));
+                  dict.set("A", rawAction);
                   targetSet = true;
                 }
               }
               const rawFlags = rawDict.getRaw("F");
               if (rawFlags !== undefined) {
-                dict.set("F", await khDetach(rawFlags));
+                dict.set("F", rawFlags);
               }
               const rawColor = rawDict.getRaw("C");
               if (rawColor !== undefined) {
-                dict.set("C", await khDetach(rawColor));
+                dict.set("C", rawColor);
               }
             }
             if (!targetSet) {
@@ -63360,6 +63372,21 @@ class WorkerMessageHandler {
         const pendingCatalog = changes.get(catalogRef)?.data;
         const catalogDict =
           pendingCatalog instanceof Dict ? pendingCatalog : await xref.fetchAsync(catalogRef);
+        {
+          const origCatalog = await xref.fetchAsync(catalogRef);
+          const stack = [origCatalog instanceof Dict ? origCatalog.getRaw("Outlines") : null];
+          while (stack.length > 0) {
+            const r = stack.pop();
+            if (!(r instanceof Ref) || khOldOutline.has(r.num) || r === catalogRef) {
+              continue;
+            }
+            khOldOutline.add(r.num);
+            const d = await xref.fetchAsync(r);
+            if (d instanceof Dict) {
+              stack.push(d.getRaw("First"), d.getRaw("Next"));
+            }
+          }
+        }
         const newCatalog = new Dict(xref);
         for (const [key, value] of catalogDict.getRawEntries()) {
           if (key !== "Outlines") {
@@ -63431,25 +63458,32 @@ class WorkerMessageHandler {
           filename
         };
       }
-      // [KleiKodesh] PATCH: KH-TOC marker. A TOC autosave appends one
-      // incremental section and, when that section holds ONLY the outline,
-      // ends it with "%KH-TOC start=<S> prev=<P> sha=<H>" (S = where the
-      // section begins, P = the startxref it chains back to, H = SHA-256 hex
-      // of bytes [S, marker line)). When the loaded file ends with such a
-      // marker AND khReadTocMarker proves it is our intact last section, this save is built from the bytes BEFORE S
-      // and chains back to P, so it REPLACES the old outline section instead
-      // of stacking a new one on it — the file stops growing per session.
-      // Safe because the replaced section held only the outline + a catalog
-      // copy, both rewritten here from the parsed (cached) objects.
+      // [KleiKodesh] PATCH: merge into the last update section. When the file
+      // already has an incremental section (khLastSection), this save is built
+      // from the bytes BEFORE it, chains to its /Prev, and writes ONE section
+      // holding every object of the old one (other tools' changes included)
+      // plus this save's changes (newer wins). The bytes before that section
+      // stay byte-identical, so repeated saves never grow the file. A signed
+      // last section is never touched: the save appends after it, and later
+      // saves merge into that new section. Anything unproven appends too.
       let khOriginalData = stream.bytes;
-      const khMarker = editedOutline != null ? khReadTocMarker(stream.bytes) : null;
-      if (khMarker && newXrefInfo.startXRef !== undefined) {
-        khOriginalData = stream.bytes.subarray(0, khMarker.start);
-        newXrefInfo.startXRef = khMarker.prev;
+      if (newXrefInfo.startXRef !== undefined) {
+        const khSection = khLastSection(stream.bytes, xref, startXRef);
+        if (khSection && !khSection.signed) {
+          try {
+            const khObjects = await khLastSectionObjects(khSection, changes, xref, newXrefInfo.encryptRef, khOldOutline);
+            for (const [ref, value] of khObjects) {
+              changes.put(ref, value);
+            }
+            khOriginalData = stream.bytes.subarray(0, khSection.start);
+            newXrefInfo.startXRef = khSection.prev;
+            newXrefInfo.khXRefStm = khSection.xrefStm;
+          } catch (ex) {
+            warn(`SaveDocument - cannot merge the last update section: "${ex}".`);
+          }
+        }
       }
-      const khSectionStart = khOriginalData.length;
-      const khPrev = newXrefInfo.startXRef;
-      const khSaved = await incrementalUpdate({
+      return incrementalUpdate({
         originalData: khOriginalData,
         xrefInfo: newXrefInfo,
         changes,
@@ -63465,15 +63499,6 @@ class WorkerMessageHandler {
       }).finally(() => {
         xref.resetNewTemporaryRef();
       });
-      if (!khOnlyOutline || editedOutline == null || !Number.isInteger(khPrev)) {
-        return khSaved;
-      }
-      const khSha = khSha256Hex(khSaved, khSectionStart, khSaved.length);
-      const khMarkerText = `%KH-TOC start=${khSectionStart} prev=${khPrev} sha=${khSha}\n`;
-      const khWithMarker = new Uint8Array(khSaved.length + khMarkerText.length);
-      khWithMarker.set(khSaved);
-      writeString(khMarkerText, khSaved.length, khWithMarker);
-      return khWithMarker;
     });
     handler.on("GetOperatorList", function (data, sink) {
       const {

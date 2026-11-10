@@ -1823,30 +1823,15 @@ teardown moment). Contract, all on the iframe `window`:
 outline edit straight into the file, debounced 600 ms after each dirty notify: it runs
 `pdfDocument.saveDocument()` and sends ONLY the bytes past the loaded length to the
 `writePdfTail` op (service in dev, C# bridge action hosted; logic in Core
-`PdfIncrementalSaveWriter`), which writes them at that offset and truncates after. The
-loaded prefix never changes (the viewer keeps range-reading it safely), and each save of a
-session REPLACES the previous tail. Across sessions too: an outline-only section ends with
-a `%KH-TOC start=<S> prev=<P>` comment after `%%EOF` (patched `pdf.worker.mjs`
-SaveDocument, search "KH-TOC marker"). When the loaded file ends with one, the worker
-builds the save from the bytes before S and chains `/Prev` to P, and the host writes at S
-— the old section is overwritten, so repeated sessions do not grow the file. A section
-that also carries annotation changes gets no marker and is kept. The marker is now
-`%KH-TOC start=<S> prev=<P> sha=<H>` (H = lowercase SHA-256 hex of bytes [S, marker
-line)), and `khReadTocMarker` only lets the save truncate when it PROVES the marker is our
-intact last section: bytes before S end in `%%EOF`; [S, marker) is exactly one section
-(one `startxref`, one `%%EOF`) whose startxref points inside it at an xref table/stream
-with a single `/Prev` = P; bytes at P are `xref` or an `/XRef` stream object; only
-whitespace follows the marker line; H matches when present (old markers without `sha=`
-are accepted on the structural checks alone). Anything else — a forged/stale marker,
-another tool's append or same-length in-place edit — is a plain append on the full file,
-never a truncation (a forged `start=` at half the file used to drop the page tree). The
-host's `tocMarkerStart` only reads S as a hint; when the worker rejects the marker its
-save keeps every loaded byte, so writing `saved[S..]` at S is still correct. When the save
-replaces a section, every `/Dest`, `/A`, `/F` and `/C` value it copies from the loaded outline
-is detached from that section (`khDetach`): a reference to an object whose newest copy lives at
-or after S is resolved and written inline (a stream gets a new object in the new section), since
-another writer's section may keep an item's action or destination in an object of its own and
-those bytes are dropped. Re-apply this worker
+`PdfIncrementalSaveWriter`), which writes them at that offset and truncates after. Every
+save MERGES INTO THE FILE'S LAST UPDATE SECTION (Focus/title/text-layer fixes, item 12): the
+worker keeps the bytes before that section and rewrites only the section, so the host writes
+`saved[offset..]` at `offset` = the end of the last revision (`%%EOF`) inside the common
+prefix of the loaded and the saved bytes (`rewriteOffset`, computed on the first save of a
+load and reused). The loaded prefix before it never changes, and repeated saves and sessions
+never grow the file. Old files ending in a `%KH-TOC start= prev= sha=` marker (the earlier,
+app-specific mechanism) are read as a normal last section; the marker line is dropped.
+Re-apply this worker
 patch on upgrade. A 1 KB anchor (last loaded bytes) must still match on disk or the write is refused.
 On success the host dispatches `kh-save-complete` (clears dirty + parked snapshot). Ctrl+S
 (capture listener on the iframe window, ahead of PDF.js) and the close-guard `saveAs` flush
@@ -1930,6 +1915,7 @@ Five small `[KleiKodesh]` patches:
 9. **Saving reorganised pages (`build/pdf.worker.mjs` `ExtractPages`, `PDFEditor.#buildOutline`, `#khApplyEditedOutline`; `build/pdf.mjs` `extractPages`)** — the whole-document save (`downloadOrSave`) now writes the sidebar's edited outline, like `SaveDocument` (entries with `src` keep their target, bold/italic, colour and closed state); it used to write the outline as loaded, dropping the edits. A copied page made the document appear twice in the page list and the outline was written once per entry; it is written once. "Save selected pages" keeps the loaded outline. The file is rewritten whole, as before, so repeated saves do not grow it.
 10. **Comment on an existing annotation without an editor (`build/pdf.mjs` `AnnotationElement.commentText` setter; `build/pdf.worker.mjs` `AnnotationFactory.saveNewAnnotations` default case, `KhExistingAnnotation`)** — the stored value had `page` but no `pageIndex`, so the save never found its page and the comment was lost; and the worker had no save path for annotation types without an editor (square, text, underline...). The value now carries `pageIndex`, and such an annotation keeps its dict with new /Contents, /M and /Popup (a new popup gets the annotation's /Rect).
 11. **Comment edited through an editor on an annotation that already has a popup (`build/pdf.worker.mjs` `MarkupAnnotation.createNewAnnotation`, `Page.saveNewAnnotations`)** — a second popup was created and the old one stayed orphaned in /Annots. The existing popup (`popupRef`) is reused with its other keys, and a reused popup is not added to /Annots twice.
+12. **Incremental save merges into the last update section (`build/pdf.worker.mjs` SaveDocument, `khLastSection`, `khLastSectionObjects`, `getTrailerDict`; `src/features/pdf-viewer/usePdfViewPageTracking.ts` `rewriteOffset`)** — replaces the `%KH-TOC start= prev= sha=` marker (and `khReadTocMarker`/`khDetach`), which only covered outline-only sections. The last section is found from the standard structure alone: the final startxref's xref table or stream (plus an `/XRefStm` inside the section), its `/Prev`, and the previous revision's `startxref <Prev> %%EOF` right before it. Every object it defines is carried into the new section (fetched, so strings/streams are re-encrypted for their own numbers; object/xref streams are unpacked; free entries stay free; the save's own changes win per object; the replaced outline's old items are not carried), which is written over it with `/Prev` = its `/Prev`. Bytes before it stay byte-identical; other tools' incremental changes (MuPDF/Acrobat annotations) are kept. No previous revision, a signed last section (`/ByteRange`), linearized or unproven structure → plain append (a signed file gets one new section; later saves merge into that). Hybrid files whose last table points back at an `/XRefStm` in the bytes before it (Word) keep that `/XRefStm` in the new trailer.
 
 ---
 

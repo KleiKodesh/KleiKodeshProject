@@ -175,19 +175,30 @@ async function buildOutlineIndex(
 // is built from the outline data rather than from the sidebar DOM.
 
 /**
- * Start of the trailing outline-only section written by a TOC autosave, read from
- * its "%KH-TOC start=<S> prev=<P> [sha=<H>]" marker (patched pdf.worker.mjs
- * SaveDocument). Only a hint: the worker does the full proof (khReadTocMarker); when it
- * rejects the marker its save keeps every loaded byte, so writing saved[S..] at S
- * still reproduces the full file + appended section. Null when the file has none.
+ * Where a save starts to differ from the loaded file, rounded down to the end of a
+ * revision ("%%EOF"). The patched pdf.worker.mjs SaveDocument merges every save into
+ * the file's last incremental update section: it keeps the bytes before that section
+ * and rewrites the rest (or, with no previous update / a signed one, appends). The
+ * section start always follows the previous revision's %%EOF, so the last %%EOF inside
+ * the common prefix is at or before it, and writing saved[offset..] at offset gives
+ * the saved file. The same for every save of a loaded document. Null when none fits.
  */
-function tocMarkerStart(bytes: Uint8Array): number | null {
-  const tail = String.fromCharCode(...bytes.subarray(Math.max(0, bytes.length - 256)))
-  const m = /%KH-TOC start=(\d+) prev=(\d+)(?: sha=[0-9a-f]{64})?\s*$/.exec(tail)
-  if (!m) return null
-  const start = Number(m[1])
-  const prev = Number(m[2])
-  return start > 0 && start < bytes.length && prev >= 0 && prev < start ? start : null
+function rewriteOffset(loaded: Uint8Array, saved: Uint8Array): number | null {
+  const limit = Math.min(loaded.length - 1, saved.length - 1)
+  let common = 0
+  while (common < limit && loaded[common] === saved[common]) common++
+  for (let i = common - 5; i >= 0; i--) {
+    if (
+      loaded[i] === 0x25 &&
+      loaded[i + 1] === 0x25 &&
+      loaded[i + 2] === 0x45 &&
+      loaded[i + 3] === 0x4f &&
+      loaded[i + 4] === 0x46
+    ) {
+      return i + 5
+    }
+  }
+  return null
 }
 
 function findActiveOutlineEntry(
@@ -229,9 +240,9 @@ export function usePdfViewPageTracking() {
   // ── TOC autosave: every outline edit is written straight into the PDF file ──
   // Only for a real local .pdf (not a Word file rendered to PDF, not a HebrewBooks
   // download, which have no writable source path). PDF.js's saveDocument() returns
-  // the LOADED bytes + one incremental section; only that section is sent and it is
-  // written at the loaded length, so each autosave of a session replaces the
-  // previous one instead of appending (rules: Core PdfIncrementalSaveWriter).
+  // the loaded bytes with the file's last update section merged with the edits (or
+  // one appended section); only the rewritten tail is sent and written over the
+  // old one, so the file never grows per save (rules: Core PdfIncrementalSaveWriter).
   const AUTOSAVE_DELAY_MS = 600
   const ANCHOR_BYTES = 1024
   let autosavePath: string | null = null
@@ -272,16 +283,16 @@ export function usePdfViewPageTracking() {
     autosaveRunning = true
     const startedGeneration = editGeneration
     try {
+      const saved = await pdfDocument.saveDocument()
       if (!loadedTail) {
         const loaded = await pdfDocument.getData()
-        // A file ending in our own outline-only section: the worker rebuilds the
-        // save from the bytes before it, so the tail is written over it.
-        const offset = tocMarkerStart(loaded) ?? loaded.length
-        if (offset < ANCHOR_BYTES) return false
+        // The worker merges the save into the file's last update section, so the
+        // tail is written over that section (see rewriteOffset).
+        const offset = rewriteOffset(loaded, saved)
+        if (offset === null || offset < ANCHOR_BYTES) return false
         loadedTail = { offset, anchor: loaded.slice(offset - ANCHOR_BYTES, offset) }
       }
       const { offset, anchor } = loadedTail
-      const saved = await pdfDocument.saveDocument()
       // Sanity: the save must be the loaded bytes plus a tail.
       if (saved.length <= offset) return false
       const savedAnchor = saved.subarray(offset - ANCHOR_BYTES, offset)
