@@ -34,19 +34,25 @@ export function useCommentaryRender(
     () => (getCommentaryZoom() / 100) * (settingsStore.commentaryFontSize / 100) * 15,
   )
 
-  // Two-tier cache — same pattern as useBookViewLineRenderer:
-  //   globalCacheKey  — diacritics, censor, searchQuery; wipes all on change.
+  // Two-tier cache — same pattern as useBookViewLineRenderer: a rendered row is kept with
+  // the inputs it was rendered from, and a row whose inputs did not change is served the
+  // same string.
+  //   globalCacheKey  — clean-text, censor; wipes all on change.
   //   perLineAnnotationKey — highlights+notes per lineId; evicts only that entry.
+  //   searchQueryByFlat — the search query a row was marked with: the panel search's query
+  //                    for a row in its result set, '' otherwise. A new search re-renders
+  //                    only the result rows; every other row keeps its render.
   const renderCache = new Map<number, string>()
   const perLineAnnotationKey = new Map<number, string>()
+  const searchQueryByFlat = new Map<number, string>()
   // Source content that produced each cached entry — section clicks render group
   // structure first and backfill line text in place, so a slot's content can
   // change without the groups array identity changing.
   const renderSource = new Map<number, string>()
   let globalCacheKey = ''
 
-  function getGlobalKey(searchQuery: string | undefined): string {
-    return `${cleanTextFlags.value}|${settingsStore.censorCacheKey}|${searchQuery ?? ''}`
+  function getGlobalKey(): string {
+    return `${cleanTextFlags.value}|${settingsStore.censorCacheKey}`
   }
 
   function getAnnotationKey(lineId: number): string {
@@ -141,13 +147,21 @@ export function useCommentaryRender(
     content: string,
     flatIndex: number,
     lineId: number | undefined,
+    /** The query to mark this row with: the panel search's, for a row in its result set only. */
     searchQuery: string | undefined,
   ): string {
-    const globalKey = getGlobalKey(searchQuery)
+    const globalKey = getGlobalKey()
     if (globalKey !== globalCacheKey) {
       renderCache.clear()
       perLineAnnotationKey.clear()
+      searchQueryByFlat.clear()
       globalCacheKey = globalKey
+    }
+
+    const rowQuery = searchQuery?.trim() ? searchQuery : ''
+    if ((searchQueryByFlat.get(flatIndex) ?? '') !== rowQuery) {
+      renderCache.delete(flatIndex)
+      searchQueryByFlat.set(flatIndex, rowQuery)
     }
 
     if (lineId != null) {
@@ -186,7 +200,7 @@ export function useCommentaryRender(
       if (lineNotes.length) result = applyUserNoteMarkers(result, lineNotes)
     }
 
-    if (searchQuery?.trim()) result = highlightMatches(result, searchQuery)
+    if (rowQuery) result = highlightMatches(result, rowQuery)
 
     // Inline notes without a marker: one empty end-of-line marker, after every offset walk.
     if (lineId != null) result = appendUnmarkedNotesMarker(result, getLineNotesForLine?.(lineId) ?? [])

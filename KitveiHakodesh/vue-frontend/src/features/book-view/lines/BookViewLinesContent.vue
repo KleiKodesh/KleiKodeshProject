@@ -74,6 +74,8 @@ const props = defineProps<
     ensureAllLines: () => Promise<void>
     altTocLabelMap?: Map<number, string>
     searchQuery?: string
+    /** The lines the in-book search results hold: only these are marked with `searchQuery`. */
+    searchMatchLines?: { has(lineIndex: number): boolean }
     currentMatchLineIndex?: number
     currentMatchOccurrence?: number
     searchHighlightQuery?: string
@@ -281,6 +283,7 @@ const { getLineNotesForLine, evictLineNotesForLines } = useLineNotes(renderedLin
 const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
   searchQuery: props.searchQuery,
+  searchMatchLines: props.searchMatchLines,
   searchHighlightLineIndex: props.searchHighlightLineIndex,
   searchHighlightQuery: props.searchHighlightQuery,
   searchHighlightSnippet: props.searchHighlightSnippet,

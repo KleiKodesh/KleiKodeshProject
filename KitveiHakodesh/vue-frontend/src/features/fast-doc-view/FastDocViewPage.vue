@@ -545,7 +545,7 @@ if (import.meta.env.DEV || import.meta.env.VITE_KH_TEST_HOOKS === '1') {
           isSearching: search.isSearching.value,
           matchCount: search.matchCount.value,
           currentMatch: search.currentMatch.value,
-          current: search.matches.value[search.currentMatch.value] ?? null,
+          current: search.currentMatchAsBlock() ?? null,
         },
       }
     },
