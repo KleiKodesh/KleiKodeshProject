@@ -19496,6 +19496,26 @@ const PDFViewerApplication = {
     };
     window.__khSaveDataPending = true;
   },
+  // [KleiKodesh] PATCH: the host's save in place (writePdfTail) gets its bytes
+  // from pdfDocument.saveDocument() itself and dispatches kh-save-complete
+  // without going through save()/download. It arms right before saveDocument()
+  // (recording the edit seq, so an edit made during the save stays unsaved) and
+  // disarms when nothing was written. No __khSaveDataPending: an unrelated
+  // download must not complete it. Reorganised pages / a merged document are a
+  // whole new file, not a tail: khNeedsWholeFileSave() tells the host to use
+  // downloadOrSave() instead.
+  khArmHostSave() {
+    this._khSaveArm = {
+      seq: this._khEditSeq || 0,
+      structure: false
+    };
+  },
+  khDisarmHostSave() {
+    this._khSaveArm = null;
+  },
+  khNeedsWholeFileSave() {
+    return this._mergedDocumentNeedsSaving === true || this.pdfThumbnailViewer?.hasStructuralChanges() === true;
+  },
   _khOnSaveComplete() {
     const arm = this._khSaveArm;
     this._khSaveArm = null;
