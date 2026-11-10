@@ -43,6 +43,12 @@
      the reserved edge is taken out of one side only. */
   padding-inline: var(--toolbar-reserved-edge);
 }
+/* Something has collapsed: the row is full, so it runs to the start edge and only the more
+   button's end stays reserved (useToolbarOverflow charges exactly this). */
+.reading-toolbar.has-overflow.toolbar-top,
+.reading-toolbar.has-overflow.toolbar-bottom {
+  padding-inline-start: var(--toolbar-edge-inset);
+}
 .reading-toolbar.toolbar-left,
 .reading-toolbar.toolbar-right {
   flex-direction: column;

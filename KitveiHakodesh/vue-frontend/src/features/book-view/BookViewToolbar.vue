@@ -314,7 +314,7 @@ defineExpose({ tocBtnRef, createBookmark })
 </script>
 
 <template>
-  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
+  <div ref="toolbarEl" class="book-view-toolbar reading-toolbar" dir="rtl" :class="[`toolbar-${toolbarPosition}`, { dragging: isDragging, 'has-overflow': hasToolbarOverflow, 'window-resizing': isWindowResizing }]" :title="$t('bookView.toolbar.dragHint')">
     <Teleport to="body">
       <div v-if="isDragging" class="toolbar-drop-preview" :style="dropPreviewStyle" />
     </Teleport>
