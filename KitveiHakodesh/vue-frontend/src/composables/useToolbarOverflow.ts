@@ -31,15 +31,14 @@ const TOOLBAR_RESERVED_EDGE = TOOLBAR_BUTTON_SIZE + 2 * TOOLBAR_EDGE_INSET
  * What the toolbar spends on itself before any button gets a pixel, subtracted from the
  * measured border box to leave the room the buttons actually share.
  *
- * A horizontal toolbar reserves the edge on BOTH sides, so its buttons stay centred on the
- * toolbar rather than drifting toward the side the button is not on. A vertical one packs
- * its buttons from the top and reserves only the end the button sits at: 2px at the top,
- * and the reserved edge at the bottom - `padding-block-end` REPLACES that end's 2px rather
- * than adding to it, so it is not 2px plus the edge. There is no border on the axis the
- * buttons run along - the toolbar's single border faces the content - so padding is the
- * whole of it.
+ * Only the end the more button sits at is reserved, on both axes. A horizontal toolbar with
+ * nothing collapsed pads both ends equally to stay centred, but the row it centres is at most
+ * this long, so it spills evenly into padding that only an invisible button occupies. Once
+ * something collapses, the start padding drops to the inset (`.has-overflow`) and the row
+ * runs right up to it. Charging both ends left a whole button-width standing empty.
+ * A vertical toolbar: 2px at the top, and the reserved edge at the bottom.
  */
-const TOOLBAR_HORIZONTAL_CHROME = 2 * TOOLBAR_RESERVED_EDGE
+const TOOLBAR_HORIZONTAL_CHROME = TOOLBAR_EDGE_INSET + TOOLBAR_RESERVED_EDGE
 const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
 
 /**
