@@ -393,6 +393,11 @@ const {
     return row ? { row, lineId: props.lines.idAt(Number(row.dataset.index)) } : null
   },
   getLineNotesForLine,
+  // The line a search result opened: its matched words are marked in its notes too.
+  (lineId) =>
+    props.searchHighlightLineIndex != null && props.lines.idAt(props.searchHighlightLineIndex) === lineId
+      ? props.searchHighlightTerms
+      : undefined,
 )
 
 // A search hit on a footnote (issue #13) opens its source line (initialLineIndex) with that

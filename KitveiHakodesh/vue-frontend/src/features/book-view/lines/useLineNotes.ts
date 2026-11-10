@@ -12,6 +12,7 @@ import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useLinkPreviewTooltip } from './useWordLinkTooltip'
 import { LINE_NOTE_SELECTOR, notesForMarker } from './lineNotes'
+import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
 
 const EMPTY: LineNote[] = []
 
@@ -102,6 +103,13 @@ export function useLineNotesTooltip(
   scrollerEl: Ref<HTMLElement | null>,
   rowOf: (marker: Element) => { row: Element; lineId: number } | null,
   getLineNotesForLine: (lineId: number) => LineNote[],
+  /**
+   * The words a search matched in a line's notes, for the line a search result opened:
+   * they are marked in the note's preview as they are in the line. A hit ON a footnote
+   * opens its source line with the note popped open - and the matched words are in the
+   * note, not in the line.
+   */
+  searchTermsForLine?: (lineId: number) => string[] | undefined,
 ) {
   const settingsStore = useSettingsStore()
   const {
@@ -121,8 +129,10 @@ export function useLineNotesTooltip(
       const at = rowOf(marker)
       const notes = at ? notesForMarker(marker, at.row, getLineNotesForLine(at.lineId)) : []
       if (!notes.length) return null
+      const terms = at ? searchTermsForLine?.(at.lineId) ?? [] : []
+      const marked = (body: string) => terms.reduce((html, term) => highlightSearchMatches(html, term), body)
       const html = notes
-        .map((note) => `<div class="line-note-body">${cleanHebrewText(note.body, settingsStore.cleanTextFlags)}</div>`)
+        .map((note) => `<div class="line-note-body">${marked(cleanHebrewText(note.body, settingsStore.cleanTextFlags))}</div>`)
         .join('')
       return { bookTitle: '', tocPath: '', html }
     },
