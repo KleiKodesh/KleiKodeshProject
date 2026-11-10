@@ -64,6 +64,7 @@ type LinesContentInstance = {
   scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
   scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
   focusScroller: () => void
+  scrollerElement: () => HTMLElement | null | undefined
   readCurrentPosition: () => { lineIndex: number; fullLineIndex: number } | null
   retainedLineRanges: () => ReadonlyArray<readonly [number, number]>
   onLinesTextEvicted: (lineIds: number[]) => void
@@ -355,6 +356,42 @@ export function useBookView(
     linesContentRef()?.scrollToLineId(lineId, target, { skipIfVisible: true })
   }
 
+  /**
+   * Ctrl+Down / Ctrl+Up with no commentary open: brings the next / previous line to
+   * the top. A line cut off at the top counts as the current one's neighbour: Down
+   * lands on the first whole line, Up on the cut one.
+   */
+  function scrollOneLine(delta: 1 | -1) {
+    const content = linesContentRef()
+    const position = content?.readCurrentPosition()
+    if (!content || !position) return
+    const cut = position.lineIndex !== position.fullLineIndex
+    const target = delta > 0
+      ? (cut ? position.fullLineIndex : position.lineIndex + 1)
+      : (cut ? position.lineIndex : position.lineIndex - 1)
+    if (target < 0 || target >= lines.value.length) return
+    content.scrollToLine(target, { force: true })
+  }
+
+  /**
+   * Enter (caret browsing): selects the line the caret is in, as a click would.
+   * Only with a commentary open and a collapsed caret inside the lines pane.
+   */
+  function selectLineAtCaret(): boolean {
+    if (!anyCommentaryVisible.value) return false
+    const scrollerElement = linesContentRef()?.scrollerElement()
+    const selection = window.getSelection()
+    if (!scrollerElement || !selection?.isCollapsed || !selection.focusNode) return false
+    const node = selection.focusNode
+    const element = node instanceof Element ? node : node.parentElement
+    const row = element?.closest<HTMLElement>('[data-index]')
+    if (!row || !scrollerElement.contains(row)) return false
+    const lineId = lines.value.at(Number(row.dataset.index))?.id ?? 0
+    if (lineId <= 0) return false
+    onLineSelected(lineId, false)
+    return true
+  }
+
   // ── TOC ───────────────────────────────────────────────────────────────────
 
   const {
@@ -502,7 +539,11 @@ export function useBookView(
     navigateToAdjacentTocSection,
     () => settingsStore.toggleCleanText(),
     () => toolbarRef()?.createBookmark(),
-    (delta) => void stepSelectedLine(delta),
+    (delta) => {
+      if (anyCommentaryVisible.value) void stepSelectedLine(delta)
+      else scrollOneLine(delta)
+    },
+    selectLineAtCaret,
   )
 
   // ── Commentary section navigation ─────────────────────────────────────────
