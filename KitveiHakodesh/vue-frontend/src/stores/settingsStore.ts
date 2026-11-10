@@ -83,6 +83,9 @@ const KEYS = {
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
+  SETTINGS_KEEP_SCREEN_ON_MODE: 'app.keepScreenOn.mode',
+  SETTINGS_KEEP_SCREEN_ON_IDLE_MINUTES: 'app.keepScreenOn.idleMinutes',
+  SETTINGS_KEEP_SCREEN_ON_LAST_MODE: 'app.keepScreenOn.lastMode',
 
   // Book-view chrome. These are reader preferences like any other, so they live here
   // and get wiped by reset() — bookViewStore owned them until the settings reset left
@@ -123,6 +126,13 @@ import {
   type OtherNameKey,
 } from '@/utils/censorDivineNames'
 
+/**
+ * When the app holds the screen awake (no dimming, no sleep). Each value matches a
+ * behaviour other readers use: 'reading' = Kindle / Moon+ Reader (only while a book or
+ * document is open), 'fullscreen' = SumatraPDF / Adobe (only in full screen), 'always' =
+ * the whole app while it is visible. The idle limit is a separate setting.
+ */
+export type KeepScreenOnMode = 'off' | 'always' | 'reading' | 'fullscreen'
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 /**
  * How the book's lines are laid out: a block per line, or flowing on as one
@@ -258,6 +268,9 @@ const DEFAULTS = {
   navSidebarVisible: hasNativeChromeTabs,
   showRecentlyOpened: true,
   showFrequentFolders: true,
+  keepScreenOnMode: 'reading' as KeepScreenOnMode,
+  // Let the screen sleep after this many minutes with no scroll, key or click; 0 = never.
+  keepScreenOnIdleMinutes: 10,
 }
 
 /**
@@ -394,6 +407,17 @@ export const useSettingsStore = defineStore('settings', () => {
   }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
+  const keepScreenOnMode = ref<KeepScreenOnMode>(DEFAULTS.keepScreenOnMode)
+  const keepScreenOnIdleMinutes = ref(DEFAULTS.keepScreenOnIdleMinutes)
+  // The mode F4 turns back on after turning it off. Never 'off'.
+  const keepScreenOnLastMode = ref<KeepScreenOnMode>(DEFAULTS.keepScreenOnMode)
+  /** F4: off <-> the last mode that was on. */
+  function toggleKeepScreenOn(): boolean {
+    if (keepScreenOnMode.value === 'off') keepScreenOnMode.value = keepScreenOnLastMode.value
+    else keepScreenOnMode.value = 'off'
+    return keepScreenOnMode.value !== 'off'
+  }
+  watch(keepScreenOnMode, (mode) => { if (mode !== 'off') keepScreenOnLastMode.value = mode })
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
   const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
@@ -563,6 +587,9 @@ export const useSettingsStore = defineStore('settings', () => {
     if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
+    loadSetting(KEYS.SETTINGS_KEEP_SCREEN_ON_LAST_MODE, keepScreenOnLastMode)
+    loadSetting(KEYS.SETTINGS_KEEP_SCREEN_ON_MODE, keepScreenOnMode)
+    loadSetting(KEYS.SETTINGS_KEEP_SCREEN_ON_IDLE_MINUTES, keepScreenOnIdleMinutes)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
     const storedBooksView = normalizeBooksView(lsGet<string>(KEYS.SETTINGS_BOOKS_VIEW))
@@ -654,6 +681,9 @@ export const useSettingsStore = defineStore('settings', () => {
   )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
+  persistSetting(keepScreenOnMode, KEYS.SETTINGS_KEEP_SCREEN_ON_MODE)
+  persistSetting(keepScreenOnIdleMinutes, KEYS.SETTINGS_KEEP_SCREEN_ON_IDLE_MINUTES)
+  persistSetting(keepScreenOnLastMode, KEYS.SETTINGS_KEEP_SCREEN_ON_LAST_MODE)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
@@ -825,6 +855,9 @@ export const useSettingsStore = defineStore('settings', () => {
     hbEditionInSidePanelByPane.value = { 1: true, 2: true }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
+    keepScreenOnMode.value = DEFAULTS.keepScreenOnMode
+    keepScreenOnIdleMinutes.value = DEFAULTS.keepScreenOnIdleMinutes
+    keepScreenOnLastMode.value = DEFAULTS.keepScreenOnMode
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
@@ -868,6 +901,9 @@ export const useSettingsStore = defineStore('settings', () => {
     setHbEditionInSidePanel,
     showRecentlyOpened,
     showFrequentFolders,
+    keepScreenOnMode,
+    keepScreenOnIdleMinutes,
+    toggleKeepScreenOn,
     fileSearchSortOrder,
     errorReportSenderEmail,
     booksView,

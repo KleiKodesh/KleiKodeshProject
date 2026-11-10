@@ -8,6 +8,8 @@ import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
 import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiChromeVisibility'
 import { HAMESHIV_LABEL } from '@/layout/appNavItems'
+import { showToast } from '@/composables/useToast'
+import { t } from '@/i18n'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -285,6 +287,15 @@ export function useAppTitleBarShortcuts(options: {
     // has no default in Chromium/WebView2, so there is nothing to suppress.
     if (e.code === 'F9') {
       toggleReadingMode()
+      return true
+    }
+    // F4 - keep the screen on: off <-> the last mode chosen in settings. There is no
+    // common key for this in other apps (keep-awake tools all leave it to the user), so
+    // it joins this app's F-key family; F4 has no Chromium/WebView2 binding.
+    if (e.code === 'F4' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      // Safety: always say which way it went, so it never stays on unnoticed.
+      const on = settingsStore.toggleKeepScreenOn()
+      showToast(t(on ? 'settings.keepScreenOn.toastOn' : 'settings.keepScreenOn.toastOff'))
       return true
     }
     if (!e.ctrlKey) return false

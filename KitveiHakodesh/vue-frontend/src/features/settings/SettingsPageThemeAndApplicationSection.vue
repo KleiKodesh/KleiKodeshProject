@@ -14,7 +14,7 @@ import UiLanguageToggle from './UiLanguageToggle.vue'
 const { t } = useI18n()
 
 const settings = useSettingsStore()
-const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
+const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, scrollbarsHidden, showRecentlyOpened, showFrequentFolders, keepScreenOnMode, keepScreenOnIdleMinutes } = storeToRefs(settings)
 
 const themeStore = useThemeStore()
 const { themePreset } = storeToRefs(themeStore)
@@ -145,6 +145,31 @@ function toggleTitleBarButton(buttonId: string) {
         :options="[
           { label: $t('settings.yes'), value: true },
           { label: $t('settings.no'), value: false },
+        ]"
+      />
+    </SettingRow>
+
+    <SettingRow id="nav-keep-screen-on" :data-nav-label="$t('settings.keepScreenOn.label')" :label="$t('settings.keepScreenOn.label')" :hint="$t('settings.keepScreenOn.hint')" wrap>
+      <ToggleGroup
+        v-model="keepScreenOnMode"
+        :options="[
+          { label: $t('settings.keepScreenOn.off'), value: 'off' },
+          { label: $t('settings.keepScreenOn.reading'), value: 'reading' },
+          { label: $t('settings.keepScreenOn.fullscreen'), value: 'fullscreen' },
+          { label: $t('settings.keepScreenOn.always'), value: 'always' },
+        ]"
+      />
+    </SettingRow>
+
+    <SettingRow v-if="keepScreenOnMode !== 'off'" id="nav-keep-screen-on-idle" :data-nav-label="$t('settings.keepScreenOn.idleLabel')" :label="$t('settings.keepScreenOn.idleLabel')" :hint="$t('settings.keepScreenOn.idleHint')" wrap>
+      <ToggleGroup
+        v-model="keepScreenOnIdleMinutes"
+        :options="[
+          { label: '5', value: 5 },
+          { label: '10', value: 10 },
+          { label: '30', value: 30 },
+          { label: '60', value: 60 },
+          { label: $t('settings.keepScreenOn.never'), value: 0 },
         ]"
       />
     </SettingRow>
