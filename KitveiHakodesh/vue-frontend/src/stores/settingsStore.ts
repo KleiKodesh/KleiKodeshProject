@@ -458,13 +458,22 @@ export const useSettingsStore = defineStore('settings', () => {
       textFont.value, teamimTextFont.value, headerFont.value,
       commentaryTextFont.value, commentaryHeaderFont.value,
     ])
+    // Every declared face of each family the settings name first (the one the text
+    // really uses), not just regular and bold: the weight setting and the headings'
+    // "+300" reach 300, 600 and 900 too, and each weight is its own file - a row drawn
+    // in a weight still on its way re-wraps when it arrives.
+    const wanted = new Set<string>()
     for (const family of families) {
-      if (!family) continue
-      for (const weight of [400, 700]) {
-        // A family the browser cannot parse or does not have simply does not load.
-        try { void document.fonts.load(`${weight} 16px ${family}`, 'א').catch(() => {}) } catch { /* not a loadable family */ }
-      }
+      const first = family?.split(',')[0]?.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
+      if (first) wanted.add(first)
     }
+    document.fonts.forEach((face) => {
+      const name = face.family.replace(/^['"]|['"]$/g, '').toLowerCase()
+      if (wanted.has(name) && face.status === 'unloaded') void face.load().catch(() => {})
+    })
+    // The stylesheet declaring the faces may not be applied yet this early: once more
+    // when the page has loaded.
+    if (document.readyState !== 'complete') window.addEventListener('load', warmReadingFonts, { once: true })
   }
 
   function applyCSSVariables() {
