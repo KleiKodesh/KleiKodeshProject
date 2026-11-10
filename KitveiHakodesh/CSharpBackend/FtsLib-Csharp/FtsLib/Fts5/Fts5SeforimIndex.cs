@@ -39,6 +39,21 @@ namespace FtsLib.Fts5
 
         bool IsBuilt => File.Exists(Path.Combine(_indexPath, IndexFileName));
 
+        // ── Block positions ──────────────────────────────────────────
+
+        /// <summary>
+        /// Each block's (a book's) run of positions, as the build stored it: one indexed table,
+        /// read in milliseconds. Null for an index built before the build stored them - see
+        /// <see cref="StoreBlockPositions"/>.
+        /// </summary>
+        public Dictionary<long, (long First, long Count)> ReadBlockPositions() => Fts5Index.ReadBlockPositions(_indexPath);
+
+        /// <summary>Stores the block positions into an index built before the build wrote them.</summary>
+        public void StoreBlockPositions(IReadOnlyList<(long BlockId, long Count)> blocks)
+        {
+            if (IsBuilt) Fts5Index.StoreBlockPositions(_indexPath, blocks);
+        }
+
         // ── Search ────────────────────────────────────────────────────
 
         /// <param name="batchSizeAt">The caller's batch plan — see

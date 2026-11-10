@@ -123,6 +123,66 @@ namespace FtsLib.Fts5
             catch (SqliteException) { return null; }
         }
 
+        // ── Block positions ───────────────────────────────────────────
+
+        // Each block's (a book's) run of positions: block_position(block_id, first_position,
+        // count). Written by the build from the corpus's own BlocksInResultOrder - the order it is
+        // streaming the lines in, so no extra pass - and read by a search confined to one block,
+        // which then needs one lookup instead of working the positions out from the whole corpus.
+        const string CreateBlockPositionTable =
+            "CREATE TABLE IF NOT EXISTS block_position(block_id INTEGER PRIMARY KEY, first_position INTEGER NOT NULL, count INTEGER NOT NULL)";
+
+        /// <param name="batch">The build's open batch, to write in and be committed with it - or
+        /// null for a transaction of its own.</param>
+        static void WriteBlockPositions(SqliteConnection conn, IReadOnlyList<(long BlockId, long Count)> blocks, SqliteTransaction batch)
+        {
+            var tx = batch ?? conn.BeginTransaction();
+            using (var create = conn.CreateCommand()) { create.Transaction = tx; create.CommandText = CreateBlockPositionTable; create.ExecuteNonQuery(); }
+            using (var clear = conn.CreateCommand()) { clear.Transaction = tx; clear.CommandText = "DELETE FROM block_position"; clear.ExecuteNonQuery(); }
+            using var insert = conn.CreateCommand();
+            insert.Transaction = tx;
+            insert.CommandText = "INSERT INTO block_position(block_id, first_position, count) VALUES ($b, $f, $c)";
+            var pBlock = insert.Parameters.Add("$b", SqliteType.Integer);
+            var pFirst = insert.Parameters.Add("$f", SqliteType.Integer);
+            var pCount = insert.Parameters.Add("$c", SqliteType.Integer);
+            long next = 1;   // positions are 1-based, as the build numbers them
+            foreach (var (blockId, count) in blocks)
+            {
+                pBlock.Value = blockId; pFirst.Value = next; pCount.Value = count;
+                insert.ExecuteNonQuery();
+                next += count;
+            }
+            if (batch == null) { tx.Commit(); tx.Dispose(); }
+        }
+
+        /// <summary>
+        /// Stores the block positions into an index built before the build wrote them (an
+        /// upgrade). <paramref name="blocks"/> must be the corpus's BlocksInResultOrder for the
+        /// library the index was built from.
+        /// </summary>
+        public static void StoreBlockPositions(string dir, IReadOnlyList<(long BlockId, long Count)> blocks)
+        {
+            using var conn = Open(LinesDb(dir), SqliteOpenMode.ReadWrite);
+            WriteBlockPositions(conn, blocks, null);
+        }
+
+        /// <summary>Each block's (first position, count), or null when the index has none stored.</summary>
+        public static Dictionary<long, (long First, long Count)> ReadBlockPositions(string dir)
+        {
+            if (!File.Exists(LinesDb(dir))) return null;
+            try
+            {
+                using var conn = Open(LinesDb(dir), SqliteOpenMode.ReadOnly);
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT block_id, first_position, count FROM block_position";
+                using var r = cmd.ExecuteReader();
+                var blocks = new Dictionary<long, (long First, long Count)>();
+                while (r.Read()) blocks[r.GetInt64(0)] = (r.GetInt64(1), r.GetInt64(2));
+                return blocks.Count > 0 ? blocks : null;
+            }
+            catch (SqliteException) { return null; }   // no such table: an index from before it
+        }
+
         // ── Build ─────────────────────────────────────────────────────
 
         /// <summary>Fresh build from scratch (benchmarks).</summary>
@@ -255,6 +315,10 @@ namespace FtsLib.Fts5
                     if (limit >= 0)
                     using (var corpus = openCorpus())
                     {
+                        // The blocks of the order the lines are about to be streamed in - the corpus
+                        // has just worked them out for that - kept for searches confined to one block.
+                        // Rewritten by a resumed build too: the order is stable for an unchanged corpus.
+                        if (corpus is IFtsOrderedCorpus orderedBlocks) WriteBlockPositions(conn, orderedBlocks.BlocksInResultOrder(), tx);
                         // Result order: the corpus's own when it has one; else ascending ids.
                         IEnumerable<(long Id, string Text)> source =
                             corpus is IFtsOrderedCorpus ordered

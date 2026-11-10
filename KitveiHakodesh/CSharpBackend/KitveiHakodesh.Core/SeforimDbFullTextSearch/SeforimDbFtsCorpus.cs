@@ -127,7 +127,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             // The guard, once per build: an id the notes encoding cannot hold fails the build
             // here, naming it, instead of colliding silently.
             if (_hasNotes) SeforimDbNoteIds.EnsureRepresentable(_connection);
-            var (bookOrder, lineCounts) = BooksInResultOrder();
+            var (bookOrder, lineCounts) = BooksInResultOrderOnce();
 
             using var command = _connection.CreateCommand();
             command.CommandText = SeforimDbSqlStrings.FtsReadBookLines(_schema);
@@ -173,6 +173,28 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// order, read by the build (<see cref="ReadDocumentsInResultOrder"/>) and by
         /// <see cref="BookPositionRanges"/>, so the two can never disagree.
         /// </summary>
+        /// <summary>
+        /// <see cref="BooksInResultOrder"/>, worked out once per corpus: it is a pass over the
+        /// whole line table and the notes table (seconds on the full library), and a build asks
+        /// for it twice - the block positions it stores, then the lines it streams.
+        /// </summary>
+        private (List<long> BookOrder, Dictionary<long, long> LineCounts) BooksInResultOrderOnce() =>
+            _booksInResultOrder ??= BooksInResultOrder();
+        private (List<long> BookOrder, Dictionary<long, long> LineCounts)? _booksInResultOrder;
+
+        /// <summary>
+        /// The books (and notes books) in result order with their line counts - the blocks the
+        /// index stores, so an in-book or commentary search finds a book's positions with one
+        /// lookup (<see cref="IFtsOrderedCorpus.BlocksInResultOrder"/>).
+        /// </summary>
+        public IReadOnlyList<(long BlockId, long Count)> BlocksInResultOrder()
+        {
+            var (bookOrder, lineCounts) = BooksInResultOrderOnce();
+            var blocks = new List<(long BlockId, long Count)>(bookOrder.Count);
+            foreach (long bookId in bookOrder) blocks.Add((bookId, lineCounts[bookId]));
+            return blocks;
+        }
+
         private (List<long> BookOrder, Dictionary<long, long> LineCounts) BooksInResultOrder()
         {
             var treeOrder = SeforimDbBookTreeOrder.Load(_connection);
@@ -222,7 +244,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public Dictionary<long, (long First, long Count)> BookPositionRanges()
         {
-            var (bookOrder, lineCounts) = BooksInResultOrder();
+            var (bookOrder, lineCounts) = BooksInResultOrderOnce();
             var ranges = new Dictionary<long, (long First, long Count)>(bookOrder.Count);
             long next = 1;
             foreach (long bookId in bookOrder)

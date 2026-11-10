@@ -19,5 +19,13 @@ namespace FtsLib
         /// each document exactly once.
         /// </summary>
         IEnumerable<(long Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default);
+
+        /// <summary>
+        /// The order as contiguous BLOCKS (for the seforim library, books): each block's id and
+        /// how many documents it holds, in result order - the same order
+        /// <see cref="ReadDocumentsInResultOrder"/> streams. The build stores it with the index,
+        /// so a search confined to one block finds its positions with one lookup.
+        /// </summary>
+        IReadOnlyList<(long BlockId, long Count)> BlocksInResultOrder();
     }
 }
