@@ -97,6 +97,8 @@ export interface Tab {
   bookId?: number
   openTocEntryId?: number
   openTocLineIndex?: number
+  /** Pixels into `openTocLineIndex`: set when returning to an exact place (Back, recents). */
+  openTocLineOffsetPx?: number
   // Bumped to force a book-view remount when navigating within the SAME book.
   // BookView reads openTocEntryId/openTocLineIndex once at setup, and AppPageView's
   // pageKey is tabId:bookId — unchanged for the same book — so a same-book jump
@@ -201,6 +203,7 @@ const POSITION_FIELDS = [
   'tocPath',
   'openTocEntryId',
   'openTocLineIndex',
+  'openTocLineOffsetPx',
   'flashOpenLine',
   'searchHighlightLineIndex',
   'searchHighlightQuery',
@@ -1087,6 +1090,8 @@ export const useTabStore = defineStore('tabs', () => {
     const index = location.position?.scrollIndex
     if (index != null) {
       patch.openTocLineIndex = index
+      // The exact place, not just the line: the pixels into it travel too.
+      patch.openTocLineOffsetPx = location.position?.scrollOffset ?? 0
       patch.navNonce = nextNavNonce()
     }
     const searchIndex = location.position?.searchScrollIndex

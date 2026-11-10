@@ -266,22 +266,21 @@ export function useFullTextSearchFilters(
 
   async function handleResultClick(result: FullTextSearchResult, openInNewTab = false) {
     try {
-      // Capture the target tab up front and patch it by id: the lookup below awaits,
+      // In place, the tab to navigate is the one active NOW: the lookup below awaits,
       // and the active tab may change during that await (same reasoning as AddressBar).
       const title = bookTitleOf({ ...result, bookId: sourceBookOf(result.bookId) })  // a note opens its source book
-      const targetTabId = openInNewTab
-        ? paneNavigation.openTab({ title, route: '/book-view' }).id
-        : paneNavigation.activeTabId
+      const tabIdAtClick = paneNavigation.activeTabId
 
       // A footnote hit (issue #13) opens its SOURCE line, where the viewer shows the note.
       const rows = await getLineIndexFromLineId(sourceLineOf(result.lineId))
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
+      // Nothing opens for a hit whose line cannot be found (a stale index entry).
       if (lineIndex == null || bookId == null) return
       const matchedTerms = matchedTermsOf(result)
-      tabStore.updateTab(targetTabId, {
+      const destination = {
         title,
-        route: '/book-view',
+        route: '/book-view' as const,
         bookId,
         openTocLineIndex: lineIndex,
         openNoteIndex: noteIndexOf(result.lineId) ?? undefined,  // a footnote hit pops its note open
@@ -294,7 +293,13 @@ export function useFullTextSearchFilters(
         searchHighlightTerms: matchedTerms.length
           ? matchedTerms
           : executedQuery().trim().split(/\s+/).filter(Boolean),
-      })
+      }
+      // A new tab is opened only NOW, complete with its book and line: a tab opened
+      // before the lookup was a book view with no book — mounted once empty, then
+      // again for the book — and stayed an empty tab for good when the lookup found
+      // nothing.
+      if (openInNewTab) paneNavigation.openTab(destination)
+      else tabStore.updateTab(tabIdAtClick, destination)
     } catch (err) {
       console.error('[useFullTextSearchFilters] failed to open result:', err)
     }
