@@ -403,8 +403,8 @@ export function usePdfViewPageTracking() {
         // Save-as for the close-guard dialog. Resolves true only when the
         // viewer signals the file was actually written (kh-save-complete —
         // dispatched by the patched _triggerDownload only for bytes that came
-        // out of a successful saveDocument()); a cancelled picker emits
-        // nothing and falls to the timeout.
+        // out of a successful saveDocument()); a cancelled picker or
+        // failed write dispatches kh-save-settled instead → false right away.
         // A writable local PDF saves in place (the autosave, flushed now).
         // Reorganised pages / a merged document can't be a tail: save-as.
         saveAs: () =>
@@ -422,13 +422,15 @@ export function usePdfViewPageTracking() {
               settled = true
               clearTimeout(timer)
               doc.removeEventListener('kh-save-complete', onComplete)
+              doc.removeEventListener('kh-save-settled', onSettled)
               resolve(ok)
             }
             const onComplete = () => finish(true)
-            // Generous: the File System Access picker has no cancel signal, so
-            // a cancel simply times out as "not saved".
+            const onSettled = () => finish(false)
+            // Safety net only (e.g. saveDocument never reaches the download).
             const timer = setTimeout(() => finish(false), 120_000)
             doc.addEventListener('kh-save-complete', onComplete)
+            doc.addEventListener('kh-save-settled', onSettled)
             void app.downloadOrSave().catch(() => finish(false))
           }),
       }
