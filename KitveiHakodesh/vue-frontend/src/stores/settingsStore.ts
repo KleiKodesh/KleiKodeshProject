@@ -444,7 +444,31 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // ── CSS sync ──────────────────────────────────────────────────────────────
 
+  /**
+   * Starts loading the reading fonts now, before any text is on screen. The bundled
+   * faces are `font-display: swap` and a browser only fetches a face when text first
+   * uses it: a book or commentary panel then painted once in the fallback font and
+   * re-wrapped a moment later when the real one arrived - every row below the top
+   * moved. Asked for here (app start, and whenever a font setting changes), the face
+   * is there by the time the first row is laid out.
+   */
+  function warmReadingFonts() {
+    if (typeof document === 'undefined' || !document.fonts?.load) return
+    const families = new Set([
+      textFont.value, teamimTextFont.value, headerFont.value,
+      commentaryTextFont.value, commentaryHeaderFont.value,
+    ])
+    for (const family of families) {
+      if (!family) continue
+      for (const weight of [400, 700]) {
+        // A family the browser cannot parse or does not have simply does not load.
+        try { void document.fonts.load(`${weight} 16px ${family}`, 'א').catch(() => {}) } catch { /* not a loadable family */ }
+      }
+    }
+  }
+
   function applyCSSVariables() {
+    warmReadingFonts()
     const style = document.documentElement.style
     style.setProperty('--header-font', headerFont.value)
     style.setProperty('--text-font', textFont.value)
