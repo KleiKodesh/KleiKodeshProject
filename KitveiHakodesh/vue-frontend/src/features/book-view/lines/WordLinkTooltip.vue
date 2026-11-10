@@ -549,6 +549,12 @@ useEventListener(() => window, 'resize', () => emit('close'))
 </template>
 
 <style scoped>
+/* Words a search matched, marked in a previewed note or line as they are in the text. */
+.word-link-tooltip-content :deep(mark.search-match) {
+  background: rgba(255, 165, 0, 0.4);
+  color: inherit;
+  border-radius: 2px;
+}
 .word-link-tooltip {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
