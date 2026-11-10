@@ -464,9 +464,6 @@ export const useTabStore = defineStore('tabs', () => {
       return {
         scrollIndex: saved.scrollIndex,
         scrollOffset: saved.scrollOffset,
-        selectedLineId: saved.selectedLineId,
-        commentaryPanels: saved.commentaryPanels,
-        sideEdition: saved.sideEdition,
       }
     }
     const tabState = peekTabViewState(tab.id)
