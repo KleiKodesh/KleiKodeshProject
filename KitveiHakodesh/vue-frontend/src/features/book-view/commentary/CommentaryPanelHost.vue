@@ -112,7 +112,8 @@ function scrollToBook(targetBookId: number) {
 
 // Search results are only shown while the bar is open AND aimed at this panel;
 // the query itself survives so reopening the bar restores it.
-const searchQuery = computed(() => (props.searchActive ? props.panel.search.query.value : ''))
+// The query as of the typing pause (highlightQuery), not as typed: see useCommentarySearch.
+const searchQuery = computed(() => (props.searchActive ? props.panel.search.highlightQuery.value : ''))
 const currentMatchFlatIndex = computed(() =>
   props.searchActive ? props.panel.search.currentMatchFlatIndex.value : undefined,
 )
@@ -164,6 +165,7 @@ defineExpose({ view })
       :set-current-mark="panel.setCurrentMark"
       :commentary-toc-paths="commentaryTocPaths"
       :search-query="searchQuery"
+      :search-match-flat-indexes="searchActive ? panel.search.matches.value : undefined"
       :current-match-flat-index="currentMatchFlatIndex"
       :current-match-occurrence="currentMatchOccurrence"
       @close="emit('close')"

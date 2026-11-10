@@ -1,11 +1,7 @@
-import { ref, shallowRef, computed, watch, onScopeDispose } from 'vue'
+import { ref, shallowRef, computed, watch, onScopeDispose, readonly } from 'vue'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { linesSubstringSearch } from '@/webview-host/seforimApi'
-
-export interface BookViewMatch {
-  lineIndex: number
-  occurrenceInLine: number
-}
+import { SearchMatchIndex } from '@/utils/searchMatchIndex'
 
 /**
  * In-book search: every occurrence of the query as a SUBSTRING of the book's text
@@ -16,15 +12,12 @@ export interface BookViewMatch {
  * the highlighter uses, and answers with the matching lines and their counts — numbers
  * only. No book text is ever held here for this.
  *
- * Two asks per fresh query: the lines around the reader first, so the count and the
- * highlights near them land at once, then the whole book. Typing narrows: a query that
+ * One ask per fresh query, for the whole book. Typing narrows: a query that
  * CONTAINS the previous one can only match lines the previous one matched, so only those
  * lines are searched again — and a whole-book answer still in flight when the query was
  * extended is waited for and narrowed from, not thrown away.
  */
 
-/** Lines around the reader searched first. */
-const NEAR_READER_LINES = 2000
 /** The debounce after a keystroke: a single character matches most lines of any book, so it waits longer for the next one. */
 const DEBOUNCE_MS = 150
 const SINGLE_CHAR_DEBOUNCE_MS = 600
@@ -52,8 +45,9 @@ export function useBookViewSearch(options: {
   onScopeDispose(() => { if (debounceTimer) clearTimeout(debounceTimer) })
 
   const currentMatchIdx = ref(0)
-  // Shallow: a search can hold a million matches; wrapping each in a proxy is pure cost.
-  const matches = shallowRef<BookViewMatch[]>([])
+  // The results as matching LINES plus a running count of occurrences - not an object per
+  // occurrence. See SearchMatchIndex for why; do not go back to a list of matches.
+  const matches = shallowRef<SearchMatchIndex>(SearchMatchIndex.EMPTY)
 
   function searchKey(bookId: number) {
     return `${bookId}:${options.activeVersionId() ?? 0}`
@@ -95,21 +89,24 @@ export function useBookViewSearch(options: {
     return ranges
   }
 
-  /** Matches from an answer (lines and counts), in the answer's order. */
-  function matchesOf(lineIndexes: number[], counts: number[]): BookViewMatch[] {
-    const all: BookViewMatch[] = []
-    for (let i = 0; i < lineIndexes.length; i++) {
-      for (let occurrenceInLine = 0; occurrenceInLine < counts[i]!; occurrenceInLine++) all.push({ lineIndex: lineIndexes[i]!, occurrenceInLine })
-    }
-    return all
+  /** The results of an answer (lines and their counts). */
+  function matchesOf(lineIndexes: number[], counts: number[]): SearchMatchIndex {
+    return SearchMatchIndex.fromRowCounts(lineIndexes, counts)
   }
 
-  function publish(found: BookViewMatch[]) {
+  /**
+   * The query the current results are FOR - what the text is highlighted with, together with
+   * the result lines (`matches.has`). Set with the results, so the marks never show one
+   * word over another word's lines, and never change while the reader is still typing.
+   */
+  const resultsQuery = ref('')
+
+  function publish(found: SearchMatchIndex, forQuery: string) {
+    resultsQuery.value = forQuery
     matches.value = found
     // Anchor the current match to the nearest line at or after the current position.
-    const cursor = options.currentLineIndex()
-    const nearestIndex = found.findIndex((m) => m.lineIndex >= cursor)
-    currentMatchIdx.value = nearestIndex === -1 ? 0 : nearestIndex
+    const nearest = found.firstAtOrAfter(options.currentLineIndex())
+    currentMatchIdx.value = nearest >= found.total ? 0 : nearest
   }
 
   async function runScan(scanQuery: string) {
@@ -120,7 +117,8 @@ export function useBookViewSearch(options: {
     const total = options.lineCount()
 
     if (!needle || bookId == null || !total) {
-      matches.value = []
+      matches.value = SearchMatchIndex.EMPTY
+      resultsQuery.value = ''
       currentMatchIdx.value = 0
       return
     }
@@ -135,18 +133,13 @@ export function useBookViewSearch(options: {
         : { lineIndexes: [], counts: [] }
       if (isStale() || !answer) return
       lastSearch = { key, needle, lineIndexes: answer.lineIndexes }
-      publish(matchesOf(answer.lineIndexes, answer.counts))
+      publish(matchesOf(answer.lineIndexes, answer.counts), scanQuery)
       return
     }
 
-    // The lines around the reader first, then the whole book.
-    const cursor = Math.min(Math.max(0, options.currentLineIndex()), total - 1)
-    const nearFirst = Math.max(0, cursor - NEAR_READER_LINES / 2)
-    const nearLast = Math.min(total - 1, nearFirst + NEAR_READER_LINES - 1)
-    const near = await linesSubstringSearch(scanQuery, [{ bookId, firstLineIndex: nearFirst, lastLineIndex: nearLast }], versionId).catch(() => null)
-    if (isStale()) return
-    if (near) publish(matchesOf(near.lineIndexes, near.counts))
-
+    // The whole book, in one request: the service answers it from the index in tens of
+    // milliseconds, so a first request for the lines around the reader only cost a second
+    // round trip.
     const answer = linesSubstringSearch(scanQuery, [{ bookId, firstLineIndex: 0, lastLineIndex: total - 1 }], versionId).catch(() => null)
     const pending = { key, needle, answer }
     pendingWholeSearch = pending
@@ -154,7 +147,7 @@ export function useBookViewSearch(options: {
     if (pendingWholeSearch === pending) pendingWholeSearch = null
     if (isStale() || !whole) return
     lastSearch = { key, needle, lineIndexes: whole.lineIndexes }
-    publish(matchesOf(whole.lineIndexes, whole.counts))
+    publish(matchesOf(whole.lineIndexes, whole.counts), scanQuery)
   }
 
   // Search whenever the debounced query changes, and again when the shown version
@@ -167,10 +160,10 @@ export function useBookViewSearch(options: {
   })
   watch(options.bookId, () => { lastSearch = null; pendingWholeSearch = null })
 
-  const matchCount = computed(() => matches.value.length)
-  const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)
-  const currentMatchLineIndex = computed(() => currentMatch.value?.lineIndex ?? -1)
-  const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
+  const matchCount = computed(() => matches.value.total)
+  const currentMatch = computed(() => matches.value.at(currentMatchIdx.value))
+  const currentMatchLineIndex = computed(() => currentMatch.value?.row ?? -1)
+  const currentMatchOccurrence = computed(() => currentMatch.value?.occurrence ?? 0)
 
   /**
    * Re-anchor the current match to wherever the reader is now, in the direction
@@ -182,20 +175,17 @@ export function useBookViewSearch(options: {
    * key they pressed.
    */
   function gotoNearestMatch(direction: 'forward' | 'backward' = 'forward') {
-    const allMatches = matches.value
-    if (!allMatches.length) return
+    const found = matches.value
+    if (!found.total) return
     const cursor = options.currentLineIndex()
     if (direction === 'backward') {
       // Last match strictly above the view; wrap to the final match.
-      let found = -1
-      for (let i = allMatches.length - 1; i >= 0; i--) {
-        if (allMatches[i]!.lineIndex < cursor) { found = i; break }
-      }
-      currentMatchIdx.value = found === -1 ? allMatches.length - 1 : found
+      const before = found.lastBefore(cursor)
+      currentMatchIdx.value = before < 0 ? found.total - 1 : before
       return
     }
-    const nearestIndex = allMatches.findIndex((m) => m.lineIndex >= cursor)
-    currentMatchIdx.value = nearestIndex === -1 ? 0 : nearestIndex
+    const nearest = found.firstAtOrAfter(cursor)
+    currentMatchIdx.value = nearest >= found.total ? 0 : nearest
   }
 
   function next() {
@@ -206,16 +196,29 @@ export function useBookViewSearch(options: {
       currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value
   }
   function clear() {
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+    debouncedQuery.value = ''
+    resultsQuery.value = ''   // the highlights go with the closed bar, at once
     query.value = ''
     currentScanToken++ // cancel any in-flight search
     lastSearch = null
     pendingWholeSearch = null
-    matches.value = []
+    matches.value = SearchMatchIndex.EMPTY
     currentMatchIdx.value = 0
   }
 
   return {
     query,
+    /**
+     * What the text is HIGHLIGHTED with: the query of the current results, on the result
+     * lines only (`matches.has`). Not the raw `query`: every change of that re-rendered
+     * the rows in the window, 50-100 ms per keystroke, delaying the next keystroke and the
+     * search behind it.
+     */
+    highlightQuery: readonly(resultsQuery),
+    /** The results: the lines the text is highlighted on (`has`), and the match navigation. */
+    // A computed, not readonly(): readonly would wrap the typed arrays in a deep proxy.
+    matches: computed(() => matches.value),
     matchCount,
     currentMatchIdx,
     currentMatchLineIndex,

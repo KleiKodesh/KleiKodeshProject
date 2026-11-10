@@ -104,6 +104,8 @@ const props = defineProps<{
   setCurrentMark: (scroller: HTMLElement, flatIndex: number, occurrence: number) => void
   commentaryTocPaths: Map<string, string>
   searchQuery?: string
+  /** The rows the panel search's results hold: only these are marked with `searchQuery`. */
+  searchMatchFlatIndexes?: { has(flatIndex: number): boolean }
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
   pinnedGroup?: PinnedCommentaryGroup | null
@@ -329,6 +331,17 @@ watch(
   },
 )
 
+/**
+ * The query a row is marked with: the panel search's, for a row in its result set only. A
+ * row that is not a match is not searched, and keeps its cached render through a new search.
+ */
+function rowSearchQuery(flatIndex: number): string | undefined {
+  const query = props.searchQuery
+  if (!query?.trim()) return undefined
+  if (props.searchMatchFlatIndexes && !props.searchMatchFlatIndexes.has(flatIndex)) return undefined
+  return query
+}
+
 // ── Scroll ────────────────────────────────────────────────────────────────────
 
 const {
@@ -416,7 +429,7 @@ function buildAllCommentaryContentHtml(): string {
     parts.push(`<div class="line">${g.bookTitle}</div>`)
     flatIndex++
     for (const l of g.lines) {
-      const rendered = props.renderContent(l.content, flatIndex, l.lineId, props.searchQuery)
+      const rendered = props.renderContent(l.content, flatIndex, l.lineId, rowSearchQuery(flatIndex))
       parts.push(`<div class="line" data-line-id="${l.lineId}">${rendered}</div>`)
       flatIndex++
     }
@@ -441,7 +454,7 @@ function buildCommentaryContentHtmlForRange(firstIndex: number, lastIndex: numbe
     for (const l of g.lines) {
       if (flatIndex > lastIndex) return parts.join('')
       if (flatIndex >= firstIndex) {
-        const rendered = props.renderContent(l.content, flatIndex, l.lineId, props.searchQuery)
+        const rendered = props.renderContent(l.content, flatIndex, l.lineId, rowSearchQuery(flatIndex))
         parts.push(`<div class="line" data-line-id="${l.lineId}">${rendered}</div>`)
       }
       flatIndex++
@@ -791,7 +804,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
                 :class="{ 'line-no-text': (flatItems[index] as any).line.lineId === -1 }"
                 :data-line-id="(flatItems[index] as any).line.lineId"
                 :style="teamimFontStyle((flatItems[index] as any).line.content)"
-                v-html="renderContent((flatItems[index] as any).line.content, index, (flatItems[index] as any).line.lineId, props.searchQuery)"
+                v-html="renderContent((flatItems[index] as any).line.content, index, (flatItems[index] as any).line.lineId, rowSearchQuery(index))"
               />
             </template>
           </WindowedScroller>

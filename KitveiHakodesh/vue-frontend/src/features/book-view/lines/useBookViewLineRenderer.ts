@@ -17,6 +17,11 @@ interface LineRenderProps {
   /** The alternate version being rendered, or null/undefined for the merged text. */
   activeVersionId?: number | null
   searchQuery?: string
+  /**
+   * The lines the in-book search results hold. Only these are marked with `searchQuery`;
+   * a row not in it is not searched at all. Undefined = mark every row (no result set).
+   */
+  searchMatchLines?: { has(lineIndex: number): boolean }
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
   searchHighlightLineIndex?: number
@@ -422,13 +427,19 @@ export function useBookViewLineRenderer(
   cleanTextFlags: import('vue').ComputedRef<number>,
   getProps: () => LineRenderProps,
 ) {
-  // Two-tier cache:
-  //   globalCacheKey — covers inputs that affect ALL lines (diacritics, censor, search).
-  //                    When this changes the whole cache is wiped.
-  //   perLineSuffix  — per-line Map<lineId, string> storing the highlights+notes
-  //                    signature last used to render that line. When only one line's
-  //                    annotations change, only that entry is evicted rather than
-  //                    clearing every rendered line.
+  // Two-tier cache. A rendered line is a string of HTML, and building it (clean-text,
+  // censor, user highlights, note markers, search marks) is the costly part of a row; the
+  // cache keeps each rendered line and a "key" - the inputs it was rendered from - and a
+  // row whose inputs did not change is served the same string, untouched.
+  //   globalCacheKey — inputs that affect ALL lines (version, clean-text, censor, the
+  //                    search RESULT the reader opened the book from). When this changes
+  //                    the whole cache is wiped.
+  //   perLineSuffix  — per-line Map<lineId, string>: that line's own inputs (its user
+  //                    highlights, notes, word-link anchors, inline notes, and the in-book
+  //                    search query IF the line is in the result set). When only one line's
+  //                    inputs change, only that entry is evicted. So a new in-book search
+  //                    re-renders only the result lines in the window - a row with no match
+  //                    keeps its key, and its render.
   //   raw            — each entry remembers the text it rendered. A version swap
   //                    replaces a line's text under the same index and id, and the
   //                    old text stays on screen until the new arrives (the windowed
@@ -444,10 +455,18 @@ export function useBookViewLineRenderer(
     const p = getProps()
     // activeVersionId wipes the whole cache on a swap; the per-entry raw text (above)
     // then catches each line whose new text arrives later.
-    return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+    return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
-  function getAnnotationKey(lineId: number): string {
+  /** The in-book search query this line is marked with: '' unless the line is in the result set. */
+  function searchQueryFor(lineIndex: number): string {
+    const p = getProps()
+    const query = p.searchQuery?.trim() ? p.searchQuery : ''
+    if (!query || (p.searchMatchLines && !p.searchMatchLines.has(lineIndex))) return ''
+    return query
+  }
+
+  function getAnnotationKey(lineId: number, lineIndex: number): string {
     const p = getProps()
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
@@ -455,7 +474,7 @@ export function useBookViewLineRenderer(
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
     const anchorsSig = wordLinkAnchorsSig(p.getWordLinkAnchorsForLine?.(lineId) ?? [])
     const lineNotesKey = lineNotesSig(p.getLineNotesForLine?.(lineId) ?? [])
-    return `${highlightsSig}|${notesSig}|${anchorsSig}|${lineNotesKey}`
+    return `${highlightsSig}|${notesSig}|${anchorsSig}|${lineNotesKey}|${searchQueryFor(lineIndex)}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -466,7 +485,7 @@ export function useBookViewLineRenderer(
       globalCacheKey = globalKey
     }
 
-    const annotationKey = getAnnotationKey(lineId)
+    const annotationKey = getAnnotationKey(lineId, lineIndex)
     if (perLineAnnotationKey.get(lineId) !== annotationKey) {
       renderCache.delete(lineIndex)
       perLineAnnotationKey.set(lineId, annotationKey)
@@ -497,8 +516,8 @@ export function useBookViewLineRenderer(
       content = applyUserNoteMarkers(content, lineNotes)
     }
 
-    if (p.searchQuery?.trim())
-      content = highlightMatches(content, p.searchQuery)
+    const lineQuery = searchQueryFor(lineIndex)
+    if (lineQuery) content = highlightMatches(content, lineQuery)
     if (lineIndex === p.searchHighlightLineIndex) {
       if (p.searchHighlightSnippet) {
         content = highlightFromSnippet(content, p.searchHighlightSnippet)

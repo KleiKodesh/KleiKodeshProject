@@ -1,12 +1,8 @@
-import { ref, shallowRef, computed, watch, onScopeDispose } from 'vue'
+import { ref, shallowRef, computed, watch, onScopeDispose, readonly } from 'vue'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { linesSubstringSearch } from '@/webview-host/seforimApi'
+import { SearchMatchIndex } from '@/utils/searchMatchIndex'
 import type { CommentaryGroup } from './useCommentary'
-
-export interface CommentaryMatch {
-  flatIndex: number
-  occurrenceInLine: number
-}
 
 /**
  * The commentary panel's search: every occurrence of the query as a SUBSTRING of the
@@ -46,7 +42,11 @@ export function useCommentarySearch(
   })
   onScopeDispose(() => { if (debounceTimer) clearTimeout(debounceTimer) })
   const currentMatchIdx = ref(0)
-  const matches = shallowRef<CommentaryMatch[]>([])
+  // The results as matching panel ROWS plus a running count of occurrences - not an object per
+  // occurrence. See SearchMatchIndex for why; do not go back to a list of matches.
+  const matches = shallowRef<SearchMatchIndex>(SearchMatchIndex.EMPTY)
+  /** The query the current results are FOR - what the panel is highlighted with, on the result rows only. */
+  const resultsQuery = ref('')
 
   // ── Where each line sits in the panel ────────────────────────────────────────
 
@@ -106,16 +106,17 @@ export function useCommentarySearch(
     return pending.answer
   }
 
-  /** Matches from an answer, placed in the panel and in panel order. */
-  function matchesOf(answer: { bookIds: number[]; lineIndexes: number[]; counts: number[] }, flatIndexOf: Map<string, number[]>): CommentaryMatch[] {
-    const found: CommentaryMatch[] = []
+  /** The results of an answer, placed in the panel: each matching line's rows and its count. */
+  function matchesOf(answer: { bookIds: number[]; lineIndexes: number[]; counts: number[] }, flatIndexOf: Map<string, number[]>): SearchMatchIndex {
+    const rows: number[] = []
+    const counts: number[] = []
     for (let i = 0; i < answer.lineIndexes.length; i++) {
       for (const flatIndex of flatIndexOf.get(`${answer.bookIds[i]}:${answer.lineIndexes[i]}`) ?? []) {
-        for (let occurrenceInLine = 0; occurrenceInLine < answer.counts[i]!; occurrenceInLine++) found.push({ flatIndex, occurrenceInLine })
+        rows.push(flatIndex)
+        counts.push(answer.counts[i]!)
       }
     }
-    found.sort((a, b) => a.flatIndex - b.flatIndex || a.occurrenceInLine - b.occurrenceInLine)
-    return found
+    return SearchMatchIndex.fromRowCounts(rows, counts)
   }
 
   async function runSearch(searchQuery: string) {
@@ -124,7 +125,8 @@ export function useCommentarySearch(
     const needle = removeDiacriticsForSearch(searchQuery.trim())
     const { flatIndexOf, placeAt } = placement.value
     if (!needle || !placeAt.size) {
-      matches.value = []
+      matches.value = SearchMatchIndex.EMPTY
+      resultsQuery.value = ''
       currentMatchIdx.value = 0
       return
     }
@@ -140,9 +142,7 @@ export function useCommentarySearch(
     // for the next keystroke even if this one is superseded before it lands.
     const matchedFlatOf = (answer: Awaited<typeof request>) => {
       if (!answer) return null
-      const flat: number[] = []
-      for (const match of matchesOf(answer, flatIndexOf)) if (match.occurrenceInLine === 0) flat.push(match.flatIndex)
-      return flat
+      return Array.from(matchesOf(answer, flatIndexOf).rows)
     }
     const pending = { needle, answer: request.then(matchedFlatOf) }
     pendingSearch = pending
@@ -151,14 +151,14 @@ export function useCommentarySearch(
     if (isStale() || !answer) return
     const found = matchesOf(answer, flatIndexOf)
     lastSearch = { needle, flatIndexes: matchedFlatOf(answer)! }
-    publish(found)
+    publish(found, searchQuery)
   }
 
-  function publish(found: CommentaryMatch[]) {
+  function publish(found: SearchMatchIndex, forQuery: string) {
+    resultsQuery.value = forQuery
     matches.value = found
-    const cursor = currentFlatIndex()
-    const nearestIdx = found.findIndex((m) => m.flatIndex >= cursor)
-    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+    const nearest = found.firstAtOrAfter(currentFlatIndex())
+    currentMatchIdx.value = nearest >= found.total ? 0 : nearest
   }
 
   watch(debouncedQuery, (searchQuery) => { void runSearch(searchQuery) })
@@ -169,33 +169,30 @@ export function useCommentarySearch(
       lastSearch = null
       pendingSearch = null
       if (debouncedQuery.value) void runSearch(debouncedQuery.value)
-      else matches.value = []
+      else { matches.value = SearchMatchIndex.EMPTY; resultsQuery.value = '' }
     },
   )
 
-  const matchCount = computed(() => matches.value.length)
-  const currentMatch = computed(() => matches.value[currentMatchIdx.value] ?? null)
-  const currentMatchFlatIndex = computed(() => currentMatch.value?.flatIndex ?? -1)
-  const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
+  const matchCount = computed(() => matches.value.total)
+  const currentMatch = computed(() => matches.value.at(currentMatchIdx.value))
+  const currentMatchFlatIndex = computed(() => currentMatch.value?.row ?? -1)
+  const currentMatchOccurrence = computed(() => currentMatch.value?.occurrence ?? 0)
 
   /**
    * Re-anchor to wherever the reader has scrolled this panel, in the direction
    * they asked to travel. Mirrors the book text's gotoNearestMatch.
    */
   function gotoNearestMatch(direction: 'forward' | 'backward' = 'forward') {
-    const newMatches = matches.value
-    if (!newMatches.length) return
+    const found = matches.value
+    if (!found.total) return
     const cur = currentFlatIndex()
     if (direction === 'backward') {
-      let found = -1
-      for (let i = newMatches.length - 1; i >= 0; i--) {
-        if (newMatches[i]!.flatIndex < cur) { found = i; break }
-      }
-      currentMatchIdx.value = found === -1 ? newMatches.length - 1 : found
+      const before = found.lastBefore(cur)
+      currentMatchIdx.value = before < 0 ? found.total - 1 : before
       return
     }
-    const nearestIdx = newMatches.findIndex((m) => m.flatIndex >= cur)
-    currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
+    const nearest = found.firstAtOrAfter(cur)
+    currentMatchIdx.value = nearest >= found.total ? 0 : nearest
   }
 
   function next() {
@@ -206,16 +203,27 @@ export function useCommentarySearch(
       currentMatchIdx.value = (currentMatchIdx.value - 1 + matchCount.value) % matchCount.value
   }
   function clear() {
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
+    debouncedQuery.value = ''
+    resultsQuery.value = ''   // the highlights go with the closed bar, at once
     query.value = ''
     currentSearchToken++
     lastSearch = null
     pendingSearch = null
-    matches.value = []
+    matches.value = SearchMatchIndex.EMPTY
     currentMatchIdx.value = 0
   }
 
   return {
     query,
+    /**
+     * What the panel is HIGHLIGHTED with: the query of the current results, on their rows only
+     * (`matches.has`). Not the raw `query`: every change of that re-rendered the rows in the
+     * window, 50-100 ms per keystroke, delaying the next keystroke and the search behind it.
+     */
+    highlightQuery: readonly(resultsQuery),
+    /** The results: the rows the panel is highlighted on (`has`), and the match navigation. A computed, not readonly(): readonly would deep-proxy the typed arrays. */
+    matches: computed(() => matches.value),
     matchCount,
     currentMatchIdx,
     currentMatchFlatIndex,
