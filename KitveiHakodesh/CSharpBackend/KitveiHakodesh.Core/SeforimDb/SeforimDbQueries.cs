@@ -259,6 +259,62 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// Like <see cref="ForEachLineInIndexRange"/> for a sparse set of line indexes — read in
         /// batches of at most 900 (SQLite's bound-parameter limit), each in reading order.
         /// </summary>
+        /// <summary>
+        /// Lines by id, whatever book each is in - (id, bookId, lineIndex, content) - on ONE
+        /// connection, batched under SQLite's variable limit. The merged text only. Rows come in
+        /// no particular order.
+        /// </summary>
+        public void ForEachLineByIds(IReadOnlyList<long> lineIds, Action<long, int, int, string> onLine)
+        {
+            const int Batch = 900;
+            if (lineIds.Count == 0) return;
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            var schema = SchemaOf(conn);
+            for (int at = 0; at < lineIds.Count; at += Batch)
+            {
+                int n = Math.Min(Batch, lineIds.Count - at);
+                var names = new string[n];
+                for (int i = 0; i < n; i++) names[i] = "@i" + i;
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetLinesByIdList(schema, string.Join(",", names));
+                for (int i = 0; i < n; i++) cmd.Parameters.AddWithValue(names[i], lineIds[at + i]);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    onLine(r.GetInt64(0), r.GetInt32(1), r.IsDBNull(2) ? 0 : r.GetInt32(2), codec.DecodeColumnOrEmpty(r, 3));
+            }
+        }
+
+        /// <summary>
+        /// Lines by (book, lineIndex), across books - (id, bookId, lineIndex, content) - on ONE
+        /// connection, batched: a commentary panel's few hundred lines spread over a hundred
+        /// books are one query, not one per book. The merged text only; rows in no particular order.
+        /// </summary>
+        public void ForEachLineByBookIndexes(IReadOnlyList<(int BookId, int LineIndex)> lines, Action<long, int, int, string> onLine)
+        {
+            const int BatchPairs = 450;   // two variables a pair, under SQLite's 999
+            if (lines.Count == 0) return;
+            using var conn = Open();
+            using var codec = CodecFor(conn);
+            var schema = SchemaOf(conn);
+            for (int at = 0; at < lines.Count; at += BatchPairs)
+            {
+                int n = Math.Min(BatchPairs, lines.Count - at);
+                var pairs = new string[n];
+                for (int i = 0; i < n; i++) pairs[i] = $"(@b{i},@i{i})";
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetLinesByBookIndexPairs(schema, string.Join(",", pairs));
+                for (int i = 0; i < n; i++)
+                {
+                    cmd.Parameters.AddWithValue("@b" + i, lines[at + i].BookId);
+                    cmd.Parameters.AddWithValue("@i" + i, lines[at + i].LineIndex);
+                }
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                    onLine(r.GetInt64(0), r.GetInt32(1), r.IsDBNull(2) ? 0 : r.GetInt32(2), codec.DecodeColumnOrEmpty(r, 3));
+            }
+        }
+
         public void ForEachLineByIndexes(int bookId, IReadOnlyList<int> lineIndexes, int versionId, Action<int, int, string> onLine)
         {
             const int Batch = 900;

@@ -192,6 +192,9 @@ namespace KitveiHakodesh.Core.SeforimDb
             // commentary panel: hundreds of lines spread through a whole book) is read by the
             // listed line indexes instead, so the lines between them are never decoded.
             var pieces = new List<(int BookId, int First, int Last, List<int>? Indexes)>();
+            // The merged text's scattered lines, from every book at once: ONE batched read for a
+            // commentary panel's few hundred lines across a hundred books, not a read per book.
+            var scattered = versionId == 0 ? new List<(int BookId, int LineIndex)>() : null;
             foreach (int bookId in bookOrder)
             {
                 var list = wanted[bookId];
@@ -200,7 +203,11 @@ namespace KitveiHakodesh.Core.SeforimDb
                 long wantedLines = 0;
                 foreach (var r in list) { if (r.Last > spanLast) spanLast = r.Last; wantedLines += r.Last - r.First + 1; }
                 long spanLines = (long)spanLast - spanFirst + 1;
-                if (wantedLines * SparseFactor < spanLines)
+                if (wantedLines * SparseFactor < spanLines && scattered != null)
+                {
+                    foreach (var r in list) for (int li = r.First; li <= r.Last; li++) scattered.Add((bookId, li));
+                }
+                else if (wantedLines * SparseFactor < spanLines)
                 {
                     var indexes = new List<int>((int)wantedLines);
                     foreach (var r in list) for (int li = r.First; li <= r.Last; li++) indexes.Add(li);
@@ -213,6 +220,17 @@ namespace KitveiHakodesh.Core.SeforimDb
                         pieces.Add((bookId, at, Math.Min(spanLast, at + PieceLines - 1), null));
                 }
             }
+            // The scattered lines: one batched read, matched as they come.
+            var scatteredHits = new Dictionary<(int BookId, int LineIndex), LineHit>();
+            if (scattered != null && scattered.Count > 0)
+            {
+                var matcher = new Matcher(needle);
+                queries.ForEachLineByBookIndexes(scattered, (id, bookId, lineIndex, content) =>
+                {
+                    int count = CountIn(content, matcher);
+                    if (count > 0) scatteredHits[(bookId, lineIndex)] = new LineHit(lineIndex, checked((int)id), count);
+                });
+            }
             var hitsPerPiece = new List<LineHit>[pieces.Count];
             System.Threading.Tasks.Parallel.For(0, pieces.Count, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Parallelism }, i =>
             {
@@ -221,6 +239,12 @@ namespace KitveiHakodesh.Core.SeforimDb
                     ? Scan(queries, bookId, first, last, versionId, query)
                     : ScanIndexes(queries, bookId, indexes, versionId, query);
             });
+            // The scattered hits in the order they were asked for, then the pieces' hits filtered
+            // back to the exact ranges.
+            if (scattered != null)
+                foreach (var (bookId, lineIndex) in scattered)
+                    if (scatteredHits.TryGetValue((bookId, lineIndex), out var hit))
+                        result.Add(new RangeHit(bookId, hit.LineIndex, hit.LineId, hit.Count));
             for (int i = 0; i < pieces.Count; i++)
             {
                 int bookId = pieces[i].BookId;
