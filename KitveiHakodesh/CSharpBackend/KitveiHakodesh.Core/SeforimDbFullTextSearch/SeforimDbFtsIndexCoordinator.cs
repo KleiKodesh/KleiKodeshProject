@@ -213,6 +213,23 @@ public sealed class SeforimDbFtsIndexCoordinator
     }
 
     /// <summary>
+    /// Reads each book's index positions into memory now, off the request path - and for an
+    /// index built before the build stored them, works them out (seconds) and stores them
+    /// once. The in-book and commentary searches need them before their first answer.
+    /// Low priority; a failure only means the first such search does the work instead.
+    /// </summary>
+    private void WarmBookPositionsInBackground()
+    {
+        var thread = new Thread(() =>
+        {
+            try { GetEngine().WarmBookPositions(); }
+            catch (Exception ex) { _log(FtsIndexLogLevel.Debug, "FTS: book positions not warmed", ex); }
+        })
+        { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "FTS book positions" };
+        thread.Start();
+    }
+
+    /// <summary>
     /// Idempotent. Marks the index ready if a completed build already exists, otherwise
     /// kicks off a background build. Called at startup and lazily from search/status.
     /// </summary>
@@ -297,6 +314,7 @@ public sealed class SeforimDbFtsIndexCoordinator
             {
                 _isReady = true;
                 _buildStarted = true;
+                WarmBookPositionsInBackground();
                 return;
             }
 

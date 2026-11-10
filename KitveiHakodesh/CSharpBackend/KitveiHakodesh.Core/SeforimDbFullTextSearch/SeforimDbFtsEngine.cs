@@ -87,16 +87,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public long? PositionOfLine(long lineId)
         {
-            Dictionary<long, (long First, long Count)> books;
-            lock (_lock)
-            {
-                if (_bookPositions == null)
-                {
-                    using var positions = OpenCorpus();
-                    _bookPositions = positions.BookPositionRanges();
-                }
-                books = _bookPositions;
-            }
+            var books = BookPositions();
             using var corpus = OpenCorpus();
             return corpus.PositionOfLine(lineId, books);
         }
@@ -113,9 +104,47 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         public const int MaxTermsPerSubstringFragment = 4000;
 
-        // Each book's block of index positions — read once per engine (one index build), as
-        // it takes a pass over the whole line table. Dropped with the engine on Invalidate.
+        // Each book's block of index positions. The build stores them in the index (the block
+        // table, written from the order it streams the lines in), so they are one small table
+        // read in milliseconds. An index built before that has none: they are worked out once -
+        // a pass over the whole line table and the notes table, seconds - and stored into it.
+        // Kept in memory per engine; dropped with it (an idle release, a wipe) and read back.
         private Dictionary<long, (long First, long Count)>? _bookPositions;
+        private readonly object _bookPositionsLock = new object();
+
+        /// <summary>
+        /// Each book's block of index positions: from memory, else as stored in the index, else
+        /// worked out and stored. Its own lock, not the engine's: the slow path (an index from
+        /// before the block table, once) must not hold up a search that does not need them.
+        /// </summary>
+        internal Dictionary<long, (long First, long Count)> BookPositions()
+        {
+            lock (_lock) { if (_bookPositions != null) return _bookPositions; }
+            lock (_bookPositionsLock)
+            {
+                lock (_lock) { if (_bookPositions != null) return _bookPositions; }
+                var index = Index;
+                var positions = index.ReadBlockPositions();
+                if (positions == null)
+                {
+                    using var corpus = OpenCorpus();
+                    var blocks = corpus.BlocksInResultOrder();
+                    positions = corpus.BookPositionRanges();
+                    // Best effort: a failure only means the next engine works them out again.
+                    try { index.StoreBlockPositions(blocks); }
+                    catch (Microsoft.Data.Sqlite.SqliteException) { }
+                    catch (System.IO.IOException) { }
+                }
+                lock (_lock) { _bookPositions ??= positions; return _bookPositions; }
+            }
+        }
+
+        /// <summary>
+        /// Gets the book positions into memory ahead of the first search that needs them (the
+        /// in-book and commentary searches, a resumed result stream) - and, for an index built
+        /// before the block table, works them out and stores them. Safe from any thread.
+        /// </summary>
+        public void WarmBookPositions() => BookPositions();
 
         /// <summary>
         /// The lines inside the given (book, first lineIndex, last lineIndex) ranges whose
@@ -128,16 +157,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public List<(int BookId, int LineIndex, long LineId)>? SubstringCandidates(
             string query, IReadOnlyList<(int BookId, int FirstLineIndex, int LastLineIndex)> lineRanges, CancellationToken ct = default)
         {
-            Dictionary<long, (long First, long Count)> books;
-            lock (_lock)
-            {
-                if (_bookPositions == null)
-                {
-                    using var corpus = OpenCorpus();
-                    _bookPositions = corpus.BookPositionRanges();
-                }
-                books = _bookPositions;
-            }
+            var books = BookPositions();
             // One index query per BOOK, over the span of that book's ranges, and the rows
             // filtered back to the exact ranges afterwards. Each FTS5 MATCH execution costs
             // ~2 ms of planning however small its rowid range, and a commentary panel on a
