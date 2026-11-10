@@ -1,4 +1,4 @@
-<script setup lang="ts" generic="T extends string | boolean">
+<script setup lang="ts" generic="T extends string | boolean | number">
 defineProps<{ options: { label: string; value: T }[]; modelValue: T }>()
 defineEmits<{ 'update:modelValue': [T] }>()
 </script>
