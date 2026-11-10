@@ -213,6 +213,7 @@ export function useBookViewSearchPanel(
       clearFullTextSearchHighlights()
     }
     activeSearch.value.query.value = query
+    owedStep = null // a step asked of the previous query does not carry to this one
     searchNavigationState[searchMode.value] = false
   }
 
@@ -227,9 +228,24 @@ export function useBookViewSearchPanel(
    *
    * Every later press steps normally from there.
    */
+  // Enter pressed before the results are in (the first search in a book can take a
+  // moment): the step is carried out when they arrive, instead of being dropped and
+  // leaving the reader to press again.
+  let owedStep: { mode: SearchMode; direction: 'forward' | 'backward' } | null = null
+  watch(activeMatchCount, (count) => {
+    const owed = owedStep
+    if (!count || !owed) return
+    owedStep = null
+    if (owed.mode === searchMode.value && searchVisible.value) stepSearch(owed.direction)
+  })
+  watch([searchMode, searchVisible], () => { owedStep = null })
+
   function stepSearch(direction: 'forward' | 'backward') {
     const search = activeSearch.value
-    if (search.matchCount.value === 0) return
+    if (search.matchCount.value === 0) {
+      if (search.query.value.trim()) owedStep = { mode: searchMode.value, direction }
+      return
+    }
     if (!searchNavigationState[searchMode.value]) {
       searchNavigationState[searchMode.value] = true
       search.gotoNearestMatch?.(direction)
