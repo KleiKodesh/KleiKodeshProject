@@ -55,6 +55,11 @@ interface PdfViewerApplication {
   _hasChanges?: () => boolean
   /** Save routing: save() when dirty (incl. outline edits), download() otherwise. */
   downloadOrSave?: () => Promise<void>
+  /** Arm kh-save-complete for a save in place (edits made during it stay unsaved). */
+  khArmHostSave?: () => void
+  khDisarmHostSave?: () => void
+  /** Reorganised pages or a merged document: a whole new file, not a tail (save-as only). */
+  khNeedsWholeFileSave?: () => boolean
 }
 
 /** The outline editor's host API, exposed by outline-search.js on the iframe window. */
@@ -279,10 +284,11 @@ export function usePdfViewPageTracking() {
     const win = contentWindowRef
     const path = autosavePath
     const pdfDocument = app?.pdfDocument
-    if (!app || !win || !path || !pdfDocument) return false
+    if (!app || !win || !path || !pdfDocument || needsWholeFileSave(app)) return false
     autosaveRunning = true
     const startedGeneration = editGeneration
     try {
+      app.khArmHostSave?.()
       const saved = await pdfDocument.saveDocument()
       if (!loadedTail) {
         const loaded = await pdfDocument.getData()
@@ -311,11 +317,21 @@ export function usePdfViewPageTracking() {
       console.warn('[pdf] TOC autosave failed:', e)
       return false
     } finally {
+      // kh-save-complete consumed the arm; drop it when nothing was dispatched.
+      app.khDisarmHostSave?.()
       autosaveRunning = false
       if (autosaveAgain) {
         autosaveAgain = false
         scheduleAutosave()
       }
+    }
+  }
+
+  function needsWholeFileSave(app: PdfViewerApplication | null): boolean {
+    try {
+      return app?.khNeedsWholeFileSave?.() === true
+    } catch {
+      return false
     }
   }
 
@@ -390,8 +406,9 @@ export function usePdfViewPageTracking() {
         // out of a successful saveDocument()); a cancelled picker emits
         // nothing and falls to the timeout.
         // A writable local PDF saves in place (the autosave, flushed now).
+        // Reorganised pages / a merged document can't be a tail: save-as.
         saveAs: () =>
-          autosavePath ? runAutosave() : new Promise<boolean>((resolve) => {
+          autosavePath && !needsWholeFileSave(applicationRef) ? runAutosave() : new Promise<boolean>((resolve) => {
             const win = contentWindowRef
             const app = applicationRef
             if (!win || !app?.downloadOrSave) {
@@ -484,6 +501,8 @@ export function usePdfViewPageTracking() {
     // on the iframe window runs before PDF.js's own Ctrl+S handler.
     if (autosavePath) {
       keydownHandler = (e: KeyboardEvent) => {
+        // Reorganised pages / a merged document: the viewer's own Ctrl+S (save-as) writes them.
+        if (needsWholeFileSave(applicationRef)) return
         if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.code !== 'KeyS') return
         e.preventDefault()
         e.stopImmediatePropagation()
