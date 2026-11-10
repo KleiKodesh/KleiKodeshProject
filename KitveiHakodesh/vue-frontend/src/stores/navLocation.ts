@@ -26,14 +26,12 @@ import type { Tab, TabRoute } from './tabStore'
  * shape pretending to fit all of them.
  */
 export interface LocationPosition {
-  // Book view (virtualized list: item index + pixel offset within it).
+  // Book view: the row at the top of the lines pane + the pixels into it. This is ALL a
+  // location carries for a book - it is the start row the lines pane is created at on
+  // Back / a recents row. The panels, the selected line and the side edition come back
+  // from the tab's own saved book state, not from here.
   scrollIndex?: number
   scrollOffset?: number
-  selectedLineId?: number | null
-  /** Both commentary panels' saved place, keyed by slot. */
-  commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
-  /** The HebrewBooks edition shown beside the text, and its column width. */
-  sideEdition?: import('@/features/book-view/bookViewTypes').SideEditionPersistState
   // HTML / TXT view (plain pixel scroll).
   htmlViewScrollTop?: number
   // PDF view.

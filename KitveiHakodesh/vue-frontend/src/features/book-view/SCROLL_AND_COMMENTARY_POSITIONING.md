@@ -86,6 +86,11 @@ a new tab): it is the start row the next scroller is created with.
   `useBookViewSessionRestore._seedPanel`). It reaches `CommentaryView` as
   `savedScrollIndex` / `savedScrollOffset` and is what the panel's scroller is
   created at — see C.
+- **A requested line is one navigation's argument.** `openTocLineIndex` (and
+  `openTocLineOffsetPx`, set when Back or a recents row returns to an exact place)
+  is read by `useBookView` at setup and cleared from the tab at once, whatever set
+  it. Left on the tab, the next remount (a tab switch) would open at that line
+  again instead of where the reader has since got to.
 - **Saving** happens when a view goes away (`registerPositionCapture` in
   `persistenceFlush.ts`, and `onBeforeUnmount`). There is no restore for a save to
   race with.

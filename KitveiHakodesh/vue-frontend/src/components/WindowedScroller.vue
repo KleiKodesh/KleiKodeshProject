@@ -55,9 +55,10 @@
  * Attributes fall through to the viewport (`tabindex`, data-*, style, native
  * listeners), so the caller treats it as the scroll element it is.
  */
-import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onBeforeUpdate, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
+import LoadingAnimation from './LoadingAnimation.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
 import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
 import { buildFlowPlan, ROWS_PLAN } from './windowedScrollerFlowPlan'
@@ -370,10 +371,26 @@ const startOffsetPx = props.initialOffsetPx ?? 0
 let isStartRowAnswered = startIndex === 0
 let isFirstWindowBuilt = false
 
+// A scroller created deep in a list shows nothing until its start row has arrived
+// (there is no "top of the list meanwhile" to show). When that takes long — a slow
+// source, results still streaming toward the row — say so, rather than sit blank.
+// After a delay, so the usual open never flashes it. Changes twice in a scroller's
+// life, so unwrapping it in the template costs the rows nothing.
+const OPENING_INDICATOR_DELAY_MS = 400
+const isOpeningSlow = ref(false)
+let openingIndicatorTimer: ReturnType<typeof setTimeout> | null =
+  startIndex > 0 ? setTimeout(() => { isOpeningSlow.value = true }, OPENING_INDICATOR_DELAY_MS) : null
+function endOpeningIndicator() {
+  if (openingIndicatorTimer != null) { clearTimeout(openingIndicatorTimer); openingIndicatorTimer = null }
+  isOpeningSlow.value = false
+}
+onBeforeUnmount(endOpeningIndicator)
+
 function buildFirstWindowWhenPossible() {
   if (isFirstWindowBuilt || !isStartRowAnswered || props.count <= 0) return
   isFirstWindowBuilt = true
   void landAt(startIndex, { offsetPx: startOffsetPx }).then(() => {
+    endOpeningIndicator()
     bar.syncFromViewport()
     emit('opened')
   })
@@ -427,7 +444,10 @@ function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibl
 async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
   // A jump made while rows already exist builds the window itself: the first window
   // must not then be built at the start row on top of it.
-  if (props.count > 0) isFirstWindowBuilt = true
+  if (props.count > 0) {
+    isFirstWindowBuilt = true
+    endOpeningIndicator()
+  }
   await landAt(index, options)
   bar.syncFromViewport()
 }
@@ -515,6 +535,9 @@ defineExpose({
         </template>
       </div>
     </div>
+    <div v-if="isOpeningSlow" class="windowed-scroller-opening">
+      <LoadingAnimation />
+    </div>
     <!-- The bar state goes in as refs on purpose: unwrapping them here would make
          this whole row list re-render on every scroll tick and resize frame. -->
     <WindowedScrollerBar
@@ -531,9 +554,16 @@ defineExpose({
 
 <style scoped>
 .windowed-scroller {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
+}
+/* Over the (empty) viewport while a scroller created deep in its list waits for its start row. */
+.windowed-scroller-opening {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .windowed-scroller-viewport {
   flex: 1 1 auto;

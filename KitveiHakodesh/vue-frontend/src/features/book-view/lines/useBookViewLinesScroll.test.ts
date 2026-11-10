@@ -76,7 +76,7 @@ function mountScroll(
     },
   })
   app.mount(document.createElement('div'))
-  return { app, scroll }
+  return { app, scroll, scrollerElement }
 }
 
 /**
@@ -136,7 +136,7 @@ describe('useBookViewLinesScroll position save on unmount', () => {
  * The keyboard caret after an opening. Caret browsing (F7) navigates from the
  * document's collapsed selection, and an opening that only focused the viewport left
  * it wherever the browser chose — the top of the mounted window, rows above the
- * landing — so the first arrow key moved away from the line that had just been opened
+ * start row — so the first arrow key moved away from the line that had just been opened
  * (the locate bar and a search result both open this way). See lineCaret.ts.
  */
 describe('useBookViewLinesScroll opening caret', () => {
@@ -146,41 +146,60 @@ describe('useBookViewLinesScroll opening caret', () => {
     window.getSelection()?.removeAllRanges()
   })
 
-  /**
-   * A scroller row with rendered line text, as the landing mounts it. Rows are put in
-   * the document because a Range only becomes the document's selection there.
-   */
-  function lineRow(text: string): HTMLElement {
+  /** jsdom has no layout: give an element the box the caret code measures. */
+  function box(element: HTMLElement, top: number, bottom: number) {
+    element.getBoundingClientRect = () =>
+      ({ top, bottom, left: 0, right: 600, width: 600, height: bottom - top, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+  }
+
+  /** A rendered line inside the scroller's viewport, at the given box. */
+  function lineIn(viewport: HTMLElement, text: string, top: number, bottom: number): HTMLElement {
     const row = document.createElement('div')
     const line = document.createElement('div')
     line.className = 'line'
     line.textContent = text
+    box(line, top, bottom)
     row.appendChild(line)
-    document.body.appendChild(row)
-    return row
+    viewport.appendChild(row)
+    return line
   }
 
-  it('puts the caret on the line it opened on, not wherever the browser would start', () => {
+  it('puts the caret on the first line in view, not on the rows mounted above it', () => {
     const store = useTabStore()
     const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
-    const above = lineRow('ויצא יעקב מבאר שבע')
-    const opened = lineRow('וישלח יעקב מלאכים לפניו')
-    const { app, scroll } = mountScroll(tab.id, { initialLineIndex: 1200 }, (index) =>
-      index === 1200 ? opened : above,
-    )
+    const { app, scroll, scrollerElement } = mountScroll(tab.id, { initialLineIndex: 1200 })
+    // The viewport's top edge is at 100: one mounted row lies wholly above it (the
+    // window starts some rows before the start row), the opened line is at the top.
+    box(scrollerElement, 100, 700)
+    lineIn(scrollerElement, 'ויצא יעקב מבאר שבע', 40, 90)
+    const opened = lineIn(scrollerElement, 'וישלח יעקב מלאכים לפניו', 100, 150)
 
     scroll.onScrollerOpened()
 
     const selection = window.getSelection()!
+    expect(selection.rangeCount).toBe(1)
     expect(selection.isCollapsed).toBe(true)
     expect(opened.contains(selection.anchorNode)).toBe(true)
     app.unmount()
   })
 
-  it('an opening with no landing target leaves the document selection alone', () => {
+  it('an opening at the top seats the caret on the first line too', () => {
     const store = useTabStore()
     const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
-    const { app, scroll } = mountScroll(tab.id, {}, () => lineRow('בראשית ברא'))
+    const { app, scroll, scrollerElement } = mountScroll(tab.id)
+    box(scrollerElement, 100, 700)
+    const first = lineIn(scrollerElement, 'בראשית ברא', 100, 150)
+
+    scroll.onScrollerOpened()
+
+    expect(first.contains(window.getSelection()!.anchorNode)).toBe(true)
+    app.unmount()
+  })
+
+  it('leaves the document selection alone while no line is rendered', () => {
+    const store = useTabStore()
+    const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
+    const { app, scroll } = mountScroll(tab.id)
 
     scroll.onScrollerOpened()
 
