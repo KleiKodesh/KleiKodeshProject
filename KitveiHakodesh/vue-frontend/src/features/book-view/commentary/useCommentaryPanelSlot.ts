@@ -72,8 +72,6 @@ type CommentaryViewInstance = {
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<boolean>
-  claimRestoreIntent?: () => void
 }
 
 /** The fetch layer and line-level annotations both panels read from. */
@@ -114,7 +112,7 @@ export function useCommentaryPanelSlot(
   const treeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
   const fraction = ref(DEFAULT_FRACTION[slot])
 
-  const { pinnedCommentaryGroup, restorePin, setPendingPin, pinExplicitly } = usePinnedCommentary(
+  const { pinnedCommentaryGroup, isPinSettled, restorePin, setPendingPin, pinExplicitly } = usePinnedCommentary(
     shared.bookId,
     () => shared.commentaryLineId.value,
     () => shared.groups.value,
@@ -129,6 +127,7 @@ export function useCommentaryPanelSlot(
     () => shared.loading.value,
     () => shared.selectedLineId.value,
     () => shared.staticFilterGroupsLoaded.value,
+    () => shared.commentaryLineId.value,
   )
 
   // Exactly the rows this panel renders. The panel's search scans this same list,
@@ -138,10 +137,6 @@ export function useCommentaryPanelSlot(
   )
 
   const panel = useBookViewCommentaryPanel(
-    viewRef,
-    shared.groups,
-    shared.loading,
-    pinnedCommentaryGroup,
     shared.selectedLineId,
     shared.commentaryLineId,
     shared.lines,
@@ -203,6 +198,7 @@ export function useCommentaryPanelSlot(
     closeFilter,
     fraction,
     pinnedCommentaryGroup,
+    isPinSettled,
     restorePin,
     setPendingPin,
     pinExplicitly,

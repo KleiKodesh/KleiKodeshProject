@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
@@ -17,7 +17,7 @@ import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import type { CommentaryGroup, CommentaryLine } from './useCommentary'
 import { commentaryGroupKey } from './useCommentary'
 import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
-import { useCommentaryScroll } from './useCommentaryScroll'
+import { useCommentaryScroll, type CommentaryRow } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
 import { useCommentaryErrorReport } from '../errorReport/useCommentaryErrorReport'
 import BookViewErrorReportDialog from '../errorReport/BookViewErrorReportDialog.vue'
@@ -108,9 +108,15 @@ const props = defineProps<{
   currentMatchOccurrence?: number
   pinnedGroup?: PinnedCommentaryGroup | null
   filterVisible?: boolean
-  // True when a saved scroll position exists for this panel — the restore path
-  // then owns first positioning and the first-load pin scroll must not fire.
-  hasSavedScrollPos?: boolean
+  /**
+   * The place this panel was last at (row + pixels into it), or null. Kept by the
+   * panel's owner so it outlives this view. It is what a scroller is CREATED at when
+   * the list coming up is the one that place belongs to — see "The scroller" below.
+   */
+  savedScrollIndex?: number | null
+  savedScrollOffset?: number | null
+  /** The pinned commentator is the one for the list in `groups` (not still the previous line's). */
+  pinSettled: boolean
 }>()
 const emit = defineEmits<{
   close: []
@@ -330,36 +336,67 @@ const {
   activePinnedGroup,
   activePinnedGroupForCapture,
   consumeExplicitPick,
-  cancelPositioning,
   markUserAdjusted,
-  isPositioning,
-  openingTarget,
+  startRow,
   scrollerOpened,
   onScroll: handleScroll,
   scrollToGroup,
   scrollToFlatIndex,
   captureScrollPos,
-  restoreCommentaryScrollPos,
-  claimRestoreIntent,
   topVisibleFlatIndex,
-  setupGroupReloadScroll,
 } = useCommentaryScroll(
   () => flatItems.value,
-  () => visibleGroups.value,
   () => headerIndexes.value,
   scroller,
-  props.slotName,
 )
 
-setupGroupReloadScroll(
-  () => props.groups,
-  () => props.pinnedGroup,
-  () => props.loading,
-  () => props.hasSavedScrollPos ?? false,
-  // The anchor an owed pin scroll belongs to: one line tap reloads the list twice,
-  // and only a genuinely different line makes an owed scroll stale.
-  () => props.selectedLineId,
-)
+// Only keys that scroll the panel count as the reader moving it (see markUserAdjusted:
+// it records that the view is the reader's own arrangement). Ctrl+C or Ctrl+F is not
+// that, and must not drop a toolbar pick.
+const SCROLLING_KEYS = new Set([
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ',
+])
+function onViewportKeydown(event: KeyboardEvent) {
+  if (SCROLLING_KEYS.has(event.key)) markUserAdjusted()
+}
+
+// ── The scroller: one per loaded list, created at its start row ───────────────
+//
+// A windowed scroller shows "the rows from index N", and N is an argument of its
+// creation (WindowedScroller.vue, "THE MODEL"). So each commentary list that loads
+// gets a NEW scroller, created AT the row that list opens on — never a scroller
+// that opens at the top and is moved to the reader's commentator afterwards.
+//
+// `scrollerStart` is that row; null = no scroller. It is decided ONCE per list, at
+// the moment the list is ready: loaded, non-empty, and its commentator settled (the
+// panel's pin is written a moment after a line change and after the list arrives —
+// `pinSettled` says the pin now belongs to THIS list). Where it opens is
+// useCommentaryScroll.startRow: the place the panel was at when it is the same
+// line's list coming back, else the panel's commentator, else the top.
+const scrollerStart = shallowRef<CommentaryRow | null>(null)
+const scrollerGeneration = ref(0)
+/** The line whose list the last scroller showed: the saved place belongs to that list only. */
+let lastShownAnchor: number | null | undefined
+const isListReady = computed(() => !props.loading && flatItems.value.length > 0 && props.pinSettled)
+// Sync: the list going away and the next one arriving can fall in one tick, and each
+// list must get its own decision and its own scroller.
+watch(isListReady, (ready) => {
+  if (!ready) {
+    scrollerStart.value = null
+    return
+  }
+  const anchor = props.selectedLineId
+  // The saved place is where this panel was — in the list of the line it was showing.
+  // The first scroller of this view takes it as given (a reopened or remounted panel,
+  // a restored session); a later one only when the same line's list is coming back.
+  const isSameList = lastShownAnchor === undefined || lastShownAnchor === anchor
+  const samePlace = isSameList && props.savedScrollIndex != null
+    ? { scrollIndex: props.savedScrollIndex, scrollOffset: props.savedScrollOffset ?? 0 }
+    : null
+  lastShownAnchor = anchor
+  scrollerStart.value = startRow(samePlace, props.pinnedGroup)
+  scrollerGeneration.value++
+}, { flush: 'sync', immediate: true })
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -535,11 +572,8 @@ defineExpose({
   activePinnedGroup,
   activePinnedGroupForCapture,
   consumeExplicitPick,
-  cancelPositioning,
   activeBookId,
   captureScrollPos,
-  restoreCommentaryScrollPos,
-  claimRestoreIntent,
   getFilterButtonEl: () => headerNavRef.value?.filterBtnRef ?? null,
 })
 
@@ -560,7 +594,7 @@ const spinnerDelay = useTimeoutFn(
   LOADING_SPINNER_DELAY_MS,
   { immediate: false },
 )
-watch(() => props.loading || isPositioning.value, (busy) => {
+watch(() => props.loading, (busy) => {
   spinnerDelay.stop()
   showLoadingSpinner.value = false
   if (busy) spinnerDelay.start()
@@ -717,11 +751,13 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
         </div>
         <div v-else class="scroller-host" dir="rtl">
           <WindowedScroller
+            v-if="scrollerStart"
+            :key="scrollerGeneration"
             ref="windowedScroller"
             class="scroller"
             :count="flatItems.length"
-            :initial-index="openingTarget?.index"
-            :initial-offset-px="openingTarget?.offsetPx"
+            :initial-index="scrollerStart.index"
+            :initial-offset-px="scrollerStart.offsetPx"
             :ensure-rows="ensureRows"
             :pinned-indexes="pinnedRowIndexes"
             :landmark-tiers="headerLandmarkTiers"
@@ -734,7 +770,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
             @wheel.passive="markUserAdjusted"
             @touchstart.passive="markUserAdjusted"
             @pointerdown.passive="markUserAdjusted"
-            @keydown="markUserAdjusted"
+            @keydown="onViewportKeydown"
           >
             <template #row="{ index }">
               <CommentaryHeader
@@ -759,17 +795,6 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
               />
             </template>
           </WindowedScroller>
-        </div>
-        <!--
-          Positioning mask. While a goal (a restore, a pinned-group scroll) waits for
-          its target - its group still arriving, its rows being fetched - the panel
-          would otherwise show whatever it opened on. Cover it until the goal lands.
-          Deliberately OUTSIDE the v-if chain above, as an absolute overlay: putting
-          it in the chain would unmount the scroller, and then there is nothing left
-          to position. The spinner keeps its usual delay so fast loads never flash it.
-        -->
-        <div v-if="!props.loading && isPositioning && flatItems.length" class="positioning-mask">
-          <LoadingAnimation v-if="showLoadingSpinner" />
         </div>
       </div>
     </div>
@@ -823,25 +848,6 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
   display: flex;
   align-items: center;
   justify-content: center;
-}
-/* Covers the scroller (not the nav) while the positioner works. Opaque: its whole
-   job is to hide the content jumping underneath. Absolute against .body, which is
-   position:relative. */
-.positioning-mask {
-  position: absolute;
-  top: 32px;
-  inset-inline-end: 0;
-  inset-inline-start: 0;
-  bottom: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-primary);
-  /* Events pass through to the scroller so the reader can still interrupt: the
-     positioner cancels its goal on wheel/pointer/key, which drops this mask the
-     same frame. With events blocked here, positioning was uninterruptible. */
-  pointer-events: none;
 }
 .hint {
   font-size: 13px;

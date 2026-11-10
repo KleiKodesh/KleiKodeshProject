@@ -26,7 +26,6 @@ import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
 import { ensureSnippets, snippetHtmlOf } from './fullTextSearchSnippets'
 import { bookTitleOf, requestReferences, tocPathOf } from './fullTextSearchReferences'
-import { decideRestore } from './scrollRestore'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 import { teamimFontStyle } from '@/utils/teamimFont'
 
@@ -50,6 +49,7 @@ const props = defineProps<{
   dbNotFound?: boolean
   /** The index build failed — searches cannot succeed until it is rebuilt. */
   indexBuildFailed?: boolean
+  /** The saved row the scroller is created at; undefined = none (row 0). */
   initialScrollIndex?: number
   initialScrollOffset?: number
   zoom?: number
@@ -170,12 +170,31 @@ function renderSnippet(snippet: string): string {
  * so every row arrives complete. Its reference (book title, TOC path) is asked for at
  * the same time but not awaited — the header is one line either way, so the path
  * filling in a moment later changes no row's height.
+ *
+ * Results stream in, so the scroller can ask for rows that are not there yet — a
+ * scroller created at a saved row deep in the list asks for that row first. The
+ * answer then waits for the stream to reach it (or to end short of it).
  */
-function ensureRows(start: number, end: number): Promise<void> {
+async function ensureRows(start: number, end: number): Promise<void> {
+  if (start >= shownCount.value) await whenRowHasArrived(start)
   const hits = shownResults.value.slice(start, end)
   requestReferences(hits)
   scheduleLookahead(start, end)
   return ensureSnippets(hits)
+}
+
+/** Resolves once result `index` is in the list, or the search has ended without reaching it. */
+function whenRowHasArrived(index: number): Promise<void> {
+  const hasArrivedOrNeverWill = () =>
+    shownCount.value > index || (props.hasSearched && !props.isSearching && shownCount.value > 0)
+  if (hasArrivedOrNeverWill()) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const stop = watch(hasArrivedOrNeverWill, (settled) => {
+      if (!settled) return
+      stop()
+      resolve()
+    })
+  })
 }
 
 // ── Lookahead ──────────────────────────────────────────────────────────────────
@@ -226,19 +245,16 @@ watch(
     // A navigation that armed a restore (Back/Forward or a recents pick onto a search)
     // changes the query too — and the query arrives LATER than the arm (the search has to
     // cancel the running one first). That query change is the restore's own, not a new
-    // search: it spends the arm, and only NOW may the restore run — against this query's
-    // results. Running it at the arm would land on the OUTGOING search's rows, still
-    // present at that instant, and spend the restore on them.
+    // search: it spends the arm, and only NOW is the new scroller created at the saved
+    // row — against this query's results. Creating it at the arm would open it on the
+    // OUTGOING search's rows, still present at that instant.
     if (armedForNextQuery) {
       armedForNextQuery = false
-      restored = false
-      nextTick(tryRestore)
+      createScrollerAtSavedRow()
       return
     }
-    // A new query means a new result list: kill any pending restore so the previous
-    // search's saved index can't be applied to it, and start at the top.
-    cancelRestore()
-    void scroller()?.scrollToIndex(0)
+    // A new query means a new result list, and a new list is a new scroller at row 0.
+    createScrollerAtTop()
   },
 )
 
@@ -469,81 +485,81 @@ function clearHighlight() {
   activeIndex.value = -1
 }
 
-// ── Restore ───────────────────────────────────────────────────────────────────
+// ── Where the list opens ──────────────────────────────────────────────────────
 //
-// Results stream in over time (a fresh re-search, or a cached prefix that resumes
-// streaming), and on reload the parent sets initialScrollIndex asynchronously after its
-// IDB read — so the target row may not exist yet when the list mounts. decideRestore
-// (scrollRestore.ts, unit-tested) says on each change whether to wait, land, or stop.
+// A WindowedScroller shows "the rows from index N", and N is an argument of its
+// creation (WindowedScroller.vue, "THE MODEL"). So a saved position is not something
+// that is "restored" into a live list: it is the row the scroller is CREATED with.
 //
-// When the target is already reachable as the list first mounts, the scroller OPENS
-// on it (`openingIndex`): the first render is the saved place, never the top.
+//   - The scroller is created at once, with the saved row (or row 0). It asks the
+//     row source below for that row like for any other; results stream in, and
+//     `ensureRows` resolves when the row has arrived — or when the stream has ended
+//     short of it, and the scroller then opens on the last row there is.
+//   - A navigation into this same, never remounted page that carries a position
+//     (Back/Forward, a recents pick) makes a NEW scroller at the new row (the key).
+//     So does a new search, at row 0: a new result list is a new list.
+//
+// Nothing here waits for a row before creating the scroller, moves a live scroller
+// to a saved row, or tracks whether the reader moved first. All three are the old
+// virtualizer model ("open at the top, then scroll") - do not bring them back.
 
-let restored = false
-// Set when the parent arms a restore target; the next query change belongs to that
-// navigation (see the searchQuery watcher) and spends it.
+const TOP = { index: 0, offsetPx: 0 }
+function savedStart() {
+  return props.initialScrollIndex == null ? TOP : { index: props.initialScrollIndex, offsetPx: props.initialScrollOffset ?? 0 }
+}
+/** The row the NEXT scroller is created at. Read by the scroller once, at its creation. */
+const scrollerStart = shallowRef(savedStart())
+const scrollerKey = ref(0)
+// Set when the parent announces a saved position for a query that is not shown yet;
+// the next query change belongs to that navigation (see the searchQuery watcher).
 let armedForNextQuery = false
 
 /** How many results are loaded — live through the in-place streaming appends. */
 const loadedCount = computed(() => { props.resultsVersion; return props.results.length })
 
-function restoreDecision() {
-  return decideRestore({ target: props.initialScrollIndex, loaded: loadedCount.value, isSearching: props.isSearching })
-}
-
-const openingIndex = computed(() => {
-  if (restored) return undefined
-  const decision = restoreDecision()
-  return decision.action === 'restore' ? decision.index : undefined
-})
-
-function tryRestore() {
-  if (restored) return
-  const decision = restoreDecision()
-  if (decision.action === 'wait') return
-  if (decision.action === 'done') return
-  const api = scroller()
-  // Not mounted yet: the scroller will open on `openingIndex` itself.
-  if (!api) return
-  restored = true
-  void landOn(decision.index, { offsetPx: props.initialScrollOffset ?? 0 })
-}
-
-/** Wired to the scroller's `opened` event: it opened on the restore target. */
+/**
+ * The saved row has been used: a scroller created later for the same results (the
+ * list emptied by a filter and filled again) opens at the top, not back there.
+ */
 function onScrollerOpened() {
-  restored = true
+  scrollerStart.value = TOP
 }
 
-watch(
-  // initialScrollIndex is a watched source too: on reload it arrives asynchronously
-  // (parent onMounted IDB read), and the restore must run when it lands.
-  [loadedCount, () => props.isSearching, () => props.initialScrollIndex],
-  tryRestore,
-  { flush: 'post' },
-)
+/** A new scroller at the saved position the parent has just set (the prop arrives next tick). */
+function createScrollerAtSavedRow() {
+  nextTick(() => {
+    scrollerStart.value = savedStart()
+    scrollerKey.value++
+  })
+}
+
+/** A new scroller at row 0 — a new result list. */
+function createScrollerAtTop() {
+  armedForNextQuery = false
+  scrollerStart.value = TOP
+  scrollerKey.value++
+}
 
 /**
- * Re-arms the restore for a NEW target. A second navigation into this same (never
+ * A NEW saved position to open at. A second navigation into this same (never
  * remounted) page — Back/Forward, or picking a search row from the address bar — patches
  * the tab in place; the parent calls this after seeding initialScrollIndex, with the
- * query that navigation shows. The restore runs once THAT query's results are the ones
- * in the list (see the searchQuery watcher); when it is the query already shown, the
- * rows are already the right ones.
+ * query that navigation shows. When it is the query already shown, the rows are the
+ * right ones and the new scroller is created now; otherwise when that query arrives
+ * (see the searchQuery watcher).
  */
 function armRestore(targetQuery: string) {
   if (targetQuery === props.searchQuery) {
     armedForNextQuery = false
-    restored = false
-    nextTick(tryRestore)
+    createScrollerAtSavedRow()
   } else {
     armedForNextQuery = true
   }
 }
 
-/** Spends the restore: the results about to arrive belong to a NEW search, which starts at the top. */
+/** The results about to arrive belong to a NEW search: no saved position applies to them. */
 function cancelRestore() {
-  restored = true
-  armedForNextQuery = false
+  createScrollerAtTop()
 }
 
 function savePos() {
@@ -601,12 +617,15 @@ defineExpose({
         :data="abbrevTooltip"
       />
       <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
+      <!-- Created AT its start row; a new one (the key) for another saved row or a
+           new search - see "Where the list opens" in the script. -->
       <WindowedScroller
+        :key="scrollerKey"
         ref="windowedScroller"
         class="scroller"
         :count="shownCount"
-        :initial-index="openingIndex"
-        :initial-offset-px="initialScrollOffset ?? 0"
+        :initial-index="scrollerStart.index"
+        :initial-offset-px="scrollerStart.offsetPx"
         :ensure-rows="ensureRows"
         :row-source-version="shownGeneration"
         :pinned-indexes="pinnedRowIndexes"

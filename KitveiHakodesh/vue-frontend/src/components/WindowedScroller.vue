@@ -3,13 +3,33 @@
  * A long-list scroller that mounts only a sliding WINDOW of rows, in normal document
  * flow, with its own index-based scrollbar beside the viewport.
  *
+ * THE MODEL — read this before changing anything here or in a caller:
+ *
+ *   1. The scroller shows "the rows from index N". That is all it knows. The top of
+ *      the list is not special: row 0 and row 5000 are the same kind of window.
+ *   2. So WHERE TO OPEN IS AN ARGUMENT (`initialIndex`, `initialOffsetPx`), given
+ *      when the scroller is created. The first window is built there. The list is
+ *      never shown at the top first and then moved.
+ *   3. A caller that does not know its start row yet does not create the scroller
+ *      yet (`v-if`). The scroller never waits for a position to "arrive".
+ *   4. Rows that do not exist yet are the ROW SOURCE's business, not the caller's: the
+ *      scroller asks `ensureRows` for its start row like for any other, and a list
+ *      still streaming in answers when the row has arrived. A caller never holds the
+ *      scroller back "until the row is loaded".
+ *   5. Going elsewhere later is `scrollToIndex`: it builds the window at that row.
+ *      Exact, one render, resolves when the row is in the DOM.
+ *   6. Therefore there is no opening phase, no settling, no retry, no "did the
+ *      reader move first?" guard — in the scroller or around it. Code of that kind
+ *      is a leftover of the virtualizer we used before; delete it, do not extend it.
+ *
  * Why not a virtualizer: a virtualizer positions every row absolutely from an
  * ESTIMATED height and corrects as rows get measured, so a jump lands on a guess and
  * then drifts while the real heights arrive — every consumer ends up with a settle
- * loop. Here rows are real flow content: a jump rebuilds the window around the target
- * and sets the scroll from its measured position, exactly and once. When rows above
- * the viewport change height (a zoom, a font swap, the window growing)
- * the reader's row is held in place — see useWindowedScrollerWindow.
+ * loop, and opening at a row means "mount at the top, then scroll". Here rows are
+ * real flow content: a window is built at its target and the scroll is set from the
+ * row's measured position, exactly and once. When rows above the viewport change
+ * height (a zoom, a font swap, the window growing) the reader's row is held in
+ * place — see useWindowedScrollerWindow.
  *
  * The viewport is a native scroll container with its own scrollbar hidden; wheel,
  * touch, PageUp/PageDown and the arrows are the browser's own. Only Home/End need
@@ -36,7 +56,7 @@
  * listeners), so the caller treats it as the scroll element it is.
  */
 import { computed, nextTick, onBeforeUpdate, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
-import { useEventListener, useResizeObserver } from '@vueuse/core'
+import { useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
 import { useWindowedScrollerWindow } from '@/composables/useWindowedScrollerWindow'
 import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScrollerBarMapping'
@@ -55,18 +75,22 @@ const props = withDefaults(
     count: number
     pinnedIndexes?: number[]
     /**
-     * Where to open: the FIRST window rendered is built around this row, so a
-     * restored position never shows the top of the list first. Read once, when the
-     * count first becomes known; later jumps go through scrollToIndex.
+     * The row the FIRST window is built at (0 when omitted). An argument of the
+     * scroller's creation, read once at setup and never watched: create the scroller
+     * only once the start row is known (`v-if`), and re-key it to open elsewhere from
+     * scratch. Jumps within a live scroller go through scrollToIndex. See "The first
+     * window" below.
      */
     initialIndex?: number
-    /** Pixels added to the initial row's top — a saved offset into the row. */
+    /** Pixels into the start row — a saved offset. Read once, with `initialIndex`. */
     initialOffsetPx?: number
     /**
      * Resolves once the rows of [start, end) can be rendered. The scroller asks
-     * before it mounts a range — a landing or an extension — so a row never appears
-     * without its content and a landing renders exactly once. Omit when the rows
-     * are always available.
+     * before it mounts a range — the first window, a jump or an extension — so a row
+     * never appears without its content and a window renders exactly once. Asked for
+     * rows that do not exist YET (a list still streaming in, asked for its start row),
+     * it resolves when they do, or when it is known they never will. Omit when the
+     * rows are always available.
      */
     ensureRows?: (start: number, end: number) => Promise<void>
     /**
@@ -106,9 +130,10 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   /**
-   * The opening landing on `initialIndex` has run — the opening render. Not emitted
-   * without one. Emitted even if the landing applied nothing (its rows could not be
-   * had, or a newer landing superseded it), so listeners null-check what they touch.
+   * The first window is on screen, at the start row. Emitted once per scroller,
+   * whatever the start row (0 included). Emitted even if nothing could be mounted
+   * (its rows could not be had, or a jump superseded it), so listeners null-check
+   * what they touch.
    */
   opened: []
 }>()
@@ -315,35 +340,64 @@ useResizeObserver(contentElement, () => {
 })
 useResizeObserver(viewportElement, () => fill())
 
-// The opening waits for BOTH the rows and the line to open on. The two arrive
-// from different places (the book's line count from the service, a saved position
-// from IndexedDB) in either order — watching the count alone lost the saved
-// position whenever the count came first.
-let hasOpened = false
+// ── The first window ───────────────────────────────────────────────────────────
+//
+// THE START ROW IS AN ARGUMENT, NOT A SCROLL. A windowed scroller only ever shows
+// "the rows from index N"; row 0 and row 5000 are the same thing to it. So opening
+// in the middle of the list is not a step that follows opening at the top: the
+// first window is simply built at `initialIndex` (0 when omitted), through the same
+// code that builds any window. Nothing is rendered before it, so there is nothing
+// to scroll away from, nothing to wait for and nothing reader input could cancel.
+//
+// Hence `initialIndex` / `initialOffsetPx` are read ONCE, here. A caller that does
+// not know its start row yet (a saved position still being read) must not create
+// the scroller yet. Do NOT make these props reactive, and do NOT add a "has the
+// reader moved?" guard: both belong to the old virtualizer model (mount at the
+// top, scroll to the row afterwards), where a late scroll had to be protected from
+// the reader. That guard once cancelled the opening on the auto-repeating keydown
+// of a Ctrl still held from the Ctrl+click that opened the tab.
+//
+// The scroller asks its ROW SOURCE for the start row, like for any other row, and
+// builds the first window when the source answers. A list whose rows are still
+// arriving (search results streaming in) is not the caller's problem to hold the
+// scroller back for: its `ensureRows` simply resolves once the start row exists —
+// or once it is known that it never will, and then the window is built at the last
+// row there is. The caller never waits "until the row is loaded" before creating
+// the scroller, and never moves it there afterwards.
+const startIndex = props.initialIndex ?? 0
+const startOffsetPx = props.initialOffsetPx ?? 0
+/** The row source has answered for the start row. Row 0 needs no asking: any rows at all will do. */
+let isStartRowAnswered = startIndex === 0
+let isFirstWindowBuilt = false
+
+function buildFirstWindowWhenPossible() {
+  if (isFirstWindowBuilt || !isStartRowAnswered || props.count <= 0) return
+  isFirstWindowBuilt = true
+  void landAt(startIndex, { offsetPx: startOffsetPx }).then(() => {
+    bar.syncFromViewport()
+    emit('opened')
+  })
+}
+
+if (!isStartRowAnswered) {
+  void Promise.resolve()
+    .then(() => props.ensureRows?.(startIndex, startIndex + 1))
+    .catch(() => { /* not to be had: the window is built at the nearest row there is */ })
+    .then(() => {
+      isStartRowAnswered = true
+      buildFirstWindowWhenPossible()
+    })
+}
+
 watch(
-  () => [props.count, props.initialIndex] as const,
-  ([count, initialIndex]) => {
+  () => props.count,
+  () => {
     clampToCount()
-    if (!hasOpened && count > 0 && initialIndex != null) {
-      hasOpened = true
-      void scrollToIndex(initialIndex, { offsetPx: props.initialOffsetPx }).then(() => emit('opened'))
-      return
-    }
-    nextTick(fill)
+    if (isFirstWindowBuilt) nextTick(fill)
+    else buildFirstWindowWhenPossible()
   },
   { immediate: true },
 )
-// The opening is only taken while nothing has moved yet. A saved index that
-// arrives after the reader has already scrolled or jumped must not pull them back
-// to it; any landing (a TOC click, a bar seek) or reader input ends the opening.
-// A bare modifier is not the reader moving: Ctrl is still held (and auto-repeating)
-// when a Ctrl+click opens a new tab and its viewport takes focus, which would
-// otherwise cancel the opening before the rows arrive.
-const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta'])
-useEventListener(viewportElement, ['wheel', 'touchstart', 'pointerdown', 'keydown'], (e: Event) => {
-  if (e instanceof KeyboardEvent && MODIFIER_KEYS.has(e.key)) return
-  hasOpened = true
-}, { passive: true })
 
 watch(() => props.rowSourceVersion, () => { void refreshRows() })
 watch(flowPlan, () => { void snapToBlocks() })
@@ -371,7 +425,9 @@ function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibl
 }
 
 async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
-  hasOpened = true
+  // A jump made while rows already exist builds the window itself: the first window
+  // must not then be built at the start row on top of it.
+  if (props.count > 0) isFirstWindowBuilt = true
   await landAt(index, options)
   bar.syncFromViewport()
 }

@@ -10,8 +10,11 @@
  *     before (so reopening the same book in a NEW tab starts clean when the
  *     setting is off).
  *
- * Also exposes the initial scroll refs that BookViewLinesContent needs before the
- * IDB read completes.
+ * Also exposes where the lines pane OPENS: `initialLineIndex` (a requested line) or
+ * `initialScrollTop` / `initialScrollOffset` (the saved place). A WindowedScroller
+ * takes its start row as an argument of its creation, so the lines pane is created
+ * only once `idbResolved` is true - by then these three are final. Nothing lands on
+ * a saved position afterwards.
  */
 import { nextTick, ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
@@ -70,7 +73,10 @@ export function useBookViewSessionRestore(
   const initialLineIndex = ref<number | undefined>(openTocLineIndex)
   const initialScrollTop = ref<number | undefined>()
   const initialScrollOffset = ref<number>(0)
-  const scrollStateReady = ref(true)
+  /**
+   * The saved state has been read (or could not be): the lines pane's start row is
+   * final. BookViewPage creates the lines pane on this - see the file comment.
+   */
   const idbResolved = ref(false)
   /** The saved version's title, or null for the merged text. Applied by useBookView. */
   const restoredVersionTitle = ref<string | null>(null)
@@ -91,7 +97,8 @@ export function useBookViewSessionRestore(
         })
       })()
 
-  _idbPromise.then(() => { idbResolved.value = true })
+  // A failed read still opens the book - at the requested line, or at the top.
+  _idbPromise.catch(() => {}).then(() => { idbResolved.value = true })
 
   function _applyRestoreData(
     bookSaved: Awaited<ReturnType<typeof tabStore.getBookViewState>>,
@@ -214,15 +221,12 @@ export function useBookViewSessionRestore(
     if (saved.fraction != null) panel.fraction.value = saved.fraction
     if (saved.pinnedGroup != null) panel.restorePin(saved.pinnedGroup)
 
-    // Publish the persisted scroll position into the live panel refs. This is the
-    // ONLY thing session restore does for commentary scroll — the actual restore is
-    // owned entirely by onCommentaryPanelMounted (useBookViewCommentaryPanel), which
-    // fires when the panel becomes visible (set by _applyRestoreData above), reads
-    // these seeded refs, claims restore intent, and restores.
-    // Seeding also makes hasSavedScrollPos true before the first groups load, so
-    // setupGroupReloadScroll defers instead of jumping to the pinned group.
-    // (Seeding happens in this microtask, before the panel path's setTimeout(0), so
-    // the ordering is guaranteed.)
+    // Publish the persisted place into the panel's refs. This is ALL session restore
+    // does for commentary scroll: the place is what the panel's scroller is CREATED
+    // at, when the commentary list has loaded (CommentaryView / useCommentaryScroll.
+    // startRow). Nothing moves a panel to it afterwards. The list needs a service
+    // round trip that cannot even start before this runs, so the place is always
+    // there in time.
     if (saved.scrollIndex == null || saved.scrollOffset == null) return
     // A user line-click before the IDB read resolves sets commentaryLineId and
     // invalidates any saved position — don't overwrite that with stale values.
@@ -240,5 +244,5 @@ export function useBookViewSessionRestore(
     }
   }
 
-  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restoredVersionTitle, restoredSideEdition, restore }
+  return { initialLineIndex, initialScrollTop, initialScrollOffset, idbResolved, restoredVersionTitle, restoredSideEdition, restore }
 }

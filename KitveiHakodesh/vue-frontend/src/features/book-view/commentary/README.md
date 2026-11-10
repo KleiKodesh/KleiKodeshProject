@@ -54,7 +54,7 @@ DB names map to canonical types as follows:
 
 **useCommentaryRender.ts** - manages content rendering for commentary lines: diacritics filtering, divine name censoring, search highlighting, and render caching to avoid re-running expensive DOM operations on every render cycle.
 
-**useCommentaryScroll.ts** - manages scroll behavior for commentary: sticky header tracking, scroll position capture/restore, and scroll-to-group navigation. Handles the complex scroll restoration logic when groups reload.
+**useCommentaryScroll.ts** - where a commentary panel is and where it opens: sticky header tracking, the place it reports on every scroll, `startRow` (the row each loaded list's NEW scroller is created at - what the reader asked for, the same place, the pinned commentator, or the top), and navigation on a live scroller (`scrollToGroup`, `scrollToFlatIndex`). No restore step, no goals, no mask - see its header and `../SCROLL_AND_COMMENTARY_POSITIONING.md`.
 
 **useCommentaryTocPaths.ts** - fetches and caches TOC paths for commentary groups asynchronously. Keyed by bookId — resolved after groups load, never blocks rendering.
 
@@ -76,7 +76,6 @@ DB names map to canonical types as follows:
 
 **commentaryTreeTypes.ts** - TypeScript types for the commentary filter tree.
 
-**DEBUG_NOTES.md** - debug investigation notes for the pinned commentary scroll bugs. Kept for future reference if similar issues resurface.
 
 ## Imports from parent book-view
 

@@ -78,8 +78,8 @@ export function useWindowedRowLanding(
   scroller: () => WindowedScrollerApi | null,
   searchBarVisible: () => boolean,
   suppressPositionSave: () => void,
-  /** Ends the opening's follow-ups - a jump supersedes them. */
-  cancelRestore: () => void,
+  /** Drops what was still to run once the scroller's first window is on screen (a flash, a mark) - the reader has gone elsewhere. */
+  cancelOpeningFollowUps: () => void,
 ) {
   // Bumped at the start of every navigation so a previous call's work after its
   // await (its mark and adjustment) is dropped instead of stomping the newer one.
@@ -96,7 +96,7 @@ export function useWindowedRowLanding(
 
     // The reader is going somewhere else: the opening's follow-ups (flash, mark)
     // must not run against a view that has moved on.
-    cancelRestore()
+    cancelOpeningFollowUps()
 
     const { occurrence, force = false, direction = 'backward' } = options
     // No occurrence means no match to refine toward — a plain jump to the line.

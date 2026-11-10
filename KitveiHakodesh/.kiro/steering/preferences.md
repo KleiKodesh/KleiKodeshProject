@@ -34,14 +34,24 @@ Everything in the app must feel instant. Speed is a top-priority requirement, no
 
 ## Virtual Scroller Rules
 
-`WindowedScroller.vue` (`src/components`) is the only virtual scroller: the book-view lines pane, the commentary panels and the full-text-search results use it. `@tanstack/vue-virtual` is gone — do not bring it back. Short lists that fit in memory (HebrewBooks, local file search, the FTS filter book list) are plain `v-for` lists whose rows carry `content-visibility: auto` + `contain-intrinsic-size`, so off-screen rows cost no layout or paint; keyboard highlight uses `useInputListNavigation` with `containerElement` + `data-nav-item`.
+`WindowedScroller.vue` (`src/components`) is the only windowed scroller: the book-view lines pane, the commentary panels, the full-text-search results and FastDocView (text and notes pane) use it. `@tanstack/vue-virtual` is gone — do not bring it back. Short lists that fit in memory (HebrewBooks, local file search, the FTS filter book list) are plain `v-for` lists whose rows carry `content-visibility: auto` + `contain-intrinsic-size`, so off-screen rows cost no layout or paint; keyboard highlight uses `useInputListNavigation` with `containerElement` + `data-nav-item`.
 
 ### WindowedScroller (`src/components/WindowedScroller.vue`)
 
-Mounts a sliding window of REAL rows in normal flow — no estimated positions, no placeholders, no retries. Rules:
+Mounts a sliding window of REAL rows in normal flow — no estimated positions, no placeholders, no retries.
+
+**The model (settled 2026-11-10 — do not reopen it):** a windowed scroller shows "the rows from index N". That is all it knows; the top of the list is not special, and row 0 and row 5000 are the same kind of window. So *where to open is an argument*, not an action:
+
+- The start row (`initialIndex`, `initialOffsetPx`) is given when the scroller is **created**, and the first window is built there. The scroller reads it once and never watches it.
+- The list is never opened at the top and moved to a position afterwards. There is no "scroll into view" step, no opening phase, no settling.
+- Rows that do not exist yet are the **row source's** business: the scroller asks `ensureRows` for its start row like for any other, and a list still streaming in (search results) answers when the row has arrived. A caller never holds the scroller back "until the row is loaded".
+- A caller that does not know its start row yet (a saved position still being read from storage, a commentary list whose commentator is not settled) **does not create the scroller yet** — gate it with `v-if`. To open somewhere else from scratch, re-key it. Every persistence / reload / tab-switch / Back path works this way: read the position first, then create the scroller with it.
+- Because nothing moves after the first render, nothing needs protecting from the reader: never add a "has the user scrolled / pressed a key?" guard, a restore flag, a safety timer or a retry around an opening. Such code is a leftover of the virtualizer (TanStack) we replaced — delete it, do not extend it. (The bug that settled this: a guard of that kind cancelled the opening on the auto-repeating keydown of a Ctrl still held from the Ctrl+click that opened the tab.)
+
+Rules:
 
 - Rows are fetched before they are mounted: give it `ensureRows(start, end)` that resolves when the range has its content and REJECTS when it cannot be had. Never render a placeholder row in the slot; a row is either absent or complete.
-- Open where the reader was: pass `initialIndex`/`initialOffsetPx` so the FIRST render is the saved window. Do not land afterwards from a composable — the scroller is the one owner of the opening landing; do follow-ups on its `opened` event.
+- Open where the reader was: create the scroller with `initialIndex`/`initialOffsetPx` (see the model above). Things that need the rows in the DOM (focus, a caret, a flash) go on its `opened` event, emitted once when the first window is on screen — for row 0 too.
 - Navigate only through `scrollToIndex(index, { offsetPx, align })`. It is exact and resolves when the scroll is set. Never set `scrollTop` to a computed offset, never poll for the row — after the await, the row and its content are in the DOM.
 - Never write a settle loop, a correction window or a retry around it. A landing that is wrong is a bug in the scroller; fix it there.
 - The scroller owns scroll anchoring (`overflow-anchor: none` on its viewport). After a patch the hold is ABSOLUTE (row offset + remembered distance), because the browser may clamp `scrollTop` while the content is shorter mid-patch; through a reader's scroll event it is relative. Keep that split.
@@ -401,9 +411,9 @@ If a shell command is genuinely needed to inspect file content (not modify it), 
 
 ## Scroll Position Save Triggers
 
-In virtual scroller components, scroll position must only be saved on `visibilitychange` (when `document.visibilityState === 'hidden'`), `beforeunload`, and `onBeforeUnmount`. Never save on the `scroll` event — not even debounced. A debounced scroll save races with the programmatic restore: the restore sets `scrollTop`, the debounce timer fires shortly after and overwrites it with the position from before the restore. The `onScroll` handler must be a no-op or omitted entirely.
+Save a WindowedScroller's position when the view goes away — the shared flush (`registerPositionCapture` in `persistenceFlush.ts`: page hidden, unload, host close, tab close) and `onBeforeUnmount` — not on every scroll tick (see Performance: nothing writes on the hot path).
 
-This applies to `FullTextSearchResultsList.vue` and any future virtual scroller component that persists scroll position.
+A saved position is used in exactly one way: it is the start row the NEXT scroller is created with (see "Virtual Scroller Rules" → "The model"). There is no "programmatic restore" that runs after mount, so there is nothing for a save to race with. If you find yourself protecting a restore from a save, or a save from a restore, the scroller is being created before its start row is known — fix that instead.
 
 ## No Browser Dialogs
 

@@ -1,85 +1,58 @@
-# Scroll persistence & commentary positioning — intended behavior
+# Scroll position & commentary panels — intended behavior
 
-This documents the complete intended behavior of scroll-position persistence and
-commentary-panel positioning, as specified by the product owner. It exists so the
-behavior never has to be re-explained: **any change to data loading, virtualization,
-or commentary rendering must preserve every rule below.**
+This documents the intended behavior of scroll-position persistence and of where the
+commentary panels open, as specified by the product owner, and the ONE model all of
+it is built on. It exists so neither has to be re-explained: **any change to data
+loading, the scroller, or commentary rendering must preserve every rule below.**
 
-Since 2026-08 there are **three** commentary panels ('bottom', 'side', 'side-left'),
-and every rule below applies to each of them independently: each keeps its own pin,
-filter, saved scroll position and restore lifecycle. Where this document says "the
-commentary pane", read "each commentary panel" - the composables named here are
-instantiated once per panel by `commentary/useCommentaryPanelSlot.ts`, which is
-driven by `COMMENTARY_SLOTS`, not by any hardcoded pair.
+There are **three** commentary panels ('bottom', 'side', 'side-left'), and every rule
+applies to each of them independently: each keeps its own commentator, filter and
+place. Where this document says "the commentary panel", read "each commentary panel"
+— the composables named here are instantiated once per panel by
+`commentary/useCommentaryPanelSlot.ts`, driven by `COMMENTARY_SLOTS`.
 
-## The positioner (2026-08-11): one owner per panel
+## The model — read this first
 
-All programmatic commentary positioning goes through a single per-panel GOAL slot in
-`useCommentaryScroll`. Six code paths used to write to the scroller directly
-(restore, groups-reload pin-follow, pin-arrived-late, panel-mount, header nav,
-search jump), coordinated through shared flags (`scrollToGroupToken`,
-`isRestoringScrollPos`, `restoreIntentClaimed`) - and every new panel or new load
-timing multiplied their races; the git history is four generations of "finally
-fixed". Now every path REQUESTS a goal (`group` / `restore` / `flatIndex` /
-`restore-intent`), and one rAF loop executes whichever goal is current:
+The lines pane and the commentary panels are `WindowedScroller` lists
+(`src/components/WindowedScroller.vue`).
 
-- **Priority**: a user request always replaces the current goal; a restore always
-  wins over auto pin-follow; an AUTO request (reload/mount) can never displace a
-  restore or a claimed restore intent. `setGoal` returns acceptance so auto callers
-  can keep their pin-scroll debt.
-- **Completion is condition-based, never wall-clock**: a goal holds until its target
-  is measured, its content present (restore with offset), its position stable for
-  SETTLE_FRAMES consecutive frames, **and nothing above the target is still waiting
-  for content**. The old fixed windows (800ms → 2.5s → 6s) each encoded an
-  assumption about how long loading takes and each broke on the next slower
-  environment; frame-based settling stretches with machine load instead. A generous
-  SAFETY_MS valve force-applies and ends a genuinely unachievable goal.
-- **Stable frames are not proof a goal is finished (2026-08-14).** `loading` goes
-  false when the group STRUCTURE lands; `useCommentary` then backfills line content
-  in batches for as long as it takes, and every still-empty line above the target
-  grows later and pushes the target down. Settling on frames alone made
-  SETTLE_FRAMES a fixed window in disguise (~500ms at 60fps): the goal declared
-  itself done mid-backfill, tore down its rAF loop, and the content then landed with
-  nothing left to re-anchor — "it scrolls to the right place and then jumps away
-  once the content loads", the symptom that outlived the positioner rewrite. The
-  loop now also requires `contentPendingAbove(goal)` to be false, which scans the
-  flat list for `type === 'line' && lineId > 0 && content === ''` before the target
-  index. Only lines ABOVE it matter (those are the ones that move it); `lineId > 0`
-  skips the injected placeholder rows, which are never backfilled and would
-  otherwise hold every goal open until the safety valve. The mask is still released
-  at first arrival, so the extra hold is invisible and stays interruptible.
-- **`isPositioning`** is true from goal start to FIRST arrival; CommentaryView
-  shows an opaque positioning mask (spinner after the usual delay) over the
-  scroller while it is true, so the reader never watches content sitting at the
-  wrong offset while backfill reshapes the list. The mask is `pointer-events:none`
-  and any wheel/pointer/key cancels the goal, so it is always interruptible - and
-  it must stay an OVERLAY: putting it in the v-if chain would unmount the scroller
-  and deadlock the goal it masks.
-- **A derived active group is not a preference.** `activePinnedGroup` falls back to
-  the FIRST header when nothing has scrolled under the nav - which is exactly a
-  panel's state mid-transit. A click landing in that window used to capture the
-  first group as "what the reader was looking at" and permanently switch the pin
-  (the T4 flip: reliable at 0ms, intermittent under host latency). Pin capture now
-  uses `activePinnedGroupForCapture`, which answers null unless the reader has
-  personally moved the panel (wheel/touch/pointer/key) since the last programmatic
-  positioning - `captureActivePins` then falls back to the held pin, which is
-  authoritative. Note this also means a PROBE's `el.scrollTop =` is deliberately
-  not a preference: no user gesture, no pin-follow.
+1. **A windowed scroller shows "the rows from index N". That is all it knows.** The
+   top of the list is not special: row 0 and row 5000 are the same kind of window.
+2. **So where a list opens is an ARGUMENT, not an action.** The start row
+   (`initialIndex`, `initialOffsetPx`) is given when the scroller is *created*, read
+   once, and the first window is built there. A list is never shown at its top and
+   moved to a position afterwards.
+3. **A caller that does not know its start row yet does not create the scroller
+   yet.** A saved position is read FIRST; a commentary list's commentator is settled
+   FIRST. To open somewhere else from scratch, a NEW scroller is created (`v-if` /
+   `:key`).
+4. **Rows that do not exist yet are the row source's business.** The scroller asks
+   `ensureRows` for its start row like for any other; a list that is still streaming
+   in answers when the row has arrived.
+5. **Going elsewhere in a live list is `await scrollToIndex(index, { offsetPx })`.**
+   Exact, one render, resolves when the row and its content are in the DOM.
 
-Verified with a latency-injected Playwright matrix (0 / 700 / 1500 ms on the
-service port): default-commentator scroll, keep-place across line switches,
-close/reopen restore at shallow and ~80% depth, section-mode loads, repeated
-same-line determinism, and rapid unthrottled click bursts - all green at every
-latency, where the pre-rewrite code failed restore beyond ~8k px drift at 700ms.
+What follows from it, and is therefore **forbidden** anywhere around these lists:
 
-Since 2026-10 both the lines pane and the commentary pane are `WindowedScroller`
-lists (`src/components/WindowedScroller.vue`): a window of REAL rows in normal flow,
-fetched before they mount, with no estimated heights, no placeholders and no
-backfill. The two-stage restore below is therefore history — `scrollToIndex` is
-exact and resolves when the row is in the DOM. The contract (what must be
-preserved) is unchanged; only the mechanism moved into the scroller.
+- "restore" code that runs after a list has mounted and moves it to a saved place;
+- a mask or spinner hiding a list that opened in the wrong place;
+- goals, intents, debts or flags that wait for something to arrive and then scroll;
+- retries, settle loops, rAF polling, `MutationObserver` corrections, timeouts;
+- any guard that cancels a move because the reader pressed a key, clicked or scrolled.
 
-## A. Exact scroll-position persistence (lines pane AND commentary pane)
+All of these existed here. They were the price of the virtualizer this app used
+before (`@tanstack/vue-virtual`), which could only open a list at its top and be
+scrolled afterwards, on estimated row heights. Four generations of "finally fixed"
+commentary positioning bugs were that price. **Do not bring any of it back.** If a
+list opens in the wrong place, the fix is in *what start row it is created with* or
+*when it is created* — never in something that runs afterwards.
+
+(The bug that settled this, 2026-11-10: the scroller mounted at the top, waited for
+its start row, and protected the late move with a "has the reader moved?" flag set by
+any keydown. Ctrl+click on a search result opens a new tab with Ctrl still held and
+auto-repeating — which cancelled the move, and the book opened at the wrong place.)
+
+## A. The reading position is persisted exactly (lines pane AND commentary panels)
 
 The exact reading position must survive:
 
@@ -87,331 +60,183 @@ The exact reading position must survive:
    is keyed by tab and remounts).
 2. **Session reload** — closing and reopening the app.
 3. **"זכרו מיקום אחרון בספר"** (Settings → resumeLastRead, default on) — opening the
-   same book in a *new* tab restores the last position saved for that book
-   (per-book `lastRead` record). When the setting is off, a brand-new tab starts
-   from the top, but an existing tab's own saved state still restores.
+   same book in a *new* tab opens at the last position saved for that book (per-book
+   `lastRead` record). When the setting is off, a brand-new tab starts from the top,
+   but an existing tab's own saved state still applies.
 
-**How the position is stored:** not as a raw `scrollTop` — that is meaningless in a
-virtualized list whose sizes are estimates — but as
-`(scrollIndex, scrollOffset)` = the index of the item at the top of the viewport
-plus the pixel offset *within* that item.
+**How a position is stored:** `(scrollIndex, scrollOffset)` = the row at the top of
+the viewport plus the pixel offset *within* that row. Rows are real DOM, so both are
+measured, never estimated.
 
-- Lines pane: captured in `useBookViewLinesScroll.captureScrollPos`, saved through
-  the tab store (per-tab `bookViewState` + per-book `lastRead` in IDB), restored via
-  `initialScrollTop`/`initialScrollOffset` (`useBookViewSessionRestore`).
-- Commentary panes: captured per panel in `useCommentaryScroll.captureScrollPos` on
-  every scroll (emitted to that panel's `useBookViewCommentaryPanel.onCommentaryScroll`),
-  restored by `restoreCommentaryScrollPos(index, offset)` -- on session restore
-  (`useBookViewSessionRestore.restore`, which seeds each panel from
-  `commentaryPanels[slot]`) and on every panel remount (`onCommentaryPanelMounted`:
-  v-if toggle, tab return). Each panel's position is stored under its own slot, so
-  no panel can overwrite another's.
+**How it is used — the same way on every path** (tab switch, reload, Back, recents,
+a new tab): it is the start row the next scroller is created with.
 
-**How restore works now (WindowedScroller):**
+- **Lines pane.** `useBookViewSessionRestore` reads the tab's state and the book's
+  last-read record from IndexedDB and sets `initialScrollTop` / `initialScrollOffset`
+  (or keeps `initialLineIndex`, a requested line — a search result, a TOC entry, a
+  deep link — which outranks a saved place). `BookViewPage` creates
+  `BookViewLinesContent` only once that read has finished (`v-if="idbResolved"`), so
+  its scroller's start row is final at creation. `useBookViewLinesScroll` puts the
+  list nowhere; on the scroller's `opened` event it only does what needs the rows in
+  the DOM (focus, the caret, the search mark, the deep-link flash).
+- **Commentary panels.** The panel reports where it is on every scroll
+  (`useCommentaryScroll.captureScrollPos` → `useBookViewCommentaryPanel
+  .onCommentaryScroll`), and that place is kept by the panel's owner so it outlives
+  the view (closed, reopened, remounted, saved to the session and read back —
+  `useBookViewSessionRestore._seedPanel`). It reaches `CommentaryView` as
+  `savedScrollIndex` / `savedScrollOffset` and is what the panel's scroller is
+  created at — see C.
+- **Saving** happens when a view goes away (`registerPositionCapture` in
+  `persistenceFlush.ts`, and `onBeforeUnmount`). There is no restore for a save to
+  race with.
 
-1. The FIRST render is the saved window: `initialIndex`/`initialOffsetPx` are
-   known before anything mounts, so there is no landing afterwards and nothing to
-   correct. The scroller's `opened` event is where follow-ups go.
-2. Later navigation is `await scrollToIndex(index, { offsetPx })` — exact, resolves
-   when the row and its content are in the DOM. No MutationObserver, no rAF retry,
-   no settle window; a wrong landing is a scroller bug, fixed in the scroller.
-3. The scroller owns anchoring across its own patches (absolute hold after a
-   window change, relative through a reader's scroll). Nothing outside it may set
-   `scrollTop` to a computed offset.
-
-**Two-phase loading rule (HISTORICAL — gone with the WindowedScroller, 2026-10;
-a commentary line now has its text before its row mounts, see `ensureLineContents`):**
-commentary line items used to render with `content === ''` and grow later when the
-backfill batch arrived. Therefore:
-
-- The restore correction must NOT apply the saved `scrollOffset` while the target
-  item's content is still pending — a 300px offset into a 20px-tall empty item
-  lands in the wrong group. Wait (bounded) for the content, then apply.
-- The content loader must prioritize the lines that are actually in the viewport
-  (`requestContentPriority` from the CommentaryView virtual-items watcher), so the
-  restore target and anything scrolled to fills within one small query instead of
-  waiting for the display-order backfill to reach it.
-
-**Async-watcher rule (learned the hard way, twice):** any watcher that awaits
-before acting on a virtualized list must
-
-1. bump its generation counter **before** every early return, not after the guards.
-   A callback that bails (empty list, still loading) still has to invalidate a
-   callback already sitting on its `await`; and
-2. re-read the list **live** after the await instead of trusting the value the
-   watcher was handed.
-
-A single line tap runs `useCommentary.load()` twice (the `selectedLineId` and
-`selectedLineIds` watchers both fire), so a panel's list goes
-`groups -> [] -> groups`. With the bump after the guards, the first
-`setupGroupReloadScroll` callback resumed while the list was empty, still saw its
-own captured non-empty array, and called `scrollToGroup` on a panel whose scroller
-the empty-state branch had already unmounted: `ABORT_no_scroller`, no scroll, and
-the panel silently kept whatever offset the virtualizer left it at. That is what
-"the commentary panel loses its place when I switch lines" was.
-
-**Pin matching rule:** a pin is `(bookId, sectionLabel, subSectionLabel)`, but the
-labels only disambiguate a book that appears in several sections. They are captured
-on the PREVIOUS line, and the same book can sit under a different section on the
-next one, so `scrollToGroup` matches exact-first then falls back to `bookId` alone
-(traced as `resolveIndex_label_fallback`). Refusing to scroll on a label mismatch
-looked identical to losing the position.
-
-**Pin-staging rule:** a pin is staged (`setPendingPin`) so that the next
-`commentaryLineId` change consumes it; a panel whose pin was NOT staged falls back
-to its default commentator. So stage it synchronously at the instant the anchor line
-changes — never before an `await`.
-
-Section navigation runs DB queries before it knows its target, and staging up-front
-left the pins in flight across the round trip. Two ways that broke:
-a navigation that found no target left them staged indefinitely, for some later,
-unrelated `commentaryLineId` change to consume; and anything that changed the anchor
-during the round trip (a line tap, the auto-select timer) consumed them early, so the
-navigation's own change found nothing staged and reset the panel to its default.
-`useCommentaryNavigation` therefore takes an `onBeforeNavigate` hook and calls it
-inside `afterNavigate`, immediately before mutating the refs.
-
-**(Superseded by the positioner - kept for history.) The correction window must outlive the load, not the animation.** A pin scroll is
-not done when it lands: items ABOVE the target render as near-empty stubs and grow as
-their text, TOC-path labels, notes and highlights arrive, and each one pushes the
-target down. `scrollToGroup` re-anchors on every DOM mutation, but only for
-`CORRECTION_WINDOW_MS`. At 800ms that window closed while a cold section-mode load
-was still filling in, so the panel landed on the pinned commentator and then drifted
-off it with nothing left to re-anchor — "it lands on Rashi and then jumps away". It is
-now 6000ms, matching the lines pane's 10s post-restore window and for the same
-reason.
-
-A long window is only safe because it yields immediately: `finish()` runs on wheel,
-touchstart, pointerdown AND keydown (the scroller is focusable and arrow keys scroll
-it), and any newer `scrollToGroup` / `restoreCommentaryScrollPos` / `scrollToFlatIndex`
-bumps `scrollToGroupToken` and cancels it. `scrollToFlatIndex` had to start bumping
-the token for this: jumping to a search match is a competing programmatic scroll, and
-at 800ms the overlap was too short to matter while at 6s it would have dragged the
-panel back off the match.
-
-**Payload size decides whether any of this is observable, and the dev corpus is too
-small.** Measured on this machine: the heaviest chapter reaches ~7.8k px with 8
-commentators, and the content settles inside 800ms (`correct_applied=0`,
-`correct_noop=3`). A rich book's chapter is an order of magnitude larger. A probe that
-passes here says nothing about a large corpus — see
-[[dev-latency-hides-races-2026-08-06]] for the latency-injection technique, and use it
-together with a section-mode (TOC-heading) click, which is the heaviest load the
-reader can trigger.
-
-**A pin can arrive AFTER its groups — owe the scroll and settle it later.**
-`usePinnedCommentary` awaits `getDefaultCommentators`, and that query runs ONCE per
-book. So on the FIRST commentary load of a book it can still be in flight when the
-groups land: `setupGroupReloadScroll` finds no pin, returns, and nothing re-triggers
-it milliseconds later when the pin appears — the panel never scrolls to the default
-commentator at all. Every later load has the list cached and works, which is why it
-reads as "the FIRST time I open a chapter it doesn't scroll to Rashi".
-
-The `!pinned` branch therefore records `pinScrollOwed`, and `settlePinDebt` pays it
-once every precondition holds. Reproduce by delaying ONLY the
-`getDefaultCommentators` service call, in a fresh page, and arm the delay BEFORE
-opening a panel — opening one syncs `commentaryLineId` from the selected line, which
-already asks for the pin. Without the fix: `begins=0`, `scrollTop=0`, panel on the
-first group. With it: `begins=1`, panel on its pin.
-
-**The debt must be re-armable, and must outlive the list blinking empty (2026-08-14).**
-The one-shot version above still lost the first-load scroll in three ways, which is
-why "it doesn't scroll to the default commentary on first load" survived the
-positioner rewrite:
-
-- **A `watch(pinnedGroup)` fires once.** When the pin resolved while a partial load
-  was still running, the callback hit its `isLoading()` guard and returned — and the
-  pin ref never changed again, so nothing re-asked and the debt stayed unpaid for the
-  whole load. The pin is NOT reliably the last precondition to arrive. `settlePinDebt`
-  is therefore called from watchers on *every* precondition — the pin
-  (`pin-arrived-late`), the loading edge (`pin-owed-load-done`) and the groups
-  (`pin-owed-groups-arrived`) — so whichever lands last does the work. All three are
-  AUTO reasons; the guards make every redundant call a no-op.
-- **`groups = []` does not mean a new load.** One line tap runs `load()` twice, so the
-  list goes `groups → [] → groups` for the SAME anchor. Voiding the debt on every
-  empty list wiped it inside that blink; if the pin query resolved in that window the
-  debt was already gone. The debt now carries the anchor it belongs to
-  (`owedForAnchor`, from `selectedLineId`) and only a genuinely different anchor
-  voids it.
-- **"Pin decided but its book isn't in the list" is owed, not done.** That branch used
-  to return without recording anything, leaving the panel on the first group with no
-  later event to correct it. It now records the debt like the `!pinned` branch.
-
-**Consume `isFirstLoad` only when ready to position.** It used to be consumed by the
-watcher's FIRST fire, which is the `groups = []` that `load()` starts with — so the
-"a restore owns first positioning" skip it guards never actually applied to a real
-load. The flag is now consumed after the empty/loading/restoring guards.
-
-**Serialize section navigation.** `onNavigateSection` resolves its target with a
-DB query, reading the CURRENT anchor to decide where "next" is. Two clicks that
-overlap therefore both read the pre-click anchor, resolve to the SAME target, and
-the reader advances one section instead of two — and the second `afterNavigate`
-assigns `commentaryLineId` a value it already holds, so no watcher fires. Clicks are
-chained (capped at a few queued steps) so each starts from where the previous
-landed. Reproduced under injected latency: 4 clicks 120ms apart advanced 1 section
-with 3 duplicate navigations and 3 × `ABORT_no_scroller`; chained, the same input
-advances 4 sections with zero aborts.
-
-**A null "active group" is not a preference.** `captureActivePins` must fall back to
-the pin a panel already holds when the live view cannot report one — a panel that is
-mid-load has an empty list and no active group, and staging null makes the pin
-watcher fall back to the DEFAULT commentator, discarding the reader's choice. Only a
-panel that has never had a pin should get the default. Under bridge latency this hit
-the non-navigating panel on essentially every consecutive nav click.
-
-**This class of bug is invisible in dev.** The local service answers in single-digit
-ms, so consecutive clicks never overlap; the WebView2 host round-trips through
-postMessage and they always do. To reproduce in a Playwright probe, delay the
-service traffic (`context.route` on the non-vite port) — 700ms is enough.
-
-**Never navigate "book 0":** the sticky nav derives its section-nav target from
-`activePinnedGroup`, which is null while a panel is empty. It used to emit
-`?? 0`, which pinned the panel to a nonexistent book and then silently refused to
-scroll on every later line change. Those buttons are now disabled without an active
-group, and `onNavigateSection` rejects a falsy bookId.
-
-**Identity in the DOM:** `.commentary-header` carries `data-book-id`. Its rendered
-label includes the TOC path, so the label changes whenever the anchor line moves even
-though the commentator has not — compare `data-book-id`, never the text, when asking
-"is this panel still on the same commentator?".
-
-**Debugging several panels:** trace flows are slot-tagged (`scrollToGroup:bottom`,
-`restore:side`) and each flow keeps its own relative clock, so filter a dump by
-`flow` to read one panel and order across panels by `seq`, never by `t`. Every
-`scrollToGroup` records a `reason` (`groups-reload`, `panel-mounted`,
-`header-nav-picker`, `already-restored`) — one `BEGIN` per
-panel per line switch is correct; two means a stale callback is firing.
-
-## A2. The KEYBOARD CARET is part of the position (2026-10)
+## A2. The KEYBOARD CARET is part of the position
 
 Caret browsing (F7, "הפעלת סמן טקסט לניווט ובחירה" in the shortcuts list) is Chromium's own —
 there is no app code behind the key. It navigates and selects from the DOCUMENT's
-caret: the collapsed `window.getSelection()`. So the lines pane has TWO positions,
-and both have to be put where the reader was sent:
+caret: the collapsed `window.getSelection()`. So the lines pane has TWO positions:
 
-- **where the view is scrolled to** — the scroller's landing, everything above; and
+- **which rows the view shows** — the scroller's window; and
 - **where the caret is** — the document selection.
 
-A click sets the second for free, which is why the arrows follow the text during
-normal reading. An OPENING does not click: `onScrollerOpened` lands the window and
-gives the viewport focus, and **focus is not a caret**. With none inside the focused
-element the browser picks its own starting point, and in a `WindowedScroller` that is
-the start of the MOUNTED WINDOW — which a landing builds `ROWS_ABOVE_ON_REBUILD`
-rows above the target and `fill` then grows upward by a screenful more. The view
-showed the right line while the caret sat some dozens of lines higher, so the first
-arrow key left it: "it opens on the right verse and then the cursor jumps to another
-chapter", reported for the address bar (`openTocLineIndex`) and for opening a
-full-text-search result, which are one bug — both are this opening path.
+A click sets the second for free. An opening does not click: the scroller is created
+at its start row and the viewport is given focus, and **focus is not a caret**. With
+none inside the focused element the browser picks its own starting point — the start
+of the MOUNTED WINDOW, which begins some rows above the start row. The view showed
+the right line while the caret sat higher, so the first arrow key left it.
 
-`placeCaretAtRowStart` (`lines/lineCaret.ts`) therefore seats a collapsed caret on the
-opened line, from `onScrollerOpened` and from the open-at-the-top path beside it.
-Collapsed matters: `hasActiveTextSelection`, `useSelectAllInContainer` and
-`useVirtualizedTextSelection` all ignore a collapsed selection, so nothing else sees
-it. A real (non-collapsed) selection is never replaced — at the moment a book opens,
-text still selected belongs to something still on screen (the other split pane, a
-commentary panel) and is the reader's.
+`placeCaretAtViewportStart` (`lines/lineCaret.ts`) therefore seats a collapsed caret
+on the first line in view, from `onScrollerOpened` — the rows are in the DOM by then,
+so it is one call, not a retry. Collapsed matters: `hasActiveTextSelection`,
+`useSelectAllInContainer` and `useVirtualizedTextSelection` all ignore a collapsed
+selection. A real (non-collapsed) selection is never replaced.
 
-Still not covered, and a different situation rather than the same bug: a jump WITHIN
-an open book (`scrollToLine` — a TOC click, a section step, a search match) leaves the
-caret where it was. Those are driven from another panel or an input, which keeps the
-focus, so the arrows are not addressing the text at all.
+Not covered, and a different situation: a jump WITHIN an open book (`scrollToLine` — a
+TOC click, a section step, a search match) leaves the caret where it was. Those are
+driven from another panel or an input, which keeps the focus.
 
-## B. Blank slate → default commentary
+## B. Blank slate → the default commentator
 
-When a line is selected and there is **no pending pin** (fresh open, no saved
-state), the panel must position itself on the book's **default commentator**
-(`default_commentator` table, lowest `position`). Implemented in
-`usePinnedCommentary`: the `commentaryLineId` watcher falls back to
-`defaultCommentatorBookIds[defaultRank]` (bottom panel 0, side panel 1) when no pin was captured; if that book has no group
-for this line, the next default that does is used (groups watcher).
+When a line is selected and the reader has not chosen a commentator (fresh open, no
+saved state), the panel opens on the book's **default commentator**
+(`default_commentator` table, lowest `position`). `usePinnedCommentary` decides it:
+the `commentaryLineId` watcher falls back to `defaultCommentatorBookIds[defaultRank]`
+(bottom panel 0, side panel 1, left panel 2) when no commentator was captured; if
+that book has no group for this line, the next default that does is used (groups
+watcher).
 
-Note: line clicks are intentionally inert while the commentary panel is closed
-(`onLineClick` checks whether either panel is open), so the blank-slate flow is always
-*open panel → click line*. That means the **first** groups load happens with the
-panel already mounted — the first-load branch of `setupGroupReloadScroll` must
-scroll to the pinned/default group when there is no saved scroll position
-(`hasSavedScrollPos`); with a saved position the restore path owns positioning
-and the first-load scroll must be skipped.
+Line clicks are intentionally inert while every commentary panel is closed, so the
+blank-slate flow is always *open panel → click line*.
 
-## C. Switching lines keeps the current commentary
+## C. Where a commentary list opens
 
-When the user selects a different line, the panel must stay on the commentary book
-they were reading:
+"The pin" is a product rule, not a scroll mechanism: it is **the commentator a panel
+stays on** (`pinnedCommentaryGroup`: book + section labels). Switching lines must keep
+the reader on the commentary book they were reading.
 
-- At the moment of the click — *synchronously, before any reactive state changes* —
-  the active group (top sticky header) is captured via `setPendingPin`
-  (`useBookViewLineSelection.onLineSelected` / `onNavigateSection`).
-- After the new line's groups load, `setupGroupReloadScroll` (in
-  `useCommentaryScroll`) scrolls to the pinned group's header.
+Every commentary list that loads gets a **new scroller** (`CommentaryView` has none
+while loading or empty), created at the row `useCommentaryScroll.startRow` returns —
+decided once, when the list is ready. In order:
+
+1. **what the reader just asked for** while there was no scroller to show it (a
+   commentator picked, a search hit stepped to, while the list was loading);
+2. **the same place**, when the list coming up is the one the saved place belongs to:
+   the first scroller of a view (a reopened or remounted panel, a restored session),
+   or the same line's list loading again. An index past the end of a list that has
+   since shortened opens on the last row;
+3. **the panel's commentator** — the pinned group's header;
+4. the top.
+
+"The list is ready" means: loaded, non-empty, **and its commentator settled**
+(`pinSettled`). `usePinnedCommentary` writes the pin a moment *after* a line change
+and again *after* the list arrives (both watchers await the book's default
+commentators), so the pin a panel holds when a new list lands may still be the
+previous line's. `isPinSettled` says the pin now belongs to this list; the scroller
+is created only then. This one wait replaces everything that used to chase a pin that
+"arrived late".
+
+How the commentator follows the reader:
+
+- At the moment of a line click — *synchronously, before any reactive state changes*
+  — each panel's current commentator is captured and staged (`captureActivePins` /
+  `setPendingPin`, see the rules below). An explicit line click also voids the saved
+  place: it belonged to the previous line's list.
 - If the pinned book has **no commentary on the new line**, a placeholder group
   ("אין טקסט לשורה זו") is injected at the pinned book's canonical position
-  (ordering taken from `staticFilterGroups`) so the panel doesn't jump — see
-  `useGroupsForDisplay` in `useCommentary.ts`, which each panel calls with its own
-  pin. (The shared fetch deliberately injects nothing: it would have to pick one
-  panel's pin, and injecting there also made `usePinnedCommentary`'s groups watcher
-  believe the pin had real links for the line.)
-- Placeholder lines use `lineId: -1` and must never be content-backfilled.
+  (`useGroupsForDisplay`), so the panel opens there rather than elsewhere. Placeholder
+  lines use `lineId: -1`.
 
-## D. Header next/prev navigation scrolls to the target commentary
+## D. Navigation inside a live panel
 
-The commentary header (and `CommentaryHeaderNav`) has next/previous-section buttons
-(`onNavigateSection` in `useCommentaryNavigation`). They:
+The reader picking a commentator (header toolbar next/previous and its search, the
+filter tree) or stepping to an in-panel search match is plain navigation:
+`scrollToGroup` / `scrollToFlatIndex` → one `scroller.scrollToIndex`. When no
+scroller can take it (the list is loading), the request becomes the row the next
+scroller is created at.
 
-1. Find the next/prev line (normal mode), TOC section (TOC mode), or adjacent line
-   (multi-select mode) that has commentary for the given book.
-2. Set `selectedLineId`/`commentaryLineId`, scroll the **lines pane** to the target
-   line (`scrollToLineId`).
-3. Pin the target book in the **navigating panel only** (`setPendingPin` on that
-   slot, via `useBookView.onNavigateSection(slot, ...)`), so when the new groups load
-   `setupGroupReloadScroll` scrolls that panel to the book's group -- the same path as
-   a line click. No manual scroll wiring. The other panel keeps what it was showing.
-
-`scrollToGroup` itself is two-stage like restore: `scrollToIndex` first, then a
-MutationObserver correction that re-reads the header's measured `start`. Because
-content backfill keeps resizing items for a short while after groups render, the
-correction must stay active (bounded, cancellable by a newer scroll request via the
-token) until the target's position is stable — a single one-shot correction lands
-wrong if a batch arrives right after it.
+The header's next/previous-**section** buttons (`onNavigateSection` in
+`useCommentaryNavigation`) find the next/previous line or TOC section with commentary
+for that book, move the anchor line there, scroll the **lines pane** to it, and pin
+the book in the navigating panel only — so the new list opens on it by C. No scroll
+wiring of their own.
 
 ## E. Lines pane keeps its position when a side commentary opens or closes
 
-All three commentary panels are rendered by one nested layout (a side column on each
-side of the text, a SplitPane row beneath it), so opening the bottom panel remounts
-nothing. Opening or closing **either** side column does change the text column's
-width, which re-wraps every line, so BookViewLinesContent is re-keyed on
-`sideColumnsKey` (both columns' open state) and restored deliberately.
+Opening or closing **either** side column changes the text column's width, which
+re-wraps every line, so `BookViewLinesContent` is re-keyed on `sideColumnsKey`: a new
+scroller is created. A `watch(sideColumnsKey)` in `BookViewPage` captures the old
+one's position first and makes it the new one's start row (clearing
+`initialLineIndex`, so the captured place outranks the line the book was opened at).
+Dragging a divider remounts nothing.
 
-The remounted instance re-runs its initial-scroll restore from
-`initialLineIndex`/`initialScrollTop`/`initialScrollOffset` — refs frozen at
-session-restore time — so without intervention it jumps to the stale position (or
-the top when nothing was saved). A pre-flush `watch(sideColumnsKey)` in
-BookViewPage captures the live position (`linesContentRef.captureScrollPos()`, old
-instance still mounted at pre-flush time) and writes it into those same refs,
-clearing `initialLineIndex` so the captured index wins over a TOC-open index.
-The capture is skipped while `idbResolved` is still false: session restore reopens
-a side panel BEFORE the lines instance has applied its restore, and capturing at
-that moment would read `{0,0}` and overwrite the seeded position (the whole view
-then lands at the top). The seeded values are exactly what the remounted instance
-should restore from, so restore-driven remounts capture nothing.
-Dragging either divider does not remount anything and needs no handling.
+Known limitation: the place is (index, offset)-based, and the two widths give
+different line heights — the same line is kept at the top, but the pixel offset into
+it may differ slightly.
 
-Known limitation: the restore is (index, offset)-based, and the two widths give
-different line heights — the same line is kept at the top, but the sub-line pixel
-offset may land slightly differently. A no-remount single-container layout for the
-lines pane was tried (2026-07-13) and reverted at the product owner's request.
+## Rules about the commentator (pin) — learned the hard way, still true
 
-## Interaction rules / gotchas (learned the hard way)
+- **Pin matching.** A pin is `(bookId, sectionLabel, subSectionLabel)`, but the labels
+  only disambiguate a book that appears in several sections. They are captured on the
+  PREVIOUS line, and the same book can sit under a different section on the next one,
+  so the group is matched exact-first, then by `bookId` alone (`resolveGroupIndex`).
+- **Pin staging.** A pin is staged (`setPendingPin`) so that the next
+  `commentaryLineId` change consumes it; a panel whose pin was NOT staged falls back
+  to its default. Stage it synchronously at the instant the anchor line changes —
+  never before an `await`. `useCommentaryNavigation` takes an `onBeforeNavigate` hook
+  and calls it immediately before mutating the refs for exactly this.
+- **A derived active group is not a preference.** `activePinnedGroup` falls back to
+  the FIRST header when no rows are on screen. Pin capture uses
+  `activePinnedGroupForCapture`, which answers null unless the reader has personally
+  moved the panel (wheel / touch / pointer / a scrolling key) since the app last put
+  it somewhere at their request, or picked a commentator by name from the toolbar
+  (`explicitPick`). `captureActivePins` then falls back to the pin the panel holds.
+  A probe's `el.scrollTop =` is deliberately not a preference.
+- **A null "active group" is not a preference either.** A panel that is mid-load has
+  no active group; staging null would reset it to the default commentator. Only a
+  panel that has never had a pin gets the default.
+- **Async watchers** that await before writing (both pin watchers) bump their
+  generation counter before every early return and re-read the list live after the
+  await. One line tap runs `useCommentary.load()` twice, so a panel's list goes
+  `groups → [] → groups` for the same line.
+- **Serialize section navigation.** `onNavigateSection` reads the CURRENT anchor to
+  decide where "next" is, after a DB query; overlapping clicks would both resolve to
+  the same target. Clicks are chained (capped) so each starts where the previous
+  ended.
+- **Never navigate "book 0".** The sticky nav's section buttons are disabled without
+  an active group, and `onNavigateSection` rejects a falsy bookId.
+- **Identity in the DOM.** `.commentary-header` carries `data-book-id`. Its label
+  includes the TOC path and changes with the anchor line; compare `data-book-id`,
+  never the text, when asking "is this panel still on the same commentator?".
+- **This class of bug is invisible in dev.** The local service answers in single-digit
+  ms; the WebView2 host round-trips through postMessage. To reproduce ordering bugs in
+  a Playwright probe, delay the service traffic (`context.route` on the non-vite
+  port) — 700 ms is enough. Use a section-mode (TOC-heading) click for the heaviest
+  load.
 
-- **Restore wins over pin-scroll**: `restoreCommentaryScrollPos` sets
-  `isRestoringScrollPos` and bumps `scrollToGroupToken` so `setupGroupReloadScroll`
-  and in-flight `scrollToGroup` calls never overwrite an in-flight restore.
-- `setupGroupReloadScroll` skips its very first groups load (`isFirstLoad`) — the
-  panel-mount path (`onCommentaryPanelMounted`) owns positioning on first open.
-- Commentary groups are replaced wholesale on every line change (`groups.value =`);
-  mutation-in-place only happens for content backfill, which MUST go through the
-  reactive proxy (`groups.value`), never the raw array, or already-rendered rows
-  won't update.
+## Other facts
+
+- Commentary groups are replaced wholesale on every line change (`groups.value =`).
+- A commentary line has its text before its row mounts (`ensureLineContents` is the
+  scroller's row source); there are no empty rows that grow later.
 - `useCommentaryRender`'s render cache is keyed by flat index and validated against
-  the *source content string* (`renderSource`) — required because content changes
-  in place without the groups array identity changing.
-- Scroll capture during backfill fires on anchoring adjustments too; that's fine —
-  the saved `(index, offset)` stays approximately right and restore corrects.
+  the *source content string* (`renderSource`).

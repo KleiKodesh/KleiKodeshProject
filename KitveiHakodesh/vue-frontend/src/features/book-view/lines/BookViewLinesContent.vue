@@ -263,10 +263,9 @@ const {
     ),
 )
 
-const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelRestore } =
+const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
   useBookViewLinesScroll(
   scroller,
-  () => props.lines,
   props,
   { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
   (event, firstVisible, firstFull, isUserScroll) =>
@@ -461,7 +460,7 @@ const { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration } 
   () => props.lines,
   () => props.searchBarVisible ?? false,
   suppressPositionSave,
-  cancelRestore,
+  cancelOpeningFollowUps,
 )
 
 const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoint(
@@ -512,8 +511,8 @@ function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
 
-// Focus the lines view once it has loaded (this component only mounts once
-// scrollStateReady is true), so the arrow keys / PageUp-PageDown drive the
+// Focus the lines view once it has loaded (this component only mounts once the
+// saved position has been read, so its start row is known at setup), so the arrow keys / PageUp-PageDown drive the
 // reader immediately without a click. Guard against stealing focus from a
 // background pane in split view, or from an input the user is already typing
 // in (e.g. an open search bar).

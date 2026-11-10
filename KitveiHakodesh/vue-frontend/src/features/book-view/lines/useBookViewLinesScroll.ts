@@ -5,21 +5,23 @@
  * into it straight from the DOM — the scroller mounts real rows, so there is no
  * estimated position to mistrust.
  *
- * Scroll restore: the scroller itself opens on the saved line (its `initialIndex`
- * and `initialOffsetPx`, passed by BookViewLinesContent). It fetches the line's
- * chunk, mounts the window around it with its text, and sets the scroll from the
- * row's real position — one render, nothing to correct afterwards. This composable
- * only holds the position save through that landing and runs the follow-ups (focus,
- * the keyboard caret, the search mark, the deep-link flash) once the scroller reports
- * it is open.
+ * Scroll restore: there is no restore STEP. A windowed scroller shows "the rows from
+ * index N", and N is an argument of its creation — the saved line (or a requested
+ * one) is simply the row the scroller is created with (`initialIndex` /
+ * `initialOffsetPx`, passed by BookViewLinesContent). BookViewPage creates this pane
+ * only once the saved position has been read, so the start row is final at setup.
+ * Never add code here that opens at the top and moves to the saved line afterwards,
+ * waits for a position to arrive, or guards a late move against reader input: that
+ * is the virtualizer model this pane left behind. This composable only holds the
+ * position save until the first window is on screen and runs what needs the rows in
+ * the DOM (focus, the keyboard caret, the search mark, the deep-link flash).
  */
-import { watch, nextTick, onBeforeUnmount } from 'vue'
+import { watch, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
-import type { LinesTable } from './linesTable'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
-import { mayTakeFocus, placeCaretWhenRendered } from './lineCaret'
+import { mayTakeFocus, placeCaretAtViewportStart } from './lineCaret'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
@@ -40,7 +42,6 @@ export interface BookViewLinesScrollProps {
   initialScrollOffset?: number
   flashLineOnOpen?: boolean
   searchHighlightLineIndex?: number
-  idbResolved?: boolean
   /** True when EITHER commentary panel is open. */
   commentaryVisible?: boolean
   /**
@@ -86,7 +87,6 @@ const FLASH_DURATION_MS = 3600
 
 export function useBookViewLinesScroll(
   scroller: () => WindowedScrollerApi | null,
-  lines: () => LinesTable,
   props: BookViewLinesScrollProps,
   storeRefs: BookViewLinesScrollStoreRefs,
   emit: (
@@ -112,21 +112,15 @@ export function useBookViewLinesScroll(
   // ── Position-save suppression ───────────────────────────────────────────────
 
   let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
-  // Held while the scroller opens on a saved or requested line: its landing's
-  // scroll event must not be taken for the reader moving, nor persisted. A
-  // requested line (TOC, deep link) is known at setup; a SAVED one arrives from
-  // IndexedDB after it — read through a getter, and the hold starts when it lands.
-  const openingTarget = () => props.initialLineIndex ?? props.initialScrollIndex
-  // Also held until IndexedDB has answered: a flush in that gap would persist the
-  // rows filled at the top as the reader's place, ahead of the saved one.
-  let saveSuppressed = openingTarget() != null || props.idbResolved === false
-  // A hold started for a late-arriving target lapses on its own: the scroller
-  // declines an opening once the reader has moved, so `opened` may never come.
-  const OPENING_HOLD_SAFETY_MS = 5000
-  let openingSafetyTimer: ReturnType<typeof setTimeout> | null = null
-  function clearOpeningSafety() {
-    if (openingSafetyTimer != null) { clearTimeout(openingSafetyTimer); openingSafetyTimer = null }
-  }
+  // The row this pane opens at: a requested line (TOC, search result, deep link) or
+  // the saved one; undefined = the top. FINAL at setup — BookViewPage creates the
+  // pane only once the saved position has been read, and the scroller is created
+  // with this row as its start. Nothing arrives later, so nothing here waits.
+  const startRow = props.initialLineIndex ?? props.initialScrollIndex
+  // Held until the first window is on screen: building it sets the scroll, and that
+  // scroll event must not be taken for the reader moving, nor persisted. Opening at
+  // the top sets nothing — the top is the reader's place from the start.
+  let saveSuppressed = startRow != null
 
   function suppressPositionSave() {
     saveSuppressed = true
@@ -134,44 +128,44 @@ export function useBookViewLinesScroll(
     saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
   }
 
-  // ── Opening at the saved / requested line ───────────────────────────────────
+  // ── Once the first window is on screen ──────────────────────────────────────
+  //
+  // The scroller opened AT the start row (see WindowedScroller.vue, "The first
+  // window") — this composable does not put it anywhere. What follows is only what
+  // has to happen once the rows are in the DOM: focus, the caret, the search mark,
+  // the deep-link flash.
 
-  let restoreCancelled = false
+  let openingFollowUpsCancelled = false
   let flashTimer: number | null = null
 
   /** Ends the opening's follow-ups: a jump elsewhere supersedes them, and an unmount must leave nothing behind. */
-  function cancelRestore() {
-    restoreCancelled = true
+  function cancelOpeningFollowUps() {
+    openingFollowUpsCancelled = true
     saveSuppressed = false
-    clearOpeningSafety()
     if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
   }
 
-  watch(openingTarget, (target) => {
-    if (target == null || restoreCancelled) return
-    saveSuppressed = true
-    clearOpeningSafety()
-    openingSafetyTimer = setTimeout(() => { openingSafetyTimer = null; saveSuppressed = false }, OPENING_HOLD_SAFETY_MS)
-  })
-
-  /** The scroller's opening landing is on screen — wired to its `opened` event. */
+  /** The scroller's first window is on screen — wired to its `opened` event (emitted for the top too). */
   function onScrollerOpened() {
-    const target = openingTarget()
-    if (restoreCancelled || target == null) return
-    clearOpeningSafety()
-    // The landing's scroll event is dispatched at the next frame's start, ahead of
-    // its animation callbacks — so the hold covers it and is released just after.
-    saveSuppressed = true
-    requestAnimationFrame(() => { if (!restoreCancelled) saveSuppressed = false })
+    if (openingFollowUpsCancelled) return
+    if (startRow != null) {
+      // The scroll event of the first window is dispatched at the next frame's
+      // start, ahead of its animation callbacks — so the hold covers it and is
+      // released just after.
+      requestAnimationFrame(() => { if (!openingFollowUpsCancelled) saveSuppressed = false })
+    }
     const element = scroller()?.scrollerElement
     const takeFocus = mayTakeFocus(element)
     if (takeFocus) element?.focus({ preventScroll: true })
     // Focus says which element the keys reach; it does not say where in the text they
     // start from. Caret browsing (F7) moves the DOCUMENT's caret, and without one in
     // the opened line the browser starts from the top of the mounted window — rows
-    // above the landing — so the first arrow key left the line the reader was given.
-    // See lineCaret.ts.
-    if (takeFocus) placeCaretWhenRendered(element)
+    // above the start row — so the first arrow key left the line the reader was
+    // given. At the top too: the browser's own starting point is only coincidentally
+    // the first row. See lineCaret.ts.
+    if (takeFocus) placeCaretAtViewportStart(element)
+    if (startRow == null) return
+    const target = startRow
     // FTS: the highlighted mark is in the rendered row — bring it into view.
     if (props.searchHighlightLineIndex != null) {
       element?.querySelector('mark.search-match')?.scrollIntoView({ block: 'center' })
@@ -189,29 +183,6 @@ export function useBookViewLinesScroll(
         }, FLASH_DURATION_MS)
       }
     }
-  }
-
-  // Opening at the top (nothing saved): focus once the book is in. Decided only
-  // once IndexedDB has answered — before that "nothing saved" is not known yet.
-  {
-    const stop = watch(
-      () => [lines().length, props.idbResolved, openingTarget()] as const,
-      ([count, resolved, target]) => {
-        if (!count || !resolved) return
-        stop()
-        if (target != null) return // the scroller's `opened` focuses after its landing
-        saveSuppressed = false // nothing saved: the top is the reader's place
-        nextTick(() => {
-          const element = scroller()?.scrollerElement
-          if (!mayTakeFocus(element)) return
-          element?.focus({ preventScroll: true })
-          // The caret belongs on the line the reader is looking at here too — the
-          // browser's own starting point is only coincidentally the first row.
-          placeCaretWhenRendered(element)
-        })
-      },
-      { flush: 'post' },
-    )
   }
 
   // ── Persist scroll position ─────────────────────────────────────────────────
@@ -297,7 +268,7 @@ export function useBookViewLinesScroll(
 
   onBeforeUnmount(() => {
     unregisterHostFlush()
-    cancelRestore()
+    cancelOpeningFollowUps()
     saveSuppressed = false
     if (saveSuppressTimer) {
       clearTimeout(saveSuppressTimer)
@@ -360,7 +331,7 @@ export function useBookViewLinesScroll(
   return {
     captureScrollPos,
     readCurrentPosition,
-    cancelRestore,
+    cancelOpeningFollowUps,
     onScrollerOpened,
     isPositionSaveSuppressed: () => saveSuppressed,
     suppressPositionSave,

@@ -181,27 +181,16 @@ Dropdown anchor depends on which physical side of the screen the toggle button s
 
 `WindowedScroller` owns `Ctrl+Home` / `Ctrl+End` (and Page keys) for the lists it renders. Plain lists paired with a text input get them from `useInputListNavigation` (`containerElement` + `[data-nav-item]` rows); standalone plain lists from `useListKeyNav`. The scroll container must have `tabindex="0"` where it owns focus.
 
-## Virtual Scroller — Programmatic Scroll to a Specific DOM Element Within an Item
+## WindowedScroller — Going to a Row, or to an Element Inside a Row
 
-When you need to scroll not just to a virtualizer item but to a specific DOM element *within* that item (e.g. a `<mark>` inside a rendered line), there are two distinct cases with different solutions. The canonical implementation is in `scrollToIndexWithRetry.ts` and `BookViewLinesContent.vue`.
+The lists that window their rows use `WindowedScroller.vue`. Its model is in `preferences.md` ("Virtual Scroller Rules" → "The model") and at the top of the component — read it first. In short: the scroller shows "the rows from index N"; where it OPENS is an argument of its creation (`initialIndex`), never a scroll performed after mounting; and going elsewhere later is `scrollToIndex`.
 
-### Item already in the measurements cache (already rendered)
+To go to a row, or to an element inside it (a `<mark>` in a rendered line):
 
-Never call `virtualizer.scrollToIndex()` when the item is already measured. That call is asynchronous — it runs in a later frame and will overwrite any `scrollTop` you set, snapping the scroll position back to where the virtualizer wants it.
+- `await scroller.scrollToIndex(index, { offsetPx, align })`. It fetches the rows, builds the window at that row and sets the scroll from the row's real position. When the promise resolves, the row and its content are in the DOM.
+- Then act on the element directly (add the class, `scrollIntoView({ block: 'center' })` for a mark that the row's own landing left off screen). See `useWindowedRowLanding.ts`.
 
-Instead: set `scrollTop` directly to place the item at the correct position, then use a `MutationObserver` on the scroller element to detect when the target DOM element actually appears or gets its final CSS class, and adjust `scrollTop` from `getBoundingClientRect()` at that point. Two `requestAnimationFrame` calls before starting the observer covers the fast path (DOM already ready); the observer handles the slow path where a render cache invalidation means the item HTML hasn't been repainted yet.
-
-Always set a timeout (500ms is safe) to disconnect the observer in case the element never appears.
-
-### Item not yet in the measurements cache (outside rendered range)
-
-Call `virtualizer.scrollToIndex({ align: 'start' })` to bring the item into the rendered range, then retry in subsequent `requestAnimationFrame` calls until the item appears in `measurementsCache`. Once it does, switch to the direct `scrollTop` strategy above — do not keep calling `scrollToIndex` after the item is measured or it will fight your `scrollTop` assignments.
-
-### Key rules
-
-- `virtualizer.scrollToIndex()` and direct `scrollTop` assignment are mutually exclusive — never mix them for the same scroll operation.
-- `getBoundingClientRect()` returns stale values until after the browser has painted. Always read it inside a `requestAnimationFrame` (or the MutationObserver callback, which fires after the DOM mutation but before the next paint — one rAF after the callback gives accurate layout values).
-- A render cache keyed on reactive props (like `currentMatchOccurrence`) means the item's HTML is re-rendered asynchronously after the prop changes. `nextTick` alone is not enough — the virtualizer has its own render cycle on top of Vue's. The MutationObserver approach is the only reliable way to detect when the repainted DOM is actually ready.
+Never, around a WindowedScroller: a `requestAnimationFrame` retry, a `MutationObserver` waiting for the row, a timeout, a "measurements cache" check, or a direct `scrollTop` write to a computed offset. Those belonged to the virtualizer (`@tanstack/vue-virtual`) this app no longer uses; a jump that is wrong is a bug in the scroller and is fixed there.
 
 ## Database
 

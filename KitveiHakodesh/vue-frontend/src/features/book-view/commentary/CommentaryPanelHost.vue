@@ -6,7 +6,7 @@
  * It exists so BookViewPage does not carry one near-identical thirty-prop
  * CommentaryView block per panel - the panels differ only in which slot they are
  * handed. The inner instance is re-exposed as `view` because useBookView drives
- * each panel through its CommentaryView methods (scrollToGroup, restore, ...).
+ * each panel through its CommentaryView methods (scrollToGroup, scrollToFlatIndex, ...).
  *
  * A SIDE panel's filter dropdown is rendered here, clipped to its own column.
  * The bottom panel's is not: it runs the full book-view body height, which a
@@ -152,7 +152,9 @@ defineExpose({ view })
       :resolve-word-link-target="resolveWordLinkTarget"
       :ensure-line-contents="ensureLineContents"
       :trim-line-contents="trimLineContents"
-      :has-saved-scroll-pos="panel.scrollIndex.value != null"
+      :saved-scroll-index="panel.scrollIndex.value"
+      :saved-scroll-offset="panel.scrollOffset.value"
+      :pin-settled="panel.isPinSettled.value"
       :create-note="createNote"
       :update-note="updateNote"
       :delete-note="deleteNote"

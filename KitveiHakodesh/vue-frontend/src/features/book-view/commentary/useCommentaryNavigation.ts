@@ -10,7 +10,7 @@
  *   - Normal mode: navigates to the next/prev line that has commentary for the book.
  *
  * After navigating, the main text scrolls to the target line via scrollToLineId.
- * The commentary panel scrolls to the target book's group via setupGroupReloadScroll
+ * The commentary panel opens on the target book's group: the new list's scroller is created at the pin
  * in useCommentaryScroll — the same path that fires when a user clicks a line.
  * No manual watch(commentaryLoading) is needed here.
  */

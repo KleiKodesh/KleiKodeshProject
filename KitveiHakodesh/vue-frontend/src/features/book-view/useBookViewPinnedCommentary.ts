@@ -9,7 +9,7 @@
  * This avoids all timing races with the virtualizer and scroll events — the
  * capture happens at the point of user interaction, not asynchronously.
  */
-import { ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { getDefaultCommentators } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
@@ -104,6 +104,19 @@ export function usePinnedCommentary(
   // before any reactive state changes. Applied by the commentaryLineId watcher.
   let pendingPin: PinnedCommentaryGroup | null = null
 
+  // ── Is the pin settled? ─────────────────────────────────────────────────────
+  //
+  // A commentary panel's scroller is CREATED AT the pinned commentator (a windowed
+  // scroller takes its start row as an argument of its creation). So the panel has
+  // to know, before it creates one for a newly loaded list, that this pin is the
+  // pin FOR that list - not the previous line's, still waiting to be replaced by
+  // the two watchers below, which both write it after an await.
+  /** A line change whose pin has not been written yet. */
+  const isLinePinPending = ref(false)
+  /** The groups array the pin has been reconciled with (the groups watcher's last word). */
+  const groupsPinIsSettledFor = shallowRef<CommentaryGroup[]>(groups())
+  const isPinSettled = computed(() => !isLinePinPending.value && groupsPinIsSettledFor.value === groups())
+
   function ensureDefaultCommentatorsLoaded(): Promise<void> {
     if (bookId == null) return Promise.resolve()
     defaultCommentatorsLoad ??= loadDefaultCommentatorIds(bookId)
@@ -138,8 +151,10 @@ export function usePinnedCommentary(
     const captured = pendingPin
     pendingPin = null
     const mine = ++lineGeneration
+    isLinePinPending.value = true
     await ensureDefaultCommentatorsLoaded()
     if (mine !== lineGeneration) return // a newer line selection owns the pin now
+    isLinePinPending.value = false
     if (captured) {
       pinnedCommentaryGroup.value = captured
       return
@@ -166,6 +181,9 @@ export function usePinnedCommentary(
     const mine = ++groupsGeneration
     await ensureDefaultCommentatorsLoaded()
     if (mine !== groupsGeneration) return // superseded while the defaults loaded
+    // Whatever the branches below decide, the pin is this list's from here on. Set
+    // first: they only write the pin synchronously, in this same turn.
+    groupsPinIsSettledFor.value = groups()
     // Re-read live: the argument captured before the await can be a previous line's groups.
     const newGroups = groups()
     if (!newGroups.length) return
@@ -209,5 +227,5 @@ export function usePinnedCommentary(
     pinnedCommentaryGroup.value = buildPin(bookId, groups(), true)
   }
 
-  return { pinnedCommentaryGroup, restorePin, pinExplicitly, setPendingPin }
+  return { pinnedCommentaryGroup, isPinSettled, restorePin, pinExplicitly, setPendingPin }
 }

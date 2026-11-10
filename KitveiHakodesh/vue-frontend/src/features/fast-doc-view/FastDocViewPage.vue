@@ -242,6 +242,9 @@ onMounted(async () => {
   if (saved?.fastDocViewNotesFractions) notesFractions.value = { ...saved.fastDocViewNotesFractions }
   initialIndex.value = saved?.fastDocViewBlockIndex ?? 0
   initialOffsetPx.value = saved?.fastDocViewBlockOffset ?? 0
+  // The text opens AT this block, so it is the block in view from the start: the notes
+  // pane's scroller is created at the note in sync with it, not at note 0.
+  firstVisibleIndex.value = initialIndex.value
   stateReady.value = true
   if (filePath) await fastDocument.open(filePath, { reachIndex: initialIndex.value })
 })

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { LinesTable } from './linesTable'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, ref, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
@@ -47,7 +46,7 @@ const BOOK_ID = 7
 /** Mounts the composable the way BookViewLinesContent does, on a scroller sitting at line 3. */
 function mountScroll(
   tabId: string,
-  props: Parameters<typeof useBookViewLinesScroll>[2] = {},
+  props: Parameters<typeof useBookViewLinesScroll>[1] = {},
   rowElement: (index: number) => HTMLElement | null = () => null,
 ) {
   const scrollerElement = document.createElement('div')
@@ -69,7 +68,6 @@ function mountScroll(
     setup() {
       scroll = useBookViewLinesScroll(
         () => scroller,
-        () => new LinesTable(),
         props,
         { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
         () => undefined,

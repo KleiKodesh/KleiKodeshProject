@@ -76,13 +76,10 @@ type CommentaryViewInstance = {
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   activePinnedGroupForCapture?: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   consumeExplicitPick?: () => void
-  cancelPositioning?: () => void
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<boolean>
-  claimRestoreIntent?: () => void
   $el?: HTMLElement
 }
 
@@ -311,12 +308,11 @@ export function useBookView(
   pinFns.applyPendingPins = applyPendingPins
 
   /**
-   * An explicit line click invalidates every panel's saved commentary scroll
-   * position: the pinned-group jump owns positioning for fresh navigation, and a
-   * stale session-restored position must not be applied to the new line's
-   * commentary (it would land on an arbitrary commentator and suppress the pinned
-   * jump). The position refs repopulate naturally — the pinned jump's programmatic
-   * scroll fires a scroll event that re-captures them.
+   * An explicit line click voids every panel's saved commentary place: the new
+   * line's list opens at the panel's commentator, and a place saved for another
+   * line's list (a session-restored one included) must not be what its scroller is
+   * created at. The place repopulates as soon as the new list is on screen — the
+   * panel reports where it is on every scroll.
    */
   function onLineSelected(lineId: number, isShiftClick: boolean) {
     // Re-clicking the already-selected line is a no-op: the panels keep their
@@ -327,10 +323,6 @@ export function useBookView(
     for (const slot of COMMENTARY_SLOTS) {
       panels[slot].scrollIndex.value = null
       panels[slot].scrollOffset.value = null
-      // The saved position is void, so any goal still chasing it is void too - and
-      // an in-flight restore would otherwise block this load's pin-follow and then
-      // apply the previous line's offset to the new line's list.
-      commentaryViewRefs[slot]()?.cancelPositioning?.()
     }
   }
 
@@ -629,7 +621,7 @@ export function useBookView(
 
   const {
     initialLineIndex, initialScrollTop, initialScrollOffset,
-    scrollStateReady, idbResolved, restoredVersionTitle, restoredSideEdition, restore: restoreSession,
+    idbResolved, restoredVersionTitle, restoredSideEdition, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     panels,
@@ -807,7 +799,7 @@ export function useBookView(
     buildExportHtml, bookTitle,
     // scroll / search state
     currentScrollLineIndex,
-    scrollStateReady, idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
+    idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
     flashOpenLine,
     activeMatchCount: searchPanel.activeMatchCount,
     activeMatchIdx: searchPanel.activeMatchIdx,

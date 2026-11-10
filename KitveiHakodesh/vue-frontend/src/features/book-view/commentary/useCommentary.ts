@@ -504,12 +504,19 @@ export function useGroupsForDisplay(
    * Whether staticFilterGroups has finished loading. The placeholder's POSITION
    * comes from that ordering, so injecting one before it lands puts the row at
    * index 0 and then moves it when the real order arrives - two reshuffles of
-   * every row below it, while a restore is chasing its saved scrollIndex through
-   * them. That is the "it shows a placeholder and then jumps to the saved
-   * position" flicker. Better to inject nothing for those few ms: a missing row
+   * every row below it. Better to inject nothing for those few ms: a missing row
    * settles into place, a misplaced one drags the whole list twice.
    */
   staticFilterGroupsLoaded: () => boolean = () => true,
+  /**
+   * The line the commentary is anchored to, null while it is not anchored yet. A
+   * reopened tab has its selected line and its pin back before the commentary has
+   * even been asked for: `groups` is empty then because nothing is loaded, NOT
+   * because the pinned book has no text on the line. A placeholder there would be a
+   * two-row "list" that a panel creates its scroller for, only to drop it when the
+   * real list arrives.
+   */
+  commentaryLineId: () => number | null = selectedLineId,
 ) {
   const booksDataStore = useBooksDataStore()
 
@@ -519,6 +526,7 @@ export function useGroupsForDisplay(
     if (
       !pinned ||
       selectedLineId() == null ||
+      commentaryLineId() == null ||
       loading() ||
       !staticFilterGroupsLoaded() ||
       currentGroups.some((g) => g.bookId === pinned)
