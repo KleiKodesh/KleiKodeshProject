@@ -135,6 +135,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int HasChildren { get; set; }
         public string Text { get; set; } = "";
         public int? LineIndex { get; set; }
+        /// <summary>Set on main-TOC rows merged in from an alt structure (the seifim): that
+        /// structure's id. Null on the book's own TOC rows and on alt-TOC rows.</summary>
+        public int? AltStructureId { get; set; }
     }
 
     /// <summary>Alt-TOC structure — matches AltTocStructure.</summary>

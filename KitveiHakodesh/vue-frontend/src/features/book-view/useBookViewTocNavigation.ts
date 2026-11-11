@@ -31,8 +31,9 @@ export function useBookViewTocNavigation(
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
-  altTocSections: import('vue').Ref<AltTocSection[]>,
-  altTocStructuresPrintingNumbers: import('vue').Ref<ReadonlySet<number>>,
+  /** Every structure whose labels are drawn in the text: alt TOCs and those merged into the main TOC. */
+  labelSections: Readonly<import('vue').Ref<AltTocSection[]>>,
+  labelPrintingNumbers: Readonly<import('vue').Ref<ReadonlySet<number>>>,
   openTocEntryId: number | undefined,
 ) {
   const paneNavigation = usePaneNavigation()
@@ -54,7 +55,7 @@ export function useBookViewTocNavigation(
   }
 
   const altTocLabelMap = computed(() =>
-    buildAltTocLineLabels(altTocSections.value, altTocStructuresPrintingNumbers.value),
+    buildAltTocLineLabels(labelSections.value, labelPrintingNumbers.value),
   )
 
   let lastSectionNavigationEntryId: number | null = null

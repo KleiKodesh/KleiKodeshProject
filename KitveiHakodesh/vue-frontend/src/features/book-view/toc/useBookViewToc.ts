@@ -3,6 +3,8 @@ import { ref, shallowRef, markRaw, computed, watch, onScopeDispose } from 'vue'
 import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries, getLineContents } from '@/webview-host/seforimApi'
 import { sampleNumberedLeaves, printsOwnNumbering } from './altTocTextLabels'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
+import { sortByPreference } from './altTocPreference'
+import { mergedAltTocSections } from './mergedAltTocSections'
 import { registerOpenTabToc, findOpenTabToc, findOpenTabTocView, type OpenTabToc } from './openTabTocRegistry'
 import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
 
@@ -22,36 +24,6 @@ export interface AltTocPane {
   key: string
   entries: TocEntry[]
   searchTree: SearchableTree | null // built lazily on first search use
-}
-
-/**
- * Preference of an alt structure's key, lowest first: the preferred structure leads
- * the pane's list. Larger divisions come before fine counters (seifim, letters).
- * Keys not listed sit between them and keep db order.
- */
-function altTocStructurePriority(key: string): number {
-  switch (key.toLowerCase()) {
-    case 'daf':        return 0
-    case 'parasha':    return 1
-    case 'hilchot':    return 2
-    case 'chapters':
-    case 'chapter':    return 3
-    case 'simannames':
-    case 'simanim':
-    case 'siman':      return 4
-    case 'topic':      return 5
-    case 'section':    return 6
-    case 'seifim':     return 200
-    case 'letter':     return 201
-    default:           return 100
-  }
-}
-
-/** The sections with the preferred structure first (stable sort keeps db order on ties). */
-function sortByPreference(sections: AltTocSection[]): AltTocSection[] {
-  return [...sections].sort(
-    (a, b) => altTocStructurePriority(a.structure.key) - altTocStructurePriority(b.structure.key),
-  )
 }
 
 /** The pane title of a structure: our own name for its key, else its Hebrew title. */
@@ -125,6 +97,14 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   const tocEntries = shallowRef<TocEntry[]>(markRaw([]))
   const altTocSections = shallowRef<AltTocSection[]>([])
   const altTocStructuresPrintingNumbers = shallowRef<ReadonlySet<number>>(new Set())
+  // Merged alt structures as label sections, set once their numbering check is done.
+  const mergedLabelSections = shallowRef<AltTocSection[]>([])
+  const mergedPrintingNumbers = shallowRef<ReadonlySet<number>>(new Set())
+  /** Every structure whose labels are drawn in the text: the alt TOCs and the merged ones. */
+  const tocLabelSections = computed(() => [...altTocSections.value, ...mergedLabelSections.value])
+  const tocLabelPrintingNumbers = computed<ReadonlySet<number>>(
+    () => new Set([...altTocStructuresPrintingNumbers.value, ...mergedPrintingNumbers.value]),
+  )
   const loading = ref(false)
   const tocLoaded = ref(false) // true once the first load completes, even if entries is empty
   const error = ref<string | null>(null)
@@ -167,6 +147,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       openTabToc.view = { bookTitle: title, entries, searchTree }
       tocEntries.value = entries
       tocSearchTree.value = searchTree
+      void loadMergedLabelSections(entries, generation)
     } catch (e) {
       if (generation !== loadGeneration) return
       // TOC load failed — show the book with no TOC rather than a blank page
@@ -180,6 +161,16 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         tocLoaded.value = true
       }
     }
+  }
+
+  async function loadMergedLabelSections(entries: TocEntry[], generation: number) {
+    const sections = mergedAltTocSections(entries)
+    if (!sections.length) return
+    // Before the sections land, so labels of a numbering the book prints never flash.
+    const printing = await findStructuresPrintingNumbers(sections).catch(() => new Set<number>())
+    if (generation !== loadGeneration) return
+    mergedPrintingNumbers.value = printing
+    mergedLabelSections.value = sections
   }
 
   let altTocGeneration = 0
@@ -214,6 +205,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         tocLoaded.value = false
         altTocSections.value = []
         altTocStructuresPrintingNumbers.value = new Set()
+        mergedLabelSections.value = []
+        mergedPrintingNumbers.value = new Set()
         load(id)
         loadAltTocSections(id)
       }
@@ -278,6 +271,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     tocEntries,
     altTocSections,
     altTocStructuresPrintingNumbers,
+    tocLabelSections,
+    tocLabelPrintingNumbers,
     altTocPane,
     loading,
     tocLoaded,
