@@ -79,8 +79,10 @@ useDropdownClose(
   height: 100%;
   flex-shrink: 0;
   /* Default cap before the reader drags the sash: long titles wrap instead of widening the
-     panel without limit. A dragged width (useSidePanelLayout, 0.1..0.5) lifts it. */
-  max-width: 30%;
+     panel without limit. The share keeps it narrow in a small window; the pixel cap stops
+     it growing past a normal panel width in a wide one. A dragged width
+     (useSidePanelLayout, 0.1..0.5) lifts it. */
+  max-width: min(30%, 240px);
 }
 
 /* Overlay mode floats over the content with no sash beside it, so it needs its
