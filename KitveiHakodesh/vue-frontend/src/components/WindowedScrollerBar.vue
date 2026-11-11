@@ -33,6 +33,12 @@ const props = defineProps<{
   barState: WindowedScrollerBarState
   /** The viewport this bar drives: wheeled over the bar, revealed on hover, paged by the track. */
   viewport: HTMLElement | null
+  /**
+   * The app's thin style (`.toc-thin-scroll`, the side panels' bars): the width the
+   * browser gives a `scrollbar-width: thin` bar (10px on Windows), its narrower thumb
+   * and smaller arrow glyphs - measured from the native thin bar. Colours and the hidden-scrollbars mode as ever.
+   */
+  thin?: boolean
 }>()
 
 const totalHeight = computed(() => props.barState.totalHeight.value)
@@ -68,18 +74,20 @@ const REVEAL_KEEPALIVE_MS = 400
 
 // Measured from a real scroll container, once per page: the width follows the OS,
 // the zoom level and `scrollbar-width`, and the bar must match its siblings exactly.
-let measuredNativeWidth = 0
-function nativeScrollbarWidth(): number {
-  if (measuredNativeWidth) return measuredNativeWidth
+const measuredNativeWidths = { regular: 0, thin: 0 }
+function nativeScrollbarWidth(thin: boolean): number {
+  const kind = thin ? 'thin' : 'regular'
+  if (measuredNativeWidths[kind]) return measuredNativeWidths[kind]
   const probe = document.createElement('div')
   probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden'
+  if (thin) probe.className = 'toc-thin-scroll'
   document.body.appendChild(probe)
-  measuredNativeWidth = probe.offsetWidth - probe.clientWidth || 17
+  measuredNativeWidths[kind] = probe.offsetWidth - probe.clientWidth || (thin ? 10 : 17)
   probe.remove()
-  return measuredNativeWidth
+  return measuredNativeWidths[kind]
 }
-const barWidth = ref(17)
-onMounted(() => { barWidth.value = nativeScrollbarWidth() })
+const barWidth = ref(props.thin ? 10 : 17)
+onMounted(() => { barWidth.value = nativeScrollbarWidth(!!props.thin) })
 
 // ── Geometry ───────────────────────────────────────────────────────────────────
 
@@ -288,7 +296,7 @@ defineExpose({ barElement, targetAt })
   <div
     ref="barElement"
     class="windowed-scroller-bar"
-    :class="{ 'is-disabled': !isScrollable }"
+    :class="{ 'is-disabled': !isScrollable, 'is-thin': thin }"
     :style="{ width: `${barWidth}px` }"
   >
     <div
@@ -354,6 +362,20 @@ defineExpose({ barElement, targetAt })
     top var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
     height var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
     background-color 120ms;
+}
+/* The thin bar's thumb: the native thin pill, a little narrower than its gutter. */
+.windowed-scroller-bar.is-thin .windowed-scroller-thumb {
+  width: calc(100% - 4px);
+  min-width: 4px;
+}
+.windowed-scroller-bar.is-thin .windowed-scroller-bar-arrow::before {
+  border-inline-width: 3px;
+}
+.windowed-scroller-bar.is-thin .windowed-scroller-bar-arrow.is-up::before {
+  border-bottom-width: 4px;
+}
+.windowed-scroller-bar.is-thin .windowed-scroller-bar-arrow.is-down::before {
+  border-top-width: 4px;
 }
 /* Under the hand it must track the pointer exactly. */
 .windowed-scroller-thumb.is-dragging {

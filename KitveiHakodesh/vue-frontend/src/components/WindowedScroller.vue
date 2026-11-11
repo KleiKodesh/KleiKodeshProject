@@ -125,6 +125,8 @@ const props = withDefaults(
     rowKind?: (index: number) => WindowedScrollerRowKind
     /** Flow mode: class(es) for the paragraph element holding a run of inline rows — the caller's column look. */
     paragraphClass?: string
+    /** The drawn bar in the app's thin style (`.toc-thin-scroll`): narrower gutter, thumb and arrows. */
+    thin?: boolean
   }>(),
   { pinnedIndexes: () => [], mode: 'rows' },
 )
@@ -168,6 +170,7 @@ const {
   windowEnd,
   isRowInWindow,
   clampToCount,
+  replaceRows: replaceWindowRows,
   findRowIndexAt,
   rememberAnchor,
   holdAnchor,
@@ -441,6 +444,26 @@ function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibl
   return { index, offsetWithinRow: viewport.scrollTop - row.offsetTop }
 }
 
+/**
+ * The list changed shape in one place - `removed` rows from `at` became `inserted` new
+ * rows (a tree node expanded or collapsed). Call synchronously before the new count is
+ * rendered: the window, its anchor and the mounted row elements move with their rows,
+ * so the reader's row stays pixel-still. Any other change of the list is a new list:
+ * re-key the scroller.
+ */
+function replaceRows(at: number, removed: number, inserted: number) {
+  replaceWindowRows(at, removed, inserted)
+  const delta = inserted - removed
+  const changeEnd = at + removed
+  const moved: [number, HTMLElement][] = []
+  for (const [index, element] of rowElements) {
+    if (index < at) continue
+    rowElements.delete(index)
+    if (index >= changeEnd) moved.push([index + delta, element])
+  }
+  for (const [index, element] of moved) rowElements.set(index, element)
+}
+
 async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
   // A jump made while rows already exist builds the window itself: the first window
   // must not then be built at the start row on top of it.
@@ -487,6 +510,7 @@ defineExpose({
   scrollbarElement: computed(() => barReference.value?.barElement ?? null),
   renderedRange,
   scrollToIndex,
+  replaceRows,
   revealIndex,
   readFirstVisible,
   isRowRendered,
@@ -544,6 +568,7 @@ defineExpose({
       ref="barReference"
       :bar-state="bar"
       :viewport="viewportElement"
+      :thin="thin"
       @seek="bar.seek"
       @track-hold="onTrackHold"
       @track-step="onTrackStep"

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import TreeView from './TreeView.vue'
 import type { TreeNodeItem } from './treeTypes'
 import type { TreeSearcher } from '@/utils/segmentSearchTree'
+import type { TreeViewScrollPosition } from './treeViewRows'
 
 /**
  * One table-of-contents tree (title row optional) - the book view's TOC and the FastDocView
@@ -24,13 +25,12 @@ const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
 defineExpose({
   containerRef: () => treeViewRef.value?.containerRef ?? null,
   getExpanded: () => treeViewRef.value?.getExpanded() ?? [],
-  setExpanded: (ids: readonly number[]) => treeViewRef.value?.setExpanded(ids),
+  /** Expanded ids and, optionally, the saved first visible row (else the top row stays where it is). */
+  setExpanded: (ids: readonly number[], position?: TreeViewScrollPosition | null) =>
+    treeViewRef.value?.setExpanded(ids, position),
+  getScrollPosition: () => treeViewRef.value?.getScrollPosition() ?? null,
   /** Collapse everything and go back to the top. */
-  reset: () => {
-    treeViewRef.value?.reset()
-    const el = treeViewRef.value?.containerRef
-    if (el) el.scrollTop = 0
-  },
+  reset: () => treeViewRef.value?.reset(),
 })
 </script>
 

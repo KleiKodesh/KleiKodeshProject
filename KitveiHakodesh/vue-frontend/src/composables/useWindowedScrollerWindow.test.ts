@@ -62,3 +62,63 @@ describe('useWindowedScrollerWindow landAt', () => {
     expect(window.windowEnd.value).toBeLessThanOrEqual(1_000)
   })
 })
+
+describe('useWindowedScrollerWindow replaceRows (rows inserted / removed mid-list)', () => {
+  function withViewport(start: number, end: number, readerRow: number) {
+    const rowHeight = 20
+    const viewport = { scrollTop: (readerRow - start) * rowHeight, scrollHeight: 0, clientHeight: 400, getBoundingClientRect: () => ({ top: 0 }) }
+    const window = useWindowedScrollerWindow({
+      count: () => 2_000,
+      viewport: () => viewport as unknown as HTMLElement,
+      rowElement: (index) =>
+        index >= window.windowStart.value && index < window.windowEnd.value
+          ? ({ offsetTop: (index - window.windowStart.value) * rowHeight, offsetHeight: rowHeight, getBoundingClientRect: () => ({ top: (index - window.windowStart.value) * rowHeight - viewport.scrollTop }) } as unknown as HTMLElement)
+          : null,
+      ensureRows: async () => {},
+    })
+    window.windowStart.value = start
+    window.windowEnd.value = end
+    return window
+  }
+  it('moves the whole window by the change when it lies above the window', () => {
+    const window = withViewport(100, 160, 120)
+    window.replaceRows(10, 0, 500)
+    expect([window.windowStart.value, window.windowEnd.value]).toEqual([600, 660])
+    window.replaceRows(10, 500, 0)
+    expect([window.windowStart.value, window.windowEnd.value]).toEqual([100, 160])
+  })
+
+  it('leaves the window alone when the change is below it', () => {
+    const window = withViewport(100, 160, 120)
+    window.replaceRows(160, 0, 30)
+    expect([window.windowStart.value, window.windowEnd.value]).toEqual([100, 160])
+  })
+
+  it('restarts the window after a change above the reader inside the window', () => {
+    const window = withViewport(100, 160, 130)
+    // 5 rows at 110 became 5000: the reader's row 130 is now 5125.
+    window.replaceRows(110, 5, 5000)
+    expect(window.windowStart.value).toBe(5110)
+    expect(window.windowEnd.value).toBe(5155)
+    expect(window.isRowInWindow(5125)).toBe(true)
+  })
+
+  it('keeps the top and mounts a bounded slice of a large insert below the reader', () => {
+    const window = withViewport(100, 160, 110)
+    window.replaceRows(120, 0, 30_000)
+    expect(window.windowStart.value).toBe(100)
+    expect(window.windowEnd.value).toBe(120 + 120)
+  })
+
+  it('keeps the rows after a small insert below the reader', () => {
+    const window = withViewport(100, 160, 110)
+    window.replaceRows(120, 0, 10)
+    expect([window.windowStart.value, window.windowEnd.value]).toEqual([100, 170])
+  })
+
+  it('collapsing below the reader drops the removed rows from the window', () => {
+    const window = withViewport(100, 160, 110)
+    window.replaceRows(120, 20, 0)
+    expect([window.windowStart.value, window.windowEnd.value]).toEqual([100, 140])
+  })
+})

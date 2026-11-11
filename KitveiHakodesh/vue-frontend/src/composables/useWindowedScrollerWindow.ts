@@ -542,11 +542,65 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     windowEnd.value = end
   }
 
+  // ── Rows inserted or removed mid-list ─────────────────────────────────────────
+
+  /**
+   * The list changed shape in ONE place: the `removed` rows from `at` became `inserted`
+   * new rows (a tree node expanded or collapsed). Call synchronously BEFORE the patch
+   * that renders the new count, then remap the index-keyed row elements the same way.
+   * Indexes below `at` keep their meaning; indexes from `at + removed` move by the
+   * difference. The window and the anchor move with their rows, so the reader's row
+   * stays pixel-still however many rows changed above it - the update hooks hold it
+   * as for any other patch.
+   *
+   * A change overlapping the window keeps the side the reader is on: below the change,
+   * the window restarts after it (fill re-grows the rows above); otherwise the window
+   * keeps its top and mounts at most MAX_EXTEND_ROWS of the new rows. A reader whose
+   * top row was itself removed is held on the row before the change.
+   */
+  function replaceRows(at: number, removed: number, inserted: number) {
+    const delta = inserted - removed
+    const changeEnd = at + removed
+    const start = windowStart.value
+    const end = windowEnd.value
+    const viewport = options.viewport()
+    const readerIndex = viewport && end > start ? findRowIndexAt(viewport.scrollTop, false) : null
+    if (end <= at) {
+      // Wholly below the window: nothing mounted moves.
+    } else if (start >= changeEnd) {
+      windowStart.value = start + delta
+      windowEnd.value = end + delta
+    } else if (readerIndex != null && readerIndex >= changeEnd) {
+      windowStart.value = changeEnd + delta
+      windowEnd.value = end + delta
+    } else {
+      windowStart.value = Math.min(start, at)
+      // Few new rows: keep the mounted rows after them too. Many: mount a screenful's
+      // worth and let fill grow the rest as the reader goes.
+      const newEnd = inserted > MAX_EXTEND_ROWS ? at + MAX_EXTEND_ROWS : Math.max(at + inserted, end + delta)
+      windowEnd.value = Math.max(windowStart.value + 1, newEnd)
+    }
+    // The count prop may not have caught up yet: clampToCount runs when it does.
+    if (windowStart.value > windowEnd.value) windowStart.value = windowEnd.value
+    textAnchor = null
+    if (anchor) {
+      if (anchor.index >= changeEnd) anchor.index += delta
+      else if (anchor.index >= at) {
+        const previous = at - 1
+        const row = previous >= windowStart.value ? options.rowElement(previous) : null
+        anchor = row && viewport
+          ? { index: previous, offsetTop: measuredTop(viewport, row), offsetHeight: row.offsetHeight, scrollTop: viewport.scrollTop }
+          : null
+      }
+    }
+  }
+
   return {
     windowStart,
     windowEnd,
     isRowInWindow,
     clampToCount,
+    replaceRows,
     findRowIndexAt,
     rememberAnchor,
     holdAnchor,

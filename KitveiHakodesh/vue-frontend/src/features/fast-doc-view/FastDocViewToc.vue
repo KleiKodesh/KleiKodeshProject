@@ -5,6 +5,7 @@ import TocTreeSection from '@/components/TocTreeSection.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
 import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 import type { FastDocViewOutlineNode } from './fastDocViewOutline'
+import type { TreeViewScrollPosition } from '@/components/treeViewRows'
 
 /**
  * The FastDocView table of contents: the book view's TOC panel (the shared TocTreeLayout +
@@ -15,7 +16,8 @@ import type { FastDocViewOutlineNode } from './fastDocViewOutline'
 export interface FastDocViewTocState {
   searchQuery?: string
   expanded?: number[]
-  scrollTop?: number
+  /** The first visible row and the pixels into it, in the tree as expanded above. */
+  scroll?: TreeViewScrollPosition | null
 }
 
 const props = defineProps<{
@@ -46,16 +48,12 @@ function snapshotState(): FastDocViewTocState {
   return {
     searchQuery: query.value || undefined,
     expanded: sectionRef.value?.getExpanded() ?? [],
-    scrollTop: sectionRef.value?.containerRef()?.scrollTop ?? 0,
+    scroll: sectionRef.value?.getScrollPosition() ?? null,
   }
 }
 function applyState(saved: FastDocViewTocState) {
   if (saved.searchQuery) query.value = saved.searchQuery
-  if (saved.expanded?.length) sectionRef.value?.setExpanded(saved.expanded)
-  nextTick(() => {
-    const list = sectionRef.value?.containerRef()
-    if (list && saved.scrollTop != null) list.scrollTop = saved.scrollTop
-  })
+  if (saved.expanded?.length || saved.scroll) sectionRef.value?.setExpanded(saved.expanded ?? [], saved.scroll)
 }
 onMounted(() => {
   const saved = props.savedState

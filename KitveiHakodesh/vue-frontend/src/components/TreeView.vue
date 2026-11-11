@@ -1,10 +1,35 @@
 <script setup lang="ts">
+/**
+ * A tree on screen is a flat list (`visibleNodes`), drawn through the app's
+ * WindowedScroller: only a window of rows is in the DOM, as real flow content with
+ * their own heights (long titles wrap), so a tree of 30k rows expands, restores and
+ * scrolls like a tree of 30. The list is recomputed on expand / collapse / filter
+ * only, never per scroll.
+ *
+ * An expand or collapse changes the list in one place; the scroller is told
+ * (`replaceRows`) before it renders, so the reader's row stays pixel-still whatever
+ * opened or closed above it. Anything else (a new filter, new nodes, a restored
+ * shape) is a new list: the scroller is re-created at its start row (`reopenAt`).
+ *
+ * The search results (filter mode, at most 100 rows with path subtitles) go through
+ * the same scroller: one code path for keys, focus and the bar, and rows of any
+ * height are what it is built for.
+ */
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
+import WindowedScroller from './WindowedScroller.vue'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { SegmentSearchTree, type TreeSearcher } from '@/utils/segmentSearchTree'
 import { useElementSize } from '@vueuse/core'
+import {
+  ancestorPath,
+  changedSpans,
+  expandAncestorsOf,
+  flattenVisible,
+  nearestShownIndex,
+  type TreeViewScrollPosition,
+} from './treeViewRows'
 
 // Vue casts an absent boolean prop to false, so the on-by-default flag needs an explicit default.
 const props = withDefaults(defineProps<{
@@ -26,50 +51,84 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent | KeyboardEvent] }>()
 
 const expanded = ref<Set<number>>(new Set())
-const containerRef = ref<HTMLElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
+const scrollerRef = ref<InstanceType<typeof WindowedScroller> | null>(null)
+/** The scroll element (focus, keys) - the scroller's viewport. */
+const containerRef = computed<HTMLElement | null>(() => scrollerRef.value?.scrollerElement ?? null)
+
+const nodeById = computed(() => {
+  const map = new Map<number, TreeNodeItem>()
+  for (const n of props.nodes) map.set(n.id, n)
+  return map
+})
+
+// Use the passed-in tree or build one lazily only when a filter is active and no
+// external tree was provided — avoids constructing segment maps on every load.
+const internalTree = computed(() =>
+  !props.searchTree && props.filter ? new SegmentSearchTree(props.nodes) : null,
+)
+const activeTree = computed<TreeSearcher>(() => props.searchTree ?? internalTree.value ?? new SegmentSearchTree([]))
+
+const visibleNodes = computed(() =>
+  props.filter
+    ? (activeTree.value.search(props.nodes, props.filter, 100) as TreeNodeItem[])
+    : flattenVisible(props.nodes, expanded.value),
+)
+const visibleIndexById = computed(() => new Map(visibleNodes.value.map((n, i) => [n.id, i])))
+
+// ── The scroller and where it opens ─────────────────────────────────────────
 
 /**
- * The row element of a visible node. Rows are the container's children in
- * visibleNodes order, so no per-row refs are kept (a ref callback per row is
- * re-run for every row on every render).
+ * The row the scroller is created at. Null until the tree is mounted and knows it
+ * (centring the active entry needs the pane's height), so the scroller is never
+ * created at the top and then moved.
  */
-function rowElAt(index: number): HTMLElement | null {
-  return (containerRef.value?.children[index] as HTMLElement | undefined) ?? null
-}
-function rowEl(id: number): HTMLElement | null {
-  const index = visibleIndexById.value.get(id)
-  return index == null ? null : rowElAt(index)
+const opening = ref<TreeViewScrollPosition | null>(null)
+const scrollerKey = ref(0)
+
+function reopenAt(position: TreeViewScrollPosition) {
+  opening.value = position
+  scrollerKey.value++
 }
 
-function expandAncestors(id: number) {
-  const map = nodeById.value
-  const node = map.get(id)
-  if (!node) return
-  let current = node
-  while (current.parentId != null) {
-    expanded.value.add(current.parentId)
-    const parent = map.get(current.parentId)
-    if (!parent) break
-    current = parent
+/** The offset that centres a row of this height in the pane. */
+function centringOffset(rowHeight: number) {
+  const height = containerRef.value?.clientHeight ?? rootRef.value?.clientHeight ?? 0
+  return -Math.max(0, height / 2 - rowHeight / 2)
+}
+
+/** The list is about to be replaced as a whole: the next change is not a mid-list span. */
+let isListReplaced = false
+
+watch(() => [props.nodes, props.filter, activeTree.value], () => { isListReplaced = true })
+
+// A pre-flush watcher: runs before the scroller patches the new list.
+watch(visibleNodes, (next, previous) => {
+  if (!opening.value) return
+  if (isListReplaced) {
+    isListReplaced = false
+    // A new search shows its results from the top; leaving it goes back to the active entry.
+    reopenAt(props.filter ? { index: 0, offsetPx: 0 } : startForActive())
+    return
   }
+  for (const span of changedSpans(previous, next)) scrollerRef.value?.replaceRows(span.at, span.removed, span.inserted)
+})
+
+/** Where the tree opens on its own: the active entry centred (ancestors expanded), else the top. */
+function startForActive(): TreeViewScrollPosition {
+  const id = props.activeNodeId
+  positionedNodeId = id
+  if (id == null || props.filter) return { index: 0, offsetPx: 0 }
+  expandAncestorsOf(id, nodeById.value, expanded.value)
+  const index = visibleIndexById.value.get(id) ?? 0
+  return { index, offsetPx: centringOffset(props.rowHeight ?? 28) }
 }
 
-function scrollIntoView(id: number) {
-  const el = rowEl(id)
-  const container = containerRef.value
-  if (!el || !container) return
-  // Already fully on screen (below the sticky header): leave the pane where it is.
-  const rowTopInPane = el.offsetTop - container.offsetTop
-  const viewTop = container.scrollTop + (headerRef.value?.offsetHeight ?? 0)
-  if (rowTopInPane >= viewTop && rowTopInPane + el.offsetHeight <= container.scrollTop + container.clientHeight) return
-  // offsetTop is measured from the nearest positioned ancestor, and the scroll
-  // container isn't one — so subtract the container's own offset to get the row's
-  // position within it. Without this the second tree of a SplitPane scrolls too
-  // far by the height of the pane above it. Rects would be simpler but report a
-  // stuck sticky header at its pinned position rather than its layout position.
-  const top = el.offsetTop - container.offsetTop
-  container.scrollTop = top - container.clientHeight / 2 + el.offsetHeight / 2
-}
+onMounted(() => {
+  opening.value = startForActive()
+})
+
+// ── Following the active entry ──────────────────────────────────────────────
 
 /**
  * The node this tree has already positioned itself on.
@@ -91,33 +150,53 @@ function scrollIntoView(id: number) {
  */
 let positionedNodeId: number | undefined
 
+function isFullyVisibleBelowHeader(index: number): boolean {
+  const scroller = scrollerRef.value
+  const viewport = containerRef.value
+  const row = scroller?.isRowRendered(index) ? scroller.rowElement(index) : null
+  if (!viewport || !row) return false
+  const top = row.offsetTop
+  return top >= viewport.scrollTop + headerHeight.value && top + row.offsetHeight <= viewport.scrollTop + viewport.clientHeight
+}
+
+function revealCentred(id: number) {
+  const index = visibleIndexById.value.get(id)
+  const scroller = scrollerRef.value
+  if (index == null || !scroller) return
+  // Already fully on screen (below the sticky header): leave the pane where it is.
+  if (isFullyVisibleBelowHeader(index)) return
+  const rowHeight = scroller.rowElement(index)?.offsetHeight ?? props.rowHeight ?? 28
+  void scroller.scrollToIndex(index, { offsetPx: centringOffset(rowHeight) })
+}
+
 function syncToNode(id: number | undefined) {
   // Already here — nothing to do. Repeat announcements land here and stop.
   if (id === positionedNodeId) return
   positionedNodeId = id
+  if (!opening.value || props.filter) return
   // No entry covers the position (the reader is above the tree's first entry):
   // follow them back to the top rather than stay parked on the last one.
   if (id == null) {
-    if (containerRef.value) containerRef.value.scrollTop = 0
+    void scrollerRef.value?.scrollToIndex(0)
     return
   }
-  expandAncestors(id)
-  nextTick(() => scrollIntoView(id))
+  expandAncestorsOf(id, nodeById.value, expanded.value)
+  nextTick(() => revealCentred(id))
 }
 
 watch(() => props.activeNodeId, syncToNode)
 
-onMounted(() => {
-  syncToNode(props.activeNodeId)
-})
+// ── Expand / collapse ───────────────────────────────────────────────────────
 
 function toggle(node: TreeNodeItem) {
   if (expanded.value.has(node.id)) expanded.value.delete(node.id)
   else expanded.value.add(node.id)
 }
 
+/** Collapse everything and go back to the top. */
 function reset() {
   expanded.value = new Set()
+  if (opening.value) reopenAt({ index: 0, offsetPx: 0 })
 }
 
 /**
@@ -130,71 +209,74 @@ function getExpanded(): number[] {
   return [...expanded.value]
 }
 
-function setExpanded(ids: readonly number[]): void {
-  expanded.value = new Set(ids)
+/** The first visible row and how far into it, for the caller to save. Null before the tree has opened. */
+function getScrollPosition(): TreeViewScrollPosition | null {
+  const visible = scrollerRef.value?.readFirstVisible()
+  return visible ? { index: visible.index, offsetPx: visible.offsetWithinRow } : null
 }
 
-defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded })
+/**
+ * A new shape - a restore, or every node expanded at once. The tree re-opens at
+ * `position` (a saved one), else at the row that was at the top, wherever it now is.
+ */
+function setExpanded(ids: readonly number[], position?: TreeViewScrollPosition | null): void {
+  const top = getScrollPosition()
+  const topId = top ? visibleNodes.value[top.index]?.id : undefined
+  expanded.value = new Set(ids)
+  if (!opening.value) return
+  if (position) {
+    reopenAt(position)
+    return
+  }
+  const index = topId == null ? undefined : nearestShownIndex(topId, nodeById.value, visibleIndexById.value)
+  reopenAt(index == null ? { index: 0, offsetPx: 0 } : { index, offsetPx: top!.offsetPx })
+}
+
+defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded, getScrollPosition })
+
+// ── Sticky header ───────────────────────────────────────────────────────────
 
 /**
  * Sticky header: the full ancestor path of the row at the top of the scroll
  * area (not just its direct parent), drawn as real tree rows in an overlay above the
- * scroller. Recomputed once per frame on scroll.
+ * scroller. Read from the data: the scroller names the first visible row, the
+ * node names its parents. Recomputed once per frame on scroll.
  */
 const headerRef = ref<HTMLElement | null>(null)
 const headerPath = ref<TreeNodeItem[]>([])
-// The scroller's scrollbar width - the header stops short of it so the bar stays usable.
+// The scroller's drawn bar - the header stops short of it so the bar stays usable.
 const scrollbarWidth = ref(0)
-const nodeById = computed(() => {
-  const map = new Map<number, TreeNodeItem>()
-  for (const n of props.nodes) map.set(n.id, n)
-  return map
-})
-
-function rowTop(el: HTMLElement, container: HTMLElement) {
-  return el.offsetTop - container.offsetTop
-}
-
-/** First visible row whose bottom is below `y` (binary search - rows are in order). */
-function rowAt(y: number): TreeNodeItem | undefined {
-  const container = containerRef.value
-  const list = visibleNodes.value
-  if (!container) return undefined
-  let lo = 0
-  let hi = list.length - 1
-  let found: TreeNodeItem | undefined
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    const el = rowElAt(mid)
-    if (!el) return undefined
-    if (rowTop(el, container) + el.offsetHeight > y) {
-      found = list[mid]
-      hi = mid - 1
-    } else lo = mid + 1
-  }
-  return found
-}
+const { height: headerHeight } = useElementSize(headerRef, undefined, { box: 'border-box' })
 
 function updateHeader() {
-  const container = containerRef.value
-  if (!container || props.filter || props.stickyHeaders === false || container.scrollTop <= 0) {
+  const scroller = scrollerRef.value
+  if (!scroller || props.filter || props.stickyHeaders === false) {
     headerPath.value = []
     return
   }
-  scrollbarWidth.value = container.offsetWidth - container.clientWidth
-  const top = rowAt(container.scrollTop + (headerRef.value?.offsetHeight ?? 0))
-  const path: TreeNodeItem[] = []
-  let parentId = top?.parentId ?? null
-  while (parentId != null) {
-    const parent = nodeById.value.get(parentId)
-    if (!parent) break
-    path.unshift(parent)
-    parentId = parent.parentId
+  const top = scroller.readFirstVisible(headerRef.value?.offsetHeight ?? 0)
+  if (!top || (top.index === 0 && (containerRef.value?.scrollTop ?? 0) <= 0)) {
+    headerPath.value = []
+    return
   }
+  scrollbarWidth.value = scroller.scrollbarElement?.offsetWidth ?? 0
+  const path = ancestorPath(visibleNodes.value[top.index], nodeById.value)
   const same =
     path.length === headerPath.value.length && path.every((n, i) => n.id === headerPath.value[i]!.id)
-  if (!same) headerPath.value = path
+  if (same) return
+  const depthChanged = path.length !== headerPath.value.length
+  headerPath.value = path
+  // The row under the header was read below the OLD header's height: read it once
+  // more below the new one (once - a row exactly at the edge must not flip-flop).
+  if (depthChanged && !isHeaderRecheck) {
+    nextTick(() => {
+      isHeaderRecheck = true
+      updateHeader()
+      isHeaderRecheck = false
+    })
+  }
 }
+let isHeaderRecheck = false
 
 let headerFrame = 0
 function onScroll() {
@@ -205,23 +287,26 @@ function onScroll() {
   })
 }
 
+watch(
+  () => [visibleNodes.value, props.filter],
+  () => nextTick(updateHeader),
+)
+
 /**
  * The sticky rows are the ancestor rows themselves: same look, same chevron, same click.
  * Collapsing one folds the heading away and brings it to the top, where it now sits
- * as an ordinary row.
+ * as an ordinary row (below its own ancestors' header).
  */
-function collapseFromHeader(node: TreeNodeItem) {
+async function collapseFromHeader(node: TreeNodeItem) {
   expanded.value.delete(node.id)
-  nextTick(() => {
-    const el = rowEl(node.id)
-    const container = containerRef.value
-    if (!el || !container) return
-    container.scrollTop = rowTop(el, container)
-    updateHeader()
-    nextTick(() => {
-      container.scrollTop = rowTop(el, container) - (headerRef.value?.offsetHeight ?? 0)
-    })
-  })
+  await nextTick()
+  const index = visibleIndexById.value.get(node.id)
+  const scroller = scrollerRef.value
+  if (index == null || !scroller) return
+  await scroller.scrollToIndex(index)
+  updateHeader()
+  await nextTick()
+  if (headerPath.value.length) await scroller.scrollToIndex(index, { offsetPx: -(headerRef.value?.offsetHeight ?? 0) })
 }
 
 function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
@@ -229,8 +314,7 @@ function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
   emit('select', node, event)
 }
 
-// Keyboard nav / reveal-active scroll rows into view: keep them out from under the header.
-const { height: headerHeight } = useElementSize(headerRef, undefined, { box: 'border-box' })
+// ── Keys and clicks ─────────────────────────────────────────────────────────
 
 const { focusedIndex, containerFocused } = useListKeys(
   containerRef,
@@ -238,6 +322,7 @@ const { focusedIndex, containerFocused } = useListKeys(
   // Forward the KeyboardEvent so consumers see Ctrl/⌘+Enter (via wantsNewTab),
   // mirroring the MouseEvent they already get from a click.
   (i, _openInNewTab, event) => emit('select', visibleNodes.value[i]!, event),
+  { reveal: (i) => scrollerRef.value?.revealIndex(i) },
 )
 
 function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
@@ -249,79 +334,60 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
   positionedNodeId = node.id
   emit('select', node, event)
 }
-
-// Use the passed-in tree or build one lazily only when a filter is active and no
-// external tree was provided — avoids constructing segment maps on every load.
-const internalTree = computed(() =>
-  !props.searchTree && props.filter ? new SegmentSearchTree(props.nodes) : null,
-)
-const activeTree = computed<TreeSearcher>(() => props.searchTree ?? internalTree.value ?? new SegmentSearchTree([]))
-
-const visibleNodes = computed(() => {
-  if (props.filter) {
-    return activeTree.value.search(props.nodes, props.filter, 100) as TreeNodeItem[]
-  }
-
-  const result: TreeNodeItem[] = []
-  const hidden = new Set<number>()
-
-  for (const node of props.nodes) {
-    if (node.parentId !== null && hidden.has(node.parentId)) {
-      hidden.add(node.id)
-      continue
-    }
-    result.push(node)
-    if (node.hasChildren && !expanded.value.has(node.id)) hidden.add(node.id)
-  }
-  return result
-})
-const visibleIndexById = computed(() => new Map(visibleNodes.value.map((n, i) => [n.id, i])))
-// After visibleNodes is declared - the getter reads it during setup.
-watch(
-  () => [visibleNodes.value, props.filter],
-  () => nextTick(updateHeader),
-)
 </script>
 
 <template>
-  <div class="tree-view">
-  <div v-if="headerPath.length" ref="headerRef" class="tree-sticky-header" :style="{ insetInlineEnd: `${scrollbarWidth}px` }">
-    <TreeNode
-      v-for="node in headerPath"
-      :key="node.id"
-      :node="node"
-      :expanded="true"
-      :active="node.id === activeNodeId"
-      :focused="false"
-      :filtered="false"
-      :indent="indent"
-      :level-offset="levelOffset"
-      :row-height="rowHeight"
-      :font-size="fontSize"
-      @toggle="collapseFromHeader(node)"
-      @select="selectFromHeader(node, $event)"
-    />
-  </div>
-  <div ref="containerRef" class="tree-entries toc-thin-scroll" tabindex="0" :style="{ scrollPaddingTop: `${headerPath.length ? headerHeight : 0}px` }" @scroll.passive="onScroll">
-    <TreeNode
-      v-for="(node, i) in visibleNodes"
-      :key="node.id"
-      v-memo="[node, i, expanded.has(node.id), node.id === activeNodeId, containerFocused && focusedIndex === i, filter, activeTree, indent, levelOffset, rowHeight, fontSize]"
-      :node="node"
-      :expanded="expanded.has(node.id)"
-      :active="node.id === activeNodeId"
-      :focused="containerFocused && focusedIndex === i"
-      :filtered="!!filter"
-      :indent="indent"
-      :level-offset="levelOffset"
-      :row-height="rowHeight"
-      :font-size="fontSize"
-      @toggle="toggle(node)"
-      @select="selectNode(i, node, $event)"
+  <div ref="rootRef" class="tree-view">
+    <div v-if="headerPath.length" ref="headerRef" class="tree-sticky-header" :style="{ insetInlineEnd: `${scrollbarWidth}px` }">
+      <TreeNode
+        v-for="node in headerPath"
+        :key="node.id"
+        :node="node"
+        :expanded="true"
+        :active="node.id === activeNodeId"
+        :focused="false"
+        :filtered="false"
+        :indent="indent"
+        :level-offset="levelOffset"
+        :row-height="rowHeight"
+        :font-size="fontSize"
+        @toggle="collapseFromHeader(node)"
+        @select="selectFromHeader(node, $event)"
+      />
+    </div>
+    <WindowedScroller
+      v-if="opening"
+      :key="scrollerKey"
+      ref="scrollerRef"
+      class="tree-entries"
+      thin
+      tabindex="0"
+      :count="visibleNodes.length"
+      :initial-index="opening.index"
+      :initial-offset-px="opening.offsetPx"
+      :style="{ scrollPaddingTop: `${headerPath.length ? headerHeight : 0}px` }"
+      @scroll.passive="onScroll"
+      @opened="updateHeader"
     >
-      {{ filter ? (activeTree.displayPaths.get(node.id) ?? node.text) : node.text }}
-    </TreeNode>
-  </div>
+      <template #row="{ index }">
+        <TreeNode
+          v-if="visibleNodes[index]"
+          :node="visibleNodes[index]!"
+          :expanded="expanded.has(visibleNodes[index]!.id)"
+          :active="visibleNodes[index]!.id === activeNodeId"
+          :focused="containerFocused && focusedIndex === index"
+          :filtered="!!filter"
+          :indent="indent"
+          :level-offset="levelOffset"
+          :row-height="rowHeight"
+          :font-size="fontSize"
+          @toggle="toggle(visibleNodes[index]!)"
+          @select="selectNode(index, visibleNodes[index]!, $event)"
+        >
+          {{ filter ? (activeTree.displayPaths.get(visibleNodes[index]!.id) ?? visibleNodes[index]!.text) : visibleNodes[index]!.text }}
+        </TreeNode>
+      </template>
+    </WindowedScroller>
   </div>
 </template>
 
@@ -333,6 +399,11 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--tree-bg, var(--bg-primary));
+}
+.tree-view > .windowed-scroller {
+  flex: 1;
+  min-height: 0;
 }
 /* Overlay, not in the flow: its height changes with the path and must not shift the rows. */
 .tree-sticky-header {
@@ -343,22 +414,5 @@ watch(
   display: flex;
   flex-direction: column;
   background: var(--tree-bg, var(--bg-primary));
-}
-.tree-entries {
-  flex: 1;
-  height: 100%;
-  overflow: auto;
-  min-height: 0;
-  background: var(--tree-bg, var(--bg-primary));
-}
-</style>
-
-<style>
-.tree-entries .tree-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 28px;
-}
-.tree-entries .tree-row.is-filtered {
-  contain-intrinsic-size: auto 56px;
 }
 </style>

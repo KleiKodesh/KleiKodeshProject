@@ -18,7 +18,15 @@ export function useListKeys(
   containerEl: Ref<HTMLElement | null>,
   getCount: () => number,
   onActivate?: (index: number, openInNewTab: boolean, event: KeyboardEvent) => void,
-  options?: { itemSelector?: string },
+  options?: {
+    itemSelector?: string
+    /**
+     * Brings item `index` into view. For a windowed list, where only some items are in
+     * the DOM and the n-th element is not the n-th item (WindowedScroller.revealIndex).
+     * Default: the n-th `itemSelector` element, scrolled to nearest.
+     */
+    reveal?: (index: number) => void
+  },
 ) {
   const selector = options?.itemSelector ?? '[data-nav-item]'
   const focusedIndex = ref(-1)
@@ -29,6 +37,7 @@ export function useListKeys(
   }
 
   function scrollItemIntoView(index: number) {
+    if (options?.reveal) return options.reveal(index)
     const items = getItems()
     const el = items[index]
     if (el) el.scrollIntoView({ block: 'nearest' })

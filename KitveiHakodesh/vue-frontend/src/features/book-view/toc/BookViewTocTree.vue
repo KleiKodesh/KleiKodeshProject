@@ -96,22 +96,17 @@ function snapshotState(): Omit<TocPersistState, 'visible'> {
     searchQuery: searchQuery.value,
     expanded: tocSectionRef.value?.getExpanded() ?? [],
     altExpanded: altSectionRef.value?.getExpanded() ?? [],
-    scrollTop: tocSectionRef.value?.containerRef()?.scrollTop ?? 0,
-    altScrollTop: altSectionRef.value?.containerRef()?.scrollTop ?? 0,
+    scroll: tocSectionRef.value?.getScrollPosition() ?? null,
+    altScroll: altSectionRef.value?.getScrollPosition() ?? null,
   }
 }
 
 function applyState(saved: TocPersistState) {
   if (saved.searchQuery) searchQuery.value = saved.searchQuery
-  // Expanded state must land before the scroll: expanding rows changes the
-  // scroll height, so restoring the offset first would clamp it to the
-  // collapsed tree's height and land the reader in the wrong place.
-  if (saved.expanded?.length) tocSectionRef.value?.setExpanded(saved.expanded)
+  // The expanded ids and the first visible row go in together: the row index means
+  // a row of the tree as expanded, and the tree re-opens at it.
+  if (saved.expanded?.length || saved.scroll) tocSectionRef.value?.setExpanded(saved.expanded ?? [], saved.scroll)
   applyAltState(saved)
-  nextTick(() => {
-    const toc = tocSectionRef.value?.containerRef()
-    if (toc && saved.scrollTop != null) toc.scrollTop = saved.scrollTop
-  })
 }
 
 /**
@@ -143,11 +138,7 @@ onBeforeUnmount(() => {
 
 function applyAltState(saved: TocPersistState) {
   const apply = () => {
-    if (saved.altExpanded?.length) altSectionRef.value?.setExpanded(saved.altExpanded)
-    nextTick(() => {
-      const alt = altSectionRef.value?.containerRef()
-      if (alt && saved.altScrollTop != null) alt.scrollTop = saved.altScrollTop
-    })
+    if (saved.altExpanded?.length || saved.altScroll) altSectionRef.value?.setExpanded(saved.altExpanded ?? [], saved.altScroll)
   }
   if (altSectionRef.value) apply()
   // Re-apply on every (re)mount of the alt section until one sticks, then stop.
