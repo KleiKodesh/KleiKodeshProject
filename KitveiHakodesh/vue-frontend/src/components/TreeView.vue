@@ -127,10 +127,9 @@ function setExpanded(ids: readonly number[]): void {
 defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded })
 
 /**
- * Sticky breadcrumb: the full ancestor path of the row at the top of the scroll
- * area (not just its direct parent), drawn as our own overlay element above the
- * scroller. Recomputed once per frame on scroll; clicking a crumb brings that
- * heading to the top.
+ * Sticky header: the full ancestor path of the row at the top of the scroll
+ * area (not just its direct parent), drawn as real tree rows in an overlay above the
+ * scroller. Recomputed once per frame on scroll.
  */
 const headerRef = ref<HTMLElement | null>(null)
 const headerPath = ref<TreeNodeItem[]>([])
@@ -196,17 +195,28 @@ function onScroll() {
   })
 }
 
-function scrollToCrumb(node: TreeNodeItem) {
-  const el = rowRefs.value.get(node.id)
-  const container = containerRef.value
-  if (!el || !container) return
-  // The overlay header covers the top of the scroller: land the heading just below it
-  // (its path is then the heading's ancestors, so the header's height is final).
-  container.scrollTop = rowTop(el, container)
-  updateHeader()
+/**
+ * The sticky rows are the ancestor rows themselves: same look, same chevron, same click.
+ * Collapsing one folds the heading away and brings it to the top, where it now sits
+ * as an ordinary row.
+ */
+function collapseFromHeader(node: TreeNodeItem) {
+  expanded.value.delete(node.id)
   nextTick(() => {
-    container.scrollTop = rowTop(el, container) - (headerRef.value?.offsetHeight ?? 0)
+    const el = rowRefs.value.get(node.id)
+    const container = containerRef.value
+    if (!el || !container) return
+    container.scrollTop = rowTop(el, container)
+    updateHeader()
+    nextTick(() => {
+      container.scrollTop = rowTop(el, container) - (headerRef.value?.offsetHeight ?? 0)
+    })
   })
+}
+
+function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
+  positionedNodeId = node.id
+  emit('select', node, event)
 }
 
 // Keyboard nav / reveal-active scroll rows into view: keep them out from under the header.
@@ -265,10 +275,20 @@ watch(
 <template>
   <div class="tree-view">
   <div v-if="headerPath.length" ref="headerRef" class="tree-sticky-header" :style="{ insetInlineEnd: `${scrollbarWidth}px` }">
-    <template v-for="(crumb, ci) in headerPath" :key="crumb.id">
-      <span v-if="ci > 0" class="crumb-sep">›</span>
-      <span class="crumb" @click="scrollToCrumb(crumb)">{{ crumb.text }}</span>
-    </template>
+    <TreeNode
+      v-for="node in headerPath"
+      :key="node.id"
+      :node="node"
+      :expanded="true"
+      :active="node.id === activeNodeId"
+      :focused="false"
+      :filtered="false"
+      :indent="indent"
+      :row-height="rowHeight"
+      :font-size="fontSize"
+      @toggle="collapseFromHeader(node)"
+      @select="selectFromHeader(node, $event)"
+    />
   </div>
   <div ref="containerRef" class="tree-entries toc-thin-scroll" tabindex="0" :style="{ scrollPaddingTop: `${headerPath.length ? headerHeight : 0}px` }" @scroll.passive="onScroll">
     <TreeNode
@@ -308,23 +328,8 @@ watch(
   top: 0;
   z-index: 2;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 4px;
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  flex-direction: column;
   background: var(--tree-bg, var(--bg-primary));
-}
-.crumb {
-  cursor: pointer;
-}
-.crumb:hover {
-  color: var(--accent-color, #3478f6);
-}
-.crumb-sep {
-  opacity: 0.6;
 }
 .tree-entries {
   flex: 1;
