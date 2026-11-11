@@ -837,7 +837,7 @@ public sealed class Dispatcher(
                 case "getAllTocEntries":
                 {
                     var a = MsgPack.De<TocByBookArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new TocEntriesResult { Rows = seforim.GetAllTocEntries(a.BookId) }));
+                    return RpcResponse.Ok(MsgPack.Ser(TocEntriesResult.From(seforim.GetAllTocEntries(a.BookId))));
                 }
 
                 case "getAltTocStructures":
@@ -849,7 +849,7 @@ public sealed class Dispatcher(
                 case "getAllAltTocEntries":
                 {
                     var a = MsgPack.De<TocByStructureArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new TocEntriesResult { Rows = seforim.GetAllAltTocEntries(a.StructureId) }));
+                    return RpcResponse.Ok(MsgPack.Ser(TocEntriesResult.From(seforim.GetAllAltTocEntries(a.StructureId))));
                 }
 
                 case "getTocTitlesForBooks":

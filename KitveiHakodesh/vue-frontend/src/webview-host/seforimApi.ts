@@ -156,8 +156,45 @@ export async function getHebrewBooksEditions(bookId: number): Promise<HebrewBook
 
 // ── TOC ─────────────────────────────────────────────────────────────────────
 
+/**
+ * A TOC as the service sends it: columns, entry i being the i-th value of each, and every
+ * distinct text once (see TocEntriesResult in the service's SeforimModels.cs). Absent
+ * values: parentIds/lineIds/altStructureIds 0, lineIndexes -1.
+ */
+interface TocColumns {
+  ids: number[]
+  parentIds: number[]
+  levels: number[]
+  lineIds: number[]
+  lineIndexes: number[]
+  hasChildren: Uint8Array | number[]
+  texts: string[]
+  textIndex: number[]
+  altStructureIds?: number[] | null
+}
+
+/** Back to entry rows. Entries with the same text share one string. */
+function tocEntriesFromColumns(c: TocColumns): TocEntry[] {
+  const entries = new Array<TocEntry>(c.ids.length)
+  const alt = c.altStructureIds
+  for (let i = 0; i < entries.length; i++) {
+    const entry: TocEntry = {
+      id: c.ids[i]!,
+      parentId: c.parentIds[i] || null,
+      level: c.levels[i]!,
+      lineId: c.lineIds[i] || null,
+      hasChildren: c.hasChildren[i]!,
+      text: c.texts[c.textIndex[i]!]!,
+      lineIndex: c.lineIndexes[i]! < 0 ? null : c.lineIndexes[i]!,
+    }
+    if (alt) entry.altStructureId = alt[i] || null
+    entries[i] = entry
+  }
+  return entries
+}
+
 export async function getAllTocEntries(bookId: number): Promise<TocEntry[]> {
-  return (await seforimOp<{ rows: TocEntry[] }>('getAllTocEntries', { bookId })).rows
+  return tocEntriesFromColumns(await seforimOp<TocColumns>('getAllTocEntries', { bookId }))
 }
 
 export async function getAltTocStructures(bookId: number): Promise<AltTocStructure[]> {
@@ -165,7 +202,7 @@ export async function getAltTocStructures(bookId: number): Promise<AltTocStructu
 }
 
 export async function getAllAltTocEntries(structureId: number): Promise<TocEntry[]> {
-  return (await seforimOp<{ rows: TocEntry[] }>('getAllAltTocEntries', { structureId })).rows
+  return tocEntriesFromColumns(await seforimOp<TocColumns>('getAllAltTocEntries', { structureId }))
 }
 
 /** Daf-yomi navigation: first TOC entry whose text matches the LIKE `pattern`. */
