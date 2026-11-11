@@ -85,7 +85,12 @@ function syncToNode(id: number | undefined) {
   // Already here — nothing to do. Repeat announcements land here and stop.
   if (id === positionedNodeId) return
   positionedNodeId = id
-  if (id == null) return
+  // No entry covers the position (the reader is above the tree's first entry):
+  // follow them back to the top rather than stay parked on the last one.
+  if (id == null) {
+    if (containerRef.value) containerRef.value.scrollTop = 0
+    return
+  }
   expandAncestors(id)
   nextTick(() => scrollIntoView(id))
 }
