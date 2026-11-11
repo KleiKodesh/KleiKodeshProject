@@ -48,6 +48,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 _categoriesCache = null;
                 _booksCache = null;
+                _categoriesById = null;
+                _booksById = null;
             }
         }
 
@@ -893,20 +895,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var r = cmd.ExecuteReader();
             while (r.Read())
                 list.Add(new TocSectionRow { SectionStart = r.GetInt32(0) });
-            return list;
-        }
-
-        public List<LinkTargetRow> GetLinkTargetForSourceLineAndBook(int sourceLineId, int targetBookId)
-        {
-            var list = new List<LinkTargetRow>();
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinkTargetForSourceLineAndBook;
-            cmd.Parameters.AddWithValue("@sourceLineId", sourceLineId);
-            cmd.Parameters.AddWithValue("@targetBookId", targetBookId);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new LinkTargetRow { TargetLineId = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1) });
             return list;
         }
 

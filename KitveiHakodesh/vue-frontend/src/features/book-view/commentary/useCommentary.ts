@@ -126,7 +126,7 @@ const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
 const staticFilterGroupsByBook = new Map<number, Promise<CommentaryGroup[]>>()
 
 /** Every book that links to `bookId` (SOURCE / TARGUM / COMMENTARY), cached per book. */
-export async function loadStaticFilterGroupsForBook(bookId: number): Promise<CommentaryGroup[]> {
+async function loadStaticFilterGroupsForBook(bookId: number): Promise<CommentaryGroup[]> {
   const booksDataStore = useBooksDataStore()
   await booksDataStore.ensureLoaded()
   await booksDataStore.ensureCommentaryMetadataLoaded()
@@ -452,8 +452,7 @@ export function useCommentary(
     loadedForLineId = null
   })
 
-  // Lazy — called by useBookView when the related-books dropdown or commentary filter
-  // panel first opens. Safe to call multiple times; staticFilterGroupsByBook prevents
+  // Lazy — called when a commentary filter panel first opens. Safe to call multiple times; staticFilterGroupsByBook prevents
   // redundant DB queries for the same book.
   async function ensureStaticFilterGroupsLoaded() {
     const id = sourceBookId()

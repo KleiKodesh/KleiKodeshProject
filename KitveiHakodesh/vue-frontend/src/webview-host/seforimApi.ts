@@ -13,6 +13,7 @@ import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
   LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
+  RelatedBook, RelatedBooksList,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -374,11 +375,22 @@ export async function getPrevTocSectionWithCommentary(
       { mainBookId, commentaryBookId, rangePairs, direction: 'prev' })).rows
 }
 
-export async function getLinkTargetForSourceLineAndBook(
-  sourceLineId: number, targetBookId: number,
-): Promise<{ targetLineId: number; lineIndex: number }[]> {
-  return (await seforimOp<{ rows: { targetLineId: number; lineIndex: number }[] }>('getLinkTargetForSourceLineAndBook',
-      { sourceLineId, targetBookId })).rows
+// ── Related books (book view toolbar) ─────────────────────────────────────────
+
+/** The related-books dropdown's list for a book, sections in display order. */
+export async function getRelatedBooks(bookId: number): Promise<RelatedBooksList> {
+  return seforimOp<RelatedBooksList>('getRelatedBooks', { bookId })
+}
+
+/**
+ * The line a related book opens at for the reader's current top line, or null for the
+ * book's start. `target` is the row exactly as getRelatedBooks returned it.
+ */
+export async function resolveRelatedTarget(
+  fromBookId: number, topLineIndex: number, target: RelatedBook,
+): Promise<number | null> {
+  return (await seforimOp<{ lineIndex: number | null }>('resolveRelatedTarget',
+      { fromBookId, topLineIndex, target })).lineIndex ?? null
 }
 
 // ── TOC paths & line→book/index helpers ───────────────────────────────────────
