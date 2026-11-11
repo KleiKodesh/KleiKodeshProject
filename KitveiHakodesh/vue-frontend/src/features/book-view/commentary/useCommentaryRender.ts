@@ -1,6 +1,6 @@
 import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
+import { removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark, cleanTextFlagsFor } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, annotationOffsetLength, contentInAnnotationOffsetSpace } from '../lines/useBookViewLineRenderer'
@@ -29,7 +29,8 @@ export function useCommentaryRender(
 ) {
   const settingsStore = useSettingsStore()
 
-  const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
+  // Commentary text: a short plain heading before a dash is a dibbur hamatchil too.
+  const cleanTextFlags = computed(() => cleanTextFlagsFor(settingsStore.cleanTextFlags, true))
   const commentaryFontPx = computed(
     () => (getCommentaryZoom() / 100) * (settingsStore.commentaryFontSize / 100) * 15,
   )
@@ -184,8 +185,7 @@ export function useCommentaryRender(
     // anchor offsets are in upstream's visible-char convention, pre-filter/pre-censor).
     const anchors = lineId != null ? (getWordLinkAnchorsForLine?.(lineId) ?? []) : []
     let result = anchors.length ? applyWordLinkAnchors(content, anchors) : content
-    result =
-      cleanHebrewText(result, cleanTextFlags.value)
+    result = cleanHebrewText(result, cleanTextFlags.value)
     result = censorDivineNames(result, settingsStore.censorOptions)
 
     // Apply user highlights before search marks so search marks render on top

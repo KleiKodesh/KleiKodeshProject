@@ -201,8 +201,32 @@
     "cleanDibburHamatchilDash": "Dibbur hamatchil dash to period",
     "cleanMaqaf": "Maqaf to space",
     "cleanNikkud": "Vowels",
-    "cleanNormalizePunctuation": "Colons, quotes and spacing",
-    "cleanRemovePunctuation": "Remove punctuation (keep line end)",
+    "mark": {
+      "colon": "Colon in a line",
+      "comma": "Comma",
+      "dash": "Dash",
+      "passageEndColon": "Colon ending a passage",
+      "period": "Period in a line",
+      "questionExclamation": "? and !",
+      "quotes": "Quotation marks",
+      "semicolon": "Semicolon"
+    },
+    "markMode": {
+      "keep": "Keep",
+      "remove": "Remove",
+      "toComma": "To ,",
+      "toPeriod": "To ."
+    },
+    "punctuation": "Punctuation",
+    "punctuationLevel": {
+      "classic": "Classic: periods, commas, colons",
+      "custom": "Custom",
+      "none": "None (line end only)",
+      "original": "Original",
+      "periodsColons": "Periods and colons",
+      "periodsOnly": "Periods only"
+    },
+    "punctuationMarks": "Each mark",
     "cleanTeamim": "Cantillation",
     "cleanText": "Clean text",
     "cleanTextOptions": "What to clean",

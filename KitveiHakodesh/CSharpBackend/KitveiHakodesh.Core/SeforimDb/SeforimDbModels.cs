@@ -111,6 +111,8 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int HasSourceConnection { get; set; }
         public int HasCommentaryConnection { get; set; }
         public int HasOtherConnection { get; set; }
+        /// <summary>1 when the library marks the book a commentary (book.dependenceType).</summary>
+        public int IsCommentary { get; set; }
     }
 
     /// <summary>A streamed line row — matches { id, lineIndex, content } in fetchRange().</summary>

@@ -23,7 +23,7 @@ const KEYS = {
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
   SETTINGS_LINES_LAYOUT: 'text.linesLayout',
   SETTINGS_CLEAN_TEXT_ACTIVE: 'text.cleanText.active',
-  SETTINGS_CLEAN_TEXT_OPTIONS: 'text.cleanText.options',
+  SETTINGS_CLEAN_TEXT_OPTIONS: 'text.cleanText.options.v2', // v2: per-mark punctuation bits
   SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
 
   // Commentary display

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { cleanHebrewText } from './hebrewTextCleaning'
+import { MARK_MODE, MARK_COLON, MARK_PASSAGE_END_COLON, MARK_QUOTES, MARK_COMMA, PUNCTUATION_PRESETS, withMarkMode } from './punctuationModes'
 import { CLEAN_TEXT } from './hebrewTextProcessing'
 
 describe('cleanHebrewText — colon handling', () => {
@@ -14,10 +15,16 @@ describe('cleanHebrewText — colon handling', () => {
     expect(cleanHebrewText('2:ב')).toBe('2:ב')
   })
 
-  it('still drops mid-sentence artifact colons with surrounding space', () => {
-    expect(cleanHebrewText('הוא : שני')).toBe('הוא שני')
-    expect(cleanHebrewText('הוא: שני')).toBe('הוא שני')
-    expect(cleanHebrewText('הוא :שני')).toBe('הוא שני')
+  it('keeps every mid-line colon by default (classic keeps colons)', () => {
+    expect(cleanHebrewText('הוא : שני')).toBe('הוא : שני')
+    expect(cleanHebrewText('הוא: שני')).toBe('הוא: שני')
+  })
+
+  it('colon "to period": a sentence colon becomes a period, loose artifacts go', () => {
+    const toPeriod = withMarkMode(0, MARK_COLON, MARK_MODE.CONVERT)
+    expect(cleanHebrewText('הוא: שני', toPeriod)).toBe('הוא. שני')
+    expect(cleanHebrewText('הוא : שני', toPeriod)).toBe('הוא שני')
+    expect(cleanHebrewText('הוא :שני', toPeriod)).toBe('הוא שני')
   })
 
   it('still keeps end-of-line colons', () => {
@@ -48,8 +55,8 @@ describe('cleanHebrewText — colon handling', () => {
     expect(output).toContain('(דברים ח:טו)')
     expect(output).not.toContain('טיג')
     expect(output).not.toContain('חטו')
-    // The 'הגה:' colon is followed by a space + letter — an artifact, still dropped.
-    expect(output).not.toContain('הגה:')
+    // The 'הגה:' colon closes a label, so it stays.
+    expect(output).toContain('הגה:')
     // Nikkud is gone.
     expect(output).toContain('כשמיר')
   })
@@ -80,6 +87,7 @@ describe('cleanHebrewText — gershayim / quote handling', () => {
 })
 
 describe('cleanHebrewText - separate options', () => {
+  const NONE = PUNCTUATION_PRESETS.find((p) => p.key === 'none')!.value
   const ALEF = 'א'
   const BET = 'ב'
   const PATAH = 'ַ'
@@ -99,13 +107,74 @@ describe('cleanHebrewText - separate options', () => {
 
   it('remove punctuation keeps only the line-end period and parenthesized marks', () => {
     const input = `${ALEF}, ${BET}; ${ALEF}! ${BET}. ${ALEF} — ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`
-    expect(cleanHebrewText(input, CLEAN_TEXT.REMOVE_PUNCTUATION)).toBe(
+    expect(cleanHebrewText(input, NONE)).toBe(
       `${ALEF} ${BET} ${ALEF} ${BET} ${ALEF} ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`,
     )
   })
 
   it('keeps an acronym quote under remove punctuation', () => {
-    expect(cleanHebrewText(`${ALEF}${BET}"${ALEF} "${BET}"`, CLEAN_TEXT.REMOVE_PUNCTUATION)).toBe(`${ALEF}${BET}"${ALEF} ${BET}`)
+    expect(cleanHebrewText(`${ALEF}${BET}"${ALEF} "${BET}"`, NONE)).toBe(`${ALEF}${BET}"${ALEF} ${BET}`)
+  })
+
+  const N = PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+
+  it('passage-end colon can become a period while citations stay', () => {
+    const flags = withMarkMode(0, MARK_PASSAGE_END_COLON, MARK_MODE.CONVERT)
+    expect(cleanHebrewText(`${ALEF}:`, flags)).toBe(`${ALEF}.`)
+    expect(cleanHebrewText(`${ALEF}:</b><br>${BET}`, flags)).toBe(`${ALEF}.</b><br>${BET}`)
+    expect(cleanHebrewText(`(${ALEF}:${BET})`, flags)).toBe(`(${ALEF}:${BET})`)
+    expect(cleanHebrewText(`<b>${ALEF}</b>:<b>${BET}</b>`, withMarkMode(0, MARK_COLON, MARK_MODE.REMOVE))).toBe(`<b>${ALEF}</b>:<b>${BET}</b>`)
+  })
+
+  it('quotes "keep" leaves every quote mark', () => {
+    const flags = withMarkMode(N, MARK_QUOTES, MARK_MODE.KEEP)
+    expect(cleanHebrewText(`"${ALEF}${BET}"`, flags)).toBe(`"${ALEF}${BET}"`)
+    expect(cleanHebrewText(`&quot;${ALEF}&quot;`, flags)).toBe(`&quot;${ALEF}&quot;`)
+  })
+
+  it('each mark is set on its own', () => {
+    expect(cleanHebrewText(`${ALEF}, ${BET}; ${ALEF}?`, withMarkMode(0, MARK_COMMA, MARK_MODE.REMOVE))).toBe(`${ALEF} ${BET}; ${ALEF}?`)
+  })
+
+  it('original level leaves punctuation untouched', () => {
+    expect(cleanHebrewText(`${ALEF}, ${BET}; "${ALEF}": ${BET}?`, CLEAN_TEXT.NIKKUD)).toBe(`${ALEF}, ${BET}; "${ALEF}": ${BET}?`)
+  })
+  const GERESH = '\u05F3'
+  const GERSHAYIM = '\u05F4'
+
+  it('keeps a sentence colon after a footnote tag or bracket', () => {
+    expect(cleanHebrewText(`${ALEF}<sup>1</sup>: ${BET}`, N)).toBe(`${ALEF}<sup>1</sup>: ${BET}`)
+    expect(cleanHebrewText(`(${ALEF}): ${BET}`, N)).toBe(`(${ALEF}): ${BET}`)
+  })
+
+  it('keeps a citation colon next to a geresh', () => {
+    expect(cleanHebrewText(`(${ALEF}${GERESH}:${BET}${GERESH})`, N)).toBe(`(${ALEF}${GERESH}:${BET}${GERESH})`)
+  })
+
+  it('keeps an acronym quote with vowel points or a direction mark beside it', () => {
+    expect(cleanHebrewText(`${ALEF}${PATAH}${BET}${PATAH}"${ALEF}${PATAH}`, N)).toBe(`${ALEF}${PATAH}${BET}${PATAH}"${ALEF}${PATAH}`)
+    expect(cleanHebrewText(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`, N)).toBe(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`)
+  })
+
+  it('turns a hyphen joining two Hebrew words into a space under maqaf, not a digit range', () => {
+    expect(cleanHebrewText(`${ALEF}${BET}-${BET}${ALEF}`, CLEAN_TEXT.MAQAF)).toBe(`${ALEF}${BET} ${BET}${ALEF}`)
+    expect(cleanHebrewText('615-567', CLEAN_TEXT.MAQAF)).toBe('615-567')
+  })
+
+  it('removes a paseq without leaving a double space', () => {
+    expect(cleanHebrewText(`${ALEF} \u05C0 ${BET}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF} ${BET}`)
+  })
+
+  it('remove punctuation keeps marks inside square brackets', () => {
+    expect(cleanHebrewText(`${ALEF} [${BET}:${ALEF}.] ${BET}.`, NONE)).toBe(`${ALEF} [${BET}:${ALEF}.] ${BET}.`)
+  })
+
+  it('remove punctuation turns a glued long dash into a space', () => {
+    expect(cleanHebrewText(`${ALEF}\u2013${BET}`, NONE)).toBe(`${ALEF} ${BET}`)
+  })
+
+  it('remove punctuation drops a period before an inline tag mid-line', () => {
+    expect(cleanHebrewText(`<b>${ALEF}.</b> ${BET}.`, NONE)).toBe(`<b>${ALEF}</b> ${BET}.`)
   })
 
   it('does nothing with no flags', () => {

@@ -122,7 +122,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             BookInfo? book = null;
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetBookById;
+            _bookHasDependenceType ??= ColumnExists(conn, "book", "dependenceType");
+            cmd.CommandText = SeforimDbSqlStrings.GetBookById(_bookHasDependenceType.Value);
             cmd.Parameters.AddWithValue("@id", id);
             using var r = cmd.ExecuteReader();
             if (r.Read())
@@ -136,10 +137,13 @@ namespace KitveiHakodesh.Core.SeforimDb
                     HasSourceConnection = r.IsDBNull(4) ? 0 : r.GetInt32(4),
                     HasCommentaryConnection = r.IsDBNull(5) ? 0 : r.GetInt32(5),
                     HasOtherConnection = r.IsDBNull(6) ? 0 : r.GetInt32(6),
+                    IsCommentary = r.IsDBNull(7) ? 0 : r.GetInt32(7),
                 };
             }
             return book;
         }
+
+        private bool? _bookHasDependenceType;
 
         private bool? _lineHasCharCount;
 

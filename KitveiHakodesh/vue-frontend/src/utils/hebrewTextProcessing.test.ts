@@ -1,46 +1,80 @@
 import { describe, it, expect } from 'vitest'
-import { stripNikkudFromHtml } from './hebrewTextProcessing'
+import { stripNikkudFromHtml, CLEAN_TEXT } from './hebrewTextProcessing'
 
 // Latin stand-ins for the Hebrew lemma/body: the rules under test key on
 // punctuation and structure, never on the letters themselves.
 describe('stripNikkudFromHtml — dibbur hamatchil separator', () => {
-  it('turns the first dash of a line into a full stop', () => {
-    expect(stripNikkudFromHtml('AAA BBB - body')).toBe('AAA BBB. body')
+  // The dash rule alone: the default flags also remove punctuation dashes.
+  const DH = CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH
+  const PLAIN = DH | CLEAN_TEXT.PLAIN_DIBBUR_HAMATCHIL
+
+  it('turns the dash after a bold heading into a full stop', () => {
+    expect(stripNikkudFromHtml('<b>AAA BBB</b> - body', DH)).toBe('<b>AAA BBB</b>. body')
   })
 
-  it('drops later dashes but keeps the word gap', () => {
-    expect(stripNikkudFromHtml('AAA - body - tail')).toBe('AAA. body tail')
+  it('leaves a mid-sentence pause dash alone (vocalized Talmud)', () => {
+    expect(stripNikkudFromHtml('AAA BBB, CCC DDD – EEE.', DH)).toBe('AAA BBB, CCC DDD – EEE.')
+  })
+
+  it('judges only the first dash; later ones are punctuation', () => {
+    expect(stripNikkudFromHtml('<b>AAA</b> - body - tail', DH)).toBe('<b>AAA</b>. body - tail')
   })
 
   it('converts every dash type, since the corpus is inconsistent', () => {
-    for (const dash of ['-', '\u2012', '\u2013', '\u2014', '\u2015', '\u2212']) {
-      expect(stripNikkudFromHtml(`AAA ${dash} body`)).toBe('AAA. body')
+    for (const dash of ['-', '‒', '–', '—', '―', '−']) {
+      expect(stripNikkudFromHtml(`<b>AAA</b> ${dash} body`, DH)).toBe('<b>AAA</b>. body')
     }
   })
 
-  it('gives each line its own separator across block tags', () => {
-    expect(stripNikkudFromHtml('<div>A - b</div><div>C - d</div>')).toBe('<div>A. b</div><div>C. d</div>')
-    expect(stripNikkudFromHtml('A - b<br>C - d')).toBe('A. b<br>C. d')
+  it('ignores empty tags inside the heading (Vilna Rashi)', () => {
+    expect(stripNikkudFromHtml('<b><b></b><i></i>AAA BBB</b> - body', DH)).toBe('<b><b></b><i></i>AAA BBB</b>. body')
   })
 
-  it('keeps the separator when the lemma is wrapped in an inline tag', () => {
-    expect(stripNikkudFromHtml('<b>A</b> - body - tail')).toBe('<b>A</b>. body tail')
+  it('accepts numbering before the bold heading', () => {
+    expect(stripNikkudFromHtml('(12) <b>AAA</b> - body', DH)).toBe('(12) <b>AAA</b>. body')
   })
 
-  it('absorbs a period already ending the lemma rather than doubling it', () => {
-    expect(stripNikkudFromHtml('AAA. - body')).toBe('AAA. body')
+  it('keeps a heading period or colon instead of adding a second one', () => {
+    expect(stripNikkudFromHtml('<b>AAA BBB.</b> — body', DH)).toBe('<b>AAA BBB.</b> body')
+    expect(stripNikkudFromHtml('<b>AAA</b>: - body', DH)).toBe('<b>AAA</b>: body')
   })
 
-  it('drops a dash with no lemma in front of it instead of opening with a dot', () => {
-    expect(stripNikkudFromHtml('- A - B')).toBe('A. B')
+  it('rejects text after the bold heading or several bold spans', () => {
+    expect(stripNikkudFromHtml('<b>AAA.</b> body more - tail', DH)).toBe('<b>AAA.</b> body more - tail')
+    expect(stripNikkudFromHtml('<b>A</b> b <b>C</b> - d', DH)).toBe('<b>A</b> b <b>C</b> - d')
+  })
+
+  it('needs the commentary flag for a plain heading', () => {
+    expect(stripNikkudFromHtml('AAA BBB - body', DH)).toBe('AAA BBB - body')
+    expect(stripNikkudFromHtml('AAA BBB - body', PLAIN)).toBe('AAA BBB. body')
+    expect(stripNikkudFromHtml('AAA. - body', PLAIN)).toBe('AAA. body')
+  })
+
+  it('rejects a long or punctuated plain heading even in commentary', () => {
+    expect(stripNikkudFromHtml('A B C D E F G - body', PLAIN)).toBe('A B C D E F G - body')
+    expect(stripNikkudFromHtml('AAA, BBB - body', PLAIN)).toBe('AAA, BBB - body')
+  })
+
+  it('gives each line its own judgement across block tags', () => {
+    expect(stripNikkudFromHtml('<div><b>A</b> - b</div><div><b>C</b> - d</div>', DH)).toBe('<div><b>A</b>. b</div><div><b>C</b>. d</div>')
+    expect(stripNikkudFromHtml('<b>A</b> - b<br><b>C</b> - d', DH)).toBe('<b>A</b>. b<br><b>C</b>. d')
+  })
+
+  it('keeps a dash with nothing before it and judges the next one', () => {
+    expect(stripNikkudFromHtml('- <b>A</b> - B', DH)).toBe('- <b>A</b>. B')
+  })
+
+  it('accepts a bold span still open at the dash only in commentary', () => {
+    expect(stripNikkudFromHtml('<b>AAA - body</b>', DH)).toBe('<b>AAA - body</b>')
+    expect(stripNikkudFromHtml('<b>AAA - body</b>', PLAIN)).toBe('<b>AAA. body</b>')
   })
 
   it('leaves a dash between two letters alone', () => {
-    expect(stripNikkudFromHtml('AA-BB and CC - body')).toBe('AA-BB and CC. body')
+    expect(stripNikkudFromHtml('<b>AA-BB</b> - body', DH)).toBe('<b>AA-BB</b>. body')
   })
 
   it('never touches a dash inside a tag', () => {
-    expect(stripNikkudFromHtml('<a href="x-y z">A</a> B - c')).toBe('<a href="x-y z">A</a> B. c')
+    expect(stripNikkudFromHtml('<a href="x - y z"><b>A</b></a> - c', DH)).toBe('<a href="x - y z"><b>A</b></a>. c')
   })
 })
 

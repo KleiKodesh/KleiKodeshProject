@@ -80,6 +80,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   // instead of a boxed number each, for a value that is only ever read by index.
   const lineCharacterCounts = ref<Uint16Array | Int32Array | null>(null)
   const hasTeamim = ref(false)
+  const isCommentary = ref(false)
 
   // ── Alternate versions ──────────────────────────────────────────────────────
   //
@@ -438,6 +439,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
 
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
+    isCommentary.value = !!(book?.isCommentary)
     // Fail OPEN on a metadata error: false would silently remove the commentary
     // buttons and force-close the panel with no indication anything went wrong
     // (the panel itself surfaces load errors). False is reserved for a book that
@@ -487,7 +489,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
 
   return {
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
-    hasCommentaries, hasRelatedBooks, hasTeamim, lineCharacterCounts,
+    hasCommentaries, hasRelatedBooks, hasTeamim, isCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
   }

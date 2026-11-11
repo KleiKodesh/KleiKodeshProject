@@ -52,6 +52,8 @@ interface CopyMenuOptions {
   /** A note by its id, for the endnotes of a copy with notes. */
   getNoteById?: (noteId: number) => Note | undefined
   getRenderedLineContent?: (raw: string, lineIndex: number, lineId: number) => string
+  /** The flags the screen renders with (per-book), so model lines copy the same way. */
+  cleanTextFlags?: () => number
   onHighlight?: (colorArgb: number) => void
   onClearHighlight?: () => void
   onAddNote?: () => void
@@ -408,7 +410,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
    */
   function modelLineRenderer(): (raw: string, lineIndex: number, lineId: number) => string {
     if (settingsStore.copyWithNotes && options.getRenderedLineContent) return options.getRenderedLineContent
-    return (raw) => contentInAnnotationOffsetSpace(raw, settingsStore.cleanTextFlags, settingsStore.censorOptions)
+    return (raw) => contentInAnnotationOffsetSpace(raw, options.cleanTextFlags?.() ?? settingsStore.cleanTextFlags, settingsStore.censorOptions)
   }
 
   /**
