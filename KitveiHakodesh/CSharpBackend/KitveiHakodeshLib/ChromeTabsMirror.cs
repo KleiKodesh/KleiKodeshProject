@@ -396,8 +396,6 @@ namespace KitveiHakodeshLib
         // English = LTR chrome + English texts; anything else = RTL + Hebrew. Setting
         // RightToLeftLayout recreates the form handle, so only touch it on a real change.
 
-        private const string HebrewTitle = "כתבי הקודש";
-
         private void ApplyLanguage(string uiLanguage)
         {
             bool english = uiLanguage == "en";
@@ -408,36 +406,18 @@ namespace KitveiHakodeshLib
             if (_form.RightToLeft != direction)
                 _form.RightToLeft = direction;
 
-            if (english)
-            {
-                _form.Text = "Kitvei Hakodesh";
-                _form.TabListOpenTabsHeader = "Open tabs";
-                _form.MinimizeToolTip = "Minimize";
-                _form.MaximizeToolTip = "Maximize";
-                _form.RestoreToolTip = "Restore";
-                _form.CloseToolTip = "Close";
-                _form.CloseTabMenuText = "Close tab";
-                _form.CloseOtherTabsMenuText = "Close other tabs";
-                _form.CloseTabsToTheLeftMenuText = "Close tabs to the left";
-                _form.CloseTabsToTheRightMenuText = "Close tabs to the right";
-            }
-            else
-            {
-                _form.Text = HebrewTitle;
-                _form.TabListOpenTabsHeader = "לשוניות פתוחות";
-
-                // Hebrew caption-button tooltips (replace Windows' OS-language ones)
-                _form.MinimizeToolTip = "מזער";
-                _form.MaximizeToolTip = "הגדל";
-                _form.RestoreToolTip = "שחזר";
-                _form.CloseToolTip = "סגור";
-
-                // Hebrew tab context-menu captions (the base class defaults are English)
-                _form.CloseTabMenuText = "סגור לשונית זו";
-                _form.CloseOtherTabsMenuText = "סגור את כל הלשוניות האחרות";
-                _form.CloseTabsToTheLeftMenuText = "סגור את כל הלשוניות שמשמאל";
-                _form.CloseTabsToTheRightMenuText = "סגור את כל הלשוניות שמימין";
-            }
+            // Texts come from HostText (the registry is written before this event fires).
+            // Caption tooltips replace Windows' OS-language ones.
+            _form.Text = HostText.AppTitle;
+            _form.TabListOpenTabsHeader = HostText.OpenTabsHeader;
+            _form.MinimizeToolTip = HostText.Minimize;
+            _form.MaximizeToolTip = HostText.Maximize;
+            _form.RestoreToolTip = HostText.Restore;
+            _form.CloseToolTip = HostText.Close;
+            _form.CloseTabMenuText = HostText.CloseTab;
+            _form.CloseOtherTabsMenuText = HostText.CloseOtherTabs;
+            _form.CloseTabsToTheLeftMenuText = HostText.CloseTabsToTheLeft;
+            _form.CloseTabsToTheRightMenuText = HostText.CloseTabsToTheRight;
         }
 
         // ── Theme ───────────────────────────────────────────────────────────────────

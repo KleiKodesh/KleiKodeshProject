@@ -217,7 +217,7 @@
     <Compile Include="Service\KitveiHakodeshServiceSelfStartingChannel.cs" />
     <Compile Include="Service\KitveiHakodeshServiceOwnership.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
-    <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
+    <Compile Include="HostText.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WindowsRecentDocuments.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />

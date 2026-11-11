@@ -241,8 +241,8 @@ namespace KitveiHakodeshLib
                 {
                     using (var dlg = new OpenFileDialog())
                     {
-                        dlg.Title  = "בחר קובץ מסד נתונים";
-                        dlg.Filter = "מסד נתונים (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|כל הקבצים (*.*)|*.*";
+                        dlg.Title  = HostText.PickDatabaseTitle;
+                        dlg.Filter = HostText.DatabaseFiles + " (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|" + HostText.AllFiles + " (*.*)|*.*";
                         dlg.CheckFileExists = true;
                         if (dlg.ShowDialog(this) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
                         _bridge.Reply(id, new { path = dlg.FileName });
