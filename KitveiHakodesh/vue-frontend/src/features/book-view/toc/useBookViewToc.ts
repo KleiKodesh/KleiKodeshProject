@@ -24,6 +24,8 @@ export interface AltTocPane {
   key: string
   entries: TocEntry[]
   searchTree: SearchableTree | null // built lazily on first search use
+  /** Added to every row's level when indenting: 1 under group rows (which sit at level -1). */
+  levelOffset: number
 }
 
 /** The pane title of a structure: our own name for its key, else its Hebrew title. */
@@ -38,17 +40,20 @@ function altTocStructureTitle(structure: AltTocStructure, bookTitle: string | un
 function buildAltTocPane(sections: AltTocSection[], bookTitle: string | undefined): AltTocPane | null {
   if (!sections.length) return null
   const key = sections.map((s) => s.structure.id).join(',')
-  if (sections.length === 1) return { key, entries: sections[0]!.entries, searchTree: null }
+  if (sections.length === 1) return { key, entries: sections[0]!.entries, searchTree: null, levelOffset: 0 }
+  // The structures' own entries are reused, not copied: group rows sit at level -1 and
+  // the tree indents everything one level deeper. Only a structure's top-level entries
+  // are copied, to hang them under their group row.
   const entries: TocEntry[] = []
   for (const { structure, entries: own } of sections) {
     const groupId = -structure.id
     entries.push({
-      id: groupId, parentId: null, level: 0, hasChildren: own.length > 0,
+      id: groupId, parentId: null, level: -1, hasChildren: own.length > 0,
       text: altTocStructureTitle(structure, bookTitle), lineId: null, lineIndex: null,
     })
-    for (const e of own) entries.push({ ...e, parentId: e.parentId ?? groupId, level: e.level + 1 })
+    for (const e of own) entries.push(e.parentId == null ? { ...e, parentId: groupId } : e)
   }
-  return { key, entries: markRaw(entries), searchTree: null }
+  return { key, entries: markRaw(entries), searchTree: null, levelOffset: 1 }
 }
 
 /** Ids of the structures whose book prints their numbering itself — see altTocTextLabels. */
@@ -90,7 +95,8 @@ function stripBookTitleRoot(
   bookId: number | undefined,
 ): TocEntry[] {
   if (!bookTitle) return entries
-  return stripTocTitleRoots(entries, bookTitle, { singleRootOnly: true, bookId })
+  // In place: the rows were just fetched for this tab and nobody else holds them yet.
+  return stripTocTitleRoots(entries, bookTitle, { singleRootOnly: true, bookId, inPlace: true })
 }
 
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
@@ -113,37 +119,48 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   const altTocPane = computed<AltTocPane | null>(() => buildAltTocPane(altTocSections.value, bookTitle?.()))
 
   // This tab's entry in the open-tab TOC lookup (not a cache: removed on dispose).
-  const openTabToc: OpenTabToc = { bookId: undefined, raw: null, pending: null, view: null }
-  onScopeDispose(registerOpenTabToc(openTabToc))
+  const openTabToc: OpenTabToc = { bookId: undefined, pending: null, view: null }
+  const unregister = registerOpenTabToc(openTabToc)
   let loadGeneration = 0
+  // When the tab goes, its entry leaves the lookup and lets go of the TOC at once; the
+  // generation bump makes a fetch still in flight land nowhere instead of refilling it.
+  onScopeDispose(() => {
+    unregister()
+    loadGeneration++
+    openTabToc.bookId = undefined
+    openTabToc.view = null
+    openTabToc.pending = null
+  })
 
   async function load(id: number) {
     const generation = ++loadGeneration
     const title = bookTitle?.()
     openTabToc.bookId = id
-    openTabToc.raw = null
     openTabToc.view = null
     openTabToc.pending = null
     loading.value = true
     error.value = null
     try {
       // Another open tab on this book already holds its TOC: take its arrays as is.
+      // Otherwise share its in-flight load, or load. A load yields the FINISHED entries:
+      // the fetched rows are processed in place (no copy) by the tab that fetched them,
+      // and a tab sharing that load waits for the result - it never touches the rows.
       const view = findOpenTabTocView(id, title, openTabToc)
-      const shared = view ? null : findOpenTabToc(id, openTabToc)
-      let raw: TocEntry[]
+      let entries: TocEntry[]
       if (view) {
-        raw = findOpenTabToc(id, openTabToc) as TocEntry[]
-      } else if (shared) {
-        raw = await shared
+        entries = view.entries
       } else {
-        const fetching = getAllTocEntries(id)
-        openTabToc.pending = fetching
-        raw = await fetching
+        const inFlight = findOpenTabToc(id, openTabToc)
+        if (inFlight) {
+          entries = await inFlight
+        } else {
+          const fetchAndProcess = getAllTocEntries(id).then((rows) => markRaw(stripBookTitleRoot(rows, title, id)))
+          openTabToc.pending = fetchAndProcess
+          entries = await fetchAndProcess
+        }
       }
-      if (generation !== loadGeneration) return // the book changed mid-flight
-      const entries = view?.entries ?? markRaw(stripBookTitleRoot(raw, title, id))
+      if (generation !== loadGeneration) return // the book changed, or the tab closed
       const searchTree = view?.searchTree ?? new SearchableTree(entries)
-      openTabToc.raw = markRaw(raw)
       openTabToc.view = { bookTitle: title, entries, searchTree }
       tocEntries.value = entries
       tocSearchTree.value = searchTree

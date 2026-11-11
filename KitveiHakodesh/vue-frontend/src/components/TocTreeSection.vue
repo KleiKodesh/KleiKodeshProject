@@ -14,6 +14,8 @@ defineProps<{
   entries: TreeNodeItem[]
   filter: string
   activeEntryId?: number
+  /** Added to every row's level when indenting (see TreeNode). */
+  levelOffset?: number
   searchTree?: TreeSearcher
 }>()
 defineEmits<{ select: [TreeNodeItem] }>()
@@ -40,6 +42,7 @@ defineExpose({
       :nodes="entries"
       :filter="filter"
       :active-node-id="activeEntryId"
+      :level-offset="levelOffset"
       :search-tree="searchTree"
       @select="$emit('select', $event)"
     />

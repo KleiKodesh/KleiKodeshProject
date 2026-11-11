@@ -3,10 +3,10 @@ import { registerOpenTabToc, findOpenTabToc, type OpenTabToc } from './openTabTo
 
 describe('openTabTocRegistry', () => {
   it('returns the open tab entries and forgets them once the tab unregisters', () => {
-    const raw = [{ id: 1 }] as never[]
-    const owner: OpenTabToc = { bookId: 7, raw, pending: null, view: null }
+    const entries = [{ id: 1 }] as never[]
+    const owner: OpenTabToc = { bookId: 7, pending: null, view: { bookTitle: 'x', entries, searchTree: null as never } }
     const unregister = registerOpenTabToc(owner)
-    expect(findOpenTabToc(7)).toBe(raw)
+    expect(findOpenTabToc(7)).toBe(entries)
     expect(findOpenTabToc(8)).toBeNull()
     expect(findOpenTabToc(7, owner)).toBeNull()
     unregister()
@@ -14,7 +14,7 @@ describe('openTabTocRegistry', () => {
   })
   it('shares an in-flight fetch only while its owner is registered', () => {
     const pending = Promise.resolve([])
-    const unregister = registerOpenTabToc({ bookId: 3, raw: null, pending, view: null })
+    const unregister = registerOpenTabToc({ bookId: 3, pending, view: null })
     expect(findOpenTabToc(3)).toBe(pending)
     unregister()
     expect(findOpenTabToc(3)).toBeNull()

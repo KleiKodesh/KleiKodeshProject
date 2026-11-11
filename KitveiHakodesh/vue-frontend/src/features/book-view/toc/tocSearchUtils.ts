@@ -45,11 +45,13 @@ function isTitleVariant(bookTitle: string, rootText: string): boolean {
  * If nodes carry a `level` field it is decremented by 1 for affected descendants.
  *
  * Pass `singleRootOnly: true` to only strip when there is exactly one root.
+ * Pass `inPlace: true` to adjust the given nodes themselves instead of copying the
+ * changed ones - for a caller that owns them (freshly fetched, shared with no one).
  */
 export function stripTocTitleRoots<T extends { id: number; parentId: number | null; text: string }>(
   nodes: T[],
   bookTitle: string,
-  options: { singleRootOnly?: boolean; bookId?: number } = {},
+  options: { singleRootOnly?: boolean; bookId?: number; inPlace?: boolean } = {},
 ): T[] {
   if (!bookTitle || !nodes.length) return nodes
   const roots = nodes.filter((n) => n.parentId === null)
@@ -71,8 +73,17 @@ export function stripTocTitleRoots<T extends { id: number; parentId: number | nu
     underStripped.set(id, result)
     return result
   }
-  return nodes
-    .filter((n) => !rootIds.has(n.id))
+  const kept = nodes.filter((n) => !rootIds.has(n.id))
+  if (options.inPlace) {
+    // Decide every node first, then adjust: the walk reads the parent links as they were.
+    const lift = hasLevel ? kept.map((n) => isUnderStrippedRoot(n.id)) : null
+    kept.forEach((n, i) => {
+      if (n.parentId !== null && rootIds.has(n.parentId)) n.parentId = null
+      if (lift?.[i]) (n as unknown as { level: number }).level--
+    })
+    return kept
+  }
+  return kept
     .map((n) => {
       const parentWasRoot = n.parentId !== null && rootIds.has(n.parentId)
       const updated = parentWasRoot ? { ...n, parentId: null } : n
