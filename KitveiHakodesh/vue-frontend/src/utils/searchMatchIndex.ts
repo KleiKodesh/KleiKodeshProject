@@ -33,6 +33,15 @@ export class SearchMatchIndex {
    * a count of 0 are left out.
    */
   static fromRowCounts(rows: ArrayLike<number>, counts: ArrayLike<number>): SearchMatchIndex {
+    // The usual case - the service answers in reading order, every count positive - is
+    // copied straight in, with no map and no sort.
+    if (isStrictlyAscendingWithCounts(rows, counts)) {
+      if (!rows.length) return SearchMatchIndex.EMPTY
+      const outRows = Int32Array.from(rows)
+      const first = new Int32Array(rows.length + 1)
+      for (let i = 0; i < rows.length; i++) first[i + 1] = first[i]! + counts[i]!
+      return new SearchMatchIndex(outRows, first)
+    }
     const countByRow = new Map<number, number>()
     for (let i = 0; i < rows.length; i++) countByRow.set(rows[i]!, counts[i]!)
     const sorted = [...countByRow.keys()].filter((row) => countByRow.get(row)! > 0).sort((a, b) => a - b)
@@ -127,4 +136,13 @@ export class SearchMatchIndex {
     const i = this.lowerBound(row)
     return i < this.rows.length && this.rows[i] === row ? i : -1
   }
+}
+
+/** Rows already strictly ascending, each with a positive count - the shape the service answers in. */
+function isStrictlyAscendingWithCounts(rows: ArrayLike<number>, counts: ArrayLike<number>): boolean {
+  for (let i = 0; i < rows.length; i++) {
+    if (!(counts[i]! > 0)) return false
+    if (i > 0 && rows[i]! <= rows[i - 1]!) return false
+  }
+  return true
 }

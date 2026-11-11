@@ -78,13 +78,13 @@ public sealed class LinesSubstringSearchArgs
 }
 
 /// <summary>Parallel arrays: the lines holding the query, by book in first-seen order then
-/// reading order, and how many times each holds it.</summary>
+/// reading order, and how many times each holds it. Exactly what the find-in-text results
+/// need (the line positions and their counts); line ids are not sent - nothing reads them.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinesSubstringSearchResult
 {
     public int[] BookIds { get; set; } = Array.Empty<int>();
     public int[] LineIndexes { get; set; } = Array.Empty<int>();
-    public int[] LineIds { get; set; } = Array.Empty<int>();
     public int[] Counts { get; set; } = Array.Empty<int>();
 }
 
