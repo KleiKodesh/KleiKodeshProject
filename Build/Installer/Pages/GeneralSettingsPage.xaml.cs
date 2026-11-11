@@ -80,10 +80,9 @@ namespace KleiKodeshVstoInstallerWpf
             bool english = UiLanguage.Current == UiLanguage.English;
             try
             {
+                // No "reopen Word" notice here: the installer closes Word before installing.
+                // That notice belongs to the Word settings pane only.
                 VbaMacrosTemplate.Install(install, AddinInstaller.MacrosResourcesFolder);
-                if (WordHelper.IsWordRunning())
-                    MessageBox.Show(VbaMacrosTemplate.ReopenWordText(english), Properties.Strings.Settings,
-                        MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, UiLanguage.MessageBoxOptions);
             }
             catch (Exception ex)
             {
