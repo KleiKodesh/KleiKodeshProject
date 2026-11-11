@@ -5,9 +5,7 @@
  *
  * - Stretched operators (`mo.omath-stretch[data-variants]`): Word draws a grown delimiter or n-ary operator with the
  *   font's OpenType MATH size variants, else its assembly; the operator carries them ("height:width ... |assembly width", em).
- *   The browser stretched the operator to a height; Word picks the smallest variant at least 1.2 times that tall for a
- *   delimiter, 0.7 times for an n-ary operator (else the assembly) - factors fitted to Word 16's PDFs of 3-, 5- and 10-row
- *   brackets and growing integrals in Cambria Math and DejaVu Math TeX Gyre (test-data/word-math/brackets-*-v1.pdf) -
+ *   Word picks the smallest variant covering TeX's size for the content's ink (DELIMITER_FACTOR below; else the assembly) -
  *   the operator is narrowed to that variant's width by equal negative margins (Chromium stops stretching inside an mpadded).
  * - Display equations cut into pieces at their operators (`.omath-para`):
  *   - `data-math-break="repeat"` (m:brkBin repeat, ECMA-376 22.1.2.15): a piece that starts a line shows its hidden operator
@@ -21,7 +19,59 @@
 const STRETCH = 'mo.omath-stretch[data-variants]'
 const BLOCKS = '.omath-para[data-math-break], .omath-para[data-math-wrap-right]'
 
-const DELIMITER_FACTOR = 1.2, NARY_FACTOR = 0.7
+/**
+ * TeX's \left / \right size (tex.web make_left_right, as KaTeX src/delimiter.ts makeLeftRightDelim takes it): with d the
+ * larger distance of the content's ink from the math axis, the delimiter must cover max(2d x 901/1000, 2d - 5 pt at 10 pt,
+ * i.e. 0.5 em). Word's PDFs (test-data/word-math/brackets-*-v1.pdf) follow it for delimiters and for growing n-ary operators.
+ */
+const DELIMITER_FACTOR = 0.901, DELIMITER_SHORTFALL_EM = 0.5
+
+let canvas: CanvasRenderingContext2D | null | undefined
+const inkCache = new Map<string, { ascent: number; descent: number; fontAscent: number; fontDescent: number }>()
+
+/** A token's ink above / below its baseline and its font's ascent / descent (px), from the browser's text metrics. */
+function inkOf(text: string, font: string) {
+  const key = font + '|' + text
+  let ink = inkCache.get(key)
+  if (ink) return ink
+  canvas ??= document.createElement('canvas').getContext('2d')
+  if (!canvas) return null
+  canvas.font = font
+  const m = canvas.measureText(text)
+  ink = { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent, fontAscent: m.fontBoundingBoxAscent, fontDescent: m.fontBoundingBoxDescent }
+  if (inkCache.size > 2000) inkCache.clear()
+  inkCache.set(key, ink)
+  return ink
+}
+
+/** The content a stretched operator grows with: a delimiter's row (without its fences), an n-ary operator's argument. */
+function contentOf(operator: HTMLElement): Element | null {
+  if (operator.getAttribute('data-stretch') !== 'nary') return operator.parentElement
+  let wrapper: Element = operator
+  while (wrapper.parentElement && !['mrow', 'math'].includes(wrapper.parentElement.tagName.toLowerCase())) wrapper = wrapper.parentElement
+  return wrapper.nextElementSibling
+}
+
+/** The content's ink extent (px, top / bottom) from its tokens' boxes and text metrics. */
+function inkExtent(content: Element): { top: number; bottom: number } | null {
+  let top = Infinity, bottom = -Infinity
+  for (const token of content.querySelectorAll<HTMLElement>('mi, mn, mo:not(.omath-stretch), mtext')) {
+    const text = token.textContent ?? ''
+    if (!text.trim() || token.closest('mphantom')) continue
+    const box = token.getBoundingClientRect()
+    if (!(box.height > 0)) continue
+    const style = getComputedStyle(token)
+    const ink = inkOf(text, `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`)
+    if (!ink) continue
+    // a token box is either the font's line box or the ink box: its baseline sits accordingly
+    const lineBox = ink.fontAscent + ink.fontDescent
+    if (!(lineBox > 0) || !Number.isFinite(ink.ascent) || !Number.isFinite(ink.descent)) continue
+    const baseline = Math.abs(box.height - lineBox) < Math.abs(box.height - (ink.ascent + ink.descent)) ? box.top + ink.fontAscent * box.height / lineBox : box.top + ink.ascent
+    top = Math.min(top, baseline - ink.ascent)
+    bottom = Math.max(bottom, baseline + ink.descent)
+  }
+  return top < bottom ? { top, bottom } : null
+}
 
 type Variants = { heights: number[]; widths: number[]; assembly: number }
 
@@ -81,13 +131,19 @@ export function layoutMath(root: Element) {
   const stretchReads = stretched.map(operator => {
     const box = operator.getBoundingClientRect()
     const size = parseFloat(getComputedStyle(operator).fontSize) || 16
-    return { operator, width: box.width, height: box.height, size, factor: operator.getAttribute('data-stretch') === 'nary' ? NARY_FACTOR : DELIMITER_FACTOR }
+    const content = contentOf(operator)
+    const extent = content ? inkExtent(content) : null
+    // the stretched operator is centred on the math axis: the axis is its middle
+    const axis = box.top + box.height / 2
+    const distance = extent ? Math.max(axis - extent.top, extent.bottom - axis) : box.height / 2
+    const needed = Math.max(2 * distance * DELIMITER_FACTOR, 2 * distance - DELIMITER_SHORTFALL_EM * size)
+    return { operator, width: box.width, height: needed, size }
   })
   let starts = pieceLists.map(pieces => lineStarts(pieces.map(piece => piece.getBoundingClientRect())))
   // write: stretched widths, copies at the line starts
-  for (const { operator, width, height, size, factor } of stretchReads) {
+  for (const { operator, width, height, size } of stretchReads) {
     if (!(height > 0) || !(size > 0)) continue
-    const wanted = wordVariantWidth(parseVariants(operator.getAttribute('data-variants') ?? ''), factor * height / size) * size
+    const wanted = wordVariantWidth(parseVariants(operator.getAttribute('data-variants') ?? ''), height / size) * size
     if (wanted > 0 && Math.abs(wanted - width) >= 0.25) operator.style.marginInline = `${(wanted - width) / 2}px`
   }
   const repeating = blocks.map(block => block.hasAttribute('data-math-break'))
