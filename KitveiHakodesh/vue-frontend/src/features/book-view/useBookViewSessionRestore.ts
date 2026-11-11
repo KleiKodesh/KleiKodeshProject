@@ -52,6 +52,11 @@ export interface RestorableCommentaryPanel {
 /** What session restore needs in order to bring the TOC panel back. */
 export interface RestorableToc {
   visible: Ref<boolean>
+  /**
+   * Hands the saved inner state over BEFORE the panel is shown, so the tree is
+   * created at its saved row (the start row is an argument of creation).
+   */
+  stage?: (saved: TocPersistState) => void
   /** Applies the saved inner state to the tree component, once it exists. */
   apply: (saved: TocPersistState) => void
 }
@@ -185,6 +190,7 @@ export function useBookViewSessionRestore(
     const savedToc = bookSaved?.toc ?? (useLastRead ? lastRead?.toc : undefined)
     if (savedToc && toc) {
       if (savedToc.visible) {
+        toc.stage?.(savedToc)
         toc.visible.value = true
         // The tree only mounts once the panel is visible, so its inner state has
         // to wait for that render.
