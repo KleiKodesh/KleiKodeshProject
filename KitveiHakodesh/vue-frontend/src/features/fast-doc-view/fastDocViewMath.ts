@@ -27,7 +27,7 @@ type Variants = { heights: number[]; widths: number[]; assembly: number }
 
 function parseVariants(value: string): Variants {
   const [list = '', assembly = '0'] = value.split('|')
-  const pairs = list.trim().split(/\s+/).map(pair => pair.split(':').map(Number))
+  const pairs = list.trim().split(/\s+/).map(pair => pair.split(':').map(Number)).filter(p => p.length === 2 && p.every(Number.isFinite))
   return { heights: pairs.map(p => p[0]!), widths: pairs.map(p => p[1]!), assembly: Number(assembly) }
 }
 
@@ -72,7 +72,9 @@ export function layoutMath(root: Element) {
   // write: back to the library's output, copies hidden
   for (const operator of stretched) operator.style.marginInline = ''
   blocks.forEach((block, b) => {
-    block.style.textAlign = ''
+    // the library's own alignment (m:jc) is in the block's style: kept once, restored on every run
+    if (!block.hasAttribute('data-align')) block.setAttribute('data-align', block.style.textAlign)
+    block.style.textAlign = block.getAttribute('data-align') ?? ''
     pieceLists[b]!.forEach((piece, i) => { piece.style.marginInlineEnd = ''; const repeat = repeatLists[b]![i]; if (repeat) setRepeat(repeat, piece, pieceLists[b]![i - 1], false) })
   })
   // read 1: stretched operators and the lines
@@ -104,6 +106,7 @@ export function layoutMath(root: Element) {
     if (!moved.some(Boolean)) break
     moved.forEach((m, b) => { if (!m) repeating[b] = false })
   }
+  // best effort when the lines did not settle in three reads (a copy can then sit one piece off a line start)
   repeating.forEach((_, b) => { if (blocks[b]!.hasAttribute('data-math-break')) showAt(b, starts[b]!) })
   // wrapRight: read the first lines once, then write
   const rights = blocks.map((block, b) => {
