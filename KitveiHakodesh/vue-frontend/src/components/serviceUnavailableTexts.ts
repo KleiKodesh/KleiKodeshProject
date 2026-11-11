@@ -28,7 +28,8 @@ export const SERVICE_UNAVAILABLE_TEXTS: Record<ServiceUnavailableReason, { title
 /** The banner button's label per reason. */
 export const SERVICE_ACTION_LABELS: Record<ServiceUnavailableReason, string> = {
   NotRunning: t('components.service.retry'),
-  NotInstalled: t('components.service.install'),
+  // The service files are gone - nothing to install from; the user reinstalls the app.
+  NotInstalled: t('components.service.retry'),
   InstallDeclined: t('components.service.retry'),
   InstallFailed: t('components.service.retry'),
   StartFailed: t('components.service.repair'),
