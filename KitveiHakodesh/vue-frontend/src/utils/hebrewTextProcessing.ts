@@ -7,6 +7,11 @@
  * HTML entities encoding Hebrew diacritics (&#xNNNN; or &#NNNNN;) are resolved
  * before filtering so they are caught by the unicode range patterns.
  */
+import {
+  PUNCTUATION_PRESETS, MARK_MODE, markMode,
+  MARK_QUESTION_EXCLAMATION, MARK_SEMICOLON, MARK_COMMA, MARK_DASH,
+} from './punctuationModes'
+
 /**
  * Decode numeric HTML entities holding Hebrew diacritics so the strip regexes,
  * which only ever match literal characters, can see them. Covers &#xNNNN; (hex)
@@ -22,8 +27,9 @@ function decodeDiacriticEntities(html: string): string {
 }
 
 /**
- * The independent clean-text options, as bit flags. The book view's clean-text combo
- * picks any set of them; the copy-clean-text paths use CLEAN_TEXT_LEGACY.
+ * The independent clean-text toggles, as bit flags (bits 0-7). Punctuation is set per mark
+ * in the bits above (punctuationModes.ts). The book view's clean-text combo picks any
+ * combination; the copy-clean-text paths use CLEAN_TEXT_LEGACY.
  */
 export const CLEAN_TEXT = {
   /** Cantillation U+0591\u2013U+05AF and paseq U+05C0. */
@@ -34,18 +40,26 @@ export const CLEAN_TEXT = {
   MAQAF: 4,
   /** The first dash-space of a line (after a dibbur hamatchil) becomes a full stop; later ones go. */
   DIBBUR_HAMATCHIL_DASH: 8,
-  /** !? \u2192 .   ; \u2192 ,   stray colons and non-acronym quotes dropped, spaces tidied. */
-  NORMALIZE_PUNCTUATION: 16,
   /**
-   * Issue #334 / Otzaria's removePunctuation: , ; ! ? and dashes dropped, quotes kept only
-   * as acronyms, and . : kept only at the end of a line or inside parentheses.
+   * Not a user option: the caller knows the text is commentary, so a short PLAIN heading
+   * (no bold) before the dash also counts as a dibbur hamatchil. Only read with
+   * DIBBUR_HAMATCHIL_DASH.
    */
-  REMOVE_PUNCTUATION: 32,
+  PLAIN_DIBBUR_HAMATCHIL: 64,
 } as const
+
+/**
+ * The user's clean-text flags for text known to be commentary: a short plain heading then
+ * counts as a dibbur hamatchil too. Used for rendering AND annotation offsets, which must agree.
+ */
+export function cleanTextFlagsFor(flags: number, isCommentary: boolean): number {
+  return isCommentary && flags & CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH ? flags | CLEAN_TEXT.PLAIN_DIBBUR_HAMATCHIL : flags
+}
 
 /** What "remove nikkud" always did in one go - still what copy-clean-text applies. */
 export const CLEAN_TEXT_LEGACY =
-  CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD | CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH | CLEAN_TEXT.NORMALIZE_PUNCTUATION
+  CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD | CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH |
+  PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
 
 /**
  * Nikkud U+05B0\u2013U+05BD, U+05BF, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7. U+05BF RAFE is
@@ -64,88 +78,155 @@ const BLOCK_BOUNDARY_TAG = /^<\/?(?:div|p|br|li|tr|td|th|h[1-6]|section|article|
 
 /**
  * Apply the per-text-node clean-text options (CLEAN_TEXT) to an HTML string. Tag
- * attributes are preserved. The options that need to scan across characters
- * (NORMALIZE_PUNCTUATION's colon/quote/space rules, REMOVE_PUNCTUATION's period/colon
- * rule) live in cleanHebrewText, which calls this first.
+ * attributes are preserved. The punctuation rules that need to scan across characters
+ * (colons, periods, quotes, spacing) live in cleanHebrewText, which calls this first.
  *
  * Transformations applied to text nodes only (tags are passed through unchanged):
  *   - TEAMIM / NIKKUD: the marks above
- *   - DIBBUR_HAMATCHIL_DASH: dash types followed by a space: the FIRST one in each line becomes a full
- *     stop, since it separates a dibbur hamatchil (the lemma opening a
- *     Rashi/Tosafot comment) from the body. Which dash is used there is
- *     inconsistent across the corpus, so all of them convert. Every later
- *     dash-space is removed as decoration, leaving its space as the word gap:
- *       hyphen-minus U+002D (-), en dash U+2013 (–), em dash U+2014 (—),
- *       figure dash U+2012, horizontal bar U+2015 (―), minus sign U+2212 (−)
- *       A dash between two letters is preserved. The divine-name censor separator
- *       is U+2011 (non-breaking hyphen, e.g. א‑ל) and is never in this class at all.
- *   - MAQAF, and the context-free parts of the two punctuation options (finishPunctuation)
+ *   - DIBBUR_HAMATCHIL_DASH: see separateDibburHamatchil
+ *   - MAQAF, and the context-free punctuation marks (finishPunctuation)
  */
 export function stripNikkudFromHtml(html: string, flags: number = CLEAN_TEXT_LEGACY): string {
-  // The first dash-space of a line separates the dibbur hamatchil from the body, so
-  // it becomes a full stop; every later dash-space is dropped as decoration. Which
-  // dash the corpus uses there is inconsistent (hyphen and em dash both occur), so
-  // the whole dash class feeds this rule.
-  //
-  // The latch is per LINE, not per call: the render paths pass one line, but the
-  // copy paths join many lines into a single string, and each of those still needs
-  // its own dibbur hamatchil. It resets on a block boundary — never on an inline
-  // tag, since "<b>lemma</b> - body" must still get its dot after the </b>.
-  let dhSeparatorDone = false
-  // Whether a lemma has appeared since the last block boundary. A chunk can open
-  // with the dash ("<b>lemma</b> - body"), so what precedes it in this chunk is not
-  // the test — the lemma may have been the previous chunk entirely.
-  let lemmaSeen = false
   // Entity-encoded nikkud would otherwise survive the one option whose whole job is
   // removing it.
-  return decodeDiacriticEntities(html).replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
-    if (tag) {
-      if (BLOCK_BOUNDARY_TAG.test(tag)) {
-        dhSeparatorDone = false
-        lemmaSeen = false
-      }
-      return tag
-    }
-    if (flags & CLEAN_TEXT.TEAMIM) text = text.replace(TEAMIM_MARKS, '')
-    if (!(flags & CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH)) {
-      if (flags & CLEAN_TEXT.NIKKUD) text = text.replace(NIKKUD_MARKS, '')
-      return finishPunctuation(text, flags)
-    }
-    // The dot hugs the lemma, so the DH match also swallows any horizontal space and period
-    // already sitting in front of the dash. A later dash is only decoration: it
-    // goes, but its leading space stays behind as the word gap.
-    // Lines are separated by block tags, never by a bare newline: the copy paths wrap
-    // each line in a tag, and txt-view's merged runs join with a space on purpose.
-    text = text.replace(/(^|[^])([^\S\n]*)\.?[^\S\n]*[\u002D\u2012–—\u2015\u2212] /g, (_m: string, before: string, gap: string) => {
-      if (before !== '' && !/\s/.test(before)) lemmaSeen = true
-      // No lemma yet on this line means no sentence for the dot to close, so the
-      // dash just goes; a leading full stop would read worse than the dash did.
-      if (dhSeparatorDone || !lemmaSeen) return before + gap
-      dhSeparatorDone = true
-      return before + '. '
-    })
-    // A chunk with visible text leaves a lemma behind for a dash in the NEXT chunk,
-    // which is how "<b>lemma</b> - body" survives the tag boundary.
-    if (/\S/.test(text)) lemmaSeen = true
+  let source = decodeDiacriticEntities(html)
+  if (flags & CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH) {
+    source = separateDibburHamatchil(source, (flags & CLEAN_TEXT.PLAIN_DIBBUR_HAMATCHIL) !== 0)
+  }
+  return source.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
+    if (tag) return tag
+    // A paseq stands between spaces; removing it alone would leave two.
+    if (flags & CLEAN_TEXT.TEAMIM) text = text.replace(/ \u05C0 /g, ' ').replace(TEAMIM_MARKS, '')
     if (flags & CLEAN_TEXT.NIKKUD) text = text.replace(NIKKUD_MARKS, '')
     return finishPunctuation(text, flags)
   })
 }
 
-/** The per-text-node parts of MAQAF and the two punctuation options. */
-function finishPunctuation(text: string, flags: number): string {
-  if (flags & CLEAN_TEXT.MAQAF) text = text.replace(/\u05BE/g, ' ')
-  if (flags & CLEAN_TEXT.REMOVE_PUNCTUATION) {
-    // Semicolons, but not the one closing an HTML entity like &nbsp;
-    text = text.replace(/[,!?]|(?<!&[^;\s]{0,10});/g, '')
-    // Dashes that are punctuation: the long ones anywhere, a hyphen only standing alone
-    return text.replace(/[\u2012\u2013\u2014\u2015\u2212]|(?<!\S)-(?!\S)/g, '')
+/** A dash used as punctuation, standing before a space. All of them occur as the separator. */
+const SPACED_DASH = /(^|\s)[-‒–—―−] /
+/** Leading numbering a heading may carry: "(1)", "12.", "1)" - Hebrew letters too. */
+const HEADING_NUMBERING = /^\s*(?:[([]?[א-ת\d'"׳״]{1,5}[)\].]\s*)?$/
+/** What may follow the bold heading before the dash: only its own closing mark. */
+const HEADING_TAIL = /^\s*[.:]?\s*$/
+/** Plain-heading limit, measured on seforim.db: most real headings are 6 words or fewer. */
+const PLAIN_HEADING_MAX_WORDS = 6
+
+/**
+ * DIBBUR_HAMATCHIL_DASH. A commentary line opens with heading words (the dibbur hamatchil)
+ * and a dash; that dash becomes a full stop. Elsewhere a dash is a pause in the sentence
+ * (vocalized Talmud, Berakhot 13a: "...if he directed his heart - he fulfilled") and is
+ * left alone.
+ *
+ * Measured on a labelled seforim.db sample (line_dh = ground truth): the old "first dash
+ * after any text" rule put a wrong full stop on 43% of dash lines. The heading test:
+ *   - the text before the line's first spaced dash is ONE bold span, optionally after
+ *     numbering and before its own "." or ":" (precision 0.93, recall 0.86);
+ *   - with `plainHeadingOk` (the caller knows the text is commentary), also up to
+ *     PLAIN_HEADING_MAX_WORDS plain words with no inner punctuation (recall 0.99).
+ * The dash character itself cannot tell the two apart: both use all three dash types.
+ *
+ * A heading already ending in "." or ":" keeps it and the dash just goes. Only the first
+ * spaced dash of a line is judged; later ones are punctuation. A dash with nothing
+ * visible in front of it opens no sentence: it stays, and the next one is judged.
+ * Lines are separated by block tags (copy paths join many lines in one string).
+ */
+function separateDibburHamatchil(html: string, plainHeadingOk: boolean): string {
+  let linePrefix = ''
+  let judged = false
+  return html.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
+    if (tag) {
+      if (BLOCK_BOUNDARY_TAG.test(tag)) {
+        linePrefix = ''
+        judged = false
+      } else if (!judged) {
+        linePrefix += tag
+      }
+      return tag
+    }
+    if (judged) return text
+    let out = ''
+    for (;;) {
+      const match = SPACED_DASH.exec(text)
+      if (!match) {
+        linePrefix += text
+        return out + text
+      }
+      const dashStart = match.index + (match[1] ?? '').length
+      const before = text.slice(0, dashStart)
+      const after = text.slice(match.index + match[0].length)
+      const visible = (linePrefix + before).replace(/<[^>]*>/g, '')
+      if (!/\S/.test(visible)) {
+        // Nothing to close yet (a list or table cell opening with a dash): keep the dash
+        // and judge the next one.
+        const kept = text.slice(0, match.index + match[0].length)
+        out += kept
+        // Left out of the prefix, so the heading after it is still judged on its own.
+        linePrefix += before
+        text = after
+        continue
+      }
+      judged = true
+      if (!isDibburHamatchil(linePrefix + before, plainHeadingOk)) return out + text
+      // The full stop hugs the heading; one already there is kept instead.
+      const head = before.replace(/\s+$/, '')
+      return out + (/[.:]\s*$/.test(visible) ? head : head + '.') + ' ' + after
+    }
+  })
+}
+
+/** Is `prefix` (the line's HTML before its first dash) a dibbur hamatchil? */
+function isDibburHamatchil(prefix: string, plainHeadingOk: boolean): boolean {
+  // Empty tags carry nothing: Vilna Rashi is "<b><b></b><i></i>words</b>".
+  let html = prefix
+  for (let prev = ''; prev !== html; ) {
+    prev = html
+    html = html.replace(/<([a-z][a-z0-9]*)\b[^>]*>\s*<\/\1>/gi, '')
   }
-  if (flags & CLEAN_TEXT.NORMALIZE_PUNCTUATION) {
-    // A run like ?! is one mark of punctuation, so it collapses to a single dot
-    text = text.replace(/[!?]+/g, '.')
-    // Replace standalone semicolons but not ones inside HTML entities like &nbsp;
-    text = text.replace(/(?<!&[^;\s]{0,10});/g, ',')
+  // The text outside bold, before and after it, and the number of top-level bold spans.
+  let depth = 0
+  let spans = 0
+  let outsideBefore = ''
+  let outsideAfter = ''
+  for (const [, tag, text] of html.matchAll(/(<[^>]*>)|([^<]+)/g)) {
+    if (tag) {
+      const bold = /^<(\/?)(?:b|strong)\b/i.exec(tag)
+      if (!bold) continue
+      if (bold[1]) depth = Math.max(0, depth - 1)
+      else if (depth++ === 0) spans++
+    } else if (depth === 0) {
+      if (spans === 0) outsideBefore += text
+      else outsideAfter += text
+    }
+  }
+  // A bold span still open at the dash is a heading only in commentary: base texts that
+  // bold a whole line have the dash inside the bold.
+  if (spans === 1 && depth > 0 && !plainHeadingOk) return false
+  if (spans === 1) return HEADING_NUMBERING.test(outsideBefore) && HEADING_TAIL.test(outsideAfter)
+  if (spans > 1 || !plainHeadingOk) return false
+  const words = outsideBefore.trim().replace(/[.:]$/, '').trim()
+  return !/[,.:;!?()[\]]/.test(words) && words.split(/\s+/).length <= PLAIN_HEADING_MAX_WORDS
+}
+
+/** Semicolons, but not the one closing an HTML entity like &nbsp; */
+const SEMICOLON = /(?<!&[^;\s]{0,10});/g
+/** A long dash glued between two words: their separator. */
+const GLUED_LONG_DASH = /(?<=\S)[\u2012\u2013\u2014\u2015\u2212](?=\S)/g
+/** Punctuation dashes: the long ones anywhere, a hyphen only standing alone. */
+const PUNCTUATION_DASH = /[\u2012\u2013\u2014\u2015\u2212]|(?<!\S)-(?!\S)/g
+
+/** The per-text-node parts of MAQAF and the context-free punctuation marks. */
+function finishPunctuation(text: string, flags: number): string {
+  // A hyphen joining two Hebrew words is a maqaf typed on the keyboard (437 in a 21k-line
+  // sample). Digit ranges (615-567) and a hyphen inside a Latin word stay.
+  if (flags & CLEAN_TEXT.MAQAF) text = text.replace(/\u05BE|(?<=[\u05D0-\u05EA][\u0591-\u05C7]*)-(?=[\u05D0-\u05EA])/g, ' ')
+  // A run like ?! is one mark, so it becomes a single period.
+  const questionExclamation = markMode(flags, MARK_QUESTION_EXCLAMATION)
+  if (questionExclamation !== MARK_MODE.KEEP) text = text.replace(/[!?]+/g, questionExclamation === MARK_MODE.CONVERT ? '.' : '')
+  const semicolon = markMode(flags, MARK_SEMICOLON)
+  if (semicolon !== MARK_MODE.KEEP) text = text.replace(SEMICOLON, semicolon === MARK_MODE.CONVERT ? ',' : '')
+  if (markMode(flags, MARK_COMMA) === MARK_MODE.REMOVE) text = text.replace(/,/g, '')
+  if (markMode(flags, MARK_DASH) === MARK_MODE.REMOVE) {
+    text = text.replace(GLUED_LONG_DASH, ' ').replace(PUNCTUATION_DASH, '')
   }
   return text
 }

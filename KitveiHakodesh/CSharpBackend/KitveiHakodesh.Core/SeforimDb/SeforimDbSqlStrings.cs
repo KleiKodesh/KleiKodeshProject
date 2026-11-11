@@ -41,11 +41,14 @@ namespace KitveiHakodesh.Core.SeforimDb
             GROUP BY b.id
             ORDER BY b.orderIndex";
 
-        /// <summary>Single book by id — totalLines for virtual-scroll init + has* flags for the toolbar.</summary>
-        public const string GetBookById = @"
+        /// <summary>Single book by id — totalLines for virtual-scroll init + has* flags for the toolbar,
+        /// and whether it is a commentary (clean text's heading rule). Older libraries lack
+        /// <c>dependenceType</c>.</summary>
+        internal static string GetBookById(bool hasDependenceType) => $@"
             SELECT totalLines, hasTeamim,
                    hasTargumConnection, hasReferenceConnection, hasSourceConnection,
-                   hasCommentaryConnection, hasOtherConnection
+                   hasCommentaryConnection, hasOtherConnection,
+                   {(hasDependenceType ? "dependenceType = 'commentary'" : "0")} AS isCommentary
             FROM book
             WHERE id = @id";
 

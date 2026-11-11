@@ -52,6 +52,8 @@ export interface BookInfo {
   hasSourceConnection: number
   hasCommentaryConnection: number
   hasOtherConnection: number
+  /** 1 when the library marks the book a commentary: clean text then accepts plain headings. */
+  isCommentary?: number
 }
 
 /**
