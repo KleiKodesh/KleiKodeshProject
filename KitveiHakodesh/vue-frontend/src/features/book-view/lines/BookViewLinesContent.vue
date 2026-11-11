@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, inject } from 'vue'
 import { storeToRefs } from 'pinia'
+import { cleanTextFlagsFor } from '@/utils/hebrewTextProcessing'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { WindowedScrollerApi, WindowedScrollerRowKind } from '@/components/windowedScrollerTypes'
 import { useTabStore } from '@/stores/tabStore'
@@ -9,6 +10,8 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { LinesTable } from './linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
+import { lineIsWhollyBold } from './lineIsWhollyBold'
+import { altTocBreakSources, isAltTocLabelVisible, type AltTocLineLabels } from '../toc/altTocTextLabels'
 import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
@@ -72,7 +75,7 @@ const props = defineProps<
     ensureLines: (start: number, end: number) => Promise<void>
     /** Resolves once every line of the book has its text — whole-book actions only. */
     ensureAllLines: () => Promise<void>
-    altTocLabelMap?: Map<number, string>
+    altTocLabelMap?: Map<number, AltTocLineLabels>
     searchQuery?: string
     /** The lines the in-book search results hold: only these are marked with `searchQuery`. */
     searchMatchLines?: { has(lineIndex: number): boolean }
@@ -94,6 +97,8 @@ const props = defineProps<
      * a teamim book beside a plain one renders each in its own font.
      */
     bookHasTeamim?: boolean
+    /** The library marks this book a commentary: clean text accepts plain dibbur hamatchil headings. */
+    bookIsCommentary?: boolean
     /**
      * Every line's character count by lineIndex, from the library — the scrollbar's
      * static per-row height estimate. null while loading, or for a library without
@@ -121,7 +126,7 @@ const zoom = computed({
   set: (value: number) => bookViewStore.setLinesZoom(tabId, bookId, value),
 })
 
-const cleanTextFlags = computed(() => settingsStore.cleanTextFlags)
+const cleanTextFlags = computed(() => cleanTextFlagsFor(settingsStore.cleanTextFlags, !!props.bookIsCommentary))
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 const linesLayout = computed(() => settingsStore.linesLayout)
 
@@ -141,33 +146,39 @@ const BLOCK_MARKUP =
 function rowKind(index: number): WindowedScrollerRowKind {
   void props.linesRevision
   const content = props.lines.contentAt(index)
-  if (content == null || content.trim() === '' || BLOCK_MARKUP.test(content) || isWhollyBold(content)) return 'block'
+  if (content == null || content.trim() === '' || BLOCK_MARKUP.test(content) || lineIsWhollyBold(content)) return 'block'
   return 'inline'
 }
 
 /**
- * A flowing line's alt-TOC label, its own spaces made fixed-width (four-per-em, about
- * a plain space): the gaps around an inline label are word-spacing on plain spaces,
- * which must not widen the label's own words — see the `.line-inline` label styles.
+ * This line's alt-TOC labels of one type (see toc/altTocTextLabels), joined, minus any
+ * label the text already shows at the start of its line or the one before or after.
+ * Break labels may come from a line or two below, climbing over the headings between.
  */
-function inlineAltTocLabel(index: number): string | undefined {
-  return props.altTocLabelMap?.get(index)?.replace(/ /g, ' ')
+function shownAltTocLabels(index: number, type: keyof AltTocLineLabels): string | undefined {
+  void props.linesRevision
+  const map = props.altTocLabelMap
+  if (!map?.size) return undefined
+  const contentAt = (i: number) => (i >= 0 ? props.lines.contentAt(i) : null)
+  const sources = type === 'breaks' ? altTocBreakSources(index, contentAt) : [index]
+  const shown: string[] = []
+  for (const source of sources) {
+    const labels = map.get(source)?.[type]
+    if (!labels?.length) continue
+    const near = [source, source - 1, source + 1, index].map(contentAt)
+    for (const label of labels) if (!isAltTocLabelVisible(label, near) && !shown.includes(label)) shown.push(label)
+  }
+  return shown.length ? shown.join(' · ') : undefined
 }
 
 /**
- * A line that is ONE bold element from start to end is a heading in all but tag
- * (measured 2026-11-03: about 8.5k lines), so it stands as a block, like a TOC
- * line. A line that only OPENS with bold words — the usual start of a comment —
- * still flows.
+ * A flowing line's inline alt-TOC label, its own spaces made fixed-width (four-per-em,
+ * about a plain space): the gaps around an inline label are word-spacing on plain
+ * spaces, which must not widen the label's own words — see the `.line-inline` label styles.
  */
-function isWhollyBold(content: string): boolean {
-  return WHOLLY_BOLD.test(content)
+function inlineAltTocLabel(index: number): string | undefined {
+  return shownAltTocLabels(index, 'inlines')?.replace(/ /g, ' ')
 }
-/**
- * One <b>/<strong> run, whose first closing tag ends the line — trailing spaces,
- * &nbsp; and <br> aside; otherwise text follows the bold run.
- */
-const WHOLLY_BOLD = /^\s*<(b|strong)\b[^>]*>(?:(?!<\/\1\s*>)[\s\S])*<\/\1\s*>(?:\s|&nbsp;|<br\s*\/?>)*$/i
 
 // The windowed scroller mounts the rows around any target before it scrolls, so
 // every position read here is a real DOM measurement — see WindowedScroller.vue.
@@ -349,6 +360,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   getTocPath: props.getTocPath,
   getNoteById,
   getRenderedLineContent: lineContent,
+  cleanTextFlags: () => cleanTextFlags.value,
   onHighlight,
   onClearHighlight,
   onAddNote,
@@ -684,6 +696,15 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       @contextmenu="contextMenuRef?.show($event)"
     >
       <template #row="{ index, kind }">
+        <!-- A parent alt-TOC entry (a parasha, "hilchot X"): its own line above the text.
+             Drawn by CSS from the attribute, so it holds no text to copy or search. -->
+        <span
+          v-if="rowHasText(index) && shownAltTocLabels(index, 'breaks')"
+          class="alt-toc-break-label"
+          :class="{ 'reading-column-line': kind !== 'inline' }"
+          :data-alt-toc="shownAltTocLabels(index, 'breaks')"
+          aria-hidden="true"
+        />
         <!-- Never a placeholder: the scroller asked for these lines before mounting them. -->
         <!-- An inline row flows inside the scroller's paragraph, which carries the column look. -->
         <component
@@ -696,9 +717,9 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
             selected: props.commentaryVisible && !multiSelectLineIdSet && selectedLineId === lines.idAt(index),
             'toc-section': props.commentaryVisible && !multiSelectLineIdSet && isInActiveSection(index),
             'multi-selected': props.commentaryVisible && isMultiSelected(index),
-            'before-inline-label': kind === 'inline' && props.altTocLabelMap?.has(index + 1),
+            'before-inline-label': kind === 'inline' && inlineAltTocLabel(index + 1) != null,
           }"
-          :data-alt-toc="kind === 'inline' ? inlineAltTocLabel(index) : props.altTocLabelMap?.get(index)"
+          :data-alt-toc="kind === 'inline' ? inlineAltTocLabel(index) : shownAltTocLabels(index, 'inlines')"
           v-html="lineContent(lines.contentAt(index)!, index, lines.idAt(index))"
           @click="onLineClick(index, $event)"
         />
@@ -815,7 +836,13 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line.multi-selected::after {
   opacity: 1;
 }
-.line[data-alt-toc]::before {
+/* Outside a paragraph the label is a row of its own, in the same reading column as the
+   line below it (width, margins); inside one the paragraph already is that column. */
+.alt-toc-break-label.reading-column-line {
+  display: block;
+}
+.line[data-alt-toc]::before,
+.alt-toc-break-label::before {
   content: attr(data-alt-toc);
   display: block;
   font-size: 0.85rem;

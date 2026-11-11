@@ -7,18 +7,19 @@
  *   with a lag-window guard so rapid consecutive presses use the just-navigated
  *   entry id rather than the stale activeTocEntryId (which the scroll sync
  *   updates asynchronously).
- * - altTocLabelMap — maps line index → alt TOC label for the selected alt structure
+ * - altTocLabelMap — line index → the alt-TOC labels drawn in the text, from every alt
+ *   structure (see toc/altTocTextLabels)
  */
 import { computed, watch } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { TocEntry } from '@/webview-host/queries.types'
+import { buildAltTocLineLabels } from './toc/altTocTextLabels'
+import type { AltTocSection } from './toc/useBookViewToc'
 import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 type LinesContentInstance = {
   scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
   scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
 }
-
-type AltTocSection = { entries: { lineIndex: number | null | undefined; text: string }[] }
 
 const SECTION_NAVIGATION_LAG_WINDOW_MS = 500
 
@@ -30,7 +31,8 @@ export function useBookViewTocNavigation(
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
-  selectedAltTocSection: import('vue').Ref<AltTocSection | null>,
+  altTocSections: import('vue').Ref<AltTocSection[]>,
+  altTocStructuresPrintingNumbers: import('vue').Ref<ReadonlySet<number>>,
   openTocEntryId: number | undefined,
 ) {
   const paneNavigation = usePaneNavigation()
@@ -51,21 +53,9 @@ export function useBookViewTocNavigation(
     )
   }
 
-  const altTocLabelMap = computed(() => {
-    const map = new Map<number, string>()
-    const section = selectedAltTocSection.value
-    if (!section) return map
-    for (const entry of section.entries) {
-      if (entry.lineIndex == null) continue
-      // A parent and its first child start on the same line (a parasha and its
-      // first aliya, say), so labels accumulate outer-first — overwriting would
-      // drop the parasha and leave only the aliya.
-      const existing = map.get(entry.lineIndex)
-      if (existing == null) map.set(entry.lineIndex, entry.text)
-      else if (existing !== entry.text) map.set(entry.lineIndex, `${existing} · ${entry.text}`)
-    }
-    return map
-  })
+  const altTocLabelMap = computed(() =>
+    buildAltTocLineLabels(altTocSections.value, altTocStructuresPrintingNumbers.value),
+  )
 
   let lastSectionNavigationEntryId: number | null = null
   let lastSectionNavigationTimestamp = 0

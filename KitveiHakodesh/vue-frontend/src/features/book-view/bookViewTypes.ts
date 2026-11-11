@@ -172,8 +172,6 @@ export interface TocPersistState {
   altExpanded?: number[]
   scrollTop?: number
   altScrollTop?: number
-  /** Which alternate structure the reader picked, when the book has several. */
-  altStructureId?: number | null
 }
 
 /**

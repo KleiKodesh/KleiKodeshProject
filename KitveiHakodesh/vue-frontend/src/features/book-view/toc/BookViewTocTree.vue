@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import type { AltTocSection } from './useBookViewToc'
+import type { AltTocPane } from './useBookViewToc'
 import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
@@ -12,7 +12,7 @@ const props = defineProps<{
   activeTocEntryId?: number
   activeAltTocEntryId?: number
   tocEntries: TocEntry[]
-  selectedAltTocSection: AltTocSection | null
+  altTocPane: AltTocPane | null
   loading: boolean
   error: string | null
   tocSearchTree?: SearchableTree
@@ -32,11 +32,11 @@ function focusTocList() {
 }
 
 const hasToc = computed(() => props.tocEntries.length > 0)
-const hasAlt = computed(() => props.selectedAltTocSection != null)
+const hasAlt = computed(() => props.altTocPane != null)
 
 watch(searchQuery, (q) => {
   if (!q) return
-  const section = props.selectedAltTocSection
+  const section = props.altTocPane
   if (section != null && section.searchTree == null) {
     section.searchTree = new SearchableTree(section.entries)
   }
@@ -47,7 +47,7 @@ watch(searchQuery, (q) => {
 // tab switch, so none of the state below survives on its own. The book view
 // snapshots it on save and hands it back through restoreState on mount.
 
-function snapshotState(): Omit<TocPersistState, 'visible' | 'altStructureId'> {
+function snapshotState(): Omit<TocPersistState, 'visible'> {
   return {
     searchQuery: searchQuery.value,
     expanded: tocSectionRef.value?.getExpanded() ?? [],
@@ -110,7 +110,7 @@ function applyAltState(saved: TocPersistState) {
   let stop: (() => void) | undefined
   stop = trackRestoreWatch(
     watch(
-      () => props.selectedAltTocSection?.structure.id,
+      () => props.altTocPane?.key,
       (id) => {
         if (id == null) return
         nextTick(() => {
@@ -179,13 +179,13 @@ defineExpose({ snapshotState, restoreState })
       <template #bottom>
         <TocTreeSection
           ref="altSectionRef"
-          v-if="selectedAltTocSection"
-          :key="selectedAltTocSection.structure.id"
+          v-if="altTocPane"
+          :key="altTocPane.key"
           :title="null"
-          :entries="selectedAltTocSection.entries"
+          :entries="altTocPane.entries"
           :active-entry-id="activeAltTocEntryId"
           :filter="searchQuery"
-          :search-tree="selectedAltTocSection.searchTree ?? undefined"
+          :search-tree="altTocPane.searchTree ?? undefined"
           @select="$emit('altSelect', $event as TocEntry)"
         />
       </template>

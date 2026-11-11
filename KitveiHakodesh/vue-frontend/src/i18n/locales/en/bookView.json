@@ -138,7 +138,37 @@
   },
   "selectAll": "Select all",
   "toc": {
-    "loadError": "Error loading table of contents"
+    "loadError": "Error loading table of contents",
+    "altStructure": {
+      "chapters": "Chapters",
+      "chapter": "Chapters",
+      "parasha": "Parashot",
+      "simannames": "Halachot and simanim",
+      "siman": "Simanim",
+      "simanim": "Simanim",
+      "seifim": "Seifim",
+      "letter": "Letters",
+      "topic": "Topics",
+      "hilchot": "Halachot",
+      "venice": "Venice edition",
+      "vilna": "Vilna edition",
+      "daf": "Dapim",
+      "dapim": "Dapim",
+      "gate": "Gates",
+      "book": "Books",
+      "contents": "Contents",
+      "30daycycle": "By day of the month",
+      "authors": "Authors",
+      "compositions": "Compositions",
+      "tanaimandamoraim": "Tannaim and Amoraim",
+      "chamber": "Chambers",
+      "essay": "Passages",
+      "pillars": "Pillars",
+      "remez": "Remazim",
+      "section": "Sections",
+      "tikkunim": "Tikkunim",
+      "vavimandamudim": "Vavim and amudim"
+    }
   },
   "readAloud": {
     "panel": "Read aloud",
