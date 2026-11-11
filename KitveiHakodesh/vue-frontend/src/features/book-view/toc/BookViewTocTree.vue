@@ -4,6 +4,7 @@ import type { AltTocPane } from './useBookViewToc'
 import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
+import type { TreeSearcher } from '@/utils/segmentSearchTree'
 import TocTreeSection from '@/components/TocTreeSection.vue'
 import TocTreeLayout from '@/components/TocTreeLayout.vue'
 import SplitPane from '@/components/SplitPane.vue'
@@ -35,22 +36,48 @@ function focusTocList() {
 const hasToc = computed(() => props.tocEntries.length > 0)
 const hasAlt = computed(() => props.altTocPane != null)
 
+// The alt pane's search tree. It builds nothing until it is first searched.
+const altSearchTree = computed(() =>
+  props.altTocPane ? (props.altTocPane.searchTree ?? new SearchableTree(props.altTocPane.entries)) : null,
+)
+
 // The two panes are only a display split. A search runs over both structures and shows
-// ONE result list. Alt ids may collide with main TOC ids, so alt rows get negative ids
-// here and are mapped back to their own entry on select.
+// ONE result list, searching the two trees together (no combined copy of both). Alt ids
+// may collide with main TOC ids, so alt result rows get negative ids and are mapped back
+// to their own entry on select.
 const searching = computed(() => searchQuery.value.length > 0 && hasToc.value && hasAlt.value)
 const altId = (id: number) => -id - 1
 const merged = computed(() => {
-  if (!searching.value) return null
-  const alt = props.altTocPane!.entries
+  if (!searching.value || !props.tocSearchTree || !altSearchTree.value) return null
+  const mainTree = props.tocSearchTree
+  const altTree = altSearchTree.value
+  const altEntries = props.altTocPane!.entries
+  /** The alt entries behind the alt rows of the latest results. */
   const altById = new Map<number, TocEntry>()
-  const entries: TocEntry[] = [...props.tocEntries]
-  for (const e of alt) {
-    const id = altId(e.id)
-    altById.set(id, e)
-    entries.push({ ...e, id, parentId: e.parentId == null ? null : altId(e.parentId) })
+  const searcher: TreeSearcher = {
+    search: (_nodes, query, limit) => {
+      altById.clear()
+      const hits = SearchableTree.searchAcross(
+        [{ tree: mainTree, nodes: props.tocEntries }, { tree: altTree, nodes: altEntries }],
+        query,
+        limit,
+      )
+      return hits.map(({ node, part }) => {
+        if (part === 0) return node
+        const e = node as TocEntry
+        const id = altId(e.id)
+        altById.set(id, e)
+        return { ...e, id, parentId: e.parentId == null ? null : altId(e.parentId) }
+      })
+    },
+    displayPaths: {
+      get: (id) => {
+        const alt = altById.get(id)
+        return alt ? altTree.displayPaths.get(alt.id) : mainTree.displayPaths.get(id)
+      },
+    },
   }
-  return { entries, altById, tree: new SearchableTree(entries) }
+  return { entries: props.tocEntries, altById, searcher }
 })
 
 function onMergedSelect(entry: TocEntry) {
@@ -187,7 +214,7 @@ defineExpose({ snapshotState, restoreState })
       :title="null"
       :entries="merged.entries"
       :filter="searchQuery"
-      :search-tree="merged.tree"
+      :search-tree="merged.searcher"
       @select="onMergedSelect($event as TocEntry)"
     />
     <SplitPane v-show="!merged" :bottom-visible="hasToc && hasAlt" class="toc-body">
@@ -197,7 +224,7 @@ defineExpose({ snapshotState, restoreState })
           v-if="hasToc"
           :title="null"
           :entries="tocEntries"
-          :filter="searchQuery"
+          :filter="merged ? '' : searchQuery"
           :active-entry-id="activeTocEntryId"
           :search-tree="tocSearchTree"
           @select="$emit('select', $event as TocEntry)"
@@ -211,8 +238,8 @@ defineExpose({ snapshotState, restoreState })
           :title="null"
           :entries="altTocPane.entries"
           :active-entry-id="activeAltTocEntryId"
-          :filter="searchQuery"
-          :search-tree="altTocPane.searchTree ?? undefined"
+          :filter="merged ? '' : searchQuery"
+          :search-tree="altSearchTree ?? undefined"
           @select="$emit('altSelect', $event as TocEntry)"
         />
       </template>

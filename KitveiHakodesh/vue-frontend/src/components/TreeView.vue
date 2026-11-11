@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { SegmentSearchTree } from '@/utils/segmentSearchTree'
+import { SegmentSearchTree, type TreeSearcher } from '@/utils/segmentSearchTree'
 import { useElementSize } from '@vueuse/core'
 
 // Vue casts an absent boolean prop to false, so the on-by-default flag needs an explicit default.
@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<{
   rowHeight?: number
   fontSize?: string
   stickyHeaders?: boolean
-  searchTree?: SegmentSearchTree
+  searchTree?: TreeSearcher
 }>(), { stickyHeaders: true })
 
 // The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
@@ -253,7 +253,7 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
 const internalTree = computed(() =>
   !props.searchTree && props.filter ? new SegmentSearchTree(props.nodes) : null,
 )
-const activeTree = computed(() => props.searchTree ?? internalTree.value ?? new SegmentSearchTree([]))
+const activeTree = computed<TreeSearcher>(() => props.searchTree ?? internalTree.value ?? new SegmentSearchTree([]))
 
 const visibleNodes = computed(() => {
   if (props.filter) {

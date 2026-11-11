@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import TreeView from './TreeView.vue'
 import type { TreeNodeItem } from './treeTypes'
-import type { SegmentSearchTree } from '@/utils/segmentSearchTree'
+import type { TreeSearcher } from '@/utils/segmentSearchTree'
 
 /**
  * One table-of-contents tree (title row optional) - the book view's TOC and the FastDocView
@@ -14,7 +14,7 @@ defineProps<{
   entries: TreeNodeItem[]
   filter: string
   activeEntryId?: number
-  searchTree?: SegmentSearchTree
+  searchTree?: TreeSearcher
 }>()
 defineEmits<{ select: [TreeNodeItem] }>()
 
