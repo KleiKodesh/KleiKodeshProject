@@ -939,10 +939,19 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new TocSectionResult { Rows = seforim.GetTocSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.RangePairs, a.Direction != "prev") }));
                 }
 
-                case "getLinkTargetForSourceLineAndBook":
+                case "getRelatedBooks":
                 {
-                    var a = MsgPack.De<LinkTargetArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new LinkTargetResult { Rows = seforim.GetLinkTargetForSourceLineAndBook(a.SourceLineId, a.TargetBookId) }));
+                    var a = MsgPack.De<RelatedBooksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetRelatedBooks(a.BookId)));
+                }
+
+                case "resolveRelatedTarget":
+                {
+                    var a = MsgPack.De<RelatedTargetArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new RelatedTargetResult
+                    {
+                        LineIndex = seforim.ResolveRelatedTarget(a.FromBookId, a.TopLineIndex, a.Target),
+                    }));
                 }
 
                 case "getTocPathsForLines":

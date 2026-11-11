@@ -843,7 +843,7 @@ export function useBookView(
     // data
     tabId, bookId,
     lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
+    groups, filterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
     tocEntries, tocSearchTree, altTocSections, altTocPane, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation (hoisted — survive v-if toggle)
@@ -875,7 +875,6 @@ export function useBookView(
     onModeChange: searchPanel.onModeChange,
     toggleTocPanel: sidePanel.toggleTocPanel,
     closeSidePanel: sidePanel.closeSidePanel,
-    ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
     getActiveTocEntry, getActiveAltTocEntry, getTocPath,
   }
 }

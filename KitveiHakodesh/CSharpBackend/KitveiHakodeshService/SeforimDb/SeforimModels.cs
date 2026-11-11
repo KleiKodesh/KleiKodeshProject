@@ -243,6 +243,24 @@ public sealed class StaticFilterArgs
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class StaticFilterResult { public List<StaticFilterRow> Rows { get; set; } = new(); }
 
+// ── Related books (book view toolbar) ───────────────────────────────────────────
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RelatedBooksArgs { public int BookId { get; set; } }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RelatedTargetArgs
+{
+    public int FromBookId { get; set; }
+    public int TopLineIndex { get; set; }
+    /// <summary>The clicked row as getRelatedBooks returned it.</summary>
+    public RelatedBook Target { get; set; } = new();
+}
+
+/// <summary>Wrapped, not a bare int?: the line the target opens at, null = its start.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RelatedTargetResult { public int? LineIndex { get; set; } }
+
 // ── Commentary navigation ──────────────────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -269,11 +287,6 @@ public sealed class TocSectionArgs
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocSectionResult { public List<TocSectionRow> Rows { get; set; } = new(); }
 
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LinkTargetArgs { public int SourceLineId { get; set; } public int TargetBookId { get; set; } }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LinkTargetResult { public List<LinkTargetRow> Rows { get; set; } = new(); }
 
 // ── TOC paths & line→book/index helpers ────────────────────────────────────────
 

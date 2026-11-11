@@ -249,3 +249,27 @@ export interface WordLinkTargetRow {
   connectionTypeId: number
   orderIndex: number
 }
+
+/** A book in the related-books dropdown (Core RelatedBook). Sent back as is on a click. */
+export interface RelatedBook {
+  bookId: number
+  title: string
+  /** A base text of the open book. */
+  isBaseText: boolean
+  /** A commentary of a base text: its line is reached through that base. */
+  viaSourceBookId: number | null
+  /** That commentary's own primary base, when it is a commentary on the via-base. */
+  chainBaseBookId: number | null
+}
+
+/** A section of the related-books list: a commentary-panel label, or "commentaries of" a base text. */
+export interface RelatedBooksSection {
+  label: string | null
+  commentariesOfBookId: number | null
+  commentariesOfTitle: string | null
+  books: RelatedBook[]
+}
+
+export interface RelatedBooksList {
+  sections: RelatedBooksSection[]
+}

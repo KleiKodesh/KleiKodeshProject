@@ -45,7 +45,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
-import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LinesTable } from './lines/linesTable'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 import { useI18n } from 'vue-i18n'
@@ -66,8 +65,6 @@ const props = defineProps<{
   exportRestricted?: boolean
   // True while an export to Word runs; the button shows a spinner.
   exportingToWord?: boolean
-  filterGroups: CommentaryGroup[]
-  relatedBooksLoaded: boolean
   // The book's alternate versions. Empty for most books, which hides the control.
   versions: BookVersionRow[]
   activeVersionId: number | null
@@ -75,7 +72,6 @@ const props = defineProps<{
   hebrewBooksEditions: HebrewBooksEdition[]
   currentScrollLineIndex: number
   lines: LinesTable
-  onRelatedBooksOpen?: () => void
   /** The default name for a bookmark on a line - its TOC path. */
   bookmarkLabelForLine?: (lineIndex: number) => string
   /** Where a bookmark made now points - the lines pane reads the selection or top of view. */
@@ -361,11 +357,7 @@ defineExpose({ tocBtnRef, createBookmark })
       v-bind="collapseAttrs('related-books')"
       class="dropdown-host"
       :book-id="bookId"
-      :filter-groups="filterGroups"
-      :related-books-loaded="relatedBooksLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
-      :lines="lines"
-      :on-open="onRelatedBooksOpen"
     />
     <!--
       Only for the minority of books that carry alternate versions. Absent rather
@@ -609,11 +601,7 @@ defineExpose({ tocBtnRef, createBookmark })
         v-if="isOverflowed('related-books')"
         in-overflow
         :book-id="bookId"
-        :filter-groups="filterGroups"
-        :related-books-loaded="relatedBooksLoaded"
         :current-scroll-line-index="currentScrollLineIndex"
-        :lines="lines"
-        :on-open="onRelatedBooksOpen"
       />
       <BookViewCleanTextCombo v-if="isOverflowed('clean-text')" in-overflow />
       <button

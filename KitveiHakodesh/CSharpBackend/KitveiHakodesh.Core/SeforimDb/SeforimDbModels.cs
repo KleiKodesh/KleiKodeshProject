@@ -14,6 +14,41 @@ namespace KitveiHakodesh.Core.SeforimDb
     // The *Args and {Rows} envelopes that used to sit alongside these stay with the
     // transport that shapes them — they describe RPC calls, not data.
 
+    /// <summary>The book view's related-books list, sections in display order.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class RelatedBooksList
+    {
+        public List<RelatedBooksSection> Sections { get; set; } = new();
+    }
+
+    /// <summary>One section of the related-books list. Either a commentary-panel section
+    /// (<see cref="Label"/>: the category or connection-type label the panel uses), or the
+    /// commentaries of one of the book's base texts (<see cref="CommentariesOfBookId"/> set,
+    /// <see cref="CommentariesOfTitle"/> its title, Label null - the UI words the caption).</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class RelatedBooksSection
+    {
+        public string? Label { get; set; }
+        public int? CommentariesOfBookId { get; set; }
+        public string? CommentariesOfTitle { get; set; }
+        public List<RelatedBook> Books { get; set; } = new();
+    }
+
+    /// <summary>A related book. The routing fields go back unchanged to
+    /// SeforimDbQueries.ResolveRelatedTarget when the book is clicked.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class RelatedBook
+    {
+        public int BookId { get; set; }
+        public string Title { get; set; } = "";
+        /// <summary>A base text of the open book: its links point AT the open book.</summary>
+        public bool IsBaseText { get; set; }
+        /// <summary>Set for a commentary of a base text: its line is reached through that base.</summary>
+        public int? ViaSourceBookId { get; set; }
+        /// <summary>The book's own primary base, when that is a commentary on the via-base.</summary>
+        public int? ChainBaseBookId { get; set; }
+    }
+
     /// <summary>An alternate text version of a book — the version overlay picker's rows.
     /// Only versions that actually carry content are returned.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
@@ -309,8 +344,6 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class TocSectionRow { public int SectionStart { get; set; } }
 
-    [MessagePackObject(keyAsPropertyName: true)]
-    public sealed class LinkTargetRow { public int TargetLineId { get; set; } public int LineIndex { get; set; } }
 
     /// <summary>Which TOC entry a requested line sits under. The path TEXT is not here: lines of one
     /// section share an entry, so the text rides once per entry in <see cref="TocEntryPathRow"/>.</summary>
