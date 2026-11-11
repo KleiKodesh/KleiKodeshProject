@@ -55,6 +55,7 @@ function fakeApi(total: number) {
     noteBlocks: async () => Int32Array.from([5]),
     bookmark: async () => null,
     search: async () => ({ hitBlocks: [], hitCounts: [], nextBlock: -1, reachedEnd: true }),
+    searchNotes: async () => ({ hitBlocks: [], hitCounts: [], nextBlock: -1, reachedEnd: true }),
     sections: async () => SECTIONS,
     scan: async (documentId, blocks) => {
       calls.push({ op: 'scan', args: [documentId, blocks] })

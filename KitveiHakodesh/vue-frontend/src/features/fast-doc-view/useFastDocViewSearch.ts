@@ -13,8 +13,15 @@ const SINGLE_CHAR_DEBOUNCE_MS = 600
 export interface FastDocViewSearchOptions {
   api: FastDocViewApi
   documentId: () => string | null | undefined
-  /** The block at the top of the view: the search scans from here, and the count anchors here. */
+  /** The row at the top of the view (a block, or a note in the notes pane): the scan starts here, and the count anchors here. */
   currentBlock: () => number
+  /**
+   * What is searched: the document's text (`blocks`, the default) or its footnotes and endnotes
+   * (`notes`, rows = the notes pane's notes). Two separate searches with separate results, like the
+   * book view's lines search and commentary panel search - a note's match is never a match on the
+   * block that references it (the reader could not be shown it there).
+   */
+  scope?: 'blocks' | 'notes'
 }
 
 /** One match: the block it is in and which occurrence of the query within that block (the book view's BookViewMatch). */
@@ -47,6 +54,12 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
   let isNavigationArmed = false
 
   const matchCount = computed(() => matches.value.total)
+
+  /** One bounded scan of this search's scope. */
+  const searchStep = (documentId: string, text: string, from: number, max: number) =>
+    options.scope === 'notes'
+      ? options.api.searchNotes(documentId, text, false, from, max)
+      : options.api.search(documentId, text, false, from, max)
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   watch(query, (value) => {
@@ -105,7 +118,7 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
       // From the reader's block to the end of the document...
       let from = start
       while (isCurrent()) {
-        const step = await options.api.search(documentId, text, false, from, FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP)
+        const step = await searchStep(documentId, text, from, FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP)
         if (!isCurrent()) return
         insertMatches(matchesOf(step))
         if (step.reachedEnd || step.nextBlock < 0) break
@@ -115,7 +128,7 @@ export function useFastDocViewSearch(options: FastDocViewSearchOptions) {
       // ...then from the start up to where it began.
       from = 0
       while (isCurrent() && from < start) {
-        const step = await options.api.search(documentId, text, false, from, Math.min(FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP, start - from))
+        const step = await searchStep(documentId, text, from, Math.min(FAST_DOC_VIEW_SEARCH_BLOCKS_PER_STEP, start - from))
         if (!isCurrent()) return
         insertMatches(matchesOf(step, (block) => block < start))
         if (step.nextBlock < 0 || step.nextBlock <= from) break

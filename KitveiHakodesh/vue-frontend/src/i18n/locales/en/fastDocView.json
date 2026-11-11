@@ -6,6 +6,7 @@
   "toc": "Table of contents",
   "notes": "Notes",
   "noNotes": "No notes in view",
+  "searchNotesPlaceholder": "Search the notes",
   "zoomIn": "Zoom in (Ctrl+)\nText: {text}% {'|'} Notes: {notes}%\nReset: Ctrl+0",
   "zoomOut": "Zoom out (Ctrl-)\nText: {text}% {'|'} Notes: {notes}%\nReset: Ctrl+0",
   "footnote": "Footnote",

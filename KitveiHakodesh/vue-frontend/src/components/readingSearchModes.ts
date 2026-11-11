@@ -1,7 +1,7 @@
 /**
  * The reading pages' search targets - shared by the in-text search bar (ReadingSearchBar) and the
- * book view: the text itself, or one of the book view's commentary panels. A page without
- * commentary panels (FastDocView) only ever uses 'content'.
+ * book view: the text itself, or one of the book view's commentary panels. FastDocView uses the
+ * slot its notes pane sits in for the notes search (bottom, right = 'side', left = 'side-left').
  */
 export type CommentarySlot = 'bottom' | 'side' | 'side-left'
 

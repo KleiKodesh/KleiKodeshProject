@@ -29,6 +29,8 @@ const props = defineProps<{
   openCommentarySlots: CommentarySlot[]
   mode: SearchMode
   query?: string
+  /** The input's placeholder while a panel is searched; the book view's "search the commentary" by default. */
+  panelPlaceholder?: string
 }>()
 const emit = defineEmits<{
   close: []
@@ -108,7 +110,7 @@ watch(() => props.openCommentarySlots, (slots) => {
 const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
 
 const placeholder = computed(() =>
-  searchMode.value === 'content' ? t('bookView.search.placeholderText') : t('bookView.search.placeholderCommentary'),
+  searchMode.value === 'content' ? t('bookView.search.placeholderText') : (props.panelPlaceholder ?? t('bookView.search.placeholderCommentary')),
 )
 
 const matchLabel = computed(() => {

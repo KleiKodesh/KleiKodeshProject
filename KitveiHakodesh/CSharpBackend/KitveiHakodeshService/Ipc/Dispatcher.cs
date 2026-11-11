@@ -200,6 +200,11 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<FastDocViewSearchArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.Search(a.DocumentId, a.Query, a.MatchCase, a.FromBlock, a.MaxBlocks)));
                 }
+                case "fastDocViewSearchNotes":
+                {
+                    var a = MsgPack.De<FastDocViewSearchNotesArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(fastDocViewDocuments.SearchNotes(a.DocumentId, a.Query, a.MatchCase, a.FromNote, a.MaxNotes)));
+                }
                 case "fastDocViewBookmark":
                 {
                     var a = MsgPack.De<FastDocViewBookmarkArgs>(req.Args);
