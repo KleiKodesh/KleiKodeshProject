@@ -4,7 +4,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 {
     /// <summary>
     /// Merges a book's "Seifim" alt structure into its main TOC as one more level: each
-    /// seif under its siman. Only called once SeforimDbSqlStrings.GetMergeableSeifimStructure
+    /// seif under its siman. Only called once SeforimDbSqlStrings.IsSeifimStructureMergeable
     /// has proven the whole structure fits (all or nothing).
     /// </summary>
     internal static class SeifimTocMerge

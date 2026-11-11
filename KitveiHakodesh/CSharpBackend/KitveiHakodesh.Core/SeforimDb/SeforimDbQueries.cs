@@ -381,7 +381,7 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         /// <summary>
         /// The book's TOC. When its "Seifim" alt structure only adds a seif level under the main
-        /// TOC's simanim (see GetMergeableSeifimStructure), the seifim are merged in as the
+        /// TOC's simanim (see IsSeifimStructureMergeable), the seifim are merged in as the
         /// simanim's children - and GetAltTocStructures leaves that structure out.
         /// </summary>
         public List<TocEntryRow> GetAllTocEntries(int bookId)
@@ -396,11 +396,24 @@ namespace KitveiHakodesh.Core.SeforimDb
         private int? GetMergeableSeifimStructureId(int bookId)
         {
             using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetMergeableSeifimStructure;
-            cmd.Parameters.AddWithValue("@bookId", bookId);
-            var result = cmd.ExecuteScalar();
-            return result == null || result is DBNull ? null : Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture);
+            using var find = conn.CreateCommand();
+            find.CommandText = SeforimDbSqlStrings.GetSeifimStructureId;
+            find.Parameters.AddWithValue("@bookId", bookId);
+            var found = find.ExecuteScalar();
+            if (found == null || found is DBNull) return null;
+            int structureId = Convert.ToInt32(found, System.Globalization.CultureInfo.InvariantCulture);
+
+            using var deeper = conn.CreateCommand();
+            deeper.CommandText = SeforimDbSqlStrings.SeifimTwinHasChildren;
+            deeper.Parameters.AddWithValue("@bookId", bookId);
+            deeper.Parameters.AddWithValue("@structureId", structureId);
+            if (Convert.ToInt32(deeper.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 1) return null;
+
+            using var check = conn.CreateCommand();
+            check.CommandText = SeforimDbSqlStrings.IsSeifimStructureMergeable;
+            check.Parameters.AddWithValue("@bookId", bookId);
+            check.Parameters.AddWithValue("@structureId", structureId);
+            return Convert.ToInt32(check.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 1 ? structureId : null;
         }
 
         public List<TocEntryRow> GetAllAltTocEntries(int structureId) =>
