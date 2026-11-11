@@ -24,6 +24,36 @@ export interface AltTocPane {
   searchTree: SearchableTree | null // built lazily on first search use
 }
 
+/**
+ * Preference of an alt structure's key, lowest first: the preferred structure leads
+ * the pane's list. Larger divisions come before fine counters (seifim, letters).
+ * Keys not listed sit between them and keep db order.
+ */
+function altTocStructurePriority(key: string): number {
+  switch (key.toLowerCase()) {
+    case 'daf':        return 0
+    case 'parasha':    return 1
+    case 'hilchot':    return 2
+    case 'chapters':
+    case 'chapter':    return 3
+    case 'simannames':
+    case 'simanim':
+    case 'siman':      return 4
+    case 'topic':      return 5
+    case 'section':    return 6
+    case 'seifim':     return 200
+    case 'letter':     return 201
+    default:           return 100
+  }
+}
+
+/** The sections with the preferred structure first (stable sort keeps db order on ties). */
+function sortByPreference(sections: AltTocSection[]): AltTocSection[] {
+  return [...sections].sort(
+    (a, b) => altTocStructurePriority(a.structure.key) - altTocStructurePriority(b.structure.key),
+  )
+}
+
 /** The pane title of a structure: our own name for its key, else its Hebrew title. */
 function altTocStructureTitle(structure: AltTocStructure, bookTitle: string | undefined): string {
   const nameKey = `bookView.toc.altStructure.${structure.key.toLowerCase().replace(/[^a-z0-9]/g, '')}`
@@ -171,7 +201,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       const printing = await findStructuresPrintingNumbers(sections).catch(() => new Set<number>())
       if (generation !== altTocGeneration) return
       altTocStructuresPrintingNumbers.value = printing
-      altTocSections.value = sections
+      altTocSections.value = sortByPreference(sections)
     } catch {
       // alt TOC is non-critical — silently ignore errors
     }
@@ -228,8 +258,10 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   // Alt entries arrive ordered by id, which is document order for most structures
   // but not all — a handful interleave their levels. Sorting once per section
   // keeps the lookup a plain binary search.
+  // Scrolling follows the preferred structure only (first after sortByPreference);
+  // the others stay where the reader left them.
   const altTocLineOrder = computed(() =>
-    (altTocPane.value?.entries ?? [])
+    (altTocSections.value[0]?.entries ?? [])
       .filter((e) => e.lineIndex != null)
       .sort((a, b) => a.lineIndex! - b.lineIndex!),
   )
