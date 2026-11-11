@@ -40,8 +40,6 @@ namespace KitveiHakodeshLib
         /// </summary>
         private static readonly SemaphoreSlim Gate = new SemaphoreSlim(1, 1);
 
-        private const string BusyPaste = "פעולת הדבקה אחרת מתבצעת כעת.";
-        private const string BusyExport = "פעולת ייצוא אחרת מתבצעת כעת.";
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -51,7 +49,7 @@ namespace KitveiHakodeshLib
         /// never leaves a partially-opened document or a stray invisible Word behind.
         /// </summary>
         public static Task<string> ExportAsync(string html, string title = "", string requestId = null)
-            => RunCancellableAsync(requestId, "khs-word-export", cancellation => ExportCore(html, title, cancellation), BusyExport);
+            => RunCancellableAsync(requestId, "khs-word-export", cancellation => ExportCore(html, title, cancellation), HostText.BusyExport);
 
         /// <summary>Runs one Word action that <see cref="CancelExport"/> can stop by <paramref name="requestId"/> (none: not cancellable).</summary>
         private static async Task<string> RunCancellableAsync(string requestId, string threadName, Action<CancellationToken> work, string busyMessage)
@@ -109,7 +107,7 @@ namespace KitveiHakodeshLib
         /// Returns null on success, or a message describing why it failed — never throws.
         /// </summary>
         public static Task<string> PasteAtCursorAsync(string requestId = null)
-            => RunCancellableAsync(requestId, "khs-word-paste", PasteAtCursorCore, BusyPaste);
+            => RunCancellableAsync(requestId, "khs-word-paste", PasteAtCursorCore, HostText.BusyPaste);
 
         // ── Private implementation ────────────────────────────────────────────
 
@@ -174,11 +172,11 @@ namespace KitveiHakodeshLib
                 // RPC_E_CALL_REJECTED / VBA "call was rejected by callee" — Word is busy with a
                 // dialog, a drag, or a modal state and is refusing automation right now.
                 if (com.HResult == unchecked((int)0x80010001) || com.HResult == unchecked((int)0x8001010A))
-                    return "וורד עסוק כעת ואינו מגיב. סגור תיבת דו-שיח פתוחה ונסה שוב.";
+                    return HostText.WordBusy;
 
                 // RPC_E_DISCONNECTED / the object is gone — the instance we were talking to died.
                 if (com.HResult == unchecked((int)0x80010108) || com.HResult == unchecked((int)0x800706BA))
-                    return "החיבור לוורד אבד. נסה שוב.";
+                    return HostText.WordConnectionLost;
             }
             return ex.Message;
         }

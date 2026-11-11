@@ -97,7 +97,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                     {
                         using (var dlg = new SaveFileDialog())
                         {
-                            dlg.Title    = HebrewBooksTexts.SaveAsDialogTitle;
+                            dlg.Title    = HostText.SaveBookTitle;
                             dlg.Filter   = "PDF (*.pdf)|*.pdf";
                             dlg.FileName = suggestedName;
                             if (dlg.ShowDialog() == DialogResult.OK) dest = dlg.FileName;
@@ -146,7 +146,7 @@ namespace KitveiHakodeshLib.HebrewBooks
 
                 if (string.IsNullOrWhiteSpace(localFolder))
                 {
-                    _bridge.Reply(id, new { error = HebrewBooksTexts.NoLocalFolderConfigured });
+                    _bridge.Reply(id, new { error = HostText.NoLocalFolderConfigured });
                     return;
                 }
 
@@ -176,7 +176,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
                 localFolder = HebrewBooksLocalFolder.Resolve(localFolder);
-                if (string.IsNullOrWhiteSpace(localFolder)) { _bridge.Reply(id, new { error = HebrewBooksTexts.NoLocalFolderConfigured }); return; }
+                if (string.IsNullOrWhiteSpace(localFolder)) { _bridge.Reply(id, new { error = HostText.NoLocalFolderConfigured }); return; }
 
                 string filePath = HebrewBooksLocalFolder.LocalFolderHit(localFolder, bookId);
                 if (filePath == null) { _bridge.Reply(id, new { notFound = true }); return; }

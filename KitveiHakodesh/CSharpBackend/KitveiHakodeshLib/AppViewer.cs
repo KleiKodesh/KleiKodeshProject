@@ -517,10 +517,10 @@ namespace KitveiHakodeshLib
                 string message = BuildErrorMessage(ex);
                 if (InvokeRequired)
                     Invoke(new Action(() => MessageBox.Show(
-                        message, "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                        message, HostText.ErrorBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error)));
                 else
                     MessageBox.Show(
-                        message, "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        message, HostText.ErrorBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -531,7 +531,12 @@ namespace KitveiHakodeshLib
         /// </summary>
         private static string BuildErrorMessage(Exception ex)
         {
-            string baseMessage = "שגיאה באתחול האפליקציה:\n" + ex.Message;
+            // 0x8007139F (ERROR_INVALID_STATE): another Word with a different elevation
+            // (admin vs. normal) already holds the shared WebView2 data folder.
+            if (ex.HResult == unchecked((int)0x8007139F))
+                return HostText.OtherWordDifferentElevation;
+
+            string baseMessage = HostText.InitFailed + "\n" + ex.Message;
 
             // Detect SQLite native interop failures — these are the hardest to
             // diagnose remotely because they depend on process bitness, Word bitness,
@@ -551,7 +556,7 @@ namespace KitveiHakodeshLib
                 var sb = new StringBuilder();
                 sb.AppendLine(baseMessage);
                 sb.AppendLine();
-                sb.AppendLine("── פרטי סביבה ──");
+                sb.AppendLine(HostText.EnvironmentDetails);
 
                 // The most relevant fields for this error class.
                 var keys = new[]

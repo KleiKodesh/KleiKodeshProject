@@ -75,7 +75,7 @@ namespace KitveiHakodeshLib.LocalFile
             object reply;
             try
             {
-                string folder = await NativeFolderPicker.PickAsync("בחר תיקיית ספרים מקומית", ownerHandle);
+                string folder = await NativeFolderPicker.PickAsync(HostText.PickLocalBooksFolder, ownerHandle);
                 reply = folder == null ? (object)new { cancelled = true } : new { folderPath = folder };
             }
             catch (Exception ex) { reply = new { error = ex.Message }; }
@@ -106,8 +106,8 @@ namespace KitveiHakodeshLib.LocalFile
                 {
                     using (var dlg = new OpenFileDialog())
                     {
-                        dlg.Title  = "פתח קובץ";
-                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
+                        dlg.Title  = HostText.OpenFileTitle;
+                        dlg.Filter = HostText.Documents + " (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|" + HostText.AllFiles + " (*.*)|*.*";
                         // A folder that has since been deleted must not sink the pick: the dialog
                         // silently falls back to its default when InitialDirectory does not exist.
                         if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
@@ -148,13 +148,13 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 {
-                    Fail("הקובץ לא נמצא: " + filePath);
+                    Fail(HostText.FileNotFound + ": " + filePath);
                     return;
                 }
 
                 if (!LocalFileOpenRules.IsSupported(filePath, out bool needsConvert))
                 {
-                    Fail("סוג קובץ זה אינו נתמך: " + Path.GetExtension(filePath).ToLowerInvariant());
+                    Fail(HostText.FileTypeNotSupported + ": " + Path.GetExtension(filePath).ToLowerInvariant());
                     return;
                 }
 
@@ -184,7 +184,7 @@ namespace KitveiHakodeshLib.LocalFile
                     cached = await ConvertToPdfAsync(filePath);
                 }
 
-                if (cached == null) { Fail("לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן."); return; }
+                if (cached == null) { Fail(HostText.CannotConvertFile + ". " + HostText.MakeSureWordInstalled); return; }
 
                 string cachedUrl = WordCacheUrl + Path.GetFileName(cached);
                 if (replyId != null)
@@ -271,10 +271,10 @@ namespace KitveiHakodeshLib.LocalFile
             try
             {
                 string filePath = root.GetProperty("filePath").GetString();
-                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
+                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = HostText.FileNotFound }); return; }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                if (!LocalFileOpenRules.IsSupported(filePath, out _)) { _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך" }); return; }
+                if (!LocalFileOpenRules.IsSupported(filePath, out _)) { _bridge.Reply(id, new { error = HostText.FileTypeNotSupported }); return; }
                 if (ext == ".txt")
                 {
                     // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
@@ -291,7 +291,7 @@ namespace KitveiHakodeshLib.LocalFile
 
                 string cached = GetCachePath(filePath);
                 if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
-                if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
+                if (cached == null) { _bridge.Reply(id, new { error = HostText.CannotConvertFile }); return; }
                 _bridge.Reply(id, new { url = "http://kitveihakodesh-app/word-cache/" + Path.GetFileName(cached) });
             }
             catch (Exception ex)
@@ -312,7 +312,7 @@ namespace KitveiHakodeshLib.LocalFile
                 string filePath = root.GetProperty("filePath").GetString();
                 if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 {
-                    _bridge.Reply(id, new { error = "הקובץ לא נמצא" });
+                    _bridge.Reply(id, new { error = HostText.FileNotFound });
                     return;
                 }
 
@@ -330,7 +330,7 @@ namespace KitveiHakodeshLib.LocalFile
                 string filePath = root.GetProperty("filePath").GetString();
                 if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 {
-                    _bridge.Reply(id, new { error = "הקובץ לא נמצא" });
+                    _bridge.Reply(id, new { error = HostText.FileNotFound });
                     return;
                 }
 
@@ -361,7 +361,7 @@ namespace KitveiHakodeshLib.LocalFile
             try
             {
                 string filePath = root.GetProperty("filePath").GetString();
-                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
+                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = HostText.FileNotFound }); return; }
                 // Read + decode off the UI thread. Many Hebrew .txt files are legacy
                 // Windows-1255, which TextEncodingDetector detects.
                 string content = await Task.Run(() => TextEncodingDetector.ReadAllText(filePath)).ConfigureAwait(false);
