@@ -163,19 +163,32 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// up to the next main-TOC entry. One failing parent keeps the whole structure as an alt
         /// TOC, so a merge is all or nothing.
         /// </summary>
-        public const string GetMergeableSeifimStructure = @"
+        public const string GetSeifimStructureId = @"
+            SELECT id FROM alt_toc_structure WHERE bookId = @bookId AND key = 'Seifim' LIMIT 1";
+
+        /// <summary>1 when a siman's main-TOC twin (same line, same text) already has children -
+        /// a main TOC that goes deeper than simanim, so no merge. ~1 ms; runs before the full check,
+        /// which would first sort the whole main TOC (~250 ms on a 30k-entry book) to say the same.</summary>
+        public const string SeifimTwinHasChildren = @"
+            SELECT EXISTS (
+              SELECT 1 FROM alt_toc_entry a
+              JOIN tocEntry e ON e.lineId = a.lineId AND e.textId = a.textId
+              WHERE a.structureId = @structureId AND a.hasChildren = 1
+                AND e.bookId = @bookId AND e.hasChildren = 1)";
+
+        /// <summary>1 when the Seifim structure @structureId of book @bookId passes the merge rule
+        /// above, else 0. The structure id is a bound parameter, not looked up in the query: as a
+        /// CTE value SQLite scanned all of alt_toc_entry (~250 ms) instead of its structureId index.</summary>
+        public const string IsSeifimStructureMergeable = @"
             WITH main AS (
               SELECT e.lineId, e.textId, e.hasChildren, l.lineIndex,
                      LEAD(l.lineIndex) OVER (ORDER BY l.lineIndex, e.id) AS nextLineIndex
               FROM tocEntry e LEFT JOIN line l ON l.id = e.lineId
               WHERE e.bookId = @bookId),
-            st AS (
-              SELECT id FROM alt_toc_structure WHERE bookId = @bookId AND key = 'Seifim' LIMIT 1),
             parents AS (
-              SELECT a.id, a.lineId, a.textId FROM alt_toc_entry a, st
-              WHERE a.structureId = st.id AND a.hasChildren = 1)
-            SELECT st.id FROM st
-            WHERE EXISTS (SELECT 1 FROM parents)
+              SELECT a.id, a.lineId, a.textId FROM alt_toc_entry a
+              WHERE a.structureId = @structureId AND a.hasChildren = 1)
+            SELECT EXISTS (SELECT 1 FROM parents)
               AND NOT EXISTS (
                 SELECT 1 FROM parents p WHERE NOT EXISTS (
                   SELECT 1 FROM main m
