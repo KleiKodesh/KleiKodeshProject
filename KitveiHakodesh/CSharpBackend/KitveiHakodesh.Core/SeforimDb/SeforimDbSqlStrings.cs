@@ -155,6 +155,37 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE bookId = @bookId
             ORDER BY id";
 
+        /// <summary>
+        /// The book's "Seifim" alt structure when it can be merged into the main TOC as one more
+        /// level (see SeforimDbQueries.GetAllTocEntries) - no row otherwise. Merged only when EVERY
+        /// parent in it (a siman) passes: a main-TOC entry on the same line with the same text and
+        /// no children of its own, and every child (a seif) is a leaf on a line from that entry
+        /// up to the next main-TOC entry. One failing parent keeps the whole structure as an alt
+        /// TOC, so a merge is all or nothing.
+        /// </summary>
+        public const string GetMergeableSeifimStructure = @"
+            WITH main AS (
+              SELECT e.lineId, e.textId, e.hasChildren, l.lineIndex,
+                     LEAD(l.lineIndex) OVER (ORDER BY l.lineIndex, e.id) AS nextLineIndex
+              FROM tocEntry e LEFT JOIN line l ON l.id = e.lineId
+              WHERE e.bookId = @bookId),
+            st AS (
+              SELECT id FROM alt_toc_structure WHERE bookId = @bookId AND key = 'Seifim' LIMIT 1),
+            parents AS (
+              SELECT a.id, a.lineId, a.textId FROM alt_toc_entry a, st
+              WHERE a.structureId = st.id AND a.hasChildren = 1)
+            SELECT st.id FROM st
+            WHERE EXISTS (SELECT 1 FROM parents)
+              AND NOT EXISTS (
+                SELECT 1 FROM parents p WHERE NOT EXISTS (
+                  SELECT 1 FROM main m
+                  WHERE m.lineId = p.lineId AND m.textId = p.textId AND m.hasChildren = 0
+                    AND NOT EXISTS (
+                      SELECT 1 FROM alt_toc_entry k LEFT JOIN line kl ON kl.id = k.lineId
+                      WHERE k.parentId = p.id
+                        AND (k.hasChildren = 1 OR kl.lineIndex IS NULL OR kl.lineIndex < m.lineIndex
+                             OR (m.nextLineIndex IS NOT NULL AND kl.lineIndex >= m.nextLineIndex)))))";
+
         /// <summary>All alt_toc entries for a structure, flat.</summary>
         public const string GetAllAltTocEntries = @"
             SELECT ae.id, ae.parentId, ae.level, ae.lineId, ae.hasChildren,

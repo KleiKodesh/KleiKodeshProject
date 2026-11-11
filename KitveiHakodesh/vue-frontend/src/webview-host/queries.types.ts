@@ -97,6 +97,8 @@ export interface TocEntry {
   text: string
   lineId: number | null
   lineIndex: number | null
+  /** On main-TOC entries merged in from an alt structure (the seifim): that structure's id. */
+  altStructureId?: number | null
 }
 
 export interface AltTocStructure {

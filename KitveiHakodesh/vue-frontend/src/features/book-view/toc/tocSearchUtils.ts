@@ -60,12 +60,23 @@ export function stripTocTitleRoots<T extends { id: number; parentId: number | nu
   )
   if (!rootIds.size) return nodes
   const hasLevel = 'level' in nodes[0]!
+  // Every descendant of a stripped root moves up one level, not only its children.
+  const parentOf = new Map(nodes.map((n) => [n.id, n.parentId]))
+  const underStripped = new Map<number, boolean>()
+  const isUnderStrippedRoot = (id: number): boolean => {
+    const known = underStripped.get(id)
+    if (known !== undefined) return known
+    const parentId = parentOf.get(id)
+    const result = parentId == null ? false : rootIds.has(parentId) || isUnderStrippedRoot(parentId)
+    underStripped.set(id, result)
+    return result
+  }
   return nodes
     .filter((n) => !rootIds.has(n.id))
     .map((n) => {
       const parentWasRoot = n.parentId !== null && rootIds.has(n.parentId)
       const updated = parentWasRoot ? { ...n, parentId: null } : n
-      if (hasLevel && parentWasRoot) {
+      if (hasLevel && isUnderStrippedRoot(n.id)) {
         return { ...updated, level: (updated as unknown as { level: number }).level - 1 }
       }
       return updated

@@ -150,7 +150,7 @@ export function useBookView(
 
   const {
     getActiveTocEntry, getActiveAltTocEntry, getTocPath,
-    altTocSections, altTocStructuresPrintingNumbers, altTocPane,
+    altTocSections, tocLabelSections, tocLabelPrintingNumbers, altTocPane,
     tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
   } = useToc(() => bookId, () => bookTitle)
@@ -526,8 +526,8 @@ export function useBookView(
     getActiveTocEntry,
     getActiveAltTocEntry,
     getTocPath,
-    altTocSections,
-    altTocStructuresPrintingNumbers,
+    tocLabelSections,
+    tocLabelPrintingNumbers,
     openTocEntryId,
   )
 

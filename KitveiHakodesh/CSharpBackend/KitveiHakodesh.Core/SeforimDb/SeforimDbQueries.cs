@@ -379,8 +379,29 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         // ── TOC ──────────────────────────────────────────────────────────────────
 
-        public List<TocEntryRow> GetAllTocEntries(int bookId) =>
-            ReadTocEntries(SeforimDbSqlStrings.GetAllTocEntries, ("@bookId", bookId));
+        /// <summary>
+        /// The book's TOC. When its "Seifim" alt structure only adds a seif level under the main
+        /// TOC's simanim (see GetMergeableSeifimStructure), the seifim are merged in as the
+        /// simanim's children - and GetAltTocStructures leaves that structure out.
+        /// </summary>
+        public List<TocEntryRow> GetAllTocEntries(int bookId)
+        {
+            var main = ReadTocEntries(SeforimDbSqlStrings.GetAllTocEntries, ("@bookId", bookId));
+            var seifimId = GetMergeableSeifimStructureId(bookId);
+            if (seifimId == null) return main;
+            var seifim = ReadTocEntries(SeforimDbSqlStrings.GetAllAltTocEntries, ("@structureId", seifimId.Value));
+            return SeifimTocMerge.Merge(main, seifim, seifimId.Value);
+        }
+
+        private int? GetMergeableSeifimStructureId(int bookId)
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetMergeableSeifimStructure;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            var result = cmd.ExecuteScalar();
+            return result == null || result is DBNull ? null : Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         public List<TocEntryRow> GetAllAltTocEntries(int structureId) =>
             ReadTocEntries(SeforimDbSqlStrings.GetAllAltTocEntries, ("@structureId", structureId));
@@ -427,6 +448,9 @@ namespace KitveiHakodesh.Core.SeforimDb
                     HeTitle = r.IsDBNull(3) ? null : r.GetString(3),
                 });
             }
+            // A Seifim structure merged into the main TOC (GetAllTocEntries) is not an alt TOC.
+            if (list.Exists(s => s.Key == "Seifim") && GetMergeableSeifimStructureId(bookId) is int merged)
+                list.RemoveAll(s => s.Id == merged);
             return list;
         }
 
