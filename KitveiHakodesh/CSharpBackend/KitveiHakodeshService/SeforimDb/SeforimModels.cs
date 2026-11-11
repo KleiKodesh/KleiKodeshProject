@@ -106,8 +106,63 @@ public sealed class TocByBookArgs { public int BookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocByStructureArgs { public int StructureId { get; set; } }
 
+/// <summary>
+/// A TOC as columns, not one keyed record per entry: entry i is the i-th value of every
+/// array. Field names go over the wire once instead of once per entry, and each distinct
+/// text once (`Texts`, indexed by `TextIndex`) - TOC texts repeat heavily ("seif a"...).
+/// Absent values: ParentIds/LineIds/AltStructureIds 0 (database ids start at 1),
+/// LineIndexes -1. Decoded back to TocEntry rows by the frontend's seforimApi.
+/// </summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocEntriesResult { public List<TocEntryRow> Rows { get; set; } = new(); }
+public sealed class TocEntriesResult
+{
+    public int[] Ids { get; set; } = [];
+    public int[] ParentIds { get; set; } = [];
+    public int[] Levels { get; set; } = [];
+    public int[] LineIds { get; set; } = [];
+    public int[] LineIndexes { get; set; } = [];
+    public byte[] HasChildren { get; set; } = [];
+    public string[] Texts { get; set; } = [];
+    public int[] TextIndex { get; set; } = [];
+    /// <summary>Null when no entry came from an alt structure (the usual case).</summary>
+    public int[]? AltStructureIds { get; set; }
+
+    public static TocEntriesResult From(List<TocEntryRow> rows)
+    {
+        int n = rows.Count;
+        var result = new TocEntriesResult
+        {
+            Ids = new int[n], ParentIds = new int[n], Levels = new int[n], LineIds = new int[n],
+            LineIndexes = new int[n], HasChildren = new byte[n], TextIndex = new int[n],
+        };
+        var textIndexOf = new Dictionary<string, int>(StringComparer.Ordinal);
+        var texts = new List<string>();
+        for (int i = 0; i < n; i++)
+        {
+            var r = rows[i];
+            result.Ids[i] = r.Id;
+            result.ParentIds[i] = r.ParentId ?? 0;
+            result.Levels[i] = r.Level;
+            result.LineIds[i] = r.LineId ?? 0;
+            result.LineIndexes[i] = r.LineIndex ?? -1;
+            result.HasChildren[i] = r.HasChildren != 0 ? (byte)1 : (byte)0;
+            if (!textIndexOf.TryGetValue(r.Text, out var t))
+            {
+                t = texts.Count;
+                textIndexOf[r.Text] = t;
+                texts.Add(r.Text);
+            }
+            result.TextIndex[i] = t;
+            if (r.AltStructureId is int structureId)
+            {
+                result.AltStructureIds ??= new int[n];
+                result.AltStructureIds[i] = structureId;
+            }
+        }
+        result.Texts = texts.ToArray();
+        return result;
+    }
+}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class AltTocStructuresResult { public List<AltTocStructureRow> Rows { get; set; } = new(); }
