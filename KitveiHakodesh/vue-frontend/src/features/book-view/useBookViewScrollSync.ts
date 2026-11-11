@@ -88,13 +88,18 @@ export function useBookViewScrollSync(
     if (entry && entry.id !== activeTocEntryId.value && derivedEntrySupersedesActive(entry)) {
       activeTocEntryId.value = entry.id
       paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
+    } else if (!entry && activeTocEntryId.value != null) {
+      // Above the first heading (Home on a book with an intro): no entry covers
+      // this line, so the old highlight must go rather than linger.
+      activeTocEntryId.value = undefined
+      paneNavigation.updateActiveTab({ tocPath: undefined })
     }
 
     // The alt tree tracks the reader independently — it has its own entries, so
     // the main entry's id means nothing to it. The breadcrumb stays on the main TOC.
     const altEntry = getActiveAltTocEntry(lineIndex)
-    if (altEntry && altEntry.id !== activeAltTocEntryId.value) {
-      activeAltTocEntryId.value = altEntry.id
+    if (altEntry?.id !== activeAltTocEntryId.value) {
+      activeAltTocEntryId.value = altEntry?.id
     }
 
     if (!autoSelectTopLine.value) return

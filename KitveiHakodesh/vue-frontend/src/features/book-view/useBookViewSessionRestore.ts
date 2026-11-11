@@ -54,7 +54,6 @@ export interface RestorableToc {
   visible: Ref<boolean>
   /** Applies the saved inner state to the tree component, once it exists. */
   apply: (saved: TocPersistState) => void
-  restoreAltStructure: (id: number | null | undefined) => void
 }
 
 export function useBookViewSessionRestore(
@@ -185,7 +184,6 @@ export function useBookViewSessionRestore(
     // opened without one should still come back with the panel they left open.
     const savedToc = bookSaved?.toc ?? (useLastRead ? lastRead?.toc : undefined)
     if (savedToc && toc) {
-      toc.restoreAltStructure(savedToc.altStructureId)
       if (savedToc.visible) {
         toc.visible.value = true
         // The tree only mounts once the panel is visible, so its inner state has

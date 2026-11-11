@@ -138,7 +138,37 @@
   },
   "selectAll": "בחר הכל",
   "toc": {
-    "loadError": "שגיאה בטעינת תוכן עניינים"
+    "loadError": "שגיאה בטעינת תוכן עניינים",
+    "altStructure": {
+      "chapters": "פרקים",
+      "chapter": "פרקים",
+      "parasha": "פרשיות",
+      "simannames": "הלכות וסימנים",
+      "siman": "סימנים",
+      "simanim": "סימנים",
+      "seifim": "סעיפים",
+      "letter": "אותיות",
+      "topic": "נושאים",
+      "hilchot": "הלכות",
+      "venice": "דפוס ונציה",
+      "vilna": "דפוס וילנא",
+      "daf": "דפים",
+      "dapim": "דפים",
+      "gate": "שערים",
+      "book": "ספרים",
+      "contents": "תוכן",
+      "30daycycle": "לפי ימי החודש",
+      "authors": "מחברים",
+      "compositions": "חיבורים",
+      "tanaimandamoraim": "תנאים ואמוראים",
+      "chamber": "חדרים",
+      "essay": "פסקאות",
+      "pillars": "עמודים",
+      "remez": "רמזים",
+      "section": "חלקים",
+      "tikkunim": "תיקונים",
+      "vavimandamudim": "ווים ועמודים"
+    }
   },
   "readAloud": {
     "panel": "קריאה בקול",

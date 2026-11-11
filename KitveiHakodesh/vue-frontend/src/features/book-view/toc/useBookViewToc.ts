@@ -1,6 +1,7 @@
-import { t } from '@/i18n'
+import { t, i18n } from '@/i18n'
 import { ref, shallowRef, markRaw, computed, watch, onScopeDispose } from 'vue'
-import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
+import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries, getLineContents } from '@/webview-host/seforimApi'
+import { sampleNumberedLeaves, printsOwnNumbering } from './altTocTextLabels'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
 import { registerOpenTabToc, findOpenTabToc, findOpenTabTocView, type OpenTabToc } from './openTabTocRegistry'
 import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
@@ -11,26 +12,52 @@ export interface AltTocSection {
   searchTree: SearchableTree | null // built lazily on first search use
 }
 
-// Priority order for picking the default alt-toc structure when multiple exist.
-// Keys not in this list get priority 100 and fall back to the first by id.
-function altTocStructurePriority(key: string): number {
-  switch (key.toLowerCase()) {
-    case 'daf':      return 0
-    case 'parasha':  return 1
-    case 'chapters': return 2
-    case 'topic':    return 3
-    case 'section':  return 4
-    default:         return 100
-  }
+/**
+ * The alt-TOC pane: every alt structure of the book in one tree. With more than one
+ * structure, each sits under a titled group row of its own (id = -structureId, no
+ * line); with one, its entries stand as they are.
+ */
+export interface AltTocPane {
+  /** Changes when the book's structures change — keys the pane's tree. */
+  key: string
+  entries: TocEntry[]
+  searchTree: SearchableTree | null // built lazily on first search use
 }
 
-function pickPreferredAltTocStructure(structures: AltTocStructure[]): AltTocStructure | undefined {
-  return structures.reduce<AltTocStructure | undefined>((best, current) =>
-    best == null || altTocStructurePriority(current.key) < altTocStructurePriority(best.key)
-      ? current
-      : best,
-    undefined,
-  )
+/** The pane title of a structure: our own name for its key, else its Hebrew title. */
+function altTocStructureTitle(structure: AltTocStructure, bookTitle: string | undefined): string {
+  const nameKey = `bookView.toc.altStructure.${structure.key.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+  if ((i18n.global as unknown as { te: (k: string) => boolean }).te(nameKey)) return t(nameKey)
+  // Some libraries hold the book's own title here instead of the structure's name.
+  const heTitle = structure.heTitle?.trim()
+  return heTitle && heTitle !== bookTitle?.trim() ? heTitle : structure.key
+}
+
+function buildAltTocPane(sections: AltTocSection[], bookTitle: string | undefined): AltTocPane | null {
+  if (!sections.length) return null
+  const key = sections.map((s) => s.structure.id).join(',')
+  if (sections.length === 1) return { key, entries: sections[0]!.entries, searchTree: null }
+  const entries: TocEntry[] = []
+  for (const { structure, entries: own } of sections) {
+    const groupId = -structure.id
+    entries.push({
+      id: groupId, parentId: null, level: 0, hasChildren: own.length > 0,
+      text: altTocStructureTitle(structure, bookTitle), lineId: null, lineIndex: null,
+    })
+    for (const e of own) entries.push({ ...e, parentId: e.parentId ?? groupId, level: e.level + 1 })
+  }
+  return { key, entries: markRaw(entries), searchTree: null }
+}
+
+/** Ids of the structures whose book prints their numbering itself — see altTocTextLabels. */
+async function findStructuresPrintingNumbers(sections: AltTocSection[]): Promise<Set<number>> {
+  const samples = sections.map((s) => ({ id: s.structure.id, sample: sampleNumberedLeaves(s.entries) }))
+  const lineIds = [...new Set(samples.flatMap((s) => s.sample.map((e) => e.lineId!)))]
+  const printing = new Set<number>()
+  if (!lineIds.length) return printing
+  const contents = new Map((await getLineContents(lineIds)).map((r) => [r.id, r.content]))
+  for (const { id, sample } of samples) if (printsOwnNumbering(sample, contents)) printing.add(id)
+  return printing
 }
 
 /**
@@ -67,37 +94,13 @@ function stripBookTitleRoot(
 export function useToc(bookId: () => number | undefined, bookTitle?: () => string | undefined) {
   const tocEntries = shallowRef<TocEntry[]>(markRaw([]))
   const altTocSections = shallowRef<AltTocSection[]>([])
-  const selectedAltTocStructureId = ref<number | null>(null)
+  const altTocStructuresPrintingNumbers = shallowRef<ReadonlySet<number>>(new Set())
   const loading = ref(false)
   const tocLoaded = ref(false) // true once the first load completes, even if entries is empty
   const error = ref<string | null>(null)
   const tocSearchTree = shallowRef<SearchableTree>(new SearchableTree([]))
 
-  const selectedAltTocSection = computed<AltTocSection | null>(() => {
-    const sections = altTocSections.value
-    if (!sections.length) return null
-    return sections.find((s) => s.structure.id === selectedAltTocStructureId.value) ?? sections[0]!
-  })
-
-  function selectAltTocStructure(structure: AltTocStructure) {
-    selectedAltTocStructureId.value = structure.id
-    altStructureChosen = true
-  }
-
-  /**
-   * True once the choice is the reader's — either they picked a structure, or one
-   * was restored from a saved record. The alt-TOC load falls back to the priority
-   * default only while this is false, so an async load that lands after restore
-   * cannot overwrite what the reader had.
-   */
-  let altStructureChosen = false
-
-  /** Called by session restore before/while the alt sections load. */
-  function restoreAltTocStructure(id: number | null | undefined) {
-    if (id == null) return
-    selectedAltTocStructureId.value = id
-    altStructureChosen = true
-  }
+  const altTocPane = computed<AltTocPane | null>(() => buildAltTocPane(altTocSections.value, bookTitle?.()))
 
   // This tab's entry in the open-tab TOC lookup (not a cache: removed on dispose).
   const openTabToc: OpenTabToc = { bookId: undefined, raw: null, pending: null, view: null }
@@ -164,12 +167,11 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         }),
       )
       if (generation !== altTocGeneration) return // the book changed mid-flight
+      // Before the sections land, so labels of a numbering the book prints never flash.
+      const printing = await findStructuresPrintingNumbers(sections).catch(() => new Set<number>())
+      if (generation !== altTocGeneration) return
+      altTocStructuresPrintingNumbers.value = printing
       altTocSections.value = sections
-      // Only fall back to the priority default when the reader has no choice of
-      // their own — a restored structure must survive this late-landing load.
-      if (altStructureChosen && sections.some((s) => s.structure.id === selectedAltTocStructureId.value)) return
-      selectedAltTocStructureId.value =
-        pickPreferredAltTocStructure(sections.map((s) => s.structure))?.id ?? null
     } catch {
       // alt TOC is non-critical — silently ignore errors
     }
@@ -181,10 +183,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       if (id != null) {
         tocLoaded.value = false
         altTocSections.value = []
-        selectedAltTocStructureId.value = null
-        // A new book means the old choice no longer applies — back to the default
-        // until this book's own saved structure (if any) is restored.
-        altStructureChosen = false
+        altTocStructuresPrintingNumbers.value = new Set()
         load(id)
         loadAltTocSections(id)
       }
@@ -230,7 +229,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   // but not all — a handful interleave their levels. Sorting once per section
   // keeps the lookup a plain binary search.
   const altTocLineOrder = computed(() =>
-    (selectedAltTocSection.value?.entries ?? [])
+    (altTocPane.value?.entries ?? [])
       .filter((e) => e.lineIndex != null)
       .sort((a, b) => a.lineIndex! - b.lineIndex!),
   )
@@ -246,10 +245,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
   return {
     tocEntries,
     altTocSections,
-    selectedAltTocSection,
-    selectedAltTocStructureId,
-    selectAltTocStructure,
-    restoreAltTocStructure,
+    altTocStructuresPrintingNumbers,
+    altTocPane,
     loading,
     tocLoaded,
     error,

@@ -78,10 +78,11 @@ const {
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
   tabId, bookId, lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
+  bookIsCommentary,
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions,
   filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
-  tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
+  tocEntries, tocSearchTree, altTocPane, tocLoading, tocError,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
   getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
@@ -580,7 +581,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
-              :selected-alt-toc-section="selectedAltTocSection"
+              :alt-toc-pane="altTocPane"
               :loading="tocLoading"
               :error="tocError"
               @select="onTocSelect"
@@ -667,6 +668,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :selected-section-line-ids="selectedSectionLineIds"
                     :multi-select-line-ids="manualSelectionLineIds"
                     :book-has-teamim="bookHasTeamim"
+                    :book-is-commentary="bookIsCommentary"
                     @scrolled="onLinesScrolled"
                     @line-selected="onLineSelected"
                     @ctrl-f="openContentSearch"
@@ -750,7 +752,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
-              :selected-alt-toc-section="selectedAltTocSection"
+              :alt-toc-pane="altTocPane"
               :loading="tocLoading"
               :error="tocError"
               @select="onTocSelect"

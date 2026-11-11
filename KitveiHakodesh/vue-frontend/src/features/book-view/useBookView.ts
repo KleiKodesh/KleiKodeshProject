@@ -86,7 +86,7 @@ type CommentaryViewInstance = {
 
 /** The TOC tree component, for the state it owns and the book view persists. */
 type TocTreeInstance = {
-  snapshotState: () => Omit<TocPersistState, 'visible' | 'altStructureId'>
+  snapshotState: () => Omit<TocPersistState, 'visible'>
   restoreState: (saved: TocPersistState | undefined) => void
 }
 
@@ -150,15 +150,14 @@ export function useBookView(
 
   const {
     getActiveTocEntry, getActiveAltTocEntry, getTocPath,
-    altTocSections, selectedAltTocSection,
-    selectedAltTocStructureId, restoreAltTocStructure,
+    altTocSections, altTocStructuresPrintingNumbers, altTocPane,
     tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
   } = useToc(() => bookId, () => bookTitle)
 
   const {
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
-    hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, lineCharacterCounts,
+    hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
   } = useLines(() => bookId, {
@@ -415,10 +414,9 @@ export function useBookView(
     () => linesContentRef()?.readCurrentPosition() ?? null,
   )
 
-  // The alt sections finish loading after the reader is already scrolled, and a
-  // structure switch swaps the entries wholesale. Either way no scroll event
-  // follows, so resolve the active alt entry against the current position here.
-  watch(selectedAltTocSection, () => {
+  // The alt sections finish loading after the reader is already scrolled, and no
+  // scroll event follows, so resolve the active alt entry against the current position here.
+  watch(altTocPane, () => {
     activeAltTocEntryId.value = getActiveAltTocEntry(currentScrollLineIndex.value)?.id
   })
 
@@ -528,7 +526,8 @@ export function useBookView(
     getActiveTocEntry,
     getActiveAltTocEntry,
     getTocPath,
-    selectedAltTocSection,
+    altTocSections,
+    altTocStructuresPrintingNumbers,
     openTocEntryId,
   )
 
@@ -646,7 +645,7 @@ export function useBookView(
    * otherwise closing the panel (or saving while it is shut) would persist an
    * empty tree over a good one. `visible` always comes from the live flag.
    */
-  let lastTocInnerState: Omit<TocPersistState, 'visible' | 'altStructureId'> | undefined
+  let lastTocInnerState: Omit<TocPersistState, 'visible'> | undefined
 
   function tocPersistState(): TocPersistState {
     const tree = tocTreeRef()
@@ -654,7 +653,6 @@ export function useBookView(
     return {
       ...lastTocInnerState,
       visible: sidePanel.tocVisible.value,
-      altStructureId: selectedAltTocStructureId.value,
     }
   }
 
@@ -679,7 +677,6 @@ export function useBookView(
     {
       visible: sidePanel.tocVisible,
       apply: (saved) => tocTreeRef()?.restoreState(saved),
-      restoreAltStructure: restoreAltTocStructure,
     },
   )
 
@@ -813,6 +810,7 @@ export function useBookView(
     openNoteIndex,
     // book metadata
     bookHasTeamim,
+    bookIsCommentary,
     // alternate versions (empty for most books — the toolbar control hides)
     versions, activeVersionId, selectVersion, versionPersistState,
     // scanned editions on HebrewBooks (empty for most books — the toolbar control hides)
@@ -836,7 +834,7 @@ export function useBookView(
     tabId, bookId,
     lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
-    tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
+    tocEntries, tocSearchTree, altTocSections, altTocPane, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation (hoisted — survive v-if toggle)
     getHighlightsForLine, applyHighlight, clearHighlight,
