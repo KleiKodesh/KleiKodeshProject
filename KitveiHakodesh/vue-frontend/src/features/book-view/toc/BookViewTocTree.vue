@@ -22,25 +22,42 @@ const emit = defineEmits<{ select: [TocEntry]; altSelect: [TocEntry] }>()
 
 const tocSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
 const altSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
+const mergedSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
 const searchQuery = ref('')
 
 // Focusing the search box on open / after loading lives in TocTreeLayout.
 
 function focusTocList() {
-  const el = tocSectionRef.value?.containerRef?.()
+  const el = (mergedSectionRef.value ?? tocSectionRef.value)?.containerRef?.()
   el?.focus()
 }
 
 const hasToc = computed(() => props.tocEntries.length > 0)
 const hasAlt = computed(() => props.altTocPane != null)
 
-watch(searchQuery, (q) => {
-  if (!q) return
-  const section = props.altTocPane
-  if (section != null && section.searchTree == null) {
-    section.searchTree = new SearchableTree(section.entries)
+// The two panes are only a display split. A search runs over both structures and shows
+// ONE result list. Alt ids may collide with main TOC ids, so alt rows get negative ids
+// here and are mapped back to their own entry on select.
+const searching = computed(() => searchQuery.value.length > 0 && hasToc.value && hasAlt.value)
+const altId = (id: number) => -id - 1
+const merged = computed(() => {
+  if (!searching.value) return null
+  const alt = props.altTocPane!.entries
+  const altById = new Map<number, TocEntry>()
+  const entries: TocEntry[] = [...props.tocEntries]
+  for (const e of alt) {
+    const id = altId(e.id)
+    altById.set(id, e)
+    entries.push({ ...e, id, parentId: e.parentId == null ? null : altId(e.parentId) })
   }
+  return { entries, altById, tree: new SearchableTree(entries) }
 })
+
+function onMergedSelect(entry: TocEntry) {
+  const alt = merged.value?.altById.get(entry.id)
+  if (alt) emit('altSelect', alt)
+  else emit('select', entry)
+}
 
 // ── Persistence ─────────────────────────────────────────────────────────────
 // This whole subtree is v-if'd away when the panel closes and rebuilt on every
@@ -163,7 +180,17 @@ defineExpose({ snapshotState, restoreState })
     @focus-list="focusTocList"
     @reset="resetTrees"
   >
-    <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
+    <TocTreeSection
+      v-if="merged"
+      ref="mergedSectionRef"
+      class="toc-body"
+      :title="null"
+      :entries="merged.entries"
+      :filter="searchQuery"
+      :search-tree="merged.tree"
+      @select="onMergedSelect($event as TocEntry)"
+    />
+    <SplitPane v-show="!merged" :bottom-visible="hasToc && hasAlt" class="toc-body">
       <template #top>
         <TocTreeSection
           ref="tocSectionRef"
