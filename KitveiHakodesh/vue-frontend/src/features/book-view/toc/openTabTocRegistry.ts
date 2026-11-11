@@ -8,13 +8,13 @@ import type { SearchableTree } from './tocSearchUtils'
  * preview) on a book that is already open takes the open tab's arrays instead of
  * refetching; a book with no open tab is always fetched.
  *
- * `raw` is what getAllTocEntries returned (word-link sections use it as is);
- * `pending` is set while the owning tab's fetch is in flight so a simultaneous
- * mount shares it — and only while that tab is alive.
+ * Only the tab's processed entries are held (title root removed) - never a second,
+ * unprocessed copy beside them. `pending` is set while the owning tab's load is in
+ * flight so a simultaneous mount shares it - and only while that tab is alive. It
+ * resolves to the processed entries, never the raw rows.
  */
 export interface OpenTabToc {
   bookId: number | undefined
-  raw: TocEntry[] | null
   pending: Promise<TocEntry[]> | null
   /** The tab's title-stripped entries + search tree, reusable by a tab with the same book title. */
   view: { bookTitle: string | undefined; entries: TocEntry[]; searchTree: SearchableTree } | null
@@ -35,12 +35,16 @@ export function findOpenTabTocView(bookId: number, bookTitle: string | undefined
   return null
 }
 
-/** The raw TOC an open tab already holds for `bookId`, or its in-flight fetch; null when no open tab has it. */
+/**
+ * The TOC an open tab already holds for `bookId` (its processed entries), or its
+ * in-flight fetch; null when no open tab has it. Word-link sections use it: they read
+ * only line positions and relative levels, which removing the title root keeps.
+ */
 export function findOpenTabToc(bookId: number, except?: OpenTabToc): TocEntry[] | Promise<TocEntry[]> | null {
   let pending: Promise<TocEntry[]> | null = null
   for (const owner of openTabTocs) {
     if (owner === except || owner.bookId !== bookId) continue
-    if (owner.raw) return owner.raw
+    if (owner.view) return owner.view.entries
     pending ??= owner.pending
   }
   return pending

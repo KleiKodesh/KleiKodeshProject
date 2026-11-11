@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{
   filter?: string
   activeNodeId?: number
   indent?: number
+  /** Added to every row's level when indenting (see TreeNode). */
+  levelOffset?: number
   rowHeight?: number
   fontSize?: string
   stickyHeaders?: boolean
@@ -293,6 +295,7 @@ watch(
       :focused="false"
       :filtered="false"
       :indent="indent"
+      :level-offset="levelOffset"
       :row-height="rowHeight"
       :font-size="fontSize"
       @toggle="collapseFromHeader(node)"
@@ -303,13 +306,14 @@ watch(
     <TreeNode
       v-for="(node, i) in visibleNodes"
       :key="node.id"
-      v-memo="[node, i, expanded.has(node.id), node.id === activeNodeId, containerFocused && focusedIndex === i, filter, activeTree, indent, rowHeight, fontSize]"
+      v-memo="[node, i, expanded.has(node.id), node.id === activeNodeId, containerFocused && focusedIndex === i, filter, activeTree, indent, levelOffset, rowHeight, fontSize]"
       :node="node"
       :expanded="expanded.has(node.id)"
       :active="node.id === activeNodeId"
       :focused="containerFocused && focusedIndex === i"
       :filtered="!!filter"
       :indent="indent"
+      :level-offset="levelOffset"
       :row-height="rowHeight"
       :font-size="fontSize"
       @toggle="toggle(node)"

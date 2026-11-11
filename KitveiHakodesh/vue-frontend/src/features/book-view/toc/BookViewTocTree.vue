@@ -238,6 +238,7 @@ defineExpose({ snapshotState, restoreState })
           :title="null"
           :entries="altTocPane.entries"
           :active-entry-id="activeAltTocEntryId"
+          :level-offset="altTocPane.levelOffset"
           :filter="merged ? '' : searchQuery"
           :search-tree="altSearchTree ?? undefined"
           @select="$emit('altSelect', $event as TocEntry)"

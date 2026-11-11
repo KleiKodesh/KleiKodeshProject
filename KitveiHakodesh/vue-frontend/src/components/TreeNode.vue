@@ -9,6 +9,8 @@ const props = defineProps<{
   focused: boolean
   filtered: boolean
   indent?: number
+  /** Added to the node's level when indenting (a tree whose group rows sit at level -1). */
+  levelOffset?: number
   rowHeight?: number
   fontSize?: string
 }>()
@@ -18,7 +20,7 @@ const props = defineProps<{
 // (Space) emits no event — the payload is optional and undefined there.
 defineEmits<{ toggle: []; select: [event?: MouseEvent] }>()
 
-const indentPx = () => `${props.node.level * (props.indent ?? 10)}px`
+const indentPx = () => `${(props.node.level + (props.levelOffset ?? 0)) * (props.indent ?? 10)}px`
 const rh = () => `${props.rowHeight ?? 28}px`
 const fs = () => props.fontSize ?? '0.8rem'
 </script>
