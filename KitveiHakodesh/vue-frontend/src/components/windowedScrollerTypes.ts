@@ -61,6 +61,8 @@ export interface WindowedScrollerApi {
    * Resolves once the scroll is set.
    */
   scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<void>
+  /** One contiguous change of the list (rows inserted/removed mid-list), before it renders - see WindowedScroller. */
+  replaceRows(at: number, removed: number, inserted: number): void
   /** Brings the row into view with 'nearest' semantics (no-op when fully visible) — the keyboard-highlight reveal. */
   revealIndex(index: number): void
   /**

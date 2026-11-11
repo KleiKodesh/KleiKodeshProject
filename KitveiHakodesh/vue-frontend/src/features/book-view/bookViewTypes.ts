@@ -1,3 +1,4 @@
+import type { TreeViewScrollPosition } from '@/components/treeViewRows'
 /**
  * Shared types for the book-view feature.
  * Import from here — never from a component file.
@@ -170,8 +171,9 @@ export interface TocPersistState {
   expanded?: number[]
   /** Expanded node ids for the alternate structure tree (daf, parasha, …). */
   altExpanded?: number[]
-  scrollTop?: number
-  altScrollTop?: number
+  /** The main tree's first visible row and the pixels into it (row index in the tree as expanded above). */
+  scroll?: TreeViewScrollPosition | null
+  altScroll?: TreeViewScrollPosition | null
 }
 
 /**
