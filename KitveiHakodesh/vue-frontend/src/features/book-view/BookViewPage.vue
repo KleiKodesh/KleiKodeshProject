@@ -82,7 +82,7 @@ const {
   versions, activeVersionId, selectVersion, versionPersistState,
   hebrewBooksEditions,
   filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
-  tocEntries, tocSearchTree, altTocPane, tocLoading, tocError,
+  tocEntries, tocSearchTree, altTocPane, tocLoading, tocError, restoredTocState,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
   getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
@@ -582,6 +582,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
               :alt-toc-pane="altTocPane"
+              :initial-state="restoredTocState"
               :loading="tocLoading"
               :error="tocError"
               @select="onTocSelect"
@@ -753,6 +754,7 @@ function getSideEditionOutlineTarget(): string | undefined {
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
               :alt-toc-pane="altTocPane"
+              :initial-state="restoredTocState"
               :loading="tocLoading"
               :error="tocError"
               @select="onTocSelect"

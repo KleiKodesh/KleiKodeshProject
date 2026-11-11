@@ -43,6 +43,10 @@ const props = withDefaults(defineProps<{
   fontSize?: string
   stickyHeaders?: boolean
   searchTree?: TreeSearcher
+  /** Expanded ids the tree is CREATED with (a restored session). Read once, at mount. */
+  initialExpanded?: readonly number[]
+  /** The row the tree is created at (a restored session), instead of the active entry. Read once, at mount. */
+  initialPosition?: TreeViewScrollPosition | null
 }>(), { stickyHeaders: true })
 
 // The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
@@ -125,6 +129,14 @@ function startForActive(): TreeViewScrollPosition {
 }
 
 onMounted(() => {
+  if (props.initialExpanded?.length) expanded.value = new Set(props.initialExpanded)
+  if (props.initialPosition && !props.filter) {
+    // Opened where the reader left it; the active entry counts as reached, so its
+    // sync does not move the tree a second time.
+    positionedNodeId = props.activeNodeId
+    opening.value = props.initialPosition
+    return
+  }
   opening.value = startForActive()
 })
 

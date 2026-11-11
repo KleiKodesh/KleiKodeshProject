@@ -17,6 +17,12 @@ const props = defineProps<{
   loading: boolean
   error: string | null
   tocSearchTree?: SearchableTree
+  /**
+   * The saved state of a restored session, given BEFORE the trees exist: each tree
+   * is created at its saved row with its saved expanded ids (no second landing).
+   * restoreState with this same object then only has the search box left to do.
+   */
+  initialState?: TocPersistState | null
 }>()
 
 const emit = defineEmits<{ select: [TocEntry]; altSelect: [TocEntry] }>()
@@ -24,7 +30,7 @@ const emit = defineEmits<{ select: [TocEntry]; altSelect: [TocEntry] }>()
 const tocSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
 const altSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
 const mergedSectionRef = ref<InstanceType<typeof TocTreeSection> | null>(null)
-const searchQuery = ref('')
+const searchQuery = ref(props.initialState?.searchQuery ?? '')
 
 // Focusing the search box on open / after loading lives in TocTreeLayout.
 
@@ -160,6 +166,8 @@ function applyAltState(saved: TocPersistState) {
 
 function restoreState(saved: TocPersistState | undefined) {
   if (!saved) return
+  // The trees were created from it already (initialState).
+  if (saved === props.initialState) return
   // The sections only exist once the TOC has loaded — restoring into nothing
   // would silently drop the state, so wait for the load when one is in flight.
   if (props.loading) {
@@ -217,6 +225,8 @@ defineExpose({ snapshotState, restoreState })
           :entries="tocEntries"
           :filter="merged ? '' : searchQuery"
           :active-entry-id="activeTocEntryId"
+          :initial-expanded="initialState?.expanded"
+          :initial-position="initialState?.scroll"
           :search-tree="tocSearchTree"
           @select="$emit('select', $event as TocEntry)"
         />
@@ -229,6 +239,8 @@ defineExpose({ snapshotState, restoreState })
           :title="null"
           :entries="altTocPane.entries"
           :active-entry-id="activeAltTocEntryId"
+          :initial-expanded="initialState?.altExpanded"
+          :initial-position="initialState?.altScroll"
           :level-offset="altTocPane.levelOffset"
           :filter="merged ? '' : searchQuery"
           :search-tree="altSearchTree ?? undefined"

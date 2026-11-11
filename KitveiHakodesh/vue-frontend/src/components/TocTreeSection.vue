@@ -18,6 +18,9 @@ defineProps<{
   /** Added to every row's level when indenting (see TreeNode). */
   levelOffset?: number
   searchTree?: TreeSearcher
+  /** What the tree is created with on a restored session - see TreeView. */
+  initialExpanded?: readonly number[]
+  initialPosition?: TreeViewScrollPosition | null
 }>()
 defineEmits<{ select: [TreeNodeItem] }>()
 
@@ -44,6 +47,8 @@ defineExpose({
       :active-node-id="activeEntryId"
       :level-offset="levelOffset"
       :search-tree="searchTree"
+      :initial-expanded="initialExpanded"
+      :initial-position="initialPosition"
       @select="$emit('select', $event)"
     />
   </div>

@@ -18,7 +18,7 @@
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useCommentaryPanelSlot        — everything one commentary panel owns
  */
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
+import { ref, shallowRef, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { TocBridge } from '@/stores/bookViewStore'
@@ -658,8 +658,16 @@ export function useBookView(
 
   // Snapshot on close: the panel's subtree is destroyed by then, so the state has
   // to be taken while the component is still mounted.
+  /**
+   * The saved TOC state the tree is CREATED with on a session restore - its trees open
+   * at their saved rows instead of opening at the active entry and moving. Dropped
+   * once the panel closes: a later reopen shows the tree as the reader left it.
+   */
+  const restoredTocState = shallowRef<TocPersistState | null>(null)
+
   watch(sidePanel.tocVisible, (visible, wasVisible) => {
     if (wasVisible && !visible) {
+      restoredTocState.value = null
       const tree = tocTreeRef()
       if (tree) lastTocInnerState = tree.snapshotState()
     }
@@ -676,6 +684,7 @@ export function useBookView(
     selectedLineId, commentaryLineId,
     {
       visible: sidePanel.tocVisible,
+      stage: (saved) => { restoredTocState.value = saved },
       apply: (saved) => tocTreeRef()?.restoreState(saved),
     },
   )
@@ -819,6 +828,7 @@ export function useBookView(
     selectedLineId,
     searchMode: searchPanel.searchMode,
     activeTocEntryId,
+    restoredTocState,
     activeAltTocEntryId,
     tocVisible: sidePanel.tocVisible,
     sidePanelVisible: sidePanel.sidePanelVisible,
