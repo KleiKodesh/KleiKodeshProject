@@ -799,9 +799,9 @@ public sealed class Dispatcher(
                     for (int i = 0; i + 2 < triples.Length; i += 3)
                         ranges.Add(new global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsLineRange { BookId = triples[i], FirstLineIndex = triples[i + 1], LastLineIndex = triples[i + 2] });
                     var hits = seforim.SubstringSearch(fts.Coordinator, a.Query ?? "", ranges, a.VersionId);
-                    var bookIds = new int[hits.Count]; var lineIndexes = new int[hits.Count]; var lineIds = new int[hits.Count]; var counts = new int[hits.Count];
-                    for (int i = 0; i < hits.Count; i++) { bookIds[i] = hits[i].BookId; lineIndexes[i] = hits[i].LineIndex; lineIds[i] = hits[i].LineId; counts[i] = hits[i].Count; }
-                    return RpcResponse.Ok(MsgPack.Ser(new LinesSubstringSearchResult { BookIds = bookIds, LineIndexes = lineIndexes, LineIds = lineIds, Counts = counts }));
+                    var bookIds = new int[hits.Count]; var lineIndexes = new int[hits.Count]; var counts = new int[hits.Count];
+                    for (int i = 0; i < hits.Count; i++) { bookIds[i] = hits[i].BookId; lineIndexes[i] = hits[i].LineIndex; counts[i] = hits[i].Count; }
+                    return RpcResponse.Ok(MsgPack.Ser(new LinesSubstringSearchResult { BookIds = bookIds, LineIndexes = lineIndexes, Counts = counts }));
                 }
 
                 case "getLineIds":

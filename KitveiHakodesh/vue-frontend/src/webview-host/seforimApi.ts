@@ -63,7 +63,7 @@ export async function linesSubstringSearch(
   query: string,
   ranges: { bookId: number; firstLineIndex: number; lastLineIndex: number }[],
   versionId = 0,
-): Promise<{ bookIds: number[]; lineIndexes: number[]; lineIds: number[]; counts: number[] }> {
+): Promise<{ bookIds: number[]; lineIndexes: number[]; counts: number[] }> {
   const rangeTriples = new Array<number>(ranges.length * 3)
   for (let i = 0; i < ranges.length; i++) {
     rangeTriples[i * 3] = ranges[i]!.bookId
