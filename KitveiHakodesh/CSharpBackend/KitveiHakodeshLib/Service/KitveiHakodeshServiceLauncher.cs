@@ -181,6 +181,10 @@ namespace KitveiHakodeshLib.Service
                     return;
                 }
 
+                // Registered, but no service exe anywhere: it was deleted - say so, not "won't start".
+                if (registered && FindExecutable() == null)
+                    throw Unavailable(KitveiHakodeshServiceUnavailableReason.NotInstalled,
+                        "The KitveiHakodesh service exe is missing from this computer (probably deleted).");
                 if (registered)
                     throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
                         "The KitveiHakodesh service is registered but will not start.");

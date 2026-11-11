@@ -13,8 +13,8 @@
   "service": {
     "notRunningTitle": "The Kitvei Hakodesh service is not responding",
     "notRunningBody": "Books and search are unavailable right now. The service may be restarting - please click \"Try again\".",
-    "notInstalledTitle": "The Kitvei Hakodesh service is not installed",
-    "notInstalledBody": "Books and search need this service, and it is not installed on this computer. You can install it now: clicking \"Install service\" installs it, and Windows will ask for administrator approval.",
+    "notInstalledTitle": "The Kitvei Hakodesh service was not found on this computer",
+    "notInstalledBody": "Books and search need this service, but it was not found on this computer - it was probably deleted. To fix it, download and install the app again.",
     "installDeclinedTitle": "Service installation was not approved",
     "installDeclinedBody": "Books and search need the Kitvei Hakodesh service, and installing it requires administrator approval. Please click \"Try again\" and approve the permission prompt.",
     "installFailedTitle": "Service installation failed",
