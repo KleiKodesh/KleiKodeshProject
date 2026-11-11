@@ -41,3 +41,13 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
   installed app, the portable app and dev.
 - Registry settings and file associations are not files and are outside this rule; ask before
   changing them.
+
+# Submodules - pins move by Dependabot
+
+- Every repo that holds submodules has `.github/dependabot.yml` (gitsubmodule, daily) and
+  `.github/workflows/dependabot-auto-merge.yml`; today: this repo and FastDocView.
+  Release builds use the pins, so these keep library work from silently missing a release.
+- Adding a submodule to any repo: add both files to that repo if missing (copy from here).
+  If the new submodule has its own submodules, add them in its repo too.
+- Local builds use the submodule folders on disk, not the pins. Never enable
+  `submodule.recurse`: a pull would reset those folders to an older pinned commit.
