@@ -24,19 +24,23 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent | KeyboardEvent] }>()
 
 const expanded = ref<Set<number>>(new Set())
-const rowRefs = ref<Map<number, HTMLElement>>(new Map())
 const containerRef = ref<HTMLElement | null>(null)
 
-function setRowRef(el: unknown, id: number) {
-  const dom = (el as any)?.$el ?? (el instanceof HTMLElement ? el : null)
-  if (dom) rowRefs.value.set(id, dom)
-  else rowRefs.value.delete(id)
+/**
+ * The row element of a visible node. Rows are the container's children in
+ * visibleNodes order, so no per-row refs are kept (a ref callback per row is
+ * re-run for every row on every render).
+ */
+function rowElAt(index: number): HTMLElement | null {
+  return (containerRef.value?.children[index] as HTMLElement | undefined) ?? null
+}
+function rowEl(id: number): HTMLElement | null {
+  const index = visibleIndexById.value.get(id)
+  return index == null ? null : rowElAt(index)
 }
 
 function expandAncestors(id: number) {
-  // Build a local map on demand — only called on active-entry change, not on every render
-  const map = new Map<number, TreeNodeItem>()
-  for (const n of props.nodes) map.set(n.id, n)
+  const map = nodeById.value
   const node = map.get(id)
   if (!node) return
   let current = node
@@ -49,9 +53,13 @@ function expandAncestors(id: number) {
 }
 
 function scrollIntoView(id: number) {
-  const el = rowRefs.value.get(id)
+  const el = rowEl(id)
   const container = containerRef.value
   if (!el || !container) return
+  // Already fully on screen (below the sticky header): leave the pane where it is.
+  const rowTopInPane = el.offsetTop - container.offsetTop
+  const viewTop = container.scrollTop + (headerRef.value?.offsetHeight ?? 0)
+  if (rowTopInPane >= viewTop && rowTopInPane + el.offsetHeight <= container.scrollTop + container.clientHeight) return
   // offsetTop is measured from the nearest positioned ancestor, and the scroll
   // container isn't one — so subtract the container's own offset to get the row's
   // position within it. Without this the second tree of a SplitPane scrolls too
@@ -155,7 +163,7 @@ function rowAt(y: number): TreeNodeItem | undefined {
   let found: TreeNodeItem | undefined
   while (lo <= hi) {
     const mid = (lo + hi) >> 1
-    const el = rowRefs.value.get(list[mid]!.id)
+    const el = rowElAt(mid)
     if (!el) return undefined
     if (rowTop(el, container) + el.offsetHeight > y) {
       found = list[mid]
@@ -203,7 +211,7 @@ function onScroll() {
 function collapseFromHeader(node: TreeNodeItem) {
   expanded.value.delete(node.id)
   nextTick(() => {
-    const el = rowRefs.value.get(node.id)
+    const el = rowEl(node.id)
     const container = containerRef.value
     if (!el || !container) return
     container.scrollTop = rowTop(el, container)
@@ -265,6 +273,7 @@ const visibleNodes = computed(() => {
   }
   return result
 })
+const visibleIndexById = computed(() => new Map(visibleNodes.value.map((n, i) => [n.id, i])))
 // After visibleNodes is declared - the getter reads it during setup.
 watch(
   () => [visibleNodes.value, props.filter],
@@ -294,7 +303,7 @@ watch(
     <TreeNode
       v-for="(node, i) in visibleNodes"
       :key="node.id"
-      :ref="(el) => setRowRef(el, node.id)"
+      v-memo="[node, i, expanded.has(node.id), node.id === activeNodeId, containerFocused && focusedIndex === i, filter, activeTree, indent, rowHeight, fontSize]"
       :node="node"
       :expanded="expanded.has(node.id)"
       :active="node.id === activeNodeId"
