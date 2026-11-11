@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, shallowReactive, computed, watch, nextTick } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
 import {
@@ -386,9 +386,12 @@ export const useBookViewStore = defineStore('bookView', () => {
   }
 
   // ── TOC bridge — per-tab registration for title bar navigation ────────────
-  // Uses a reactive Map so insertions/deletions trigger computed re-evaluation.
+  // A SHALLOW reactive Map: insertions/deletions still trigger computeds, but get()
+  // returns the bridge itself. A deep reactive Map handed back a proxy, which never
+  // equalled the registered bridge, so unregister never deleted it and every closed
+  // tab's whole book view (lines, TOC, search tree) stayed in memory through it.
 
-  const tocBridgeByTabId = reactive(new Map<string, TocBridge>())
+  const tocBridgeByTabId = shallowReactive(new Map<string, TocBridge>())
 
   function registerTocBridge(tabId: string, bridge: TocBridge) {
     tocBridgeByTabId.set(tabId, bridge)
@@ -414,7 +417,7 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   // ── PDF bridge — per-tab registration for PDF outline breadcrumb navigation
 
-  const pdfBridgeByTabId = reactive(new Map<string, PdfBridge>())
+  const pdfBridgeByTabId = shallowReactive(new Map<string, PdfBridge>())
 
   function registerPdfBridge(tabId: string, bridge: PdfBridge) {
     pdfBridgeByTabId.set(tabId, bridge)
@@ -430,7 +433,7 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   // ── PDF unsaved-edit snapshots + close guard state ─────────────────────────
 
-  const pdfEditStateByTabId = reactive(new Map<string, PdfEditState>())
+  const pdfEditStateByTabId = shallowReactive(new Map<string, PdfEditState>())
 
   /** Called by the PDF view on every viewer notification (edit or save). */
   function setPdfEditState(tabId: string, state: PdfEditState) {
