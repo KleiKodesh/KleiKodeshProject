@@ -138,12 +138,26 @@ public sealed class FastDocViewOpenDocuments : IDisposable
     public const int MaxBlocksPerSearch = 2000;
 
     /// <summary>One bounded step of an in-document search (the library's windowed Search, the app's book-view
-    /// normalisation): scans up to <paramref name="maxBlocks"/> blocks from <paramref name="fromBlock"/>.</summary>
+    /// normalisation): scans up to <paramref name="maxBlocks"/> blocks from <paramref name="fromBlock"/>. The blocks'
+    /// own text only - the notes are searched separately (<see cref="SearchNotes"/>).</summary>
     public FastDocViewSearchResult Search(string documentId, string query, bool matchCase, int fromBlock, int maxBlocks) =>
         Use(documentId, document =>
         {
             WordDocumentSearchBatch batch = document.Search(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
                                                             Math.Max(0, fromBlock), Math.Clamp(maxBlocks, 1, MaxBlocksPerSearch));
+            return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
+        });
+
+    /// <summary>
+    /// One bounded step of the NOTES search - footnotes and endnotes, separately from the text, as the book view
+    /// searches its commentary panel apart from its lines: up to <paramref name="maxNotes"/> notes from
+    /// <paramref name="fromNote"/>, in the notes pane's order. The result's blocks are note indexes.
+    /// </summary>
+    public FastDocViewSearchResult SearchNotes(string documentId, string query, bool matchCase, int fromNote, int maxNotes) =>
+        Use(documentId, document =>
+        {
+            WordDocumentSearchBatch batch = document.SearchNotes(query ?? "", new WordDocumentSearchOptions(MatchCase: matchCase),
+                                                                 Math.Max(0, fromNote), Math.Clamp(maxNotes, 1, MaxBlocksPerSearch));
             return new FastDocViewSearchResult { HitBlocks = batch.HitBlocks, HitCounts = batch.HitCounts, NextBlock = batch.NextBlock, ReachedEnd = batch.ReachedEnd };
         });
 

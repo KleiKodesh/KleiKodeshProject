@@ -115,6 +115,17 @@ public sealed class FastDocViewSearchArgs
     public int MaxBlocks { get; set; }
 }
 
+/// <summary>The notes search's args: the same as <see cref="FastDocViewSearchArgs"/>, over notes (body order).</summary>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed class FastDocViewSearchNotesArgs
+{
+    public string DocumentId { get; set; } = "";
+    public string Query { get; set; } = "";
+    public bool MatchCase { get; set; }
+    public int FromNote { get; set; }
+    public int MaxNotes { get; set; }
+}
+
 /// <summary>One bounded search step: the hit blocks of the scanned range (ascending) with, parallel to them, how
 /// many times the query occurs in each (the page steps match by match, as the book view does per line), where to
 /// continue (-1 at the end), and whether the whole document was scanned. Numbers only - no text.</summary>

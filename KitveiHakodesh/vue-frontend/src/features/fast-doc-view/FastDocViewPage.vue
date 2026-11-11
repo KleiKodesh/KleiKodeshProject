@@ -28,6 +28,7 @@ import FastDocViewToc, { type FastDocViewTocState } from './FastDocViewToc.vue'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
 import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import { slotForSearchMode, type CommentarySlot, type SearchMode } from '@/components/readingSearchModes'
 import { useFastDocViewSearch } from './useFastDocViewSearch'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
@@ -128,7 +129,11 @@ function zoomBoth(step: (current: number) => number) {
 }
 const zoomModel = computed({ get: () => zoom.value, set: setZoom })
 useZoomHandler({ zoom: zoomModel, target: scrollerElement, keyboard: true })
-const notesPaneRef = ref<{ scrollerElement: HTMLElement | null; renderedRange: () => { start: number; end: number } } | null>(null)
+const notesPaneRef = ref<{
+  scrollerElement: HTMLElement | null
+  renderedRange: () => { start: number; end: number }
+  windowedScroller: () => WindowedScrollerApi | null
+} | null>(null)
 const notesScrollerElement = computed(() => notesPaneRef.value?.scrollerElement ?? null)
 const notesZoomModel = computed({ get: () => notesZoom.value, set: setNotesZoom })
 useZoomHandler({ zoom: notesZoomModel, target: notesScrollerElement, keyboard: true })
@@ -183,6 +188,22 @@ const search = useFastDocViewSearch({
   documentId: () => fastDocument.summary.value?.documentId,
   currentBlock: () => windowedScroller.value?.readFirstVisible(0)?.index ?? 0,
 })
+// The notes (footnotes, endnotes) are searched SEPARATELY, in the notes pane - as the book view
+// searches its commentary panel apart from its lines. A match in a note is never a match on the
+// block that references it: the reader could not be shown it there. The bar's mode switch picks
+// the target (the text, or the notes pane while it is open), each with its own query and results.
+const notesSearch = useFastDocViewSearch({
+  api: fastDocViewApi,
+  documentId: () => fastDocument.summary.value?.documentId,
+  currentBlock: () => notesPaneRef.value?.windowedScroller()?.readFirstVisible(0)?.index ?? 0,
+  scope: 'notes',
+})
+const searchMode = ref<SearchMode>('content')
+/** The search bar's slot for the notes pane: where it sits (bottom, right, left). */
+const notesSearchSlot = computed<CommentarySlot>(() =>
+  effectiveNotesPlace.value === 'right' ? 'side' : effectiveNotesPlace.value === 'left' ? 'side-left' : 'bottom')
+const isNotesSearch = computed(() => slotForSearchMode(searchMode.value) != null)
+const activeSearch = computed(() => (isNotesSearch.value ? notesSearch : search))
 function openSearch() {
   searchVisible.value = true
 }
@@ -213,7 +234,19 @@ const { scrollToLine: landOnRow } = useWindowedRowLanding(
   () => {},
   () => {},
 )
+// The same landing in the notes pane, for the notes search.
+const { scrollToLine: landOnNote } = useWindowedRowLanding(
+  () => notesPaneRef.value?.windowedScroller() ?? null,
+  () => false,
+  () => {},
+  () => {},
+)
 async function onSearchStep(direction: 'forward' | 'backward') {
+  if (isNotesSearch.value) {
+    const note = notesSearch.step(direction)
+    if (note) await landOnNote(note.block, { occurrence: note.occurrence, direction })
+    return
+  }
   const match = search.step(direction)
   if (!match) return
   // The block's nth mark becomes the current one (setCurrentMark), as the book view's per-line occurrence.
@@ -226,7 +259,7 @@ function blockHtml(index: number): string {
   // The book view's clean-text (Ctrl+D, global setting) first, then the search marks, as its line renderer;
   // the picture sources last (never searched or cleaned).
   const html = cleanHebrewText(fastDocument.blockAt(index)?.html ?? '', settingsStore.cleanTextFlags)
-  const marked = search.query.value.trim() && searchVisible.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
+  const marked = search.query.value.trim() && searchVisible.value && !isNotesSearch.value ? highlightSearchMatches(html, search.query.value, { ignoreCase: true }) : html
   return pictures.withPictureSources(marked)
 }
 
@@ -792,14 +825,16 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
         <ReadingSearchBar
           :visible="searchVisible"
           toolbar-position="top"
-          :match-count="search.query.value.trim() && !search.isSearching.value && search.matchCount.value === 0 ? 0 : search.matchCount.value || -1"
-          :current-match="search.currentMatch.value"
-          :commentary-visible="false"
-          :open-commentary-slots="[]"
-          mode="content"
-          :query="search.query.value"
+          :match-count="activeSearch.query.value.trim() && !activeSearch.isSearching.value && activeSearch.matchCount.value === 0 ? 0 : activeSearch.matchCount.value || -1"
+          :current-match="activeSearch.currentMatch.value"
+          :commentary-visible="notesVisible && hasNotes"
+          :open-commentary-slots="notesVisible && hasNotes ? [notesSearchSlot] : []"
+          :mode="searchMode"
+          :panel-placeholder="$t('fastDocView.searchNotesPlaceholder')"
+          :query="activeSearch.query.value"
           @close="closeSearch"
-          @query-change="search.query.value = $event"
+          @mode-change="searchMode = $event"
+          @query-change="activeSearch.query.value = $event"
           @next="onSearchStep('forward')"
           @prev="onSearchStep('backward')"
         />
@@ -896,6 +931,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
               :follow-index="notesFollowIndex"
               :font-px="notesFontPx"
               :with-picture-sources="pictures.withPictureSources"
+              :search-query="searchVisible && isNotesSearch ? notesSearch.query.value : ''"
               @close="notesVisible = false"
               @go-to-reference="goToNoteReference"
             />

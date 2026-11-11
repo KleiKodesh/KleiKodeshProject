@@ -6,6 +6,7 @@
   "toc": "תוכן עניינים",
   "notes": "הערות",
   "noNotes": "אין הערות בתצוגה",
+  "searchNotesPlaceholder": "חיפוש בהערות",
   "zoomIn": "הגדל (Ctrl+)\nטקסט: {text}% {'|'} הערות: {notes}%\nאיפוס: Ctrl+0",
   "zoomOut": "הקטן (Ctrl-)\nטקסט: {text}% {'|'} הערות: {notes}%\nאיפוס: Ctrl+0",
   "footnote": "הערת שוליים",

@@ -4,6 +4,8 @@ import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { FastDocViewIndexedNote } from './useFastDocViewNotes'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 
 /**
  * Every footnote / endnote of the document, in body order, as ONE windowed scroller (the app's
@@ -31,6 +33,8 @@ const props = defineProps<{
   fontPx: number
   /** Gives the note's pictures their sources (the page's picture loader); the HTML as is without it. */
   withPictureSources?: (html: string) => string
+  /** The notes search's query (the search bar aimed at the notes pane): its matches are marked in the notes shown. */
+  searchQuery?: string
 }>()
 const emit = defineEmits<{ goToReference: [note: FastDocViewIndexedNote]; close: [] }>()
 
@@ -45,6 +49,8 @@ defineExpose({
   scrollerElement: pane,
   /** The mounted note rows [start, end): kept in the notes cache. */
   renderedRange: () => scroller.value?.renderedRange ?? { start: 0, end: 0 },
+  /** The notes' scroller, for the notes search to land on a note and mark its current match. */
+  windowedScroller: () => scroller.value as unknown as WindowedScrollerApi | null,
 })
 
 /** A clicked note lands with a short ease (not the browser's slow smooth scroll). */
@@ -161,7 +167,10 @@ function referenceTitle(note: FastDocViewIndexedNote, t: (key: string) => string
 }
 function bodyHtml(note: FastDocViewIndexedNote, title: string): string {
   // the book view's clean-text (Ctrl+D), as on its commentary
-  const html = cleanHebrewText(note.html, settingsStore.cleanTextFlags).replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
+  const cleaned = cleanHebrewText(note.html, settingsStore.cleanTextFlags).replace(NOTE_MARK, `${NOTE_MARK} role="button" tabindex="0" title="${title}"`)
+  // The notes search's matches, as the text's search marks its blocks (FastDocViewPage blockHtml);
+  // the picture sources last (never searched).
+  const html = props.searchQuery?.trim() ? highlightSearchMatches(cleaned, props.searchQuery, { ignoreCase: true }) : cleaned
   return props.withPictureSources ? props.withPictureSources(html) : html
 }
 function onBodyActivate(event: Event, note: FastDocViewIndexedNote) {

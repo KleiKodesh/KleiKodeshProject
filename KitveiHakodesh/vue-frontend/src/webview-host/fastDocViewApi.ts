@@ -93,8 +93,17 @@ export interface FastDocViewApi {
   notes(documentId: string, first: number, count: number): Promise<FastDocViewNote[]>
   /** One Int32 per known note (body order): the block holding its reference. Grows with the index. */
   noteBlocks(documentId: string): Promise<Int32Array>
-  /** Searches up to `maxBlocks` blocks from `fromBlock` (block indexes + match counts only; book-view normalisation). */
+  /**
+   * Searches up to `maxBlocks` blocks from `fromBlock` (block indexes + match counts only; book-view
+   * normalisation). The blocks' OWN text: a footnote's or endnote's text is never counted here.
+   */
   search(documentId: string, query: string, matchCase: boolean, fromBlock: number, maxBlocks: number): Promise<FastDocViewSearchStep>
+  /**
+   * Searches the NOTES - footnotes and endnotes, separately from the text (as the book view's
+   * commentary panel search is separate from its lines): up to `maxNotes` notes from `fromNote`, in
+   * the notes pane's own order. `hitBlocks` are note indexes; `nextBlock` the next note to continue from.
+   */
+  searchNotes(documentId: string, query: string, matchCase: boolean, fromNote: number, maxNotes: number): Promise<FastDocViewSearchStep>
   /** The block holding bookmark `name` (an internal link's target), or null when there is none. */
   bookmark(documentId: string, name: string): Promise<number | null>
   /** Page text width per section, in block order (the known ones while the index builds). */
@@ -181,6 +190,9 @@ export const fastDocViewApi: FastDocViewApi = {
     (await serviceCall<FastDocViewHeading[]>('fastDocViewHeadings', { documentId })) ?? [],
   search: async (documentId, query, matchCase, fromBlock, maxBlocks) =>
     (await serviceCall<FastDocViewSearchStep>('fastDocViewSearch', { documentId, query, matchCase, fromBlock, maxBlocks })) ??
+    { hitBlocks: [], hitCounts: [], nextBlock: -1, reachedEnd: true },
+  searchNotes: async (documentId, query, matchCase, fromNote, maxNotes) =>
+    (await serviceCall<FastDocViewSearchStep>('fastDocViewSearchNotes', { documentId, query, matchCase, fromNote, maxNotes })) ??
     { hitBlocks: [], hitCounts: [], nextBlock: -1, reachedEnd: true },
   bookmark: async (documentId, name) =>
     (await serviceCall<{ blockIndex?: number | null }>('fastDocViewBookmark', { documentId, name }))?.blockIndex ?? null,
