@@ -12,7 +12,7 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 **FullTextSearchFilterPanel.vue** — slide-in filter panel. Contains the category/book tree and a book-name search input at the bottom. The book-name query is owned by `useFullTextSearchFilters` (via `v-model:filter-book-query`) so it persists when the panel closes. When a query is typed the tree is replaced by a flat matching-book list (`FullTextSearchFilterBookList`).
 
-**FullTextSearchFilterNode.vue** — single node in the filter tree (category or book row with checkbox).
+**FullTextSearchFilterRow.vue** — one row of the filter tree (category, book or computer file, with checkbox), drawn by TreeView. **fullTextSearchFilterTree.ts** builds the rows and the per-category totals and check states once per change.
 
 **FullTextSearchFilterBookList.vue** — flat list of books shown inside the filter panel when the user types a book-name query. Same row styling as the tree nodes.
 

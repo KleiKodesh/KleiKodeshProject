@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, markRaw, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { computed, ref, shallowRef, markRaw, onMounted, nextTick, watch } from 'vue'
 import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import {
   IconMinimize20Regular,
@@ -10,9 +10,17 @@ import {
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { searchBookTitleIds } from '@/features/book-catalog/bookTitleSearch'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import FullTextSearchFilterNode from './FullTextSearchFilterNode.vue'
+import TreeView from '@/components/TreeView.vue'
+import type { TreeNodeItem } from '@/components/treeTypes'
+import FullTextSearchFilterRow from './FullTextSearchFilterRow.vue'
 import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
-import { FILTER_EXPANSION_KEY } from './fullTextSearchFilterExpansion'
+import {
+  categoryCheckStates,
+  categoryResultTotals,
+  createFilterTreeRows,
+  expandableCategoryRowIds,
+  type FilterTreeRow,
+} from './fullTextSearchFilterTree'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 const props = withDefaults(defineProps<{
@@ -57,77 +65,87 @@ const filteredBooks = shallowRef<BookRow[]>(markRaw([]))
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
 
-// ── Expand / collapse all ─────────────────────────────────────────────────────
-// Expansion is owned here as one reactive Set and shared with every node via
-// provide/inject. Nodes render children only when their id is in the set, so
-// "expand all" can grow the tree gradually rather than in one blocking frame.
-const expandedIds = reactive(new Set<number>())
+// ── The tree ──────────────────────────────────────────────────────────────────
+// TreeView draws the rows through the windowed scroller: only the rows on screen are in
+// the DOM, so expanding everything is one list change, not thousands of mounted rows.
+// Totals and check states are worked out once per change for the whole tree.
+const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
 const allExpanded = ref(false)
 
 const treeNodes = computed(() => props.nodes ?? booksStore.ROOT.children)
 // A tree that loads folders as they open has no whole to expand at once.
 const isLazyTree = computed(() => props.nodes !== undefined)
 
-provide(FILTER_EXPANSION_KEY, {
-  isExpanded: (id: number) => expandedIds.has(id),
-  toggle: (node: CategoryNode) => {
-    if (expandedIds.has(node.id)) {
-      expandedIds.delete(node.id)
-      emit('collapseNode', node)
-    } else {
-      expandedIds.add(node.id)
-      emit('expandNode', node)
-    }
-  },
-})
+const resultTotals = computed(() => categoryResultTotals(treeNodes.value, props.resultCounts))
+const checkStates = computed(() =>
+  categoryCheckStates(treeNodes.value, props.checkedBookIds, props.checkedFilePaths, props.uncheckedFolderIds),
+)
+const buildRows = createFilterTreeRows()
+const treeRows = computed(() =>
+  buildRows(treeNodes.value, !!props.hasSearched, props.resultCounts, resultTotals.value),
+)
 
-// Pre-order list of every category that has something to reveal. Pre-order means
-// a parent always precedes its descendants, so revealing ids in order fills the
-// tree top-down.
-function collectExpandableIds(nodes: CategoryNode[], out: number[]): number[] {
-  for (const node of nodes) {
-    if (node.children.length || node.books.length) out.push(node.id)
-    collectExpandableIds(node.children, out)
-  }
-  return out
+function rowCount(row: FilterTreeRow): number {
+  const { item } = row
+  if (item.kind === 'category') return resultTotals.value.get(item.category.id) ?? 0
+  return item.kind === 'book' ? (props.resultCounts.get(item.book.id) ?? 0) : 0
+}
+function rowChecked(row: FilterTreeRow): boolean {
+  const { item } = row
+  if (item.kind === 'category') return checkStates.value.get(item.category.id)?.checked ?? false
+  if (item.kind === 'book') return props.checkedBookIds.has(item.book.id)
+  return !!props.checkedFilePaths?.has(item.file.path)
+}
+function rowIndet(row: FilterTreeRow): boolean {
+  return row.item.kind === 'category' && (checkStates.value.get(row.item.category.id)?.indet ?? false)
 }
 
-let expandRaf: number | null = null
-function stopExpanding() {
-  if (expandRaf !== null) {
-    cancelAnimationFrame(expandRaf)
-    expandRaf = null
-  }
+function onRowToggled(node: TreeNodeItem, expanded: boolean) {
+  const { item } = node as FilterTreeRow
+  if (item.kind !== 'category') return
+  if (expanded) emit('expandNode', item.category)
+  else emit('collapseNode', item.category)
 }
 
-// Reveal ids in rAF-batched chunks so the browser paints between batches and the
-// UI stays responsive even for a catalog with thousands of entries.
-function expandAll() {
-  stopExpanding()
-  allExpanded.value = true
-  const ids = collectExpandableIds(treeNodes.value, [])
-  let i = 0
-  const BATCH = 150
-  const step = () => {
-    const end = Math.min(i + BATCH, ids.length)
-    for (; i < end; i++) expandedIds.add(ids[i]!)
-    expandRaf = i < ids.length ? requestAnimationFrame(step) : null
-  }
-  expandRaf = requestAnimationFrame(step)
+function onRowCheck(row: FilterTreeRow) {
+  const { item } = row
+  if (item.kind === 'category') emit('toggleCategory', item.category, !rowChecked(row))
+  else if (item.kind === 'book') emit('toggleBook', item.book.id)
+  else emit('toggleFile', item.file.path)
 }
 
-function collapseAll() {
-  stopExpanding()
-  expandedIds.clear()
-  allExpanded.value = false
+function firstNavigableBookId(cat: CategoryNode): number | null {
+  // Prefer a book that has results (when search has run), otherwise first book.
+  // Subcategories before own books — the catalog's order.
+  for (const child of cat.children) {
+    const found = firstNavigableBookId(child)
+    if (found != null) return found
+  }
+  for (const book of cat.books) {
+    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
+  }
+  return null
+}
+
+/** A title clicked, or Enter on the keyboard's row: go to its first result. Space checks the row. */
+function onRowSelect(node: TreeNodeItem, event?: MouseEvent | KeyboardEvent) {
+  const row = node as FilterTreeRow
+  if (event instanceof KeyboardEvent && event.code === 'Space') {
+    onRowCheck(row)
+    return
+  }
+  const { item } = row
+  if (item.kind === 'book') emit('navigateToBook', item.book.id)
+  else if (item.kind === 'category') {
+    const id = firstNavigableBookId(item.category)
+    if (id != null) emit('navigateToBook', id)
+  }
 }
 
 function toggleExpandAll() {
-  if (allExpanded.value) collapseAll()
-  else expandAll()
+  allExpanded.value = !allExpanded.value
+  treeViewRef.value?.setExpanded(allExpanded.value ? expandableCategoryRowIds(treeRows.value) : [])
 }
-
-onBeforeUnmount(stopExpanding)
 
 function onSelectAllClick() {
   if (isAllChecked.value) {
@@ -174,6 +192,13 @@ const isIndet = computed(() => props.selectAllState
 // Show book list when there are committed tokens OR the current input is long enough
 const activeQuery = computed(() => inputText.value.trim())
 const isSearching = computed(() => props.bookTitleSearch && (props.atFilters.length > 0 || activeQuery.value.length >= 2))
+
+// The tree gives way to the book list while the @ field searches; it comes back with the
+// same rows open. Read before the list replaces it (a pre-flush watcher runs before render).
+const savedExpanded = shallowRef<number[]>([])
+watch(isSearching, (searching) => {
+  if (searching && treeViewRef.value) savedExpanded.value = treeViewRef.value.getExpanded()
+})
 
 // Books matching any committed token or the current input (if long enough), in the title
 // search's rank order, token by token. Resolved async in the catalog index; the result-count
@@ -301,20 +326,29 @@ function onInputKeydown(e: KeyboardEvent) {
           @navigate-to-book="emit('navigateToBook', $event)"
         />
         <div v-else class="tree-scroll">
-          <FullTextSearchFilterNode
-            v-for="cat in treeNodes"
-            :key="cat.id"
-            :category="cat"
-            :checked-book-ids="checkedBookIds"
-            :checked-file-paths="checkedFilePaths"
-            :unchecked-folder-ids="uncheckedFolderIds"
-            :result-counts="resultCounts"
-            :has-searched="hasSearched"
-            @toggle-book="emit('toggleBook', $event)"
-            @toggle-file="emit('toggleFile', $event)"
-            @toggle-category="(c, v) => emit('toggleCategory', c, v)"
-            @navigate-to-book="emit('navigateToBook', $event)"
-          />
+          <TreeView
+            ref="treeViewRef"
+            :nodes="treeRows"
+            :row-height="26"
+            :initial-expanded="savedExpanded"
+            nodes-update-in-place
+            @toggle="onRowToggled"
+            @select="onRowSelect"
+          >
+            <template #row="{ node, expanded, focused, toggle, select }">
+              <FullTextSearchFilterRow
+                :row="(node as FilterTreeRow)"
+                :expanded="expanded"
+                :focused="focused"
+                :count="rowCount(node as FilterTreeRow)"
+                :checked="rowChecked(node as FilterTreeRow)"
+                :indet="rowIndet(node as FilterTreeRow)"
+                @toggle="toggle"
+                @select="select"
+                @check="onRowCheck(node as FilterTreeRow)"
+              />
+            </template>
+          </TreeView>
         </div>
       </template>
     </div>
@@ -433,9 +467,9 @@ function onInputKeydown(e: KeyboardEvent) {
 }
 .tree-scroll {
   flex: 1;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 /* The field is the panel's own footer, so it sits ON the panel surface rather than in a
    separate strip: no top rule, just breathing room around the pill. The rule was there to
