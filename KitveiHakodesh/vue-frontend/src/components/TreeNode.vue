@@ -54,6 +54,7 @@ const fs = () => props.fontSize ?? '0.8rem'
     />
     <div
       class="tree-label"
+      :title="filtered ? undefined : node.text"
       @click.stop="$emit('select', $event)"
       @auxclick.middle.stop="$emit('select', $event)"
     >
@@ -124,6 +125,15 @@ const fs = () => props.fontSize ?? '0.8rem'
   white-space: normal;
   word-break: break-word;
   cursor: pointer;
+}
+/* A long title wraps to at most two lines, then ends in an ellipsis (full text in the
+   tooltip). Search results are exempt: their path subtitle is what tells them apart. */
+.tree-row:not(.is-filtered) .tree-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .tree-row.is-filtered {
