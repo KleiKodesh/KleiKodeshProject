@@ -54,26 +54,30 @@ export function categoryCheckStates(
   uncheckedFolderIds?: ReadonlySet<number>,
 ): Map<number, CategoryCheckState> {
   const states = new Map<number, CategoryCheckState>()
-  const visit = (node: CategoryNode): { books: number; checkedBooks: number } => {
-    let books = node.books.length
-    let checkedBooks = 0
-    for (const book of node.books) if (checkedBookIds.has(book.id)) checkedBooks++
+  // Counts books, files AND unopened folders (one item each, by their own box), so a file
+  // or folder unchecked deep down makes every folder above it partial, not just its parent.
+  const visit = (node: CategoryNode): { items: number; checkedItems: number } => {
+    let items = node.books.length
+    let checkedItems = 0
+    for (const book of node.books) if (checkedBookIds.has(book.id)) checkedItems++
     for (const child of node.children) {
       const sub = visit(child)
-      books += sub.books
-      checkedBooks += sub.checkedBooks
+      items += sub.items
+      checkedItems += sub.checkedItems
     }
     const files = node.files ?? []
-    let checkedFiles = 0
-    for (const file of files) if (checkedFilePaths?.has(file.path)) checkedFiles++
-    const items = books + files.length
-    const checkedItems = checkedBooks + checkedFiles
-    const isUnopenedFolder = node.files !== undefined && items === 0
+    items += files.length
+    for (const file of files) if (checkedFilePaths?.has(file.path)) checkedItems++
+    if (node.files !== undefined && items === 0) {
+      const checked = !uncheckedFolderIds?.has(node.id)
+      states.set(node.id, { checked, indet: false })
+      return { items: 1, checkedItems: checked ? 1 : 0 }
+    }
     states.set(node.id, {
-      checked: isUnopenedFolder ? !uncheckedFolderIds?.has(node.id) : items > 0 && checkedItems === items,
+      checked: items > 0 && checkedItems === items,
       indet: checkedItems > 0 && checkedItems < items,
     })
-    return { books, checkedBooks }
+    return { items, checkedItems }
   }
   for (const root of roots) visit(root)
   return states
