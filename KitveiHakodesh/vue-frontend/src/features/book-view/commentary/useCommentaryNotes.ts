@@ -4,7 +4,7 @@
  * Loading strategy — lazy, viewport-driven, non-blocking:
  *   The caller provides visible lineIds via scheduleNotesLoad (called from the
  *   component's virtualizer watcher). A 100ms debounce batches rapid scroll
- *   events into a single DB query per commentary book.
+ *   events into a single DB query for the whole window.
  *
  *   lineIdToBookId is populated from getGroups() eagerly so createNote() knows
  *   which bookId to use before the async load completes.
@@ -97,14 +97,16 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
       // GROUPED id, never over the whole input: groupByBook drops any line whose owning
       // book is not in lineIdToBookId yet, and marking those as loaded would retire them
       // permanently — their notes would never appear and never export.
-      for (const [bookId, ids] of groupByBook(stillPending)) {
-        for (const id of ids) loadedLineIds.add(id)
-        void track(ids, _loadForLines(bookId, ids))
-      }
+      // One query for the whole window, all its books together.
+      const byBook = groupByBook(stillPending)
+      const ids = [...byBook.values()].flat()
+      if (!ids.length) return
+      for (const id of ids) loadedLineIds.add(id)
+      void track(ids, _loadForLines([...byBook.keys()], ids))
     }, 100)
   }
 
-  async function _loadForLines(bookId: number, lineIds: number[]): Promise<void> {
+  async function _loadForLines(bookIds: number[], lineIds: number[]): Promise<void> {
     try {
       const rows = await queryUserSettings<{
         id: number
@@ -116,7 +118,7 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
         quote: string
         createdAt: number
         updatedAt: number
-      }>(USER_SETTINGS_SQL.GET_NOTES_FOR_LINES(lineIds.length), [bookId, ...lineIds])
+      }>(USER_SETTINGS_SQL.GET_NOTES_FOR_BOOKS_LINES(bookIds.length, lineIds.length), [...bookIds, ...lineIds])
 
       for (const row of rows) {
         _addToMap({
@@ -176,7 +178,7 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
       for (const [bookId, bookIds] of grouped) {
         for (let i = 0; i < bookIds.length; i += LOAD_CHUNK) {
           if (disposed) return
-          await _loadForLines(bookId, bookIds.slice(i, i + LOAD_CHUNK))
+          await _loadForLines([bookId], bookIds.slice(i, i + LOAD_CHUNK))
         }
       }
     })()
