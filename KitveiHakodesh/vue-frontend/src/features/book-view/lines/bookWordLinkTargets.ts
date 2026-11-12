@@ -8,7 +8,7 @@
  * dropped with it. The shortcut, which lives outside the view, finds a live view's answer
  * through the registry below (removed on dispose) and otherwise asks directly.
  */
-import { inject, onScopeDispose, provide, type InjectionKey } from 'vue'
+import { getCurrentInstance, inject, onScopeDispose, provide, type InjectionKey } from 'vue'
 import { getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
 import type { WordLinkTargetRow } from '@/webview-host/queries.types'
 
@@ -52,7 +52,11 @@ const UNSHARED: BookWordLinkTargets = { targetsFor: ask }
 
 /** The view's shared loader; outside a book view, a plain request each time. */
 export function injectBookWordLinkTargets(): BookWordLinkTargets {
-  return inject(KEY, UNSHARED)
+  // inject() reads the PARENT's provides only; BookViewPage provides and also runs
+  // useBookView (commentary annotations) in its own setup, so look at its own first.
+  const own = (getCurrentInstance() as unknown as { provides?: Record<symbol, unknown> } | null)?.provides
+  const mine = own && Object.prototype.hasOwnProperty.call(own, KEY) ? (own[KEY as symbol] as BookWordLinkTargets) : undefined
+  return mine ?? inject(KEY, UNSHARED)
 }
 
 /** For callers outside the view (the shortcut): a live view's answer, else a request. */
