@@ -295,6 +295,12 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     if (delta !== 0) viewport.scrollTop += delta
   }
 
+  /** The viewport is where our last hold left it - a scroll event now is that hold's, not a move. */
+  function isHeldScrollTop(): boolean {
+    const viewport = options.viewport()
+    return viewport != null && heldScrollTop != null && viewport.scrollTop === heldScrollTop
+  }
+
   // ── Landing ───────────────────────────────────────────────────────────────────
 
   // Bumped by every landing. A landing whose rows arrive after a newer one started
@@ -605,6 +611,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
     rememberAnchor,
     holdAnchor,
     holdAnchorThroughScroll,
+    isHeldScrollTop,
     landAt,
     cancelLanding,
     refreshRows,

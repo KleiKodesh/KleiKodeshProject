@@ -29,6 +29,20 @@ export interface WindowedScrollerScrollToOptions {
 export interface WindowedScrollerRevealOptions {
   /** A mounted row lands through scrollToIndex too (a landing), not the browser's nearest-edge scroll. */
   landMounted?: boolean
+  /** Pixels at the viewport's top covered by a sticky header: a row under them is not showing; one landed from above lands below them. */
+  topInsetPx?: number
+}
+
+export interface WindowedScrollerRowVisibilityOptions {
+  /** Pixels at the viewport's top covered by a sticky header, not counted as showing. */
+  topInsetPx?: number
+}
+
+/** The bar's thumb in viewport coordinates, and the track it travels in. */
+export interface WindowedScrollerThumbRect {
+  top: number
+  height: number
+  trackHeight: number
 }
 
 export interface WindowedScrollerVisibleRow {
@@ -83,8 +97,10 @@ export interface WindowedScrollerApi {
    */
   readFirstVisible(topInsetPx?: number, fully?: boolean): WindowedScrollerVisibleRow | null
   isRowRendered(index: number): boolean
-  isRowFullyVisible(index: number): boolean
+  isRowFullyVisible(index: number, options?: WindowedScrollerRowVisibilityOptions): boolean
   rowElement(index: number): HTMLElement | null
   /** What the scrollbar has at a viewport Y, or null when the pointer is off the bar. */
   barTargetAt(clientY: number): WindowedScrollerBarTarget | null
+  /** Where the bar's thumb is heading, in viewport coordinates; null when the list does not scroll. */
+  thumbRect(): WindowedScrollerThumbRect | null
 }

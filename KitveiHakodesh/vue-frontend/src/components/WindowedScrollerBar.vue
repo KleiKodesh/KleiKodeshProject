@@ -289,7 +289,18 @@ function targetAt(clientY: number): { position: number; onThumb: boolean } | nul
   return { position: positionForThumbTop(offset - thumbHeight.value / 2), onThumb: false }
 }
 
-defineExpose({ barElement, targetAt })
+/** The thumb's target top and height (not its glide), in viewport coordinates; null with no thumb. */
+function thumbRect(): { top: number; height: number; trackHeight: number } | null {
+  const track = trackElement.value
+  if (!track || !isScrollable.value) return null
+  const trackRect = track.getBoundingClientRect()
+  // From the parent's position itself, not shownPosition: that follows through a
+  // watcher, so it is a scroll behind until the next flush.
+  const top = drag.value ? drag.value.thumbTop : thumbTopFor(position.value)
+  return { top: trackRect.top + top, height: thumbHeight.value, trackHeight: trackRect.height }
+}
+
+defineExpose({ barElement, targetAt, thumbRect })
 </script>
 
 <template>

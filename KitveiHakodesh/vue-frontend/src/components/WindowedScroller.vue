@@ -67,6 +67,8 @@ import type {
   WindowedScrollerMoveSource,
   WindowedScrollerRevealOptions,
   WindowedScrollerRowKind,
+  WindowedScrollerRowVisibilityOptions,
+  WindowedScrollerThumbRect,
   WindowedScrollerScrollToOptions,
   WindowedScrollerVisibleRow,
 } from './windowedScrollerTypes'
@@ -155,6 +157,15 @@ const emit = defineEmits<{
    * the first window).
    */
   moveend: [source: WindowedScrollerMoveSource]
+  /**
+   * The view scrolled - one per native scroll event, after the scroller has taken the
+   * new position in (its bar and thumb are already there). `source` follows moveend's
+   * rule: 'reader' for the reader's own scrolling (the bar and its far seeks, Home/End
+   * included), 'landing' while one of the scroller's landings moves it. The scroller's
+   * own holds (a zoom or re-wrap keeping the reader's row still) are not moves and do
+   * not report. A run of moves always ends in one moveend.
+   */
+  move: [source: WindowedScrollerMoveSource]
 }>()
 
 const viewportElement = ref<HTMLElement | null>(null)
@@ -191,6 +202,7 @@ const {
   rememberAnchor,
   holdAnchor,
   holdAnchorThroughScroll,
+  isHeldScrollTop,
   landAt,
   cancelLanding,
   refreshRows,
@@ -345,10 +357,13 @@ function barTargetAt(clientY: number): WindowedScrollerBarTarget | null {
 // corrects any such shift against the last anchor; on a plain reader scroll the
 // anchor row has not moved within the content and the hold is a no-op.
 function onViewportScroll() {
+  // Read before the hold below can move it: was this scroll our own hold's?
+  const isOwnHold = isHeldScrollTop()
   holdAnchorThroughScroll()
   rememberAnchor()
   bar.syncFromViewport()
   fill()
+  if (!isOwnHold) emit('move', currentMoveSource())
 }
 
 // ── Move end ─────────────────────────────────────────────────────────────────────
@@ -359,6 +374,14 @@ function onViewportScroll() {
 let landingsInFlight = 0
 let isBarPressed = false
 let landingScrollEndOwed: WindowedScrollerMoveSource | null = null
+/** The source of the landing in flight (the latest, when several overlap). */
+let landingSource: WindowedScrollerMoveSource = 'landing'
+/** Who is moving the view right now - see the `move` event. */
+function currentMoveSource(): WindowedScrollerMoveSource {
+  if (isBarPressed) return 'reader'
+  if (landingsInFlight > 0) return landingSource
+  return landingScrollEndOwed ?? 'reader'
+}
 function onViewportScrollEnd() {
   if (landingsInFlight > 0 || isBarPressed) return
   const source = landingScrollEndOwed ?? 'reader'
@@ -385,6 +408,7 @@ async function runLanding(land: () => Promise<void>, byReader = false): Promise<
   const viewport = viewportElement.value
   const before = viewport?.scrollTop
   const source: WindowedScrollerMoveSource = byReader || isBarPressed ? 'reader' : 'landing'
+  landingSource = source
   landingsInFlight++
   try {
     await land()
@@ -520,11 +544,18 @@ function isRowRendered(index: number): boolean {
   return rowElements.has(index) && isRowInWindow(index)
 }
 
-function isRowFullyVisible(index: number): boolean {
+/** `topInsetPx`: the top that many pixels is covered (a sticky header) and does not count as showing. */
+function isRowFullyVisible(index: number, options: WindowedScrollerRowVisibilityOptions = {}): boolean {
   const viewport = viewportElement.value
   const row = isRowRendered(index) ? rowElement(index) : null
   if (!viewport || !row) return false
-  return row.offsetTop >= viewport.scrollTop && row.offsetTop + row.offsetHeight <= viewport.scrollTop + viewport.clientHeight
+  const top = viewport.scrollTop + (options.topInsetPx ?? 0)
+  return row.offsetTop >= top && row.offsetTop + row.offsetHeight <= viewport.scrollTop + viewport.clientHeight
+}
+
+/** Where the bar's thumb is (its target, not where its glide has got to), in viewport coordinates. Null when there is no thumb. */
+function thumbRect(): WindowedScrollerThumbRect | null {
+  return barReference.value?.thumbRect() ?? null
 }
 
 function readFirstVisible(topInsetPx = 0, fully = false): WindowedScrollerVisibleRow | null {
@@ -596,12 +627,17 @@ function onViewportKeydown(event: KeyboardEvent) {
  * is not mounted lands exactly through scrollToIndex, top-aligned when it lies above the
  * viewport and bottom-aligned when below. For keyboard highlight movement.
  *
+ * `topInsetPx`: the top that many pixels is covered (a sticky header): a row under it
+ * is not showing, and a row landed from above lands just below it. A mounted row's
+ * nearest-edge scroll honours the viewport's own `scroll-padding-top` for the same.
+ *
  * `landMounted`: a mounted row lands through scrollToIndex as well (top- or
  * bottom-aligned by where it sits), so the move is one of the scroller's landings
  * (isLanding, moveend('landing')) rather than a native scroll.
  */
 function revealIndex(index: number, options: WindowedScrollerRevealOptions = {}) {
-  if (isRowFullyVisible(index)) return
+  const inset = options.topInsetPx ?? 0
+  if (isRowFullyVisible(index, { topInsetPx: inset })) return
   const row = isRowRendered(index) ? rowElement(index) : null
   if (row && !options.landMounted) {
     row.scrollIntoView({ block: 'nearest' })
@@ -609,9 +645,9 @@ function revealIndex(index: number, options: WindowedScrollerRevealOptions = {})
   }
   const viewport = viewportElement.value
   const isAbove = row && viewport
-    ? row.offsetTop < viewport.scrollTop
-    : index < (readFirstVisible()?.index ?? renderedRange.value.start)
-  void scrollToIndex(index, { align: isAbove ? 'start' : 'end' })
+    ? row.offsetTop < viewport.scrollTop + inset
+    : index < (readFirstVisible(inset)?.index ?? renderedRange.value.start)
+  void scrollToIndex(index, isAbove ? { align: 'start', offsetPx: -inset } : { align: 'end' })
 }
 
 defineExpose({
@@ -628,6 +664,7 @@ defineExpose({
   isRowFullyVisible,
   rowElement,
   barTargetAt,
+  thumbRect,
 })
 </script>
 

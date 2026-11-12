@@ -87,10 +87,10 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollEl, {
 // Hovering the scrollbar names the result there — its number, book and TOC path —
 // the same label the book view's lines and commentary bars show.
 const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
-const { scrollbarTocTooltip, refreshScrollbarTocTooltip, closeScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
+const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd, closeScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
-  viewportElement: scrollEl,
+  getThumbRect: () => scroller()?.thumbRect() ?? null,
   getBookTitle: () => '',
   getLabelAt: (index) => {
     const result = shownResults.value[index]
@@ -100,7 +100,6 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip, closeScrollbarTocToolti
   // Streaming results resize the thumb under a resting pointer; the label waits for them.
   isSuspended: () => props.isSearching,
 })
-useEventListener(scrollEl, 'scroll', refreshScrollbarTocTooltip, { passive: true })
 watch(() => props.isSearching, (searching) => { if (searching) closeScrollbarTocTooltip() })
 
 // Right-click copy and the clean-text toggle are served by the app-wide fallback
@@ -610,6 +609,8 @@ defineExpose({
         tabindex="0"
         :style="{ fontSize: `${fontPx}px` }"
         @opened="onScrollerOpened"
+        @move="onScrollerMove"
+        @moveend="onScrollerMoveEnd"
       >
         <template #row="{ index }">
           <div

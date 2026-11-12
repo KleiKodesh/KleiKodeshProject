@@ -62,6 +62,7 @@ function mountScroll(
     isRowFullyVisible: () => true,
     rowElement,
     barTargetAt: () => null,
+    thumbRect: () => null,
     replaceRows: vi.fn(),
     nudge: vi.fn(),
     landing: false,
