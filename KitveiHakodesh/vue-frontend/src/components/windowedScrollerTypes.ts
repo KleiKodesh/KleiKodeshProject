@@ -26,6 +26,11 @@ export interface WindowedScrollerScrollToOptions {
   align?: 'start' | 'end'
 }
 
+export interface WindowedScrollerRevealOptions {
+  /** A mounted row lands through scrollToIndex too (a landing), not the browser's nearest-edge scroll. */
+  landMounted?: boolean
+}
+
 export interface WindowedScrollerVisibleRow {
   index: number
   /** How far the viewport's top sits below the row's top. Negative when the row starts below it. */
@@ -68,8 +73,10 @@ export interface WindowedScrollerApi {
   scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<void>
   /** One contiguous change of the list (rows inserted/removed mid-list), before it renders - see WindowedScroller. */
   replaceRows(at: number, removed: number, inserted: number): void
+  /** Moves the view by `px` as part of a landing (a follow-up nudge): held by isLanding, ends as moveend('landing'). */
+  nudge(px: number): void
   /** Brings the row into view with 'nearest' semantics (no-op when fully visible) — the keyboard-highlight reveal. */
-  revealIndex(index: number): void
+  revealIndex(index: number, options?: WindowedScrollerRevealOptions): void
   /**
    * The first row showing below the viewport's top plus `topInsetPx`. `fully` asks for
    * the first row whose top is below that line, not merely any part of it.

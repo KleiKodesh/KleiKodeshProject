@@ -13,7 +13,8 @@
  * Never add code here that opens at the top and moves to the saved line afterwards,
  * waits for a position to arrive, or guards a late move against reader input: that
  * is the virtualizer model this pane left behind. This composable only holds the
- * position save until the first window is on screen and runs what needs the rows in
+ * position save until the first window is on screen (then the scroller's isLanding()
+ * holds it through its own landings) and runs what needs the rows in
  * the DOM (focus, the keyboard caret, the search mark, the deep-link flash).
  */
 import { watch, onBeforeUnmount } from 'vue'
@@ -109,31 +110,26 @@ export function useBookViewLinesScroll(
     }
   }
 
-  // ── Position-save suppression ───────────────────────────────────────────────
+  // ── Position-save hold ──────────────────────────────────────────────────────
 
-  let saveSuppressFrame = 0
   // The row this pane opens at: a requested line (TOC, search result, deep link) or
   // the saved one; undefined = the top. FINAL at setup — BookViewPage creates the
   // pane only once the saved position has been read, and the scroller is created
   // with this row as its start. Nothing arrives later, so nothing here waits.
   const startRow = props.initialLineIndex ?? props.initialScrollIndex
-  // Held until the first window is on screen: building it sets the scroll, and that
-  // scroll event must not be taken for the reader moving, nor persisted. Opening at
-  // the top sets nothing — the top is the reader's place from the start.
-  let saveSuppressed = startRow != null
+  // Until the first window is on screen there is no reader position to save: the
+  // rows are not there yet. Opening at the top needs no hold - the top is the
+  // reader's place from the start.
+  let isAwaitingFirstWindow = startRow != null
 
   /**
-   * The app is about to set the scroll itself (a jump to a line, a nudge to a mark):
-   * the scroll event that write causes is not the reader moving, and its position is
-   * not to be persisted. Call it right before the write. The event is dispatched at
-   * the start of the next frame, ahead of that frame's animation callbacks — so the
-   * hold is released by one, exactly after the event. Not a timer: a fixed window
-   * either ends before a slow frame's event or swallows the reader's next scroll.
+   * Not a moment to persist the position, nor to take a scroll for the reader's: the
+   * first window is not built yet, or one of the scroller's own landings (a jump, the
+   * first window, a nudge to a mark) is under way or its scroll has not ended. The
+   * scroller knows - see its isLanding().
    */
-  function suppressPositionSave() {
-    saveSuppressed = true
-    cancelAnimationFrame(saveSuppressFrame)
-    saveSuppressFrame = requestAnimationFrame(() => { saveSuppressed = false })
+  function isSaveHeld(): boolean {
+    return isAwaitingFirstWindow || (scroller()?.isLanding() ?? false)
   }
 
   // ── Once the first window is on screen ──────────────────────────────────────
@@ -149,19 +145,16 @@ export function useBookViewLinesScroll(
   /** Ends the opening's follow-ups: a jump elsewhere supersedes them, and an unmount must leave nothing behind. */
   function cancelOpeningFollowUps() {
     openingFollowUpsCancelled = true
-    saveSuppressed = false
+    isAwaitingFirstWindow = false
     if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
   }
 
   /** The scroller's first window is on screen — wired to its `opened` event (emitted for the top too). */
   function onScrollerOpened() {
     if (openingFollowUpsCancelled) return
-    if (startRow != null) {
-      // The scroll event of the first window is dispatched at the next frame's
-      // start, ahead of its animation callbacks — so the hold covers it and is
-      // released just after.
-      requestAnimationFrame(() => { if (!openingFollowUpsCancelled) saveSuppressed = false })
-    }
+    // From here the scroller's own isLanding() holds the save through the first
+    // window's scroll, until that scroll has ended.
+    isAwaitingFirstWindow = false
     const element = scroller()?.scrollerElement
     const takeFocus = mayTakeFocus(element)
     if (takeFocus) element?.focus({ preventScroll: true })
@@ -175,8 +168,14 @@ export function useBookViewLinesScroll(
     if (startRow == null) return
     const target = startRow
     // FTS: the highlighted mark is in the rendered row — bring it into view.
-    if (props.searchHighlightLineIndex != null) {
-      element?.querySelector('mark.search-match')?.scrollIntoView({ block: 'center' })
+    // Centred through the scroller's nudge: part of the opening landing, not the reader.
+    const mark = props.searchHighlightLineIndex != null ? element?.querySelector('mark.search-match') : null
+    if (element && mark) {
+      const markRect = mark.getBoundingClientRect()
+      const viewportRect = element.getBoundingClientRect()
+      scroller()?.nudge(
+        (markRect.top + markRect.height / 2) - (viewportRect.top + viewportRect.height / 2),
+      )
     }
     // Deep-link open (otzaria:// / zayit://): momentarily flash the target line's
     // background so the user sees where the link landed. One-shot; the class is
@@ -223,11 +222,11 @@ export function useBookViewLinesScroll(
   // Returns the last-read put so a host flush (persistenceFlush.ts) can wait for it;
   // every other caller is fire-and-forget. The per-tab state put is the same kind of
   // write to the same driver, so one of the two is enough to wait on.
-  function savePos(): Promise<void> | undefined {
+  function savePos(ignoreHold = false): Promise<void> | undefined {
     // Mid-flight programmatic positions are transient — persisting one would
     // overwrite the reader's real place with wherever a jump happened to be
     // passing through.
-    if (saveSuppressed) return
+    if (!ignoreHold && isSaveHeld()) return
     const position = lastKnownPos ?? captureScrollPos()
     if (!position) return
 
@@ -270,15 +269,13 @@ export function useBookViewLinesScroll(
   // for why the position must be captured BEFORE the coalesced stores flush.
   let lastCaptureSuppressed = false
   const unregisterHostFlush = registerPositionCapture(() => {
-    lastCaptureSuppressed = saveSuppressed
+    lastCaptureSuppressed = isSaveHeld()
     return savePos()
   }, tabId)
 
   onBeforeUnmount(() => {
     unregisterHostFlush()
     cancelOpeningFollowUps()
-    saveSuppressed = false
-    cancelAnimationFrame(saveSuppressFrame)
     // A view leaving while its tab stays open (tab switch, navigation within the
     // tab) has only this save. A closed tab's view unmounts after the tab has left
     // the list, and the close already captured this same position (disposeClosedTab
@@ -286,7 +283,9 @@ export function useBookViewLinesScroll(
     // (the per-tab put the store drops anyway). The one exception is a close that
     // fell inside a suppressed window - that capture wrote nothing, so this is its
     // save, as it was before the close-time capture existed.
-    if (tabStore.isOpenTab(tabId) || lastCaptureSuppressed) savePos()
+    // The view is leaving: whatever it shows last is where the reader is, so the
+    // hold does not apply (as before, when the unmount released it).
+    if (tabStore.isOpenTab(tabId) || lastCaptureSuppressed) savePos(true)
   })
 
   // ── Scroll handler ──────────────────────────────────────────────────────────
@@ -318,7 +317,7 @@ export function useBookViewLinesScroll(
   }
 
   // Reports the scroller's position on EVERY scroll, programmatic ones included.
-  // saveSuppressed is a statement about saving, not about where the reader is: the
+  // isSaveHeld() is a statement about saving, not about where the reader is: the
   // breadcrumb, the active TOC entry and auto-select track the CURRENT position and
   // are just as right after a programmatic jump as after a wheel.
   function onScroll() {
@@ -327,10 +326,10 @@ export function useBookViewLinesScroll(
     const { lineIndex, fullLineIndex } = position
     lastKnownPos = captureScrollPos()
     // The third argument says whether the READER moved the view, as opposed to a
-    // jump the app performed. saveSuppressed already draws exactly that line and
-    // every programmatic scroller sets it — and unlike a `wheel` listener it also
-    // catches scrollbar drags and keyboard scrolling.
-    emit('scrolled', lineIndex, fullLineIndex, !saveSuppressed)
+    // jump the app performed. The scroller draws exactly that line (isLanding: its
+    // own landings and nudges until their scroll ends) — and unlike a `wheel`
+    // listener it also catches scrollbar drags and keyboard scrolling.
+    emit('scrolled', lineIndex, fullLineIndex, !isSaveHeld())
   }
 
   return {
@@ -338,8 +337,7 @@ export function useBookViewLinesScroll(
     readCurrentPosition,
     cancelOpeningFollowUps,
     onScrollerOpened,
-    isPositionSaveSuppressed: () => saveSuppressed,
-    suppressPositionSave,
+    isPositionSaveHeld: isSaveHeld,
     onScroll,
   }
 }

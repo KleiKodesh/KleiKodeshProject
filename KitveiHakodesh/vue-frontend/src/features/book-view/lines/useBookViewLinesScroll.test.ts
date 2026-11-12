@@ -63,7 +63,9 @@ function mountScroll(
     rowElement,
     barTargetAt: () => null,
     replaceRows: vi.fn(),
-    isLanding: () => false,
+    nudge: vi.fn(),
+    landing: false,
+    isLanding(): boolean { return this.landing },
   }
   let scroll!: ReturnType<typeof useBookViewLinesScroll>
   const app = createApp({
@@ -78,7 +80,7 @@ function mountScroll(
     },
   })
   app.mount(document.createElement('div'))
-  return { app, scroll, scrollerElement }
+  return { app, scroll, scrollerElement, scroller }
 }
 
 /**
@@ -111,9 +113,9 @@ describe('useBookViewLinesScroll position save on unmount', () => {
   it('a close inside a suppressed window (mid programmatic jump) saves on unmount instead', async () => {
     const store = useTabStore()
     const tab = store.openTab({ route: '/book-view', title: 'book', bookId: BOOK_ID })
-    const { app, scroll } = mountScroll(tab.id)
+    const { app, scroller } = mountScroll(tab.id)
 
-    scroll.suppressPositionSave()
+    scroller.landing = true
     store.closeTab(tab.id)
     expect(idb.lastReadPuts).toEqual([])
 
