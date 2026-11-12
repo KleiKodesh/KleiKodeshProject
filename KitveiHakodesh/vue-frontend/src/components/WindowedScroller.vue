@@ -622,7 +622,7 @@ function onViewportKeydown(event: KeyboardEvent) {
   if (event.key === 'Home') {
     event.preventDefault()
     void landOn(0, {}, true)
-  } else if (event.key === 'End') {
+  } else if (event.key === 'End' && props.count > 0) {
     event.preventDefault()
     void landOn(props.count - 1, { align: 'end' }, true)
   }
