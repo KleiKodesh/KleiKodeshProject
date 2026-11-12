@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useElementSize } from '@vueuse/core'
 import FilterPills from '@/components/FilterPills.vue'
 import { IconFolderAdd20Regular, IconLibrary20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
-import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import BookCatalogTitleBar from '@/features/book-catalog/BookCatalogTitleBar.vue'
 import BookCatalogViewList from '@/features/book-catalog/BookCatalogView.List.vue'
 import BookCatalogViewCards from '@/features/book-catalog/BookCatalogView.Cards.vue'
@@ -59,15 +57,9 @@ function setView(v: BooksView) {
   view.value = v
 }
 
-// Cards view: the address bar shares the grid's width (see BookCatalogPage).
+// Cards view: the address bar lines up with the grid's edges (see BookCatalogPage).
 const contentRef = ref<HTMLElement | null>(null)
-const { width: contentWidth } = useElementSize(contentRef)
-const gridLayout = useCardGridLayout(() => contentWidth.value - 24, view)
-const gridStyle = computed(() =>
-  view.value === 'cards' && contentWidth.value > 0
-    ? { '--catalog-content-width': `${gridLayout.value.width}px`, '--catalog-columns': gridLayout.value.columns }
-    : undefined,
-)
+const isCardsView = computed(() => view.value === 'cards')
 
 // ── Keyboard: one combobox, as on the catalog page ──────────────────────────
 type ActiveViewInstance = ComponentPublicInstance & {
@@ -280,9 +272,9 @@ function confirmRemove() {
 </script>
 
 <template>
-  <div class="user-space-page" :style="gridStyle">
+  <div class="user-space-page">
     <BookCatalogTitleBar
-      :class="{ 'matches-grid': gridStyle }"
+      :class="{ 'matches-grid': isCardsView }"
       :view="view"
       :path="path"
       :show-search="showSearch"
@@ -388,7 +380,7 @@ function confirmRemove() {
   background: var(--bg-primary);
 }
 .matches-grid {
-  padding-inline: calc((100% - var(--catalog-content-width)) / 2);
+  padding-inline: 12px;
 }
 .user-space-content {
   flex: 1;

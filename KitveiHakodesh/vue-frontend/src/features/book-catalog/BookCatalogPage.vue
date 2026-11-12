@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { useIntervalFn, useElementSize } from '@vueuse/core'
-import { useCardGridLayout } from '@/composables/useCardGridLayout'
+import { useIntervalFn } from '@vueuse/core'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
@@ -65,20 +64,11 @@ const activeViewProps = computed(() =>
 // Search results have no tree shape: in tree mode they list.
 const searchResultsView = computed(() => (view.value === 'tree' ? 'list' : view.value))
 
-// Cards view: cards keep a 140-200px width and the grid takes whole columns,
-// centred; the address bar shares that width so its edges line up with the grid.
-// 24px = the grid's own inline padding (.catalog-cards).
+// Cards view: the address bar lines up with the card grid's edges (.matches-grid).
+// The grid sizes itself in CSS (.catalog-cards); measuring it here cost a second
+// layout on every resize frame.
 const contentRef = ref<HTMLElement | null>(null)
-const { width: contentWidth } = useElementSize(contentRef)
-const gridLayout = useCardGridLayout(() => contentWidth.value - 24, view)
-const gridStyle = computed(() =>
-  view.value === 'cards' && contentWidth.value > 0
-    ? {
-        '--catalog-content-width': `${gridLayout.value.width}px`,
-        '--catalog-columns': gridLayout.value.columns,
-      }
-    : undefined,
-)
+const isCardsView = computed(() => view.value === 'cards')
 
 function setView(v: BooksView) {
   // Assigning the store ref persists it — settingsStore watches and writes.
@@ -345,9 +335,9 @@ function onSearchEnter() {
 
 <template>
   <!-- Never translated, always RTL in every UI language (user decision). -->
-  <div class="books-page" dir="rtl" :style="gridStyle">
+  <div class="books-page" dir="rtl">
     <BookCatalogTitleBar
-      :class="{ 'matches-grid': gridStyle }"
+      :class="{ 'matches-grid': isCardsView }"
       :view="view"
       :path="path"
       :show-search="showSearch"
@@ -450,9 +440,9 @@ function onSearchEnter() {
   height: 100%;
   background: var(--bg-primary);
 }
-/* The pill spans the card grid's width, centred over it (see gridStyle). */
+/* The pill spans the card grid's width: the grid fills the page minus its 12px padding. */
 .matches-grid {
-  padding-inline: calc((100% - var(--catalog-content-width)) / 2);
+  padding-inline: 12px;
 }
 .books-content {
   flex: 1;
