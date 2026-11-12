@@ -51,6 +51,15 @@ export const USER_SETTINGS_SQL = {
     ORDER BY lineId, startOffset
   `,
 
+  /** GET_NOTES_FOR_LINES for lines of several books in one statement (line ids are global). */
+  GET_NOTES_FOR_BOOKS_LINES: (bookCount: number, lineCount: number) => `
+    SELECT id, bookId, lineId, startOffset, endOffset, note, quote, createdAt, updatedAt
+    FROM user_notes
+    WHERE bookId IN (${Array(bookCount).fill('?').join(',')})
+      AND lineId IN (${Array(lineCount).fill('?').join(',')})
+    ORDER BY lineId, startOffset
+  `,
+
   INSERT_NOTE: `
     INSERT INTO user_notes (bookId, lineId, startOffset, endOffset, note, quote, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)

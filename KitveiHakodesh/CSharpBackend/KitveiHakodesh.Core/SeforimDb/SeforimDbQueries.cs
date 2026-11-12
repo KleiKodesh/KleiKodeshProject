@@ -36,6 +36,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         private List<CategoryRow>? _categoriesCache;
         private List<BookRow>? _booksCache;
         private readonly object _catalogCacheLock = new();
+        private readonly Dictionary<int, int[]> _catalogCommentaryBookIdsByBook = new();
 
         /// <summary>
         /// Idle memory release: drops the cached catalog (every book + category row). The next
@@ -51,6 +52,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 _booksCache = null;
                 _categoriesById = null;
                 _booksById = null;
+                _catalogCommentaryBookIdsByBook.Clear();
             }
         }
 
@@ -627,15 +629,25 @@ namespace KitveiHakodesh.Core.SeforimDb
             // Applies to BOTH directions: a pair can be stored either way round (Zayit keeps
             // some forward-only), and the related-books list counts both.
             if (bookId > 0 && (result.Incoming.Count > 0 || result.Rows.Count > 0))
-            {
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = SeforimDbSqlStrings.GetCatalogCommentaryBooks;
-                cmd.Parameters.AddWithValue("@bookId", bookId);
-                using var r = cmd.ExecuteReader();
-                var ids = new List<int>();
-                while (r.Read()) ids.Add(r.GetInt32(0));
-                result.CatalogCommentaryBookIds = ids.ToArray();
-            }
+                result.CatalogCommentaryBookIds = CatalogCommentaryBookIdsOf(conn, bookId);
+            return result;
+        }
+
+        /// <summary>The catalogue's commentary verdict for <paramref name="bookId"/>: a per-book
+        /// constant of the catalogue, so it is read once per book and kept until the catalogue
+        /// cache is cleared (ClearCatalogCache), not once per line.</summary>
+        private int[] CatalogCommentaryBookIdsOf(SqliteConnection conn, int bookId)
+        {
+            lock (_catalogCacheLock)
+                if (_catalogCommentaryBookIdsByBook.TryGetValue(bookId, out var cached)) return cached;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetCatalogCommentaryBooks;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            var ids = new List<int>();
+            while (r.Read()) ids.Add(r.GetInt32(0));
+            var result = ids.ToArray();
+            lock (_catalogCacheLock) _catalogCommentaryBookIdsByBook[bookId] = result;
             return result;
         }
 
