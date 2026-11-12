@@ -38,7 +38,7 @@ export function createLineDecorationsBatch(): LineDecorationsBatch {
     const notes = noteWaiters
     anchorWaiters = []
     noteWaiters = []
-    const union = (waiters: Waiter<unknown>[]) => [...new Set(waiters.flatMap((w) => w.ids))]
+    const union = (waiters: readonly { ids: number[] }[]) => [...new Set(waiters.flatMap((w) => w.ids))]
     const answer = await getLineDecorationsForLines(union(anchors), union(notes))
     for (const w of anchors) w.resolve(anchors.length === 1 ? answer.anchors : rowsOf(answer.anchors, w.ids))
     for (const w of notes) {

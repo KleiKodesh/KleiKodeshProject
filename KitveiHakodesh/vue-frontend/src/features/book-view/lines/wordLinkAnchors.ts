@@ -355,6 +355,6 @@ export function applyWordLinkAnchors(content: string, anchors: WordLinkAnchor[])
 /** Cheap per-line signature for the renderers' annotation cache keys. Anchors are
  * immutable per line within a session (db content), so length alone distinguishes
  * the only transition that matters: not-loaded/empty → loaded. */
-export function wordLinkAnchorsSig(anchors: WordLinkAnchor[]): string {
+export function wordLinkAnchorsSig(anchors: readonly WordLinkAnchor[]): string {
   return anchors.length ? `wl${anchors.length}` : ''
 }
