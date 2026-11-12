@@ -463,7 +463,7 @@ namespace KitveiHakodesh.Core.SeforimDb
               -- deliberately left alone - if the data asserts the relationship, that outranks
               -- any inference made here.
               AND (
-                l.{schema.DeclaredBaseColumn} > 0
+                {schema.DeclaredBaseExpr("l")} > 0
                 OR ((SELECT cc.ancestorId FROM book src
                        JOIN category_closure cc ON cc.descendantId = src.categoryId
                        JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -499,7 +499,7 @@ namespace KitveiHakodesh.Core.SeforimDb
               -- deliberately left alone - if the data asserts the relationship, that outranks
               -- any inference made here.
               AND (
-                l.{schema.DeclaredBaseColumn} > 0
+                {schema.DeclaredBaseExpr("l")} > 0
                 OR ((SELECT cc.ancestorId FROM book src
                        JOIN category_closure cc ON cc.descendantId = src.categoryId
                        JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -511,7 +511,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                     AND (SELECT tb2.isBaseBook FROM book tb2 WHERE tb2.id = l.targetBookId) = 0)
               )
             GROUP BY l.sourceBookId
-            ORDER BY MAX(l.{schema.DeclaredBaseColumn}) DESC,
+            ORDER BY MAX({schema.DeclaredBaseExpr("l")}) DESC,
                      sb.isBaseBook DESC,
                      sb.orderIndex,
                      COUNT(DISTINCT l.targetLineId) DESC";

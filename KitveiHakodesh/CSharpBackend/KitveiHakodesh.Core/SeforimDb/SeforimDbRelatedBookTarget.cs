@@ -166,7 +166,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 WHERE ln.bookId = @from AND ln.lineIndex BETWEEN @lo AND @hi
                   AND l.connectionTypeId IN ({SeforimDbSqlStrings.InPlaceholders("c", _dependantTypeIds.Count)})
                   AND l.sourceBookId = @base
-                  {(undeclaredOk ? "" : $"AND l.{_schema.DeclaredBaseColumn} > 0")}";
+                  {(undeclaredOk ? "" : $"AND {_schema.DeclaredBaseExpr("l")} > 0")}";
             cmd.Parameters.AddWithValue("@from", fromBookId);
             cmd.Parameters.AddWithValue("@lo", topLineIndex - BaseLineProbeRadius);
             cmd.Parameters.AddWithValue("@hi", topLineIndex + BaseLineProbeRadius);
@@ -320,7 +320,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                     WHERE l.targetLineId IN ({ids})
                       AND l.connectionTypeId IN ({string.Join(",", _dependantTypeIds)})
                       AND l.sourceBookId = @reader
-                      {(undeclaredOk ? "" : $"AND l.{_schema.DeclaredBaseColumn} > 0")}";
+                      {(undeclaredOk ? "" : $"AND {_schema.DeclaredBaseExpr("l")} > 0")}";
                 cmd.Parameters.AddWithValue("@reader", position.BookId);
                 using var rd = cmd.ExecuteReader();
                 while (rd.Read())

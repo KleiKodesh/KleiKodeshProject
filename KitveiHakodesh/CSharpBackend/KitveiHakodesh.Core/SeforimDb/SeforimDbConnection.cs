@@ -91,6 +91,13 @@ namespace KitveiHakodesh.Core.SeforimDb
         private static SeforimDbLineContentCodec CodecFor(SqliteConnection connection)
             => SeforimDbLineContentCodec.Create(connection);
 
+        /// <summary>The probed shape of this database (harness use).</summary>
+        internal SeforimDbSchema ProbeSchemaForTests()
+        {
+            using var conn = Open();
+            return SchemaOf(conn);
+        }
+
         /// <summary>True if <paramref name="table"/> has a column named <paramref name="column"/>.</summary>
         private static bool ColumnExists(SqliteConnection connection, string table, string column)
         {

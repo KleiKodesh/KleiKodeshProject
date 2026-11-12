@@ -103,9 +103,19 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             // Each base text's own groups. Their base texts are in ONE query for all of them.
             var sourceBases = bases.BasesOf(sourceIds);
-            var sourceGroups = sourceIds.ToDictionary(id => id, id => BuildStaticGroups(
-                ReadStaticForward(conn, id, dependantTypeIds), sourceBases[id],
-                typeNames, books, categories, categoryCache));
+            int commentaryTypeId = typeNames.FirstOrDefault(kv => kv.Value == "COMMENTARY").Key;
+            var sourceGroups = sourceIds.ToDictionary(id => id, id =>
+            {
+                // What depends on the base text by its links, plus every book the library lists
+                // as based on it or on one of those (a commentary on its commentary).
+                var forward = ReadStaticForward(conn, id, dependantTypeIds);
+                var direct = bases.BooksBasedOn(new[] { id });
+                var listed = direct.Concat(bases.BooksBasedOn(direct)).Distinct();
+                var linked = new HashSet<int>(forward.Select(f => f.Item1));
+                foreach (int extra in listed)
+                    if (extra != id && !linked.Contains(extra)) forward.Add((extra, commentaryTypeId));
+                return BuildStaticGroups(forward, sourceBases[id], typeNames, books, categories, categoryCache);
+            });
 
             // The primary base of every book in those groups - again ONE query - so a book
             // that merely cites the base text (Rif Shabbat in Berachot's list) is dropped.

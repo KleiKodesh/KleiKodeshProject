@@ -5,14 +5,17 @@ using Microsoft.Data.Sqlite;
 namespace KitveiHakodesh.Core.SeforimDb
 {
     /// <summary>
-    /// The base texts of many books at once, best first - the same answer as
-    /// <see cref="SeforimDbSqlStrings.GetReverseBooks"/> per book, in one statement for all.
+    /// The base texts of many books at once, best first, for the related-books list.
     ///
-    /// GetReverseBooks drops lateral citations row by row with three correlated subqueries
-    /// (declared base, or same top-level corpus and the asked-about book not a base text).
-    /// Only the declared flag varies per row; the corpus test depends on the (base, book)
-    /// PAIR. So the links are aggregated per pair once, the pair test is made once per pair
-    /// from a per-book lookup, and a pair failing it keeps only its declared rows' figures.
+    /// A book's bases are its rows in the library's <c>book_base_text</c> table; a book with no
+    /// row there (and every book on a library without the table - Zayit) takes the books that
+    /// link to it with a DECLARED base link (schema.DeclaredBaseColumn &gt; 0). Bases inferred
+    /// from undeclared links are not used. Several bases rank as GetReverseBooks ranked them:
+    /// declared flag (declared links only), a base-text book first, catalogue order, then how
+    /// much of the book the base covers - counted only when the order still needs it.
+    ///
+    /// <see cref="PairAllowedUndeclared"/> serves the click resolver, whose per-line link rules
+    /// are GetReverseLineData's and unchanged.
     /// </summary>
     internal sealed class BaseTextLookup
     {
@@ -42,50 +45,50 @@ namespace KitveiHakodesh.Core.SeforimDb
         public Dictionary<int, List<int>> BasesOf(IReadOnlyCollection<int> bookIds, bool primaryOnly = false)
         {
             var result = bookIds.Distinct().ToDictionary(id => id, _ => new List<int>());
-            if (result.Count == 0 || _typeIds.Count == 0) return result;
-            string bp = "l." + _schema.DeclaredBaseColumn;
+            if (result.Count == 0) return result;
+            string bp = _schema.DeclaredBaseExpr("l");
             string typeList = string.Join(",", _typeIds);
+            var kept = new List<Ranked>();
 
-            // Pass 1: per (book, base) pair, the declared flag only - no per-line counting.
-            var pairs = new List<(int Target, int Source, long MaxDeclared)>();
-            using (var cmd = _conn.CreateCommand())
+            // The table first: one indexed read for all of them.
+            if (_schema.HasBookBaseText)
             {
-                var targets = result.Keys.ToList();
+                using var cmd = _conn.CreateCommand();
+                cmd.CommandText = $"SELECT bookId, baseBookId FROM book_base_text WHERE bookId IN ({string.Join(",", result.Keys)}) AND baseBookId != bookId";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) kept.Add(new Ranked { Target = r.GetInt32(0), Source = r.GetInt32(1), FromTable = true });
+            }
+
+            // Books with no row: their declared base links, one grouped statement.
+            var withoutRow = result.Keys.Where(id => !kept.Any(k => k.Target == id)).ToList();
+            if (withoutRow.Count > 0 && _typeIds.Count > 0 && _schema.HasDeclaredBaseColumn)
+            {
+                using var cmd = _conn.CreateCommand();
                 cmd.CommandText = $@"
                     SELECT l.targetBookId, l.sourceBookId, MAX({bp})
                     FROM link l
-                    WHERE l.targetBookId IN ({SeforimDbSqlStrings.InPlaceholders("t", targets.Count)})
+                    WHERE l.targetBookId IN ({string.Join(",", withoutRow)})
                       AND l.connectionTypeId IN ({typeList})
+                      AND {bp} > 0
                       AND l.sourceBookId != l.targetBookId
                     GROUP BY l.targetBookId, l.sourceBookId";
-                for (int i = 0; i < targets.Count; i++) cmd.Parameters.AddWithValue("@t" + i, targets[i]);
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
-                    pairs.Add((r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? long.MinValue : r.GetInt64(2)));
+                    kept.Add(new Ranked { Target = r.GetInt32(0), Source = r.GetInt32(1), MaxDeclared = r.GetInt64(2), DeclaredOnly = true });
             }
-            if (pairs.Count == 0) return result;
+            if (kept.Count == 0) return result;
 
-            LoadFacts(pairs.Select(p => p.Target).Concat(pairs.Select(p => p.Source)));
-
-            // A pair failing the corpus test keeps only its declared rows (and so their MAX).
-            var kept = new List<Ranked>();
-            foreach (var p in pairs)
+            LoadFacts(kept.Select(k => k.Source));
+            kept.RemoveAll(k => !_facts.ContainsKey(k.Source)); // a base missing from the book table
+            foreach (var k in kept)
             {
-                if (!_facts.TryGetValue(p.Source, out var source)) continue; // JOIN book sb
-                bool hasTarget = _facts.TryGetValue(p.Target, out var target);
-                bool pairAllowed = hasTarget && source.Corpus != null && target.Corpus != null
-                                   && source.Corpus == target.Corpus && target.IsBaseBook == 0;
-                if (pairAllowed || p.MaxDeclared > 0)
-                    kept.Add(new Ranked
-                    {
-                        Target = p.Target, Source = p.Source, MaxDeclared = p.MaxDeclared,
-                        IsBase = source.IsBaseBook, Order = source.OrderIndex, DeclaredOnly = !pairAllowed,
-                    });
+                var f = _facts[k.Source];
+                k.IsBase = f.IsBaseBook;
+                k.Order = f.OrderIndex;
             }
 
-            // Pass 2: the coverage count (COUNT DISTINCT target lines) only breaks ties on the
-            // keys above - counted in ONE statement, only for the books that have such a tie
-            // where the order is needed.
+            // Coverage (COUNT DISTINCT target lines) only breaks ties on the keys above -
+            // counted in ONE statement, only for the books that have such a tie.
             static (long, int, int) Key(Ranked x) => (x.MaxDeclared, x.IsBase, x.Order);
             var byTarget = kept.GroupBy(k => k.Target)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.MaxDeclared).ThenByDescending(x => x.IsBase).ThenBy(x => x.Order).ToList());
@@ -104,11 +107,24 @@ namespace KitveiHakodesh.Core.SeforimDb
             return result;
         }
 
+        /// <summary>The books whose table row names <paramref name="baseBookIds"/> as a base
+        /// (idx_book_base_text_base). Empty on a library without the table.</summary>
+        public List<int> BooksBasedOn(IReadOnlyCollection<int> baseBookIds)
+        {
+            var list = new List<int>();
+            if (!_schema.HasBookBaseText || baseBookIds.Count == 0) return list;
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = $"SELECT DISTINCT bookId FROM book_base_text WHERE baseBookId IN ({string.Join(",", baseBookIds)}) ORDER BY bookId";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) list.Add(r.GetInt32(0));
+            return list;
+        }
+
         private sealed class Ranked
         {
             public int Target, Source, IsBase, Order;
             public long MaxDeclared, Count;
-            public bool DeclaredOnly;
+            public bool DeclaredOnly, FromTable;
         }
 
         private void LoadCoverageCounts(List<Ranked> pairs, string bp, string typeList)
