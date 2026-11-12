@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UnreachableBadge from '@/layout/UnreachableBadge.vue'
 import { ref, computed } from 'vue'
-import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fluent'
+import { IconPin12Filled, IconDelete16Filled, IconArrowMove20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { wantsNewTab, OPEN_IN_NEW_TAB_HINT } from '@/composables/useOpenInNewTab'
 import type { HomeSuggestionCard as HomeSuggestionCardData } from './homeSuggestionCard'
@@ -188,6 +188,14 @@ function onRemove() {
       >
         <IconPin12Filled />
       </button>
+      <span
+        v-if="card.move"
+        class="card-action card-action--move"
+        :title="card.move.title"
+        v-on="card.move.events"
+      >
+        <IconArrowMove20Regular />
+      </span>
       <button
         type="button"
         class="card-action card-action--remove"
@@ -354,6 +362,11 @@ function onRemove() {
 }
 .card-action--remove {
   color: var(--text-secondary);
+}
+.card-action--move {
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
 }
 .card-action--remove:hover {
   color: var(--status-danger);

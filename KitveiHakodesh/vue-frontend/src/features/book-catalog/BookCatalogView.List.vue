@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { IconFolder20Filled, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconFolder20Filled, IconDelete16Regular, IconArrowMove20Regular } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
@@ -9,6 +9,7 @@ import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 import { titleWithAuthor } from './titleWithAuthor'
+import { useFolderReorder } from './useFolderReorder'
 
 const props = defineProps<{
   items: FsItem[]
@@ -22,7 +23,10 @@ const emit = defineEmits<{
   selectFile: [LocalFileItem, boolean?]
   /** UserSpace only: the remove action on a folder that canRemove allows. */
   removeFolder: [CategoryNode]
+  /** UserSpace only: a root dragged onto another root's place. */
+  moveFolder: [CategoryNode, CategoryNode]
 }>()
+const reorder = useFolderReorder(() => props.canRemove, (from, to) => emit('moveFolder', from, to))
 
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -87,8 +91,9 @@ function selectItem(index: number, event?: MouseEvent) {
         :key="item.uid"
         class="fs-item"
         data-nav-item
-        :class="{ 'is-focused': focusedIndex === index }"
+        :class="{ 'is-focused': focusedIndex === index, 'is-drop-target': item.kind === 'folder' && reorder.over.value === item.node }"
         :title="getTooltip(item)"
+        v-bind="item.kind === 'folder' ? reorder.targetAttrs(item.node) : {}"
         @mousedown.prevent
         @click="selectItem(index, $event)"
         @auxclick.middle="selectItem(index, $event)"
@@ -101,6 +106,14 @@ function selectItem(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
+        <span
+          v-if="item.kind === 'folder' && canRemove?.(item.node)"
+          class="row-move"
+          :title="$t('userSpace.moveRoot')"
+          v-on="reorder.handleEvents(item.node)"
+        >
+          <IconArrowMove20Regular />
+        </span>
         <button
           v-if="item.kind === 'folder' && canRemove?.(item.node)"
           type="button"
@@ -175,7 +188,8 @@ function selectItem(index: number, event?: MouseEvent) {
 .file-icon svg {
   color: inherit;
 }
-/* UserSpace roots: remove, shown on hover or keyboard highlight. */
+/* UserSpace roots: move and remove, shown on hover or keyboard highlight. */
+.row-move,
 .row-remove {
   display: flex;
   align-items: center;
@@ -184,12 +198,30 @@ function selectItem(index: number, event?: MouseEvent) {
   width: 22px;
   height: 22px;
   padding: 0;
-  margin-inline-start: auto;
   border-radius: 4px;
   color: var(--text-secondary);
   opacity: 0;
   pointer-events: none;
 }
+.row-move {
+  margin-inline-start: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.row-move + .row-remove {
+  margin-inline-start: 0;
+}
+.row-remove {
+  margin-inline-start: auto;
+}
+.row-move:hover {
+  background: var(--hover-bg);
+}
+.fs-item.is-drop-target {
+  box-shadow: inset 0 0 0 2px var(--accent-color);
+}
+.fs-item:hover .row-move,
+.fs-item.is-focused .row-move,
 .fs-item:hover .row-remove,
 .fs-item.is-focused .row-remove {
   opacity: 1;

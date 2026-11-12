@@ -2,6 +2,7 @@
   "addComputerFolder": "Add a folder from this computer",
   "addCatalogFolder": "Add a folder from the catalog",
   "removeRoot": "Remove from UserSpace",
+  "moveRoot": "Drag to change the order",
   "removeConfirm": "Remove \"{title}\" from UserSpace?",
   "removeConfirmDesc": "Only the link is removed. The books and files themselves are not deleted.",
   "searchPlaceholder": "Search UserSpace",

@@ -12,6 +12,7 @@ import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { titleWithAuthor } from './titleWithAuthor'
 import { stripCommentaryTarget } from './stripCommentaryTarget'
+import { useFolderReorder } from './useFolderReorder'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
@@ -27,7 +28,10 @@ const emit = defineEmits<{
   selectFile: [LocalFileItem, boolean?]
   /** UserSpace only: the remove action on a folder that canRemove allows. */
   removeFolder: [CategoryNode]
+  /** UserSpace only: a root dragged onto another root's place. */
+  moveFolder: [CategoryNode, CategoryNode]
 }>()
+const reorder = useFolderReorder(() => props.canRemove, (from, to) => emit('moveFolder', from, to))
 
 const cardsEl = ref<HTMLElement | null>(null)
 const CARD_CELL = ':scope > *'
@@ -55,6 +59,11 @@ function getTitle(item: FsItem): string {
   return titleWithAuthor(stripCommentaryTarget(item.book.title), item.book.authors)
 }
 
+function folderOf(i: number): CategoryNode | null {
+  const item = props.items[i]
+  return item?.kind === 'folder' ? item.node : null
+}
+
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
@@ -63,6 +72,10 @@ const cards = computed((): CardData[] =>
     icon: item.kind === 'folder' ? FOLDER_ICON : item.kind === 'file' ? markRaw(fileIcon(item.file).icon20) : BOOK_ICON,
     color: item.kind === 'folder' ? 'var(--status-warning)' : item.kind === 'file' ? fileIcon(item.file).color : '#c1440e',
     remove: item.kind === 'folder' && props.canRemove?.(item.node) ? () => emit('removeFolder', item.node) : undefined,
+    move:
+      item.kind === 'folder' && props.canRemove?.(item.node)
+        ? { title: t('userSpace.moveRoot'), events: reorder.handleEvents(item.node) as Record<string, (e: never) => void> }
+        : undefined,
     open: (openInNewTab) => {
       focusedIndex.value = i
       activateIndex(i, openInNewTab)
@@ -109,7 +122,8 @@ defineExpose({
         v-for="(card, i) in cards"
         :key="card.key"
         :card="card"
-        :class="{ 'is-focused': focusedIndex === i }"
+        :class="{ 'is-focused': focusedIndex === i, 'is-drop-target': items[i]?.kind === 'folder' && reorder.over.value === folderOf(i) }"
+        v-bind="folderOf(i) ? reorder.targetAttrs(folderOf(i)!) : {}"
       />
     </div>
   </div>
@@ -167,6 +181,9 @@ defineExpose({
 .is-focused :deep(.card-action) {
   opacity: 1;
   pointer-events: auto;
+}
+.is-drop-target :deep(.card) {
+  box-shadow: inset 0 0 0 2px var(--accent-color);
 }
 .is-focused :deep(.card) {
   background: color-mix(in srgb, var(--text-primary) 12%, var(--bg-primary));

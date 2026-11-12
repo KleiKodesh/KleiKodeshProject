@@ -265,6 +265,13 @@ function onRemoveFolder(node: CategoryNode) {
   const key = rootKeyOf(node)
   if (key) removing.value = { key, title: node.title }
 }
+// Move: drag a root by its handle onto another root to change the order.
+function onMoveFolder(from: CategoryNode, to: CategoryNode) {
+  const fromKey = rootKeyOf(from)
+  const toKey = rootKeyOf(to)
+  if (fromKey && toKey) userSpaceStore.move(fromKey, toKey)
+  focusSearchInput()
+}
 function confirmRemove() {
   if (removing.value) removeRoot(removing.value.key)
   removing.value = null
@@ -339,6 +346,7 @@ function confirmRemove() {
           @expand-folder="onExpandFolder"
           @collapse-folder="onCollapseFolder"
           @remove-folder="onRemoveFolder"
+          @move-folder="onMoveFolder"
         />
         <template v-if="isSearching">
           <MessageBanner
