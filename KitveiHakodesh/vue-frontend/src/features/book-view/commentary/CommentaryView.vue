@@ -645,6 +645,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getCurrentLineIndex: () => null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
   getThumbRect: () => scroller()?.thumbRect() ?? null,
+  getTopRow: () => scroller()?.readFirstVisible(0)?.index ?? null,
   getBookTitle: () => '',
   getLabelAt: (index) => {
     const header = headerAt(index)
@@ -766,7 +767,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
             tabindex="0"
             data-ctrlf-enabled
             @opened="scrollerOpened"
-            @moveend="onScrollerMoveEnd(); onMoveEnd($event)"
+            @moveend="onScrollerMoveEnd($event); onMoveEnd($event)"
             @move="onScrollerMove"
             @scroll="onScroll"
             @click="onMarkerClick"

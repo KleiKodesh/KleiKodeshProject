@@ -456,6 +456,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
   getThumbRect: () => scroller()?.thumbRect() ?? null,
+  getTopRow: () => scroller()?.readFirstVisible(0)?.index ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
   getActiveAltTocEntry: () => props.getActiveAltTocEntry,
@@ -698,7 +699,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       @scroll="onScroll()"
       @move="onScrollerMove"
       @opened="onScrollerOpened"
-      @moveend="onScrollerMoveEnd(); emit('moveend')"
+      @moveend="onScrollerMoveEnd($event); emit('moveend')"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >

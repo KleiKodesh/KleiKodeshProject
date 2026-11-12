@@ -43,8 +43,8 @@ export interface ScrollbarTocTooltipData {
 const HOVER_DELAY_MS = 120
 /** How long the scroll-follow label stays after the scrolling stops. */
 const SCROLL_LINGER_MS = 700
-/** Scroll-follow shows once one run (one move of the scroller) has travelled this many screens. */
-const JOURNEY_SCREENS = 5
+/** How many rows the reader scrolls from where the scroll began before the label shows. */
+const JOURNEY_ROWS = 5
 /** Books shorter than this many screens never get the scroll-follow label. */
 const MIN_SCREENS = 4
 
@@ -77,6 +77,8 @@ export function useBookViewScrollbarTocTooltip(
      * (its `move` event): landings (a TOC jump, a restore) do not show it.
      */
     getThumbRect?: () => WindowedScrollerThumbRect | null
+    /** The row at the top of the scroller (its readFirstVisible) - how far the reader has scrolled. */
+    getTopRow?: () => number | null
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -93,6 +95,7 @@ export function useBookViewScrollbarTocTooltip(
     clearHoverTimer()
     clearScrollLinger()
     isScrollFollow = false
+    scrollStartRow = null
     scrollbarTocTooltip.value = null
   }
 
@@ -117,24 +120,22 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  /**
-   * Thumb top where the current run began. A run is one move of the scroller: from
-   * its first reader scroll until the scroller reports the move ended (moveend).
-   */
-  let scrollRunStartTop: number | null = null
+  /** The top row where the reader's scrolling began: set by their first scroll, cleared when the label goes or the app lands. */
+  let scrollStartRow: number | null = null
 
   /**
    * Worth labelling only when the book is long (thumb under a quarter of the track)
-   * and the reader travels far — one run covering JOURNEY_SCREENS
-   * screens. The thumb is one screen tall on the track, so its travel divided by its
-   * height is the distance in screens. A nudge never shows it, however long it lasts.
-   * Once shown, it keeps following until it lingers out.
+   * and the reader has scrolled JOURNEY_ROWS rows from where they started - read from
+   * the scroller's own top row, no timing. Once shown, it keeps following until it
+   * lingers out.
    */
-  function isJourney(thumbTop: number, thumbHeight: number, trackHeight: number): boolean {
-    if (scrollRunStartTop === null) scrollRunStartTop = thumbTop
+  function isJourney(thumbHeight: number, trackHeight: number): boolean {
+    const row = options.getTopRow?.() ?? options.getCurrentLineIndex()
+    if (row == null) return false
+    if (scrollStartRow === null) scrollStartRow = row
     if (isScrollFollow) return true
     if (!thumbHeight || thumbHeight * MIN_SCREENS > trackHeight) return false
-    return Math.abs(thumbTop - scrollRunStartTop) >= thumbHeight * JOURNEY_SCREENS
+    return Math.abs(row - scrollStartRow) >= JOURNEY_ROWS
   }
 
   function followScroll() {
@@ -142,7 +143,7 @@ export function useBookViewScrollbarTocTooltip(
     // Where the thumb is GOING, not where its glide has got to.
     const thumb = options.getThumbRect?.()
     if (!bar || !thumb || options.isSuspended?.()) return
-    if (!isJourney(thumb.top, thumb.height, thumb.trackHeight)) return
+    if (!isJourney(thumb.height, thumb.trackHeight)) return
     const thumbCenterY = thumb.top + thumb.height / 2
     const index = lineIndexForPointer(thumbCenterY)
     const bookTitle = titleAt(index)
@@ -263,9 +264,9 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  /** The scroller's `moveend`: the run is over; the next reader scroll starts a new one. */
-  function onScrollerMoveEnd() {
-    scrollRunStartTop = null
+  /** The scroller's `moveend`: an app landing moves the start; the reader's own pauses do not. */
+  function onScrollerMoveEnd(source?: WindowedScrollerMoveSource) {
+    if (source === 'landing') scrollStartRow = null
   }
 
   return { scrollbarTocTooltip, closeScrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd }
