@@ -161,7 +161,7 @@ function onToggleToc(event: MouseEvent) {
     </ToolbarSplitDropdown>
     <!-- the book view's sync-commentaries toggle (same icon and tooltips), for the notes pane -->
     <button
-      v-if="hasNotes"
+      :disabled="!hasNotes"
       :class="{ active: notesSync }"
       :title="notesSync ? $t('fastDocView.syncNotesOnTitle') : $t('fastDocView.syncNotesOffTitle')"
       @click="emit('toggleNotesSync')"

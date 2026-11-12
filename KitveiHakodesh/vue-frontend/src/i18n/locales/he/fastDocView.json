@@ -17,7 +17,7 @@
   "cancelOpenAsPdf": "ביטול ההמרה ל-PDF",
   "convertingToast": "יש להמיר תחלה את המסמך ל-PDF באמצעות Word - נא להמתין...",
   "openConvertedPdf": "קובץ ה-PDF מוכן - לחצו לפתיחה",
-  "openInDefaultApp": "פתיחה בתוכנה המוגדרת כבררת מחדל",
+  "openInDefaultApp": "פתיחה בתוכנת ברירת המחדל",
   "openInDefaultAppFailed": "לא ניתן היה לפתוח את הקובץ בתוכנה אחרת",
   "goToFootnoteReference": "מעבר למקום ההערה בתקסט",
   "goToEndnoteReference": "מעבר למקום הערת הסוף בתקסט",

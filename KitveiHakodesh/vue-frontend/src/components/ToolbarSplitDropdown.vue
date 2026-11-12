@@ -160,6 +160,10 @@ button {
 .active .split-dropdown-main {
   color: var(--accent-color);
 }
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* ── Dropdown panel (BookViewWordLinkMarkersDropdown look) ── */
 .split-dropdown-panel {
