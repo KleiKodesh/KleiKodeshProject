@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
   RelatedBook, RelatedBooksList, CommentaryFilterGroup,
 } from './queries.types'
 
@@ -372,13 +372,8 @@ export async function getDefaultCommentators(bookId: number): Promise<{ commenta
 // ── Reverse lookups (source & targum) + static filter books ────────────────────
 
 /** Reverse source/targum lookup — pass commentary type ids for source, targum type ids for targum. */
-export async function getReverseLineData(lineIds: number[], typeIds: number[]): Promise<ReverseLineRow[]> {
-  if (lineIds.length === 0 || typeIds.length === 0) return []
-  return (await seforimOp<{ rows: ReverseLineRow[] }>('getReverseLineData', { lineIds, typeIds })).rows
-}
-
 /**
- * The lines getReverseLineData finds, once each and without their text (the commentary
+ * The lines a reverse lookup finds, once each and without their text (the commentary
  * panel fetches the text of the rows it shows). `lines` is a list of ids or a book's
  * index range; a section as a range spares sending (and binding) thousands of ids.
  */
