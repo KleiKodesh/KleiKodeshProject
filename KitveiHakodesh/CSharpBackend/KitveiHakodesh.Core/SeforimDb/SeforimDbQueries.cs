@@ -25,8 +25,9 @@ namespace KitveiHakodesh.Core.SeforimDb
     public sealed partial class SeforimDbQueries
     {
         // ── Catalog ─────────────────────────────────────────────────────────────────
-        // The catalog (categories + books) is STATIC for the life of the process — the
-        // seforim DB is read-only and only ever replaced while the service is down. Both
+        // The catalog (categories + books) is static while the database FILE is unchanged —
+        // we never write it, but another app may replace or update it in place; Open() then
+        // drops this cache (ForgetShapeIfFileChanged in SeforimDbConnection.cs). Both
         // queries are also the heaviest catalog cost (getAllBooks is a 3-table GROUP BY +
         // group_concat over every book, ~70-90ms), so serve them from an in-memory cache
         // after the first load: every consumer (dev reloads, future hosted path) gets an

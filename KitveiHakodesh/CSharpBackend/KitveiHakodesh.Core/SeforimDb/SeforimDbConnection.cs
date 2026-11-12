@@ -61,10 +61,42 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (string.IsNullOrWhiteSpace(_databasePath))
                 throw SeforimDbUnavailableException.NotConfigured();
 
-            if (!File.Exists(_databasePath))
+            var file = new FileInfo(_databasePath!);
+            if (!file.Exists)
                 throw SeforimDbUnavailableException.NotOnDisk(_databasePath!);
 
+            ForgetShapeIfFileChanged(file);
             return SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
+        }
+
+        /// <summary>Size + last-write of the file the remembered shape and catalog came from.</summary>
+        private (long Length, long Ticks) _shapeFileStamp;
+        private readonly object _shapeLock = new();
+
+        /// <summary>
+        /// The database can be replaced or updated IN PLACE (an Otzaria update, the user
+        /// copying in another library) - same path, different tables. Everything this
+        /// instance remembers about the file (what tables/columns it has, the catalog) is
+        /// dropped when the file's size or last-write changes, so the next query probes the
+        /// new file. A stat per open: microseconds. SeforimDbSchema keys its own cache the same way.
+        /// </summary>
+        private void ForgetShapeIfFileChanged(FileInfo file)
+        {
+            var stamp = (file.Length, file.LastWriteTimeUtc.Ticks);
+            lock (_shapeLock)
+            {
+                if (stamp == _shapeFileStamp) return;
+                bool firstOpen = _shapeFileStamp == default;
+                _shapeFileStamp = stamp;
+                if (firstOpen) return;
+            }
+            _bookHasDependenceType = null;
+            _lineHasCharCount = null;
+            _linkHasTargetLineIndex = null;
+            _hasLinkAnchorTable = null;
+            _hasLineNoteTable = null;
+            _hasBookVersionTables = null;
+            ClearCatalogCache();
         }
 
         /// <summary>
