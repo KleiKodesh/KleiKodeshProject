@@ -44,6 +44,8 @@ const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('פתח קובץ', 'folder', 'Ctrl+4'),
   navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5'),
   navItem('אזור אישי', 'userSpace', 'Ctrl+U'),
+  // In development: shown in dev builds only until the user-space index exists.
+  ...(import.meta.env.DEV ? [navItem('חיפוש באזור האישי', 'userSpaceSearch', '')] : []),
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),

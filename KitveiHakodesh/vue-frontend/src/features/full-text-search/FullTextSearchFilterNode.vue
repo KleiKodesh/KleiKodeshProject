@@ -8,6 +8,10 @@ const props = withDefaults(
   defineProps<{
     category: CategoryNode
     checkedBookIds: Set<number>
+    /** User space: the checked computer files, by path. Absent for the library tree. */
+    checkedFilePaths?: Set<string>
+    /** User space: unchecked computer folders, by node id. */
+    uncheckedFolderIds?: Set<number>
     resultCounts: Map<number, number>
     hasSearched?: boolean
     /** Nesting level, 0 at the roots. Drives the type ladder only — no indent. */
@@ -25,6 +29,7 @@ const rung = computed(() => Math.min(props.depth, LADDER_MAX_RUNG))
 
 const emit = defineEmits<{
   toggleBook: [number]
+  toggleFile: [string]
   toggleCategory: [CategoryNode, boolean]
   navigateToBook: [number]
 }>()
@@ -34,7 +39,7 @@ const emit = defineEmits<{
 const expansion = inject(FILTER_EXPANSION_KEY)!
 const expanded = computed(() => expansion.isExpanded(props.category.id))
 function toggleExpanded() {
-  expansion.toggle(props.category.id)
+  expansion.toggle(props.category)
 }
 
 function allBookIds(cat: CategoryNode): number[] {
@@ -47,15 +52,22 @@ const bookIds = computed(() => props.category.subtreeBookIds ?? allBookIds(props
 const totalResults = computed(() =>
   bookIds.value.reduce((s, id) => s + (props.resultCounts.get(id) ?? 0), 0),
 )
-const isChecked = computed(
-  () => bookIds.value.length > 0 && bookIds.value.every((id) => props.checkedBookIds.has(id)),
+// A computer folder's files count only once it has been opened (its contents load then).
+const filePaths = computed(() => (props.category.files ?? []).map((f) => f.path))
+const itemCount = computed(() => bookIds.value.length + filePaths.value.length)
+const checkedCount = computed(
+  () => bookIds.value.filter((id) => props.checkedBookIds.has(id)).length
+     + filePaths.value.filter((p) => props.checkedFilePaths?.has(p)).length,
 )
-const isIndet = computed(() => {
-  const n = bookIds.value.filter((id) => props.checkedBookIds.has(id)).length
-  return n > 0 && n < bookIds.value.length
-})
+// A computer folder not opened yet has no files to count: its own checked state stands.
+const isUnopenedFolder = computed(() => props.category.files !== undefined && itemCount.value === 0)
+const isChecked = computed(() => isUnopenedFolder.value
+  ? !props.uncheckedFolderIds?.has(props.category.id)
+  : itemCount.value > 0 && checkedCount.value === itemCount.value)
+const isIndet = computed(() => checkedCount.value > 0 && checkedCount.value < itemCount.value)
+// `files` is set on every computer folder, loaded or not: it can always be opened.
 const hasChildren = computed(
-  () => props.category.children.length > 0 || props.category.books.length > 0,
+  () => props.category.children.length > 0 || props.category.books.length > 0 || props.category.files !== undefined,
 )
 
 function firstNavigableBookId(cat: CategoryNode): number | null {
@@ -109,9 +121,12 @@ function navigateToCategory() {
         :category="child"
         :depth="depth + 1"
         :checked-book-ids="checkedBookIds"
+        :checked-file-paths="checkedFilePaths"
+        :unchecked-folder-ids="uncheckedFolderIds"
         :result-counts="resultCounts"
         :has-searched="hasSearched"
         @toggle-book="emit('toggleBook', $event)"
+        @toggle-file="emit('toggleFile', $event)"
         @toggle-category="(c, v) => emit('toggleCategory', c, v)"
         @navigate-to-book="emit('navigateToBook', $event)"
       />
@@ -135,6 +150,19 @@ function navigateToCategory() {
           </button>
         </div>
       </template>
+      <div
+        v-for="file in category.files ?? []"
+        :key="file.path"
+        class="row book-row"
+        :class="{ checked: checkedFilePaths?.has(file.path) }"
+      >
+        <span class="row-title" :class="{ dimmed: !checkedFilePaths?.has(file.path) }" :title="file.path">
+          {{ file.title || file.name }}
+        </span>
+        <button class="checkbox-col" @click.stop="emit('toggleFile', file.path)">
+          <span class="check-mark">✓</span>
+        </button>
+      </div>
     </template>
   </div>
 </template>

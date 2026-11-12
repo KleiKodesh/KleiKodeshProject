@@ -25,5 +25,6 @@
   },
   "allRoots": "All",
   "rootPills": "Filter by folder",
-  "wholeCatalog": "Book catalog"
+  "wholeCatalog": "Book catalog",
+  "searchNotIndexed": "Searching the files in UserSpace is not available yet."
 }

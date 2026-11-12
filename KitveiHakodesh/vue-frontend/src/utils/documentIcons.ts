@@ -30,6 +30,8 @@ import {
   IconChatSparkle24Regular,
   IconFolderPerson20Filled,
   IconFolderPerson24Filled,
+  IconDocumentSearch20Filled,
+  IconDocumentSearch24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { IconSearchSparkle24, IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
@@ -68,6 +70,7 @@ export type DocumentIconKey =
   | 'folder'
   | 'fileSearch'
   | 'userSpace'
+  | 'userSpaceSearch'
   | 'hameshiv'
   | 'settings'
   | 'home'
@@ -103,6 +106,8 @@ const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   // resolves it against the live document before baking it into a PNG.
   folder:   { key: 'folder',   color: 'var(--status-warning)', icon20: IconFolder20Filled, icon24: IconFolder24Filled },
   userSpace: { key: 'userSpace', color: '#2b8a7e', icon20: IconFolderPerson20Filled, icon24: IconFolderPerson24Filled },
+  // UserSpace's colour, so the two read as one family.
+  userSpaceSearch: { key: 'userSpaceSearch', color: '#2b8a7e', icon20: IconDocumentSearch20Filled, icon24: IconDocumentSearch24Filled },
   // Self-contained multi-colour icons: they carry their own fills (gradients for
   // the sparkle, a hardcoded orange for Everything), so they are used exactly as the
   // tiles use them and take no colour of their own.
@@ -156,6 +161,8 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'fileSearch'
     case '/user-space':
       return 'userSpace'
+    case '/user-space-search':
+      return 'userSpaceSearch'
     case '/settings':
       return 'settings'
     default:
