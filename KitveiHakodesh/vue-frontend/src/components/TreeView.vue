@@ -162,21 +162,12 @@ onMounted(() => {
  */
 let positionedNodeId: number | undefined
 
-function isFullyVisibleBelowHeader(index: number): boolean {
-  const scroller = scrollerRef.value
-  const viewport = containerRef.value
-  const row = scroller?.isRowRendered(index) ? scroller.rowElement(index) : null
-  if (!viewport || !row) return false
-  const top = row.offsetTop
-  return top >= viewport.scrollTop + headerHeight.value && top + row.offsetHeight <= viewport.scrollTop + viewport.clientHeight
-}
-
 function revealCentred(id: number) {
   const index = visibleIndexById.value.get(id)
   const scroller = scrollerRef.value
   if (index == null || !scroller) return
   // Already fully on screen (below the sticky header): leave the pane where it is.
-  if (isFullyVisibleBelowHeader(index)) return
+  if (scroller.isRowFullyVisible(index, { topInsetPx: headerHeight.value })) return
   const rowHeight = scroller.rowElement(index)?.offsetHeight ?? props.rowHeight ?? 28
   void scroller.scrollToIndex(index, { offsetPx: centringOffset(rowHeight) })
 }
@@ -253,6 +244,11 @@ defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded
  * area (not just its direct parent), drawn as real tree rows in an overlay above the
  * scroller. Read from the data: the scroller names the first visible row, the
  * node names its parents. Recomputed once per frame on scroll.
+ *
+ * The header's height for a path is known before it is drawn: its rows are the
+ * path's nodes, the same rows the tree draws (one or two lines - a long title wraps),
+ * at the same width. A node already in the header is measured there; otherwise its
+ * own row in the scroller when mounted; otherwise one line (`rowHeight`).
  */
 const headerRef = ref<HTMLElement | null>(null)
 const headerPath = ref<TreeNodeItem[]>([])
@@ -260,35 +256,54 @@ const headerPath = ref<TreeNodeItem[]>([])
 const scrollbarWidth = ref(0)
 const { height: headerHeight } = useElementSize(headerRef, undefined, { box: 'border-box' })
 
+function headerRowHeight(node: TreeNodeItem): number {
+  const shownAt = headerPath.value.findIndex((n) => n.id === node.id)
+  const shown = shownAt >= 0 ? (headerRef.value?.children[shownAt] as HTMLElement | undefined) : undefined
+  if (shown) return shown.offsetHeight
+  const index = visibleIndexById.value.get(node.id)
+  const scroller = scrollerRef.value
+  const row = index != null && scroller?.isRowRendered(index) ? scroller.rowElement(index) : null
+  return row?.offsetHeight ?? props.rowHeight ?? 28
+}
+
+/** The sticky header's height while it shows `path`. */
+function headerHeightFor(path: readonly TreeNodeItem[]): number {
+  let height = 0
+  for (const node of path) height += headerRowHeight(node)
+  return height
+}
+
+/** The header path for the row at the top below a header `insetPx` tall; null when none shows. */
+function headerPathBelow(insetPx: number): TreeNodeItem[] | null {
+  const top = scrollerRef.value?.readFirstVisible(insetPx)
+  if (!top || (top.index === 0 && (containerRef.value?.scrollTop ?? 0) <= 0)) return null
+  return ancestorPath(visibleNodes.value[top.index], nodeById.value)
+}
+
 function updateHeader() {
   const scroller = scrollerRef.value
   if (!scroller || props.filter || props.stickyHeaders === false) {
     headerPath.value = []
     return
   }
-  const top = scroller.readFirstVisible(headerRef.value?.offsetHeight ?? 0)
-  if (!top || (top.index === 0 && (containerRef.value?.scrollTop ?? 0) <= 0)) {
+  let path = headerPathBelow(headerHeightFor(headerPath.value))
+  // Read below the CURRENT header; a header of another height covers another row, so
+  // read once more below the new path's own height (once - a row exactly at the edge
+  // must not flip-flop).
+  if (path) {
+    const height = headerHeightFor(path)
+    if (height !== headerHeightFor(headerPath.value)) path = headerPathBelow(height) ?? path
+  }
+  if (!path) {
     headerPath.value = []
     return
   }
   scrollbarWidth.value = scroller.scrollbarElement?.offsetWidth ?? 0
-  const path = ancestorPath(visibleNodes.value[top.index], nodeById.value)
   const same =
     path.length === headerPath.value.length && path.every((n, i) => n.id === headerPath.value[i]!.id)
   if (same) return
-  const depthChanged = path.length !== headerPath.value.length
   headerPath.value = path
-  // The row under the header was read below the OLD header's height: read it once
-  // more below the new one (once - a row exactly at the edge must not flip-flop).
-  if (depthChanged && !isHeaderRecheck) {
-    nextTick(() => {
-      isHeaderRecheck = true
-      updateHeader()
-      isHeaderRecheck = false
-    })
-  }
 }
-let isHeaderRecheck = false
 
 let headerFrame = 0
 function onScroll() {
@@ -310,15 +325,17 @@ watch(
  * as an ordinary row (below its own ancestors' header).
  */
 async function collapseFromHeader(node: TreeNodeItem) {
+  // Its header once it sits at the top is its own ancestors - the rows above it in
+  // the header now, measured before they change.
+  const shownAt = headerPath.value.findIndex((n) => n.id === node.id)
+  const insetPx = headerHeightFor(headerPath.value.slice(0, Math.max(0, shownAt)))
   expanded.value.delete(node.id)
   await nextTick()
   const index = visibleIndexById.value.get(node.id)
   const scroller = scrollerRef.value
   if (index == null || !scroller) return
-  await scroller.scrollToIndex(index)
+  await scroller.scrollToIndex(index, { offsetPx: -insetPx })
   updateHeader()
-  await nextTick()
-  if (headerPath.value.length) await scroller.scrollToIndex(index, { offsetPx: -(headerRef.value?.offsetHeight ?? 0) })
 }
 
 function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
@@ -334,7 +351,7 @@ const { focusedIndex, containerFocused } = useListKeys(
   // Forward the KeyboardEvent so consumers see Ctrl/⌘+Enter (via wantsNewTab),
   // mirroring the MouseEvent they already get from a click.
   (i, _openInNewTab, event) => emit('select', visibleNodes.value[i]!, event),
-  { reveal: (i) => scrollerRef.value?.revealIndex(i) },
+  { reveal: (i) => scrollerRef.value?.revealIndex(i, { topInsetPx: headerPath.value.length ? headerHeight.value : 0 }) },
 )
 
 function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {

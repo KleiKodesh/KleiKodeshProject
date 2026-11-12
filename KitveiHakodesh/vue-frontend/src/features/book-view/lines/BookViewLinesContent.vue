@@ -452,10 +452,10 @@ if (props.openNoteIndex != null && props.initialLineIndex != null) {
 
 // Hovering the scrollbar shows the reader's current book and TOC path — reaching
 // for the scrollbar is when "where am I?" gets asked.
-const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
+const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
-  viewportElement: scrollerEl,
+  getThumbRect: () => scroller()?.thumbRect() ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
   getActiveAltTocEntry: () => props.getActiveAltTocEntry,
@@ -695,9 +695,10 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
       :data-teamim="bookHasTeamim ? 'true' : 'false'"
-      @scroll="onScroll(); refreshScrollbarTocTooltip()"
+      @scroll="onScroll()"
+      @move="onScrollerMove"
       @opened="onScrollerOpened"
-      @moveend="emit('moveend')"
+      @moveend="onScrollerMoveEnd(); emit('moveend')"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >

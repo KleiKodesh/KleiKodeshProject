@@ -548,7 +548,6 @@ useScopedCopy(
 )
 
 function onScroll() {
-  refreshScrollbarTocTooltip()
   handleScroll((scrollIndex, scrollOffset) => {
     emit('scroll', scrollIndex, scrollOffset)
   })
@@ -642,10 +641,10 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 // Hovering the scrollbar names the commentary and section there, as the lines view
 // does: on the thumb where the reader is, elsewhere where a drag there would land.
 const scrollbarElement = computed(() => windowedScroller.value?.scrollbarElement ?? null)
-const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollbarElement, {
+const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewScrollbarTocTooltip(scrollbarElement, {
   getCurrentLineIndex: () => null,
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
-  viewportElement: scrollerEl,
+  getThumbRect: () => scroller()?.thumbRect() ?? null,
   getBookTitle: () => '',
   getLabelAt: (index) => {
     const header = headerAt(index)
@@ -767,7 +766,8 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
             tabindex="0"
             data-ctrlf-enabled
             @opened="scrollerOpened"
-            @moveend="onMoveEnd"
+            @moveend="onScrollerMoveEnd(); onMoveEnd($event)"
+            @move="onScrollerMove"
             @scroll="onScroll"
             @click="onMarkerClick"
             @contextmenu="contextMenuRef?.show($event)"

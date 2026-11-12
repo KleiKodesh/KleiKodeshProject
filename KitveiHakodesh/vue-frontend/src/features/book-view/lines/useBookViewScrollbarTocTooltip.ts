@@ -21,9 +21,10 @@
  * no gap bridge, and it closes when the pointer leaves the track. No fixed timing
  * windows — the only timer is the standard hover-intent delay before the first show.
  */
-import { nextTick, onScopeDispose, ref, type Ref } from 'vue'
+import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { TocEntry } from '@/webview-host/queries.types'
+import type { WindowedScrollerMoveSource, WindowedScrollerThumbRect } from '@/components/windowedScrollerTypes'
 
 export interface ScrollbarTocTooltipData {
   /** Viewport Y of the pointer, so the label sits beside the pointer on the track. */
@@ -40,14 +41,10 @@ export interface ScrollbarTocTooltipData {
 }
 
 const HOVER_DELAY_MS = 120
-/** A scroll this soon after wheel/touch/key input is the reader's own. */
-const USER_SCROLL_WINDOW_MS = 400
 /** How long the scroll-follow label stays after the scrolling stops. */
 const SCROLL_LINGER_MS = 700
-/** Scroll-follow shows once one run (no pause) has travelled this many screens. */
+/** Scroll-follow shows once one run (one move of the scroller) has travelled this many screens. */
 const JOURNEY_SCREENS = 5
-/** A gap longer than this between scroll steps ends the run (wheel notches ~100 ms apart). */
-const SCROLL_PAUSE_MS = 250
 /** Books shorter than this many screens never get the scroll-follow label. */
 const MIN_SCREENS = 4
 
@@ -74,11 +71,12 @@ export function useBookViewScrollbarTocTooltip(
      */
     isSuspended?: () => boolean
     /**
-     * The scroller's viewport. Given, the label also shows beside the thumb while the
-     * reader scrolls (wheel, touch, keys) and fades shortly after — DMScrollBar's
-     * info label. Programmatic scrolls (a TOC jump, a restore) do not show it.
+     * The scroller's thumb (WindowedScroller's thumbRect). Given, the label also shows
+     * beside the thumb while the reader scrolls (wheel, touch, keys, the bar) and fades
+     * shortly after — DMScrollBar's info label. The scroller says whose move it is
+     * (its `move` event): landings (a TOC jump, a restore) do not show it.
      */
-    viewportElement?: Ref<HTMLElement | null>
+    getThumbRect?: () => WindowedScrollerThumbRect | null
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -110,7 +108,6 @@ export function useBookViewScrollbarTocTooltip(
 
   /** True while the label is the scroll-follow one, not the hover one. */
   let isScrollFollow = false
-  let lastUserInputAt = -Infinity
   let scrollLingerTimer: ReturnType<typeof setTimeout> | null = null
 
   function clearScrollLinger() {
@@ -120,33 +117,21 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  if (options.viewportElement) {
-    // Zoom (Ctrl+wheel, Ctrl+key) moves the thumb too, but it is not the reader travelling.
-    useEventListener(options.viewportElement, ['wheel', 'touchmove', 'keydown'], (event: Event) => {
-      if ((event as WheelEvent | KeyboardEvent).ctrlKey) {
-        lastUserInputAt = -Infinity
-        scrollRunStartTop = null
-        return
-      }
-      lastUserInputAt = performance.now()
-    }, { passive: true })
-  }
-
-  /** Thumb top where the current uninterrupted scroll run began, and the run's last step. */
+  /**
+   * Thumb top where the current run began. A run is one move of the scroller: from
+   * its first reader scroll until the scroller reports the move ended (moveend).
+   */
   let scrollRunStartTop: number | null = null
-  let lastScrollStepAt = -Infinity
 
   /**
    * Worth labelling only when the book is long (thumb under a quarter of the track)
-   * and the reader travels far — one run with no pause covering JOURNEY_SCREENS
+   * and the reader travels far — one run covering JOURNEY_SCREENS
    * screens. The thumb is one screen tall on the track, so its travel divided by its
    * height is the distance in screens. A nudge never shows it, however long it lasts.
    * Once shown, it keeps following until it lingers out.
    */
   function isJourney(thumbTop: number, thumbHeight: number, trackHeight: number): boolean {
-    const now = performance.now()
-    if (scrollRunStartTop === null || now - lastScrollStepAt > SCROLL_PAUSE_MS) scrollRunStartTop = thumbTop
-    lastScrollStepAt = now
+    if (scrollRunStartTop === null) scrollRunStartTop = thumbTop
     if (isScrollFollow) return true
     if (!thumbHeight || thumbHeight * MIN_SCREENS > trackHeight) return false
     return Math.abs(thumbTop - scrollRunStartTop) >= thumbHeight * JOURNEY_SCREENS
@@ -154,16 +139,11 @@ export function useBookViewScrollbarTocTooltip(
 
   function followScroll() {
     const bar = scrollbarElement.value
-    const thumb = bar?.querySelector<HTMLElement>('.windowed-scroller-thumb')
+    // Where the thumb is GOING, not where its glide has got to.
+    const thumb = options.getThumbRect?.()
     if (!bar || !thumb || options.isSuspended?.()) return
-    // Where the thumb is GOING, not where its glide has got to: its inline top and
-    // height are the target, inside the track (its offset parent).
-    const track = (thumb.offsetParent as HTMLElement | null) ?? bar
-    const trackRect = track.getBoundingClientRect()
-    const thumbTop = parseFloat(thumb.style.top) || 0
-    const thumbHeight = parseFloat(thumb.style.height) || 0
-    if (!isJourney(thumbTop, thumbHeight, trackRect.height)) return
-    const thumbCenterY = trackRect.top + thumbTop + thumbHeight / 2
+    if (!isJourney(thumb.top, thumb.height, thumb.trackHeight)) return
+    const thumbCenterY = thumb.top + thumb.height / 2
     const index = lineIndexForPointer(thumbCenterY)
     const bookTitle = titleAt(index)
     const path = index == null ? '' : pathAtLine(index)
@@ -260,14 +240,13 @@ export function useBookViewScrollbarTocTooltip(
   })
 
   /**
-   * Called as the view scrolls. Dragging the thumb is exactly when the path changes
+   * The scroller's `move`. Dragging the thumb is exactly when the path changes
    * fastest, and the pointer is not moving during it — so without this the label
    * would sit frozen on a stale section for the whole drag.
    */
-  function refreshScrollbarTocTooltip() {
-    if (options.viewportElement && (isScrollFollow || !scrollbarTocTooltip.value)) {
-      // After the flush: the thumb's inline top/height are this scroll's only then.
-      if (performance.now() - lastUserInputAt <= USER_SCROLL_WINDOW_MS) void nextTick(followScroll)
+  function onScrollerMove(source: WindowedScrollerMoveSource) {
+    if (options.getThumbRect && (isScrollFollow || !scrollbarTocTooltip.value)) {
+      if (source === 'reader') followScroll()
       return
     }
     if (!scrollbarTocTooltip.value) return
@@ -284,5 +263,10 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  return { scrollbarTocTooltip, closeScrollbarTocTooltip, refreshScrollbarTocTooltip }
+  /** The scroller's `moveend`: the run is over; the next reader scroll starts a new one. */
+  function onScrollerMoveEnd() {
+    scrollRunStartTop = null
+  }
+
+  return { scrollbarTocTooltip, closeScrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd }
 }
