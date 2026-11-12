@@ -47,12 +47,38 @@ const props = withDefaults(defineProps<{
   initialExpanded?: readonly number[]
   /** The row the tree is created at (a restored session), instead of the active entry. Read once, at mount. */
   initialPosition?: TreeViewScrollPosition | null
+  /**
+   * New `nodes` are the same tree updated, not another tree: rows shown or hidden, a
+   * folder's contents loaded. Each node keeps its object, so the change reaches the
+   * scroller as spans (the reader's row stays still), instead of re-opening the tree.
+   */
+  nodesUpdateInPlace?: boolean
 }>(), { stickyHeaders: true })
 
 // The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
 // (keyboard) — both flow through wantsNewTab. It is undefined only for
 // programmatic selection.
-const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent | KeyboardEvent] }>()
+const emit = defineEmits<{
+  select: [node: TreeNodeItem, event?: MouseEvent | KeyboardEvent]
+  /** The reader opened or closed a node (its chevron, or a sticky row's). */
+  toggle: [node: TreeNodeItem, expanded: boolean]
+}>()
+
+/**
+ * A caller's own row instead of TreeNode, in the list and in the sticky header alike.
+ * `toggle` and `select` are what TreeNode's chevron and title do; `header` is true for a
+ * sticky copy of an ancestor row.
+ */
+defineSlots<{
+  row?: (props: {
+    node: TreeNodeItem
+    expanded: boolean
+    focused: boolean
+    header: boolean
+    toggle: () => void
+    select: (event?: MouseEvent | KeyboardEvent) => void
+  }) => unknown
+}>()
 
 const expanded = ref<Set<number>>(new Set())
 const rootRef = ref<HTMLElement | null>(null)
@@ -104,7 +130,8 @@ function centringOffset(rowHeight: number) {
 /** The list is about to be replaced as a whole: the next change is not a mid-list span. */
 let isListReplaced = false
 
-watch(() => [props.nodes, props.filter, activeTree.value], () => { isListReplaced = true })
+watch(() => props.nodes, () => { if (!props.nodesUpdateInPlace) isListReplaced = true })
+watch(() => [props.filter, activeTree.value], () => { isListReplaced = true })
 
 // A pre-flush watcher: runs before the scroller patches the new list.
 watch(visibleNodes, (next, previous) => {
@@ -218,8 +245,10 @@ watch(() => props.activeNodeId, syncToNode)
 // ── Expand / collapse ───────────────────────────────────────────────────────
 
 function toggle(node: TreeNodeItem) {
-  if (expanded.value.has(node.id)) expanded.value.delete(node.id)
-  else expanded.value.add(node.id)
+  const opening = !expanded.value.has(node.id)
+  if (opening) expanded.value.add(node.id)
+  else expanded.value.delete(node.id)
+  emit('toggle', node, opening)
 }
 
 /** Collapse everything and go back to the top. */
@@ -357,14 +386,17 @@ function collapseFromHeader(node: TreeNodeItem) {
   // the header now, measured before they change.
   const shownAt = headerPath.value.findIndex((n) => n.id === node.id)
   const insetPx = headerHeightFor(headerPath.value.slice(0, Math.max(0, shownAt)))
-  changeList(() => expanded.value.delete(node.id), () => {
+  changeList(() => {
+    expanded.value.delete(node.id)
+    emit('toggle', node, false)
+  }, () => {
     const index = visibleIndexById.value.get(node.id)
     // The header follows from the landing's moves and its moveend.
     if (index != null) void scrollerRef.value?.scrollToIndex(index, { offsetPx: -insetPx })
   })
 }
 
-function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
+function selectFromHeader(node: TreeNodeItem, event?: MouseEvent | KeyboardEvent) {
   positionedNodeId = node.id
   emit('select', node, event)
 }
@@ -395,7 +427,7 @@ function revealRow(index: number) {
   scroller.revealIndex(index, { topInsetPx: Math.max(shownInset, itsHeader), landMounted: true })
 }
 
-function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
+function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent | KeyboardEvent) {
   focusedIndex.value = i
   // Select first, scroll second — the same order every sync follows. The row is
   // already under the pointer, so being "positioned" on it is simply true, and
@@ -409,9 +441,19 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
 <template>
   <div ref="rootRef" class="tree-view">
     <div v-if="headerPath.length" ref="headerRef" class="tree-sticky-header" :style="{ insetInlineEnd: `${scrollbarWidth}px` }">
+      <template v-for="node in headerPath" :key="node.id">
+      <slot
+        v-if="$slots.row"
+        name="row"
+        :node="node"
+        :expanded="true"
+        :focused="false"
+        :header="true"
+        :toggle="() => collapseFromHeader(node)"
+        :select="(event?: MouseEvent | KeyboardEvent) => selectFromHeader(node, event)"
+      />
       <TreeNode
-        v-for="node in headerPath"
-        :key="node.id"
+        v-else
         :node="node"
         :expanded="true"
         :active="node.id === activeNodeId"
@@ -424,6 +466,7 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
         @toggle="collapseFromHeader(node)"
         @select="selectFromHeader(node, $event)"
       />
+      </template>
     </div>
     <WindowedScroller
       v-if="opening"
@@ -441,8 +484,18 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
       @opened="updateHeader"
     >
       <template #row="{ index }">
+        <slot
+          v-if="$slots.row && visibleNodes[index]"
+          name="row"
+          :node="visibleNodes[index]!"
+          :expanded="expanded.has(visibleNodes[index]!.id)"
+          :focused="containerFocused && focusedIndex === index"
+          :header="false"
+          :toggle="() => toggle(visibleNodes[index]!)"
+          :select="(event?: MouseEvent | KeyboardEvent) => selectNode(index, visibleNodes[index]!, event)"
+        />
         <TreeNode
-          v-if="visibleNodes[index]"
+          v-else-if="visibleNodes[index]"
           :node="visibleNodes[index]!"
           :expanded="expanded.has(visibleNodes[index]!.id)"
           :active="visibleNodes[index]!.id === activeNodeId"

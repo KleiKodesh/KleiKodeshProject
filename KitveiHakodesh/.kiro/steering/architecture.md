@@ -286,8 +286,8 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 - `FullTextSearchAdvancedPanel.vue` — advanced query options (wildcard/grammar wrap, distance, ordering, ketiv)
 - `FullTextSearchResultsList.vue` — results (virtual scroller)
 - `FullTextSearchResultPreview.vue` + `useFullTextSearchPreview.ts` — inline result preview
-- `FullTextSearchFilterPanel.vue`, `FullTextSearchFilterNode.vue`, `FullTextSearchFilterBookList.vue` — category/book filter tree
-- `fullTextSearchFilterExpansion.ts` — filter tree expansion state
+- `FullTextSearchFilterPanel.vue`, `FullTextSearchFilterRow.vue`, `FullTextSearchFilterBookList.vue` — category/book filter tree (TreeView rows)
+- `fullTextSearchFilterTree.ts` — the filter tree's flat rows, per-category totals and check states (one pass per change)
 - `FullTextSearchIndexingOverlay.vue` — indexing progress overlay; search is enabled as soon as the first segment is flushed (partial index)
 - `useFullTextSearch.ts` — search execution and IDB caching; streams results from the host in batches; enriches each batch with TOC paths; resumes interrupted searches from the cache skip offset
 - `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress`; handles `ftsIndexInvalidated` (automatic rebuild when the DB changes or the index is corrupt)
