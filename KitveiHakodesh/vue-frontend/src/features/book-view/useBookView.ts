@@ -722,6 +722,12 @@ export function useBookView(
   bookViewStore.registerTocBridge(tabId, tocBridge)
 
   onBeforeUnmount(() => {
+    // The page's own hook runs before its children unmount: the TOC tree is still
+    // there. The lines pane saves the TOC in ITS unmount, after the tree has gone -
+    // without this snapshot a tab switch saved only `visible`.
+    const tocTree = tocTreeRef()
+    if (tocTree) lastTocInnerState = tocTree.snapshotState()
+
     // Detached (created after an await), so nothing else will dispose it. The flag covers
     // the other half: if we unmount BEFORE the await resumes, there is no handle yet and
     // the continuation must not create the watch at all.

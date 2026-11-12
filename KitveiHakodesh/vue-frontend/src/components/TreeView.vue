@@ -15,7 +15,7 @@
  * the same scroller: one code path for keys, focus and the bar, and rows of any
  * height are what it is built for.
  */
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
 import WindowedScroller from './WindowedScroller.vue'
 import type { TreeNodeItem } from './treeTypes'
@@ -118,6 +118,32 @@ watch(visibleNodes, (next, previous) => {
   for (const span of changedSpans(previous, next)) scrollerRef.value?.replaceRows(span.at, span.removed, span.inserted)
 })
 
+/**
+ * What to do once the scroller has drawn the list's new shape (a reveal after an
+ * expand, the landing after a collapse): it needs the scroller's new count and rows.
+ * Run by the post-flush watcher below - Vue's own render order, not a wait.
+ */
+let afterListRendered: (() => void) | null = null
+
+/** Runs `then` once the list `change` makes has been drawn - at once when it changes nothing. */
+function changeList(change: () => void, then: () => void) {
+  const before = visibleNodes.value
+  change()
+  if (visibleNodes.value === before) then()
+  else afterListRendered = then
+}
+
+watch(
+  () => [visibleNodes.value, props.filter],
+  () => {
+    const then = afterListRendered
+    afterListRendered = null
+    then?.()
+    updateHeader()
+  },
+  { flush: 'post' },
+)
+
 /** Where the tree opens on its own: the active entry centred (ancestors expanded), else the top. */
 function startForActive(): TreeViewScrollPosition {
   const id = props.activeNodeId
@@ -130,9 +156,10 @@ function startForActive(): TreeViewScrollPosition {
 
 onMounted(() => {
   if (props.initialExpanded?.length) expanded.value = new Set(props.initialExpanded)
-  if (props.initialPosition && !props.filter) {
-    // Opened where the reader left it; the active entry counts as reached, so its
-    // sync does not move the tree a second time.
+  if (props.initialPosition) {
+    // Opened where the reader left it - in the tree, or in the search results when it
+    // is created with its query (the position was saved on that same list). The active
+    // entry counts as reached, so its sync does not move the tree a second time.
     positionedNodeId = props.activeNodeId
     opening.value = props.initialPosition
     return
@@ -183,8 +210,7 @@ function syncToNode(id: number | undefined) {
     void scrollerRef.value?.scrollToIndex(0)
     return
   }
-  expandAncestorsOf(id, nodeById.value, expanded.value)
-  nextTick(() => revealCentred(id))
+  changeList(() => expandAncestorsOf(id, nodeById.value, expanded.value), () => revealCentred(id))
 }
 
 watch(() => props.activeNodeId, syncToNode)
@@ -240,10 +266,13 @@ defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded
 // ── Sticky header ───────────────────────────────────────────────────────────
 
 /**
- * Sticky header: the full ancestor path of the row at the top of the scroll
- * area (not just its direct parent), drawn as real tree rows in an overlay above the
- * scroller. Read from the data: the scroller names the first visible row, the
- * node names its parents. Recomputed once per frame on scroll.
+ * Sticky header: the ancestor path of the row at the top of the scroll area (not
+ * just its direct parent), drawn as real tree rows in an overlay above the scroller -
+ * but only the ancestors whose own rows have scrolled ABOVE the viewport's top. A row
+ * still showing needs no sticky copy, and a copy over it would cover the rows below
+ * it (at the very top of the tree, the header would sit over the list's first rows).
+ * Read from the data: the scroller names the first visible rows, the node names its
+ * parents. Recomputed on each of the scroller's moves.
  *
  * The header's height for a path is known before it is drawn: its rows are the
  * path's nodes, the same rows the tree draws (one or two lines - a long title wraps),
@@ -273,11 +302,23 @@ function headerHeightFor(path: readonly TreeNodeItem[]): number {
   return height
 }
 
-/** The header path for the row at the top below a header `insetPx` tall; null when none shows. */
+/**
+ * The header path for the row at the top below a header `insetPx` tall: its ancestors
+ * whose rows lie above the viewport (scrolled past, wholly or in part). Ancestors come
+ * before their descendants in the list, so this is always a leading part of the path.
+ * Null when none shows.
+ */
 function headerPathBelow(insetPx: number): TreeNodeItem[] | null {
-  const top = scrollerRef.value?.readFirstVisible(insetPx)
-  if (!top || (top.index === 0 && (containerRef.value?.scrollTop ?? 0) <= 0)) return null
-  return ancestorPath(visibleNodes.value[top.index], nodeById.value)
+  const scroller = scrollerRef.value
+  const top = scroller?.readFirstVisible(insetPx)
+  const edge = scroller?.readFirstVisible(0)
+  if (!top || !edge) return null
+  // The row at the viewport's very top: rows before it are above; it is above in part
+  // once scrolled into (it starts above the top edge).
+  const firstShowing = edge.offsetWithinRow > 0 ? edge.index + 1 : edge.index
+  const path = ancestorPath(visibleNodes.value[top.index], nodeById.value)
+    .filter((node) => (visibleIndexById.value.get(node.id) ?? Infinity) < firstShowing)
+  return path.length ? path : null
 }
 
 function updateHeader() {
@@ -305,37 +346,22 @@ function updateHeader() {
   headerPath.value = path
 }
 
-let headerFrame = 0
-function onScroll() {
-  if (headerFrame) return
-  headerFrame = requestAnimationFrame(() => {
-    headerFrame = 0
-    updateHeader()
-  })
-}
-
-watch(
-  () => [visibleNodes.value, props.filter],
-  () => nextTick(updateHeader),
-)
 
 /**
  * The sticky rows are the ancestor rows themselves: same look, same chevron, same click.
  * Collapsing one folds the heading away and brings it to the top, where it now sits
  * as an ordinary row (below its own ancestors' header).
  */
-async function collapseFromHeader(node: TreeNodeItem) {
+function collapseFromHeader(node: TreeNodeItem) {
   // Its header once it sits at the top is its own ancestors - the rows above it in
   // the header now, measured before they change.
   const shownAt = headerPath.value.findIndex((n) => n.id === node.id)
   const insetPx = headerHeightFor(headerPath.value.slice(0, Math.max(0, shownAt)))
-  expanded.value.delete(node.id)
-  await nextTick()
-  const index = visibleIndexById.value.get(node.id)
-  const scroller = scrollerRef.value
-  if (index == null || !scroller) return
-  await scroller.scrollToIndex(index, { offsetPx: -insetPx })
-  updateHeader()
+  changeList(() => expanded.value.delete(node.id), () => {
+    const index = visibleIndexById.value.get(node.id)
+    // The header follows from the landing's moves and its moveend.
+    if (index != null) void scrollerRef.value?.scrollToIndex(index, { offsetPx: -insetPx })
+  })
 }
 
 function selectFromHeader(node: TreeNodeItem, event?: MouseEvent) {
@@ -351,8 +377,23 @@ const { focusedIndex, containerFocused } = useListKeys(
   // Forward the KeyboardEvent so consumers see Ctrl/⌘+Enter (via wantsNewTab),
   // mirroring the MouseEvent they already get from a click.
   (i, _openInNewTab, event) => emit('select', visibleNodes.value[i]!, event),
-  { reveal: (i) => scrollerRef.value?.revealIndex(i, { topInsetPx: headerPath.value.length ? headerHeight.value : 0 }) },
+  { reveal: revealRow },
 )
+
+/**
+ * Brings a row the keys moved to into view below the sticky header. Once it has
+ * scrolled to the top, the header there is its own ancestors - possibly more rows than
+ * show now - so a row landed from above lands below THAT header, never under it.
+ */
+function revealRow(index: number) {
+  const scroller = scrollerRef.value
+  if (!scroller) return
+  const shownInset = headerPath.value.length ? headerHeight.value : 0
+  if (scroller.isRowFullyVisible(index, { topInsetPx: shownInset })) return
+  const hasHeader = !props.filter && props.stickyHeaders !== false
+  const itsHeader = hasHeader ? headerHeightFor(ancestorPath(visibleNodes.value[index], nodeById.value)) : 0
+  scroller.revealIndex(index, { topInsetPx: Math.max(shownInset, itsHeader), landMounted: true })
+}
 
 function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
   focusedIndex.value = i
@@ -395,7 +436,8 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
       :initial-index="opening.index"
       :initial-offset-px="opening.offsetPx"
       :style="{ scrollPaddingTop: `${headerPath.length ? headerHeight : 0}px` }"
-      @scroll.passive="onScroll"
+      @move="updateHeader"
+      @moveend="updateHeader"
       @opened="updateHeader"
     >
       <template #row="{ index }">
