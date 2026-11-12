@@ -1,6 +1,6 @@
 /**
  * Line-level commentary data shared by BOTH commentary panels: highlights, notes,
- * word-link anchors, TOC paths, and the export-only book line renderer.
+ * word-link anchors and TOC paths.
  *
  * Shared, not per panel, because the two panels are anchored to the same line and
  * therefore need the same annotations - two instances would double every notes and
@@ -18,11 +18,6 @@ import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useLineNotes } from './lines/useLineNotes'
 import { useCopyExportData } from './lines/useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
-import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
-import type { LinesTable } from './lines/linesTable'
-import { computed } from 'vue'
-import type { useSettingsStore } from '@/stores/settingsStore'
 
 type GroupsForDisplay = Parameters<typeof useCommentaryHighlights>[0] extends () => infer T ? T : never
 
@@ -34,16 +29,12 @@ export function useBookViewCommentaryAnnotations(
    */
   groupsForDisplay: () => GroupsForDisplay,
   selectedSectionLineIds: () => number[] | null,
-  lines: () => LinesTable,
-  bookTitle: string | undefined,
-  settings: ReturnType<typeof useSettingsStore>,
 ) {
-  const cleanTextFlagsForExport = computed(() => settings.cleanTextFlags)
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
     useCommentaryHighlights(groupsForDisplay)
 
-  const { getNotesForLine, getNoteById, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
+  const { getNotesForLine, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
   // Word-level link anchors for commentary lines (they are source lines of their own
@@ -74,16 +65,6 @@ export function useBookViewCommentaryAnnotations(
     },
   )
 
-  const { lineContent: renderLineForExport } = useBookViewLineRenderer(
-    settings,
-    cleanTextFlagsForExport,
-    () => ({ getHighlightsForLine: undefined, getNotesForLine }),
-  )
-
-  function buildExportHtml(): string {
-    return buildBookExportHtml(lines(), bookTitle ?? '', renderLineForExport, getNoteById)
-  }
-
   return {
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
@@ -91,6 +72,5 @@ export function useBookViewCommentaryAnnotations(
     getLineNotesForLine, scheduleLineNotesLoad,
     prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget,
     commentaryTocPaths,
-    buildExportHtml,
   }
 }

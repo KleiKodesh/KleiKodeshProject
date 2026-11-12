@@ -156,7 +156,7 @@ export function useBookView(
   } = useToc(() => bookId, () => bookTitle)
 
   const {
-    lines, linesRevision, prefetch, ensureLines, ensureLineIds, ensureAllLines,
+    lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
@@ -453,13 +453,10 @@ export function useBookView(
     prepareForLines: prepareCommentaryExportData,
     prepareForRenderedHtml: prepareCommentaryExportTargets,
     resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
-    commentaryTocPaths, buildExportHtml,
+    commentaryTocPaths,
   } = useBookViewCommentaryAnnotations(
     () => annotationGroups.value,
     () => selectedSectionLineIds.value,
-    () => lines.value,
-    bookTitle,
-    settingsStore,
   )
 
   annotationFns.getHighlightsForLine = getHighlightsForLine
@@ -842,7 +839,7 @@ export function useBookView(
     tocPersistState,
     // data
     tabId, bookId,
-    lines, linesRevision, ensureLines, ensureAllLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
+    lines, linesRevision, ensureLines, readLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
     tocEntries, tocSearchTree, altTocSections, altTocPane, tocLoading, tocError,
     altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
@@ -854,7 +851,7 @@ export function useBookView(
     prepareCommentaryExportData, prepareCommentaryExportTargets, resolveCommentaryWordLinkTarget,
     commentaryTocPaths,
     // export
-    buildExportHtml, bookTitle,
+    bookTitle,
     // scroll / search state
     currentScrollLineIndex,
     idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
