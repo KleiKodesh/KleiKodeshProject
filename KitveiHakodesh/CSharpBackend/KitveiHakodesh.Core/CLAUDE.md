@@ -7,9 +7,8 @@ Read this before writing a line of code here. The full migration plan is
 
 ## ⚠ 1. The Service ships as NATIVE AOT
 
-`KitveiHakodeshService` sets `PublishAot=true` and references this project, so **everything
-in Core's `net10.0-windows` leg is compiled by ILC**. No runtime IL generation, no
-reflection-driven behaviour.
+`KitveiHakodeshService` sets `PublishAot=true` and references this project, so **all of
+Core is compiled by ILC**. No runtime IL generation, no reflection-driven behaviour.
 
 - **NO DAPPER.** It emits materializers as IL at runtime — impossible under native AOT.
   Use raw ADO: `CreateCommand` / `ExecuteReader`.
@@ -17,9 +16,9 @@ reflection-driven behaviour.
   `Assembly.Load`, `dynamic`, or `Emit`.
 - Serialization must be **source-generated** — MessagePack attributes on the type;
   `JsonSerializerContext` if JSON is ever unavoidable.
-- Anything that genuinely needs the above goes on the **net48 leg only**, excluded from
-  net10 with `<Compile Remove>` (e.g. Office Interop).
-- Keep `IsAotCompatible` on the net10 leg so warnings surface here, not at publish time.
+- Anything that genuinely needs the above does not belong in Core: host-only code (Office
+  Interop, the Word COM finder) lives in `KitveiHakodeshLib/Common` (net48), since e1e30b36.
+- Keep `IsAotCompatible` on so warnings surface here, not at publish time.
 
 ## ⚠ 2. MessagePack is the only wire format
 
@@ -71,14 +70,14 @@ is not. Split at that seam: the query is Core's, the algorithm is FtsLib's.
   **seforim.db alone** (379 lines of it). Everywhere else: `const`s at the top of the
   queries file, so the SQL sits beside its caller.
 
-## 6. Both legs, always
+## 6. One target: net10.0-windows
 
-`<TargetFrameworks>net48;net10.0-windows</TargetFrameworks>`.
-net48 is **non-negotiable** — the Word VSTO add-in only supports it. Every change must
-compile on both legs, and the net48 consumers (VSTO, `KitveiHakodeshDemoApp`) must still
-resolve.
+`<TargetFramework>net10.0-windows</TargetFramework>` only (since e1e30b36). The net48 hosts
+(Word VSTO add-in, `KitveiHakodeshDemoApp`) no longer reference Core: they reach it through
+the service (`KitveiHakodesh.ServiceClient`), and `KitveiHakodeshLib` holds no Core, SQLite,
+Lucene, FtsLib or MessagePack DLL. Don't add a net48 leg back; host-only needs go in Lib.
 
-`InvariantGlobalization=true` is set on the Service leg only, so **always specify
+`InvariantGlobalization=true` is set on the Service, so **always specify
 `Ordinal`/`Invariant` explicitly** — never rely on culture-sensitive defaults
 (`StartsWith(string)`, `EndsWith(string)`, `IndexOf(string)`, `string.Compare`).
 
