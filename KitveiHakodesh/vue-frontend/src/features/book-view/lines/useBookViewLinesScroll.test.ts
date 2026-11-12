@@ -62,6 +62,7 @@ function mountScroll(
     isRowFullyVisible: () => true,
     rowElement,
     barTargetAt: () => null,
+    replaceRows: vi.fn(),
   }
   let scroll!: ReturnType<typeof useBookViewLinesScroll>
   const app = createApp({
