@@ -48,13 +48,6 @@ export interface UseLinesOptions {
   onTextEvicted?: (lineIds: number[]) => void
 }
 
-/** Uint16 when every count fits (the usual case), Int32 for a line longer than 65535 characters. */
-function packCounts(counts: number[]): Uint16Array | Int32Array {
-  let max = 0
-  for (let i = 0; i < counts.length; i++) if (counts[i]! > max) max = counts[i]!
-  return max <= 0xffff ? Uint16Array.from(counts) : Int32Array.from(counts)
-}
-
 export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
   // Shallow: the table is written here only, in chunks, and each write triggers once
   // (triggerRef). Readers go through its methods (at, idAt, contentAt, slice...).
@@ -421,7 +414,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     // until the counts land, and keeps doing so if the library has none.
     lineCharacterCounts.value = null
     void getLineCharCounts(id)
-      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? packCounts(counts) : null })
+      .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? counts : null })
       .catch(() => { /* the bar's measured fallback stands */ })
 
     let metadataFailed = false

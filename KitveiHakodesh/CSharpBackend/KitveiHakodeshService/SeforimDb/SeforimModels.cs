@@ -95,9 +95,30 @@ public sealed class LineIdsByRangeArgs { public int BookId { get; set; } public 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIdsByRangeResult { public int[] Ids { get; set; } = Array.Empty<int>(); }
 
-/// <summary>Counts by lineIndex; null when the library has no <c>line.charCount</c> column.</summary>
+/// <summary>Counts by lineIndex as little-endian uint16 (a MessagePack bin: 2 bytes a line, not
+/// an int array - 7414's 151 KB of ints); a count over 65535 is clamped (the bar's estimate
+/// only). Null when the library has no <c>line.charCount</c> column.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineCharCountsResult { public int[]? Counts { get; set; } }
+public sealed class LineCharCountsResult
+{
+    public byte[]? Packed { get; set; }
+
+    public static LineCharCountsResult Pack(int[]? counts)
+    {
+        if (counts == null) return new LineCharCountsResult();
+        var bytes = new byte[counts.Length * 2];
+        for (int i = 0; i < counts.Length; i++)
+        {
+            int c = Math.Clamp(counts[i], 0, ushort.MaxValue);
+            bytes[2 * i] = (byte)c;
+            bytes[2 * i + 1] = (byte)(c >> 8);
+        }
+        return new LineCharCountsResult { Packed = bytes };
+    }
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineDecorationsArgs { public List<int> AnchorLineIds { get; set; } = new(); public List<int> NoteLineIds { get; set; } = new(); }
 
 // ── TOC ─────────────────────────────────────────────────────────────────────
 

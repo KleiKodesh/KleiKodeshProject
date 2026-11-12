@@ -44,6 +44,7 @@ import { useNoteTooltip } from './useNoteTooltip'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
 import { useWordLinkAnchors } from './useWordLinkAnchors'
+import { createLineDecorationsBatch } from './lineDecorationsBatch'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isExportRestricted } from '../exportRestriction'
@@ -287,11 +288,13 @@ const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, read
 
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
 // a no-op on DBs without the table.
-const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds)
+// Anchors and inline notes of a window come in ONE service call (lineDecorationsBatch).
+const lineDecorations = createLineDecorationsBatch()
+const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds, lineDecorations.anchorsFor)
 // Inline notes (line_note, Otzaria schema 7+) - lazy, viewport-driven, a no-op on DBs without the table.
-const { getLineNotesForLine, evictLineNotesForLines } = useLineNotes(renderedLineIds)
+const { getLineNotesForLine, evictLineNotesForLines } = useLineNotes(renderedLineIds, lineDecorations.notesFor)
 
-const { lineContent } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
+const { lineContent, forgetLines: forgetRenderedLines } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,
   searchQuery: props.searchQuery,
   searchMatchLines: props.searchMatchLines,
@@ -609,6 +612,7 @@ function retainedLineRanges(): ReadonlyArray<readonly [number, number]> {
 
 /** Lines whose text the store just released: their per-line annotation caches go with it. */
 function onLinesTextEvicted(lineIds: number[]) {
+  forgetRenderedLines(lineIds)
   evictWordLinkAnchorsForLines(lineIds)
   evictLineNotesForLines(lineIds)
 }

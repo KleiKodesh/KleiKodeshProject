@@ -89,13 +89,13 @@ namespace KitveiHakodesh.Core.SeforimDb
                 bool firstOpen = _shapeFileStamp == default;
                 _shapeFileStamp = stamp;
                 if (firstOpen) return;
+                _bookHasDependenceType = null;
+                _lineHasCharCount = null;
+                _linkHasTargetLineIndex = null;
+                _hasLinkAnchorTable = null;
+                _hasLineNoteTable = null;
+                _hasBookVersionTables = null;
             }
-            _bookHasDependenceType = null;
-            _lineHasCharCount = null;
-            _linkHasTargetLineIndex = null;
-            _hasLinkAnchorTable = null;
-            _hasLineNoteTable = null;
-            _hasBookVersionTables = null;
             ClearCatalogCache();
         }
 

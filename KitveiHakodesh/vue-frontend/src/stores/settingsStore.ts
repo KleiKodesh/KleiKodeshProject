@@ -111,7 +111,7 @@ const KEYS = {
   SETTINGS_ERROR_REPORT_EMAIL: 'errorReport.senderEmail',
 } as const
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry, hasNativeChromeTabs } from '@/webview-host/bridge'
-import { getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
+import { wordLinkTargetsForOpenBook } from '@/features/book-view/lines/bookWordLinkTargets'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
   DEFAULT_DIVINE_NAME_MODE,
@@ -767,12 +767,8 @@ export const useSettingsStore = defineStore('settings', () => {
    *  on schema-v1 DBs (empty target list), and on transient failures — including a
    *  dev service transport error, which rejects rather than resolving null. */
   async function toggleWordLinkMarkersForBook(bookId: number) {
-    let targets: Awaited<ReturnType<typeof getWordLinkTargetsForBook>>
-    try {
-      targets = await getWordLinkTargetsForBook(bookId)
-    } catch {
-      return
-    }
+    // The open view already asked for this book: its answer, not a second query.
+    const targets = await wordLinkTargetsForOpenBook(bookId)
     if (!targets?.length) return
     toggleWordLinkMarkers([...new Set(targets.map((t) => t.targetBookId))])
   }

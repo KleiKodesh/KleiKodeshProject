@@ -818,7 +818,7 @@ public sealed class Dispatcher(
                 case "getLineCharCounts":
                 {
                     var a = MsgPack.De<LineCharCountsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new LineCharCountsResult { Counts = seforim.GetLineCharCounts(a.BookId) }));
+                    return RpcResponse.Ok(MsgPack.Ser(LineCharCountsResult.Pack(seforim.GetLineCharCounts(a.BookId))));
                 }
 
                 case "getBookMetadata":
@@ -892,6 +892,18 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(seforim.GetLineNotesForLines(a.LineIds)));
+                }
+
+                case "getLineDecorationsForLines":
+                {
+                    var a = MsgPack.De<LineDecorationsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetLineDecorationsForLines(a.AnchorLineIds, a.NoteLineIds)));
+                }
+
+                case "getWordLinkPreview":
+                {
+                    var a = MsgPack.De<LineIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetWordLinkPreview(a.LineId)));
                 }
 
                 case "getWordLinkAnchorTargetsForBook":

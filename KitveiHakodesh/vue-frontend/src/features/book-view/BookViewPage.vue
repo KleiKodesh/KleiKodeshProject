@@ -28,9 +28,12 @@ import { useI18n } from 'vue-i18n'
 import BookViewReadAloudPanel from './BookViewReadAloudPanel.vue'
 import { useBookViewReadAloud } from './useBookViewReadAloud'
 import { useBookViewReadAloudHighlight } from './useBookViewReadAloudHighlight'
+import { provideBookWordLinkTargets } from './lines/bookWordLinkTargets'
 
 const { t } = useI18n()
 
+// One word-link targets query per book for the whole view (toolbar dropdown + lines).
+provideBookWordLinkTargets()
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
