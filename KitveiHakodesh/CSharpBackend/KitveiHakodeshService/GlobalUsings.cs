@@ -33,6 +33,7 @@ global using ReverseBookRow = KitveiHakodesh.Core.SeforimDb.ReverseBookRow;
 global using RelatedBook = KitveiHakodesh.Core.SeforimDb.RelatedBook;
 global using RelatedBooksList = KitveiHakodesh.Core.SeforimDb.RelatedBooksList;
 global using ReverseLineRow = KitveiHakodesh.Core.SeforimDb.ReverseLineRow;
+global using ReverseLineRefRow = KitveiHakodesh.Core.SeforimDb.ReverseLineRefRow;
 global using SchemaMetaValueRow = KitveiHakodesh.Core.SeforimDb.SchemaMetaValueRow;
 global using SectionNavRow = KitveiHakodesh.Core.SeforimDb.SectionNavRow;
 global using StaticFilterRow = KitveiHakodesh.Core.SeforimDb.StaticFilterRow;

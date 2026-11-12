@@ -1,5 +1,6 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { getCommentaryFilterGroups, getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import { getCommentaryFilterGroups, getCommentaryLinkGroupsForBookLineRange, getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import type { BookLineRange } from '@/webview-host/queries.types'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
@@ -125,6 +126,8 @@ export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
   sourceBookId: () => number | undefined = () => undefined,
+  /** selectedLineIds as an index range of sourceBookId, when they are exactly one. */
+  selectedLineRange: () => { fromIndex: number; toIndex: number } | null = () => null,
 ) {
   const groups = ref<CommentaryGroup[]>([])
   const staticFilterGroups = ref<CommentaryGroup[]>([])
@@ -330,11 +333,18 @@ export function useCommentary(
       // content-joining query up to 10 MB per click) — so the group structure
       // renders at once. Line text is fetched for the rows shown.
       const queryLineIds = isMulti ? multiIds : [lineId]
-      const lineIdsForReverse = queryLineIds
+      // A section goes to Core as its index range when it is exactly one (it always is,
+      // unless a line id is missing): the same answer, without thousands of ids.
+      const bookId = sourceBookId() ?? 0
+      const range = isMulti && bookId > 0 ? selectedLineRange() : null
+      const queryLines: number[] | BookLineRange =
+        range && range.toIndex - range.fromIndex === queryLineIds.length ? { bookId, ...range } : queryLineIds
 
       // One call brings the forward groups, the links pointing AT these lines and the
       // catalogue's commentary verdict for this book (see CommentaryLinkGroups).
-      const linkGroupsPromise = getCommentaryLinkGroupsForSourceLineRange(queryLineIds, sourceBookId() ?? 0)
+      const linkGroupsPromise = Array.isArray(queryLines)
+        ? getCommentaryLinkGroupsForSourceLineRange(queryLines, bookId)
+        : getCommentaryLinkGroupsForBookLineRange(queryLines)
 
       const [linkGroups, sourceEntries] = await Promise.all([
         linkGroupsPromise,
@@ -343,7 +353,7 @@ export function useCommentary(
           booksDataStore.ensureCommentaryMetadataLoaded(),
           ensureConnectionTypeNamesLoaded(),
         ]).then(() =>
-          fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
+          fetchSourceEntriesViaReverseQuery(queryLines, booksDataStore.allBooksMap),
         ),
       ])
 

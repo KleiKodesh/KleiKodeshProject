@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
+  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
   RelatedBook, RelatedBooksList, CommentaryFilterGroup,
 } from './queries.types'
 
@@ -377,6 +377,20 @@ export async function getReverseLineData(lineIds: number[], typeIds: number[]): 
   return (await seforimOp<{ rows: ReverseLineRow[] }>('getReverseLineData', { lineIds, typeIds })).rows
 }
 
+/**
+ * The lines getReverseLineData finds, once each and without their text (the commentary
+ * panel fetches the text of the rows it shows). `lines` is a list of ids or a book's
+ * index range; a section as a range spares sending (and binding) thousands of ids.
+ */
+export async function getReverseLines(lines: number[] | BookLineRange, typeIds: number[]): Promise<ReverseLineRefRow[]> {
+  if (typeIds.length === 0) return []
+  if (Array.isArray(lines)) {
+    if (lines.length === 0) return []
+    return (await seforimOp<{ rows: ReverseLineRefRow[] }>('getReverseLines', { lineIds: lines, typeIds })).rows
+  }
+  return (await seforimOp<{ rows: ReverseLineRefRow[] }>('getReverseLines', { ...lines, typeIds })).rows
+}
+
 /** The commentary filter tree's groups for a book, in display order (Core builds them). */
 export async function getCommentaryFilterGroups(bookId: number): Promise<CommentaryFilterGroup[]> {
   return (await seforimOp<{ groups: CommentaryFilterGroup[] }>('getCommentaryFilterGroups', { bookId })).groups
@@ -543,4 +557,9 @@ export async function getCommentaryLinkGroupsForSourceLineRange(
   bookId = 0,
 ): Promise<CommentaryLinkGroups> {
   return seforimOp<CommentaryLinkGroups>('getCommentaryLinkGroupsForSourceLineRange', { lineIds, bookId })
+}
+
+/** getCommentaryLinkGroupsForSourceLineRange for a book's lines with lineIndex in [fromIndex, toIndex). */
+export async function getCommentaryLinkGroupsForBookLineRange(range: BookLineRange): Promise<CommentaryLinkGroups> {
+  return seforimOp<CommentaryLinkGroups>('getCommentaryLinkGroupsForBookLineRange', range)
 }

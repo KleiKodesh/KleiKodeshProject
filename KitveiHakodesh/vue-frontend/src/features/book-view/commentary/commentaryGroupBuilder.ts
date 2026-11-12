@@ -3,8 +3,8 @@
  * All data transformation and querying for the commentary panel lives here.
  * No Vue reactivity — purely async functions and pure transformations.
  */
-import { getReverseLineData } from '@/webview-host/seforimApi'
-import type { BookRow, CommentaryLinkGroups } from '@/webview-host/queries.types'
+import { getReverseLines } from '@/webview-host/seforimApi'
+import type { BookLineRange, BookRow, CommentaryLinkGroups } from '@/webview-host/queries.types'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
   ensureConnectionTypeNamesLoaded,
@@ -246,25 +246,26 @@ export async function buildCommentaryGroupsFromCombined(
  * Instead of querying links where connectionType = SOURCE (unreliable), this queries links
  * where targetLineId is one of the given lines and connectionType is a COMMENTARY-type,
  * then returns the SOURCE book lines those commentary links point back to.
+ * Ids and line indexes only: the text comes like every other row's, on demand.
  */
 export async function fetchSourceEntriesViaReverseQuery(
-  lineIds: number[],
+  lines: number[] | BookLineRange,
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryBookEntry[]> {
   const reverseTypeIds = getBaseTextReverseConnectionTypeIds()
   if (!reverseTypeIds.length) return []
 
-  const rows = await getReverseLineData(lineIds, reverseTypeIds)
+  const rows = await getReverseLines(lines, reverseTypeIds)
 
   if (!rows.length) return []
 
   const byBook = new Map<number, { lineIds: Set<number> }>()
-  const lineData = new Map<number, { lineIndex: number; content: string }>()
+  const lineIndexById = new Map<number, number>()
 
   for (const row of rows) {
     if (!byBook.has(row.sourceBookId)) byBook.set(row.sourceBookId, { lineIds: new Set() })
     byBook.get(row.sourceBookId)!.lineIds.add(row.sourceLineId)
-    lineData.set(row.sourceLineId, { lineIndex: row.lineIndex, content: row.content })
+    lineIndexById.set(row.sourceLineId, row.lineIndex)
   }
 
   return [...byBook.entries()].map(([bookId, { lineIds }]) => {
@@ -276,8 +277,8 @@ export async function fetchSourceEntriesViaReverseQuery(
       lines: [...lineIds]
         .map((id) => ({
           lineId: id,
-          lineIndex: lineData.get(id)?.lineIndex ?? 0,
-          content: lineData.get(id)?.content ?? '',
+          lineIndex: lineIndexById.get(id) ?? 0,
+          content: '',
         }))
         .sort((a, b) => a.lineIndex - b.lineIndex),
       category: resolveCategory(book),

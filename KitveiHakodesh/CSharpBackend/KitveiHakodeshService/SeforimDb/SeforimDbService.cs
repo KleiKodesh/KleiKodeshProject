@@ -184,6 +184,15 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<DefaultCommentatorRow> GetDefaultCommentators(int bookId) =>
         Run(() => _queries.GetDefaultCommentators(bookId), new List<DefaultCommentatorRow>(), "getDefaultCommentators");
 
+    public CommentaryLinkGroups GetCommentaryLinkGroupsForBookLineRange(int bookId, int fromIndex, int toIndex) =>
+        Run(() => _queries.GetCommentaryLinkGroupsForBookLineRange(bookId, fromIndex, toIndex), new CommentaryLinkGroups(), "getCommentaryLinkGroupsForBookLineRange");
+
+    public List<ReverseLineRefRow> GetReverseLines(List<int> lineIds, List<int> typeIds) =>
+        Run(() => _queries.GetReverseLines(lineIds, typeIds), new List<ReverseLineRefRow>(), "getReverseLines");
+
+    public List<ReverseLineRefRow> GetReverseLinesForBookLineRange(int bookId, int fromIndex, int toIndex, List<int> typeIds) =>
+        Run(() => _queries.GetReverseLinesForBookLineRange(bookId, fromIndex, toIndex, typeIds), new List<ReverseLineRefRow>(), "getReverseLines");
+
     public List<ReverseLineRow> GetReverseLineData(List<int> lineIds, List<int> typeIds) =>
         Run(() => _queries.GetReverseLineData(lineIds, typeIds), new List<ReverseLineRow>(), "getReverseLineData");
 
