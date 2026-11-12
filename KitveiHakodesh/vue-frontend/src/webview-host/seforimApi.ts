@@ -13,7 +13,7 @@ import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
   LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRow, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
-  RelatedBook, RelatedBooksList,
+  RelatedBook, RelatedBooksList, CommentaryFilterGroup,
 } from './queries.types'
 
 /** Runs a named seforim operation on the service. One call per capability, no branch. */
@@ -329,20 +329,9 @@ export async function getReverseLineData(lineIds: number[], typeIds: number[]): 
   return (await seforimOp<{ rows: ReverseLineRow[] }>('getReverseLineData', { lineIds, typeIds })).rows
 }
 
-/** Distinct source/targum books linking to the given base book via the given connection types. */
-export async function getReverseBooks(bookId: number, typeIds: number[]): Promise<{ sourceBookId: number }[]> {
-  if (typeIds.length === 0) return []
-  return (await seforimOp<{ rows: { sourceBookId: number }[] }>('getReverseBooks', { bookId, typeIds })).rows
-}
-
-export async function getStaticFilterBooks(
-  sourceBookId: number,
-  typeIds: number[],
-): Promise<{ targetBookId: number; connectionTypeId: number }[]> {
-  if (typeIds.length === 0) return []
-  return (await seforimOp<{ rows: { targetBookId: number; connectionTypeId: number }[] }>(
-      'getStaticFilterBooks', { sourceBookId, typeIds },
-    )).rows
+/** The commentary filter tree's groups for a book, in display order (Core builds them). */
+export async function getCommentaryFilterGroups(bookId: number): Promise<CommentaryFilterGroup[]> {
+  return (await seforimOp<{ groups: CommentaryFilterGroup[] }>('getCommentaryFilterGroups', { bookId })).groups
 }
 
 // ── Commentary navigation ─────────────────────────────────────────────────────

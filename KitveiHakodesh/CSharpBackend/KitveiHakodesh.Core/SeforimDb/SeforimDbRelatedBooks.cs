@@ -209,6 +209,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             public string SectionLabel = "";
             public string? SubSectionLabel;
             public string PrimaryType = "";
+            public string Category = "";
+            public List<string> ConnectionTypes = new();
         }
 
         private sealed class GroupEntry
@@ -218,6 +220,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             public string Category = "";
             public int TreeOrder;
             public string PrimaryType = "";
+            public List<string> ConnectionTypes = new();
         }
 
         private static List<StaticGroup> BuildStaticGroups(
@@ -227,7 +230,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             if (forwardRows.Count == 0 && reverseBookIds.Count == 0) return new List<StaticGroup>();
 
-            GroupEntry Entry(int id, string primary)
+            GroupEntry Entry(int id, List<string> types)
             {
                 books.TryGetValue(id, out var book);
                 string category = SeforimDbBookCommentaryCategory.OtherCategory;
@@ -239,12 +242,13 @@ namespace KitveiHakodesh.Core.SeforimDb
                     Title = !string.IsNullOrEmpty(book?.Title) ? CommentaryDisplayTitle(book!.Title) : id.ToString(),
                     Category = category,
                     TreeOrder = book?.TreeOrder ?? 999999,
-                    PrimaryType = primary,
+                    PrimaryType = PrimaryConnectionType(types),
+                    ConnectionTypes = types,
                 };
             }
 
             var entries = new List<GroupEntry>();
-            foreach (int id in reverseBookIds) entries.Add(Entry(id, "SOURCE"));
+            foreach (int id in reverseBookIds) entries.Add(Entry(id, new List<string> { "SOURCE" }));
 
             var typesByBook = new Dictionary<int, List<string>>();
             var bookOrder = new List<int>();
@@ -258,7 +262,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 string canonical = CanonicalConnectionType(typeNames.TryGetValue(typeId, out var n) ? n : typeId.ToString());
                 if (!types.Contains(canonical)) types.Add(canonical);
             }
-            foreach (int id in bookOrder) entries.Add(Entry(id, PrimaryConnectionType(typesByBook[id])));
+            foreach (int id in bookOrder) entries.Add(Entry(id, typesByBook[id]));
 
             // buildCommentaryGroupsFromEntries
             var result = new List<StaticGroup>();
@@ -266,7 +270,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 string label = SectionLabelFor(type);
                 foreach (var e in entries.Where(e => e.PrimaryType == type).OrderBy(e => e.TreeOrder))
-                    result.Add(new StaticGroup { BookId = e.BookId, Title = e.Title, SectionLabel = label, PrimaryType = type });
+                    result.Add(new StaticGroup
+                    {
+                        BookId = e.BookId, Title = e.Title, SectionLabel = label, PrimaryType = type,
+                        Category = e.Category, ConnectionTypes = e.ConnectionTypes,
+                    });
             }
             void AddMergedByCategory(string type)
             {
@@ -284,6 +292,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                         {
                             BookId = e.BookId, Title = e.Title, SectionLabel = label,
                             SubSectionLabel = category, PrimaryType = type,
+                            Category = category, ConnectionTypes = e.ConnectionTypes,
                         });
             }
             AddFlat("SOURCE");

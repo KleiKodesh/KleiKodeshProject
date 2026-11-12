@@ -830,6 +830,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<StaticFilterRow>();
             if (typeIds is null || typeIds.Count == 0) return list;
             using var conn = Open();
+            return ReadStaticFilterBooks(conn, sourceBookId, typeIds);
+        }
+
+        /// <summary>GetStaticFilterBooks on an open connection (GetCommentaryFilterGroups shares it).</summary>
+        private static List<StaticFilterRow> ReadStaticFilterBooks(SqliteConnection conn, int sourceBookId, List<int> typeIds)
+        {
+            var list = new List<StaticFilterRow>();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetStaticFilterBooks(typeIds.Count);
             cmd.Parameters.AddWithValue("@bookId", sourceBookId);

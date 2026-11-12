@@ -55,6 +55,7 @@ for (int i = 0; i < args.Length; i++)
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
         case "--treeorder-selftest": treeOrderSelfTest = true; break;
         case "--related-books-nobase": return KitveiHakodeshService.Tests.RelatedBooksEquivalence.RunNoBaseData(args[++i], args[++i].Split(',').Select(int.Parse).ToArray());
+        case "--filter-groups": { int at = Array.IndexOf(args, "--ref-db"); return KitveiHakodeshService.Tests.CommentaryFilterGroupsEquivalence.Run(dbPath ?? (Array.IndexOf(args, "--db") is int d && d >= 0 ? args[d + 1] : "C:/Users/Admin/AppData/Roaming/otzaria/books/seforim.db"), at >= 0 ? args[at + 1] : null, args.Contains("--new-first")); }
         case "--related-books": return KitveiHakodeshService.Tests.RelatedBooksEquivalence.Run(dbPath ?? "C:/Users/Admin/AppData/Roaming/otzaria/books/seforim.db", args.Contains("--quick"));
         case "--toratemet-realcheck": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.RealCheck();
         case "--toratemet-selftest": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.Run() == 0 ? 0 : 1;

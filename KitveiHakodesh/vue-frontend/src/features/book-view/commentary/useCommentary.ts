@@ -1,5 +1,5 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
-import { getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
+import { getCommentaryFilterGroups, getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { isCommentaryItemVisible } from '../bookViewTypes'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
@@ -11,7 +11,6 @@ import {
 } from './commentaryConnectionTypes'
 import {
   buildCommentaryGroupsFromCombined,
-  buildStaticCommentaryFilterGroups,
   fetchSourceEntriesViaReverseQuery,
   commentaryDisplayTitle,
 } from './commentaryGroupBuilder'
@@ -113,32 +112,6 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
 }
 
 const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
-
-// Static filter groups are a per-book constant — which books EVER comment on /
-// translate / source this book — derived from three link-table scans that cost
-// seconds on heavily-linked books (a gemara volume has ~75k inbound links).
-// Cached at MODULE level so a tab switch back to the same book never re-runs
-// the scans. The PROMISE is cached (not just the result) so a remount that
-// races a still-in-flight build reuses it instead of re-issuing the queries;
-// rejected entries are dropped so a transient service error retries next time.
-// The seforim DB is fixed for the page's lifetime (a DB swap reloads the page),
-// so there is no invalidation.
-const staticFilterGroupsByBook = new Map<number, Promise<CommentaryGroup[]>>()
-
-/** Every book that links to `bookId` (SOURCE / TARGUM / COMMENTARY), cached per book. */
-async function loadStaticFilterGroupsForBook(bookId: number): Promise<CommentaryGroup[]> {
-  const booksDataStore = useBooksDataStore()
-  await booksDataStore.ensureLoaded()
-  await booksDataStore.ensureCommentaryMetadataLoaded()
-
-  let pending = staticFilterGroupsByBook.get(bookId)
-  if (!pending) {
-    pending = buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
-    staticFilterGroupsByBook.set(bookId, pending)
-    pending.catch(() => staticFilterGroupsByBook.delete(bookId))
-  }
-  return pending
-}
 
 /**
  * Loads the commentary of the current line. ONE instance per book view, shared by
@@ -405,8 +378,33 @@ export function useCommentary(
     }
   }
 
+  // The filter tree's groups are a per-book constant built by Core in one request. The
+  // request in flight is held by THIS instance (one per book view, shared by its panels),
+  // so panels opening their filters together share it; it goes with the instance.
+  let staticFilterRequest: { bookId: number; pending: Promise<CommentaryGroup[]> } | null = null
+
   async function loadStaticFilterGroups(bookId: number, token: number) {
-    const nextGroups = await loadStaticFilterGroupsForBook(bookId)
+    if (staticFilterRequest?.bookId !== bookId) {
+      const pending = getCommentaryFilterGroups(bookId).then((rows) =>
+        rows.map((row): CommentaryGroup => ({
+          bookId: row.bookId,
+          bookTitle: row.bookTitle,
+          path: row.path,
+          connectionTypes: row.connectionTypes,
+          lines: [],
+          category: row.category,
+          sectionLabel: row.sectionLabel,
+          ...(row.subSectionLabel != null ? { subSectionLabel: row.subSectionLabel } : {}),
+        })),
+      )
+      const request = { bookId, pending }
+      staticFilterRequest = request
+      // A failed request is dropped so the next filter open retries.
+      pending.catch(() => {
+        if (staticFilterRequest === request) staticFilterRequest = null
+      })
+    }
+    const nextGroups = await staticFilterRequest.pending
     if (token !== staticFilterLoadToken) return
 
     staticFilterGroups.value = nextGroups
@@ -452,8 +450,8 @@ export function useCommentary(
     loadedForLineId = null
   })
 
-  // Lazy — called when a commentary filter panel first opens. Safe to call multiple times; staticFilterGroupsByBook prevents
-  // redundant DB queries for the same book.
+  // Lazy — called when a commentary filter panel first opens. Safe to call multiple times;
+  // staticFilterRequest prevents redundant requests for the same book.
   async function ensureStaticFilterGroupsLoaded() {
     const id = sourceBookId()
     if (id == null || staticFilterGroupsLoaded.value) return

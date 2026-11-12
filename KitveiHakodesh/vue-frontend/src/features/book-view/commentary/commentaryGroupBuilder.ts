@@ -3,7 +3,7 @@
  * All data transformation and querying for the commentary panel lives here.
  * No Vue reactivity — purely async functions and pure transformations.
  */
-import { getReverseLineData, getReverseBooks, getStaticFilterBooks } from '@/webview-host/seforimApi'
+import { getReverseLineData } from '@/webview-host/seforimApi'
 import type { BookRow, CommentaryLinkGroups } from '@/webview-host/queries.types'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
@@ -285,80 +285,4 @@ export async function fetchSourceEntriesViaReverseQuery(
       primaryConnectionType: 'SOURCE',
     }
   })
-}
-
-/**
- * Builds the full static filter group list for a given source book.
- * Used to populate the commentary filter tree before any line is selected.
- * Expensive (two link-table scans) — useCommentary caches the returned
- * promise per book at module level; do not call from anywhere else without
- * going through that cache.
- */
-export async function buildStaticCommentaryFilterGroups(
-  sourceBookId: number,
-  allBooksMap: Map<number, BookRow>,
-): Promise<CommentaryGroup[]> {
-  await ensureConnectionTypeNamesLoaded()
-
-  // Both directions ask for the same family: the things that actually COMMENT on a
-  // text - commentary, super-commentary, targum, midrash and the rest. Forward finds
-  // what depends on this book, reverse finds what this book depends on. Types that are
-  // mere citation (OTHER, REFERENCE, LINKER, QUOTATION) are not related books and stay
-  // out of both. Only SOURCE is unreliable forwards, which is why it comes from the
-  // reverse lookup below.
-  const dependantTypeIds = getBaseTextReverseConnectionTypeIds()
-  const forwardConnectionTypeIds = dependantTypeIds
-
-  const reverseTypeIds = dependantTypeIds
-
-  const [forwardRows, reverseSourceRows] = await Promise.all([
-    getStaticFilterBooks(sourceBookId, forwardConnectionTypeIds),
-    getReverseBooks(sourceBookId, reverseTypeIds),
-  ])
-
-  if (!forwardRows.length && !reverseSourceRows.length) return []
-
-  const byBook = new Map<number, Set<string>>()
-  for (const row of forwardRows) {
-    if (!byBook.has(row.targetBookId)) byBook.set(row.targetBookId, new Set())
-    const rawName = getConnectionTypeName(row.connectionTypeId)
-    const canonicalName = normalizeConnectionTypeName(rawName)
-    byBook.get(row.targetBookId)!.add(canonicalName)
-  }
-
-  const commentaryEntries: CommentaryBookEntry[] = [...byBook.entries()].map(
-    ([bookId, typesSet]) => {
-      const book = allBooksMap.get(bookId)
-      const connectionTypes = [...typesSet]
-      return {
-        bookId,
-        bookTitle: resolveBookTitle(book, bookId),
-        connectionTypes,
-        lines: [],
-        category: resolveCategory(book),
-        treeOrder: book?.treeOrder ?? 999999,
-        primaryConnectionType: getPrimaryConnectionType(connectionTypes),
-      }
-    },
-  )
-
-  const sourceEntries: CommentaryBookEntry[] = reverseSourceRows.map(
-    ({ sourceBookId: bookId }) => {
-      const book = allBooksMap.get(bookId)
-      return {
-        bookId,
-        bookTitle: resolveBookTitle(book, bookId),
-        connectionTypes: ['SOURCE'],
-        lines: [],
-        category: resolveCategory(book),
-        treeOrder: book?.treeOrder ?? 999999,
-        primaryConnectionType: 'SOURCE',
-      }
-    },
-  )
-
-  return buildCommentaryGroupsFromEntries([
-    ...sourceEntries,
-    ...commentaryEntries,
-  ])
 }
