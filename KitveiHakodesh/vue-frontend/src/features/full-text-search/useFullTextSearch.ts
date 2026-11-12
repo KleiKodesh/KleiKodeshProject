@@ -206,6 +206,11 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   // The in-flight stream — aborting it closes the connection, which is the service's
   // cancel signal (no cancel op, no polling).
   let _streamAbort: AbortController | null = null
+  // Bumped by every search start, cancel and clear: a run whose number is no longer the
+  // current one is superseded and stops. By number, not by query text — re-running the
+  // SAME query must stop the earlier run too (it may still be awaiting the cache, before
+  // it has a stream to abort, and its `finally` would end the new run's searching state).
+  let currentRunId = 0
   // The result set in the order the service streamed it — the library's catalog tree order
   // (the index stores lines in that order). 'catalogOrder' restores it, and every other sort
   // breaks ties by it. Kept apart from `results`, which a re-sort reorders.
@@ -322,6 +327,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   })
 
   async function cancelSearch() {
+    currentRunId++
     // Closing the stream IS the cancel — the service sees the broken connection.
     if (_streamAbort) {
       _streamAbort.abort()
@@ -341,6 +347,8 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   async function executeSearch(q: string, resumeFrom?: SearchCacheEntry) {
     if (!q.trim()) return
     await cancelSearch()
+    const runId = currentRunId
+    const isSuperseded = () => runId !== currentRunId
     rerunWhenIndexed = null
 
     isSearching.value = true
@@ -368,7 +376,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
     let terms = searchTerms
     const resumeAfter = resumeFrom ? acc[acc.length - 1]?.lineId ?? 0 : 0
     const resumed = resumeAfter > 0 && await cache.resume(cacheKey, terms).catch(() => false)
-    if (executedQuery.value !== q) return // superseded while the cache answered
+    if (isSuperseded()) return // superseded while the cache answered
     if (!resumed && acc.length) {
       // Nothing to continue (the entry went meanwhile): start over, or every hit would show twice.
       acc.length = 0
@@ -376,7 +384,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
       resultsVersion.value++
     }
     if (!resumed) await cache.init(cacheKey, q, indexingComplete, terms).catch(() => {/* best-effort */})
-    if (executedQuery.value !== q) return // superseded while the cache answered
+    if (isSuperseded()) return // superseded while the cache answered
 
     const abort = new AbortController()
     _streamAbort = abort
@@ -404,7 +412,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
       }
 
       for await (const chunk of stream) {
-        if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+        if (isSuperseded()) { abort.abort(); return } // superseded locally
         if (chunk.restarted && acc.length) {
           // The resume line could not be placed (the library changed): the service runs the
           // search from the start, so the cached hits go.
@@ -412,7 +420,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
           terms = searchTerms = []
           flush()
           await cache.init(cacheKey, q, indexingComplete, terms).catch(() => {/* best-effort */})
-          if (executedQuery.value !== q) { abort.abort(); return } // superseded meanwhile
+          if (isSuperseded()) { abort.abort(); return } // superseded meanwhile
         }
         if (chunk.stage) enterStage(chunk.stage)
         if (chunk.newTerms?.length) {
@@ -435,7 +443,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
           if (performance.now() - lastFlushAt >= FLUSH_INTERVAL_MS) flush()
           cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
         }
-        if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
+        if (isSuperseded()) { abort.abort(); return } // superseded while caching
         if (chunk.error) {
           if (dirty) flush() // surface whatever streamed before the error
           if (!acc.length) searchError.value = 'searchFailed'
@@ -459,7 +467,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
       }
       // Safety: if the iterator completed without a done/error frame, surface any
       // hits that were still pending under the flush throttle.
-      if (dirty && executedQuery.value === q) flush()
+      if (dirty && !isSuperseded()) flush()
     } catch (err) {
       // An aborted stream is a cancel (new search / navigation), not a failure.
       if (!abort.signal.aborted) {
@@ -470,7 +478,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
       // Whatever arrived and is still buffered is written, so the next visit resumes after it.
       cache.flush(cacheKey)
       if (_streamAbort === abort) _streamAbort = null
-      if (executedQuery.value === q) {
+      if (!isSuperseded()) {
         isSearching.value = false
         currentStage.value = null
         clearStageLabel()
@@ -488,6 +496,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   }
 
   function clearSearch() {
+    void cancelSearch()
     results.value = []
     resultsVersion.value++
     streamedOrder = []
@@ -530,8 +539,13 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   async function loadCachedResults(q: string): Promise<boolean> {
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
+    // Showing another result set stops the running search; a search started while the
+    // cache answers wins, and this one then shows nothing (true: the caller must not search).
+    await cancelSearch()
+    const runId = currentRunId
     if (pinOwner) await cache.pin(pinOwner, cacheKey).catch(() => {/* non-fatal */})
     const cached = await cache.get(cacheKey, q).catch(() => null)
+    if (runId !== currentRunId) return true
     if (!cached || (cached.results.length === 0 && cached.complete === false)) return false
     results.value = cached.results
     resultsVersion.value++
