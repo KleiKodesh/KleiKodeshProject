@@ -161,6 +161,7 @@ defineExpose({ view })
       :delete-note="deleteNote"
       :commentary-font-px="panel.commentaryFontPx.value"
       :render-content="panel.renderContent"
+      :trim-render-cache="panel.trimRenderCache"
       :annotation-offset-length-of="panel.annotationOffsetLengthOf"
       :set-current-mark="panel.setCurrentMark"
       :commentary-toc-paths="commentaryTocPaths"

@@ -2,9 +2,9 @@
  * Manages user notes for all commentary books visible in the commentary panel.
  *
  * Loading strategy — lazy, viewport-driven, non-blocking:
- *   The caller provides visible lineIds via scheduleNotesLoad (called from the
- *   component's virtualizer watcher). A 100ms debounce batches rapid scroll
- *   events into a single DB query for the whole window.
+ *   The caller provides the mounted lineIds via scheduleNotesLoad once its scroller
+ *   has come to rest (opened / moveend, or a window change while it is still), so a
+ *   scroll costs one DB query for the window it ends on - no timer.
  *
  *   lineIdToBookId is populated from getGroups() eagerly so createNote() knows
  *   which bookId to use before the async load completes.
@@ -32,15 +32,11 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   // "already requested" does not mean "already available" — an export that must be
   // able to await the data needs the promise, not just the flag.
   const inFlight = new Map<number, Promise<void>>()
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
   // A select-all warm-up walks EVERY commentary book in sequential chunks. Nothing about
-  // closing the panel stops that on its own, so the chunk loop checks this between chunks
-  // and the pending debounce is dropped outright.
+  // closing the panel stops that on its own, so the chunk loop checks this between chunks.
   let disposed = false
   onScopeDispose(() => {
     disposed = true
-    if (debounceTimer !== null) clearTimeout(debounceTimer)
-    debounceTimer = null
   })
 
   /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
@@ -65,45 +61,59 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   }
 
   // ── Keep lineIdToBookId current as groups change ──────────────────────────
+  // Built once per load: the groups array is re-made for reasons that keep every group
+  // (a panel's placeholder coming and going), and those only add the new groups' lines.
+  // When a group is gone the load changed: the map is rebuilt from the current groups,
+  // and the notes kept for lines no longer shown are released with it.
+  let indexedGroups = new Set<CommentaryGroup>()
+
+  function indexGroup(group: CommentaryGroup) {
+    if (group.bookId <= 0) return
+    for (const line of group.lines) {
+      if (line.lineId > 0) lineIdToBookId.set(line.lineId, group.bookId)
+    }
+  }
 
   watch(
     getGroups,
     (groups) => {
-      for (const group of groups) {
-        if (group.bookId > 0) {
-          for (const line of group.lines) {
-            if (line.lineId > 0) lineIdToBookId.set(line.lineId, group.bookId)
-          }
-        }
+      const current = new Set(groups)
+      let groupGone = false
+      for (const group of indexedGroups) {
+        if (!current.has(group)) { groupGone = true; break }
       }
+      if (groupGone) {
+        lineIdToBookId.clear()
+        for (const group of groups) indexGroup(group)
+        releaseLinesNotIn(lineIdToBookId)
+      } else {
+        for (const group of groups) if (!indexedGroups.has(group)) indexGroup(group)
+      }
+      indexedGroups = current
     },
     { immediate: true },
   )
+
+  /** Forgets the loaded state and the notes of every line `shown` no longer has. */
+  function releaseLinesNotIn(shown: Map<number, number>) {
+    for (const id of loadedLineIds) if (!shown.has(id) && !inFlight.has(id)) loadedLineIds.delete(id)
+    for (const id of notesByLine.value.keys()) if (!shown.has(id)) notesByLine.value.delete(id)
+  }
 
   // ── Lazy load ─────────────────────────────────────────────────────────────
 
   function scheduleLoad(lineIds: number[]) {
     const pending = lineIds.filter((id) => id > 0 && !loadedLineIds.has(id))
     if (!pending.length) return
-
-    if (debounceTimer !== null) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null
-      // Re-filter: `pending` was computed before the debounce, and an export's
-      // immediate load may have claimed some of these lines in the meantime.
-      const stillPending = pending.filter((id) => !loadedLineIds.has(id))
-      if (!stillPending.length) return
-      // Group by commentary bookId and issue one query per book. Marking happens per
-      // GROUPED id, never over the whole input: groupByBook drops any line whose owning
-      // book is not in lineIdToBookId yet, and marking those as loaded would retire them
-      // permanently — their notes would never appear and never export.
-      // One query for the whole window, all its books together.
-      const byBook = groupByBook(stillPending)
-      const ids = [...byBook.values()].flat()
-      if (!ids.length) return
-      for (const id of ids) loadedLineIds.add(id)
-      void track(ids, _loadForLines([...byBook.keys()], ids))
-    }, 100)
+    // Marking happens per GROUPED id, never over the whole input: groupByBook drops any
+    // line whose owning book is not in lineIdToBookId yet, and marking those as loaded
+    // would retire them permanently — their notes would never appear and never export.
+    // One query for the whole window, all its books together.
+    const byBook = groupByBook(pending)
+    const ids = [...byBook.values()].flat()
+    if (!ids.length) return
+    for (const id of ids) loadedLineIds.add(id)
+    void track(ids, _loadForLines([...byBook.keys()], ids))
   }
 
   async function _loadForLines(bookIds: number[], lineIds: number[]): Promise<void> {
@@ -139,8 +149,8 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
     }
   }
 
-  // Watch visible lineIds and schedule a load whenever the set changes.
-  // Called by the component's virtualizer watcher — not driven from here.
+  // Loads the notes of the window the panel's scroller rests on — called by the
+  // component when its scroller opens or ends a move, not driven from here.
   function scheduleNotesLoad(lineIds: number[]) {
     scheduleLoad(lineIds)
   }
@@ -148,7 +158,7 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   /**
    * Immediate, awaitable load — for the export paths, which need the notes of every
    * selected line (a select-all covers lines that were never rendered) and cannot
-   * wait on the scroll debounce. Same per-book grouping and skip-set as scheduleLoad,
+   * wait for the scroller to come to rest. Same per-book grouping and skip-set as scheduleLoad,
    * chunked because an export can ask for a whole document at once.
    */
   async function loadNotesForLines(lineIds: number[]): Promise<void> {
