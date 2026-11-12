@@ -389,10 +389,15 @@ function endOpeningIndicator() {
 }
 onBeforeUnmount(endOpeningIndicator)
 
+// Set once the list has emptied after its first window: the rows that come back are
+// a new list (a search re-run clears its results, then streams them again), opened at the top.
+let reopensAtTop = false
+
 function buildFirstWindowWhenPossible() {
   if (isFirstWindowBuilt || !isStartRowAnswered || props.count <= 0) return
   isFirstWindowBuilt = true
-  void landAt(startIndex, { offsetPx: startOffsetPx }).then(() => {
+  const [index, offsetPx] = reopensAtTop ? [0, 0] : [startIndex, startOffsetPx]
+  void landAt(index, { offsetPx }).then(() => {
     endOpeningIndicator()
     bar.syncFromViewport()
     emit('opened')
@@ -413,6 +418,15 @@ watch(
   () => props.count,
   () => {
     clampToCount()
+    // An emptied list has no window left to grow from: fill() never mounts rows into
+    // an empty window, so without this the rows that arrive next stay blank. Drop the
+    // first window (and any landing still in flight toward it) and build it again.
+    if (props.count <= 0 && isFirstWindowBuilt) {
+      isFirstWindowBuilt = false
+      reopensAtTop = true
+      cancelLanding()
+      return
+    }
     if (isFirstWindowBuilt) nextTick(fill)
     else buildFirstWindowWhenPossible()
   },
