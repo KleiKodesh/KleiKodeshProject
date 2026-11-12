@@ -631,3 +631,9 @@ h1::after {
 :root[dir='ltr'] textarea {
   unicode-bidi: plaintext;
 }
+
+/* A folder being reordered (useFolderReorder): a closed hand everywhere until it is dropped. */
+html.is-reorder-dragging,
+html.is-reorder-dragging * {
+  cursor: grabbing !important;
+}
