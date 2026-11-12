@@ -64,6 +64,7 @@ import { useWindowedScrollerBarMapping } from '@/composables/useWindowedScroller
 import { buildFlowPlan, ROWS_PLAN } from './windowedScrollerFlowPlan'
 import type {
   WindowedScrollerBarTarget,
+  WindowedScrollerMoveSource,
   WindowedScrollerRowKind,
   WindowedScrollerScrollToOptions,
   WindowedScrollerVisibleRow,
@@ -145,8 +146,12 @@ const emit = defineEmits<{
    * its own landings (a jump, Home/End, a far bar seek) when the landing finishes -
    * even when it swapped the rows without changing scrollTop, which fires nothing
    * native; a held bar (drag, track hold) at release.
+   *
+   * `source` says who moved it: 'reader' (wheel, touch, keys incl. Home/End, the
+   * bar and its far seeks) or 'landing' (a landing code asked for: scrollToIndex,
+   * the first window).
    */
-  moveend: []
+  moveend: [source: WindowedScrollerMoveSource]
 }>()
 
 const viewportElement = ref<HTMLElement | null>(null)
@@ -275,7 +280,7 @@ const bar = useWindowedScrollerBarMapping({
   windowEnd,
   rowElement,
   findRowIndexAt,
-  landAt: (index, align) => scrollToIndex(index, { align }),
+  landAt: (index, align) => landOn(index, { align }, true),
   cancelLanding,
   landmarkTiers: () => props.landmarkTiers ?? [],
   rowWeights: () => props.rowWeights,
@@ -345,11 +350,17 @@ function onViewportScroll() {
 
 // ── Move end ─────────────────────────────────────────────────────────────────────
 // A native scrollend inside one of our own landings or a bar hold is part of that
-// move, not its end: the landing / the release reports it.
+// move, not its end: the landing / the release reports it. A landing that moved
+// scrollTop gets its native scrollend a frame after it finishes - that scrollend is
+// the landing's end, so it is reported as the landing's, not as a reader scroll.
 let landingsInFlight = 0
 let isBarPressed = false
+let landingScrollEndOwed: WindowedScrollerMoveSource | null = null
 function onViewportScrollEnd() {
-  if (landingsInFlight === 0 && !isBarPressed) emit('moveend')
+  if (landingsInFlight > 0 || isBarPressed) return
+  const source = landingScrollEndOwed ?? 'reader'
+  landingScrollEndOwed = null
+  emit('moveend', source)
 }
 function onBarPointerDown() {
   isBarPressed = true
@@ -361,9 +372,31 @@ function onBarPointerUp() {
   window.removeEventListener('pointercancel', onBarPointerUp, { capture: true })
   if (!isBarPressed) return
   isBarPressed = false
-  if (landingsInFlight === 0) emit('moveend')
+  landingScrollEndOwed = null
+  if (landingsInFlight === 0) emit('moveend', 'reader')
 }
 onBeforeUnmount(onBarPointerUp)
+
+/** Runs one of the scroller's own landings and reports its end (see moveend). */
+async function runLanding(land: () => Promise<void>, byReader = false): Promise<void> {
+  const viewport = viewportElement.value
+  const before = viewport?.scrollTop
+  const source: WindowedScrollerMoveSource = byReader || isBarPressed ? 'reader' : 'landing'
+  landingsInFlight++
+  try {
+    await land()
+  } finally {
+    landingsInFlight--
+  }
+  if (landingsInFlight > 0 || isBarPressed) return
+  if (viewport && viewport.scrollTop !== before) landingScrollEndOwed = source
+  else emit('moveend', source)
+}
+
+/** One of the scroller's own landings is under way (or its scroll has not ended yet). */
+function isLanding(): boolean {
+  return landingsInFlight > 0 || landingScrollEndOwed != null
+}
 
 // Layout changes that are not this component's own patch: a width change re-wrapping
 // every row, a font arriving. Held against the last remembered anchor.
@@ -427,7 +460,7 @@ function buildFirstWindowWhenPossible() {
   if (isFirstWindowBuilt || !isStartRowAnswered || props.count <= 0) return
   isFirstWindowBuilt = true
   const [index, offsetPx] = reopensAtTop ? [0, 0] : [startIndex, startOffsetPx]
-  void landAt(index, { offsetPx }).then(() => {
+  void runLanding(() => landAt(index, { offsetPx })).then(() => {
     endOpeningIndicator()
     bar.syncFromViewport()
     emit('opened')
@@ -508,21 +541,19 @@ function replaceRows(at: number, removed: number, inserted: number) {
   for (const [index, element] of moved) rowElements.set(index, element)
 }
 
-async function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
+function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
+  return landOn(index, options, false)
+}
+
+async function landOn(index: number, options: WindowedScrollerScrollToOptions, byReader: boolean): Promise<void> {
   // A jump made while rows already exist builds the window itself: the first window
   // must not then be built at the start row on top of it.
   if (props.count > 0) {
     isFirstWindowBuilt = true
     endOpeningIndicator()
   }
-  landingsInFlight++
-  try {
-    await landAt(index, options)
-  } finally {
-    landingsInFlight--
-  }
+  await runLanding(() => landAt(index, options), byReader)
   bar.syncFromViewport()
-  if (landingsInFlight === 0 && !isBarPressed) emit('moveend')
 }
 
 function onViewportKeydown(event: KeyboardEvent) {
@@ -530,10 +561,10 @@ function onViewportKeydown(event: KeyboardEvent) {
   // which is nowhere in particular.
   if (event.key === 'Home') {
     event.preventDefault()
-    void scrollToIndex(0)
+    void landOn(0, {}, true)
   } else if (event.key === 'End') {
     event.preventDefault()
-    void scrollToIndex(props.count - 1, { align: 'end' })
+    void landOn(props.count - 1, { align: 'end' }, true)
   }
 }
 
@@ -562,6 +593,7 @@ defineExpose({
   scrollToIndex,
   replaceRows,
   revealIndex,
+  isLanding,
   readFirstVisible,
   isRowRendered,
   isRowFullyVisible,

@@ -1,6 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi, WindowedScrollerMoveSource } from '@/components/windowedScrollerTypes'
 
 /**
  * Where a group's header sits below the viewport's top, and where the sticky header
@@ -113,27 +113,15 @@ export function useCommentaryScroll(
     return api.readFirstVisible(NAV_HEIGHT)?.index ?? 0
   })
 
-  // ── What the reader chose ───────────────────────────────────────────────────
-
-  /**
-   * True while the reader is moving this panel themselves (wheel, touch, pointer, a
-   * scrolling key), until the app next positions it. Their scrolling reports the
-   * commentator now at the top as this panel's commentator.
-   */
-  let userAdjusted = false
-  function markUserAdjusted() {
-    userAdjusted = true
-  }
-
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scroller()?.scrollerElement?.scrollTop ?? 0
     const pos = captureScrollPos()
     if (pos) emitScroll(pos.scrollIndex, pos.scrollOffset)
   }
 
-  /** The scroller stopped moving (its moveend): if the reader moved it, the commentator at the top is theirs. */
-  function onMoveEnd() {
-    if (userAdjusted && isOpen && stickyHeader.value) onReaderCommentator(activePinnedGroup.value)
+  /** The scroller stopped moving (its moveend): if the READER moved it, the commentator at the top is theirs. */
+  function onMoveEnd(source: WindowedScrollerMoveSource) {
+    if (source === 'reader' && isOpen && stickyHeader.value) onReaderCommentator(activePinnedGroup.value)
   }
 
   function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
@@ -220,8 +208,6 @@ export function useCommentaryScroll(
   let isOpen = false
   function scrollerOpened() {
     isOpen = true
-    // A new list, opened where the app put it: not the reader's own move.
-    userAdjusted = false
     scrollTop.value = scroller()?.scrollerElement?.scrollTop ?? 0
     const request = requestForNextScroller
     requestForNextScroller = null
@@ -245,9 +231,6 @@ export function useCommentaryScroll(
    * showing and does not contain it.
    */
   async function goTo(request: Request): Promise<boolean> {
-    // The reader put the panel here: what the sticky header says next is the app
-    // carrying out their request, not their own scrolling.
-    userAdjusted = false
     const api = scroller()
     if (!api || !isOpen) {
       requestForNextScroller = request
@@ -308,7 +291,6 @@ export function useCommentaryScroll(
     scrollTop,
     activeHeader,
     activePinnedGroup,
-    markUserAdjusted,
     onMoveEnd,
     startRow,
     scrollerOpened,

@@ -349,7 +349,6 @@ function rowSearchQuery(flatIndex: number): string | undefined {
 const {
   activeHeader,
   activePinnedGroup,
-  markUserAdjusted,
   onMoveEnd,
   startRow,
   scrollerOpened,
@@ -364,16 +363,6 @@ const {
   scroller,
   (group) => emit('commentator', group),
 )
-
-// Only keys that scroll the panel count as the reader moving it (see markUserAdjusted:
-// it records that the view is the reader's own arrangement). Ctrl+C or Ctrl+F is not
-// that, and must not drop a toolbar pick.
-const SCROLLING_KEYS = new Set([
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ',
-])
-function onViewportKeydown(event: KeyboardEvent) {
-  if (SCROLLING_KEYS.has(event.key)) markUserAdjusted()
-}
 
 // ── The scroller: one per loaded list, created at its start row ───────────────
 //
@@ -781,10 +770,6 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
             @scroll="onScroll"
             @click="onMarkerClick"
             @contextmenu="contextMenuRef?.show($event)"
-            @wheel.passive="markUserAdjusted"
-            @touchstart.passive="markUserAdjusted"
-            @pointerdown.passive="markUserAdjusted"
-            @keydown="onViewportKeydown"
           >
             <template #row="{ index }">
               <CommentaryHeader
