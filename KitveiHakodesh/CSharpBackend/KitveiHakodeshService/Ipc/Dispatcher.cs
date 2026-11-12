@@ -939,6 +939,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new TocSectionResult { Rows = seforim.GetTocSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.RangePairs, a.Direction != "prev") }));
                 }
 
+                case "getCommentaryFilterGroups":
+                {
+                    var a = MsgPack.De<BookIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryFilterGroups(a.BookId)));
+                }
+
                 case "getRelatedBooks":
                 {
                     var a = MsgPack.De<RelatedBooksArgs>(req.Args);

@@ -190,6 +190,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<TocSectionRow> GetTocSectionWithCommentary(int mainBookId, int commentaryBookId, List<int> rangePairs, bool next) =>
         Run(() => _queries.GetTocSectionWithCommentary(mainBookId, commentaryBookId, rangePairs, next), new List<TocSectionRow>(), "getTocSectionWithCommentary");
 
+    public CommentaryFilterGroupList GetCommentaryFilterGroups(int bookId) =>
+        Run(() => _queries.GetCommentaryFilterGroups(bookId), new CommentaryFilterGroupList(), "getCommentaryFilterGroups");
+
     public RelatedBooksList GetRelatedBooks(int bookId) =>
         Run(() => _queries.GetRelatedBooks(bookId), new RelatedBooksList(), "getRelatedBooks");
 

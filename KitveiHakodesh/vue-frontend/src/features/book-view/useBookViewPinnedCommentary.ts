@@ -16,7 +16,7 @@ import type { PinnedCommentaryGroup } from './bookViewTypes'
 
 // One default-commentators query per book, EVER: every commentary panel creates a
 // usePinnedCommentary instance, and without this cache each ran the identical
-// query. The PROMISE is cached (same pattern as staticFilterGroupsByBook) so the
+// query. The PROMISE is cached so the
 // instances racing at mount share one in-flight request; a rejection is evicted
 // so a transient service error retries next time.
 const defaultCommentatorsByBook = new Map<number, Promise<number[]>>()

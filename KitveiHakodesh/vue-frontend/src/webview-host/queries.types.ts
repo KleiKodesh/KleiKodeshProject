@@ -270,6 +270,17 @@ export interface RelatedBooksSection {
   books: RelatedBook[]
 }
 
+/** One commentary filter-tree row (Core CommentaryFilterGroup): CommentaryGroup minus lines. */
+export interface CommentaryFilterGroup {
+  bookId: number
+  bookTitle: string
+  path: string
+  connectionTypes: string[]
+  category: string
+  sectionLabel: string
+  subSectionLabel: string | null
+}
+
 export interface RelatedBooksList {
   sections: RelatedBooksSection[]
 }

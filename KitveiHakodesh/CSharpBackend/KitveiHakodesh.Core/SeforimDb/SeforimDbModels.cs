@@ -14,6 +14,28 @@ namespace KitveiHakodesh.Core.SeforimDb
     // The *Args and {Rows} envelopes that used to sit alongside these stay with the
     // transport that shapes them — they describe RPC calls, not data.
 
+    /// <summary>The commentary panel's filter tree groups, in display order.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryFilterGroupList
+    {
+        public List<CommentaryFilterGroup> Groups { get; set; } = new();
+    }
+
+    /// <summary>One filter-tree row: a book under a connection-type section (and, for
+    /// commentaries and other links, a category sub-section). The frontend CommentaryGroup
+    /// minus its lines.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class CommentaryFilterGroup
+    {
+        public int BookId { get; set; }
+        public string BookTitle { get; set; } = "";
+        public string Path { get; set; } = "";
+        public List<string> ConnectionTypes { get; set; } = new();
+        public string Category { get; set; } = "";
+        public string SectionLabel { get; set; } = "";
+        public string? SubSectionLabel { get; set; }
+    }
+
     /// <summary>The book view's related-books list, sections in display order.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class RelatedBooksList
