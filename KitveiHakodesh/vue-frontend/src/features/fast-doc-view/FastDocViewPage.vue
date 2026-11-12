@@ -152,8 +152,9 @@ const documentFontPx = computed(() => {
 function blockColumnStyle(index: number): Record<string, string> | undefined {
   // The document's own text width is the only margin (plus the page's fixed gutter); the book
   // view's column width and padding never apply here. "Ignore document margins" (global): the
-  // text fills the pane - for the text and, through this same function, the notes pane.
-  if (settingsStore.fastDocViewIgnoreMargins) return undefined
+  // text takes the lines view's max column width setting - for the text and, through this same
+  // function, the notes pane.
+  if (settingsStore.fastDocViewIgnoreMargins) return { '--fast-doc-view-column-max-width': 'var(--lines-content-max-width, none)' }
   const twips = fastDocument.textWidthTwipsAt(index)
   if (twips == null) return undefined
   const widthPx = (twips / 15) * textScale.value
