@@ -80,18 +80,17 @@ export function useWindowedRowLanding(
   /** Drops what was still to run once the scroller's first window is on screen (a flash, a mark) - the reader has gone elsewhere. */
   cancelOpeningFollowUps: () => void,
 ) {
-  // Bumped at the start of every navigation so a previous call's work after its
-  // await (its mark and adjustment) is dropped instead of stomping the newer one.
-  let scrollGeneration = 0
-
-  async function scrollToLine(lineIndex: number, options: ScrollToLineOptions = {}) {
+  /**
+   * Resolves true when this call landed the row through the scroller (row mounted, scroll
+   * set) and no newer landing superseded it - the scroller says so, no counter here.
+   * False when it did not land: superseded, nothing to land on, or no landing needed.
+   */
+  async function scrollToLine(lineIndex: number, options: ScrollToLineOptions = {}): Promise<boolean> {
     const api = scroller()
     const scrollerElement = api?.scrollerElement
-    if (!api || !scrollerElement) return
-    const generation = ++scrollGeneration
-    const isStale = () => generation !== scrollGeneration
+    if (!api || !scrollerElement) return false
 
-    if (options.skipIfVisible && api.isRowFullyVisible(lineIndex)) return
+    if (options.skipIfVisible && api.isRowFullyVisible(lineIndex)) return false
 
     // The reader is going somewhere else: the opening's follow-ups (flash, mark)
     // must not run against a view that has moved on.
@@ -145,26 +144,18 @@ export function useWindowedRowLanding(
     if (wantsMark && !force && api.isRowRendered(lineIndex)) {
       if (applyCurrentMark()) {
         adjustToMark()
-        return
+        return false
       }
       // The mark is not in the DOM after all (text still loading) — fall through.
     }
 
-    await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
-    if (isStale()) return
-    if (!wantsMark) return
+    // Superseded by a newer landing: its mark and adjustment are the newer one's business.
+    const landed = await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
+    if (!landed) return false
     // The row is mounted with its text, marks included — nothing to wait for.
-    if (applyCurrentMark()) adjustToMark()
+    if (wantsMark && applyCurrentMark()) adjustToMark()
+    return true
   }
 
-  /**
-   * Bumped by every scrollToLine. A caller that follows a landing up (a bookmark's nudge to
-   * its exact character) reads it right after starting the scroll and gives up once it moves:
-   * a later jump has taken the view.
-   */
-  function currentScrollGeneration() {
-    return scrollGeneration
-  }
-
-  return { scrollToLine, currentScrollGeneration }
+  return { scrollToLine }
 }

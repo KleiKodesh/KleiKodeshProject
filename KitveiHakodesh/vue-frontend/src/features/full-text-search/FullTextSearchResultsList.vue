@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
 import { sourceBookOf } from './noteIds'
-import { ref, shallowRef, computed, watch, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, onBeforeUnmount, onScopeDispose } from 'vue'
 import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
@@ -246,7 +246,7 @@ watch(
     // OUTGOING search's rows, still present at that instant.
     if (armedForNextQuery) {
       armedForNextQuery = false
-      createScrollerAtSavedRow()
+      createScrollerAtSavedRow(armedStart)
       return
     }
     // A new query means a new result list, and a new list is a new scroller at row 0.
@@ -492,6 +492,8 @@ const scrollerKey = ref(0)
 // Set when the parent announces a saved position for a query that is not shown yet;
 // the next query change belongs to that navigation (see the searchQuery watcher).
 let armedForNextQuery = false
+/** The saved row an armed restore creates its scroller at - handed over by armRestore. */
+let armedStart = TOP
 
 /** How many results are loaded — live through the in-place streaming appends. */
 const loadedCount = computed(() => { props.resultsVersion; return props.results.length })
@@ -504,12 +506,10 @@ function onScrollerOpened() {
   scrollerStart.value = TOP
 }
 
-/** A new scroller at the saved position the parent has just set (the prop arrives next tick). */
-function createScrollerAtSavedRow() {
-  nextTick(() => {
-    scrollerStart.value = savedStart()
-    scrollerKey.value++
-  })
+/** A new scroller at a saved position - the start row is an argument of its creation. */
+function createScrollerAtSavedRow(start: { index: number; offsetPx: number }) {
+  scrollerStart.value = start
+  scrollerKey.value++
 }
 
 /** A new scroller at row 0 — a new result list. */
@@ -523,15 +523,16 @@ function createScrollerAtTop() {
  * A NEW saved position to open at. A second navigation into this same (never
  * remounted) page — Back/Forward, or picking a search row from the address bar — patches
  * the tab in place; the parent calls this after seeding initialScrollIndex, with the
- * query that navigation shows. When it is the query already shown, the rows are the
+ * query that navigation shows and the saved row itself (`start`). When it is the query already shown, the rows are the
  * right ones and the new scroller is created now; otherwise when that query arrives
  * (see the searchQuery watcher).
  */
-function armRestore(targetQuery: string) {
+function armRestore(targetQuery: string, start: { index: number; offsetPx: number }) {
   if (targetQuery === props.searchQuery) {
     armedForNextQuery = false
-    createScrollerAtSavedRow()
+    createScrollerAtSavedRow(start)
   } else {
+    armedStart = start
     armedForNextQuery = true
   }
 }

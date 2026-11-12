@@ -55,7 +55,7 @@ function mountScroll(
     scrollerElement,
     scrollbarElement: null,
     renderedRange: { start: 0, end: 10 },
-    scrollToIndex: vi.fn(async () => undefined),
+    scrollToIndex: vi.fn(async () => true),
     revealIndex: vi.fn(),
     readFirstVisible: () => ({ index: 3, offsetWithinRow: 0 }),
     isRowRendered: () => true,
@@ -74,7 +74,7 @@ function mountScroll(
       scroll = useBookViewLinesScroll(
         () => scroller,
         props,
-        { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID },
+        { tabStore: useTabStore(), bookViewStore: useBookViewStore(), autoSelectTopLine: ref(false), zoom: ref(100), tabId, bookId: BOOK_ID, paneId: 1 },
         () => undefined,
       )
       return () => null

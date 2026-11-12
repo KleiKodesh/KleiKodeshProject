@@ -223,10 +223,6 @@ export function useCommentaryScroll(
 
   // ── Navigation on a live scroller ───────────────────────────────────────────
 
-  let navigationsInFlight = 0
-  /** Bumped by every navigation: a follow-up belongs to the latest one only. */
-  let navigationSeq = 0
-
   /**
    * Shows what the reader asked for. On an open scroller it goes there now; with no
    * scroller, or one still building its first window, the request becomes where the
@@ -241,14 +237,8 @@ export function useCommentaryScroll(
     }
     const row = rowOf(request)
     if (!row) return false
-    const seq = ++navigationSeq
-    navigationsInFlight++
-    try {
-      await api.scrollToIndex(row.index, { offsetPx: row.offsetPx })
-    } finally {
-      navigationsInFlight--
-    }
-    if (seq !== navigationSeq) return true
+    // False when a newer navigation superseded this one: the follow-up is the newer one's.
+    if (!(await api.scrollToIndex(row.index, { offsetPx: row.offsetPx }))) return true
     const element = api.scrollerElement
     if (request.kind === 'flatIndex' && element) {
       // The row is mounted with its text, marks included. Bring the current one

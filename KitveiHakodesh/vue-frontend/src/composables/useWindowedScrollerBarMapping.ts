@@ -41,7 +41,7 @@ export interface WindowedScrollerBarMappingOptions {
   rowElement: (index: number) => HTMLElement | null
   /** The mounted row at a viewport-content offset — the window's own lookup. */
   findRowIndexAt: (top: number, fully: boolean) => number | null
-  landAt: (index: number, align: 'start' | 'end') => Promise<void>
+  landAt: (index: number, align: 'start' | 'end') => Promise<unknown>
   /** Abandons a landing in flight: the reader has since moved within the window. */
   cancelLanding?: () => void
   /** Row indexes of the list's section starts, coarse tier first. */

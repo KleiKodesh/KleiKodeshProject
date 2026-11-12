@@ -343,10 +343,12 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
    * target near the window's end first gets the rows below it, so the landing has
    * text under it rather than a gap. Exact: the scroll is set from the row's real
    * position once it is in the DOM. Does nothing when the rows cannot be had.
+   * Resolves true when it landed (the row mounted, the scroll set); false when it did
+   * not - no rows, the rows not to be had, or cancelled / superseded by a newer landing.
    */
-  async function landAt(index: number, landing: WindowedScrollerLandingOptions = {}): Promise<void> {
+  async function landAt(index: number, landing: WindowedScrollerLandingOptions = {}): Promise<boolean> {
     const count = options.count()
-    if (count <= 0) return
+    if (count <= 0) return false
     const target = Math.max(0, Math.min(index, count - 1))
     const generation = ++landingGeneration
     const wantEnd = Math.min(count, target + ROWS_BELOW_ON_REBUILD)
@@ -365,7 +367,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         windowEnd.value = Math.min(wantEnd, options.count())
       })
       if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
-      if (!applied) return
+      if (!applied) return false
     } else if (windowEnd.value < wantEnd) {
       let isTargetPastEnd = false
       const applied = await prepareWindow(generation, windowEnd.value, wantEnd, () => {
@@ -374,18 +376,18 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         clampToCount()
       })
       if (isTargetPastEnd) return landAt(options.count() - 1, { align: landing.align ?? 'end' })
-      if (!applied) return
+      if (!applied) return false
     }
     // Cancelled (or superseded) after the window moved: the reader moved on, but
     // the new rows still need an anchor to hold and their neighbours filled.
     if (generation !== landingGeneration) {
       rememberAnchor()
       fill()
-      return
+      return false
     }
     const viewport = options.viewport()
     const row = options.rowElement(target)
-    if (!viewport || !row) return
+    if (!viewport || !row) return false
     // A positive offset is a saved position partway down the row; one that no
     // longer fits (the row re-wrapped at another zoom or width) lands at its top
     // rather than inside the row after it.
@@ -403,6 +405,7 @@ export function useWindowedScrollerWindow(options: WindowedScrollerWindowOptions
         : Math.max(0, Math.round(row.getBoundingClientRect().top - viewportTop + viewport.scrollTop + offset))
     rememberAnchor()
     fill()
+    return true
   }
 
   /**

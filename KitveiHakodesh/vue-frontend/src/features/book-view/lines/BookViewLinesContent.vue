@@ -279,11 +279,13 @@ const {
     ),
 )
 
+// Focus on open is onScrollerOpened's (the scroller's `opened`), with the split-view guard.
+const paneId = inject<1 | 2>('paneId', 1)
 const { onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
   useBookViewLinesScroll(
   scroller,
   props,
-  { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
+  { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId, paneId },
   (event, firstVisible, firstFull, isUserScroll) =>
     emit(event, firstVisible, firstFull, isUserScroll),
 )
@@ -423,6 +425,12 @@ const {
 // A search hit on a footnote (issue #13) opens its source line (initialLineIndex) with that
 // note popped open: once the line's notes have loaded and its row shows their markers, the
 // note's marker opens its preview as a hover would. One-shot.
+/** The scroller's first window is on screen (its `opened`): the start row is mounted. */
+const isScrollerOpened = ref(false)
+function onLinesScrollerOpened() {
+  isScrollerOpened.value = true
+  onScrollerOpened()
+}
 if (props.openNoteIndex != null && props.initialLineIndex != null) {
   const noteIndex = props.openNoteIndex
   const lineIndex = props.initialLineIndex
@@ -430,22 +438,21 @@ if (props.openNoteIndex != null && props.initialLineIndex != null) {
   let stop: (() => void) | null = null
   stop = watch(
     () => {
+      if (!isScrollerOpened.value) return []
       void props.linesRevision
       const lineId = lineIndex < props.lines.length ? props.lines.idAt(lineIndex) : 0
       return lineId ? getLineNotesForLine(lineId) : []
     },
-    async (notes) => {
+    // Post-flush: the row has rendered the loaded notes' markers.
+    (notes) => {
       if (done || !notes.length) return
       done = true
       stop?.()
-      await nextTick()
-      requestAnimationFrame(() => {
-        const row = scroller()?.rowElement(lineIndex)
-        const marker = row ? markerForNote(row, notes, noteIndex) : null
-        if (marker) openLineNoteTooltip(marker)
-      })
+      const row = scroller()?.rowElement(lineIndex)
+      const marker = row ? markerForNote(row, notes, noteIndex) : null
+      if (marker) openLineNoteTooltip(marker)
     },
-    { immediate: true },
+    { immediate: true, flush: 'post' },
   )
   if (done) stop()
 }
@@ -481,7 +488,7 @@ const {
   },
 })
 
-const { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration } = useBookViewLinesNavigation(
+const { scrollToLine, scrollToLineId, lineIndexForId } = useBookViewLinesNavigation(
   scroller,
   () => props.lines,
   () => props.searchBarVisible ?? false,
@@ -493,7 +500,6 @@ const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoi
   () => props.searchBarVisible ?? false,
   scrollToLine,
   lineIndexForId,
-  currentScrollGeneration,
 )
 
 /** Whether the row at `index` has its text — read in the row slot, with the lines revision so a text change under the same index re-renders the row. */
@@ -534,21 +540,6 @@ function isMultiSelected(lineIndex: number): boolean {
 function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
-
-// Focus the lines view once it has loaded (this component only mounts once the
-// saved position has been read, so its start row is known at setup), so the arrow keys / PageUp-PageDown drive the
-// reader immediately without a click. Guard against stealing focus from a
-// background pane in split view, or from an input the user is already typing
-// in (e.g. an open search bar).
-const paneId = inject<1 | 2>('paneId', 1)
-onMounted(() => {
-  nextTick(() => {
-    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
-    const focused = document.activeElement as HTMLElement | null
-    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.isContentEditable)) return
-    focusScroller()
-  })
-})
 
 // Toolbar export to Word: the custom copy + paste-into-Word path, over the whole book
 // (as if the user had pressed Ctrl+A first) rather than writing a new document.
@@ -619,7 +610,7 @@ function onLinesTextEvicted(lineIds: number[]) {
   evictLineNotesForLines(lineIds)
 }
 
-defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
+defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scroller(), pasteAllIntoWord, scrollToLine, scrollToLineId, readBookmarkPoint, scrollToBookmarkPoint, focusScroller, captureScrollPos, readCurrentPosition, retainedLineRanges, onLinesTextEvicted })
 </script>
 
 <template>
@@ -698,7 +689,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       :data-teamim="bookHasTeamim ? 'true' : 'false'"
       @scroll="onScroll()"
       @move="onScrollerMove"
-      @opened="onScrollerOpened"
+      @opened="onLinesScrollerOpened"
       @moveend="onScrollerMoveEnd($event); emit('moveend')"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
