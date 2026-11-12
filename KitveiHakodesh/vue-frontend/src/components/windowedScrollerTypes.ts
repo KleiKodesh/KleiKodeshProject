@@ -82,9 +82,10 @@ export interface WindowedScrollerApi {
   /**
    * Lands the row at the top of the viewport. Exact: when the row is not mounted the
    * window is rebuilt around it first, then the scroll is set from its real position.
-   * Resolves once the scroll is set.
+   * Resolves true once the row is mounted and the scroll set; false when this landing
+   * was superseded by a newer one (or its rows could not be had) - no counters needed.
    */
-  scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<void>
+  scrollToIndex(index: number, options?: WindowedScrollerScrollToOptions): Promise<boolean>
   /** One contiguous change of the list (rows inserted/removed mid-list), before it renders - see WindowedScroller. */
   replaceRows(at: number, removed: number, inserted: number): void
   /** Moves the view by `px` as part of a landing (a follow-up nudge): held by isLanding, ends as moveend('landing'). */

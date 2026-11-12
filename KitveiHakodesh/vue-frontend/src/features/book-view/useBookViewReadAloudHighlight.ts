@@ -1,5 +1,6 @@
 import { onScopeDispose, watch } from 'vue'
 import type { BookViewReadAloud, ReadAloudPosition } from './useBookViewReadAloud'
+import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 
 /**
  * Marks the word being read aloud in the lines pane, and always keeps the line being read in view.
@@ -37,8 +38,9 @@ function pointAtLetter(row: HTMLElement, letterIndex: number): { node: Text; off
 
 export function useBookViewReadAloudHighlight(
   readAloud: BookViewReadAloud,
-  scrollerElement: () => HTMLElement | null,
-  scrollToLine: (lineIndex: number) => void,
+  scroller: () => WindowedScrollerApi | null,
+  /** Resolves true once the line is landed and mounted; false when a newer landing superseded it. */
+  scrollToLine: (lineIndex: number) => Promise<boolean>,
 ) {
   const supported = typeof CSS !== 'undefined' && 'highlights' in CSS
 
@@ -47,19 +49,14 @@ export function useBookViewReadAloudHighlight(
   }
 
   function rowFor(lineIndex: number): HTMLElement | null {
-    return scrollerElement()?.querySelector<HTMLElement>(`[data-index="${lineIndex}"]`) ?? null
+    const api = scroller()
+    return api?.isRowRendered(lineIndex) ? api.rowElement(lineIndex) : null
   }
 
-  /** Brings the line into view when it is not on screen. */
-  function follow(lineIndex: number) {
-    const scroller = scrollerElement()
-    const row = rowFor(lineIndex)
-    if (scroller && row) {
-      const box = row.getBoundingClientRect()
-      const view = scroller.getBoundingClientRect()
-      if (box.top >= view.top && box.bottom <= view.bottom) return
-    }
-    scrollToLine(lineIndex)
+  /** Brings the line into view when it is not on screen. Null when it already shows. */
+  function follow(lineIndex: number): Promise<boolean> | null {
+    if (scroller()?.isRowFullyVisible(lineIndex)) return null
+    return scrollToLine(lineIndex)
   }
 
   /** Marks the word at `pos` in its drawn row. */
@@ -83,26 +80,24 @@ export function useBookViewReadAloudHighlight(
 
   watch(
     readAloud.position,
-    (pos, previous) => {
+    async (pos, previous) => {
       if (!pos) {
         clear()
         return
       }
-      if (pos.lineIndex !== previous?.lineIndex) follow(pos.lineIndex)
+      const landing = pos.lineIndex !== previous?.lineIndex ? follow(pos.lineIndex) : null
       if (!supported || !readAloud.highlightWords.value || pos.wordStart < 0) {
         clear()
         return
       }
-      const row = rowFor(pos.lineIndex)
-      if (!row) {
-        clear()
-        // The line was just scrolled to and is not drawn yet: mark it once it is.
-        requestAnimationFrame(() => {
-          if (readAloud.position.value === pos && rowFor(pos.lineIndex)) markWord(pos)
-        })
+      if (rowFor(pos.lineIndex)) {
+        markWord(pos)
         return
       }
-      markWord(pos)
+      clear()
+      // The line is being landed and is not mounted yet: mark it once the landing has
+      // mounted it - unless a newer landing or a newer word took over meanwhile.
+      if (landing && (await landing) && readAloud.position.value === pos && rowFor(pos.lineIndex)) markWord(pos)
     },
   )
 

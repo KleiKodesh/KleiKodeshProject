@@ -282,7 +282,7 @@ watch(
     paneNavigation.updateActiveTab({ searchRestore: undefined })
     // The query this navigation shows — the term the list's `searchQuery` will carry.
     const tabQuery = paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery ?? ''
-    resultsListRef.value?.armRestore(parseSearchQuery(tabQuery).term || tabQuery)
+    resultsListRef.value?.armRestore(parseSearchQuery(tabQuery).term || tabQuery, { index: restore.index, offsetPx: restore.offset })
   },
 )
 

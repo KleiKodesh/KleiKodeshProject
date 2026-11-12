@@ -180,8 +180,8 @@ const readAloud = useBookViewReadAloud()
 const readAloudOpen = ref(false)
 useBookViewReadAloudHighlight(
   readAloud,
-  () => linesContentRef.value?.scrollerElement() ?? null,
-  (lineIndex) => void linesContentRef.value?.scrollToLine(lineIndex),
+  () => linesContentRef.value?.scrollerApi() ?? null,
+  (lineIndex) => linesContentRef.value?.scrollToLine(lineIndex) ?? Promise.resolve(false),
 )
 function startReadAloud() {
   if (bookId == null) return

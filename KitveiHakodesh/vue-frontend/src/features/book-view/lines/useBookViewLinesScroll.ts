@@ -22,7 +22,7 @@ import type { Ref } from 'vue'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
-import { mayTakeFocus, placeCaretAtViewportStart } from './lineCaret'
+import { placeCaretAtViewportStart } from './lineCaret'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
@@ -79,6 +79,8 @@ export interface BookViewLinesScrollStoreRefs {
   zoom: Ref<number>
   tabId: string
   bookId: number
+  /** Which split-view pane these lines are in: a background pane never takes focus on open. */
+  paneId: 1 | 2
 }
 
 /** Matches the `.flash-open` animation in BookViewLinesContent.vue. */
@@ -97,7 +99,7 @@ export function useBookViewLinesScroll(
     isUserScroll: boolean,
   ) => void,
 ) {
-  const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId } = storeRefs
+  const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId, paneId } = storeRefs
 
   // ── Scroll capture ──────────────────────────────────────────────────────────
 
@@ -156,7 +158,13 @@ export function useBookViewLinesScroll(
     // window's scroll, until that scroll has ended.
     isAwaitingFirstWindow = false
     const element = scroller()?.scrollerElement
-    const takeFocus = mayTakeFocus(element)
+    // Never from a background pane in split view, nor from an input the reader is
+    // typing in (an open search bar); otherwise the keys drive the reader at once.
+    const isBackgroundPane = bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId
+    const active = document.activeElement as HTMLElement | null
+    const isTypingElsewhere = !!active && !element?.contains(active) &&
+      (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
+    const takeFocus = !!element && !isBackgroundPane && !isTypingElsewhere
     if (takeFocus) element?.focus({ preventScroll: true })
     // Focus says which element the keys reach; it does not say where in the text they
     // start from. Caret browsing (F7) moves the DOCUMENT's caret, and without one in

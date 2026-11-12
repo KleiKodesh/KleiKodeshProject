@@ -14,7 +14,6 @@
  * letters survive all of them, so a count of letters points at the same word either way.
  * Counting text nodes, not pixels, also makes it survive zoom and pane width.
  */
-import { nextTick } from 'vue'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 
@@ -42,10 +41,6 @@ function snippetOf(text: string): string | undefined {
   const collapsed = text.replace(/\s+/g, ' ').trim()
   if (!collapsed) return undefined
   return collapsed.length > SNIPPET_LENGTH ? `${collapsed.slice(0, SNIPPET_LENGTH).trimEnd()}…` : collapsed
-}
-
-function rowElement(scrollerElement: HTMLElement, lineIndex: number): HTMLElement | null {
-  return scrollerElement.querySelector<HTMLElement>(`[data-index="${lineIndex}"]`)
 }
 
 function rowOf(node: Node, scrollerElement: HTMLElement): HTMLElement | null {
@@ -99,9 +94,8 @@ function caretAt(x: number, y: number): { node: Node; offset: number } | null {
 export function useBookViewLinesBookmarkPoint(
   scroller: () => WindowedScrollerApi | null,
   searchBarVisible: () => boolean,
-  scrollToLine: (lineIndex: number, options: { force?: boolean }) => Promise<void>,
+  scrollToLine: (lineIndex: number, options: { force?: boolean }) => Promise<boolean>,
   lineIndexForId: (lineId: number, fallbackLineIndex?: number) => Promise<number | undefined>,
-  currentScrollGeneration: () => number,
 ) {
   function readSelectionPoint(scrollerElement: HTMLElement): BookViewLinesBookmarkPoint | null {
     const selection = window.getSelection()
@@ -128,7 +122,7 @@ export function useBookViewLinesBookmarkPoint(
     const reserved = searchBarVisible() ? SEARCH_BAR_INSET_PX : 0
     const first = api?.readFirstVisible(reserved + SCROLL_LANDING_GAP_PX + 4) ?? api?.readFirstVisible(0)
     if (!first) return null
-    const row = rowElement(scrollerElement, first.index)
+    const row = api?.rowElement(first.index)
     if (!row) return { lineIndex: first.index, letterOffset: 0 }
     const rowText = row.textContent ?? ''
     const pointAt = (characterOffset: number): BookViewLinesBookmarkPoint => ({
@@ -165,16 +159,12 @@ export function useBookViewLinesBookmarkPoint(
   ) {
     const lineIndex = await lineIndexForId(lineId, fallbackLineIndex)
     if (lineIndex == null) return
-    const landing = scrollToLine(lineIndex, { force: true })
-    // Read right after the scroll began: any later jump (another bookmark, the TOC,
-    // section keys) bumps it, and this landing's follow-up must not act on that view.
-    const generation = currentScrollGeneration()
-    const isStale = () => generation !== currentScrollGeneration()
-    await landing
-    await nextTick()
-    if (isStale()) return
-    const scrollerElement = scroller()?.scrollerElement
-    const row = scrollerElement && rowElement(scrollerElement, lineIndex)
+    // False when a later jump (another bookmark, the TOC, section keys) superseded this
+    // landing: its follow-up must not act on that view. True = the row is mounted.
+    if (!(await scrollToLine(lineIndex, { force: true }))) return
+    const api = scroller()
+    const scrollerElement = api?.scrollerElement
+    const row = api?.rowElement(lineIndex)
     if (!scrollerElement || !row) return
     const start = positionAtLetterCount(row, letterOffset, 'start')
     if (!start) return

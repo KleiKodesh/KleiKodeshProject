@@ -16,7 +16,7 @@
  * only once `idbResolved` is true - by then these three are final. Nothing lands on
  * a saved position afterwards.
  */
-import { nextTick, ref } from 'vue'
+import { ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -56,9 +56,7 @@ export interface RestorableToc {
    * Hands the saved inner state over BEFORE the panel is shown, so the tree is
    * created at its saved row (the start row is an argument of creation).
    */
-  stage?: (saved: TocPersistState) => void
-  /** Applies the saved inner state to the tree component, once it exists. */
-  apply: (saved: TocPersistState) => void
+  stage: (saved: TocPersistState) => void
 }
 
 export function useBookViewSessionRestore(
@@ -190,11 +188,9 @@ export function useBookViewSessionRestore(
     const savedToc = bookSaved?.toc ?? (useLastRead ? lastRead?.toc : undefined)
     if (savedToc && toc) {
       if (savedToc.visible) {
-        toc.stage?.(savedToc)
+        // Staged first: the tree mounts with it as its initial state when the panel shows.
+        toc.stage(savedToc)
         toc.visible.value = true
-        // The tree only mounts once the panel is visible, so its inner state has
-        // to wait for that render.
-        nextTick(() => toc.apply(savedToc))
       }
     }
 

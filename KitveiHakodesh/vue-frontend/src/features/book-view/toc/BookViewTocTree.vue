@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import type { AltTocPane } from './useBookViewToc'
 import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
@@ -19,8 +19,7 @@ const props = defineProps<{
   tocSearchTree?: SearchableTree
   /**
    * The saved state of a restored session, given BEFORE the trees exist: each tree
-   * is created at its saved row with its saved expanded ids (no second landing).
-   * restoreState with this same object then only has the search box left to do.
+   * is created at its saved row with its saved expanded ids, the search box with its query.
    */
   initialState?: TocPersistState | null
 }>()
@@ -95,7 +94,7 @@ function onMergedSelect(entry: TocEntry) {
 // ── Persistence ─────────────────────────────────────────────────────────────
 // This whole subtree is v-if'd away when the panel closes and rebuilt on every
 // tab switch, so none of the state below survives on its own. The book view
-// snapshots it on save and hands it back through restoreState on mount.
+// snapshots it on save and hands it back as `initialState` at creation.
 
 function snapshotState(): Omit<TocPersistState, 'visible'> {
   return {
@@ -107,86 +106,6 @@ function snapshotState(): Omit<TocPersistState, 'visible'> {
   }
 }
 
-function applyState(saved: TocPersistState) {
-  if (saved.searchQuery) searchQuery.value = saved.searchQuery
-  // The expanded ids and the first visible row go in together: the row index means
-  // a row of the tree as expanded, and the tree re-opens at it.
-  if (saved.expanded?.length || saved.scroll) tocSectionRef.value?.setExpanded(saved.expanded ?? [], saved.scroll)
-  applyAltState(saved)
-}
-
-/**
- * The alternate-structure tree restores on its own schedule.
- *
- * Its section is keyed by `structure.id` and fed by a load separate from the main
- * TOC's — with no `loading` flag of its own — so it can mount, or REMOUNT, well
- * after applyState has run. Setting its expanded ids too early is silently thrown
- * away with the old component instance, which is exactly what happened: the ids
- * persisted correctly and the tree still came back collapsed.
- */
-// restoreState is called through defineExpose from useBookViewSessionRestore, which reaches
-// it after both an await and a nextTick — so the watches below are created with no active
-// effect scope and unmount disposes none of them. Each self-stops on success, but neither
-// condition is guaranteed: a book with no alt-TOC structure never satisfies the first, and a
-// tab closed while the TOC is still loading never satisfies the second. Track and dispose.
-const restoreWatchStops = new Set<() => void>()
-function trackRestoreWatch(stop: () => void): () => void {
-  restoreWatchStops.add(stop)
-  return () => {
-    restoreWatchStops.delete(stop)
-    stop()
-  }
-}
-onBeforeUnmount(() => {
-  for (const stop of restoreWatchStops) stop()
-  restoreWatchStops.clear()
-})
-
-function applyAltState(saved: TocPersistState) {
-  const apply = () => {
-    if (saved.altExpanded?.length || saved.altScroll) altSectionRef.value?.setExpanded(saved.altExpanded ?? [], saved.altScroll)
-  }
-  if (altSectionRef.value) apply()
-  // Re-apply on every (re)mount of the alt section until one sticks, then stop.
-  let stop: (() => void) | undefined
-  stop = trackRestoreWatch(
-    watch(
-      () => props.altTocPane?.key,
-      (id) => {
-        if (id == null) return
-        nextTick(() => {
-          apply()
-          stop?.()
-        })
-      },
-      { flush: 'post' },
-    ),
-  )
-}
-
-function restoreState(saved: TocPersistState | undefined) {
-  if (!saved) return
-  // The trees were created from it already (initialState).
-  if (saved === props.initialState) return
-  // The sections only exist once the TOC has loaded — restoring into nothing
-  // would silently drop the state, so wait for the load when one is in flight.
-  if (props.loading) {
-    let stop: (() => void) | undefined
-    stop = trackRestoreWatch(
-      watch(
-        () => props.loading,
-        (busy) => {
-          if (busy) return
-          stop?.()
-          nextTick(() => applyState(saved))
-        },
-      ),
-    )
-    return
-  }
-  applyState(saved)
-}
-
 /** The search box's reset button: clear the query, collapse both trees, back to the top. */
 function resetTrees() {
   searchQuery.value = ''
@@ -194,7 +113,7 @@ function resetTrees() {
   altSectionRef.value?.reset()
 }
 
-defineExpose({ snapshotState, restoreState })
+defineExpose({ snapshotState })
 </script>
 
 <template>

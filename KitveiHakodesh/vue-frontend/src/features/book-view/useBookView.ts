@@ -18,7 +18,7 @@
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useCommentaryPanelSlot        — everything one commentary panel owns
  */
-import { ref, shallowRef, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { TocBridge } from '@/stores/bookViewStore'
@@ -83,7 +83,6 @@ type CommentaryViewInstance = {
 /** The TOC tree component, for the state it owns and the book view persists. */
 type TocTreeInstance = {
   snapshotState: () => Omit<TocPersistState, 'visible'>
-  restoreState: (saved: TocPersistState | undefined) => void
 }
 
 export function useBookView(
@@ -519,9 +518,8 @@ export function useBookView(
     // this panel's pin directly and scroll it, leaving the other panel alone.
     if (!anchorChanges) {
       panels[slot].pinExplicitly(commentaryBookId)
-      void nextTick(() => commentaryViewRefs[slot]()?.scrollToGroup(
-        commentaryBookId, undefined, undefined, 'nav-same-anchor',
-      ))
+      // A scroller not open yet takes it as where its next one is created (goTo queues it).
+      commentaryViewRefs[slot]()?.scrollToGroup(commentaryBookId, undefined, undefined, 'nav-same-anchor')
       return
     }
     // Section nav steers this panel to this book; the other panels keep theirs.
@@ -621,7 +619,6 @@ export function useBookView(
     {
       visible: sidePanel.tocVisible,
       stage: (saved) => { restoredTocState.value = saved },
-      apply: (saved) => tocTreeRef()?.restoreState(saved),
     },
   )
 

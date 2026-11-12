@@ -404,20 +404,22 @@ function onBarPointerUp() {
 onBeforeUnmount(onBarPointerUp)
 
 /** Runs one of the scroller's own landings and reports its end (see moveend). */
-async function runLanding(land: () => Promise<void>, byReader = false): Promise<void> {
+async function runLanding<T>(land: () => Promise<T>, byReader = false): Promise<T> {
   const viewport = viewportElement.value
   const before = viewport?.scrollTop
   const source: WindowedScrollerMoveSource = byReader || isBarPressed ? 'reader' : 'landing'
   landingSource = source
   landingsInFlight++
+  let result: T
   try {
-    await land()
+    result = await land()
   } finally {
     landingsInFlight--
   }
-  if (landingsInFlight > 0 || isBarPressed) return
+  if (landingsInFlight > 0 || isBarPressed) return result
   if (viewport && viewport.scrollTop !== before) landingScrollEndOwed = source
   else emit('moveend', source)
+  return result
 }
 
 /**
@@ -587,11 +589,16 @@ function replaceRows(at: number, removed: number, inserted: number) {
   for (const [index, element] of moved) rowElements.set(index, element)
 }
 
-function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<void> {
+/**
+ * Resolves true once the row is mounted and the scroll set; false when this landing did
+ * not land - superseded by a newer landing (or the list emptied), or its rows not to be
+ * had. A caller following up on its own jump checks this instead of keeping a counter.
+ */
+function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions = {}): Promise<boolean> {
   return landOn(index, options, false)
 }
 
-async function landOn(index: number, options: WindowedScrollerScrollToOptions, byReader: boolean): Promise<void> {
+async function landOn(index: number, options: WindowedScrollerScrollToOptions, byReader: boolean): Promise<boolean> {
   // A row past the rows known so far (a list still streaming in) is the ROW SOURCE's
   // business, as for the start row: ask it, and it answers once the row exists - or once
   // it is known it never will, and then the landing clamps to the last row there is.
@@ -604,8 +611,9 @@ async function landOn(index: number, options: WindowedScrollerScrollToOptions, b
     isFirstWindowBuilt = true
     endOpeningIndicator()
   }
-  await runLanding(() => landAt(index, options), byReader)
+  const landed = await runLanding(() => landAt(index, options), byReader)
   bar.syncFromViewport()
+  return landed
 }
 
 function onViewportKeydown(event: KeyboardEvent) {
