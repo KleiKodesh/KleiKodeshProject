@@ -12,6 +12,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { commentaryDisplayTitle } from './commentaryGroupBuilder'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
 import { useI18n } from 'vue-i18n'
 
@@ -63,9 +64,15 @@ const activeGroup = computed(() =>
 // panel's commentator is known throughout, its title comes from the catalog. Without
 // this the box showed its search placeholder for a moment on every line change.
 const booksDataStore = useBooksDataStore()
+// The same form the list's groups carry (commentaryDisplayTitle), so the name does not
+// change shape when the list arrives.
+function catalogDisplayTitle(bookId: number | undefined): string | undefined {
+  const title = bookId != null ? booksDataStore.allBooksMap.get(bookId)?.title : undefined
+  return title ? commentaryDisplayTitle(title) : undefined
+}
 const activeBookTitle = computed(() =>
   activeGroup.value?.bookTitle
-    ?? (props.activePinnedGroup ? booksDataStore.allBooksMap.get(props.activePinnedGroup.bookId)?.title : undefined)
+    ?? catalogDisplayTitle(props.activePinnedGroup?.bookId)
     ?? '',
 )
 
