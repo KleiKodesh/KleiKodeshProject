@@ -1,4 +1,5 @@
 import type { InjectionKey } from 'vue'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 
 /**
  * Shared expansion controller for the FTS filter tree.
@@ -12,8 +13,9 @@ import type { InjectionKey } from 'vue'
 export interface FilterExpansionController {
   /** Ids of the currently-expanded category nodes (reactive). */
   isExpanded: (id: number) => boolean
-  /** Toggle a single node open/closed (used by the per-row expander button). */
-  toggle: (id: number) => void
+  /** Toggle a single node open/closed (used by the per-row expander button). The node, not
+   *  its id: a tree whose folders load when opened (user space) reads them from it. */
+  toggle: (node: CategoryNode) => void
 }
 
 export const FILTER_EXPANSION_KEY: InjectionKey<FilterExpansionController> =

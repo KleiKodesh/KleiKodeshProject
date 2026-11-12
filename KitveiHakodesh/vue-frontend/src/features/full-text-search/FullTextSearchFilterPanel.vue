@@ -15,14 +15,30 @@ import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
 import { FILTER_EXPANSION_KEY } from './fullTextSearchFilterExpansion'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   checkedBookIds: Set<number>
   resultCounts: Map<number, number>
   hasSearched?: boolean
   atFilters: string[]
-}>()
+  /**
+   * The tree's top rows. Absent = the library catalog. User space passes its own roots,
+   * whose computer folders load when opened (`expandNode` / `collapseNode`).
+   */
+  nodes?: CategoryNode[]
+  /** User space: the checked computer files, by path. */
+  checkedFilePaths?: Set<string>
+  /** User space: unchecked computer folders, by node id (an unopened one has no files to tell). */
+  uncheckedFolderIds?: Set<number>
+  /** The select-all box's state, for a tree that is not the catalog. Absent = counted over the catalog's books. */
+  selectAllState?: { checked: boolean; indet: boolean }
+  /** The footer's @ field, which picks books by title from the catalog. Off for user space. */
+  bookTitleSearch?: boolean
+}>(), { bookTitleSearch: true })
 const emit = defineEmits<{
   toggleBook: [number]
+  toggleFile: [string]
+  expandNode: [CategoryNode]
+  collapseNode: [CategoryNode]
   toggleCategory: [CategoryNode, boolean]
   checkAll: []
   checkVisible: [number[]]
@@ -48,11 +64,20 @@ onMounted(() => nextTick(() => searchInputRef.value?.focus()))
 const expandedIds = reactive(new Set<number>())
 const allExpanded = ref(false)
 
+const treeNodes = computed(() => props.nodes ?? booksStore.ROOT.children)
+// A tree that loads folders as they open has no whole to expand at once.
+const isLazyTree = computed(() => props.nodes !== undefined)
+
 provide(FILTER_EXPANSION_KEY, {
   isExpanded: (id: number) => expandedIds.has(id),
-  toggle: (id: number) => {
-    if (expandedIds.has(id)) expandedIds.delete(id)
-    else expandedIds.add(id)
+  toggle: (node: CategoryNode) => {
+    if (expandedIds.has(node.id)) {
+      expandedIds.delete(node.id)
+      emit('collapseNode', node)
+    } else {
+      expandedIds.add(node.id)
+      emit('expandNode', node)
+    }
   },
 })
 
@@ -80,7 +105,7 @@ function stopExpanding() {
 function expandAll() {
   stopExpanding()
   allExpanded.value = true
-  const ids = collectExpandableIds(booksStore.ROOT.children, [])
+  const ids = collectExpandableIds(treeNodes.value, [])
   let i = 0
   const BATCH = 150
   const step = () => {
@@ -139,14 +164,16 @@ watch([inputText, () => props.atFilters.length], ([text, count]) => {
 })
 
 const total = computed(() => booksStore.allBooks.length)
-const isAllChecked = computed(() => total.value > 0 && props.checkedBookIds.size === total.value)
-const isIndet = computed(
-  () => props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value,
-)
+const isAllChecked = computed(() => props.selectAllState
+  ? props.selectAllState.checked
+  : total.value > 0 && props.checkedBookIds.size === total.value)
+const isIndet = computed(() => props.selectAllState
+  ? props.selectAllState.indet
+  : props.checkedBookIds.size > 0 && props.checkedBookIds.size < total.value)
 
 // Show book list when there are committed tokens OR the current input is long enough
 const activeQuery = computed(() => inputText.value.trim())
-const isSearching = computed(() => props.atFilters.length > 0 || activeQuery.value.length >= 2)
+const isSearching = computed(() => props.bookTitleSearch && (props.atFilters.length > 0 || activeQuery.value.length >= 2))
 
 // Books matching any committed token or the current input (if long enough), in the title
 // search's rank order, token by token. Resolved async in the catalog index; the result-count
@@ -247,7 +274,7 @@ function onInputKeydown(e: KeyboardEvent) {
         <span class="panel-title">{{ $t('fullTextSearch.filter.selectAll') }}</span>
       </div>
       <button
-        v-if="!isSearching && !booksStore.loading"
+        v-if="!isSearching && !booksStore.loading && !isLazyTree"
         class="expand-all-btn c-pointer hover-bg"
         :title="allExpanded ? $t('fullTextSearch.filter.collapseAll') : $t('fullTextSearch.filter.expandAll')"
         @click.stop="toggleExpandAll"
@@ -275,13 +302,16 @@ function onInputKeydown(e: KeyboardEvent) {
         />
         <div v-else class="tree-scroll">
           <FullTextSearchFilterNode
-            v-for="cat in booksStore.ROOT.children"
+            v-for="cat in treeNodes"
             :key="cat.id"
             :category="cat"
             :checked-book-ids="checkedBookIds"
+            :checked-file-paths="checkedFilePaths"
+            :unchecked-folder-ids="uncheckedFolderIds"
             :result-counts="resultCounts"
             :has-searched="hasSearched"
             @toggle-book="emit('toggleBook', $event)"
+            @toggle-file="emit('toggleFile', $event)"
             @toggle-category="(c, v) => emit('toggleCategory', c, v)"
             @navigate-to-book="emit('navigateToBook', $event)"
           />
@@ -289,7 +319,7 @@ function onInputKeydown(e: KeyboardEvent) {
       </template>
     </div>
 
-    <div class="panel-search">
+    <div v-if="bookTitleSearch" class="panel-search">
       <div class="search-inner">
         <span
           v-for="(token, i) in atFilters"

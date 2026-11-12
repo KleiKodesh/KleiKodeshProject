@@ -20,6 +20,10 @@
       "label": "אזור אישי",
       "description": "הספרים והתיקיות שבחרת, במקום אחד"
     },
+    "userSpaceSearch": {
+      "label": "חיפוש באזור האישי",
+      "description": "חיפוש בתוך הספרים והקבצים שלך"
+    },
     "fileSearch": {
       "label": "חיפוש קבצים",
       "description": "חיפוש מסמכים במחשב"

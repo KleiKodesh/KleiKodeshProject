@@ -54,6 +54,7 @@ const pages: Record<string, unknown> = {
   '/midot': defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue')),
   '/file-search': defineAsyncComponent(() => import('@/features/local-file-search/LocalFileSearchPage.vue')),
   '/user-space': defineAsyncComponent(() => import('@/features/user-space/UserSpacePage.vue')),
+  '/user-space-search': defineAsyncComponent(() => import('@/features/user-space/UserSpaceSearchPage.vue')),
 }
 </script>
 

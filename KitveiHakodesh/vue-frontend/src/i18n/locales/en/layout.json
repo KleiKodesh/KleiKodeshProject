@@ -20,6 +20,10 @@
       "label": "UserSpace",
       "description": "Your chosen books and folders, in one place"
     },
+    "userSpaceSearch": {
+      "label": "UserSpace search",
+      "description": "Search the text of your own books and files"
+    },
     "fileSearch": {
       "label": "File search",
       "description": "Search documents on this computer"

@@ -30,6 +30,7 @@ export function useAppNavigation() {
     'מידות ושיעורים': '/midot',
     'חיפוש קבצים': '/file-search',
     'אזור אישי': '/user-space',
+    'חיפוש באזור האישי': '/user-space-search',
   }
 
   // ── Shared side-effect actions ────────────────────────────────────────────

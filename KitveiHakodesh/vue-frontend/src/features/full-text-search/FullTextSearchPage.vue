@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import PageCard from '@/components/PageCard.vue'
 import { ref, computed, inject, watch, onMounted, onBeforeUnmount, onScopeDispose, nextTick } from 'vue'
-import { useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { registerPositionCapture } from '@/webview-host/persistenceFlush'
-import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useFullTextSearch } from './useFullTextSearch'
+import { useFullTextSearchPanelsClose } from './useFullTextSearchPanelsClose'
 import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchFilters'
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -21,8 +20,8 @@ import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import MessageBanner from '@/components/MessageBanner.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
 import FullTextSearchOptionsPanel from './FullTextSearchOptionsPanel.vue'
-import { WORD_OPTIONS } from './queryWordSyntax'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
+import FullTextSearchLayout from './FullTextSearchLayout.vue'
 
 const paneNavigation = usePaneNavigation()
 // For the page's own keyboard shortcuts: which pane this is, and whether it is the
@@ -85,6 +84,7 @@ const {
   allWords,
   setAllWords,
   perWord,
+  isOptionsActive,
   sortOrder,
   executeSearch,
   cancelSearch,
@@ -136,9 +136,6 @@ const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
 const isOptionsOpen = ref(false)
 const optionsPanelRef = ref<HTMLElement | null>(null)
-// The options dropdown fills the whole height under the bar, i.e. the results area's.
-const resultsAreaRef = ref<HTMLElement | null>(null)
-const { height: resultsAreaHeight } = useElementSize(resultsAreaRef)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 // Set for one tick while the searchRestore watcher is applying a history position, so the
 // new-search reset can recognize that navigation no matter which watcher runs first.
@@ -156,51 +153,7 @@ const showOptionsCard = computed(
      && !paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery,
 )
 
-const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
-
-const isOptionsActive = computed(
-  () => maxWordDistance.value !== 10 || requireOrdered.value
-     || WORD_OPTIONS.some((option) => allWords.value[option] !== (option === 'ketiv'))
-     || Object.values(perWord.value).some((words) => words?.length)
-     || settings.searchContextMarginWords !== 30,
-)
-
-// The filter panel closes on outside-click only in narrow "overlay" mode, where
-// it floats over the results. In wide mode (≥520px) it's a persistent side panel
-// beside the results, so clicking the results should not dismiss it.
-// Breakpoint mirrors the `@media (min-width: 520px)` layout switch below.
-const isOverlayMode = useMediaQuery('(max-width: 519.98px)')
-
-useDropdownClose(
-  filterPanelRef,
-  () => {
-    if (isFilterOpen.value) isFilterOpen.value = false
-  },
-  {
-    toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
-    enabled: isOverlayMode,
-    // A full-height side panel, not a popup: the viewport fit would cap it 8px short
-    // of the bottom edge (same opt-out as SidePanel).
-    fitToViewport: false,
-  },
-)
-
-// The options panel is a popup over the results in every size, so unlike the filter
-// panel it closes on outside-click unconditionally — no overlay-mode gate.
-//
-// The toggle button has to be named, or clicking it while the panel is open would close
-// it and then reopen it: onClickOutside runs on the CLICK, capture-phase on window, so
-// it fires before the button's own bubble-phase handler (@click.stop can't cancel a
-// capture listener that already ran). Naming the button makes the composable return
-// without closing, leaving the single close to the button's toggle. Nothing reads the
-// returned `justClosed` — that guard is for toggles that set the flag themselves.
-useDropdownClose(
-  optionsPanelRef,
-  () => {
-    if (isOptionsOpen.value) isOptionsOpen.value = false
-  },
-  { toggleButton: computed(() => searchBarRef.value?.optionsBtnRef ?? null) },
-)
+useFullTextSearchPanelsClose({ searchBarRef, filterPanelRef, optionsPanelRef, isFilterOpen, isOptionsOpen })
 
 // A search on screen re-runs when an option changes (its results are stale), once per user action.
 let rerunScheduled = false
@@ -562,13 +515,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="search-page">
-    <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
-    <!-- Height bound only while the dropdown is open: otherwise every resize frame re-rendered the page for it. -->
-    <div v-show="!showOptionsCard" class="search-bar-dock" :style="isOptionsOpen ? { '--options-panel-height': `${resultsAreaHeight}px` } : undefined">
-      <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
-           instance (no remount), so typing, focus and refs survive the hop back to the top. -->
-      <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showOptionsCard">
+  <FullTextSearchLayout
+    :show-options-card="showOptionsCard"
+    :is-options-open="isOptionsOpen"
+    :is-filter-open="isFilterOpen"
+    :instance-key="String(tabId)"
+    @close-filter="isFilterOpen = false"
+  >
+    <template #bar>
       <FullTextSearchBar
         ref="searchBarRef"
         v-model:search-query="searchQuery"
@@ -588,7 +542,8 @@ onBeforeUnmount(() => {
         @toggle-options="isOptionsOpen = !isOptionsOpen"
         @clear="onClearSearch"
       />
-      </Teleport>
+    </template>
+    <template #options>
       <FullTextSearchOptionsPanel
         v-if="isOptionsOpen"
         ref="optionsPanelRef"
@@ -605,89 +560,82 @@ onBeforeUnmount(() => {
         @update:per-word="perWord = $event"
         @close="isOptionsOpen = false"
       />
-    </div>
-
-    <div ref="resultsAreaRef" class="results-area">
-      <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
-      <PageCard v-show="showOptionsCard">
-        <div :id="cardBarSlotId" class="card-bar-slot" />
-        <FullTextSearchOptionsPanel
-          as-card
-          :max-word-distance="maxWordDistance"
-          :require-ordered="requireOrdered"
-          :context-words="settings.searchContextMarginWords"
-          :all-words="allWords"
-          :per-word="perWord"
-          :query="searchQuery"
-          @update:max-word-distance="maxWordDistance = $event"
-          @update:require-ordered="requireOrdered = $event"
-          @update:context-words="settings.searchContextMarginWords = $event"
-          @set-all-words="setAllWords"
-          @update:per-word="perWord = $event"
-        />
-      </PageCard>
-      <div v-if="!showOptionsCard" class="results-list-wrap">
-        <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
-             column, runs the full height beside it, and the options dropdown covers it. -->
-        <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
-        <div class="search-stage-row" aria-live="polite">
-          <template v-if="isSearching">
-            {{ stageLabel }}
-            <span v-if="filteredCount" class="search-stage-count">{{ filteredCount.toLocaleString() }}</span>
-          </template>
-          <span v-else-if="resultCount" dir="auto">
-            <span class="search-stage-count">{{ filteredCount.toLocaleString() }}<template v-if="filteredCount < resultCount"> / {{ resultCount.toLocaleString() }}</template></span>
-            {{ $t('fullTextSearch.results') }}
-          </span>
-        </div>
-        <!-- Rows the search could not decode were skipped (issue #13): say so, the results may be incomplete. -->
-        <MessageBanner
-          v-if="unreadableRowCount > 0"
-          class="unreadable-banner"
-          severity="warning"
-          :message="$t('fullTextSearch.error.unreadableRows', { count: unreadableRowCount.toLocaleString() })"
-          @dismiss="unreadableRowCount = 0"
-        />
-        <FullTextSearchResultsList
-          ref="resultsListRef"
-          :results="filteredResults"
-          :results-version="filteredVersion"
-          :results-generation="filteredGeneration"
-          :search-query="executedQuery"
-          :is-searching="isSearching"
-          :has-searched="hasSearched"
-          :search-error="searchError"
-          :db-not-found="indexingState.dbNotFound"
-          :index-build-failed="indexingState.buildFailed"
-          :initial-scroll-index="initialScrollIndex"
-          :initial-scroll-offset="initialScrollOffset"
-          :zoom="zoom"
-          @result-click="handleResultClick"
-          @save-scroll="onSaveScroll"
-        />
+    </template>
+    <template #card-options>
+      <FullTextSearchOptionsPanel
+        as-card
+        :max-word-distance="maxWordDistance"
+        :require-ordered="requireOrdered"
+        :context-words="settings.searchContextMarginWords"
+        :all-words="allWords"
+        :per-word="perWord"
+        :query="searchQuery"
+        @update:max-word-distance="maxWordDistance = $event"
+        @update:require-ordered="requireOrdered = $event"
+        @update:context-words="settings.searchContextMarginWords = $event"
+        @set-all-words="setAllWords"
+        @update:per-word="perWord = $event"
+      />
+    </template>
+    <template #results>
+      <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
+      <div class="search-stage-row" aria-live="polite">
+        <template v-if="isSearching">
+          {{ stageLabel }}
+          <span v-if="filteredCount" class="search-stage-count">{{ filteredCount.toLocaleString() }}</span>
+        </template>
+        <span v-else-if="resultCount" dir="auto">
+          <span class="search-stage-count">{{ filteredCount.toLocaleString() }}<template v-if="filteredCount < resultCount"> / {{ resultCount.toLocaleString() }}</template></span>
+          {{ $t('fullTextSearch.results') }}
+        </span>
       </div>
-
-      <div v-if="isFilterOpen" class="filter-shell" :class="{ floating: showOptionsCard }" @click.self="isFilterOpen = false">
-        <FullTextSearchFilterPanel
-          ref="filterPanelRef"
-          :checked-book-ids="checkedBookIds"
-          :result-counts="resultCounts"
-          :has-searched="hasSearched"
-          :at-filters="atFilters"
-          @toggle-book="toggleBook"
-          @toggle-category="toggleCategory"
-          @check-all="checkAll"
-          @uncheck-all="uncheckAll"
-          @check-visible="checkVisible"
-          @close="isFilterOpen = false"
-          @update:at-filters="setAtFilters"
-          @navigate-to-book="onNavigateToBook"
-        />
-      </div>
-    </div>
-
-    <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
-  </div>
+      <!-- Rows the search could not decode were skipped (issue #13): say so, the results may be incomplete. -->
+      <MessageBanner
+        v-if="unreadableRowCount > 0"
+        class="unreadable-banner"
+        severity="warning"
+        :message="$t('fullTextSearch.error.unreadableRows', { count: unreadableRowCount.toLocaleString() })"
+        @dismiss="unreadableRowCount = 0"
+      />
+      <FullTextSearchResultsList
+        ref="resultsListRef"
+        :results="filteredResults"
+        :results-version="filteredVersion"
+        :results-generation="filteredGeneration"
+        :search-query="executedQuery"
+        :is-searching="isSearching"
+        :has-searched="hasSearched"
+        :search-error="searchError"
+        :db-not-found="indexingState.dbNotFound"
+        :index-build-failed="indexingState.buildFailed"
+        :initial-scroll-index="initialScrollIndex"
+        :initial-scroll-offset="initialScrollOffset"
+        :zoom="zoom"
+        @result-click="handleResultClick"
+        @save-scroll="onSaveScroll"
+      />
+    </template>
+    <template #filter>
+      <FullTextSearchFilterPanel
+        ref="filterPanelRef"
+        :checked-book-ids="checkedBookIds"
+        :result-counts="resultCounts"
+        :has-searched="hasSearched"
+        :at-filters="atFilters"
+        @toggle-book="toggleBook"
+        @toggle-category="toggleCategory"
+        @check-all="checkAll"
+        @uncheck-all="uncheckAll"
+        @check-visible="checkVisible"
+        @close="isFilterOpen = false"
+        @update:at-filters="setAtFilters"
+        @navigate-to-book="onNavigateToBook"
+      />
+    </template>
+    <template #overlay>
+      <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
+    </template>
+  </FullTextSearchLayout>
 </template>
 
 <style scoped>
@@ -713,103 +661,5 @@ onBeforeUnmount(() => {
 .search-stage-count {
   unicode-bidi: isolate;
   direction: ltr;
-}
-.search-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-  background: var(--bg-primary);
-}
-.results-area {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-/* Anchor for the options panel: on wide screens it floats as a popup below
-   the search bar, so it needs the bar's bottom edge as its containing block. */
-.search-bar-dock {
-  position: relative;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* The results area has no stacking context, so its filter shell (z-index 10) competes
-     with this dock directly: stay above it so the dock's popups (options panel, sort
-     dropdown) paint over both the results list and the filter side panel. */
-  z-index: 11;
-}
-/* Room around the bar inside the card (TopSearchBar's own 8px/6px is tuned for the
-   page edge, too tight in the card). */
-.card-bar-slot {
-  flex-shrink: 0;
-  padding: 4px 0;
-}
-/* The card owns the frame; the panel inside is just its lower section. */
-.results-area :deep(.options-panel.as-card) {
-  width: 100%;
-  max-width: 100%;
-  min-height: 0;
-  flex: 1 1 auto;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-/* Full-width card (PageCard <=600px) takes the app background; the panel must
-   not paint its own bg-secondary over it. Breakpoint mirrors PageCard.vue. */
-@media (max-width: 600px) {
-  .results-area :deep(.options-panel.as-card),
-  .results-area :deep(.options-panel.as-card .panel-header) {
-    background: none;
-  }
-}
-.results-list-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-/* Narrow overlay mode: shell covers the results area with a semitransparent backdrop */
-.filter-shell {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.28);
-}
-
-/* Wide mode: shell is a transparent flex child; panel sits beside the results */
-@media (min-width: 520px) {
-  .results-area {
-    flex-direction: row-reverse;
-  }
-  .results-list-wrap {
-    min-width: 0;
-  }
-  /* Flex, so the panel inside can stretch to the shell's full height. As a plain block
-     the panel had nothing to stretch against and collapsed to its content height. */
-  .filter-shell {
-    position: static;
-    background: none;
-    height: 100%;
-    flex-shrink: 0;
-    display: flex;
-  }
-  /* Over the clean-page card the panel floats instead of taking a column, so the
-     centered card is not pushed aside. */
-  .filter-shell.floating {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-  }
-  /* `height: 100%` would resolve against the shell and then ADD the panel's own margin,
-     overflowing the area by that much at top and bottom. Stretching instead lets the
-     margin be a true inset: the panel fills the height that's left over. */
-  .results-area :deep(.panel) {
-    position: static;
-    align-self: stretch;
-    flex-shrink: 0;
-  }
 }
 </style>

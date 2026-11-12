@@ -95,6 +95,13 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
   }
   // Per-word choices: per tab, saved with the tab's view state (the page restores them).
   const perWord = ref<PerWord>({})
+  /** Any option set away from its default - the bar marks its options button. */
+  const isOptionsActive = computed(
+    () => searchMaxWordDistance.value !== 10 || searchRequireOrdered.value
+       || WORD_OPTIONS.some((option) => allWords.value[option] !== (option === 'ketiv'))
+       || Object.values(perWord.value).some((words) => words?.length)
+       || settings.searchContextMarginWords !== 30,
+  )
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
@@ -581,6 +588,7 @@ export function useFullTextSearch(isIndexing?: () => boolean, pinOwner?: string)
     allWords,
     setAllWords,
     perWord,
+    isOptionsActive,
     sortOrder,
     executeSearch,
     cancelSearch,
