@@ -51,12 +51,16 @@ describe('useWindowedScrollerBarMapping.syncFromViewport', () => {
     windowEnd.value = 160
     mapping.syncFromViewport()
     const afterWindowMove = mapping.landmarkTiers.value
-    expect(afterWindowMove).not.toBe(first)
+    // The rows are exactly as estimated, so no landmark moved: the bar keeps its arrays.
+    expect(afterWindowMove).toBe(first)
 
     viewport.scrollHeight = 40 * 20 + 100
     mapping.syncFromViewport()
     const afterResize = mapping.landmarkTiers.value
     expect(afterResize).not.toBe(afterWindowMove)
+    // Above the window: unchanged; below it: shifted by the window's real minus estimated height.
+    expect(afterResize[0]![0]).toBe(0)
+    expect(afterResize[0]![1]).toBeGreaterThan(500 * 20)
     expect(mapping.totalHeight.value).toBeGreaterThan(1000 * 20)
 
     tiers.value = [[0, 250, 750]]
