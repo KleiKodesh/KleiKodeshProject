@@ -51,9 +51,9 @@ export function useBookViewLineSelection(
     // Lines load on demand (an unloaded line has a negative id): until every line of
     // the section has its id, return null — the watcher below fetches the ids — so
     // useCommentary waits for the real ones.
-    const section = lines().slice(fromIndex, toIndex)
-    if (!section.length || section.some((l) => l.id <= 0)) return null
-    return section.map((l) => l.id)
+    const section = lines().idsIn(fromIndex, toIndex)
+    if (!section.length || section.some((id) => id <= 0)) return null
+    return section
   })
 
   // The section's line ids, fetched (ids only) when a TOC section is selected.
@@ -103,7 +103,7 @@ export function useBookViewLineSelection(
         const fromIndex = Math.min(anchorIndex, clickedIndex)
         const toIndex = Math.max(anchorIndex, clickedIndex)
         const applyRange = () => {
-          const rangeIds = lines().slice(fromIndex, toIndex + 1).filter((l) => l.id > 0).map((l) => l.id)
+          const rangeIds = lines().idsIn(fromIndex, toIndex + 1).filter((id) => id > 0)
           if (!rangeIds.length) return
           manualSelectionLineIds.value = rangeIds
           // commentaryLineId drives which line commentary loads for — keep the anchor
@@ -113,7 +113,7 @@ export function useBookViewLineSelection(
         }
         // The lines between the two ends may never have been scrolled through: their
         // ids (only) are fetched first.
-        const complete = lines().slice(fromIndex, toIndex + 1).every((l) => l.id > 0)
+        const complete = lines().idsIn(fromIndex, toIndex + 1).every((id) => id > 0)
         if (complete) applyRange()
         else void ensureLineIds(fromIndex, toIndex + 1).then(applyRange, () => {})
         return true

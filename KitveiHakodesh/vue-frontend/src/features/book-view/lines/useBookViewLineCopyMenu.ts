@@ -2,7 +2,7 @@ import { t } from '@/i18n'
 import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
-import type { LinesTable } from './linesTable'
+import type { LineItem, LinesTable } from './linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
@@ -73,10 +73,10 @@ interface CopyMenuOptions {
    */
   prepareForLines?: (lineIds: number[]) => Promise<void>
   /**
-   * Fetches every line of the book. Select-all copies the whole book, and lines are
-   * only ever fetched on demand, so the copy asks for them when the user selects all.
+   * Reads the lines of [start, end) for a copy, without keeping them in the lines store.
+   * Select-all copies the whole book, so it reads it when the user selects all.
    */
-  ensureAllLines: () => Promise<void>
+  readLines: (start: number, end: number) => Promise<LineItem[]>
   /** Resolves only the citations already rendered in a fragment — the selection path. */
   prepareForRenderedHtml?: (html: string) => Promise<void>
   /** Resolves one point citation's target for its endnote. Synchronous by necessity. */
@@ -190,10 +190,11 @@ function resolveFirstLineIndex(
 function extractSelection(
   scrollerEl: HTMLElement | null,
   lines: LinesTable,
-  isSelectAll: boolean,
+  /** The whole book's lines when the copy is a select-all; null for a live selection. */
+  wholeBook: readonly LineItem[] | null,
   renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
 ): SelectionResult | null {
-  if (isSelectAll) {
+  if (wholeBook) {
     // Wrap each line as its own <div> block so the two copy concerns stay separable:
     // with copyJoinLines OFF the per-line blocks keep one line break per line on
     // paste (matching a normal selection), and with it ON the flatten step strips
@@ -201,10 +202,11 @@ function extractSelection(
     // quotation re-collect) strip all tags anyway, so the wrappers don't affect them.
     const parts: string[] = []
     let firstLineIndex: number | null = null
-    lines.forEachLoaded((l) => {
+    for (const l of wholeBook) {
+      if (l.content == null) continue
       firstLineIndex ??= l.lineIndex
       parts.push(`<div class="line">${renderLine ? renderLine(l.content, l.lineIndex, l.id) : l.content}</div>`)
-    })
+    }
     return { joined: parts.join(''), firstLineIndex }
   }
 
@@ -282,40 +284,6 @@ function extractSelectionWithUnmountedLines(
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
-/**
- * Builds the full RTL HTML for exporting a book to Word.
- */
-export function buildBookExportHtml(
-  lines: LinesTable,
-  bookTitle: string,
-  renderLine: (raw: string, lineIndex: number, lineId: number) => string,
-  getNoteById: (noteId: number) => Note | undefined,
-): string {
-  function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-    const found = getNoteById(noteId)
-    return found ? { noteText: found.note, quote: found.quote } : undefined
-  }
-
-  const renderedLines: string[] = []
-  lines.forEachLoaded((l) => renderedLines.push(`<div class="book-line">${renderLine(l.content, l.lineIndex, l.id)}</div>`))
-  const renderedBody = renderedLines.join('\n')
-
-  const { html: bodyHtml, endnotes } = extractEndnotes(renderedBody, resolveNote)
-  const endnotesHtml = buildEndnotesHtml(endnotes)
-
-  return (
-    `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">` +
-    `<title>${bookTitle}</title>` +
-    `<style>body{direction:rtl;font-family:"David","Times New Roman",serif;font-size:14pt;line-height:1.8}` +
-    `.book-line{margin-bottom:4pt}a{color:#0078d4}sup{font-size:0.7em}ol{margin-top:12pt}li{margin-bottom:4pt}` +
-    `</style></head><body>` +
-    `<h1>${bookTitle}</h1>` +
-    bodyHtml +
-    endnotesHtml +
-    `</body></html>`
-  )
-}
-
 // ── Copy flag semantics ───────────────────────────────────────────────────────
 //
 // ALL copy paths (menu העתק, Ctrl+C) go through useScopedCopy's copy event handler
@@ -349,7 +317,7 @@ export function buildBookExportHtml(
 //   OFF: leave text as-is
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void, buildSource: (firstLineIndex: number | null) => string } {
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void, buildSource: (firstLineIndex: number | null) => string, wholeBookReady: () => Promise<LineItem[]> } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
@@ -433,7 +401,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
     if (isSelectAll.value) {
       // Copy-all: gather every line from the model (virtualization-independent).
-      const result = extractSelection(scrollerEl.value, lines(), true, modelLineRenderer())
+      const result = extractSelection(scrollerEl.value, lines(), selectAllRows(), modelLineRenderer())
       if (!result) return null
       joined = result.joined
       firstLineIndex = result.firstLineIndex
@@ -458,7 +426,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         firstLineIndex = stitched.firstLineIndex
       } else if (settingsStore.copyJoinLines) {
         // Collect the selected .line innerHTML (optionally via the note renderer).
-        const result = extractSelection(scrollerEl.value, lines(), false, renderLine)
+        const result = extractSelection(scrollerEl.value, lines(), null, renderLine)
         if (!result) return null
         joined = result.joined
         firstLineIndex = result.firstLineIndex
@@ -554,7 +522,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       if (settingsStore.copyJoinLines) {
         inlineText = stripNoteMarkers(html).replace(/<\/?(?:div|span)>/gi, ' ').replace(/\s+/g, ' ').trim()
       } else {
-        const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value, options.getRenderedLineContent)
+        const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null, options.getRenderedLineContent)
         const blobHtml = blobResult ? blobResult.joined : html
         inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       }
@@ -609,7 +577,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         // the budget the copy goes ahead with whatever has arrived; the load keeps running
         // and the next copy has it all.
         const prepared = isSelectAll.value
-          ? wholeBookReady().then(() => options.prepareForLines?.(lines().map((l) => l.id)))
+          ? wholeBookReady().then((rows) => options.prepareForLines?.(rows.map((l) => l.id)))
           : options.prepareForRenderedHtml?.(selectionHtml())
         if (prepared) await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
@@ -619,21 +587,38 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     triggerCopy(afterCopy)
   }
 
-  // The whole book's text, fetched once per select-all (started the moment the user
-  // selects all, below, so the copy rarely has to wait for it).
-  let wholeBook: Promise<void> | null = null
-  function wholeBookReady(): Promise<void> {
-    return (wholeBook ??= options.ensureAllLines().finally(() => { wholeBook = null }))
+  // The whole book's lines, read once per select-all (started the moment the user
+  // selects all, below, so the copy rarely has to wait) and dropped when the select-all ends.
+  let wholeBook: Promise<LineItem[]> | null = null
+  let wholeBookRows: LineItem[] | null = null
+  function wholeBookReady(): Promise<LineItem[]> {
+    if (wholeBookRows) return Promise.resolve(wholeBookRows)
+    const reading = (wholeBook ??= options.readLines(0, lines().length)
+      .then((rows) => { if (wholeBook === reading) wholeBookRows = rows; return rows })
+      .finally(() => { if (wholeBook === reading) wholeBook = null }))
+    return reading
+  }
+  /** The select-all's lines; before they arrive, the lines that are loaded. */
+  function selectAllRows(): readonly LineItem[] {
+    if (wholeBookRows) return wholeBookRows
+    const table = lines()
+    const loaded: LineItem[] = []
+    for (let i = 0; i < table.length; i++) if (table.contentAt(i) != null) loaded.push(table.at(i)!)
+    return loaded
   }
 
   // Select-all is the one case whose warm-up can be big, so it runs here — outside
   // any clipboard gesture — rather than inside the copy action. Covers both routes
   // into select-all (Ctrl+A and the menu item), since both set this flag.
   watch(isSelectAll, (on) => {
-    if (!on) return
+    if (!on) {
+      wholeBook = null
+      wholeBookRows = null
+      return
+    }
     const loading = wholeBookReady()
     if (!settingsStore.copyWithNotes || !options.prepareForLines) return
-    void loading.then(() => options.prepareForLines?.(lines().map((l) => l.id)))
+    void loading.then((rows) => options.prepareForLines?.(rows.map((l) => l.id)))
   })
 
   function onCopy(): void {
@@ -648,7 +633,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   }
 
   function onSearchInRepository(): void {
-    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
+    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value ? selectAllRows() : null)
     if (!result) return
     const query = toHebrewSearchQuery(result.joined)
     if (!query) return
@@ -736,6 +721,8 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       annotationRow,
     ],
     buildFormattedHtml,
+    /** The whole book's lines for an export; held until the select-all ends. */
+    wholeBookReady,
     onCopy,
     onPasteIntoWord,
     onSearchInRepository,

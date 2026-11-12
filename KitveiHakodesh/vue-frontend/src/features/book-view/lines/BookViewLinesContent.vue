@@ -8,7 +8,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import type { LinesTable } from './linesTable'
+import type { LineItem, LinesTable } from './linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { lineIsWhollyBold } from './lineIsWhollyBold'
 import { altTocBreakSources, isAltTocLabelVisible, type AltTocLineLabels } from '../toc/altTocTextLabels'
@@ -74,8 +74,8 @@ const props = defineProps<
     linesRevision?: number
     /** Resolves once the lines of [start, end) have their text — the scroller's row source. */
     ensureLines: (start: number, end: number) => Promise<void>
-    /** Resolves once every line of the book has its text — whole-book actions only. */
-    ensureAllLines: () => Promise<void>
+    /** Reads the lines of [start, end) for a copy or export, without keeping them. */
+    readLines: (start: number, end: number) => Promise<LineItem[]>
     altTocLabelMap?: Map<number, AltTocLineLabels>
     searchQuery?: string
     /** The lines the in-book search results hold: only these are marked with `searchQuery`. */
@@ -349,7 +349,7 @@ const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCo
   getWordLinkAnchorsForLine,
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
 })
-const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, onSearchInRepository, buildSource } = useBookViewLineCopyMenu({
+const { items: contextMenuItems, buildFormattedHtml, wholeBookReady, onCopy, onPasteIntoWord, onSearchInRepository, buildSource } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,
@@ -373,7 +373,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   prepareForLines,
   prepareForRenderedHtml,
   resolveWordLinkTarget,
-  ensureAllLines: () => props.ensureAllLines(),
+  readLines: (start, end) => props.readLines(start, end),
 })
 const visibleContextMenuItems = computed(() =>
   exportRestricted.value
@@ -382,7 +382,7 @@ const visibleContextMenuItems = computed(() =>
 )
 useScopedCopy(
   scrollerEl,
-  () => { const texts: string[] = []; props.lines.forEachLoaded((line) => { if (line.content) texts.push(line.content) }); return texts },
+  () => [],
   isSelectAll,
   buildFormattedHtml,
 )
@@ -498,7 +498,7 @@ const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoi
 /** Whether the row at `index` has its text — read in the row slot, with the lines revision so a text change under the same index re-renders the row. */
 function rowHasText(index: number): boolean {
   void props.linesRevision
-  return props.lines.hasText(index)
+  return props.lines.contentAt(index) != null
 }
 
 function onLineClick(index: number, event: MouseEvent) {
@@ -566,13 +566,14 @@ onMounted(() => {
 const PASTE_INTO_WORD_MAX_HTML_CHARS = 6_000_000
 
 async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean = () => false): Promise<void> {
-  // The whole book is exported, and lines are fetched only on demand: fetch it now.
-  try { await props.ensureAllLines() } catch { /* export what is loaded */ }
+  // The whole book is exported, and lines are kept only near the reader: read it now.
+  let rows: LineItem[] = []
+  try { rows = await wholeBookReady() } catch { /* export what is loaded */ }
   // Cancelled while the book loaded: nothing reached Word yet, so nothing is sent.
   if (isCancelled()) return
   selectAllInContainer()
   if (settingsStore.copyWithNotes) {
-    try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
+    try { await prepareForLines(rows.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
   if (isCancelled()) {
     window.getSelection()?.removeAllRanges()

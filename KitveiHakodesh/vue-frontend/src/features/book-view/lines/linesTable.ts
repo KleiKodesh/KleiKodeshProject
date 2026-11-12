@@ -1,23 +1,21 @@
 export interface LineItem {
   id: number
   lineIndex: number
-  /** null = not fetched yet. Never rendered: the scroller asks for a range before mounting it. */
+  /** null = not loaded. Never rendered: the scroller asks for a range before mounting it. */
   content: string | null
 }
 
 /**
- * The book's lines, SPARSE: the line count, one Int32 per line for the id (0 = not
- * known yet) and a Map holding only the text that is loaded right now. A 190k-line
- * book costs 760 KB of ids, not one placeholder object per line; the text is the
- * reader's window plus the eviction budget (see useLines).
+ * The book's lines: one Int32 id per line (0 = not known yet) and the text of only the
+ * lines near the reader (see useLines). A 190k-line book costs 760 KB of ids.
  *
- * Readers see LineItem rows synthesized on demand: `at(i)` returns `{ id, lineIndex,
- * content }` with a NEGATIVE placeholder id (-(i+1)) while the real one is unknown and
- * `content: null` while the text is not loaded — exactly the row shape of the old array.
+ * After a version swap the old text moves to `staleTexts`: still shown (rows keep their
+ * height), but not counted as loaded, so the next ensureLines fetches the new text.
  */
 export class LinesTable {
   private ids: Int32Array
-  private readonly texts = new Map<number, string>()
+  private texts = new Map<number, string>()
+  private staleTexts = new Map<number, string>()
   // Built on the first id lookup, dropped on every id write.
   private indexById: Map<number, number> | null = null
 
@@ -25,17 +23,15 @@ export class LinesTable {
     this.ids = new Int32Array(count)
   }
 
-  /** The book's line count (the old array's length). */
   get length(): number {
     return this.ids.length
   }
 
-  /** Lines whose text is loaded. */
+  /** Lines whose current text is loaded. */
   get loadedCount(): number {
     return this.texts.size
   }
 
-  /** Extends the table to `count` lines. No-op if already that long. */
   growTo(count: number) {
     if (count <= this.ids.length) return
     const next = new Int32Array(count)
@@ -45,7 +41,7 @@ export class LinesTable {
 
   at(index: number): LineItem | undefined {
     if (index < 0 || index >= this.ids.length) return undefined
-    return { id: this.idAt(index), lineIndex: index, content: this.texts.get(index) ?? null }
+    return { id: this.idAt(index), lineIndex: index, content: this.contentAt(index) }
   }
 
   /** The line's id, or its negative placeholder (-(index+1)) while unknown. */
@@ -58,9 +54,10 @@ export class LinesTable {
   }
 
   contentAt(index: number): string | null {
-    return this.texts.get(index) ?? null
+    return this.texts.get(index) ?? this.staleTexts.get(index) ?? null
   }
 
+  /** The line's text is loaded under the current version. */
   hasText(index: number): boolean {
     return this.texts.has(index)
   }
@@ -68,6 +65,7 @@ export class LinesTable {
   setText(index: number, id: number, text: string) {
     this.setId(index, id)
     this.texts.set(index, text)
+    this.staleTexts.delete(index)
   }
 
   setId(index: number, id: number) {
@@ -76,9 +74,30 @@ export class LinesTable {
     this.indexById = null
   }
 
-  /** Releases the line's text; its id stays. Returns false when there was none. */
-  clearText(index: number): boolean {
-    return this.texts.delete(index)
+  /** A version swap: every loaded text becomes stale (shown until replaced). */
+  markAllStale() {
+    for (const [index, text] of this.texts) this.staleTexts.set(index, text)
+    this.texts.clear()
+  }
+
+  /** Releases the text of every line `keep` rejects; returns the released lines' ids. */
+  releaseTextsExcept(keep: (index: number) => boolean): number[] {
+    const released: number[] = []
+    for (const store of [this.texts, this.staleTexts]) {
+      for (const index of store.keys()) {
+        if (keep(index)) continue
+        store.delete(index)
+        released.push(this.idAt(index))
+      }
+    }
+    return released
+  }
+
+  /** The ids of [from, to), clamped; unknown ones as their negative placeholders. */
+  idsIn(from: number, to: number): number[] {
+    const ids: number[] = []
+    for (let i = Math.max(0, from); i < Math.min(this.ids.length, to); i++) ids.push(this.idAt(i))
+    return ids
   }
 
   /** The index of a line by its id, for ids the table has learned; undefined otherwise. */
@@ -89,27 +108,5 @@ export class LinesTable {
       for (let i = 0; i < this.ids.length; i++) if (this.ids[i]! > 0) this.indexById.set(this.ids[i]!, i)
     }
     return this.indexById.get(id)
-  }
-
-  /** Synthesized rows for [from, to), clamped to the table. */
-  slice(from: number, to: number = this.ids.length): LineItem[] {
-    const start = Math.max(0, from)
-    const end = Math.min(this.ids.length, to)
-    const rows: LineItem[] = []
-    for (let i = start; i < end; i++) rows.push(this.at(i)!)
-    return rows
-  }
-
-  /** Over every line of the book, synthesized. Whole-book actions use it after ensureAllLines. */
-  map<T>(fn: (line: LineItem, index: number) => T): T[] {
-    const out: T[] = new Array(this.ids.length)
-    for (let i = 0; i < this.ids.length; i++) out[i] = fn(this.at(i)!, i)
-    return out
-  }
-
-  /** Over the lines whose text is loaded, in index order. */
-  forEachLoaded(fn: (line: LineItem & { content: string }) => void) {
-    const indexes = Array.from(this.texts.keys()).sort((a, b) => a - b)
-    for (const i of indexes) fn({ id: this.idAt(i), lineIndex: i, content: this.texts.get(i)! })
   }
 }
