@@ -19,7 +19,7 @@ export const UNMARKED_NOTES_MARKER_CLASS = 'line-note-marker'
 export const LINE_NOTE_SELECTOR = `${FOOTNOTE_MARKER_SELECTOR}, sup.${UNMARKED_NOTES_MARKER_CLASS}`
 
 /** Render-cache signature of a line's notes. */
-export function lineNotesSig(notes: LineNote[]): string {
+export function lineNotesSig(notes: readonly LineNote[]): string {
   return notes.length ? notes.map((note) => `${note.noteIndex}:${note.hasMarker ? 1 : 0}:${note.body.length}`).join(',') : ''
 }
 
