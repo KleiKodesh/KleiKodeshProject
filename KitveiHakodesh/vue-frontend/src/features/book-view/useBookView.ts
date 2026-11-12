@@ -305,9 +305,8 @@ export function useBookView(
     for (const slot of COMMENTARY_SLOTS) {
       panels[slot].setPendingPin(snapshot[slot] ?? null)
       // The reader's toolbar pick has now been handed to the pin, so it is spent.
-      // Consumption belongs HERE and not in the capture: applyPositionSync
-      // captures a snapshot 120ms before applying it and abandons it entirely if a
-      // newer scroll supersedes the timer. Clearing on capture let any lines-pane
+      // Consumption belongs HERE and not in the capture: a capture can be
+      // abandoned (an auto-select load superseded or cancelled) before it applies. Clearing on capture let any lines-pane
       // scroll between the pick and the next line click swallow the choice - the
       // intermittent half of this bug.
       commentaryViewRefs[slot]()?.consumeExplicitPick?.()
@@ -413,6 +412,7 @@ export function useBookView(
     captureActivePins,
     applyPendingPins,
     () => linesContentRef()?.readCurrentPosition() ?? null,
+    () => linesContentRef()?.scrollerElement(),
   )
 
   // The alt sections finish loading after the reader is already scrolled, and no

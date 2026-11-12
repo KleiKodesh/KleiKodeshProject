@@ -6,9 +6,14 @@
  * restore) sync once their scroll events go quiet — a jump is a landing and, for a
  * search match, the nudge that brings the mark into view, and only where it comes
  * to rest is the reader's position. See onLinesScrolled.
+ *
+ * The auto-selected commentary (not the line highlight) loads once per scroll:
+ * where a reader scroll stops (scrollStopGate) or where a jump settles.
  */
 import { onScopeDispose, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useEventListener } from '@vueuse/core'
+import { createScrollStopGate } from './scrollStopGate'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
@@ -34,6 +39,8 @@ export function useBookViewScrollSync(
    * where the jump came to rest (see readCurrentPosition in useBookViewLinesScroll).
    */
   readLivePosition: () => { lineIndex: number; fullLineIndex: number } | null,
+  /** The lines viewport: its scrollend and its scrollbar's press/release end a reader scroll. */
+  scrollViewport: () => HTMLElement | null | undefined,
 ) {
   const paneNavigation = usePaneNavigation()
   const bookViewStore = useBookViewStore()
@@ -41,7 +48,43 @@ export function useBookViewScrollSync(
 
   const currentScrollLineIndex = ref(0)
   const currentFullLineIndex = ref(0)
-  let autoSelectCommentaryTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * The line whose commentary auto-select owes, once the reader's scroll stops.
+   * Loading on every scroll step reloaded the panel ~30 times for 30 wheel steps;
+   * the reader only reads the commentary where the scroll comes to rest.
+   */
+  let pendingCommentaryLineId: number | null = null
+
+  function commitPendingCommentary() {
+    const lineId = pendingCommentaryLineId
+    pendingCommentaryLineId = null
+    if (lineId == null || !autoSelectTopLine.value) return
+    // Capture now: no load happened during the scroll, so the panels still show
+    // the groups the reader was on and activePinnedGroup is valid.
+    applyPendingPins(captureActivePins())
+    commentaryLineId.value = lineId
+  }
+
+  const scrollStop = createScrollStopGate(commitPendingCommentary)
+
+  function cancelPendingCommentary() {
+    pendingCommentaryLineId = null
+    scrollStop.cancel()
+  }
+
+  // scrollend does not bubble - listen in the capture phase, keep only the lines viewport's.
+  useEventListener(document, 'scrollend', (event: Event) => {
+    if (event.target === scrollViewport()) scrollStop.ended()
+  }, { capture: true, passive: true })
+  // The app's drawn scrollbar writes scrollTop per pointer move: a drag or track
+  // hold is one scroll that stops on release.
+  useEventListener(window, 'pointerdown', (event: PointerEvent) => {
+    const bar = (event.target as Element | null)?.closest?.('.windowed-scroller-bar')
+    const viewport = scrollViewport()
+    if (bar && viewport && bar.parentElement?.contains(viewport)) scrollStop.pointerDown()
+  }, { capture: true, passive: true })
+  useEventListener(window, 'pointerup', () => scrollStop.pointerUp(), { capture: true, passive: true })
+  useEventListener(window, 'pointercancel', () => scrollStop.pointerUp(), { capture: true, passive: true })
 
   /**
    * Bumped every time the READER moves the view (not when the app jumps it).
@@ -83,7 +126,7 @@ export function useBookViewScrollSync(
   }
 
   /** Sync everything that tracks the reading position to this line index. */
-  function applyPositionSync(lineIndex: number, fullLineIndex: number) {
+  function applyPositionSync(lineIndex: number, fullLineIndex: number, isUserScroll: boolean) {
     const entry = getActiveTocEntry(lineIndex)
     if (entry && entry.id !== activeTocEntryId.value && derivedEntrySupersedesActive(entry)) {
       activeTocEntryId.value = entry.id
@@ -106,15 +149,14 @@ export function useBookViewScrollSync(
     const line = lines().at(fullLineIndex)
     if (line && line.content !== null) {
       selectedLineId.value = line.id
-      // Capture the active pinned group synchronously now — groups are still loaded
-      // and activePinnedGroup is valid. By the time the timer fires and sets
-      // commentaryLineId (triggering a load + groups clear), this value is gone.
-      const capturedPins = captureActivePins()
-      if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)
-      autoSelectCommentaryTimer = setTimeout(() => {
-        applyPendingPins(capturedPins)
-        commentaryLineId.value = line.id
-      }, 120)
+      pendingCommentaryLineId = line.id
+      // A reader scroll loads where it stops (see scrollStopGate); a programmatic
+      // jump reaches here only once it has settled, so it IS the stop.
+      if (isUserScroll) scrollStop.moved()
+      else {
+        scrollStop.cancel()
+        commitPendingCommentary()
+      }
     }
   }
 
@@ -128,7 +170,7 @@ export function useBookViewScrollSync(
     if (isUserScroll) {
       userScrollTick.value++
       cancelPendingSettle()
-      applyPositionSync(lineIndex, fullLineIndex)
+      applyPositionSync(lineIndex, fullLineIndex, true)
       return
     }
 
@@ -144,7 +186,7 @@ export function useBookViewScrollSync(
       // Read the position FRESH rather than trusting the last event's indices.
       const live = readLivePosition()
       if (!live) return
-      applyPositionSync(live.lineIndex, live.fullLineIndex)
+      applyPositionSync(live.lineIndex, live.fullLineIndex, false)
     }, PROGRAMMATIC_SETTLE_MS)
   }
 
@@ -174,20 +216,14 @@ export function useBookViewScrollSync(
   }
 
   watch(autoSelectTopLine, (enabled) => {
-    if (!enabled && autoSelectCommentaryTimer) {
-      clearTimeout(autoSelectCommentaryTimer)
-      autoSelectCommentaryTimer = null
-    }
+    if (!enabled) cancelPendingCommentary()
   })
 
-  // The 120ms timer must not outlive the view: firing after teardown sets commentaryLineId
+  // The owed load must not outlive the view: firing after teardown sets commentaryLineId
   // and starts a commentary fetch for a panel that no longer exists.
   onScopeDispose(() => {
     cancelPendingSettle()
-    if (autoSelectCommentaryTimer) {
-      clearTimeout(autoSelectCommentaryTimer)
-      autoSelectCommentaryTimer = null
-    }
+    cancelPendingCommentary()
   })
 
   return {
