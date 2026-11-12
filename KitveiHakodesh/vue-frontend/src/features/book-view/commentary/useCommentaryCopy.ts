@@ -15,6 +15,7 @@ import {
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
+import BookViewAddNoteMenuRow from '../lines/BookViewAddNoteMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
@@ -701,8 +702,15 @@ export function useCommentaryCopy(
     props: {
       onHighlight: applyHighlightFromSelection,
       onClearHighlight: clearHighlightFromSelection,
-      onAddNote: addNoteFromSelection,
     },
+  }
+
+  // Same row the lines view uses (useBookViewLineCopyMenu) - BookViewAnnotationMenuRow
+  // renders highlight colours only.
+  const addNoteRow: ContextMenuItem = {
+    type: 'component',
+    component: BookViewAddNoteMenuRow,
+    props: { onAddNote: addNoteFromSelection },
   }
 
   const contextMenuItems: ContextMenuItem[] = [
@@ -710,6 +718,7 @@ export function useCommentaryCopy(
     { label: t('bookView.copy.copy'), action: onCopy, shortcut: 'Ctrl+C' },
     { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
     { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
+    addNoteRow,
     { type: 'separator' },
     {
       type: 'submenu',
