@@ -111,10 +111,6 @@ const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
   return zoomFactor * (settingsStore.fontSize / 100) * 15
 })
-// True while the app is moving the list (a restore, a book jump): its position is
-// transient and must not be persisted.
-let programmaticScrolling = false
-
 // Keeps the rows holding a selection's two ends mounted however far they scroll
 // away. Without it, dragging a selection down the results list unmounts the row it
 // started in, and the browser re-homes the anchor onto whatever row now occupies
@@ -358,18 +354,11 @@ function captureScrollPos() {
 /**
  * Lands the list on a row, exactly: the scroller fetches the rows' snippets, mounts
  * them around the target and sets the scroll from the row's real position. The
- * position is not persisted while the landing is in flight.
+ * position is not persisted while the landing is in flight (savePos asks the
+ * scroller's isLanding).
  */
 async function landOn(index: number, landing: WindowedScrollerScrollToOptions = {}) {
-  const api = scroller()
-  if (!api) return
-  programmaticScrolling = true
-  try {
-    await api.scrollToIndex(index, landing)
-  } finally {
-    // The landing's scroll event is dispatched at the next frame's start.
-    requestAnimationFrame(() => { programmaticScrolling = false })
-  }
+  await scroller()?.scrollToIndex(index, landing)
 }
 
 // ── Keyboard navigation ───────────────────────────────────────────────────────
@@ -399,17 +388,7 @@ async function landOn(index: number, landing: WindowedScrollerScrollToOptions = 
  * the viewport's top when it sits above, its bottom at the bottom when below.
  */
 function revealResult(index: number) {
-  const api = scroller()
-  const viewport = scrollEl.value
-  if (!api || !viewport) return
-  if (api.isRowFullyVisible(index)) return
-  const row = api.isRowRendered(index) ? api.rowElement(index) : null
-  // A mounted row is placed by its own offset; an unmounted one is above the
-  // viewport exactly when its index is before the first row showing there.
-  const isAbove = row
-    ? row.offsetTop < viewport.scrollTop
-    : index < (api.readFirstVisible()?.index ?? api.renderedRange.start)
-  void landOn(index, { align: isAbove ? 'start' : 'end' })
+  scroller()?.revealIndex(index, { landMounted: true })
 }
 
 const { activeIndex, onKeydown: moveHighlight } = useInputListNavigation({
@@ -562,19 +541,18 @@ function cancelRestore() {
   createScrollerAtTop()
 }
 
-function savePos() {
-  if (programmaticScrolling) return
+function savePos(ignoreHold = false) {
+  // Mid-landing (a restore, a book jump) the position is transient: not persisted.
+  if (!ignoreHold && scroller()?.isLanding()) return
   const pos = captureScrollPos()
   if (!pos) return
   emit('saveScroll', pos)
 }
 
 // Browser hide/unload and the host's close all run through the shared flush.
-onScopeDispose(registerPositionCapture(savePos))
-onBeforeUnmount(() => {
-  programmaticScrolling = false
-  savePos()
-})
+onScopeDispose(registerPositionCapture(() => savePos()))
+// Leaving: whatever the list shows last is the reader's place, landing or not.
+onBeforeUnmount(() => savePos(true))
 
 function scrollToBook(bookId: number) {
   const index = props.results.findIndex((r) => sourceBookOf(r.bookId) === bookId)
