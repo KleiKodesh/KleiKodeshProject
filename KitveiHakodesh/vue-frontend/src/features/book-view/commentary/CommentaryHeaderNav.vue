@@ -11,6 +11,7 @@ import {
   IconFilter20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
 import { useI18n } from 'vue-i18n'
 
@@ -58,14 +59,24 @@ const activeGroup = computed(() =>
     : null,
 )
 
+// The commentator's title, also while its list is still loading (no group yet): the
+// panel's commentator is known throughout, its title comes from the catalog. Without
+// this the box showed its search placeholder for a moment on every line change.
+const booksDataStore = useBooksDataStore()
+const activeBookTitle = computed(() =>
+  activeGroup.value?.bookTitle
+    ?? (props.activePinnedGroup ? booksDataStore.allBooksMap.get(props.activePinnedGroup.bookId)?.title : undefined)
+    ?? '',
+)
+
 const openBookTooltip = computed(() => {
-  const bookTitle = activeGroup.value?.bookTitle ?? ''
+  const bookTitle = activeBookTitle.value
   const full = props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
   return full ? t('bookView.commentary.openInNewTabNamed', { name: full }) : t('bookView.commentary.openInNewTab')
 })
 
 const activeFullLabel = computed(() => {
-  const bookTitle = activeGroup.value?.bookTitle ?? ''
+  const bookTitle = activeBookTitle.value
   return props.activeTocPath ? `${bookTitle} ${props.activeTocPath}` : bookTitle
 })
 

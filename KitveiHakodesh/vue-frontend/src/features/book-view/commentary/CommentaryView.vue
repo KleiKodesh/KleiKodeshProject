@@ -349,6 +349,7 @@ function rowSearchQuery(flatIndex: number): string | undefined {
 const {
   activeHeader,
   activePinnedGroup,
+  isScrollerOpen,
   onMoveEnd,
   startRow,
   scrollerOpened,
@@ -725,7 +726,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
           class="sticky-nav"
           :groups="visibleGroups"
           :scroll-to-group="scrollToGroup"
-          :active-pinned-group="activePinnedGroup"
+          :active-pinned-group="isScrollerOpen ? activePinnedGroup : (props.pinnedGroup ?? null)"
           :filter-visible="props.filterVisible"
           :active-toc-path="activeTocPath"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"

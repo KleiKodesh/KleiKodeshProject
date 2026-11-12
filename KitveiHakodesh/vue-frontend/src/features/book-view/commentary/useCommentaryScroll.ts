@@ -206,8 +206,11 @@ export function useCommentaryScroll(
 
   /** The scroller's first window is on screen (its `opened` event): rows can be measured and navigated. */
   let isOpen = false
+  /** The current list's scroller has opened: what is at its top is real from now on. */
+  const isScrollerOpen = ref(false)
   function scrollerOpened() {
     isOpen = true
+    isScrollerOpen.value = true
     scrollTop.value = scroller()?.scrollerElement?.scrollTop ?? 0
     const request = requestForNextScroller
     requestForNextScroller = null
@@ -216,7 +219,7 @@ export function useCommentaryScroll(
     if (request) void goTo(request)
   }
   // The scroller went with its list: nothing is on screen until the next one opens.
-  watch(scroller, (api) => { if (!api) isOpen = false }, { flush: 'sync' })
+  watch(scroller, (api) => { if (!api) { isOpen = false; isScrollerOpen.value = false } }, { flush: 'sync' })
 
   // ── Navigation on a live scroller ───────────────────────────────────────────
 
@@ -291,6 +294,7 @@ export function useCommentaryScroll(
     scrollTop,
     activeHeader,
     activePinnedGroup,
+    isScrollerOpen,
     onMoveEnd,
     startRow,
     scrollerOpened,
