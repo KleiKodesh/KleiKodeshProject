@@ -161,6 +161,12 @@ export function useCommentary(
   // extends the manual selection while commentaryLineId — the anchor — stays put).
   let loadedIdsSignature: string | null = null
 
+  /** What the current selection loads: its range when it is one, else its ids. */
+  function selectionSignature(lineId: number): string {
+    const range = (sourceBookId() ?? 0) > 0 ? selectedLineRange() : null
+    return range ? `${lineId}|range:${range.fromIndex}-${range.toIndex}` : idsSignature(lineId, selectedLineIds())
+  }
+
   function idsSignature(lineId: number, ids: number[] | null): string {
     return ids != null && ids.length > 0 ? ids.join(',') : String(lineId)
   }
@@ -314,8 +320,12 @@ export function useCommentary(
   async function load(lineId: number) {
     loadedForLineId = lineId
     const multiIds = selectedLineIds()
-    const isMulti = multiIds != null && multiIds.length > 0
-    loadedIdsSignature = idsSignature(lineId, multiIds)
+    const bookId = sourceBookId() ?? 0
+    // A section (or shift-click range) loads by its range, known at once - never first as
+    // the single line while its ids are still being fetched.
+    const range = bookId > 0 ? selectedLineRange() : null
+    const isMulti = range != null || (multiIds != null && multiIds.length > 0)
+    loadedIdsSignature = selectionSignature(lineId)
     groups.value = []
     resetContents()
     loading.value = true
@@ -332,13 +342,10 @@ export function useCommentary(
       // range is a few hundred KB (the per-row shape was ~4 MB, the old
       // content-joining query up to 10 MB per click) — so the group structure
       // renders at once. Line text is fetched for the rows shown.
-      const queryLineIds = isMulti ? multiIds : [lineId]
-      // A section goes to Core as its index range when it is exactly one (it always is,
-      // unless a line id is missing): the same answer, without thousands of ids.
-      const bookId = sourceBookId() ?? 0
-      const range = isMulti && bookId > 0 ? selectedLineRange() : null
-      const queryLines: number[] | BookLineRange =
-        range && range.toIndex - range.fromIndex === queryLineIds.length ? { bookId, ...range } : queryLineIds
+      // A range goes to Core as (book, from, to): no ids needed, none sent.
+      const queryLines: number[] | BookLineRange = range
+        ? { bookId, ...range }
+        : isMulti ? multiIds! : [lineId]
 
       // One call brings the forward groups, the links pointing AT these lines and the
       // catalogue's commentary verdict for this book (see CommentaryLinkGroups).
@@ -383,7 +390,7 @@ export function useCommentary(
       // load started — the fallback watcher is about to fire another load().
       const refetchImminent =
         loadedForLineId === lineId &&
-        idsSignature(lineId, selectedLineIds()) !== loadedIdsSignature
+        selectionSignature(lineId) !== loadedIdsSignature
       if (!refetchImminent) loading.value = false
     }
   }
@@ -432,7 +439,7 @@ export function useCommentary(
         loadError.value = false
         return
       }
-      if (selectedLineIds() == null) await nextTick()
+      if (selectedLineIds() == null && selectedLineRange() == null) await nextTick()
       if (selectedLineId() !== id) return
       void load(id)
     },
@@ -447,10 +454,10 @@ export function useCommentary(
   // Comparing signatures (not a loadUsedSectionRange flag) is what makes case 2
   // work: a plain click on a line inside a TOC section already loads with a
   // section range, so the old !loadUsedSectionRange guard suppressed the reload.
-  watch(selectedLineIds, (ids) => {
+  watch([selectedLineIds, selectedLineRange], () => {
     const lineId = selectedLineId()
     if (lineId == null || lineId !== loadedForLineId) return
-    if (idsSignature(lineId, ids) === loadedIdsSignature) return
+    if (selectionSignature(lineId) === loadedIdsSignature) return
     void load(lineId)
   })
 

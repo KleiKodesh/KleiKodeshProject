@@ -63,13 +63,15 @@ export function useBookViewLineSelection(
     return section
   })
 
-  /** The lines of selectedSectionLineIds as [fromIndex, toIndex), when they are exactly that range. */
-  const selectedSectionLineRange = computed<{ fromIndex: number; toIndex: number } | null>(() => {
-    const ids = selectedSectionLineIds.value
-    if (ids == null) return null
-    const range = manualSelectionLineIds.value != null ? manualSelectionRange.value : tocSectionRange()
-    return range && range.toIndex - range.fromIndex === ids.length ? range : null
-  })
+  /**
+   * The selection as one [fromIndex, toIndex) range, when it is one: a TOC section, or a
+   * shift-click range. Known AT ONCE from the TOC - it does not wait for the section's
+   * line ids, so the commentary loads the whole section in one go (by range) instead of
+   * first the single line and then the section.
+   */
+  const selectedSectionLineRange = computed<{ fromIndex: number; toIndex: number } | null>(() =>
+    manualSelectionLineIds.value != null ? manualSelectionRange.value : tocSectionRange(),
+  )
 
   // The section's line ids, fetched (ids only) when a TOC section is selected.
   watch(
