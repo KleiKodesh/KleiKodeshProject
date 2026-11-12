@@ -335,6 +335,34 @@ namespace KitveiHakodesh.Core.SeforimDb
         public List<WordLinkTargetRow> Rows { get; set; } = new();
     }
 
+    /// <summary>The lines view's per-window decorations: word-link anchors + inline notes.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class LineDecorationsResult
+    {
+        public WordLinkAnchorsResult Anchors { get; set; } = new();
+        public LineNotesResult Notes { get; set; } = new();
+    }
+
+    /// <summary>A word-link target's TOC section: its lines, the cited one at FocusIndex.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class WordLinkPreviewSection
+    {
+        public string TocText { get; set; } = "";
+        public int FocusIndex { get; set; }
+        public List<LineRow> Lines { get; set; } = new();
+    }
+
+    /// <summary>A word-link hover preview. Empty Content = nothing to show.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class WordLinkPreviewResult
+    {
+        public int BookId { get; set; }
+        public int LineIndex { get; set; }
+        public string Content { get; set; } = "";
+        public string TocPath { get; set; } = "";
+        public WordLinkPreviewSection? Section { get; set; }
+    }
+
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class LineContentRow { public int Id { get; set; } public string Content { get; set; } = ""; }
 

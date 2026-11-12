@@ -447,8 +447,11 @@ export function useBookViewLineRenderer(
   //                    version id can hold the OLD text, and only the text itself can
   //                    say when the line must be rendered again.
   // currentMatchOccurrence is intentionally excluded — handled by setCurrentMark().
+  // Both are bounded by the lines store's text budget: forgetLines drops a line's entries
+  // when its text is evicted. `indexOfLineId` maps an evicted id to its render entry.
   const renderCache = new Map<number, { raw: string; html: string }>()
   const perLineAnnotationKey = new Map<number, string>()
+  const indexOfLineId = new Map<number, number>()
   let globalCacheKey = ''
 
   function getGlobalKey(): string {
@@ -466,15 +469,30 @@ export function useBookViewLineRenderer(
     return query
   }
 
+  const NONE: readonly never[] = []
+
   function getAnnotationKey(lineId: number, lineIndex: number): string {
     const p = getProps()
-    const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []
+    const lineHighlights = p.getHighlightsForLine?.(lineId) ?? NONE
+    const lineNotes = p.getNotesForLine?.(lineId) ?? NONE
+    const anchors = p.getWordLinkAnchorsForLine?.(lineId) ?? NONE
+    const inlineNotes = p.getLineNotesForLine?.(lineId) ?? NONE
+    const query = searchQueryFor(lineIndex)
+    // Most rows carry none of these: one constant key, no signature strings built.
+    if (!lineHighlights.length && !lineNotes.length && !anchors.length && !inlineNotes.length && !query) return ''
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
-    const lineNotes = p.getNotesForLine?.(lineId) ?? []
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
-    const anchorsSig = wordLinkAnchorsSig(p.getWordLinkAnchorsForLine?.(lineId) ?? [])
-    const lineNotesKey = lineNotesSig(p.getLineNotesForLine?.(lineId) ?? [])
-    return `${highlightsSig}|${notesSig}|${anchorsSig}|${lineNotesKey}|${searchQueryFor(lineIndex)}`
+    return `${highlightsSig}|${notesSig}|${wordLinkAnchorsSig(anchors)}|${lineNotesSig(inlineNotes)}|${query}`
+  }
+
+  /** Drops the render entries of lines whose text the lines store released. */
+  function forgetLines(lineIds: number[]) {
+    for (const lineId of lineIds) {
+      const index = indexOfLineId.get(lineId)
+      if (index !== undefined) renderCache.delete(index)
+      indexOfLineId.delete(lineId)
+      perLineAnnotationKey.delete(lineId)
+    }
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -482,6 +500,7 @@ export function useBookViewLineRenderer(
     if (globalKey !== globalCacheKey) {
       renderCache.clear()
       perLineAnnotationKey.clear()
+      indexOfLineId.clear()
       globalCacheKey = globalKey
     }
 
@@ -531,10 +550,11 @@ export function useBookViewLineRenderer(
     content = appendUnmarkedNotesMarker(content, p.getLineNotesForLine?.(lineId) ?? [])
 
     renderCache.set(lineIndex, { raw, html: content })
+    indexOfLineId.set(lineId, lineIndex)
     return content
   }
 
-  return { lineContent }
+  return { lineContent, forgetLines }
 }
 
 export { setCurrentMark } from '@/utils/searchMatchHighlight'

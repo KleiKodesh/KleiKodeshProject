@@ -43,13 +43,14 @@ export async function getBookMetadata(bookId: number): Promise<BookMetadataRow |
 }
 
 /**
- * A page of lines. `versionId` reads the page through an alternate version's overlay;
+ * Up to `limit` lines from lineIndex `fromLineIndex` on (a lineIndex range, not a row
+ * offset). `versionId` reads the page through an alternate version's overlay;
  * omit it (or pass 0) for the book's merged text.
  */
 export async function getLinesPaged(
-  bookId: number, limit: number, offset: number, versionId = 0,
+  bookId: number, limit: number, fromLineIndex: number, versionId = 0,
 ): Promise<LineRow[]> {
-  return (await seforimOp<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset, versionId })).rows
+  return (await seforimOp<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset: fromLineIndex, versionId })).rows
 }
 
 /**
@@ -106,8 +107,15 @@ export async function ftsSnippetTexts(lineIds: number[], shortLineIds: number[])
  * estimates row heights from them. null when the library has no `line.charCount`
  * column (older schemas), in which case the bar falls back to measured averages.
  */
-export async function getLineCharCounts(bookId: number): Promise<number[] | null> {
-  return (await seforimOp<{ counts: number[] | null }>('getLineCharCounts', { bookId })).counts ?? null
+export async function getLineCharCounts(bookId: number): Promise<Uint16Array | null> {
+  // Packed little-endian uint16 (2 bytes a line). Copied out: the decoder's bytes may be an
+  // unaligned view into the whole reply.
+  const packed = (await seforimOp<{ packed: Uint8Array | null }>('getLineCharCounts', { bookId })).packed
+  if (!packed || packed.byteLength < 2) return null
+  const counts = new Uint16Array(packed.byteLength >> 1)
+  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength)
+  for (let i = 0; i < counts.length; i++) counts[i] = view.getUint16(2 * i, true)
+  return counts
 }
 
 // ── Versions (book_version / version_line, later schemas only) ────────────────
@@ -306,6 +314,46 @@ export async function getLineNotesForLines(lineIds: number[]): Promise<LineNote[
     _hasLineNotes = null
     throw new Error('getLineNotesForLines failed')
   }
+}
+
+/**
+ * Word-link anchors and inline notes for two sets of lines in ONE call - the lines view asks
+ * both for every window it mounts. Each half keeps its own contract: anchors are [] on any
+ * failure, notes reject (so their lines are retried).
+ */
+export async function getLineDecorationsForLines(
+  anchorLineIds: number[], noteLineIds: number[],
+): Promise<{ anchors: WordLinkAnchor[]; notes: LineNote[] | Error }> {
+  const askAnchors = _hasLinkAnchors !== false ? anchorLineIds : []
+  const askNotes = _hasLineNotes !== false ? noteLineIds : []
+  if (!askAnchors.length && !askNotes.length) return { anchors: [], notes: [] }
+  try {
+    const res = await seforimOp<{
+      anchors: { supported: boolean; rows: WordLinkAnchor[] }
+      notes: { supported: boolean; rows: LineNote[] }
+    }>('getLineDecorationsForLines', { anchorLineIds: askAnchors, noteLineIds: askNotes })
+    if (askAnchors.length) setWordLinkSupport(res.anchors.supported)
+    if (askNotes.length) _hasLineNotes = res.notes.supported
+    return { anchors: res.anchors.rows, notes: res.notes.rows }
+  } catch {
+    _hasLinkAnchors = null
+    _hasLineNotes = null
+    return { anchors: [], notes: new Error('getLineDecorationsForLines failed') }
+  }
+}
+
+/** A word-link target's hover preview, resolved by the service: see WordLinkPreviewResult. */
+export interface WordLinkPreview {
+  bookId: number
+  lineIndex: number
+  /** '' = nothing to show. */
+  content: string
+  tocPath: string
+  section: { tocText: string; focusIndex: number; lines: LineRow[] } | null
+}
+
+export async function getWordLinkPreview(lineId: number): Promise<WordLinkPreview> {
+  return seforimOp<WordLinkPreview>('getWordLinkPreview', { lineId })
 }
 
 /** Content backfill for a batch of line ids. */

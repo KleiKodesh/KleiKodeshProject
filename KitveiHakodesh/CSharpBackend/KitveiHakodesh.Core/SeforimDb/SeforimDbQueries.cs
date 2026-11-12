@@ -205,7 +205,8 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// page through that version's overlay instead. See
         /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and
         /// does not replace.</param>
-        public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0)
+        /// <param name="fromLineIndex">first lineIndex to return (a range start, not a row offset).</param>
+        public List<LineRow> GetLinesPaged(int bookId, int limit, int fromLineIndex, int versionId = 0)
         {
             var list = new List<LineRow>();
             using var conn = Open();
@@ -219,7 +220,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
-            cmd.Parameters.AddWithValue("@offset", offset);
+            cmd.Parameters.AddWithValue("@fromIndex", fromLineIndex);
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {

@@ -19,7 +19,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
-import { getWordLinkTargetsForBook, wordLinkAnchorsSupported } from '@/webview-host/seforimApi'
+import { wordLinkAnchorsSupported } from '@/webview-host/seforimApi'
+import { injectBookWordLinkTargets } from './lines/bookWordLinkTargets'
 
 const props = defineProps<{
   bookId: number | undefined
@@ -28,6 +29,7 @@ const props = defineProps<{
 }>()
 
 const settingsStore = useSettingsStore()
+const wordLinkTargets = injectBookWordLinkTargets()
 const booksDataStore = useBooksDataStore()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
@@ -128,12 +130,8 @@ async function loadOnce(attempt = 0) {
   const bookId = props.bookId
   if (bookId == null) return
   if (loaded.value && loadedForBookId.value === bookId) return
-  let targets: Awaited<ReturnType<typeof getWordLinkTargetsForBook>> = null
-  try {
-    targets = await getWordLinkTargetsForBook(bookId)
-  } catch {
-    targets = null // dev service transport error — same treatment as a null result
-  }
+  // Shared with the lines view's own ask for the same book (one query per open).
+  const targets = await wordLinkTargets.targetsFor(bookId)
   // The tab's book switched while the fetch ran — this result belongs to the old book.
   if (props.bookId !== bookId) return
   if (targets == null) {

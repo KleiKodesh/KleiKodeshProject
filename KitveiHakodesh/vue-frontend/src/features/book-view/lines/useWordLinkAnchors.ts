@@ -11,8 +11,9 @@
  * queries, zero render-path cost (getWordLinkAnchorsForLine returns a shared empty
  * array and the renderers skip the splice entirely).
  */
-import { onScopeDispose, ref, watch } from 'vue'
-import { getWordLinkAnchorsForLines, getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
+import { onScopeDispose, shallowRef, triggerRef, watch } from 'vue'
+import { getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import { injectBookWordLinkTargets } from './bookWordLinkTargets'
 import { buildWordLinkTreatments, type WordLinkTreatment } from './wordLinkAnchors'
 import { getConnectionTypeName, normalizeConnectionTypeName } from '../commentary/commentaryConnectionTypes'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
@@ -32,10 +33,16 @@ const LOAD_CHUNK = 400
  *   - omit it and call the returned `scheduleWordLinkAnchorsLoad` from the component's
  *     virtualizer watcher (commentary view, like useCommentaryNotes.scheduleNotesLoad)
  */
-export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
+export function useWordLinkAnchors(
+  getVisibleLineIds?: () => number[],
+  /** The transport; the lines view passes its decorations batch (one call with the notes). */
+  fetchAnchors: (lineIds: number[]) => Promise<WordLinkAnchor[]> = getWordLinkAnchorsForLines,
+) {
   // Anchors for the lines whose text is in memory: the lines view evicts them with
   // the text (evictForLines), so they load again with it.
-  const anchorsByLine = ref<Map<number, WordLinkAnchor[]>>(new Map())
+  // Shallow, mutated in place, one trigger per batch or eviction: a deep ref made every
+  // anchor row reactive and fired per set().
+  const anchorsByLine = shallowRef(new Map<number, WordLinkAnchor[]>())
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
   // In-flight query per lineId. `requested` is marked BEFORE a query resolves, so
@@ -64,12 +71,13 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
   // Per-source-book fallback treatments (rank by ascending target book id, plus the
   // sign-vocabulary guard — see buildWordLinkTreatments). Promise-cached so each book's
   // targets are queried once and every batch shares the same, stable assignment.
+  const wordLinkTargets = injectBookWordLinkTargets()
   const treatmentsByBook = new Map<number, Promise<Map<number, WordLinkTreatment>>>()
 
   function treatmentsFor(sourceBookId: number): Promise<Map<number, WordLinkTreatment>> {
     const cached = treatmentsByBook.get(sourceBookId)
     if (cached) return cached
-    const p = getWordLinkTargetsForBook(sourceBookId)
+    const p = wordLinkTargets.targetsFor(sourceBookId)
       .then((targets) => {
         // null = transient failure (DB not ready/swapped): drop the cache entry so a
         // later batch retries; this batch falls back to the splicer's modulo bucket.
@@ -112,7 +120,7 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
 
   async function _loadForLines(lineIds: number[]): Promise<void> {
     try {
-      const rows = await getWordLinkAnchorsForLines(lineIds)
+      const rows = await fetchAnchors(lineIds)
       if (!rows.length) return
       // Annotate every anchor with its book's treatment BEFORE exposing it — the
       // splicer renders whatever is on the row, so assignment happens exactly once
@@ -139,6 +147,7 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
         list.push(row)
       }
       for (const [lineId, list] of byLine) anchorsByLine.value.set(lineId, list)
+      triggerRef(anchorsByLine)
     } catch {
       // DB not ready — un-mark so the lines are retried on the next visible-set change.
       for (const id of lineIds) requested.delete(id)
@@ -190,11 +199,13 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
    */
   function evictForLines(lineIds: number[]) {
     const map = anchorsByLine.value
+    let changed = false
     for (const id of lineIds) {
       if (inFlight.has(id)) continue
       requested.delete(id)
-      map.delete(id)
+      if (map.delete(id)) changed = true
     }
+    if (changed) triggerRef(anchorsByLine)
   }
 
   return {

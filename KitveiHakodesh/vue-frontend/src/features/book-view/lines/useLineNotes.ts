@@ -5,7 +5,7 @@
  * fires ONE batched query for the line ids not yet requested. On DBs without line_note
  * the seforimApi layer short-circuits to [] after the first probe, so this is a no-op there.
  */
-import { onScopeDispose, ref, watch, type Ref } from 'vue'
+import { onScopeDispose, shallowRef, triggerRef, watch, type Ref } from 'vue'
 import { getLineNotesForLines } from '@/webview-host/seforimApi'
 import type { LineNote } from '@/webview-host/queries.types'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
@@ -21,8 +21,13 @@ const EMPTY: LineNote[] = []
  * watch-driven (lines view); omit it and call `scheduleLineNotesLoad` from the view's
  * virtualizer watcher (commentary view).
  */
-export function useLineNotes(getVisibleLineIds?: () => number[]) {
-  const notesByLine = ref<Map<number, LineNote[]>>(new Map())
+export function useLineNotes(
+  getVisibleLineIds?: () => number[],
+  /** The transport; the lines view passes its decorations batch (one call with the anchors). */
+  fetchNotes: (lineIds: number[]) => Promise<LineNote[]> = getLineNotesForLines,
+) {
+  // Shallow, mutated in place, one trigger per batch or eviction (no Map copy each time).
+  const notesByLine = shallowRef(new Map<number, LineNote[]>())
   // Line ids already sent to (or in flight toward) the DB - each is queried once.
   const requested = new Set<number>()
   const inFlight = new Set<number>()
@@ -52,7 +57,7 @@ export function useLineNotes(getVisibleLineIds?: () => number[]) {
 
   async function load(lineIds: number[]) {
     try {
-      const rows = await getLineNotesForLines(lineIds)
+      const rows = await fetchNotes(lineIds)
       if (!rows.length) return
       const byLine = new Map<number, LineNote[]>()
       for (const row of rows) {
@@ -61,9 +66,8 @@ export function useLineNotes(getVisibleLineIds?: () => number[]) {
         list.push(row)
       }
       // One reactive write per batch, so the lines re-render once.
-      const next = new Map(notesByLine.value)
-      for (const [lineId, list] of byLine) next.set(lineId, list)
-      notesByLine.value = next
+      for (const [lineId, list] of byLine) notesByLine.value.set(lineId, list)
+      triggerRef(notesByLine)
     } catch {
       // DB not ready - un-mark so the lines are retried on the next visible-set change.
       for (const id of lineIds) requested.delete(id)
@@ -80,13 +84,13 @@ export function useLineNotes(getVisibleLineIds?: () => number[]) {
 
   /** Drops the notes of lines whose text was evicted; they load again with the text. */
   function evictLineNotesForLines(lineIds: number[]) {
-    let next: Map<number, LineNote[]> | null = null
+    let changed = false
     for (const id of lineIds) {
       if (inFlight.has(id)) continue
       requested.delete(id)
-      if (notesByLine.value.has(id)) (next ??= new Map(notesByLine.value)).delete(id)
+      if (notesByLine.value.delete(id)) changed = true
     }
-    if (next) notesByLine.value = next
+    if (changed) triggerRef(notesByLine)
   }
 
   return { getLineNotesForLine, evictLineNotesForLines, scheduleLineNotesLoad: scheduleLoad }

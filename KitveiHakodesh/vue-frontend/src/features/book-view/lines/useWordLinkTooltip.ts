@@ -5,10 +5,11 @@
  *
  * Delegated listeners on the scroller (one set per view, not per line):
  *   hover  — 250ms intent delay, then the target's enclosing TOC section is fetched
- *            for that one hover and shown in a WordLinkTooltip anchored to the link
- *            element, scrolled to the cited line (see wordLinkSection.ts for why a
+ *            (one service call) and shown in a WordLinkTooltip anchored to the link
+ *            element, scrolled to the cited line (see SeforimDbWordLinkPreview.cs for why a
  *            section and not just the line). A target whose section cannot be
- *            resolved falls back to its single line. Nothing is cached or prefetched.
+ *            resolved falls back to its single line. The last few previews are held
+ *            for re-hovers while the view lives; nothing is prefetched.
  *   click  — navigates to the target via the caller's onNavigate (opens the book
  *            at the target line). Runs in the CAPTURE phase with stopPropagation
  *            so the line's own click handler (commentary line selection) doesn't
@@ -29,7 +30,7 @@
  */
 import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { getLineContents, getLineIndexFromLineId, getTocPathsForLines } from '@/webview-host/seforimApi'
+import { getLineIndexFromLineId, getWordLinkPreview, type WordLinkPreview } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import {
   parseInlineRefLineId,
@@ -37,8 +38,6 @@ import {
   WORD_LINK_SELECTOR,
   type WordLinkTarget,
 } from './wordLinkAnchors'
-import { loadWordLinkSection, loadSectionTocEntries } from './wordLinkSection'
-import type { TocEntry } from '@/webview-host/queries.types'
 
 export interface WordLinkTooltipData {
   /** Unique per hover — used as component key so a new target remounts/re-measures. */
@@ -67,6 +66,9 @@ export interface WordLinkTooltipData {
 }
 
 const HOVER_DELAY_MS = 250
+
+/** Previews held for re-hovers while the view lives. */
+const RECENT_PREVIEWS = 8
 
 /**
  * How long the tooltip survives the pointer leaving the link. Long enough to
@@ -108,64 +110,60 @@ export function useWordLinkTooltip(
     return row ? { bookId: row.bookId, lineIndex: row.lineIndex, lineId } : null
   }
 
+  /** The target line a link names, without a lookup: both forms carry the line id. */
+  function targetLineId(el: Element): number | null {
+    if (el.hasAttribute('data-wl')) return parseWordLinkData(el.getAttribute('data-wl'))?.lineId ?? null
+    return parseInlineRefLineId(el.getAttribute('href'))
+  }
+
+  // The last few previews, held while this view lives: hovering back over a link (or another
+  // link to the same line) shows it again without a round trip. Not a global cache.
+  const recentPreviews = new Map<number, Promise<WordLinkPreview>>()
+
+  function previewFor(lineId: number): Promise<WordLinkPreview> {
+    const held = recentPreviews.get(lineId)
+    if (held) {
+      recentPreviews.delete(lineId)
+      recentPreviews.set(lineId, held)
+      return held
+    }
+    const fetched = getWordLinkPreview(lineId)
+    recentPreviews.set(lineId, fetched)
+    // A failed fetch is not held: the next hover asks again.
+    fetched.catch(() => {
+      if (recentPreviews.get(lineId) === fetched) recentPreviews.delete(lineId)
+    })
+    while (recentPreviews.size > RECENT_PREVIEWS) recentPreviews.delete(recentPreviews.keys().next().value!)
+    return fetched
+  }
+
   async function preview(el: Element, isCurrent: () => boolean): Promise<Omit<WordLinkTooltipData, 'id' | 'anchorRect'> | null> {
-    let target: WordLinkTarget | null
+    const lineId = targetLineId(el)
+    if (lineId == null) return null
+    // One call: the service resolves the line's book, text, TOC path and enclosing TOC
+    // section (see SeforimDbWordLinkPreview.cs for why a section) - the TOC itself never ships.
+    let found: WordLinkPreview
     try {
-      target = await resolveTarget(el)
+      found = await previewFor(lineId)
     } catch {
       return null
     }
-    if (!target || !isCurrent()) return null
-    // Nothing is cached or prefetched: the links are painted in the lines view
-    // from their own markup, and the preview's content and TOC path are fetched
-    // here, for this one hover, and live only as long as the tooltip does.
-    let content: string
-    let tocPath: string
-    let tocEntries: TocEntry[]
-    try {
-      // All three depend only on the target, so they go out together. The TOC is
-      // what the section resolution needs before it can ask for lines, and awaiting
-      // it after these would put four round-trips in series behind a 250ms hover.
-      // Its failure is not fatal — it only costs the section — so it is caught
-      // individually rather than taking the whole preview down with it.
-      const [contentRows, tocPathByLine, entries] = await Promise.all([
-        getLineContents([target.lineId]),
-        getTocPathsForLines([target.lineId]),
-        loadSectionTocEntries(target.bookId).catch(() => [] as TocEntry[]),
-      ])
-      content = contentRows[0]?.content ?? ''
-      tocPath = tocPathByLine.get(target.lineId) ?? ''
-      tocEntries = entries
-    } catch {
-      return null
-    }
-    // The cited line is the fallback preview AND the anchor within the section, so
-    // an empty one means there is nothing worth showing at all.
-    if (!isCurrent() || !content) return null
-
-    const section = tocEntries.length
-      ? await loadWordLinkSection(target.bookId, target.lineIndex, tocEntries).catch(() => null)
-      : null
-    if (!isCurrent()) return null
-
-    // The section is only worth showing if the cited line is actually in it. A
-    // mismatch would scroll the panel to the wrong place and silently reframe the
-    // citation, so fall back to the single line rather than guessing an index.
-    const focusIndex = section?.lines.findIndex((l) => l.id === target.lineId) ?? -1
-    const useSection = section !== null && focusIndex >= 0
-
+    // The cited line is the fallback preview AND the anchor within the section, so an
+    // empty one means there is nothing worth showing at all.
+    if (!isCurrent() || !found.content) return null
+    const section = found.section
     return {
-      bookTitle: opts.getBookTitle(target.bookId),
-      // The section's own TOC text already names the section; prefer the line's
-      // full path, which is the more specific of the two, and fall back to the
-      // section heading when the line has no line_toc row of its own.
-      tocPath: tocPath || (useSection ? section.tocPath : ''),
-      html: content,
-      ...(useSection
+      bookTitle: opts.getBookTitle(found.bookId),
+      // The line's full path is the more specific; the section heading stands in when the
+      // line has no line_toc row of its own.
+      tocPath: found.tocPath || (section ? section.tocText : ''),
+      html: found.content,
+      // No section (no TOC, oversized, or the cited line not in it): the single line.
+      ...(section
         ? {
             section: {
               lines: section.lines.map((l) => ({ id: l.id, html: l.content })),
-              focusIndex,
+              focusIndex: section.focusIndex,
             },
           }
         : {}),

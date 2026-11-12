@@ -163,6 +163,15 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public LineNotesResult GetLineNotesForLines(List<int> lineIds) =>
         Run(() => _queries.GetLineNotesForLines(lineIds), new LineNotesResult { Supported = true }, "getLineNotesForLines");
 
+    // Same contract per half as the two calls it joins: a failure answers Supported = true, no rows.
+    public LineDecorationsResult GetLineDecorationsForLines(List<int> anchorLineIds, List<int> noteLineIds) =>
+        Run(() => _queries.GetLineDecorationsForLines(anchorLineIds, noteLineIds),
+            new LineDecorationsResult { Anchors = new WordLinkAnchorsResult { Supported = true }, Notes = new LineNotesResult { Supported = true } },
+            "getLineDecorationsForLines");
+
+    public WordLinkPreviewResult GetWordLinkPreview(int lineId) =>
+        Run(() => _queries.GetWordLinkPreview(lineId), new WordLinkPreviewResult(), "getWordLinkPreview");
+
     public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId) =>
         Run(() => _queries.GetWordLinkAnchorTargetsForBook(bookId), new WordLinkTargetsResult { Supported = true }, "getWordLinkAnchorTargetsForBook");
 
