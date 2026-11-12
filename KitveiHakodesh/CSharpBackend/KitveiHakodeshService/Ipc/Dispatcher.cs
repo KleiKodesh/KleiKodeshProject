@@ -876,6 +876,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForSourceLineRange(a.LineIds, a.BookId)));
                 }
 
+                case "getCommentaryLinkGroupsForBookLineRange":
+                {
+                    var a = MsgPack.De<BookLineRangeArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetCommentaryLinkGroupsForBookLineRange(a.BookId, a.FromIndex, a.ToIndex)));
+                }
+
                 case "getLineContents":
                 {
                     var a = MsgPack.De<LineIdsArgs>(req.Args);
@@ -925,6 +931,15 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<ReverseLineDataArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new ReverseLineDataResult { Rows = seforim.GetReverseLineData(a.LineIds, a.TypeIds) }));
+                }
+
+                case "getReverseLines":
+                {
+                    var a = MsgPack.De<ReverseLinesArgs>(req.Args);
+                    var rows = a.BookId > 0
+                        ? seforim.GetReverseLinesForBookLineRange(a.BookId, a.FromIndex, a.ToIndex, a.TypeIds)
+                        : seforim.GetReverseLines(a.LineIds, a.TypeIds);
+                    return RpcResponse.Ok(MsgPack.Ser(new ReverseLinesResult { Rows = rows }));
                 }
 
                 case "getReverseBooks":

@@ -382,6 +382,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string Content { get; set; } = "";
     }
 
+    /// <summary>A ReverseLineRow without its text: one base-text line (see GetReverseLines).</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class ReverseLineRefRow
+    {
+        public int SourceBookId { get; set; }
+        public int SourceLineId { get; set; }
+        public int LineIndex { get; set; }
+    }
+
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class ReverseBookRow { public int SourceBookId { get; set; } }
 

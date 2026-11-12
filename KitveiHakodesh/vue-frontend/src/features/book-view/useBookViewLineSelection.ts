@@ -8,6 +8,7 @@
  *
  * Also derives selectedSectionLineIds — the ordered set of line IDs belonging to
  * the active TOC section. Manual multi-select takes priority over the TOC range.
+ * selectedSectionLineRange is the same lines as an index range [fromIndex, toIndex).
  */
 import { ref, computed, watch } from 'vue'
 import type { TocEntry } from '@/webview-host/queries.types'
@@ -29,16 +30,17 @@ export function useBookViewLineSelection(
 ) {
   const manualSelectionAnchorLineId = ref<number | null>(null)
   const manualSelectionLineIds = ref<number[] | null>(null)
+  // The index range manualSelectionLineIds was taken from.
+  const manualSelectionRange = ref<{ fromIndex: number; toIndex: number } | null>(null)
 
   function clearManualSelection() {
     manualSelectionAnchorLineId.value = null
     manualSelectionLineIds.value = null
+    manualSelectionRange.value = null
   }
 
-  const selectedSectionLineIds = computed<number[] | null>(() => {
-    // Manual multi-select takes priority over TOC-derived section range.
-    if (manualSelectionLineIds.value != null) return manualSelectionLineIds.value
-
+  /** The TOC section of the commentary line, as [fromIndex, toIndex); null when none. */
+  function tocSectionRange(): { fromIndex: number; toIndex: number } | null {
     if (commentaryLineId.value == null || !tocEntries().length || !lines().length) return null
     const tocEntry = tocEntries().find((e) => e.lineId === commentaryLineId.value)
     if (!tocEntry || tocEntry.lineIndex == null) return null
@@ -46,14 +48,30 @@ export function useBookViewLineSelection(
     const nextEntry = tocEntries()
       .slice(index + 1)
       .find((e) => e.lineIndex != null && e.level <= tocEntry.level)
-    const fromIndex = tocEntry.lineIndex
-    const toIndex = nextEntry?.lineIndex ?? lines().length
+    return { fromIndex: tocEntry.lineIndex, toIndex: nextEntry?.lineIndex ?? lines().length }
+  }
+
+  const selectedSectionLineIds = computed<number[] | null>(() => {
+    // Manual multi-select takes priority over TOC-derived section range.
+    if (manualSelectionLineIds.value != null) return manualSelectionLineIds.value
+
+    const range = tocSectionRange()
+    if (!range) return null
+    const { fromIndex, toIndex } = range
     // Lines load on demand (an unloaded line has a negative id): until every line of
     // the section has its id, return null — the watcher below fetches the ids — so
     // useCommentary waits for the real ones.
     const section = lines().idsIn(fromIndex, toIndex)
     if (!section.length || section.some((id) => id <= 0)) return null
     return section
+  })
+
+  /** The lines of selectedSectionLineIds as [fromIndex, toIndex), when they are exactly that range. */
+  const selectedSectionLineRange = computed<{ fromIndex: number; toIndex: number } | null>(() => {
+    const ids = selectedSectionLineIds.value
+    if (ids == null) return null
+    const range = manualSelectionLineIds.value != null ? manualSelectionRange.value : tocSectionRange()
+    return range && range.toIndex - range.fromIndex === ids.length ? range : null
   })
 
   // The section's line ids, fetched (ids only) when a TOC section is selected.
@@ -106,6 +124,7 @@ export function useBookViewLineSelection(
           const rangeIds = lines().idsIn(fromIndex, toIndex + 1).filter((id) => id > 0)
           if (!rangeIds.length) return
           manualSelectionLineIds.value = rangeIds
+          manualSelectionRange.value = { fromIndex, toIndex: toIndex + 1 }
           // commentaryLineId drives which line commentary loads for — keep the anchor
           // so the first load always comes from the anchor end of the range.
           commentaryLineId.value = anchorId
@@ -132,6 +151,7 @@ export function useBookViewLineSelection(
     manualSelectionAnchorLineId,
     manualSelectionLineIds,
     selectedSectionLineIds,
+    selectedSectionLineRange,
     clearManualSelection,
     onLineSelected,
   }

@@ -223,6 +223,16 @@ public sealed class CommentaryLinkGroupsArgs
     public int BookId { get; set; }
 }
 
+/// <summary>The lines of a book with lineIndex in [FromIndex, ToIndex) - a section sent as
+/// its bounds instead of its ids.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookLineRangeArgs
+{
+    public int BookId { get; set; }
+    public int FromIndex { get; set; }
+    public int ToIndex { get; set; }
+}
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentsResult { public List<LineContentRow> Rows { get; set; } = new(); }
 
@@ -243,6 +253,21 @@ public sealed class ReverseLineDataArgs
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ReverseLineDataResult { public List<ReverseLineRow> Rows { get; set; } = new(); }
+
+/// <summary>getReverseLines: the lines as ids (LineIds) or, when BookId > 0, as the book's
+/// lines with lineIndex in [FromIndex, ToIndex).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ReverseLinesArgs
+{
+    public List<int> LineIds { get; set; } = new();
+    public int BookId { get; set; }
+    public int FromIndex { get; set; }
+    public int ToIndex { get; set; }
+    public List<int> TypeIds { get; set; } = new();
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ReverseLinesResult { public List<ReverseLineRefRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ReverseBooksArgs

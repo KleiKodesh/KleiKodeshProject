@@ -209,7 +209,7 @@ export function useBookView(
 
   const {
     manualSelectionLineIds,
-    selectedSectionLineIds, clearManualSelection, onLineSelected: onLineSelectedRaw,
+    selectedSectionLineIds, selectedSectionLineRange, clearManualSelection, onLineSelected: onLineSelectedRaw,
   } = useBookViewLineSelection(
     () => lines.value,
     () => tocEntries.value,
@@ -230,6 +230,7 @@ export function useBookView(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
+    () => selectedSectionLineRange.value,
   )
 
   // ── The commentary panels (one per slot) ──────────────────────────────────

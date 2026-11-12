@@ -166,6 +166,20 @@ export interface ReverseLineRow {
   content: string
 }
 
+/** A ReverseLineRow without its text: one base-text line (getReverseLines). */
+export interface ReverseLineRefRow {
+  sourceBookId: number
+  sourceLineId: number
+  lineIndex: number
+}
+
+/** A book's lines with lineIndex in [fromIndex, toIndex): a section sent as its bounds. */
+export interface BookLineRange {
+  bookId: number
+  fromIndex: number
+  toIndex: number
+}
+
 // ── Links ─────────────────────────────────────────────────────────────────────
 
 export interface CommentaryLinkRow {

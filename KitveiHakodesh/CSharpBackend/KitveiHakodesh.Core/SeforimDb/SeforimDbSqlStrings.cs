@@ -278,20 +278,35 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// <summary>Grouped/de-duplicated variant of GetCommentaryLinksForSourceLineRange: ordered so
         /// the reader can cut groups on a (book, type) change; DISTINCT because a range of source
         /// lines links the same target line many times over.</summary>
-        public static string GetCommentaryLinkGroupsForSourceLineRange(SeforimDbSchema schema, int count, bool hasTargetLineIndex) => hasTargetLineIndex
+        public static string GetCommentaryLinkGroupsForSourceLineRange(SeforimDbSchema schema, int count, bool hasTargetLineIndex) =>
+            GetCommentaryLinkGroupsForSourceLines(schema, LineIdList("p", count), hasTargetLineIndex);
+
+        /// <summary>GetCommentaryLinkGroupsForSourceLineRange for the lines <paramref name="lineSet"/>
+        /// names - LineIdList or BookLineRangeIds.</summary>
+        public static string GetCommentaryLinkGroupsForSourceLines(SeforimDbSchema schema, string lineSet, bool hasTargetLineIndex) => hasTargetLineIndex
             ? $@"
             SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
                    l.targetLineIndex AS lineIndex
             FROM link l
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}
+            WHERE l.sourceLineId IN {lineSet}{HiddenSideFilter(schema, LinkSide.Source)}
             ORDER BY l.targetBookId, l.connectionTypeId, lineIndex, l.targetLineId"
             : $@"
             SELECT DISTINCT l.targetBookId, l.connectionTypeId, l.targetLineId,
                    ln.lineIndex
             FROM link l
             JOIN line ln ON ln.id = l.targetLineId
-            WHERE l.sourceLineId IN ({InPlaceholders("p", count)}){HiddenSideFilter(schema, LinkSide.Source)}
+            WHERE l.sourceLineId IN {lineSet}{HiddenSideFilter(schema, LinkSide.Source)}
             ORDER BY l.targetBookId, l.connectionTypeId, ln.lineIndex, l.targetLineId";
+
+        /// <summary>A bound list of line ids, @prefix0..@prefixN-1, for "x IN {lineSet}".</summary>
+        public static string LineIdList(string prefix, int count) => $"({InPlaceholders(prefix, count)})";
+
+        /// <summary>The lines of book @rangeBookId with lineIndex in [@rangeFrom, @rangeTo), for
+        /// "x IN {lineSet}". A section can be 18k lines: binding each id cost SQLite ~1.5 s on
+        /// its own, while this selects them from idx_line_book_index; the plans of the queries
+        /// using it measured the same or faster than with the bound list on both databases.</summary>
+        public const string BookLineRangeIds =
+            "(SELECT id FROM line WHERE bookId = @rangeBookId AND lineIndex >= @rangeFrom AND lineIndex < @rangeTo)";
 
         /// <summary>The end of a link a query shows it from — the numbering of link_suppressed_side.side.</summary>
         public enum LinkSide { Source = 0, Target = 1 }
@@ -319,11 +334,16 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// The dependant types (DependantConnectionTypeNames) are excluded because reversing
         /// THOSE answers a different question - "what is this book's base text" - which
         /// GetReverseLineData already handles with its own guards.</summary>
-        public static string GetIncomingLinkGroupsForTargetLineRange(SeforimDbSchema schema, int lineCount) => $@"
+        public static string GetIncomingLinkGroupsForTargetLineRange(SeforimDbSchema schema, int lineCount) =>
+            GetIncomingLinkGroupsForTargetLines(schema, LineIdList("t", lineCount));
+
+        /// <summary>GetIncomingLinkGroupsForTargetLineRange for the lines <paramref name="lineSet"/>
+        /// names - LineIdList or BookLineRangeIds.</summary>
+        public static string GetIncomingLinkGroupsForTargetLines(SeforimDbSchema schema, string lineSet) => $@"
             SELECT DISTINCT l.sourceBookId, l.connectionTypeId, l.sourceLineId, ln.lineIndex
             FROM link l
             JOIN line ln ON ln.id = l.sourceLineId
-            WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
+            WHERE l.targetLineId IN {lineSet}
               AND l.sourceBookId != l.targetBookId
               AND l.connectionTypeId NOT IN (SELECT ct.id FROM connection_type ct
                                               WHERE ct.name IN ({DependantConnectionTypeNamesSql})){HiddenSideFilter(schema, LinkSide.Target)}
@@ -446,8 +466,19 @@ namespace KitveiHakodesh.Core.SeforimDb
         public static string GetReverseLineData(SeforimDbSchema schema, int lineCount, int typeCount) => $@"
             SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, {C_ContentColumn(schema, "ln")}
             FROM link l
-            JOIN line ln ON ln.id = l.sourceLineId{C_ContentJoin(schema, "ln")}
-            WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
+            JOIN line ln ON ln.id = l.sourceLineId{C_ContentJoin(schema, "ln")}" + ReverseLineFilter(schema, LineIdList("t", lineCount), typeCount);
+
+        /// <summary>GetReverseLineData's lines without their text and without repeats: one row
+        /// per (book, line) for the lines <paramref name="lineSet"/> names (LineIdList or
+        /// BookLineRangeIds). The commentary panel fetches the text of the rows it shows; the
+        /// per-link text was the bulk of the old answer (a line repeats once per link).</summary>
+        public static string GetReverseLines(SeforimDbSchema schema, string lineSet, int typeCount) => @"
+            SELECT DISTINCT l.sourceBookId, l.sourceLineId, ln.lineIndex
+            FROM link l
+            JOIN line ln ON ln.id = l.sourceLineId" + ReverseLineFilter(schema, lineSet, typeCount);
+
+        private static string ReverseLineFilter(SeforimDbSchema schema, string lineSet, int typeCount) => $@"
+            WHERE l.targetLineId IN {lineSet}
               AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
               AND l.sourceBookId != l.targetBookId
               -- Drop lateral citations: a book that merely QUOTES one line of this one is

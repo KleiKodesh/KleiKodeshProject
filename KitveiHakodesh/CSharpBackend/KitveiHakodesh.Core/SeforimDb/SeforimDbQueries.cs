@@ -575,16 +575,37 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// One connection, three statements: the pane opens on this single call.</summary>
         public CommentaryLinkGroups GetCommentaryLinkGroupsForSourceLineRange(List<int> lineIds, int bookId)
         {
+            if (lineIds is null || lineIds.Count == 0) return new CommentaryLinkGroups();
+            return GetCommentaryLinkGroups(bookId,
+                prefix => SeforimDbSqlStrings.LineIdList(prefix, lineIds.Count),
+                (cmd, prefix) => BindList(cmd, prefix, lineIds));
+        }
+
+        /// <summary>GetCommentaryLinkGroupsForSourceLineRange for the lines of
+        /// <paramref name="bookId"/> with lineIndex in [<paramref name="fromIndex"/>,
+        /// <paramref name="toIndex"/>): the same answer, without sending a section's thousands
+        /// of line ids (see SeforimDbSqlStrings.BookLineRangeIds).</summary>
+        public CommentaryLinkGroups GetCommentaryLinkGroupsForBookLineRange(int bookId, int fromIndex, int toIndex)
+        {
+            if (bookId <= 0 || toIndex <= fromIndex) return new CommentaryLinkGroups();
+            return GetCommentaryLinkGroups(bookId,
+                _ => SeforimDbSqlStrings.BookLineRangeIds,
+                (cmd, _) => BindBookLineRange(cmd, bookId, fromIndex, toIndex));
+        }
+
+        /// <summary>The body of both forms: <paramref name="lineSet"/> names the lines in SQL
+        /// for a parameter prefix, <paramref name="bindLines"/> binds them.</summary>
+        private CommentaryLinkGroups GetCommentaryLinkGroups(int bookId, Func<string, string> lineSet, Action<SqliteCommand, string> bindLines)
+        {
             var result = new CommentaryLinkGroups();
-            if (lineIds is null || lineIds.Count == 0) return result;
             using var conn = Open();
             var schema = SchemaOf(conn);
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
 
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLineRange(schema, lineIds.Count, _linkHasTargetLineIndex.Value);
-                BindList(cmd, "p", lineIds);
+                cmd.CommandText = SeforimDbSqlStrings.GetCommentaryLinkGroupsForSourceLines(schema, lineSet("p"), _linkHasTargetLineIndex.Value);
+                bindLines(cmd, "p");
                 using var r = cmd.ExecuteReader();
                 ReadLinkGroups(r, (book, type, ids, indexes) => result.Rows.Add(new CommentaryLinkGroupRow
                 {
@@ -594,8 +615,8 @@ namespace KitveiHakodesh.Core.SeforimDb
 
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = SeforimDbSqlStrings.GetIncomingLinkGroupsForTargetLineRange(schema, lineIds.Count);
-                BindList(cmd, "t", lineIds);
+                cmd.CommandText = SeforimDbSqlStrings.GetIncomingLinkGroupsForTargetLines(schema, lineSet("t"));
+                bindLines(cmd, "t");
                 using var r = cmd.ExecuteReader();
                 ReadLinkGroups(r, (book, type, ids, indexes) => result.Incoming.Add(new IncomingLinkGroupRow
                 {
@@ -806,6 +827,45 @@ namespace KitveiHakodesh.Core.SeforimDb
                     SourceLineId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
                     LineIndex = r.IsDBNull(2) ? 0 : r.GetInt32(2),
                     Content = codec.DecodeColumnOrEmpty(r, 3),
+                });
+            }
+            return list;
+        }
+
+        /// <summary>GetReverseLineData's lines without text, one row per line (see
+        /// SeforimDbSqlStrings.GetReverseLines): what the commentary panel's base-text rows need
+        /// before it fetches the text of the rows it shows.</summary>
+        public List<ReverseLineRefRow> GetReverseLines(List<int> lineIds, List<int> typeIds)
+        {
+            if (lineIds is null || lineIds.Count == 0) return new List<ReverseLineRefRow>();
+            return ReadReverseLines(SeforimDbSqlStrings.LineIdList("t", lineIds.Count), cmd => BindList(cmd, "t", lineIds), typeIds);
+        }
+
+        /// <summary>GetReverseLines for the lines of <paramref name="bookId"/> with lineIndex in
+        /// [<paramref name="fromIndex"/>, <paramref name="toIndex"/>).</summary>
+        public List<ReverseLineRefRow> GetReverseLinesForBookLineRange(int bookId, int fromIndex, int toIndex, List<int> typeIds)
+        {
+            if (bookId <= 0 || toIndex <= fromIndex) return new List<ReverseLineRefRow>();
+            return ReadReverseLines(SeforimDbSqlStrings.BookLineRangeIds, cmd => BindBookLineRange(cmd, bookId, fromIndex, toIndex), typeIds);
+        }
+
+        private List<ReverseLineRefRow> ReadReverseLines(string lineSet, Action<SqliteCommand> bindLines, List<int> typeIds)
+        {
+            var list = new List<ReverseLineRefRow>();
+            if (typeIds is null || typeIds.Count == 0) return list;
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetReverseLines(SchemaOf(conn), lineSet, typeIds.Count);
+            bindLines(cmd);
+            BindList(cmd, "c", typeIds);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new ReverseLineRefRow
+                {
+                    SourceBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                    SourceLineId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    LineIndex = r.IsDBNull(2) ? 0 : r.GetInt32(2),
                 });
             }
             return list;
@@ -1226,6 +1286,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>Binds a list of ints to @{prefix}0..@{prefix}N-1 (for dynamic IN clauses).</summary>
+        /// <summary>Binds SeforimDbSqlStrings.BookLineRangeIds: [fromIndex, toIndex) of bookId.</summary>
+        private static void BindBookLineRange(SqliteCommand cmd, int bookId, int fromIndex, int toIndex)
+        {
+            cmd.Parameters.AddWithValue("@rangeBookId", bookId);
+            cmd.Parameters.AddWithValue("@rangeFrom", fromIndex);
+            cmd.Parameters.AddWithValue("@rangeTo", toIndex);
+        }
+
         private static void BindList(SqliteCommand cmd, string prefix, List<int> values)
         {
             for (int i = 0; i < values.Count; i++) cmd.Parameters.AddWithValue("@" + prefix + i, values[i]);
