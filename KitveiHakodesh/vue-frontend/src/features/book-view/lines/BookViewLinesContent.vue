@@ -279,7 +279,7 @@ const {
     ),
 )
 
-const { suppressPositionSave, onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
+const { onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
   useBookViewLinesScroll(
   scroller,
   props,
@@ -484,7 +484,6 @@ const { scrollToLine, scrollToLineId, lineIndexForId, currentScrollGeneration } 
   scroller,
   () => props.lines,
   () => props.searchBarVisible ?? false,
-  suppressPositionSave,
   cancelOpeningFollowUps,
 )
 
@@ -494,7 +493,6 @@ const { readBookmarkPoint, scrollToBookmarkPoint } = useBookViewLinesBookmarkPoi
   scrollToLine,
   lineIndexForId,
   currentScrollGeneration,
-  suppressPositionSave,
 )
 
 /** Whether the row at `index` has its text — read in the row slot, with the lines revision so a text change under the same index re-renders the row. */

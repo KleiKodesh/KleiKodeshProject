@@ -102,7 +102,6 @@ export function useBookViewLinesBookmarkPoint(
   scrollToLine: (lineIndex: number, options: { force?: boolean }) => Promise<void>,
   lineIndexForId: (lineId: number, fallbackLineIndex?: number) => Promise<number | undefined>,
   currentScrollGeneration: () => number,
-  suppressPositionSave: () => void,
 ) {
   function readSelectionPoint(scrollerElement: HTMLElement): BookViewLinesBookmarkPoint | null {
     const selection = window.getSelection()
@@ -190,10 +189,8 @@ export function useBookViewLinesBookmarkPoint(
     const pointRect = range.getClientRects()[0] ?? range.getBoundingClientRect()
     const reserved = searchBarVisible() ? SEARCH_BAR_INSET_PX : 0
     const shift = pointRect.top - scrollerElement.getBoundingClientRect().top - reserved - SCROLL_LANDING_GAP_PX
-    if (shift > 0) {
-      suppressPositionSave()
-      scrollerElement.scrollTop += shift
-    }
+    // Part of the landing (the scroller's nudge), so not taken for the reader moving.
+    if (shift > 0) scroller()?.nudge(shift)
     if (end) {
       const selection = window.getSelection()
       selection?.removeAllRanges()

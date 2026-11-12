@@ -26,12 +26,11 @@ export function useBookViewLinesNavigation(
   scroller: () => WindowedScrollerApi | null,
   lines: () => LinesTable,
   searchBarVisible: () => boolean,
-  suppressPositionSave: () => void,
   /** Ends the opening's follow-ups — a jump supersedes them. */
   cancelOpeningFollowUps: () => void,
 ) {
   // The landing itself (search-bar inset, match refinement) is the shared one.
-  const { scrollToLine, currentScrollGeneration } = useWindowedRowLanding(scroller, searchBarVisible, suppressPositionSave, cancelOpeningFollowUps)
+  const { scrollToLine, currentScrollGeneration } = useWindowedRowLanding(scroller, searchBarVisible, cancelOpeningFollowUps)
 
   /**
    * Resolve a line id to its index: from the loaded lines, else the caller's own index,

@@ -65,6 +65,7 @@ import { buildFlowPlan, ROWS_PLAN } from './windowedScrollerFlowPlan'
 import type {
   WindowedScrollerBarTarget,
   WindowedScrollerMoveSource,
+  WindowedScrollerRevealOptions,
   WindowedScrollerRowKind,
   WindowedScrollerScrollToOptions,
   WindowedScrollerVisibleRow,
@@ -393,6 +394,18 @@ async function runLanding(land: () => Promise<void>, byReader = false): Promise<
   else emit('moveend', source)
 }
 
+/**
+ * Moves the view by `px` as part of a landing - the follow-up of a scrollToIndex (a
+ * search mark or a bookmark's exact character brought into view). Counts as one of the
+ * scroller's own landings: isLanding() holds through its scroll, and its end is reported
+ * as moveend('landing'), never as the reader moving.
+ */
+function nudge(px: number): void {
+  const viewport = viewportElement.value
+  if (!viewport || px === 0) return
+  void runLanding(async () => { viewport.scrollTop += px })
+}
+
 /** One of the scroller's own landings is under way (or its scroll has not ended yet). */
 function isLanding(): boolean {
   return landingsInFlight > 0 || landingScrollEndOwed != null
@@ -574,15 +587,22 @@ function onViewportKeydown(event: KeyboardEvent) {
  * scroll, so stepping through the list reads as advancing, never as a jump); a row that
  * is not mounted lands exactly through scrollToIndex, top-aligned when it lies above the
  * viewport and bottom-aligned when below. For keyboard highlight movement.
+ *
+ * `landMounted`: a mounted row lands through scrollToIndex as well (top- or
+ * bottom-aligned by where it sits), so the move is one of the scroller's landings
+ * (isLanding, moveend('landing')) rather than a native scroll.
  */
-function revealIndex(index: number) {
+function revealIndex(index: number, options: WindowedScrollerRevealOptions = {}) {
   if (isRowFullyVisible(index)) return
   const row = isRowRendered(index) ? rowElement(index) : null
-  if (row) {
+  if (row && !options.landMounted) {
     row.scrollIntoView({ block: 'nearest' })
     return
   }
-  const isAbove = index < (readFirstVisible()?.index ?? renderedRange.value.start)
+  const viewport = viewportElement.value
+  const isAbove = row && viewport
+    ? row.offsetTop < viewport.scrollTop
+    : index < (readFirstVisible()?.index ?? renderedRange.value.start)
   void scrollToIndex(index, { align: isAbove ? 'start' : 'end' })
 }
 
@@ -593,6 +613,7 @@ defineExpose({
   scrollToIndex,
   replaceRows,
   revealIndex,
+  nudge,
   isLanding,
   readFirstVisible,
   isRowRendered,

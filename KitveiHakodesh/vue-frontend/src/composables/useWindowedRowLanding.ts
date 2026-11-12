@@ -77,7 +77,6 @@ export interface ScrollToLineOptions {
 export function useWindowedRowLanding(
   scroller: () => WindowedScrollerApi | null,
   searchBarVisible: () => boolean,
-  suppressPositionSave: () => void,
   /** Drops what was still to run once the scroller's first window is on screen (a flash, a mark) - the reader has gone elsewhere. */
   cancelOpeningFollowUps: () => void,
 ) {
@@ -125,13 +124,14 @@ export function useWindowedRowLanding(
         relativeTop >= reserved + 4 &&
         relativeBottom <= scrollerRect.height - BOTTOM_LANDING_CLEARANCE_PX
       if (!alreadyVisible) {
-        suppressPositionSave()
         // Land the mark at the edge the reader is travelling toward: bottom when
-        // stepping forward, top when stepping back. See `direction` above.
-        scrollerElement!.scrollTop +=
+        // stepping forward, top when stepping back. See `direction` above. A nudge is
+        // part of the landing, so it is not taken for the reader moving.
+        api!.nudge(
           direction === 'forward'
             ? relativeBottom - scrollerRect.height + BOTTOM_LANDING_CLEARANCE_PX
-            : relativeTop - reserved - SCROLL_LANDING_GAP_PX
+            : relativeTop - reserved - SCROLL_LANDING_GAP_PX,
+        )
       }
       return true
     }
@@ -150,12 +150,8 @@ export function useWindowedRowLanding(
       // The mark is not in the DOM after all (text still loading) — fall through.
     }
 
-    suppressPositionSave()
     await api.scrollToIndex(lineIndex, { offsetPx: -(reserved + SCROLL_LANDING_GAP_PX) })
     if (isStale()) return
-    // Re-armed: the fetch may have outlasted the window armed before it, and the
-    // landing's scroll event is only dispatched in the next frame.
-    suppressPositionSave()
     if (!wantsMark) return
     // The row is mounted with its text, marks included — nothing to wait for.
     if (applyCurrentMark()) adjustToMark()

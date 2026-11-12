@@ -233,13 +233,11 @@ const { scrollToLine: landOnRow } = useWindowedRowLanding(
   () => windowedScroller.value as unknown as WindowedScrollerApi | null,
   () => searchVisible.value,
   () => {},
-  () => {},
 )
 // The same landing in the notes pane, for the notes search.
 const { scrollToLine: landOnNote } = useWindowedRowLanding(
   () => notesPaneRef.value?.windowedScroller() ?? null,
   () => false,
-  () => {},
   () => {},
 )
 async function onSearchStep(direction: 'forward' | 'backward') {
