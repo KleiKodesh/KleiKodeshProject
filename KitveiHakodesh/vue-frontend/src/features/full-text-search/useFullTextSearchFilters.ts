@@ -132,6 +132,19 @@ export function useFullTextSearchFilters(
     resultCounts.value = m
   }
 
+  // How far into which raw array resultCounts has counted. The tallies are over the RAW
+  // results, so a filter-criteria rebuild (same raw array) leaves them as they are: no
+  // recount of the whole set, and no fresh Map making every tree row re-sum its subtree.
+  let countedRaw: FullTextSearchResult[] | null = null
+  let countedThrough = 0
+  function syncCounts(raw: FullTextSearchResult[]) {
+    const sameRaw = raw === countedRaw && raw.length >= countedThrough
+    if (sameRaw && raw.length === countedThrough) return
+    countInto(raw, sameRaw ? countedThrough : 0)
+    countedRaw = raw
+    countedThrough = raw.length
+  }
+
   // Fold raw results into filteredResults. Two modes:
   //   • rebuild (criteria changed, or the raw array was replaced): filter the whole set
   //     from scratch and assign a fresh array.
@@ -158,10 +171,10 @@ export function useFullTextSearchFilters(
     foldedRaw = raw
 
     // resultCounts (per-book/category tallies) drives ONLY the filter panel, which is
-    // rendered solely while it's open. An append tallies just the new tail; a rebuild
-    // recounts. Skipped while the panel is closed — the watch below counts once when it
-    // opens, from scratch.
-    if (isFilterOpen.value) countInto(raw, from)
+    // rendered solely while it's open. Only raw results not yet counted are tallied (an
+    // append's tail; everything after the raw array is replaced). Skipped while the panel
+    // is closed — the watch below catches up once when it opens.
+    if (isFilterOpen.value) syncCounts(raw)
   }
 
   function updateFilter(checked: Set<number>) {
@@ -194,14 +207,17 @@ export function useFullTextSearchFilters(
   watch(resultsVersion, () => {
     const raw = results()
     const mode = raw === foldedRaw && raw.length >= filteredThrough ? 'append' : 'rebuild'
+    // The raw set was replaced or reset in place (a restarted search refills the same
+    // array): the tallies start over too, even if it is counted only later, on open.
+    if (mode === 'rebuild') countedRaw = null
     applyFilter(effectiveBookIds.value, mode)
   })
 
   // Panel opened → its per-book counts were skipped while it was closed (see applyFilter).
-  // Count the whole current set once now; while it stays open, applyFilter keeps the
+  // Catch up on what arrived meanwhile; while it stays open, applyFilter keeps the
   // tallies live, incrementally, on each flush.
   watch(isFilterOpen, (open) => {
-    if (open) countInto(results(), 0)
+    if (open) syncCounts(results())
   })
 
   // ── Public mutations ─────────────────────────────────────────────────────────
