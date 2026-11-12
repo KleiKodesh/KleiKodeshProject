@@ -212,8 +212,16 @@ function closeSearch() {
   scrollerElement.value?.focus({ preventScroll: true })
 }
 /**
- * The text stopped moving (the scroller's moveend): the block in view is read once, here, and
- * saved as the tab's position. A move the READER made (wheel, touch, keys, the scrollbar - told
+ * The text scrolled: the block at the top is read at once, so the TOC's current heading keeps
+ * up with a long scroll - it shows the reader where they are while they are still moving.
+ */
+function onScrollerScroll() {
+  firstVisibleIndex.value = windowedScroller.value?.readFirstVisible(0)?.index ?? firstVisibleIndex.value
+}
+
+/**
+ * The text stopped moving (the scroller's moveend): the block in view is saved as the tab's
+ * position. A move the READER made (wheel, touch, keys, the scrollbar - told
  * by the scroller, so the page's own landings never count) also re-arms the search's first step
  * as in the book view, unpins the followed note and ends a heading-step run.
  */
@@ -322,7 +330,7 @@ watch(tocVisible, (visible, wasVisible) => { if (wasVisible && !visible) snapsho
 onBeforeUnmount(snapshotTocState)
 const tocToggleButton = ref<HTMLElement | null>(null)
 const outline = computed(() => buildFastDocViewOutline(fastDocument.headings.value))
-/** The block at the top of the view, read each time the text stops moving - the TOC's current heading. */
+/** The block at the top of the view, read on every scroll - the TOC's current heading. */
 const firstVisibleIndex = ref(0)
 /** The last heading at or above the reader's position (headings are in block order). */
 const activeOutlineNodeId = computed(() => {
@@ -876,6 +884,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                 :landmark-tiers="fastDocument.landmarkTiers.value"
                 :row-weights="fastDocument.rowWeights.value"
                 tabindex="0"
+                @scroll="onScrollerScroll"
                 @moveend="onScrollerMoveEnd"
                 @contextmenu="contextMenuRef?.show($event)"
               >
