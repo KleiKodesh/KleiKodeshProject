@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, markRaw, onMounted, nextTick, watch } from 'vue'
-import { useDebounceFn, useIntervalFn } from '@vueuse/core'
+import { useIntervalFn } from '@vueuse/core'
 import {
   IconMinimize20Regular,
   IconDismiss12Regular,
@@ -236,13 +236,22 @@ function applyResultCountFilter() {
     : books)
 }
 
-const runSearch = useDebounceFn(async () => {
+// The query the shown list answers. Until the newest one resolves the list is PENDING: it
+// keeps the previous rows and never shows "no books". No debounce: the service supersedes an
+// older title query itself, so each keystroke just asks again and the stale answer is dropped.
+const queryKey = computed(() => JSON.stringify([props.atFilters, inputText.value.trim()]))
+const resolvedKey = ref<string | null>(null)
+const matchPending = computed(() => resolvedKey.value !== queryKey.value)
+
+async function runSearch() {
   const generation = ++matchGeneration
+  const key = queryKey.value
   const books = await computeFilteredBooks(props.atFilters, inputText.value, () => generation !== matchGeneration)
   if (!books) return
   matchedBooks.value = markRaw(books)
   applyResultCountFilter()
-}, 150)
+  resolvedKey.value = key
+}
 
 watch([() => props.atFilters, inputText], () => runSearch(), { immediate: true })
 watch([() => props.hasSearched, () => props.resultCounts], applyResultCountFilter)
@@ -322,6 +331,7 @@ function onInputKeydown(e: KeyboardEvent) {
           :checked-book-ids="checkedBookIds"
           :result-counts="resultCounts"
           :has-searched="hasSearched"
+          :pending="matchPending"
           @toggle-book="emit('toggleBook', $event)"
           @navigate-to-book="emit('navigateToBook', $event)"
         />

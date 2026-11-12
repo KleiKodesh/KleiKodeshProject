@@ -10,6 +10,8 @@ const props = defineProps<{
   checkedBookIds: Set<number>
   resultCounts: Map<number, number>
   hasSearched?: boolean
+  /** The newest query has not answered yet: "no books" would be a guess, so show nothing. */
+  pending?: boolean
 }>()
 
 const emit = defineEmits<{ toggleBook: [number]; navigateToBook: [number] }>()
@@ -54,7 +56,8 @@ defineExpose({ onSearchInputKeydown })
 </script>
 
 <template>
-  <div v-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
+  <div v-if="!books.length && pending" class="empty" />
+  <div v-else-if="!books.length" class="empty">{{ $t('fullTextSearch.filter.noBooks') }}</div>
   <div v-else class="scroller" dir="rtl">
     <WindowedScroller ref="windowedScroller" :key="generation" :count="books.length" class="windowed">
       <template #row="{ index }">
