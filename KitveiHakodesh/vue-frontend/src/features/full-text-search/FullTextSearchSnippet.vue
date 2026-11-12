@@ -6,25 +6,50 @@ export function shownSnippetHtml(html: string): string {
   return shownByHtml.get(html)?.shown ?? html
 }
 
+/** One row's fitting steps. Each step is ONLY reads or ONLY writes, so the batch below can
+ *  run a step for every row before the next step: one layout per step for all rows. */
+interface SnippetFitter {
+  /** Read: the row's width now. */
+  measureWidth(): void
+  /** Write: back to the full snippet when the row got wider (or is new). */
+  resetIfWider(): void
+  /** Read: true when the match needs centering, and the search over leading words begins.
+   *  Its first guess is an estimate; most rows need no other. */
+  startSearch(): boolean
+  /** Write: show the next guess. False once the search has its answer. */
+  writeGuess(): boolean
+  /** Read: was that guess enough? Narrows the search. */
+  readGuess(): void
+  /** Write: show the answer. */
+  commit(): void
+}
+
 /** Rows waiting to be re-fitted. All of them are fitted together, once per frame: during a
- *  window resize or while results stream in, many rows ask at once, and fitting each one on
- *  its own callback forced a layout per row and made row heights bounce, which the scroller
- *  then corrected with a visible jump. */
-const pendingFits = new Set<{ prepare: () => void; finish: () => void }>()
+ *  window resize or while results stream in, many rows ask at once. Fitting each on its own
+ *  forced several layouts per row and made row heights bounce, which the scroller then
+ *  corrected with a visible jump. In lockstep, every row's binary search takes its next
+ *  step together, so a frame costs about log2(words) layouts however many rows there are. */
+const pendingFits = new Set<SnippetFitter>()
 let fitFrame = 0
-function scheduleFit(row: { prepare: () => void; finish: () => void }) {
+function scheduleFit(row: SnippetFitter) {
   pendingFits.add(row)
   if (fitFrame) return
   fitFrame = requestAnimationFrame(() => {
     fitFrame = 0
     const rows = [...pendingFits]
     pendingFits.clear()
-    // Every write first, then every read: one layout for the whole batch instead of one per row.
-    for (const row of rows) row.prepare()
-    for (const row of rows) row.finish()
+    for (const row of rows) row.measureWidth()
+    for (const row of rows) row.resetIfWider()
+    const searching = rows.filter(row => row.startSearch())
+    for (;;) {
+      const guessing = searching.filter(row => row.writeGuess())
+      if (!guessing.length) break
+      for (const row of guessing) row.readGuess()
+    }
+    for (const row of searching) row.commit()
   })
 }
-function cancelFit(row: { prepare: () => void; finish: () => void }) {
+function cancelFit(row: SnippetFitter) {
   pendingFits.delete(row)
 }
 </script>
@@ -82,15 +107,16 @@ function firstMatchMarks(box: HTMLElement): HTMLElement[] {
   return marks
 }
 
-/** True when the clamp cuts the text and the first match sits past the middle of the
- *  visible lines - so there is more context before it than after it, or it is cut off.
- *  Text that is not cut shows everything after the match already: nothing to balance. */
-function matchPastMiddle(): boolean {
+/** Where the first match sits in the visible text, as reading positions (0 = start of the
+ *  first line, 1 = end of the last): `start` of the match and its `middle`. Null when the
+ *  clamp does not cut the text - then everything after the match shows already, nothing to
+ *  balance. */
+function matchPosition(): { start: number; middle: number } | null {
   const box = el.value
-  if (!box) return false
+  if (!box) return null
   const marks = firstMatchMarks(box)
-  if (!marks.length) return false
-  if (box.scrollHeight <= box.clientHeight + 1) return false
+  if (!marks.length) return null
+  if (box.scrollHeight <= box.clientHeight + 1) return null
   const boxRect = box.getBoundingClientRect()
   const style = getComputedStyle(box)
   const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5
@@ -106,10 +132,15 @@ function matchPastMiddle(): boolean {
   const firstRect = marks[0]!.getClientRects()[0]
   const lastRects = marks[marks.length - 1]!.getClientRects()
   const lastRect = lastRects[lastRects.length - 1]
-  if (!firstRect || !lastRect) return false
-  const middle = (readingPos(firstRect, false) + readingPos(lastRect, true)) / 2
-  return middle > 0.5
+  if (!firstRect || !lastRect) return null
+  const start = readingPos(firstRect, false)
+  return { start, middle: (start + readingPos(lastRect, true)) / 2 }
 }
+
+/** Past the middle: more context before the match than after it, or the match cut off. */
+const PAST_MIDDLE = 0.5
+/** A guess that lands the match between this and the middle is good enough: no search. */
+const CLOSE_ENOUGH = 0.38
 
 /** `html` with its first `drop` leading words (before the first <mark>) replaced by "…". */
 function trimmed(lead: string[], drop: number, rest: string): string {
@@ -120,45 +151,76 @@ function trimmed(lead: string[], drop: number, rest: string): string {
 let dropped = 0
 /** The width the current trim was fitted at; -1 = never fitted. */
 let fittedWidth = -1
-/** Write phase. A wider row (or new html) may now fit more words, so it starts over from
- *  the full snippet. A narrower row keeps its trim: it can only need to drop more words. */
-function prepare() {
-  const box = el.value
-  if (!box) return
-  const width = box.clientWidth
-  const fromScratch = fittedWidth < 0 || width > fittedWidth
-  fittedWidth = width
-  if (fromScratch && dropped !== 0) {
-    dropped = 0
-    shown.value = props.html
-    box.innerHTML = props.html
-    unregister()
-  }
-}
+/** The width read by measureWidth for this batch. */
+let measuredWidth = -1
+/** The running search: smallest number of dropped words that centers the match. The first
+ *  guess is ESTIMATED from where the match sits (words before it per unit of reading
+ *  position), so most rows land in one try; a miss narrows a binary search instead. A fast,
+ *  wide resize re-fits every cut row each frame, so tries are what a frame costs. */
+let lead: string[] = []
+let rest = ''
+let lo = 0, hi = 0, guess = 0
+let estimate: number | null = null
 
-/** Read phase (plus a binary search for rows whose mark is hidden). */
-function finish() {
-  const box = el.value
-  if (!box || !matchPastMiddle()) return
-  const markAt = props.html.indexOf('<mark>')
-  if (markAt < 0) return
-  const lead = props.html.slice(0, markAt).trim().replace(/^…\s*/, '').split(/\s+/).filter(Boolean)
-  const rest = props.html.slice(markAt)
-  // Smallest number of dropped words that brings the match to the middle of the visible text.
-  let lo = Math.min(lead.length, Math.max(1, dropped + 1)), hi = lead.length
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    box.innerHTML = trimmed(lead, mid, rest)
-    if (matchPastMiddle()) lo = mid + 1
-    else hi = mid
-  }
-  dropped = lo
-  shown.value = trimmed(lead, lo, rest)
-  box.innerHTML = shown.value
-  register(props.html, shown.value)
+const fitter: SnippetFitter = {
+  measureWidth() {
+    measuredWidth = el.value?.clientWidth ?? -1
+  },
+  // A wider row (or new html) may now fit more words, so it starts over from the full
+  // snippet. A narrower row keeps its trim: it can only need to drop more words.
+  resetIfWider() {
+    const box = el.value
+    if (!box) return
+    const fromScratch = fittedWidth < 0 || measuredWidth > fittedWidth
+    fittedWidth = measuredWidth
+    if (fromScratch && dropped !== 0) {
+      dropped = 0
+      shown.value = props.html
+      box.innerHTML = props.html
+      unregister()
+    }
+  },
+  startSearch() {
+    if (!el.value) return false
+    const at = matchPosition()
+    if (!at || at.middle <= PAST_MIDDLE) return false
+    const markAt = props.html.indexOf('<mark>')
+    if (markAt < 0) return false
+    lead = props.html.slice(0, markAt).trim().replace(/^…\s*/, '').split(/\s+/).filter(Boolean)
+    rest = props.html.slice(markAt)
+    // Nothing left to drop (the text starts with the match, or every word is dropped already).
+    if (lead.length <= dropped) return false
+    lo = Math.min(lead.length, Math.max(1, dropped + 1))
+    hi = lead.length
+    const wordsBefore = lead.length - dropped
+    const wordsPerPos = wordsBefore / Math.max(0.05, at.start)
+    estimate = Math.min(hi, Math.max(lo, dropped + Math.ceil((at.middle - PAST_MIDDLE) * wordsPerPos)))
+    return true
+  },
+  writeGuess() {
+    const box = el.value
+    if (!box || lo >= hi) return false
+    guess = estimate ?? (lo + hi) >> 1
+    estimate = null
+    box.innerHTML = trimmed(lead, guess, rest)
+    return true
+  },
+  readGuess() {
+    const at = matchPosition()
+    if (at && at.middle > PAST_MIDDLE) { lo = Math.min(guess + 1, hi); return }
+    hi = guess
+    // Centered, or the text is no longer cut: a guess this close ends the search.
+    if (!at || at.middle >= CLOSE_ENOUGH) lo = guess
+  },
+  commit() {
+    const box = el.value
+    if (!box) return
+    dropped = lo
+    shown.value = trimmed(lead, lo, rest)
+    box.innerHTML = shown.value
+    register(props.html, shown.value)
+  },
 }
-
-const fitter = { prepare, finish }
 
 watch(() => props.html, () => {
   // New text: forget the old trim and fit from scratch.
