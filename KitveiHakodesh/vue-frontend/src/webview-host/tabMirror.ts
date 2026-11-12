@@ -53,9 +53,11 @@ export function initTabMirror(): void {
   // membership, titles, split state, and the per-pane active tabs.
   // Window resizes move the rendered divider without touching any store state —
   // bump a tick so the snapshot recomputes and the divider is re-measured.
+  // Only with split view on: there is no divider otherwise, and the bump rebuilt every
+  // tab's snapshot (titles, breadcrumbs, icons) on each resize frame for nothing.
   const resizeTick = ref(0)
   window.addEventListener('resize', () => {
-    resizeTick.value++
+    if (bookViewStore.splitViewEnabled) resizeTick.value++
   })
 
   // ── Favicons ────────────────────────────────────────────────────────────────

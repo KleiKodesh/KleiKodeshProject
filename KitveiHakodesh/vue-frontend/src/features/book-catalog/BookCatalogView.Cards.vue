@@ -144,15 +144,13 @@ defineExpose({
 /* Same grid as the home page's .home-cards. */
 .catalog-cards {
   display: grid;
-  /* Column count and grid width come from the page (useCardGridLayout): cards
-     shrink to fit another column, never stretch past their max, and the grid
-     sits centred. Until the page has measured, it falls back to auto-fill. */
-  grid-template-columns: repeat(var(--catalog-columns, auto-fill), minmax(min(100%, 140px), 1fr));
+  /* Pure CSS, no measuring: as many 140px+ columns as fit, sharing the width. Cards
+     shrink to fit another column; with two or more columns none passes ~220px. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
   /* Explorer-like: wide columns, tight rows, so each row reads as one line. */
   column-gap: 16px;
   row-gap: 4px;
   padding: 12px;
-  padding-inline: calc((100% - 24px - var(--catalog-content-width, calc(100% - 24px))) / 2 + 12px);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
