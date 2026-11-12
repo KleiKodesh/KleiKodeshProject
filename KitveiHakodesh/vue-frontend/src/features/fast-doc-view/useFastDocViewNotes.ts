@@ -55,11 +55,21 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
     }
   }
 
+  /** A note-list refresh is under way: the known notes may still grow. */
+  const isRefreshing = ref(false)
+  function startRefresh(documentId: string) {
+    isRefreshing.value = true
+    refreshing = refreshNoteBlocks(documentId).finally(() => {
+      refreshing = null
+      isRefreshing.value = false
+    })
+  }
+
   function scheduleRefresh(documentId: string) {
     if (refreshTimer) return
     refreshTimer = setTimeout(() => {
       refreshTimer = null
-      refreshing = refreshNoteBlocks(documentId).finally(() => (refreshing = null))
+      startRefresh(documentId)
     }, NOTE_BLOCKS_REFRESH_MS)
   }
 
@@ -79,13 +89,13 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
         reset()
         loadedFor = documentId
         contentVersion.value++
-        if (total > 0) refreshing = refreshNoteBlocks(documentId).finally(() => (refreshing = null))
+        if (total > 0) startRefresh(documentId)
         return
       }
       if (isComplete) {
         if (refreshTimer) clearTimeout(refreshTimer)
         refreshTimer = null
-        refreshing = refreshNoteBlocks(documentId).finally(() => (refreshing = null))
+        startRefresh(documentId)
       } else if (total > noteCount.value) scheduleRefresh(documentId)
     },
     { immediate: true },
@@ -125,8 +135,31 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
     }
   }
 
+  /**
+   * Resolves once note `index` is known (the note list still being built has reached it), or
+   * once it is known it never will be: the index is complete and no refresh is pending, or the
+   * document went away. Post-flush, so the scroller's count has caught up when a landing reads it.
+   */
+  function whenNoteKnown(index: number): Promise<void> {
+    const documentId = options.summary.value?.documentId
+    const isSettled = () => {
+      const summary = options.summary.value
+      if (noteCount.value > index || summary?.documentId !== documentId) return true
+      return !!summary?.isIndexComplete && !isRefreshing.value && refreshTimer == null
+    }
+    if (isSettled()) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const stop = watch(isSettled, (settled) => {
+        if (!settled) return
+        stop()
+        resolve()
+      }, { flush: 'post' })
+    })
+  }
+
   /** The notes scroller's row source: resolves once notes [start, end) are cached. */
   async function ensureNotes(start: number, end: number): Promise<void> {
+    await whenNoteKnown(start)
     const clampedEnd = Math.min(end, noteCount.value)
     const focus = [start, clampedEnd] as const
     try {

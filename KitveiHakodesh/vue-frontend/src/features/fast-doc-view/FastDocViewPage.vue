@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useDebounceFn, useElementSize, useEventListener, useStyleTag, useThrottleFn } from '@vueuse/core'
+import { useDebounceFn, useElementSize, useEventListener, useStyleTag } from '@vueuse/core'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import SidePanel from '@/components/SidePanel.vue'
@@ -27,7 +27,7 @@ import FastDocViewToolbar from './FastDocViewToolbar.vue'
 import FastDocViewToc, { type FastDocViewTocState } from './FastDocViewToc.vue'
 import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
 import { useWindowedRowLanding } from '@/composables/useWindowedRowLanding'
-import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { WindowedScrollerApi, WindowedScrollerMoveSource } from '@/components/windowedScrollerTypes'
 import { slotForSearchMode, type CommentarySlot, type SearchMode } from '@/components/readingSearchModes'
 import { useFastDocViewSearch } from './useFastDocViewSearch'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
@@ -101,7 +101,6 @@ async function savePositionNow() {
     fastDocViewBlockOffset: Math.round(first.offsetWithinRow),
   })
 }
-const savePosition = useDebounceFn(savePositionNow, 300)
 
 // Zoom, the book view's model: the text (its lines) and the notes (its commentary) each keep
 // their own per-tab zoom. Ctrl+wheel / trackpad pinch / touch pinch, and Ctrl+= / - / 0 with the
@@ -212,21 +211,20 @@ function closeSearch() {
   searchVisible.value = false
   scrollerElement.value?.focus({ preventScroll: true })
 }
-// The reader moving the view (wheel, keyboard, a press on the text or its scrollbar) re-arms
-// the search's first step, as a reader scroll does in the book view. Told by its source - the
-// input that causes it - so the search's own landing scroll never counts, whatever its timing.
-function onReaderInput() {
+/**
+ * The text stopped moving (the scroller's moveend): the block in view is read once, here, and
+ * saved as the tab's position. A move the READER made (wheel, touch, keys, the scrollbar - told
+ * by the scroller, so the page's own landings never count) also re-arms the search's first step
+ * as in the book view, unpins the followed note and ends a heading-step run.
+ */
+function onScrollerMoveEnd(source: WindowedScrollerMoveSource) {
+  firstVisibleIndex.value = windowedScroller.value?.readFirstVisible(0)?.index ?? firstVisibleIndex.value
+  void savePositionNow()
+  if (source !== 'reader') return
   followPinnedNote.value = null
   search.onReaderScroll()
   lastNavigatedHeadingId = null
 }
-useEventListener(scrollerElement, 'wheel', onReaderInput, { passive: true })
-useEventListener(scrollerElement, 'pointerdown', onReaderInput)
-// the scroller's drawn scrollbar sits beside the viewport
-useEventListener(computed(() => (windowedScroller.value?.scrollbarElement as HTMLElement | null | undefined) ?? null), 'pointerdown', onReaderInput)
-useEventListener(scrollerElement, 'keydown', (event: KeyboardEvent) => {
-  if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) onReaderInput()
-})
 // The book view's own landing (shared useWindowedRowLanding): a match never rests under the
 // floating search bar, and lands at the edge the step travels toward.
 const { scrollToLine: landOnRow } = useWindowedRowLanding(
@@ -324,15 +322,8 @@ watch(tocVisible, (visible, wasVisible) => { if (wasVisible && !visible) snapsho
 onBeforeUnmount(snapshotTocState)
 const tocToggleButton = ref<HTMLElement | null>(null)
 const outline = computed(() => buildFastDocViewOutline(fastDocument.headings.value))
-/** The block at the top of the view, followed while scrolling (throttled) - the TOC's current heading. */
+/** The block at the top of the view, read each time the text stops moving - the TOC's current heading. */
 const firstVisibleIndex = ref(0)
-const trackFirstVisible = useThrottleFn(() => {
-  firstVisibleIndex.value = windowedScroller.value?.readFirstVisible(0)?.index ?? firstVisibleIndex.value
-}, 150, true)
-function onScrollerScroll() {
-  void savePosition()
-  void trackFirstVisible()
-}
 /** The last heading at or above the reader's position (headings are in block order). */
 const activeOutlineNodeId = computed(() => {
   const nodes = outline.value
@@ -719,17 +710,9 @@ function onLinkClick(event: MouseEvent): boolean {
   return true
 }
 async function goToBlock(blockIndex: number) {
-  // an index still building may not have reached the block yet: wait for the count, as a bookmark jump does
-  if (blockIndex >= fastDocument.blockCount.value) {
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => { stop(); resolve() }, 15000)
-      const stop = watch(fastDocument.blockCount, (count) => {
-        if (count > blockIndex) { clearTimeout(timer); stop(); resolve() }
-      })
-    })
-  }
-  if (blockIndex >= fastDocument.blockCount.value) return
+  // A block the index still building has not reached yet: the row source answers once it has.
   await windowedScroller.value?.scrollToIndex(blockIndex)
+  if (blockIndex >= fastDocument.blockCount.value) return
   flash(windowedScroller.value?.rowElement(blockIndex) as HTMLElement | null | undefined)
 }
 async function goToBookmark(href: string) {
@@ -742,15 +725,7 @@ async function goToBookmark(href: string) {
     showToast(t('fastDocView.bookmarkNotFound'))
     return
   }
-  // An index still building found it past the blocks the scroller knows: wait for the count to reach it.
-  if (blockIndex >= fastDocument.blockCount.value) {
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => { stop(); resolve() }, 15000)
-      const stop = watch(fastDocument.blockCount, (count) => {
-        if (count > blockIndex) { clearTimeout(timer); stop(); resolve() }
-      })
-    })
-  }
+  // Past the blocks the scroller knows (an index still building): its row source answers once the block is.
   await windowedScroller.value?.scrollToIndex(blockIndex)
   const row = windowedScroller.value?.rowElement(blockIndex) as HTMLElement | null | undefined
   flash([...(row?.querySelectorAll<HTMLElement>('.bookmark[id]') ?? [])].find((element) => element.id === href.slice(1)) ?? row)
@@ -901,7 +876,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                 :landmark-tiers="fastDocument.landmarkTiers.value"
                 :row-weights="fastDocument.rowWeights.value"
                 tabindex="0"
-                @scroll="onScrollerScroll"
+                @moveend="onScrollerMoveEnd"
                 @contextmenu="contextMenuRef?.show($event)"
               >
                 <template #row="{ index }">

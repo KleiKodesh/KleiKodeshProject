@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import WindowedScroller from '@/components/WindowedScroller.vue'
 import type { FastDocViewIndexedNote } from './useFastDocViewNotes'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -14,7 +14,7 @@ import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
  * view's bottom commentary panel, with no header row (Esc or the toolbar's notes toggle closes it).
  * Sync on: `followIndex` (the first note at or after the first block in view) lands at the top.
  * Sync off: the pane scrolls on its own. `landIndex` (a clicked reference's note) is loaded and
- * lands with a short ease in either mode; a note's number jumps the text to its reference.
+ * lands at the top in either mode; a note's number jumps the text to its reference.
  */
 const props = defineProps<{
   noteCount: number
@@ -22,7 +22,7 @@ const props = defineProps<{
   noteAt: (index: number) => FastDocViewIndexedNote | undefined
   rowSourceVersion?: unknown
   isRightToLeft: boolean
-  /** A clicked reference's note: loaded and landed at the pane's top with a short ease. */
+  /** A clicked reference's note: loaded and landed at the pane's top. */
   landIndex?: number | null
   /** Bumped on every reference click, so clicking the same reference again lands it again. */
   landingNonce?: number
@@ -53,77 +53,6 @@ defineExpose({
   windowedScroller: () => scroller.value as unknown as WindowedScrollerApi | null,
 })
 
-/** A clicked note lands with a short ease (not the browser's slow smooth scroll). */
-const LANDING_MS = 180
-let landingFrame = 0
-let landingGeneration = 0
-let isLanding = false
-function cancelLanding() {
-  if (landingFrame) cancelAnimationFrame(landingFrame)
-  landingFrame = 0
-  landingGeneration++
-  isLanding = false
-}
-onBeforeUnmount(cancelLanding)
-
-/** The row's top below the viewport's top, in px - read fresh each frame (the window may grow above it). */
-function rowOffset(index: number): number | null {
-  const viewport = pane.value
-  const row = scroller.value?.rowElement(index)
-  if (!viewport || !row || !scroller.value?.isRowRendered(index)) return null
-  return row.getBoundingClientRect().top - viewport.getBoundingClientRect().top
-}
-
-/**
- * Loads note `index` and eases it to the pane's top. A note outside the mounted window is
- * loaded with the window rebuilt around the note before it (one exact landing), then eased
- * the last row. The reader's own wheel / press in the pane, or a newer landing, cancels it.
- */
-async function landNote(index: number) {
-  cancelLanding()
-  const generation = landingGeneration
-  isLanding = true
-  try {
-    if (!scroller.value) return
-    if (rowOffset(index) == null) {
-      await scroller.value.scrollToIndex(Math.max(0, index - 1))
-      await nextTick()
-      if (generation !== landingGeneration) return
-    }
-    const viewport = pane.value
-    const initial = rowOffset(index)
-    if (!viewport || initial == null || Math.abs(initial) < 2) return
-    await new Promise<void>((resolve) => {
-      const start = performance.now()
-      const step = (now: number) => {
-        const offset = generation === landingGeneration ? rowOffset(index) : null
-        if (offset == null) { landingFrame = 0; resolve(); return }
-        const t = Math.min(1, (now - start) / LANDING_MS)
-        const remaining = initial * (1 - t) ** 3   // ease-out cubic: the distance still to go
-        viewport.scrollTop = Math.min(viewport.scrollHeight - viewport.clientHeight, viewport.scrollTop + offset - remaining)
-        if (t < 1) landingFrame = requestAnimationFrame(step)
-        else { landingFrame = 0; resolve() }
-      }
-      landingFrame = requestAnimationFrame(step)
-    })
-  } finally {
-    if (generation === landingGeneration) isLanding = false
-  }
-}
-
-/** Resolves once the scroller exists and note `index` is in the list - the note list may still be indexing. */
-function whenNoteExists(index: number): Promise<void> {
-  const exists = () => !!scroller.value && props.noteCount > index
-  if (exists()) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const stop = watch(exists, (there) => {
-      if (!there) return
-      stop()
-      resolve()
-    })
-  })
-}
-
 // The pane's scroller is CREATED at the note to show (`initial-index` below: the clicked
 // reference's note, else the note in sync with the text) - a windowed scroller takes its
 // start row as an argument, so nothing here runs when the pane opens. These two watchers are
@@ -132,25 +61,23 @@ function whenNoteExists(index: number): Promise<void> {
 // Keep notes in sync with the text: the first note at or after the first block in view (instant).
 watch(
   () => props.followIndex,
-  async (index) => {
-    // A click landing in progress wins.
-    if (index == null || isLanding) return
-    await whenNoteExists(index)
-    if (isLanding || props.followIndex !== index || rowOffset(index) === 0) return
-    void scroller.value?.scrollToIndex(index)
+  (index) => {
+    // A landing in progress (a clicked reference's note) wins. A note the list has not reached
+    // yet is the row source's to wait for (scrollToIndex asks it).
+    const api = scroller.value
+    if (index == null || !api || api.isLanding()) return
+    void api.scrollToIndex(index)
   },
   { flush: 'post' },
 )
 
-// Another reference clicked while the pane is open: its note eases into view.
+// Another reference clicked while the pane is open: its note lands at the pane's top. (No
+// scroller yet - no notes known - means it is created at this note: `initial-index` below.)
 watch(
   () => [props.landIndex, props.landingNonce] as const,
-  async ([index, nonce]) => {
+  ([index]) => {
     if (index == null) return
-    await whenNoteExists(index)
-    // A newer click owns the pane by now.
-    if (props.landIndex !== index || props.landingNonce !== nonce) return
-    void landNote(index)
+    void scroller.value?.scrollToIndex(index)
   },
   { flush: 'post' },
 )
@@ -209,8 +136,6 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
         :row-source-version="rowSourceVersion"
         tabindex="0"
         :style="{ fontSize: `${fontPx}px` }"
-        @wheel.passive="cancelLanding"
-        @pointerdown="cancelLanding"
       >
         <template #row="{ index }">
           <div
