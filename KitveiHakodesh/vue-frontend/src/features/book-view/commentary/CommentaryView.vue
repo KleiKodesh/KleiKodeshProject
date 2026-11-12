@@ -96,6 +96,8 @@ const props = defineProps<{
   deleteNote: (note: Note) => Promise<void>
   commentaryFontPx: number
   renderContent: (content: string, flatIndex: number, lineId: number | undefined, searchQuery: string | undefined) => string
+  /** Drops every rendered row `keep` rejects - keeps the render cache near the scroller's window. */
+  trimRenderCache?: (keep: (flatIndex: number) => boolean) => void
   /**
    * How many annotation offsets a line's model content spans. Comes from the renderer
    * because the offset space is the text after its diacritics and censor transforms.
@@ -157,10 +159,11 @@ type FlatItem =
       sectionLabel?: string
       subSectionLabel?: string
       firstLineIndex?: number
-      tocPath?: string
+      /** commentaryGroupKey of the group: its TOC path is looked up by it (tocPathOf), never copied in. */
+      groupKey: string
     }
   // The line object itself, not a copy of its text: the list is STRUCTURAL and is
-  // rebuilt only when the groups or the TOC paths change. Text arriving in (or
+  // rebuilt only when the groups change - TOC paths arriving do not touch it. Text arriving in (or
   // released from) a line re-renders that row alone, not the whole list.
   | { type: 'line'; line: CommentaryLine }
 
@@ -189,7 +192,6 @@ useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: true })
 const visibleGroups = computed(() => props.groups)
 
 const flatItems = computed<FlatItem[]>(() => {
-  const tocPaths = props.commentaryTocPaths
   const items: FlatItem[] = []
   for (const g of visibleGroups.value) {
     items.push({
@@ -200,12 +202,17 @@ const flatItems = computed<FlatItem[]>(() => {
       sectionLabel: g.sectionLabel,
       subSectionLabel: g.subSectionLabel,
       firstLineIndex: g.lines[0]?.lineIndex,
-      tocPath: tocPaths.get(commentaryGroupKey(g)),
+      groupKey: commentaryGroupKey(g),
     })
     for (const l of g.lines) items.push({ type: 'line', line: l })
   }
   return items
 })
+
+/** A header row's TOC path: looked up per render, so the paths arriving re-render the headers only. */
+function tocPathOf(header: { groupKey: string }): string | undefined {
+  return props.commentaryTocPaths.get(header.groupKey)
+}
 
 /** Row index of every group header, ascending — the bar's landmarks and the label's lookup. */
 const headerIndexes = computed(() => {
@@ -300,18 +307,49 @@ watch(
   },
   { flush: 'post' },
 )
+
+// Rendered rows (display HTML) are kept for the window plus RENDER_CACHE_MARGIN rows on
+// each side, and for the pinned rows; the rest are dropped as the window moves.
+const RENDER_CACHE_MARGIN = 100
+function trimRenderCacheToWindow() {
+  const range = windowedScroller.value?.renderedRange
+  if (!range || !props.trimRenderCache) return
+  const from = range.start - RENDER_CACHE_MARGIN
+  const to = range.end + RENDER_CACHE_MARGIN
+  const pinned = new Set(pinnedRowIndexes.value)
+  props.trimRenderCache((flatIndex) => (flatIndex >= from && flatIndex < to) || pinned.has(flatIndex))
+}
+watch(
+  () => [windowedScroller.value?.renderedRange, pinnedRowIndexes.value] as const,
+  trimRenderCacheToWindow,
+  { flush: 'post' },
+)
 onBeforeUnmount(() => props.trimLineContents?.(props.slotName, null))
 
 // ── Notes and word links — loaded for the mounted rows ────────────────────────
 // The data layers live in useBookView (hoisted). Only the rows the scroller has
-// mounted ask for theirs.
+// mounted ask for theirs. Notes wait for the scroller to come to rest: a window that
+// changes while it is still (a filter, a new list) loads at once; one that changes
+// mid-move loads on the move's end, for the window it ends on.
+let isScrollerMoving = true
+function loadNotesForWindow() {
+  const range = windowedScroller.value?.renderedRange
+  if (range) props.scheduleNotesLoad(lineIdsIn(range.start, range.end))
+}
+function onScrollerMoveForNotes() {
+  isScrollerMoving = true
+}
+function onScrollerRestForNotes() {
+  isScrollerMoving = false
+  loadNotesForWindow()
+}
 
 watch(
   () => windowedScroller.value?.renderedRange,
   (range) => {
     if (!range) return
     const ids = lineIdsIn(range.start, range.end)
-    props.scheduleNotesLoad(ids)
+    if (!isScrollerMoving) loadNotesForWindow()
     props.scheduleWordLinkAnchorsLoad?.(ids)
     props.scheduleLineNotesLoad?.(ids)
   },
@@ -401,6 +439,8 @@ watch(isListReady, (ready) => {
   lastShownAnchor = anchor
   scrollerStart.value = startRow(samePlace, props.pinnedGroup)
   scrollerGeneration.value++
+  // A new scroller is not at rest until it has opened.
+  isScrollerMoving = true
 }, { flush: 'sync', immediate: true })
 
 // ── Context menu ──────────────────────────────────────────────────────────────
@@ -426,6 +466,8 @@ function buildAllCommentaryContentHtml(): string {
       flatIndex++
     }
   }
+  // Rendering the whole document filled the cache with every row: bound it again.
+  trimRenderCacheToWindow()
   return parts.join('')
 }
 
@@ -650,7 +692,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getLabelAt: (index) => {
     const header = headerAt(index)
     if (!header) return { bookTitle: '', path: '' }
-    const path = header.tocPath || [header.sectionLabel, header.subSectionLabel].filter(Boolean).join(' ')
+    const path = tocPathOf(header) || [header.sectionLabel, header.subSectionLabel].filter(Boolean).join(' ')
     return { bookTitle: header.bookTitle, path }
   },
 })
@@ -766,9 +808,9 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
             :landmark-tiers="headerLandmarkTiers"
             tabindex="0"
             data-ctrlf-enabled
-            @opened="scrollerOpened"
-            @moveend="onScrollerMoveEnd($event); onMoveEnd($event)"
-            @move="onScrollerMove"
+            @opened="scrollerOpened(); onScrollerRestForNotes()"
+            @moveend="onScrollerMoveEnd($event); onMoveEnd($event); onScrollerRestForNotes()"
+            @move="onScrollerMove($event); onScrollerMoveForNotes()"
             @scroll="onScroll"
             @click="onMarkerClick"
             @contextmenu="contextMenuRef?.show($event)"
@@ -781,7 +823,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
                 :first-line-index="(flatItems[index] as any).firstLineIndex"
                 :section-label="(flatItems[index] as any).sectionLabel"
                 :sub-section-label="(flatItems[index] as any).subSectionLabel"
-                :own-toc-path="(flatItems[index] as any).tocPath"
+                :own-toc-path="tocPathOf(flatItems[index] as any)"
                 @navigate-section="(d, id) => emit('navigate-section', d, id)"
                 @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
               />

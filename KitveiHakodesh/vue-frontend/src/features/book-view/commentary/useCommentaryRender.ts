@@ -50,6 +50,9 @@ export function useCommentaryRender(
   // structure first and backfill line text in place, so a slot's content can
   // change without the groups array identity changing.
   const renderSource = new Map<number, string>()
+  // The line each cached row was rendered for: a trim keeps the annotation keys of the
+  // rows it keeps and drops the rest.
+  const lineIdByFlat = new Map<number, number>()
   let globalCacheKey = ''
 
   function getGlobalKey(): string {
@@ -156,6 +159,7 @@ export function useCommentaryRender(
       renderCache.clear()
       perLineAnnotationKey.clear()
       searchQueryByFlat.clear()
+      lineIdByFlat.clear()
       globalCacheKey = globalKey
     }
 
@@ -206,7 +210,34 @@ export function useCommentaryRender(
     if (lineId != null) result = appendUnmarkedNotesMarker(result, getLineNotesForLine?.(lineId) ?? [])
 
     renderCache.set(flatIndex, result)
+    if (lineId != null) lineIdByFlat.set(flatIndex, lineId)
     return result
+  }
+
+  /**
+   * Bounds the cache to the rows near the scroller's window: every row `keep` rejects is
+   * dropped, with the inputs it was keyed by. A dropped row scrolled back into view is
+   * rendered again from its line, giving the same string.
+   */
+  function trimRenderCache(keep: (flatIndex: number) => boolean) {
+    for (const flatIndex of renderCache.keys()) {
+      if (keep(flatIndex)) continue
+      renderCache.delete(flatIndex)
+      searchQueryByFlat.delete(flatIndex)
+      renderSource.delete(flatIndex)
+      lineIdByFlat.delete(flatIndex)
+    }
+    // Rows whose cache entry was already dropped (invalidated) keep no keys either.
+    for (const flatIndex of renderSource.keys()) {
+      if (renderCache.has(flatIndex)) continue
+      searchQueryByFlat.delete(flatIndex)
+      renderSource.delete(flatIndex)
+      lineIdByFlat.delete(flatIndex)
+    }
+    const keptLineIds = new Set(lineIdByFlat.values())
+    for (const lineId of perLineAnnotationKey.keys()) {
+      if (!keptLineIds.has(lineId)) perLineAnnotationKey.delete(lineId)
+    }
   }
 
   // Invalidate render cache when groups change (new line content loaded)
@@ -216,6 +247,7 @@ export function useCommentaryRender(
       renderCache.clear()
       perLineAnnotationKey.clear()
       renderSource.clear()
+      lineIdByFlat.clear()
       globalCacheKey = ''
     },
     { flush: 'sync' },
@@ -239,6 +271,7 @@ export function useCommentaryRender(
     cleanTextFlags,
     commentaryFontPx,
     renderContent,
+    trimRenderCache,
     setCurrentMark,
     annotationOffsetLengthOf,
   }

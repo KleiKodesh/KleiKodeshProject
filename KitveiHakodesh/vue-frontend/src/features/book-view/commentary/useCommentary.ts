@@ -1,4 +1,4 @@
-import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, shallowReactive, shallowRef, watch } from 'vue'
 import { getCommentaryFilterGroups, getCommentaryLinkGroupsForBookLineRange, getCommentaryLinkGroupsForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import type { BookLineRange } from '@/webview-host/queries.types'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -129,8 +129,13 @@ export function useCommentary(
   /** selectedLineIds as an index range of sourceBookId, when they are exactly one. */
   selectedLineRange: () => { fromIndex: number; toIndex: number } | null = () => null,
 ) {
-  const groups = ref<CommentaryGroup[]>([])
-  const staticFilterGroups = ref<CommentaryGroup[]>([])
+  // Shallow: a load REPLACES the array, it is never edited in place, and deep
+  // reactivity over a whole-book range (~50k line objects) only cost proxies and
+  // tracking in every computed that walks it. The one in-place change - a line's text
+  // arriving or being released - is reactive through the line object itself
+  // (shallowReactive, see load()).
+  const groups = shallowRef<CommentaryGroup[]>([])
+  const staticFilterGroups = shallowRef<CommentaryGroup[]>([])
   const staticFilterGroupsLoaded = ref(false)
   const loading = ref(false)
   // Set when load() fails (DB/bridge error, e.g. a seforim DB missing the links
@@ -376,8 +381,11 @@ export function useCommentary(
 
       // The structure (which commentators, which lines) is all the panel needs to
       // open: the windowed scroller asks for exactly the lines it will show, before
-      // it shows them. The line index is built from the REACTIVE line objects, so a
-      // fetch writes text the rows see.
+      // it shows them. Each line object is made reactive (shallowly - its fields are
+      // plain values) and the line index holds those, so a fetch writes text the rows see.
+      for (const group of built) {
+        for (let index = 0; index < group.lines.length; index++) group.lines[index] = shallowReactive(group.lines[index]!)
+      }
       groups.value = built
       linesById = indexLines(groups.value)
     } catch {
