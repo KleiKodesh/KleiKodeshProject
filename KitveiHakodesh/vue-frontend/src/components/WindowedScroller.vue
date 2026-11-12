@@ -92,8 +92,10 @@ const props = withDefaults(
      * before it mounts a range — the first window, a jump or an extension — so a row
      * never appears without its content and a window renders exactly once. Asked for
      * rows that do not exist YET (a list still streaming in, asked for its start row),
-     * it resolves when they do, or when it is known they never will. Omit when the
-     * rows are always available.
+     * it resolves when they do, or when it is known they never will - for the start
+     * row and for a scrollToIndex past `count` alike. Resolve from a post-flush watcher
+     * (or later), so `count` has reached the scroller by then. Omit when the rows are
+     * always available.
      */
     ensureRows?: (start: number, end: number) => Promise<void>
     /**
@@ -559,6 +561,12 @@ function scrollToIndex(index: number, options: WindowedScrollerScrollToOptions =
 }
 
 async function landOn(index: number, options: WindowedScrollerScrollToOptions, byReader: boolean): Promise<void> {
+  // A row past the rows known so far (a list still streaming in) is the ROW SOURCE's
+  // business, as for the start row: ask it, and it answers once the row exists - or once
+  // it is known it never will, and then the landing clamps to the last row there is.
+  if (index >= props.count && props.ensureRows) {
+    await props.ensureRows(index, index + 1).catch(() => { /* not to be had: clamped below */ })
+  }
   // A jump made while rows already exist builds the window itself: the first window
   // must not then be built at the start row on top of it.
   if (props.count > 0) {

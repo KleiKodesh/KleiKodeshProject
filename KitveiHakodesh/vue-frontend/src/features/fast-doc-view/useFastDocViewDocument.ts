@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, shallowRef } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import {
   isFastDocViewSourceChangedError,
   type FastDocViewApi,
@@ -284,10 +284,31 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
   }
 
   /**
+   * Resolves once block `index` is known (the index still being built has reached it), or once
+   * it is known it never will be: the index completed or stopped short of it, or the document
+   * went away. Post-flush, so the scroller's count has caught up when a landing reads it.
+   */
+  function whenBlockKnown(index: number): Promise<void> {
+    const documentId = summary.value?.documentId
+    const isSettled = () =>
+      blockCount.value > index || isIndexComplete.value || indexBuildFailed.value || summary.value?.documentId !== documentId
+    if (isSettled()) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const stop = watch(isSettled, (settled) => {
+        if (!settled) return
+        stop()
+        resolve()
+      }, { flush: 'post' })
+    })
+  }
+
+  /**
    * The scroller's row source: resolves once [start, end) is cached, rejects when it
    * cannot be had. A "source changed" error reopens the document and tries once more.
    */
   async function ensureBlocks(start: number, end: number): Promise<void> {
+    if (!summary.value) throw new FastDocViewStaleFetchError('FastDocView: no document open')
+    await whenBlockKnown(start)
     if (!summary.value) throw new FastDocViewStaleFetchError('FastDocView: no document open')
     const clampedEnd = Math.min(end, blockCount.value)
     const focus = [start, clampedEnd] as const
