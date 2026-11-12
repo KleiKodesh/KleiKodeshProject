@@ -44,6 +44,8 @@ export function useCommentaryScroll(
   /** Flat index of every group header, ascending — what every header lookup walks instead of the rows. */
   headerIndexes: () => number[],
   scroller: () => WindowedScrollerApi | null,
+  /** The reader put this panel on a commentator: scrolled it there, or picked it by name. */
+  onReaderCommentator: (group: { bookId: number; sectionLabel: string; subSectionLabel: string }) => void = () => {},
 ) {
   const scrollTop = ref(0)
 
@@ -114,63 +116,24 @@ export function useCommentaryScroll(
   // ── What the reader chose ───────────────────────────────────────────────────
 
   /**
-   * The commentator the reader picked BY NAME from the header toolbar (the
-   * next/previous buttons and the search input, which reach scrollToGroup with
-   * reason 'header-nav-picker').
-   *
-   * Recorded as the CHOICE ITSELF: a pick names its book, so it needs no derivation
-   * from the sticky header and is correct the instant it happens. Consumed by
-   * consumeExplicitPick when the pin capture is APPLIED, and dropped by a later
-   * scroll gesture (see markUserAdjusted).
-   */
-  let explicitPick: { bookId: number; sectionLabel: string; subSectionLabel: string } | null = null
-
-  /**
-   * True once the reader has moved this panel themselves (wheel, touch, pointer, a
-   * scrolling key) since the app last put it somewhere at their request. It is what
-   * makes the sticky header THEIR arrangement, and so a commentator worth pinning.
-   * It does not gate, delay or cancel anything.
+   * True while the reader is moving this panel themselves (wheel, touch, pointer, a
+   * scrolling key), until the app next positions it. Their scrolling reports the
+   * commentator now at the top as this panel's commentator.
    */
   let userAdjusted = false
   function markUserAdjusted() {
     userAdjusted = true
-    // A scroll gesture supersedes an earlier toolbar pick: pick Rashi, then scroll
-    // to another commentator without switching lines, and the sticky header is now
-    // the reader's latest word.
-    explicitPick = null
-  }
-
-  /**
-   * The active group AS A PIN-CAPTURE SOURCE, which is stricter than the display
-   * version above: it answers null unless the reader has actually curated the
-   * view. activeHeader falls back to the FIRST header when no scroller is showing
-   * rows — a list that has just been replaced and whose scroller is not open yet —
-   * and a click in that moment must not capture the first group as "what the reader
-   * was looking at". A DERIVED active group is not a preference; only one the reader
-   * made is. Callers fall back to the held pin on null.
-   *
-   * A FUNCTION, deliberately not a computed: it reads plain variables, and it
-   * answers "what is true at this instant", asked imperatively at click time.
-   *
-   * READ-ONLY: the pick is consumed by consumeExplicitPick, called when the
-   * snapshot is actually APPLIED to the pins. Capture is not consumption — the
-   * scroll-sync capture may never be applied.
-   */
-  function activePinnedGroupForCapture(): any {
-    const picked =
-      explicitPick ?? (isOpen && navigationsInFlight === 0 && userAdjusted ? activePinnedGroup.value : null)
-    return picked ? { ...picked, chosen: true } : null
-  }
-
-  /** Drop the pick: a captured snapshot has been applied to the pins. */
-  function consumeExplicitPick() {
-    explicitPick = null
   }
 
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scroller()?.scrollerElement?.scrollTop ?? 0
     const pos = captureScrollPos()
     if (pos) emitScroll(pos.scrollIndex, pos.scrollOffset)
+  }
+
+  /** The scroller stopped moving (its moveend): if the reader moved it, the commentator at the top is theirs. */
+  function onMoveEnd() {
+    if (userAdjusted && isOpen && stickyHeader.value) onReaderCommentator(activePinnedGroup.value)
   }
 
   function captureScrollPos(): { scrollIndex: number; scrollOffset: number } | null {
@@ -257,12 +220,7 @@ export function useCommentaryScroll(
   let isOpen = false
   function scrollerOpened() {
     isOpen = true
-    // A new list, opened where the app decided: its sticky header is not the reader's
-    // arrangement until they move the panel again. Whatever they had arranged in the
-    // previous list was captured into the pin at the click that replaced it. Left
-    // set, the next line click captured this list's derived header as their choice —
-    // wrong whenever the list could not put the pinned header at the very top (it is
-    // the last group), and the panel drifted to the commentator above it.
+    // A new list, opened where the app put it: not the reader's own move.
     userAdjusted = false
     scrollTop.value = scroller()?.scrollerElement?.scrollTop ?? 0
     const request = requestForNextScroller
@@ -335,14 +293,9 @@ export function useCommentaryScroll(
     subSectionLabel?: string,
     reason = 'unknown',
   ): void {
-    // A pick from the header toolbar IS the reader's commentator choice - record
-    // it at once, so a line switch right after it still captures it.
+    // A pick from the header toolbar IS the reader's commentator choice.
     if (reason === 'header-nav-picker') {
-      explicitPick = {
-        bookId,
-        sectionLabel: sectionLabel ?? '',
-        subSectionLabel: subSectionLabel ?? '',
-      }
+      onReaderCommentator({ bookId, sectionLabel: sectionLabel ?? '', subSectionLabel: subSectionLabel ?? '' })
     }
     void goTo({ kind: 'group', bookId, sectionLabel, subSectionLabel })
   }
@@ -355,9 +308,8 @@ export function useCommentaryScroll(
     scrollTop,
     activeHeader,
     activePinnedGroup,
-    activePinnedGroupForCapture,
-    consumeExplicitPick,
     markUserAdjusted,
+    onMoveEnd,
     startRow,
     scrollerOpened,
     onScroll,

@@ -12,7 +12,6 @@
  */
 import { ref, computed, watch } from 'vue'
 import type { TocEntry } from '@/webview-host/queries.types'
-import type { CommentaryPinSnapshot } from './bookViewTypes'
 import type { LinesTable } from './lines/linesTable'
 
 export function useBookViewLineSelection(
@@ -20,8 +19,6 @@ export function useBookViewLineSelection(
   tocEntries: () => TocEntry[],
   commentaryLineId: import('vue').Ref<number | null>,
   selectedLineId: import('vue').Ref<number | null>,
-  captureActivePins: () => CommentaryPinSnapshot,
-  applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
   /**
    * Fetches the IDS of the lines in [start, end) — no text. Lines load on demand, so a
    * range may have nothing yet; a section or a shift-click range needs ids only.
@@ -108,10 +105,6 @@ export function useBookViewLineSelection(
       manualSelectionAnchorLineId.value = lineId
       return false
     }
-
-    // Capture synchronously before any reactive state changes: every panel's
-    // activePinnedGroup is still valid here (groups haven't been cleared yet).
-    applyPendingPins(captureActivePins())
 
     if (isShiftClick && manualSelectionAnchorLineId.value != null) {
       const anchorId = manualSelectionAnchorLineId.value

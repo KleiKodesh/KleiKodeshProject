@@ -3,23 +3,18 @@
  * auto-select to the book's scroll position.
  *
  * Reader scrolls sync immediately. Programmatic jumps (TOC click, search match,
- * restore) sync once their scroll events go quiet — a jump is a landing and, for a
- * search match, the nudge that brings the mark into view, and only where it comes
- * to rest is the reader's position. See onLinesScrolled.
+ * restore) sync where they come to rest: the lines scroller's moveend.
  *
  * The auto-selected commentary (not the line highlight) loads once per scroll:
- * where a reader scroll stops (scrollStopGate) or where a jump settles.
+ * where a reader scroll stops (the lines scroller's moveend) or where a jump settles.
  */
 import { onScopeDispose, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useEventListener } from '@vueuse/core'
-import { createScrollStopGate } from './scrollStopGate'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
 import type { LinesTable } from './lines/linesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
-import type { CommentaryPinSnapshot } from './bookViewTypes'
 export function useBookViewScrollSync(
   lines: () => LinesTable,
   activeTocEntryId: Ref<number | undefined>,
@@ -30,8 +25,6 @@ export function useBookViewScrollSync(
   getTocEntryById: (id: number) => TocEntry | null,
   getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
-  captureActivePins: () => CommentaryPinSnapshot,
-  applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
   /**
    * Fresh read of which line is at the top of the book view RIGHT NOW, straight
    * from the scroller — null while it has no rendered rows. The settle pass below
@@ -39,8 +32,6 @@ export function useBookViewScrollSync(
    * where the jump came to rest (see readCurrentPosition in useBookViewLinesScroll).
    */
   readLivePosition: () => { lineIndex: number; fullLineIndex: number } | null,
-  /** The lines viewport: its scrollend and its scrollbar's press/release end a reader scroll. */
-  scrollViewport: () => HTMLElement | null | undefined,
 ) {
   const paneNavigation = usePaneNavigation()
   const bookViewStore = useBookViewStore()
@@ -59,32 +50,26 @@ export function useBookViewScrollSync(
     const lineId = pendingCommentaryLineId
     pendingCommentaryLineId = null
     if (lineId == null || !autoSelectTopLine.value) return
-    // Capture now: no load happened during the scroll, so the panels still show
-    // the groups the reader was on and activePinnedGroup is valid.
-    applyPendingPins(captureActivePins())
     commentaryLineId.value = lineId
   }
 
-  const scrollStop = createScrollStopGate(commitPendingCommentary)
-
   function cancelPendingCommentary() {
     pendingCommentaryLineId = null
-    scrollStop.cancel()
   }
 
-  // scrollend does not bubble - listen in the capture phase, keep only the lines viewport's.
-  useEventListener(document, 'scrollend', (event: Event) => {
-    if (event.target === scrollViewport()) scrollStop.ended()
-  }, { capture: true, passive: true })
-  // The app's drawn scrollbar writes scrollTop per pointer move: a drag or track
-  // hold is one scroll that stops on release.
-  useEventListener(window, 'pointerdown', (event: PointerEvent) => {
-    const bar = (event.target as Element | null)?.closest?.('.windowed-scroller-bar')
-    const viewport = scrollViewport()
-    if (bar && viewport && bar.parentElement?.contains(viewport)) scrollStop.pointerDown()
-  }, { capture: true, passive: true })
-  useEventListener(window, 'pointerup', () => scrollStop.pointerUp(), { capture: true, passive: true })
-  useEventListener(window, 'pointercancel', () => scrollStop.pointerUp(), { capture: true, passive: true })
+  /**
+   * The lines scroller stopped moving (its moveend). A jump syncs where it came to
+   * rest, read fresh from the scroller; a reader scroll has synced as it went, and
+   * auto-select now loads the commentary where they stopped.
+   */
+  function onLinesMoveEnd() {
+    if (isJumpPending) {
+      isJumpPending = false
+      const live = readLivePosition()
+      if (live) applyPositionSync(live.lineIndex, live.fullLineIndex, false)
+    }
+    commitPendingCommentary()
+  }
 
   /**
    * Bumped every time the READER moves the view (not when the app jumps it).
@@ -93,29 +78,15 @@ export function useBookViewScrollSync(
    */
   const userScrollTick = ref(0)
 
-  /**
-   * How long programmatic scroll events must go quiet before the position they
-   * ended on is treated as THE position and synced (TOC entry, breadcrumb,
-   * auto-select). Longer than the frame between a landing and its mark nudge, far
-   * shorter than anything a reader would notice on top of a jump they just made.
-   */
-  const PROGRAMMATIC_SETTLE_MS = 200
-
-  let settleTimer: ReturnType<typeof setTimeout> | null = null
-
-  function cancelPendingSettle() {
-    if (settleTimer) {
-      clearTimeout(settleTimer)
-      settleTimer = null
-    }
-  }
+  /** A programmatic jump moved the view and its resting place is not synced yet. */
+  let isJumpPending = false
 
   /**
    * A position-derived sync must never move the highlight BETWEEN entries that
    * start on the same line — a parent header and its first child often do (a
    * parasha and its first daf, say), and the position alone cannot tell them
    * apart: getActiveTocEntry always resolves to the last of them. Overwriting
-   * here would flip every click on such a parent to its child 200ms later. When
+   * here would flip every click on such a parent to its child once the jump rests. When
    * the reader's current entry shares the derived entry's line, their choice
    * stands.
    */
@@ -150,13 +121,9 @@ export function useBookViewScrollSync(
     if (line && line.content !== null) {
       selectedLineId.value = line.id
       pendingCommentaryLineId = line.id
-      // A reader scroll loads where it stops (see scrollStopGate); a programmatic
+      // A reader scroll loads where it stops (onLinesMoveEnd); a programmatic
       // jump reaches here only once it has settled, so it IS the stop.
-      if (isUserScroll) scrollStop.moved()
-      else {
-        scrollStop.cancel()
-        commitPendingCommentary()
-      }
+      if (!isUserScroll) commitPendingCommentary()
     }
   }
 
@@ -169,25 +136,15 @@ export function useBookViewScrollSync(
     // on top of where the reader just moved.
     if (isUserScroll) {
       userScrollTick.value++
-      cancelPendingSettle()
+      isJumpPending = false
       applyPositionSync(lineIndex, fullLineIndex, true)
       return
     }
 
-    // A programmatic scroll is only a real position once it stops moving. A jump
-    // can be more than one scroll event — the landing, then the nudge that brings
-    // a search mark to the edge a frame later — and syncing each would flick the
-    // TOC panel through the intermediate one. Waiting for the events to go quiet
-    // needs no knowledge of target, direction, or who initiated the jump: it syncs
-    // where the jump came to rest, which is the only position that matters.
-    cancelPendingSettle()
-    settleTimer = setTimeout(() => {
-      settleTimer = null
-      // Read the position FRESH rather than trusting the last event's indices.
-      const live = readLivePosition()
-      if (!live) return
-      applyPositionSync(live.lineIndex, live.fullLineIndex, false)
-    }, PROGRAMMATIC_SETTLE_MS)
+    // A programmatic jump is only a real position where it comes to rest (a landing,
+    // then perhaps the nudge that brings a search mark into view): synced at the
+    // scroller's moveend, so the TOC never flicks through an intermediate place.
+    isJumpPending = true
   }
 
   /**
@@ -221,16 +178,14 @@ export function useBookViewScrollSync(
 
   // The owed load must not outlive the view: firing after teardown sets commentaryLineId
   // and starts a commentary fetch for a panel that no longer exists.
-  onScopeDispose(() => {
-    cancelPendingSettle()
-    cancelPendingCommentary()
-  })
+  onScopeDispose(cancelPendingCommentary)
 
   return {
     currentScrollLineIndex,
     currentFullLineIndex,
     userScrollTick,
     onLinesScrolled,
+    onLinesMoveEnd,
     syncTocPathForLineIndex,
   }
 }

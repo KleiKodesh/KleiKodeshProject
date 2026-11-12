@@ -42,13 +42,11 @@ import { useBookViewSidePanel } from './useBookViewSidePanel'
 import { useBookViewSearchPanel } from './useBookViewSearchPanel'
 import { useBookViewTocNavigation } from './useBookViewTocNavigation'
 import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
-import { buildPin } from './useBookViewPinnedCommentary'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { CommentaryPanel } from './commentary/useCommentaryPanelSlot'
 import type {
   CommentaryPanelLiveStates,
-  CommentaryPinSnapshot,
   CommentarySlot,
   TocPersistState,
 } from './bookViewTypes'
@@ -75,8 +73,6 @@ type CommentaryViewInstance = {
   topVisibleFlatIndex: number
   activeBookId: number | null
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
-  activePinnedGroupForCapture?: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null
-  consumeExplicitPick?: () => void
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
@@ -187,17 +183,12 @@ export function useBookView(
   const commentaryLineId = ref<number | null>(null)
 
   // ── Deferred wiring ────────────────────────────────────────────
-  // Several cycles have to be broken here, all the same way — a holder whose members
-  // are replaced once the real owner exists:
-  //   line selection needs pin capture <-> pins live on the panels
-  //   panels need annotation getters   <-> annotations need the panels' groups
+  // A cycle has to be broken here — a holder whose members are replaced once the
+  // real owner exists: panels need annotation getters <-> annotations need the
+  // panels' groups.
   // Every call site runs after setup (a render, or a user action), so the holders are
   // always populated by the time they are read.
 
-  const pinFns = {
-    captureActivePins: (): CommentaryPinSnapshot => ({}),
-    applyPendingPins: (_snapshot: CommentaryPinSnapshot) => {},
-  }
   const annotationFns = {
     getHighlightsForLine: (_lineId: number): Highlight[] => [],
     getNotesForLine: (_lineId: number): Note[] => [],
@@ -215,8 +206,6 @@ export function useBookView(
     () => tocEntries.value,
     commentaryLineId,
     selectedLineId,
-    () => pinFns.captureActivePins(),
-    (snapshot) => pinFns.applyPendingPins(snapshot),
     ensureLineIds,
   )
 
@@ -268,53 +257,6 @@ export function useBookView(
   const openCommentarySlots = computed(() =>
     COMMENTARY_SLOTS.filter((slot) => panels[slot].visible.value),
   )
-
-  // ── Pin capture across both panels ────────────────────────────────────────
-
-  /**
-   * Each panel's currently-shown group, captured synchronously at the moment of a
-   * user action — groups are still loaded and activePinnedGroup is still valid. A
-   * snapshot rather than one value because the panels sit on different books.
-   */
-  function captureActivePins(): CommentaryPinSnapshot {
-    const snapshot: CommentaryPinSnapshot = {}
-    for (const slot of COMMENTARY_SLOTS) {
-      // Three-step fallback, because a null here does NOT mean "no preference":
-      //   1. what the panel is actually showing right now (its sticky header)
-      //   2. the pin it already holds - a panel that is mid-load has an empty list
-      //      and reports no active group, and staging null for it would make the
-      //      pin watcher fall back to the DEFAULT commentator, silently throwing
-      //      away the commentator the reader had chosen. Under hosted bridge
-      //      latency, consecutive section-nav clicks hit this on every click.
-      //   3. genuinely nothing - the very first load, where the default is right.
-      // The CAPTURE variant, not the display one: it answers null unless the
-      // reader has personally scrolled the panel since the last programmatic
-      // positioning. The display variant falls back to the first header, and a
-      // click landing mid-transit captured that first group as a "preference",
-      // silently switching the panel to a commentator the reader never chose.
-      snapshot[slot] =
-        commentaryViewRefs[slot]()?.activePinnedGroupForCapture?.() ??
-        panels[slot].pinnedCommentaryGroup.value ??
-        null
-    }
-    return snapshot
-  }
-
-  /** Stage a captured snapshot so each panel's commentaryLineId watcher applies it. */
-  function applyPendingPins(snapshot: CommentaryPinSnapshot) {
-    for (const slot of COMMENTARY_SLOTS) {
-      panels[slot].setPendingPin(snapshot[slot] ?? null)
-      // The reader's toolbar pick has now been handed to the pin, so it is spent.
-      // Consumption belongs HERE and not in the capture: a capture can be
-      // abandoned (an auto-select load superseded or cancelled) before it applies. Clearing on capture let any lines-pane
-      // scroll between the pick and the next line click swallow the choice - the
-      // intermittent half of this bug.
-      commentaryViewRefs[slot]()?.consumeExplicitPick?.()
-    }
-  }
-
-  pinFns.captureActivePins = captureActivePins
-  pinFns.applyPendingPins = applyPendingPins
 
   /**
    * An explicit line click voids every panel's saved commentary place: the new
@@ -398,6 +340,7 @@ export function useBookView(
     currentFullLineIndex,
     userScrollTick,
     onLinesScrolled,
+    onLinesMoveEnd,
     syncTocPathForLineIndex,
   } = useBookViewScrollSync(
     () => lines.value,
@@ -409,10 +352,7 @@ export function useBookView(
     (id) => tocEntries.value.find((e) => e.id === id) ?? null,
     getActiveAltTocEntry,
     getTocPath,
-    captureActivePins,
-    applyPendingPins,
     () => linesContentRef()?.readCurrentPosition() ?? null,
-    () => linesContentRef()?.scrollerElement(),
   )
 
   // The alt sections finish loading after the reader is already scrolled, and no
@@ -584,10 +524,8 @@ export function useBookView(
       ))
       return
     }
-    applyPendingPins(captureActivePins())
-    // Section nav is the reader steering this panel to this book, so the pin is
-    // chosen: it must keep its place through lines the book does not comment on.
-    panels[slot].setPendingPin(buildPin(commentaryBookId, groups.value, true))
+    // Section nav steers this panel to this book; the other panels keep theirs.
+    panels[slot].pinExplicitly(commentaryBookId)
   }
 
   function onNavigateSection(slot: CommentarySlot, direction: 'next' | 'prev', commentaryBookId: number) {
@@ -861,7 +799,7 @@ export function useBookView(
     activeMatchIdx: searchPanel.activeMatchIdx,
     contentSearch,
     // handlers
-    onLinesScrolled, onTocSelect, onAltTocSelect,
+    onLinesScrolled, onLinesMoveEnd, onTocSelect, onAltTocSelect,
     onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
     openBookTarget,
     openContentSearch: searchPanel.openContentSearch,

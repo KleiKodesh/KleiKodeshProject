@@ -112,7 +112,7 @@ export function useCommentaryPanelSlot(
   const treeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
   const fraction = ref(DEFAULT_FRACTION[slot])
 
-  const { pinnedCommentaryGroup, isPinSettled, restorePin, setPendingPin, pinExplicitly } = usePinnedCommentary(
+  const { pinnedCommentaryGroup, isPinSettled, restorePin, setCommentator, pinExplicitly } = usePinnedCommentary(
     shared.bookId,
     () => shared.commentaryLineId.value,
     () => shared.groups.value,
@@ -200,7 +200,7 @@ export function useCommentaryPanelSlot(
     pinnedCommentaryGroup,
     isPinSettled,
     restorePin,
-    setPendingPin,
+    setCommentator,
     pinExplicitly,
     groupsForDisplay,
     visibleGroups,

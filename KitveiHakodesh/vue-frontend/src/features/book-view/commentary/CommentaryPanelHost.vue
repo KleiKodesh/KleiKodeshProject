@@ -171,6 +171,7 @@ defineExpose({ view })
       @close="emit('close')"
       @navigate-section="(direction, id) => emit('navigate-section', direction, id)"
       @scroll="panel.onScroll"
+      @commentator="panel.setCommentator"
       @toggle-filter-panel="onToggleFilter"
       @toggle-search="emit('toggle-search')"
       @open-book="(id, lineIndex) => emit('open-book', id, lineIndex)"

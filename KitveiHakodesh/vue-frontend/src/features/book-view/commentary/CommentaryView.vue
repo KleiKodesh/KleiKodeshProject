@@ -127,6 +127,8 @@ const emit = defineEmits<{
   'toggle-filter-panel': []
   'toggle-search': []
   scroll: [scrollIndex: number, scrollOffset: number]
+  /** The reader put this panel on a commentator (scrolled it there, or picked it). */
+  commentator: [group: { bookId: number; sectionLabel: string; subSectionLabel: string }]
 }>()
 
 // ── Note bubble state ─────────────────────────────────────────────────────────
@@ -347,9 +349,8 @@ function rowSearchQuery(flatIndex: number): string | undefined {
 const {
   activeHeader,
   activePinnedGroup,
-  activePinnedGroupForCapture,
-  consumeExplicitPick,
   markUserAdjusted,
+  onMoveEnd,
   startRow,
   scrollerOpened,
   onScroll: handleScroll,
@@ -361,6 +362,7 @@ const {
   () => flatItems.value,
   () => headerIndexes.value,
   scroller,
+  (group) => emit('commentator', group),
 )
 
 // Only keys that scroll the panel count as the reader moving it (see markUserAdjusted:
@@ -583,8 +585,6 @@ defineExpose({
   scrollToFlatIndex,
   topVisibleFlatIndex,
   activePinnedGroup,
-  activePinnedGroupForCapture,
-  consumeExplicitPick,
   activeBookId,
   captureScrollPos,
   getFilterButtonEl: () => headerNavRef.value?.filterBtnRef ?? null,
@@ -777,6 +777,7 @@ const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbar
             tabindex="0"
             data-ctrlf-enabled
             @opened="scrollerOpened"
+            @moveend="onMoveEnd"
             @scroll="onScroll"
             @click="onMarkerClick"
             @contextmenu="contextMenuRef?.show($event)"
