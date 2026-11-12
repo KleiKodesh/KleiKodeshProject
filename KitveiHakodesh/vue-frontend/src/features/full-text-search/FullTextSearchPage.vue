@@ -564,7 +564,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="search-page">
     <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
-    <div v-show="!showOptionsCard" class="search-bar-dock" :style="{ '--options-panel-height': `${resultsAreaHeight}px` }">
+    <!-- Height bound only while the dropdown is open: otherwise every resize frame re-rendered the page for it. -->
+    <div v-show="!showOptionsCard" class="search-bar-dock" :style="isOptionsOpen ? { '--options-panel-height': `${resultsAreaHeight}px` } : undefined">
       <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
            instance (no remount), so typing, focus and refs survive the hop back to the top. -->
       <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showOptionsCard">
