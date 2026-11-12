@@ -63,6 +63,7 @@ function mountScroll(
     rowElement,
     barTargetAt: () => null,
     replaceRows: vi.fn(),
+    isLanding: () => false,
   }
   let scroll!: ReturnType<typeof useBookViewLinesScroll>
   const app = createApp({

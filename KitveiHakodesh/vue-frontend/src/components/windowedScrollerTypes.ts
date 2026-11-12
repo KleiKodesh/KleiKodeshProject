@@ -12,6 +12,9 @@ import type { Ref } from 'vue'
  */
 export type WindowedScrollerRowKind = 'block' | 'inline'
 
+/** Who moved a WindowedScroller (its `moveend`): the reader, or a landing code asked for. */
+export type WindowedScrollerMoveSource = 'reader' | 'landing'
+
 export interface WindowedScrollerScrollToOptions {
   /**
    * Pixels added to the row's top when landing. Negative leaves a gap above the
@@ -49,6 +52,8 @@ export interface WindowedScrollerBarTarget {
 }
 
 export interface WindowedScrollerApi {
+  /** A landing code asked for is under way, or its scroll has not ended yet. */
+  isLanding(): boolean
   /** The native scroll container holding the rows — focus, keys and pointer listeners go here. */
   scrollerElement: HTMLElement | null
   /** The drawn scrollbar beside the viewport, arrows included — what a hover label listens on. */
