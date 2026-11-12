@@ -365,18 +365,6 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return estimatedHeightBefore(options.windowStart.value)
   }
 
-  /** A row's position: real inside the window, estimated outside it. */
-  function positionForIndex(index: number): number {
-    const viewport = options.viewport()
-    const above = pixelsAboveWindow()
-    if (index < options.windowStart.value || !viewport) return estimatedHeightBefore(index)
-    if (index < options.windowEnd.value) {
-      const row = options.rowElement(index)
-      if (row) return above + row.offsetTop
-    }
-    return above + viewport.scrollHeight + estimatedHeightBetween(options.windowEnd.value, index)
-  }
-
   /** The row whose estimated top is at `estimatedTop`, above or below the window. */
   function indexAtEstimatedTop(estimatedTop: number): number {
     return prefixSums ? rowAtEstimatedTop(prefixSums, estimatedTop) : Math.round(estimatedTop / estimatedRowHeight)
@@ -430,6 +418,62 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
     return tiers === syncedTiers || (tiers.length === 0 && syncedTiers?.length === 0)
   }
 
+  // ── Landmarks ──────────────────────────────────────────────────────────────────
+  //
+  // A landmark's position is its estimated top, except that the window sits at its REAL
+  // height: one above the window is at its estimate, one below it is shifted by a single
+  // shared amount (the window's real height minus its estimate), and only the few inside
+  // the window read their row. So the estimates are computed per landmark only when what
+  // they depend on changes (the sums, the tiers, the count, or the average while it is
+  // the estimate) - a window move is one add per landmark, no layout read, and the bar
+  // gets new arrays only when a position actually moved (its track map rebuilds on them).
+
+  let landmarkEstimates: Float64Array[] = []
+  let estimatesTiers: readonly (readonly number[])[] | null = null
+  let estimatesSums: Float64Array | null = null
+  let estimatesCount = -1
+  let estimatesRowHeight = -1
+
+  function syncLandmarkPositions(tiers: readonly (readonly number[])[], start: number, end: number, shiftBelow: number) {
+    const count = options.count()
+    if (
+      tiers !== estimatesTiers ||
+      prefixSums !== estimatesSums ||
+      count !== estimatesCount ||
+      (!prefixSums && estimatedRowHeight !== estimatesRowHeight)
+    ) {
+      landmarkEstimates = tiers.map((tier) => Float64Array.from(tier, estimatedHeightBefore))
+      estimatesTiers = tiers
+      estimatesSums = prefixSums
+      estimatesCount = count
+      estimatesRowHeight = estimatedRowHeight
+    }
+    const above = pixelsAboveWindow()
+    const previous = landmarkTiers.value
+    let changed = previous.length !== tiers.length
+    const next = tiers.map((tier, t) => {
+      const estimates = landmarkEstimates[t]!
+      const before = previous[t]
+      const positions = new Array<number>(tier.length)
+      let tierChanged = !before || before.length !== tier.length
+      for (let k = 0; k < tier.length; k++) {
+        const index = tier[k]!
+        let position: number
+        if (index < start) position = estimates[k]!
+        else {
+          const row = index < end ? options.rowElement(index) : null
+          position = row ? above + row.offsetTop : estimates[k]! + shiftBelow
+        }
+        positions[k] = position
+        if (!tierChanged && before![k] !== position) tierChanged = true
+      }
+      if (!tierChanged) return before!
+      changed = true
+      return positions
+    })
+    if (changed) landmarkTiers.value = next
+  }
+
   /** Call whenever the viewport scrolled or its rows changed. */
   function syncFromViewport() {
     const viewport = options.viewport()
@@ -458,7 +502,7 @@ export function useWindowedScrollerBarMapping(options: WindowedScrollerBarMappin
       syncedPrefixSums = prefixSums
       syncedTiers = tiers
       totalHeight.value = Math.round(above + scrollHeight + estimatedHeightBetween(end, count))
-      landmarkTiers.value = tiers.map((tier) => tier.map(positionForIndex))
+      syncLandmarkPositions(tiers, start, end, above + scrollHeight - estimatedHeightBefore(end))
     }
     position.value = pendingPosition ?? Math.round(above + viewport.scrollTop)
   }
