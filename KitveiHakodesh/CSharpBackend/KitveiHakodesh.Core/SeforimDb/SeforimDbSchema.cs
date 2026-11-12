@@ -49,8 +49,10 @@ namespace KitveiHakodesh.Core.SeforimDb
             bool hasCompressedContent,
             bool hasVersionLines,
             bool hasLinkSuppressedSide,
-            string declaredBaseColumn)
+            string? declaredBaseColumn,
+            bool hasBookBaseText)
         {
+            HasBookBaseText = hasBookBaseText;
             HasSplitLineContent = hasSplitLineContent;
             HasCompressedContent = hasCompressedContent;
             HasVersionLines = hasVersionLines;
@@ -59,12 +61,25 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
-        /// Which column this database uses for the declared-base flag — see
-        /// <see cref="DeclaredBaseColumnOtzaria"/>. Hardcoding either name breaks the reverse
-        /// lookups on the other schema with a "no such column" error, so every query that
-        /// tests the flag interpolates this.
+        /// The column this database uses for the declared-base flag (see
+        /// <see cref="DeclaredBaseColumnOtzaria"/>), or null when <c>link</c> has neither - an
+        /// older library. Queries test the flag through <see cref="DeclaredBaseExpr"/>, which
+        /// reads 0 (nothing declared) then, so no statement names a missing column.
         /// </summary>
-        public string DeclaredBaseColumn { get; }
+        public string? DeclaredBaseColumn { get; }
+
+        /// <summary>
+        /// True when the library lists each book's base texts in <c>book_base_text(bookId,
+        /// baseBookId)</c>. Decided by probing the table, never by which app built the file.
+        /// </summary>
+        public bool HasBookBaseText { get; }
+
+        /// <summary>True when <c>link</c> carries a declared-base column (either name).</summary>
+        public bool HasDeclaredBaseColumn => DeclaredBaseColumn != null;
+
+        /// <summary>The declared-base flag of link alias <paramref name="alias"/> as a SQL
+        /// expression: the column when there is one, else 0 (nothing declared).</summary>
+        public string DeclaredBaseExpr(string alias) => HasDeclaredBaseColumn ? alias + "." + DeclaredBaseColumn : "0";
 
         /// <summary>
         /// True when line text lives in the `line_content` sidecar and `line` itself has no
@@ -150,7 +165,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             try
             {
                 // Collapses "a\.", "a/b" and relative paths onto one spelling.
-                return Path.GetFullPath(databasePath);
+                // The file's write time and size join the key: a library replaced at the same
+                // path is probed afresh, never handed the old file's shape.
+                string full = Path.GetFullPath(databasePath);
+                var info = new FileInfo(full);
+                return info.Exists ? $"{full}|{info.LastWriteTimeUtc.Ticks}|{info.Length}" : full;
             }
             catch
             {
@@ -173,9 +192,10 @@ namespace KitveiHakodesh.Core.SeforimDb
                 hasCompressedContent: TableExists(connection, "zstd_dict"),
                 hasVersionLines: TableExists(connection, "version_line"),
                 hasLinkSuppressedSide: TableExists(connection, "link_suppressed_side"),
-                declaredBaseColumn: ColumnExists(connection, "link", DeclaredBaseColumnOtzaria)
-                    ? DeclaredBaseColumnOtzaria
-                    : DeclaredBaseColumnZayit);
+                declaredBaseColumn: ColumnExists(connection, "link", DeclaredBaseColumnOtzaria) ? DeclaredBaseColumnOtzaria
+                    : ColumnExists(connection, "link", DeclaredBaseColumnZayit) ? DeclaredBaseColumnZayit
+                    : null,
+                hasBookBaseText: TableExists(connection, "book_base_text"));
         }
 
         /// <summary>Forgets every cached probe. For tests, and for a database swapped at runtime.</summary>

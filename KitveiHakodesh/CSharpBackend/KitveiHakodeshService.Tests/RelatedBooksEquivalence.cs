@@ -68,7 +68,8 @@ internal static class RelatedBooksEquivalence
         var mismatchLines = new List<string>();
         var timing = new List<string>();
 
-        foreach (int bookId in SampleBooks)
+        var sample = Environment.GetEnvironmentVariable("RB_BOOKS") is string sampleIds ? sampleIds.Split(',').Select(int.Parse).ToArray() : SampleBooks;
+        foreach (int bookId in sample)
         {
             Console.WriteLine($"book {bookId} ...");
             // -- list --
@@ -88,7 +89,13 @@ internal static class RelatedBooksEquivalence
             if (!a.SequenceEqual(b))
             {
                 listMismatch++;
-                mismatchLines.Add($"LIST book {bookId}:\n  old: {string.Join(" | ", a)}\n  new: {string.Join(" | ", b)}");
+                var oldIds = oldList.Sections.SelectMany(x => x.Books).Select(x => x.BookId).ToList();
+                var newIds = newList.Sections.SelectMany(x => x.Books).Select(x => x.BookId).ToList();
+                var oldBooks = oldList.Sections.SelectMany(x => x.Books).ToDictionary(x => x.BookId);
+                var newBooks = newList.Sections.SelectMany(x => x.Books).ToDictionary(x => x.BookId);
+                string Desc(RelatedBook x) => $"{x.BookId}{(x.IsBaseText ? "B" : "")}{(x.ViaSourceBookId is int v ? "v" + v : "")}{(x.ChainBaseBookId is int c ? "c" + c : "")}";
+                var changed = oldIds.Intersect(newIds).Where(id => Desc(oldBooks[id]) != Desc(newBooks[id])).Select(id => Desc(oldBooks[id]) + "->" + Desc(newBooks[id]));
+                mismatchLines.Add($"LIST book {bookId}: only old [{string.Join(",", oldIds.Except(newIds).Select(id => Desc(oldBooks[id])))}] only new [{string.Join(",", newIds.Except(oldIds).Select(id => Desc(newBooks[id])))}] changed [{string.Join(",", changed)}] common order same: {oldIds.Intersect(newIds).SequenceEqual(newIds.Intersect(oldIds))}");
             }
             int books = newList.Sections.Sum(s => s.Books.Count);
             Console.WriteLine($"  list: {books} books, {newList.Sections.Count} sections, equal={a.SequenceEqual(b)}");
@@ -147,9 +154,45 @@ internal static class RelatedBooksEquivalence
         Console.WriteLine("book   | old list ms (Core-direct)                 | new cold | new warm | clicks | old ms/click                          | new cold/click | new warm/click");
         foreach (var t in timing) Console.WriteLine(t);
         Console.WriteLine();
-        Console.WriteLine($"lists: {SampleBooks.Length}, mismatches {listMismatch}; clicks: {resolveCount}, mismatches {resolveMismatch}");
+        Console.WriteLine($"lists: {sample.Length}, mismatches {listMismatch}; clicks: {resolveCount}, mismatches {resolveMismatch}");
         foreach (var m in mismatchLines.Take(80)) Console.WriteLine(m);
         return listMismatch + resolveMismatch == 0 ? 0 : 1;
+    }
+
+    /// <summary>A library with neither book_base_text nor a declared-base link column: every
+    /// related-books path and the reverse lookups must answer without throwing.</summary>
+    public static int RunNoBaseData(string dbPath, int[] books)
+    {
+        var db = new SeforimDbQueries(dbPath);
+        var schema = db.ProbeSchemaForTests();
+        Console.WriteLine($"schema: book_base_text={schema.HasBookBaseText} declaredColumn={schema.DeclaredBaseColumn ?? "none"}");
+        var types = db.GetAllConnectionTypes().Select(t => t.Id).ToList();
+        int failures = 0;
+        foreach (int bookId in books)
+        {
+            try
+            {
+                var reverse = db.GetReverseBooks(bookId, types);
+                var lineIds = db.GetLineIds(bookId, 0, 50).Where(id => id != 0).ToList();
+                var reverseLines = db.GetReverseLineData(lineIds, types);
+                var list = db.GetRelatedBooks(bookId);
+                int clicks = 0, resolved = 0;
+                foreach (var book in list.Sections.SelectMany(x => x.Books))
+                    foreach (int top in new[] { 0, 40 })
+                    {
+                        clicks++;
+                        if (db.ResolveRelatedTarget(bookId, top, book) != null) resolved++;
+                    }
+                Console.WriteLine($"book {bookId}: reverseBooks {reverse.Count}, reverseLines {reverseLines.Count}, list {string.Join(" | ", Describe(list))}, clicks {clicks} resolved {resolved}");
+            }
+            catch (Exception e)
+            {
+                failures++;
+                Console.WriteLine($"book {bookId}: THREW {e.GetType().Name}: {e.Message}");
+            }
+        }
+        Console.WriteLine($"no-base-data check: {books.Length} books, failures {failures}");
+        return failures == 0 ? 0 : 1;
     }
 
     private static List<string> Describe(RelatedBooksList list) => list.Sections.Select(s =>
