@@ -97,7 +97,7 @@ const {
   idbResolved, restoredSideEdition, initialLineIndex, initialScrollTop, initialScrollOffset,
   flashOpenLine,
   activeMatchCount, activeMatchIdx, contentSearch,
-  onLinesScrolled, onTocSelect, onAltTocSelect,
+  onLinesScrolled, onLinesMoveEnd, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
   openBookTarget,
   openContentSearch, openCommentarySearch, toggleSearch,
@@ -670,6 +670,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :book-has-teamim="bookHasTeamim"
                     :book-is-commentary="bookIsCommentary"
                     @scrolled="onLinesScrolled"
+                    @moveend="onLinesMoveEnd"
                     @line-selected="onLineSelected"
                     @ctrl-f="openContentSearch"
                   />

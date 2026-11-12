@@ -1,24 +1,30 @@
 /**
- * Manages the pinned commentary group for the split-pane bottom panel.
+ * Which commentator a commentary panel is on.
  *
- * The pin tracks which commentary group (book + section) is currently visible.
- * When the user navigates to a new line, the caller captures the active group
- * synchronously (before any reactive state changes) and passes it in via
- * setPendingPin(). The commentaryLineId watcher then applies it.
+ * The rule, in full:
+ *   current = persisted (session restore) ?? the one the panel is on ?? this panel's default
  *
- * This avoids all timing races with the virtualizer and scroll events — the
- * capture happens at the point of user interaction, not asynchronously.
+ * - Selecting another line - click, keyboard, auto-select once scrolling settles,
+ *   section navigation - KEEPS the current commentator. If the new line has nothing
+ *   from it, useGroupsForDisplay puts its placeholder at its place.
+ * - The reader moves to another commentator by scrolling the panel to it, or by
+ *   picking it (which scrolls the panel to it): when the panel's scroll stops, the
+ *   commentator at its top becomes current (setCommentator).
+ * - The default is used only while the panel has no commentator at all.
+ *
+ * The panel's windowed scroller is created AT this commentator's row (its start
+ * row is an argument of its creation), so there is nothing to steer afterwards: no
+ * per-line re-derivation, no timing guards.
  */
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { getDefaultCommentators } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
 
 // One default-commentators query per book, EVER: every commentary panel creates a
 // usePinnedCommentary instance, and without this cache each ran the identical
-// query. The PROMISE is cached so the
-// instances racing at mount share one in-flight request; a rejection is evicted
-// so a transient service error retries next time.
+// query. The PROMISE is cached so the instances racing at mount share one in-flight
+// request; a rejection is evicted so a transient service error retries next time.
 const defaultCommentatorsByBook = new Map<number, Promise<number[]>>()
 
 function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
@@ -32,200 +38,95 @@ function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
 }
 
 /**
- * Build a pin for `bookId`, taking the disambiguating labels from that book's group
- * in `groups` when it has one and falling back to blank labels when it does not
- * (the book has no commentary on this line - scrollToGroup matches on bookId alone
- * in that case, and the placeholder supplies the row).
- *
- * The single place a pin is constructed. There are several ways to end up on a
- * commentator - scrolling to it, picking it from the header toolbar, section nav,
- * the default on a blank slate - and each used to build this object inline, with
- * its own copy of the `?? ''` fallbacks and its own decision about `chosen`. That
- * is how the two halves of the placeholder bug got out of step in the first place;
- * a new caller that forgets `chosen` reintroduces it silently.
- *
- * `chosen` says the READER put the panel here rather than it being derived for
- * them - see PinnedCommentaryGroup. Callers pass it rather than it being inferred,
- * because only the caller knows whether a person asked for this.
+ * A commentator reference for `bookId`, with the disambiguating labels from that
+ * book's group in `groups` when it has one (blank otherwise: the panel matches on
+ * bookId alone and the placeholder supplies the row).
  */
-export function buildPin(
-  bookId: number,
-  groups: CommentaryGroup[],
-  chosen: boolean,
-): PinnedCommentaryGroup {
+export function buildPin(bookId: number, groups: CommentaryGroup[], chosen = true): PinnedCommentaryGroup {
   const group = groups.find((g) => g.bookId === bookId)
-  return {
-    bookId,
-    sectionLabel: group?.sectionLabel ?? '',
-    subSectionLabel: group?.subSectionLabel ?? '',
-    chosen,
-  }
+  return { bookId, sectionLabel: group?.sectionLabel ?? '', subSectionLabel: group?.subSectionLabel ?? '', chosen }
 }
 
 /**
- * One instance per commentary panel.
- *
- * `defaultRank` picks which of the book's default commentators this panel opens
- * on: the bottom panel takes the first, the side panel the second, the left side
- * panel the third, so opening several immediately shows different commentators
- * rather than the same one repeated.
- *
- * `fallBackToFirstDefault` decides what happens when the book has fewer defaults
- * than the panel's rank. The bottom and side panels fall back to the first
- * default (one-default books open that commentator in both). The left panel does
- * not: rather than showing a third copy of the same commentator it stays
- * unpinned, so the panel renders from the top and never scrolls anywhere.
+ * One instance per commentary panel. `defaultRank` picks this panel's default (bottom:
+ * the first, side: the second, left side: the third); `fallBackToFirstDefault` says
+ * whether a book with fewer defaults than the rank falls back to the first one, or
+ * leaves this panel on no commentator (it then shows the list from the top).
  */
 export function usePinnedCommentary(
   bookId: number | undefined,
-  commentaryLineId: () => number | null,
+  _commentaryLineId: () => number | null,
   groups: () => CommentaryGroup[],
   defaultRank = 0,
   fallBackToFirstDefault = true,
 ) {
   const pinnedCommentaryGroup = ref<PinnedCommentaryGroup | null>(null)
-  let defaultCommentatorBookIds: number[] = []
-  // The in-flight (or settled) load, NOT a boolean latch. A flag set before the await let a
-  // second caller return immediately with defaultCommentatorBookIds still empty, and the
-  // groups watcher then bailed on its `!length` guard — the first line selection in a book
-  // could end up with the panel unpinned and unlabelled.
-  let defaultCommentatorsLoad: Promise<void> | null = null
-  // One generation counter PER watcher (never shared — a groups fire must not cancel an
-  // in-flight line-selection callback, which is what decides the default pin). A callback
-  // that resumes after its await checks it is still the latest of its own kind before
-  // writing the pin, so two rapid line selections cannot let the older callback land last
-  // and pin the previous line's commentator.
-  let lineGeneration = 0
-  let groupsGeneration = 0
-  // Set to true when the pin is restored from session so the first commentaryLineId
-  // watcher fire doesn't overwrite it before the view has rendered.
-  let restoredFromSession = false
-  // Captured synchronously by the caller (onLineSelected / onNavigateSection)
-  // before any reactive state changes. Applied by the commentaryLineId watcher.
-  let pendingPin: PinnedCommentaryGroup | null = null
+  /** The book's default commentators, once known (null while loading). */
+  const defaults = ref<number[] | null>(null)
 
-  // ── Is the pin settled? ─────────────────────────────────────────────────────
-  //
-  // A commentary panel's scroller is CREATED AT the pinned commentator (a windowed
-  // scroller takes its start row as an argument of its creation). So the panel has
-  // to know, before it creates one for a newly loaded list, that this pin is the
-  // pin FOR that list - not the previous line's, still waiting to be replaced by
-  // the two watchers below, which both write it after an await.
-  /** A line change whose pin has not been written yet. */
-  const isLinePinPending = ref(false)
-  /** The groups array the pin has been reconciled with (the groups watcher's last word). */
-  const groupsPinIsSettledFor = shallowRef<CommentaryGroup[]>(groups())
-  const isPinSettled = computed(() => !isLinePinPending.value && groupsPinIsSettledFor.value === groups())
-
-  function ensureDefaultCommentatorsLoaded(): Promise<void> {
-    if (bookId == null) return Promise.resolve()
-    defaultCommentatorsLoad ??= loadDefaultCommentatorIds(bookId)
-      .catch(() => [])
+  if (bookId != null) {
+    loadDefaultCommentatorIds(bookId)
+      .catch(() => [] as number[])
       .then((ids) => {
-        defaultCommentatorBookIds = ids
+        defaults.value = ids
       })
-    return defaultCommentatorsLoad
+  } else {
+    defaults.value = []
   }
+
+  function defaultId(): number | undefined {
+    const ids = defaults.value ?? []
+    return ids[defaultRank] ?? (fallBackToFirstDefault ? ids[0] : undefined)
+  }
+
+  // The default applies only while there is no commentator (not restored, not
+  // chosen, not carried from a previous line). It is applied once the defaults are
+  // known, and never replaces a commentator the panel already has.
+  watch(
+    [defaults, () => groups()],
+    () => {
+      if (pinnedCommentaryGroup.value != null || defaults.value == null) return
+      const id = defaultId()
+      if (id !== undefined) pinnedCommentaryGroup.value = buildPin(id, groups(), false)
+    },
+    { immediate: true },
+  )
+
+  // Labels only: when the current commentator appears in a newly loaded list, take
+  // its real section labels from it (they disambiguate a book listed in several
+  // sections). The commentator itself never changes here.
+  watch(
+    () => groups(),
+    (list) => {
+      const current = pinnedCommentaryGroup.value
+      if (current == null || !list.some((g) => g.bookId === current.bookId)) return
+      const next = buildPin(current.bookId, list, current.chosen)
+      if (next.sectionLabel !== current.sectionLabel || next.subSectionLabel !== current.subSectionLabel) {
+        pinnedCommentaryGroup.value = next
+      }
+    },
+  )
 
   /**
-   * This panel's default commentator, or undefined when the book has none at this
-   * rank and the panel does not fall back (see fallBackToFirstDefault).
+   * The panel can create its scroller once it knows its commentator - or knows it
+   * has none (no default at its rank). Only the defaults load can make it wait.
    */
-  function preferredDefaultId(): number | undefined {
-    const own = defaultCommentatorBookIds[defaultRank]
-    if (own !== undefined) return own
-    return fallBackToFirstDefault ? defaultCommentatorBookIds[0] : undefined
-  }
+  const isPinSettled = computed(() => pinnedCommentaryGroup.value != null || defaults.value != null)
 
-  // Called by onLineSelected / onNavigateSection synchronously before setting
-  // selectedLineId/commentaryLineId — captures which book the user was looking at.
-  function setPendingPin(group: PinnedCommentaryGroup | null) {
-    pendingPin = group
-  }
-
-  watch(commentaryLineId, async () => {
-    if (restoredFromSession) {
-      restoredFromSession = false
-      return
-    }
-    const captured = pendingPin
-    pendingPin = null
-    const mine = ++lineGeneration
-    isLinePinPending.value = true
-    await ensureDefaultCommentatorsLoaded()
-    if (mine !== lineGeneration) return // a newer line selection owns the pin now
-    isLinePinPending.value = false
-    if (captured) {
-      pinnedCommentaryGroup.value = captured
-      return
-    }
-    // No default at this panel's rank (and no fallback): leave the panel unpinned
-    // so it renders the list from the top instead of jumping to a commentator
-    // another panel is already showing.
-    const defaultId = preferredDefaultId()
-    if (defaultId === undefined) {
-      pinnedCommentaryGroup.value = null
-      return
-    }
-    // Derived for the reader, not asked for: chosen = false, so it may still give
-    // way to another default on a line it has no text for.
-    pinnedCommentaryGroup.value = buildPin(defaultId, groups(), false)
-  })
-
-  // When groups load for a new line:
-  // - If the current pin is a default and that default IS present in the new groups,
-  //   refresh the pin with the real sectionLabel/subSectionLabel from the loaded group.
-  // - If the current pin is a default that has no links for this line, fall back to the
-  //   next default that does.
-  watch(groups, async () => {
-    const mine = ++groupsGeneration
-    await ensureDefaultCommentatorsLoaded()
-    if (mine !== groupsGeneration) return // superseded while the defaults loaded
-    // Whatever the branches below decide, the pin is this list's from here on. Set
-    // first: they only write the pin synchronously, in this same turn.
-    groupsPinIsSettledFor.value = groups()
-    // Re-read live: the argument captured before the await can be a previous line's groups.
-    const newGroups = groups()
-    if (!newGroups.length) return
-    if (!defaultCommentatorBookIds.length) return
-    const currentPin = pinnedCommentaryGroup.value
-    if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin.bookId)) return
-    if (newGroups.some((g) => g.bookId === currentPin.bookId)) {
-      // Same book, real labels now available - carry `chosen` across so a refresh
-      // never downgrades the reader's choice to a derived default.
-      pinnedCommentaryGroup.value = buildPin(currentPin.bookId, newGroups, !!currentPin.chosen)
-      return
-    }
-    // The pinned book has no commentary on this line. If the READER chose it, that
-    // is precisely the case the injected placeholder exists for: keep the pin so
-    // useGroupsForDisplay can build "no text for this line" at the book's own
-    // position and the reader stays on their commentator. Only a DERIVED default
-    // may give way to the next default below.
-    //
-    // This branch was the placeholder bug. It fires only when the pin happens to
-    // be one of the book's default commentators (the guard above), so it reassigned
-    // the pin out from under the placeholder for some commentators and not others -
-    // and useGroupsForDisplay keys the placeholder off this very ref, so it never
-    // got the chance to build one.
-    if (currentPin.chosen) return
-    const defaultId = preferredDefaultId()
-    if (defaultId === undefined) {
-      pinnedCommentaryGroup.value = null
-      return
-    }
-    pinnedCommentaryGroup.value = buildPin(defaultId, newGroups, false)
-  })
-
+  /** Persistence: the saved commentator wins over the default. */
   function restorePin(group: PinnedCommentaryGroup) {
     pinnedCommentaryGroup.value = group
-    restoredFromSession = true
   }
 
-  // Named for what it is: the reader put the panel on this book. Always chosen,
-  // so it holds through lines the book has no commentary on (placeholder).
-  function pinExplicitly(bookId: number) {
-    pinnedCommentaryGroup.value = buildPin(bookId, groups(), true)
+  /** The reader moved this panel to a commentator (scrolled or picked). */
+  function setCommentator(group: { bookId: number; sectionLabel: string; subSectionLabel: string }) {
+    pinnedCommentaryGroup.value = { ...group, chosen: true }
   }
 
-  return { pinnedCommentaryGroup, isPinSettled, restorePin, pinExplicitly, setPendingPin }
+  /** The reader picked this commentator (header toolbar). */
+  function pinExplicitly(id: number) {
+    pinnedCommentaryGroup.value = buildPin(id, groups(), true)
+  }
+
+  return { pinnedCommentaryGroup, isPinSettled, restorePin, pinExplicitly, setCommentator }
 }

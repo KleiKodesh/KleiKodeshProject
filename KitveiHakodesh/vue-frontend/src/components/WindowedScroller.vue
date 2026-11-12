@@ -139,6 +139,14 @@ const emit = defineEmits<{
    * what they touch.
    */
   opened: []
+  /**
+   * The scroller has stopped moving. Each way it moves ends in exactly one known
+   * place: a native scroll (wheel, touch, keys) at the viewport's `scrollend`; one of
+   * its own landings (a jump, Home/End, a far bar seek) when the landing finishes -
+   * even when it swapped the rows without changing scrollTop, which fires nothing
+   * native; a held bar (drag, track hold) at release.
+   */
+  moveend: []
 }>()
 
 const viewportElement = ref<HTMLElement | null>(null)
@@ -335,6 +343,28 @@ function onViewportScroll() {
   fill()
 }
 
+// ── Move end ─────────────────────────────────────────────────────────────────────
+// A native scrollend inside one of our own landings or a bar hold is part of that
+// move, not its end: the landing / the release reports it.
+let landingsInFlight = 0
+let isBarPressed = false
+function onViewportScrollEnd() {
+  if (landingsInFlight === 0 && !isBarPressed) emit('moveend')
+}
+function onBarPointerDown() {
+  isBarPressed = true
+  window.addEventListener('pointerup', onBarPointerUp, { capture: true })
+  window.addEventListener('pointercancel', onBarPointerUp, { capture: true })
+}
+function onBarPointerUp() {
+  window.removeEventListener('pointerup', onBarPointerUp, { capture: true })
+  window.removeEventListener('pointercancel', onBarPointerUp, { capture: true })
+  if (!isBarPressed) return
+  isBarPressed = false
+  if (landingsInFlight === 0) emit('moveend')
+}
+onBeforeUnmount(onBarPointerUp)
+
 // Layout changes that are not this component's own patch: a width change re-wrapping
 // every row, a font arriving. Held against the last remembered anchor.
 useResizeObserver(contentElement, () => {
@@ -485,8 +515,14 @@ async function scrollToIndex(index: number, options: WindowedScrollerScrollToOpt
     isFirstWindowBuilt = true
     endOpeningIndicator()
   }
-  await landAt(index, options)
+  landingsInFlight++
+  try {
+    await landAt(index, options)
+  } finally {
+    landingsInFlight--
+  }
   bar.syncFromViewport()
+  if (landingsInFlight === 0 && !isBarPressed) emit('moveend')
 }
 
 function onViewportKeydown(event: KeyboardEvent) {
@@ -541,6 +577,7 @@ defineExpose({
       class="windowed-scroller-viewport"
       v-bind="$attrs"
       @scroll="onViewportScroll"
+      @scrollend="onViewportScrollEnd"
       @keydown="onViewportKeydown"
     >
       <div ref="contentElement" class="windowed-scroller-content">
@@ -583,6 +620,7 @@ defineExpose({
       :bar-state="bar"
       :viewport="viewportElement"
       :thin="thin"
+      @pointerdown="onBarPointerDown"
       @seek="bar.seek"
       @track-hold="onTrackHold"
       @track-step="onTrackStep"

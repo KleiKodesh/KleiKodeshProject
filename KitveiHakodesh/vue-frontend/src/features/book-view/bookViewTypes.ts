@@ -188,9 +188,3 @@ export interface SideEditionPersistState {
   fraction: number | null
 }
 
-/**
- * Each panel's currently-shown commentary group, captured at the instant of a user
- * action (line click, auto-select scroll) while `activePinnedGroup` is still valid.
- * A snapshot rather than a single value because the panels sit on different books.
- */
-export type CommentaryPinSnapshot = Partial<Record<CommentarySlot, PinnedCommentaryGroup | null>>

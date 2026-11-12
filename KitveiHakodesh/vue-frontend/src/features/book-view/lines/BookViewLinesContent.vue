@@ -56,6 +56,8 @@ const { t } = useI18n()
 
 const emit = defineEmits<{
   scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
+  /** The lines scroller stopped moving (WindowedScroller's moveend). */
+  moveend: []
   lineSelected: [lineId: number, isShiftClick: boolean]
   'ctrl-f': []
   createBookmark: []
@@ -697,6 +699,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, pasteAllIntoWord, scroll
       :data-teamim="bookHasTeamim ? 'true' : 'false'"
       @scroll="onScroll(); refreshScrollbarTocTooltip()"
       @opened="onScrollerOpened"
+      @moveend="emit('moveend')"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >
