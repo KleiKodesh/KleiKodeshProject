@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { IconFolder20Filled, IconDelete16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconFolder20Filled, IconDelete16Regular, IconArrowMove20Regular } from '@iconify-prerendered/vue-fluent'
+import { useFolderReorder } from './useFolderReorder'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
@@ -21,7 +22,10 @@ const emit = defineEmits<{
   selectFile: [LocalFileItem, boolean?]
   /** UserSpace only: the remove action on a folder that canRemove allows. */
   removeFolder: [CategoryNode]
+  /** UserSpace only: a root dragged onto another root's place. */
+  moveFolder: [CategoryNode, CategoryNode]
 }>()
+const reorder = useFolderReorder(() => props.canRemove, (from, to) => emit('moveFolder', from, to))
 
 const tilesEl = ref<HTMLElement | null>(null)
 
@@ -92,8 +96,9 @@ function selectItem(i: number, event?: MouseEvent) {
       class="tile"
       data-nav-item
       tabindex="-1"
-      :class="{ 'is-focused': focusedIndex === i }"
+      :class="{ 'is-focused': focusedIndex === i, 'is-drop-target': item.kind === 'folder' && reorder.over.value === item.node }"
       :title="getTooltip(item)"
+      v-bind="item.kind === 'folder' ? reorder.targetAttrs(item.node) : {}"
       @mousedown.prevent
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
@@ -115,6 +120,14 @@ function selectItem(i: number, event?: MouseEvent) {
         @click.stop="emit('removeFolder', item.node)"
       >
         <IconDelete16Regular />
+      </span>
+      <span
+        v-if="item.kind === 'folder' && canRemove?.(item.node)"
+        class="tile-move"
+        :title="$t('userSpace.moveRoot')"
+        v-on="reorder.handleEvents(item.node)"
+      >
+        <IconArrowMove20Regular />
       </span>
       <span v-if="focusedIndex === i" class="tile-expanded" aria-hidden="true">
         <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }">
@@ -215,16 +228,19 @@ function selectItem(i: number, event?: MouseEvent) {
 .tile {
   position: relative;
 }
+.tile-move,
 .tile-remove {
   position: absolute;
-  top: 2px;
-  inset-inline-end: 2px;
+  /* Out at the tile's very corner (a hair past it, into the grid gap), so even the
+     hover-grown icon keeps clear of them. */
+  top: 0;
+  inset-inline-end: -2px;
   z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
@@ -233,10 +249,21 @@ function selectItem(i: number, event?: MouseEvent) {
   opacity: 0;
   pointer-events: none;
 }
+/* Move sits right under remove, in the same corner column. */
+.tile-move {
+  top: 22px;
+  cursor: grab;
+  touch-action: none;
+}
+.tile:hover .tile-move,
+.tile.is-focused .tile-move,
 .tile:hover .tile-remove,
 .tile.is-focused .tile-remove {
   opacity: 1;
   pointer-events: auto;
+}
+.tile.is-drop-target {
+  box-shadow: inset 0 0 0 2px var(--accent-color);
 }
 .tile-remove:hover {
   color: var(--status-danger);

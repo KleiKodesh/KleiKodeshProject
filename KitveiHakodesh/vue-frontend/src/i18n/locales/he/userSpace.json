@@ -2,6 +2,7 @@
   "addComputerFolder": "הוסף תיקייה מהמחשב",
   "addCatalogFolder": "הוסף תיקייה מהקטלוג",
   "removeRoot": "הסר מהאזור האישי",
+  "moveRoot": "גרור לשינוי הסדר",
   "removeConfirm": "להסיר את \"{title}\" מהאזור האישי?",
   "removeConfirmDesc": "רק הקישור יוסר. הספרים והקבצים עצמם לא יימחקו.",
   "searchPlaceholder": "חיפוש באזור האישי",

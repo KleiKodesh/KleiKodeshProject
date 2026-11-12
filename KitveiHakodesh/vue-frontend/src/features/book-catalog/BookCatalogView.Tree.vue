@@ -6,7 +6,9 @@ import {
   IconFolder20Filled,
   IconFolderOpen20Filled,
   IconDelete16Regular,
+  IconArrowMove20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useFolderReorder } from './useFolderReorder'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { CategoryNode, LocalFileItem } from '@/features/book-catalog/bookCatalogTree'
 import { fileIcon, fileTitle } from './fsItemFileIcon'
@@ -37,7 +39,10 @@ const emit = defineEmits<{
   collapseFolder: [CategoryNode]
   /** UserSpace only: the remove action on a folder that canRemove allows. */
   removeFolder: [CategoryNode]
+  /** UserSpace only: a root dragged onto another root's place. */
+  moveFolder: [CategoryNode, CategoryNode]
 }>()
+const reorder = useFolderReorder(() => props.canRemove, (from, to) => emit('moveFolder', from, to))
 
 type TreeRow =
   | { uid: string; kind: 'folder'; node: CategoryNode; level: number; expanded: boolean }
@@ -165,9 +170,10 @@ function selectRow(index: number, event?: MouseEvent) {
         class="fs-item"
         data-nav-item
         :data-testid="`tree-${row.kind}`"
-        :class="{ 'is-focused': focusedIndex === index }"
+        :class="{ 'is-focused': focusedIndex === index, 'is-drop-target': row.kind === 'folder' && reorder.over.value === row.node }"
         :style="{ '--level': row.level }"
         :title="getTooltip(row)"
+        v-bind="row.kind === 'folder' ? reorder.targetAttrs(row.node) : {}"
         @mousedown.prevent
         @click="selectRow(index, $event)"
         @auxclick.middle="selectRow(index, $event)"
@@ -191,6 +197,15 @@ function selectRow(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title" data-testid="tree-title">{{ getTitle(row) }}</span>
+        <span
+          v-if="row.kind === 'folder' && canRemove?.(row.node)"
+          class="row-move"
+          data-testid="tree-move"
+          :title="$t('userSpace.moveRoot')"
+          v-on="reorder.handleEvents(row.node)"
+        >
+          <IconArrowMove20Regular />
+        </span>
         <button
           v-if="row.kind === 'folder' && canRemove?.(row.node)"
           type="button"
@@ -269,7 +284,8 @@ function selectRow(index: number, event?: MouseEvent) {
 .file-icon svg {
   color: inherit;
 }
-/* UserSpace roots: remove, shown on hover or keyboard highlight. */
+/* UserSpace roots: move and remove, shown on hover or keyboard highlight. */
+.row-move,
 .row-remove {
   display: flex;
   align-items: center;
@@ -278,12 +294,30 @@ function selectRow(index: number, event?: MouseEvent) {
   width: 22px;
   height: 22px;
   padding: 0;
-  margin-inline-start: auto;
   border-radius: 4px;
   color: var(--text-secondary);
   opacity: 0;
   pointer-events: none;
 }
+.row-move {
+  margin-inline-start: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.row-remove {
+  margin-inline-start: auto;
+}
+.row-move + .row-remove {
+  margin-inline-start: 0;
+}
+.row-move:hover {
+  background: var(--hover-bg);
+}
+.fs-item.is-drop-target {
+  box-shadow: inset 0 0 0 2px var(--accent-color);
+}
+.fs-item:hover .row-move,
+.fs-item.is-focused .row-move,
 .fs-item:hover .row-remove,
 .fs-item.is-focused .row-remove {
   opacity: 1;

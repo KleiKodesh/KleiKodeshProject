@@ -186,5 +186,17 @@ export const useUserSpaceStore = defineStore('userSpace', () => {
     persist()
   }
 
-  return { roots, loaded, ensureLoaded, rootTitle, addCatalogCategory, addWholeCatalog, addComputerFolder, claimDefaultFolders, remove }
+  /** Moves a root to another root's place (the user dragged it there). */
+  function move(fromKey: string, toKey: string) {
+    const list = [...roots.value]
+    const from = list.findIndex((r) => userSpaceRootKey(r) === fromKey)
+    const to = list.findIndex((r) => userSpaceRootKey(r) === toKey)
+    if (from < 0 || to < 0 || from === to) return
+    const [moved] = list.splice(from, 1)
+    list.splice(to, 0, moved!)
+    roots.value = list
+    persist()
+  }
+
+  return { roots, loaded, ensureLoaded, rootTitle, addCatalogCategory, addWholeCatalog, addComputerFolder, claimDefaultFolders, remove, move }
 })

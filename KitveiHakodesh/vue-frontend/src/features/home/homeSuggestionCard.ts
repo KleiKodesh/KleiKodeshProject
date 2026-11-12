@@ -19,6 +19,8 @@ export interface HomeSuggestionCard {
   /** A remove-only action (no pin), e.g. a UserSpace root. Called at once, no exit
    *  animation: the caller may still ask to confirm. */
   remove?: () => void
+  /** A drag handle beside remove (UserSpace roots): its tooltip and its drag events. */
+  move?: { title: string; events: Record<string, (e: never) => void> }
   /** Present only on history cards — they can be pinned and removed. */
   pinning?: {
     pinned: boolean
