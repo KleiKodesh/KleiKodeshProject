@@ -251,7 +251,9 @@ export function useCommentaryScroll(
         const relativeTop = markRect.top - scrollerRect.top
         const relativeBottom = markRect.bottom - scrollerRect.top
         const visible = relativeTop >= NAV_HEIGHT + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!visible) element.scrollTop += relativeTop - NAV_HEIGHT - LANDING_GAP_PX
+        // Through the scroller's nudge: part of this landing, so its end is not taken
+        // for the reader moving (which would re-pin the panel to the hit's commentator).
+        if (!visible) api.nudge(relativeTop - NAV_HEIGHT - LANDING_GAP_PX)
       }
     }
     scrollTop.value = element?.scrollTop ?? 0
