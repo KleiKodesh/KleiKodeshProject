@@ -115,23 +115,34 @@ export function useBookViewScrollSync(
   /**
    * While the commentary is anchored on a TOC entry's line (a TOC line was selected,
    * or the previous scroll step followed one), the entry whose section holds
-   * `lineIndex`: the last entry at the anchor's level or higher that starts at or
+   * `lineIndex`: the last entry at the followed level or higher that starts at or
    * before it. Null when the commentary is on a plain line, or the line is above
    * every such entry (then the plain-line behaviour applies).
+   *
+   * The followed level is the level of the TOC line the READER selected, and it is
+   * kept while the commentary moves along. Crossing into a higher-level heading (a
+   * chapter, while following sections) lands on that heading, but the level stays:
+   * the next step follows sections again instead of the whole chapter. The level is
+   * remembered per landed entry (followedLevel) and forgotten when the reader selects
+   * anything else.
    */
-  function followedTocSectionAt(lineIndex: number): TocEntry | null {
+  function followedTocSectionAt(lineIndex: number): { entry: TocEntry; level: number } | null {
     const anchorId = pendingCommentaryLineId ?? commentaryLineId.value
     if (anchorId == null) return null
     const entries = tocEntries()
     const anchor = entries.find((e) => e.lineId === anchorId)
     if (!anchor) return null
+    const level = followedLevel?.lineId === anchorId ? followedLevel.level : anchor.level
     let found: TocEntry | null = null
     for (const e of entries) {
       if (e.lineIndex == null || e.lineIndex > lineIndex) continue
-      if (e.level <= anchor.level) found = e
+      if (e.level <= level) found = e
     }
-    return found
+    return found ? { entry: found, level } : null
   }
+
+  /** The level being followed, and the entry line the commentary landed on at that level. */
+  let followedLevel: { lineId: number; level: number } | null = null
 
   // The ids of the lines that are TOC entries, rebuilt only when the TOC changes.
   let tocLineIdsFor: TocEntry[] | null = null
@@ -170,8 +181,10 @@ export function useBookViewScrollSync(
     // The reader is following a TOC section (a TOC line is the commentary's anchor):
     // the commentary stays on that section until the text crosses into another entry,
     // then moves to THAT entry — not to a single line.
-    const sectionEntry = followedTocSectionAt(lineIndex)
-    if (sectionEntry?.lineId != null) {
+    const section = followedTocSectionAt(lineIndex)
+    const sectionEntry = section?.entry
+    if (section && sectionEntry?.lineId != null) {
+      followedLevel = { lineId: sectionEntry.lineId, level: section.level }
       selectedLineId.value = sectionEntry.lineId
       pendingCommentaryLineId = sectionEntry.lineId
       if (!isUserScroll) commitPendingCommentary()
@@ -249,6 +262,8 @@ export function useBookViewScrollSync(
     commentaryLineId,
     (id) => {
       if (pendingCommentaryLineId != null && id !== pendingCommentaryLineId) cancelPendingCommentary()
+      // A selection of the reader's own sets the level to follow from scratch.
+      if (followedLevel != null && id !== followedLevel.lineId) followedLevel = null
     },
     { flush: 'sync' },
   )
