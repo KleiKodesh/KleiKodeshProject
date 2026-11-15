@@ -193,6 +193,18 @@ namespace FtsLibTest
                 maxWordDistance:  2,
                 expectPass:       false);
 
+            // 12b. Any occurrence set within the distance passes: the char-tightest pair
+            // (A x x B) is too far, a later wider-in-chars pair (A long B) is within it.
+            foreach (bool ordered in new[] { false, true })
+            {
+                var located = new SnippetWindowLocator().Locate(
+                    "aaa bb cc ddd yy zz aaa qqqqqqqqqqqqqqqqqqqqqqqq ddd",
+                    PreparedQueryGroups.FromGroups(G("aaa", "ddd")), ordered, 2, maxWordDistance: 1);
+                bool ok = located.IsMatch && located.WordDistance == 1;
+                if (ok) passed++; else failed++;
+                Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  any pair within distance 1 passes (ordered={ordered}, dist={located.WordDistance})");
+            }
+
             // ── 13. maxWordDistance = 0: only adjacent terms pass ─────
 
             CheckFilter(ref passed, ref failed,

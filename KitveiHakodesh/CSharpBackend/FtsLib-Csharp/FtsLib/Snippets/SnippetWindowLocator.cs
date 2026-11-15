@@ -72,11 +72,27 @@ namespace FtsLib.Snippets
             // In order: the best window is the tightest ORDERED covering window and the marks
             // the tokens of ordered occurrences; the order check is this window's existence.
             // Order off: unchanged.
+            // With a word distance a line passes when ANY occurrence set is within it: the
+            // window is the tightest among the sets within the distance (same tie rule), and
+            // only when none is within it the tightest overall (the caller then drops it).
+            int denominator = originalGroupCount > 0 ? originalGroupCount : prepared.GroupCount;
+            long maxSpan = (long)maxWordDistance + (denominator - 1);
+            long posLimit = maxWordDistance == int.MaxValue ? long.MaxValue : maxSpan;
             bool ordered = requireOrdered && prepared.GroupCount > 1;
-            var (iLeft, iRight, score) = ordered ? OrderedCoverWindow(tokens, prepared) : (-1, -1, int.MaxValue);
+            var (iLeft, iRight, score) = (-1, -1, int.MaxValue);
+            if (ordered)
+            {
+                (iLeft, iRight, score) = OrderedCoverWindow(tokens, prepared, posLimit);
+                if (score == int.MaxValue && posLimit != long.MaxValue)
+                    (iLeft, iRight, score) = OrderedCoverWindow(tokens, prepared, long.MaxValue);
+            }
             bool orderedFound = score != int.MaxValue;
             if (!orderedFound)
-                (iLeft, iRight, score) = FindWindow(tokens, prepared);
+            {
+                (iLeft, iRight, score) = FindWindow(tokens, prepared, posLimit);
+                if (score == int.MaxValue && posLimit != long.MaxValue)
+                    (iLeft, iRight, score) = FindWindow(tokens, prepared, long.MaxValue);
+            }
             if (score == int.MaxValue)
                 return SnippetDescriptor.NoMatch;
 
@@ -88,12 +104,10 @@ namespace FtsLib.Snippets
 
             // WordDistance = extra words between matched slots (0 = all consecutive).
             // originalGroupCount overrides so skipped wildcards still count as a slot.
-            int denominator = originalGroupCount > 0 ? originalGroupCount : prepared.GroupCount;
 
             // Marks: the tokens of full occurrences (issue #4). Without a distance every
             // term token in the snippet is in a covering window, so only the caller's
             // distance filter narrows them.
-            long maxSpan = (long)maxWordDistance + (denominator - 1);
             bool masked = orderedFound
                 ? OrderedOccurrenceMarks(tokens, prepared, sIdx, eIdx, iLeft, iRight, maxSpan)
                 : maxWordDistance != int.MaxValue
@@ -261,7 +275,8 @@ namespace FtsLib.Snippets
 
         private (int iLeft, int iRight, int score) FindWindow(
             List<TextToken>     tokens,
-            PreparedQueryGroups prepared)
+            PreparedQueryGroups prepared,
+            long                maxPosSpan = long.MaxValue)
         {
             int required = prepared.GroupCount;
             EnsureGroupCount(required);
@@ -282,8 +297,10 @@ namespace FtsLib.Snippets
                 while (covered == required)
                 {
                     // Score in raw chars (used only for picking the tightest window).
+                    // Only windows within the position limit (word distance) compete.
                     int span = tokens[R].RawEnd - tokens[L].RawStart;
-                    if (span < bestScore)
+                    if (span < bestScore
+                        && (long)tokens[R].Position - tokens[L].Position <= maxPosSpan)
                     {
                         bestScore  = span;
                         bestILeft  = L;
@@ -341,7 +358,7 @@ namespace FtsLib.Snippets
         /// ending at a token of the last group starts there. One pass, O(tokens x groups).
         /// </summary>
         private (int iLeft, int iRight, int score) OrderedCoverWindow(
-            List<TextToken> tokens, PreparedQueryGroups prepared)
+            List<TextToken> tokens, PreparedQueryGroups prepared, long maxPosSpan = long.MaxValue)
         {
             int k = prepared.GroupCount;
             if (_last.Length < k) _last = new int[k * 2];
@@ -360,7 +377,8 @@ namespace FtsLib.Snippets
                     if (g == k - 1)
                     {
                         int span = tokens[t].RawEnd - tokens[v].RawStart;
-                        if (span < bestScore) { bestScore = span; bestL = v; bestR = t; }
+                        if (span < bestScore
+                            && (long)tokens[t].Position - tokens[v].Position <= maxPosSpan) { bestScore = span; bestL = v; bestR = t; }
                     }
                     else if (v > _last[g]) _last[g] = v;
                 }
