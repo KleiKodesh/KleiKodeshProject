@@ -109,9 +109,12 @@ useDropdownClose(bubbleRef, () => {
 })
 
 onMounted(() => {
-  nextTick(() => {
+  nextTick(async () => {
     // Measure real bubble height then resolve position so it's never clipped
     computePosition()
+    // A visibility:hidden element cannot take focus: wait for Vue to render the
+    // bubble at its resolved (visible) position, then focus.
+    await nextTick()
     textareaRef.value?.focus()
   })
 })
