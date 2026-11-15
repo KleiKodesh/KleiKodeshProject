@@ -368,10 +368,10 @@ defineExpose({ barElement, targetAt, thumbRect })
   /* Glides rather than jumps — ease-out (easeOutCubic): quick to start, slowing into
      place. A scroll tick, a page step or the estimate correcting itself all flow; a
      new target mid-glide retargets from where the thumb is. The scroll-follow label
-     (BookViewScrollbarTocTooltip) glides on the same curve. */
+     (BookViewScrollbarTocTooltip) glides on the same curve. Height is NOT animated:
+     a size change (content estimate correcting) snaps. */
   transition:
     top var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
-    height var(--bar-glide-ms, 220ms) cubic-bezier(0.33, 1, 0.68, 1),
     background-color 120ms;
 }
 /* The thin bar's thumb: the native thin pill, a little narrower than its gutter. */
