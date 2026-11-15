@@ -10,6 +10,7 @@ import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import BookViewAddNoteMenuRow from './BookViewAddNoteMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { CLEAN_TEXT } from '@/utils/hebrewTextProcessing'
 import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
@@ -369,6 +370,16 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     return appLinkHtml(source, buildLineLink(options.bookId, firstLineIndex))
   }
 
+  /** The toolbar's clean-text flags (per-book). */
+  function screenCleanTextFlags(): number {
+    return options.cleanTextFlags?.() ?? settingsStore.cleanTextFlags
+  }
+
+  /** "Copy clean text" follows the toolbar flags, but always strips nikkud and teamim at minimum. */
+  function copyCleanTextFlags(): number {
+    return screenCleanTextFlags() | CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD
+  }
+
   /**
    * How a line taken from the MODEL (select-all, or the scrolled-out middle of a long
    * selection) is rendered for copy. The model holds raw DB text, so even without the
@@ -378,7 +389,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
    */
   function modelLineRenderer(): (raw: string, lineIndex: number, lineId: number) => string {
     if (settingsStore.copyWithNotes && options.getRenderedLineContent) return options.getRenderedLineContent
-    return (raw) => contentInAnnotationOffsetSpace(raw, options.cleanTextFlags?.() ?? settingsStore.cleanTextFlags, settingsStore.censorOptions)
+    return (raw) => contentInAnnotationOffsetSpace(raw, screenCleanTextFlags(), settingsStore.censorOptions)
   }
 
   /**
@@ -492,8 +503,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
     // purpose — a מקור reference is not book text and must not be stripped.
     if (settingsStore.copyCleanText) {
-      html = cleanHebrewText(html)
-      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml)
+      const flags = copyCleanTextFlags()
+      html = cleanHebrewText(html, flags)
+      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml, flags)
     }
 
     // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
@@ -526,7 +538,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         const blobHtml = blobResult ? blobResult.joined : html
         inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       }
-      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
+      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText, copyCleanTextFlags())
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). The source is escaped inside
