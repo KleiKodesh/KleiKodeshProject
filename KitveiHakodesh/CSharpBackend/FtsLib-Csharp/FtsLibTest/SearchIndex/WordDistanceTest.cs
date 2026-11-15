@@ -112,6 +112,19 @@ namespace FtsLibTest
                 originalCount:    2,
                 expectedDistance: 0);
 
+            // In order: a paired reading's two readings are one word slot and never chain
+            // (= the engine with positions and Otzaria); the second reading then the next word does.
+            {
+                const string paired = "\u05d0\u05d1 (\u05d2\u05d3) [\u05d4\u05d5] \u05d6\u05d7";
+                var loc = new SnippetWindowLocator();
+                bool xy = loc.Locate(paired, G("\u05d2\u05d3", "\u05d4\u05d5"), requireOrdered: true, originalGroupCount: 2).IsMatch;
+                bool xyz = loc.Locate(paired, G("\u05d2\u05d3", "\u05d4\u05d5", "\u05d6\u05d7"), requireOrdered: true, originalGroupCount: 3).IsMatch;
+                var yz = loc.Locate(paired, G("\u05d4\u05d5", "\u05d6\u05d7"), requireOrdered: true, originalGroupCount: 2);
+                bool ok = !xy && !xyz && yz.IsMatch && yz.WordDistance == 0;
+                if (ok) passed++; else failed++;
+                Console.WriteLine($"  {(ok ? "PASS" : "FAIL")}  paired readings never chain in order (xy={xy}, xyz={xyz}, yz={yz.IsMatch}/{yz.WordDistance})");
+            }
+
             // A word too long to be indexed keeps its position; an unindexed query slot counts
             // in originalCount, so the long word is not an extra word.
             Check(ref passed, ref failed,

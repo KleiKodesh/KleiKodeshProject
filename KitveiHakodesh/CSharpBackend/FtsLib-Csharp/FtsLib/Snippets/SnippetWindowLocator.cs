@@ -38,6 +38,7 @@ namespace FtsLib.Snippets
         private readonly List<int>   _markRanges  = new List<int>(24);
         private          bool[]      _markMask    = new bool[32];   // occurrence marks (issue #4)
         private          int[]       _last        = new int[8];     // in order: latest chain start per group
+        private          int[]       _pending     = new int[16];    // in order: chain starts of the current position
         private          int[]       _starts      = new int[32];    // in order: per (group, token) prefix start
         private          int[]       _ends        = new int[32];    // in order: per (group, token) suffix end
 
@@ -353,9 +354,12 @@ namespace FtsLib.Snippets
 
         /// <summary>
         /// In order: the tightest (iLeft, iRight, raw-char span) window holding one token per
-        /// group in query order (by token index, a token in one slot), the earliest on a tie;
-        /// score int.MaxValue without one. Per group the latest chain start so far; a chain
-        /// ending at a token of the last group starts there. One pass, O(tokens x groups).
+        /// group in query order, the slots in strictly increasing positions (a token in one
+        /// slot), the earliest on a tie; score int.MaxValue without one. The two readings of a
+        /// paired reading share one position (one word slot) and never chain (= the engine
+        /// with positions and Otzaria). Per group the latest chain start so far, taking effect
+        /// at the next position; a chain ending at a token of the last group starts there.
+        /// One pass, O(tokens x groups).
         /// </summary>
         private (int iLeft, int iRight, int score) OrderedCoverWindow(
             List<TextToken> tokens, PreparedQueryGroups prepared, long maxPosSpan = long.MaxValue)
@@ -364,11 +368,18 @@ namespace FtsLib.Snippets
             if (_last.Length < k) _last = new int[k * 2];
             for (int g = 0; g < k; g++) _last[g] = -1;
             int bestL = -1, bestR = -1, bestScore = int.MaxValue;
+            int at = int.MinValue, nPending = 0; // starts of position `at`, applied at the next position
             for (int t = 0; t < tokens.Count; t++)
             {
                 if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
+                if (tokens[t].Position != at)
+                {
+                    for (int i = 0; i < nPending; i += 2)
+                        if (_pending[i + 1] > _last[_pending[i]]) _last[_pending[i]] = _pending[i + 1];
+                    nPending = 0;
+                    at = tokens[t].Position;
+                }
                 if (_starts.Length < gs.Length) _starts = new int[gs.Length * 2];
-                // read the previous group's state before this token updates it
                 for (int i = 0; i < gs.Length; i++) _starts[i] = gs[i] == 0 ? t : _last[gs[i] - 1];
                 for (int i = 0; i < gs.Length; i++)
                 {
@@ -380,7 +391,12 @@ namespace FtsLib.Snippets
                         if (span < bestScore
                             && (long)tokens[t].Position - tokens[v].Position <= maxPosSpan) { bestScore = span; bestL = v; bestR = t; }
                     }
-                    else if (v > _last[g]) _last[g] = v;
+                    else
+                    {
+                        if (_pending.Length < nPending + 2) _pending = new int[(nPending + 2) * 2];
+                        _pending[nPending++] = g;
+                        _pending[nPending++] = v;
+                    }
                 }
             }
             return (bestL, bestR, bestScore);
@@ -510,27 +526,49 @@ namespace FtsLib.Snippets
             for (int i = 0; i < k * w; i++) { _starts[i] = -1; _ends[i] = -1; }
             if (_last.Length < k) _last = new int[k * 2];
 
+            // the tokens of one position read the previous group's state before any of them
+            // updates it: a paired reading's readings (one word slot) never chain
             for (int g = 0; g < k; g++) _last[g] = -1;
-            for (int t = sIdx; t <= eIdx; t++)
+            for (int t = sIdx; t <= eIdx; )
             {
-                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
-                foreach (int g in gs) _starts[g * w + t - sIdx] = g == 0 ? t : _last[g - 1];
-                foreach (int g in gs)
+                int runEnd = t;
+                while (runEnd <= eIdx && tokens[runEnd].Position == tokens[t].Position) runEnd++;
+                for (int u = t; u < runEnd; u++)
                 {
-                    int v = _starts[g * w + t - sIdx];
-                    if (v > _last[g]) _last[g] = v;
+                    if (!prepared.TryGetGroups(tokens[u].NormSpan, out int[] gs)) continue;
+                    foreach (int g in gs) _starts[g * w + u - sIdx] = g == 0 ? u : _last[g - 1];
                 }
+                for (int u = t; u < runEnd; u++)
+                {
+                    if (!prepared.TryGetGroups(tokens[u].NormSpan, out int[] gs)) continue;
+                    foreach (int g in gs)
+                    {
+                        int v = _starts[g * w + u - sIdx];
+                        if (v > _last[g]) _last[g] = v;
+                    }
+                }
+                t = runEnd;
             }
             for (int g = 0; g < k; g++) _last[g] = -1;
-            for (int t = eIdx; t >= sIdx; t--)
+            for (int t = eIdx; t >= sIdx; )
             {
-                if (!prepared.TryGetGroups(tokens[t].NormSpan, out int[] gs)) continue;
-                foreach (int g in gs) _ends[g * w + t - sIdx] = g == k - 1 ? t : _last[g + 1];
-                foreach (int g in gs)
+                int runStart = t;
+                while (runStart >= sIdx && tokens[runStart].Position == tokens[t].Position) runStart--;
+                for (int u = t; u > runStart; u--)
                 {
-                    int v = _ends[g * w + t - sIdx];
-                    if (v >= 0 && (_last[g] < 0 || v < _last[g])) _last[g] = v;
+                    if (!prepared.TryGetGroups(tokens[u].NormSpan, out int[] gs)) continue;
+                    foreach (int g in gs) _ends[g * w + u - sIdx] = g == k - 1 ? u : _last[g + 1];
                 }
+                for (int u = t; u > runStart; u--)
+                {
+                    if (!prepared.TryGetGroups(tokens[u].NormSpan, out int[] gs)) continue;
+                    foreach (int g in gs)
+                    {
+                        int v = _ends[g * w + u - sIdx];
+                        if (v >= 0 && (_last[g] < 0 || v < _last[g])) _last[g] = v;
+                    }
+                }
+                t = runStart;
             }
             for (int t = sIdx; t <= eIdx; t++)
             {
