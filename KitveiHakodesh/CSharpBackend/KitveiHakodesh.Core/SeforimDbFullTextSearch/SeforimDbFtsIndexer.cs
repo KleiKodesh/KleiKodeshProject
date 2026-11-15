@@ -71,7 +71,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // right after each book with notes (ids >= R, SeforimDbNoteIds); a leading U+FEFF is stripped.
         // fts13 (2026-11-08): notes ids are 64-bit and JS-safe (R = 2^52, lineId << 16, SeforimDbNoteIds);
         // line_position stores the new virtual line ids.
-        public const string IndexFormatVersion = "fts13";
+        // fts14 (2026-11-15): a one-letter <sup> / <sub> between letters is transparent without a mark
+        // (presentation forms count, bidi / CGJ / inline tags skipped); footnote-marker always splits (issue #37).
+        public const string IndexFormatVersion = "fts14";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

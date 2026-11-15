@@ -107,45 +107,165 @@ namespace FtsLib.Tokenization
             }
         }
 
-        /// <summary>True for a sup tag name (open or close; the scanner drops the '/').</summary>
-        internal static bool IsSup(char[] name, int len)
+        /// <summary>True for a sup or sub tag name (open or close; the scanner drops the '/').</summary>
+        internal static bool IsScriptTag(char[] name, int len)
         {
             int start = (len > 0 && name[0] == '/') ? 1 : 0;
-            return len - start == 3
-                && (name[start] | 32) == 's' && (name[start + 1] | 32) == 'u' && (name[start + 2] | 32) == 'p';
+            if (len - start != 3) return false;
+            char c2 = (char)(name[start + 2] | 32);
+            return (name[start] | 32) == 's' && (name[start + 1] | 32) == 'u' && (c2 == 'p' || c2 == 'b');
         }
 
-        static bool IsLetterOrMark(char c) =>
-            (c >= 'א' && c <= 'ת') || IsAttachedMark(c);
+        static bool IsLetterOrMark(char c) => HebrewChars.IsHebrewLetter(c) || HebrewChars.IsAttachedMark(c);
 
-        static bool IsAttachedMark(char c) =>
-            c >= '֑' && c <= 'ׇ' && c != '־' && c != '׀' && c != '׃' && c != '׆';
+        /// <summary>A Hebrew letter, or a presentation form that folds to one letter and its marks.</summary>
+        static bool IsScriptLetter(char c)
+        {
+            string folded = HebrewChars.FoldPresentationForm(c);
+            if (folded == null) return HebrewChars.IsHebrewLetter(c);
+            if (folded.Length == 0 || !HebrewChars.IsHebrewLetter(folded[0])) return false;
+            for (int i = 1; i < folded.Length; i++)
+                if (!HebrewChars.IsAttachedMark(folded[i])) return false;
+            return true;
+        }
+
+        /// <summary>Zero-width chars (bidi controls, CGJ, U+FB1E) that must not change how a
+        /// neighbouring sup / sub is classified.</summary>
+        static bool IsScriptInvisible(char c) => HebrewChars.IsInvisible(c) || c == '\u034F' || c == '\uFB1E';
+
+        /// <summary>The tag name of the body text[from..to): an optional '/', then an ASCII
+        /// alphanumeric run of 1..10 chars. Returns false when there is none.</summary>
+        static bool ScriptTagName(string text, int from, int to, out bool closing, out int nameStart, out int nameLen)
+        {
+            closing = from < to && text[from] == '/';
+            nameStart = closing ? from + 1 : from;
+            int i = nameStart;
+            while (i < to && IsAsciiAlnum(text[i])) i++;
+            nameLen = i - nameStart;
+            return nameLen >= 1 && nameLen <= 10;
+        }
+
+        static bool IsAsciiAlnum(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+
+        /// <summary>An inline (transparent) tag body text[from..to): neither a word-break tag nor sup/sub.</summary>
+        static bool IsInlineTag(string text, int from, int to)
+        {
+            if (!ScriptTagName(text, from, to, out _, out int ns, out int nl)) return true;
+            var name = text.ToCharArray(ns, nl);
+            return !IsWordBreakTag(name, nl);
+        }
+
+        /// <summary>Skips zero-width chars and inline tags forward from i (bounded by end).</summary>
+        static int TrimFormattingStart(string text, int i, int end)
+        {
+            while (true)
+            {
+                while (i < end && IsScriptInvisible(text[i])) i++;
+                if (i >= end || text[i] != '<') return i;
+                int gt = text.IndexOf('>', i + 1, end - i - 1);
+                if (gt < 0 || !IsInlineTag(text, i + 1, gt)) return i;
+                i = gt + 1;
+            }
+        }
+
+        /// <summary>Skips zero-width chars and inline tags backward: returns the new end of text[0..end).</summary>
+        static int TrimFormattingEnd(string text, int end)
+        {
+            while (true)
+            {
+                while (end > 0 && IsScriptInvisible(text[end - 1])) end--;
+                if (end == 0 || text[end - 1] != '>') return end;
+                int lt = end - 2 < 0 ? -1 : text.LastIndexOf('<', end - 2);
+                if (lt < 0) return end;
+                if (text.IndexOf('>', lt + 1, end - 2 - lt) >= 0 || !IsInlineTag(text, lt + 1, end - 1)) return end;
+                end = lt;
+            }
+        }
+
+        static int TrimContextEnd(string text, int end)
+        {
+            while (true)
+            {
+                int t = TrimFormattingEnd(text, end);
+                while (t > 0 && HebrewChars.IsWordMark(text[t - 1])) t--;
+                if (t == end) return end;
+                end = t;
+            }
+        }
+
+        static int TrimContextStart(string text, int i, int end)
+        {
+            while (true)
+            {
+                int t = TrimFormattingStart(text, i, end);
+                while (t < end && HebrewChars.IsWordMark(text[t])) t++;
+                if (t == i) return i;
+                i = t;
+            }
+        }
+
+        /// <summary>The word footnote-marker in the tag body text[from..to) (case-insensitive, whole word).</summary>
+        static bool MarksFootnote(string text, int from, int to)
+        {
+            const string W = "footnote-marker";
+            for (int i = from; i + W.Length <= to; i++)
+            {
+                if (string.Compare(text, i, W, 0, W.Length, System.StringComparison.OrdinalIgnoreCase) != 0) continue;
+                bool before = i > from && (IsAsciiAlnum(text[i - 1]) || text[i - 1] == '_');
+                int j = i + W.Length;
+                bool after = j < to && (IsAsciiAlnum(text[j]) || text[j] == '_');
+                if (!before && !after) return true;
+            }
+            return false;
+        }
 
         /// <summary>
-        /// A &lt;sup&gt; whose '&lt;' is at <paramref name="lt"/> and '&gt;' at
-        /// <paramref name="gt"/> is TRANSPARENT (the word continues through it, like
-        /// &lt;b&gt;) only when its content up to the next '&lt;' is non-empty, holds only
-        /// Hebrew letters and attached marks with at least one mark, that '&lt;' starts
-        /// &lt;/sup&gt;, and the chars right before &lt;sup and right after &lt;/sup&gt;
-        /// are Hebrew letters or marks (a vocalized letter set mid-word, e.g. in Tanach).
-        /// Every other &lt;sup&gt; (a footnote or letter marker) ends the word. Same rule
-        /// as hebrew-fts html_tags::is_transparent_sup.
+        /// An open &lt;sup&gt; / &lt;sub&gt; whose '&lt;' is at <paramref name="lt"/> and
+        /// '&gt;' at <paramref name="gt"/> is TRANSPARENT (the word continues through it,
+        /// like &lt;b&gt;) when it sits between letters and wraps a hanging letter (issue #37,
+        /// Otzaria engine 5babbce is_word_internal_script): its attributes do not hold the
+        /// word footnote-marker (always splits); before '&lt;' (skipping marks, bidi / CGJ
+        /// chars and inline tags) is a Hebrew letter or a presentation form of one; its
+        /// content (inline tags and zero-width chars skipped) is either ONE such letter with
+        /// optional marks (no mark required) or Hebrew letters and marks with at least one
+        /// mark (issue #2 H58); the content ends at the matching close tag, and after it
+        /// (same skipping) comes a Hebrew letter. Every other sup / sub ends the word. Same
+        /// rule as hebrew-fts html_tags::is_transparent_sup.
         /// </summary>
         internal static bool IsTransparentSup(string text, int lt, int gt)
         {
-            if (lt == 0 || !IsLetterOrMark(text[lt - 1])) return false;
-            int close = text.IndexOf('<', gt + 1);
-            if (close < 0 || close == gt + 1) return false;
-            bool mark = false;
-            for (int i = gt + 1; i < close; i++)
+            if (!ScriptTagName(text, lt + 1, gt, out bool closing, out int ns, out int nl) || closing) return false;
+            if (MarksFootnote(text, lt + 1, gt)) return false;
+            int before = TrimContextEnd(text, lt);
+            if (before == 0 || !IsScriptLetter(text[before - 1])) return false;
+            int n = text.Length;
+            int content = TrimFormattingStart(text, gt + 1, n);
+            if (content >= n || !IsScriptLetter(text[content])) return false;
+            // one hanging letter (marks optional) ...
+            int rest = TrimContextStart(text, content + 1, n);
+            if (rest >= n || text[rest] != '<')
             {
-                char c = text[i];
-                if (!IsLetterOrMark(c)) return false;
-                if (IsAttachedMark(c)) mark = true;
+                // ... or a vocalized run of letters and marks (at least one mark)
+                int end = text.IndexOf('<', content);
+                if (end < 0) return false;
+                bool mark = false;
+                for (int i = content; i < end; i++)
+                {
+                    char c = text[i];
+                    if (!IsLetterOrMark(c) && !IsScriptInvisible(c)) return false;
+                    if (HebrewChars.IsAttachedMark(c)) mark = true;
+                }
+                if (!mark) return false;
+                rest = TrimContextStart(text, end, n);
             }
-            return mark
-                && string.Compare(text, close, "</sup>", 0, 6, System.StringComparison.OrdinalIgnoreCase) == 0
-                && close + 6 < text.Length && IsLetterOrMark(text[close + 6]);
+            if (rest >= n || text[rest] != '<') return false;
+            int closeGt = text.IndexOf('>', rest + 1);
+            if (closeGt < 0) return false;
+            if (!ScriptTagName(text, rest + 1, closeGt, out bool isClose, out int cs, out int cl) || !isClose
+                || cl != nl || string.Compare(text, cs, text, ns, nl, System.StringComparison.OrdinalIgnoreCase) != 0)
+                return false;
+            int after = TrimContextStart(text, closeGt + 1, n);
+            return after < n && IsScriptLetter(text[after]);
         }
 
         /// <summary>
