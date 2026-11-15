@@ -133,8 +133,8 @@ const props = withDefaults(
     paragraphClass?: string
     /** The drawn bar in the app's thin style (`.toc-thin-scroll`): narrower gutter, thumb and arrows. */
     thin?: boolean
-    /** Empty space after the last row, so the end of the list can scroll clear of the viewport's edge. Only present while the last row is mounted. */
-    endPaddingPx?: number
+    /** Empty space after the last row, in em (relative to the list's font size), so the end of the list can scroll clear of the viewport's edge. Only present while the last row is mounted. */
+    endPaddingEm?: number
   }>(),
   { pinnedIndexes: () => [], mode: 'rows' },
 )
@@ -627,9 +627,9 @@ function onViewportKeydown(event: KeyboardEvent) {
   } else if (event.key === 'End' && props.count > 0) {
     event.preventDefault()
     // Landing aligns the last row's bottom to the viewport's; the end padding lies below it.
-    void landOn(props.count - 1, { align: 'end', offsetPx: props.endPaddingPx ?? 0 }, true).then(() => {
+    void landOn(props.count - 1, { align: 'end' }, true).then(() => {
       const viewport = viewportElement.value
-      if (props.endPaddingPx && viewport) viewport.scrollTop = viewport.scrollHeight
+      if (props.endPaddingEm && viewport) viewport.scrollTop = viewport.scrollHeight
     })
   }
 }
@@ -695,7 +695,7 @@ defineExpose({
       <div
         ref="contentElement"
         class="windowed-scroller-content"
-        :style="endPaddingPx && windowEnd >= count ? { paddingBottom: `${endPaddingPx}px` } : undefined"
+        :style="endPaddingEm && windowEnd >= count ? { paddingBottom: `${endPaddingEm}em` } : undefined"
       >
         <template v-for="group in renderedGroups" :key="group.key">
           <div

@@ -603,7 +603,7 @@ defineExpose({
         ref="windowedScroller"
         class="scroller"
         :count="shownCount"
-        :end-padding-px="28"
+        :end-padding-em="1"
         :initial-index="scrollerStart.index"
         :initial-offset-px="scrollerStart.offsetPx"
         :ensure-rows="ensureRows"
