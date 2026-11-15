@@ -508,11 +508,23 @@ function rowHasText(index: number): boolean {
   return props.lines.contentAt(index) != null
 }
 
+/** True when the click landed in the row's own side padding, not on its text box. */
+function clickIsInRowPadding(event: MouseEvent): boolean {
+  const row = event.currentTarget as HTMLElement | null
+  if (!row || row.classList.contains('line-inline')) return false
+  const rect = row.getBoundingClientRect()
+  const style = getComputedStyle(row)
+  const left = rect.left + (parseFloat(style.paddingLeft) || 0)
+  const right = rect.right - (parseFloat(style.paddingRight) || 0)
+  return event.clientX < left || event.clientX > right
+}
+
 function onLineClick(index: number, event: MouseEvent) {
   // A drag to select text ends with a `click` event too. Don't hijack it to change
   // the commentary line — the user only wants to select text. A plain click leaves
   // the selection collapsed; a drag-select leaves real (non-empty) text selected.
   if (hasActiveTextSelection()) return
+  if (clickIsInRowPadding(event)) return
   const line = props.lines.at(index)
   if (props.commentaryVisible && line) emit('lineSelected', line.id, event.ctrlKey || event.metaKey)
 }
