@@ -801,6 +801,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
             ref="windowedScroller"
             class="scroller"
             :count="flatItems.length"
+            :end-padding-px="120"
             :initial-index="scrollerStart.index"
             :initial-offset-px="scrollerStart.offsetPx"
             :ensure-rows="ensureRows"

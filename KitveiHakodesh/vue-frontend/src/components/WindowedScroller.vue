@@ -133,6 +133,8 @@ const props = withDefaults(
     paragraphClass?: string
     /** The drawn bar in the app's thin style (`.toc-thin-scroll`): narrower gutter, thumb and arrows. */
     thin?: boolean
+    /** Empty space after the last row, so the end of the list can scroll clear of the viewport's edge. Only present while the last row is mounted. */
+    endPaddingPx?: number
   }>(),
   { pinnedIndexes: () => [], mode: 'rows' },
 )
@@ -686,7 +688,11 @@ defineExpose({
       @scrollend="onViewportScrollEnd"
       @keydown="onViewportKeydown"
     >
-      <div ref="contentElement" class="windowed-scroller-content">
+      <div
+        ref="contentElement"
+        class="windowed-scroller-content"
+        :style="endPaddingPx && windowEnd >= count ? { paddingBottom: `${endPaddingPx}px` } : undefined"
+      >
         <template v-for="group in renderedGroups" :key="group.key">
           <div
             v-if="group.kind === 'block'"
