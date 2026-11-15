@@ -8,6 +8,7 @@ import {
   type ReadAloudSkipOptions,
   type ReadAloudText,
 } from './readAloudSkip'
+import { createReadAloudVocalizer } from './readAloudVocalizer'
 
 /**
  * Reads the book aloud with the browser's own speech (the voices installed in Windows).
@@ -93,6 +94,9 @@ export function useBookViewReadAloud() {
   /** Skipping on/off, and what it skips. */
   const skipEnabled = useStorage<boolean>('bookView.readAloud.skip', true)
   const skipOptions = useStorage<ReadAloudSkipOptions>('bookView.readAloud.skipOptions', { ...DEFAULT_SKIP_OPTIONS }, undefined, { mergeDefaults: true })
+  /** Adds nikkud to the text before it is spoken (Dicta Nakdan), so unpointed Hebrew reads well. */
+  const vocalize = useStorage<boolean>('bookView.readAloud.vocalize', true)
+  const vocalizer = createReadAloudVocalizer()
   const activeSkip = () => (skipEnabled.value ? skipOptions.value : null)
 
   /** What the last start() was for, so skip and a changed setting can restart from the line. */
@@ -173,19 +177,39 @@ export function useBookViewReadAloud() {
       }
       if (!source) return
       const { bookId, versionId, totalLines } = source
+      // The next batch is fetched while this one is read, so the vocalizer can see ahead.
+      let nextRows: Awaited<ReturnType<typeof getLinesPaged>> | null = null
       for (let offset = Math.max(0, fromLine); offset < totalLines; offset += BATCH_SIZE) {
         const rows = await getLinesPaged(bookId, BATCH_SIZE, offset, versionId ?? 0)
         if (gen !== generation || rows.length === 0) return
-        for (const row of rows) {
-          const text = readAloudTextOfLine(row.content ?? '', activeSkip())
+        nextRows = null
+        if (offset + BATCH_SIZE < totalLines) {
+          void getLinesPaged(bookId, BATCH_SIZE, offset + BATCH_SIZE, versionId ?? 0).then((r) => { nextRows = r }, () => {})
+        }
+        const texts = rows.map((row) => readAloudTextOfLine(row.content ?? '', activeSkip()))
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]
+          let text = texts[i]
           const char = row.lineIndex === fromLine ? fromChar : 0
-          if (text.spoken.trim() && !(await speakText(text, row.lineIndex, voice, gen, char))) return
+          if (!text.spoken.trim()) continue
+          if (vocalize.value) {
+            const ahead = texts.slice(i, i + 1 + 8).map((t) => t.spoken)
+            const more = nextRows as typeof rows | null
+            if (more) for (const r of more.slice(0, 8)) ahead.push(readAloudTextOfLine(r.content ?? '', activeSkip()).spoken)
+            vocalizer.prefetch(ahead, rate.value)
+            text = await vocalizer.pointed(text)
+            if (gen !== generation) return
+          }
+          const done = await speakText(text, row.lineIndex, voice, gen, char)
+          if (!done) return
+          vocalizer.release(texts[i])
         }
       }
     } catch {
       // A failed fetch ends the reading.
     } finally {
       if (gen === generation) {
+        vocalizer.clear()
         isReading.value = false
         isPaused.value = false
         position.value = null
@@ -204,7 +228,7 @@ export function useBookViewReadAloud() {
   /** Restarts from another line of the same book - skip, or a changed voice or speed. */
   function restartFrom(lineIndex: number) {
     if (!isSupported || !source) return
-    stop()
+    halt()
     void run(Math.min(Math.max(0, lineIndex), source.totalLines - 1), false)
   }
 
@@ -228,7 +252,7 @@ export function useBookViewReadAloud() {
     // Carries on from the word that was being spoken, keeping a pause as it was.
     const wasPaused = isPaused.value
     const fromChar = Math.max(0, current.wordStart)
-    stop()
+    halt()
     void run(Math.min(Math.max(0, current.lineIndex), source.totalLines - 1), false, fromChar)
     if (wasPaused) pause()
   }
@@ -246,7 +270,14 @@ export function useBookViewReadAloud() {
     isPaused.value = false
   }
 
+  /** Stop for good: the speech ends and every vocalization is dropped. */
   function stop() {
+    halt()
+    vocalizer.clear()
+  }
+
+  /** Stops the speech only; vocalized lines stay, for a restart (speed, voice, skip). */
+  function halt() {
     generation++
     isReading.value = false
     isPaused.value = false
@@ -266,7 +297,7 @@ export function useBookViewReadAloud() {
 
   return {
     isSupported, isReading, isPaused, position, voices,
-    rate, voiceUri, highlightWords, skipEnabled, skipOptions,
+    rate, voiceUri, highlightWords, vocalize, skipEnabled, skipOptions,
     start, pause, resume, stop, skip, changeRate, applySettingsChange,
   }
 }
