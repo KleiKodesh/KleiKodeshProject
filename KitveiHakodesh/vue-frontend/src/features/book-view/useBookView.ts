@@ -53,7 +53,7 @@ import type {
 import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 import type { Highlight } from './lines/useBookViewHighlights'
 import type { Note } from './lines/useBookViewNotes'
-import type { LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
+import type { LineNote, TocEntry, WordLinkAnchor } from '@/webview-host/queries.types'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -265,6 +265,9 @@ export function useBookView(
    * panel reports where it is on every scroll.
    */
   function onLineSelected(lineId: number, isShiftClick: boolean) {
+    // Before the no-op check below: a click on the line the commentary already sits on
+    // is still the reader's own choice of what to follow.
+    forgetFollowedLevel()
     // Re-clicking the already-selected line is a no-op: the panels keep their
     // scroll positions instead of being reset to their pinned group.
     if (!onLineSelectedRaw(lineId, isShiftClick)) return
@@ -335,6 +338,8 @@ export function useBookView(
   // ── TOC ───────────────────────────────────────────────────────────────────
 
   const {
+    forgetFollowedLevel,
+    onTocEntryChosen,
     currentScrollLineIndex,
     currentFullLineIndex,
     userScrollTick,
@@ -455,7 +460,7 @@ export function useBookView(
   // ── TOC navigation + keyboard shortcuts ──────────────────────────────────
 
   const {
-    onTocSelect, onAltTocSelect, navigateToAdjacentTocSection, altTocLabelMap,
+    onTocSelect: onTocSelectRaw, onAltTocSelect, navigateToAdjacentTocSection, altTocLabelMap,
   } = useBookViewTocNavigation(
     () => tocEntries.value,
     activeTocEntryId,
@@ -468,6 +473,12 @@ export function useBookView(
     tocLabelPrintingNumbers,
     openTocEntryId,
   )
+
+  /** A TOC panel click: scrolls, and is the reader's own choice of what the commentary follows. */
+  function onTocSelect(entry: TocEntry) {
+    onTocEntryChosen(entry.lineId ?? null)
+    onTocSelectRaw(entry)
+  }
 
   useBookViewKeyboardShortcuts(
     linesContentRef,

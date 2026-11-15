@@ -191,14 +191,17 @@ export function useBookViewScrollSync(
       return
     }
 
-    // Plain-line mode: a TOC line is skipped. Landing on one would make it the
-    // commentary's anchor, and the TOC line IS what switches to section mode.
+    // Plain-line mode: while the READER scrolls, a TOC line is skipped. Passing over
+    // one must not make it the commentary's anchor, and the TOC line IS what switches
+    // to section mode. A jump that comes to rest ON a TOC line (a click in the TOC
+    // panel) is the opposite: the reader chose that entry, so it becomes the anchor.
     const headingIds = tocLineIds()
+    const skipHeadings = isUserScroll
     let line = lines().at(fullLineIndex)
-    for (let i = fullLineIndex + 1; line && headingIds.has(line.id) && i < lines().length; i++) {
+    for (let i = fullLineIndex + 1; line && skipHeadings && headingIds.has(line.id) && i < lines().length; i++) {
       line = lines().at(i)
     }
-    if (line && line.content !== null && !headingIds.has(line.id)) {
+    if (line && line.content !== null && !(skipHeadings && headingIds.has(line.id))) {
       selectedLineId.value = line.id
       pendingCommentaryLineId = line.id
       // A reader scroll loads where it stops (onLinesMoveEnd); a programmatic
@@ -268,6 +271,25 @@ export function useBookViewScrollSync(
     { flush: 'sync' },
   )
 
+  /**
+   * The reader selected a line themselves (a click in the text): the level to follow
+   * starts from scratch, even when the commentary already sits on that very line and
+   * nothing above fires.
+   */
+  function forgetFollowedLevel() {
+    followedLevel = null
+  }
+
+  /**
+   * The reader chose a TOC entry in the TOC panel. That click only scrolls — it never
+   * selects a line — so the choice is recorded here as the owed anchor: the jump that
+   * follows reads it, takes the entry's own level, and lands on its section.
+   */
+  function onTocEntryChosen(lineId: number | null) {
+    followedLevel = null
+    if (lineId != null && autoSelectTopLine.value) pendingCommentaryLineId = lineId
+  }
+
   watch(autoSelectTopLine, (enabled) => {
     if (!enabled) cancelPendingCommentary()
   })
@@ -277,6 +299,8 @@ export function useBookViewScrollSync(
   onScopeDispose(cancelPendingCommentary)
 
   return {
+    forgetFollowedLevel,
+    onTocEntryChosen,
     currentScrollLineIndex,
     currentFullLineIndex,
     userScrollTick,
