@@ -239,6 +239,20 @@ export function useBookViewScrollSync(
     activeAltTocEntryId.value = getActiveAltTocEntry(lineIndex)?.id
   }
 
+  // The reader selected something themselves (a click, a keyboard move, section
+  // navigation) while a scroll's commentary was still owed. Their choice wins: the
+  // owed load must not overwrite it at moveend, and must not decide the mode
+  // (followedTocSectionAt reads the owed value first). Our own commit clears the
+  // owed value BEFORE it assigns, so it never cancels itself. Sync flush: the next
+  // scroll step must already see the cancelled value.
+  watch(
+    commentaryLineId,
+    (id) => {
+      if (pendingCommentaryLineId != null && id !== pendingCommentaryLineId) cancelPendingCommentary()
+    },
+    { flush: 'sync' },
+  )
+
   watch(autoSelectTopLine, (enabled) => {
     if (!enabled) cancelPendingCommentary()
   })
