@@ -563,6 +563,8 @@ namespace FtsLib.Fts5
                 var single = new List<string> { group.Pattern };
                 if (group.Alternatives[0].ExpandKetiv)
                     foreach (var variant in KetivExpander.Expand(group.Pattern)) single.Add(variant);
+                // The divine name in its other spellings (always on).
+                single.AddRange(DivineNames.Alternatives(group.Pattern));
                 return single;
             }
 
@@ -623,6 +625,7 @@ namespace FtsLib.Fts5
                     expanded = new List<string> { alt.Pattern };
                     if (ketiv)
                         foreach (var variant in KetivExpander.Expand(alt.Pattern)) expanded.Add(variant);
+                    expanded.AddRange(DivineNames.Alternatives(alt.Pattern));
                 }
 
                 foreach (var term in expanded)

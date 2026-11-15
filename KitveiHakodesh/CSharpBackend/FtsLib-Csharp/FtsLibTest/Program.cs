@@ -21,6 +21,7 @@ namespace FtsLibTest
                 case "occmarks":          OccurrenceMarksTest.Run(args); return;
                 case "allmatches":        AllMatchesTest.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
+                case "divinenames":       DivineNamesTest.Run(args); return;
                 case "tokentest":         TokenRuleTest.Run(args); return;
                 case "tokdiag":           TokenDiag.Run(args); return;
                 case "tokbench":          TokBench.Run(args); return;
