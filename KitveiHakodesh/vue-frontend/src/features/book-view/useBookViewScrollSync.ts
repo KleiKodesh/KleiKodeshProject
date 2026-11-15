@@ -7,6 +7,21 @@
  *
  * The auto-selected commentary (not the line highlight) loads once per scroll:
  * where a reader scroll stops (the lines scroller's moveend) or where a jump settles.
+ *
+ * Auto-select has two modes, chosen by what the commentary is anchored on when the
+ * reader starts scrolling. There is no setting: the mode follows the reader's last selection.
+ *
+ *   SECTION mode - the anchor is a TOC entry's line (the reader selected a TOC line).
+ *     The commentary stays on that TOC section while the text scrolls inside it, and
+ *     moves to the next (or previous) TOC entry only when the text crosses into it.
+ *     It never drops to a single line. See followedTocSectionAt.
+ *
+ *   LINE mode - the anchor is a plain line. The commentary follows the top line.
+ *     TOC lines are skipped (the next non-TOC line is used): a TOC line as the anchor
+ *     would switch to SECTION mode on its own.
+ *
+ * Only an explicit selection changes the mode: a TOC line -> SECTION, a plain line -> LINE.
+ * Lines above the first TOC entry have no section, so they are LINE behaviour.
  */
 import { onScopeDispose, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -32,6 +47,7 @@ export function useBookViewScrollSync(
    * where the jump came to rest (see readCurrentPosition in useBookViewLinesScroll).
    */
   readLivePosition: () => { lineIndex: number; fullLineIndex: number } | null,
+  tocEntries: () => TocEntry[],
 ) {
   const paneNavigation = usePaneNavigation()
   const bookViewStore = useBookViewStore()
@@ -96,6 +112,39 @@ export function useBookViewScrollSync(
     return !(active && active.lineIndex != null && active.lineIndex === derived.lineIndex)
   }
 
+  /**
+   * While the commentary is anchored on a TOC entry's line (a TOC line was selected,
+   * or the previous scroll step followed one), the entry whose section holds
+   * `lineIndex`: the last entry at the anchor's level or higher that starts at or
+   * before it. Null when the commentary is on a plain line, or the line is above
+   * every such entry (then the plain-line behaviour applies).
+   */
+  function followedTocSectionAt(lineIndex: number): TocEntry | null {
+    const anchorId = pendingCommentaryLineId ?? commentaryLineId.value
+    if (anchorId == null) return null
+    const entries = tocEntries()
+    const anchor = entries.find((e) => e.lineId === anchorId)
+    if (!anchor) return null
+    let found: TocEntry | null = null
+    for (const e of entries) {
+      if (e.lineIndex == null || e.lineIndex > lineIndex) continue
+      if (e.level <= anchor.level) found = e
+    }
+    return found
+  }
+
+  // The ids of the lines that are TOC entries, rebuilt only when the TOC changes.
+  let tocLineIdsFor: TocEntry[] | null = null
+  let tocLineIdSet = new Set<number>()
+  function tocLineIds(): Set<number> {
+    const entries = tocEntries()
+    if (entries !== tocLineIdsFor) {
+      tocLineIdsFor = entries
+      tocLineIdSet = new Set(entries.flatMap((e) => (e.lineId != null ? [e.lineId] : [])))
+    }
+    return tocLineIdSet
+  }
+
   /** Sync everything that tracks the reading position to this line index. */
   function applyPositionSync(lineIndex: number, fullLineIndex: number, isUserScroll: boolean) {
     const entry = getActiveTocEntry(lineIndex)
@@ -117,8 +166,26 @@ export function useBookViewScrollSync(
     }
 
     if (!autoSelectTopLine.value) return
-    const line = lines().at(fullLineIndex)
-    if (line && line.content !== null) {
+
+    // The reader is following a TOC section (a TOC line is the commentary's anchor):
+    // the commentary stays on that section until the text crosses into another entry,
+    // then moves to THAT entry — not to a single line.
+    const sectionEntry = followedTocSectionAt(lineIndex)
+    if (sectionEntry?.lineId != null) {
+      selectedLineId.value = sectionEntry.lineId
+      pendingCommentaryLineId = sectionEntry.lineId
+      if (!isUserScroll) commitPendingCommentary()
+      return
+    }
+
+    // Plain-line mode: a TOC line is skipped. Landing on one would make it the
+    // commentary's anchor, and the TOC line IS what switches to section mode.
+    const headingIds = tocLineIds()
+    let line = lines().at(fullLineIndex)
+    for (let i = fullLineIndex + 1; line && headingIds.has(line.id) && i < lines().length; i++) {
+      line = lines().at(i)
+    }
+    if (line && line.content !== null && !headingIds.has(line.id)) {
       selectedLineId.value = line.id
       pendingCommentaryLineId = line.id
       // A reader scroll loads where it stops (onLinesMoveEnd); a programmatic
