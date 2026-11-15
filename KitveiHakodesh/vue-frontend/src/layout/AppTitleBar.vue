@@ -337,7 +337,7 @@ ${updateItem.text}` : t('layout.menu')"
         key="history-back"
       />
       <AppTitleBarHistoryButton
-        v-if="isTitleBarButtonVisible('next-tab')"
+        v-if="isTitleBarButtonVisible('next-tab') && pane.canGoForward.value"
         :pane-id="props.paneId"
         direction="forward"
         key="history-forward"
