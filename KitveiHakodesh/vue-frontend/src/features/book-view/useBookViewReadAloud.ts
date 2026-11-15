@@ -131,10 +131,19 @@ export function useBookViewReadAloud() {
   }
 
   /** Speaks one line's text (or a selection, lineIndex -1); false once stopped. */
-  async function speakText(text: ReadAloudText, lineIndex: number, voice: SpeechSynthesisVoice | null, gen: number): Promise<boolean> {
+  async function speakText(text: ReadAloudText, lineIndex: number, voice: SpeechSynthesisVoice | null, gen: number, fromFullChar = 0): Promise<boolean> {
     const { full, spoken, toFull } = text
     if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1 }
-    for (const chunk of splitIntoChunks(spoken)) {
+    // Where in the spoken text to begin: the first letter at or after `fromFullChar` of the full text.
+    let fromSpoken = 0
+    if (fromFullChar > 0) {
+      const found = toFull.findIndex((f) => f >= fromFullChar)
+      fromSpoken = found < 0 ? spoken.length : found
+    }
+    for (let chunk of splitIntoChunks(spoken)) {
+      if (chunk.start + chunk.text.length <= fromSpoken) continue
+      if (chunk.start < fromSpoken) chunk = { start: fromSpoken, text: chunk.text.slice(fromSpoken - chunk.start) }
+      if (!chunk.text.trim()) continue
       if (gen !== generation) return false
       await speak(chunk.text, voice, (charIndex, charLength) => {
         if (gen !== generation || lineIndex < 0) return
@@ -149,7 +158,7 @@ export function useBookViewReadAloud() {
     return gen === generation
   }
 
-  async function run(fromLine: number, readSelection: boolean) {
+  async function run(fromLine: number, readSelection: boolean, fromChar = 0) {
     const gen = generation
     isReading.value = true
     isPaused.value = false
@@ -169,7 +178,8 @@ export function useBookViewReadAloud() {
         if (gen !== generation || rows.length === 0) return
         for (const row of rows) {
           const text = readAloudTextOfLine(row.content ?? '', activeSkip())
-          if (text.spoken.trim() && !(await speakText(text, row.lineIndex, voice, gen))) return
+          const char = row.lineIndex === fromLine ? fromChar : 0
+          if (text.spoken.trim() && !(await speakText(text, row.lineIndex, voice, gen, char))) return
         }
       }
     } catch {
@@ -213,8 +223,14 @@ export function useBookViewReadAloud() {
 
   /** A new voice, speed or skip choice applies from the start of the line being read. */
   function applySettingsChange() {
-    const current = position.value?.lineIndex
-    if (isReading.value && current != null) restartFrom(current)
+    const current = position.value
+    if (!isReading.value || !current || !source) return
+    // Carries on from the word that was being spoken, keeping a pause as it was.
+    const wasPaused = isPaused.value
+    const fromChar = Math.max(0, current.wordStart)
+    stop()
+    void run(Math.min(Math.max(0, current.lineIndex), source.totalLines - 1), false, fromChar)
+    if (wasPaused) pause()
   }
 
   /** Holds the voice mid-sentence; resume() carries on from the same word. */
