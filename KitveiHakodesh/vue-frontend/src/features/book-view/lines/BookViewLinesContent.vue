@@ -673,7 +673,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
       ref="windowedScroller"
       class="scroller"
       :count="lines.length"
-      :end-padding-px="120"
+      :end-padding-px="28"
       :initial-index="initialLineIndex ?? initialScrollIndex"
       :initial-offset-px="initialLineIndex == null ? initialScrollOffset : 0"
       :ensure-rows="ensureLines"

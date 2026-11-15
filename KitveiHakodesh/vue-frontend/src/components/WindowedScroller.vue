@@ -626,7 +626,11 @@ function onViewportKeydown(event: KeyboardEvent) {
     void landOn(0, {}, true)
   } else if (event.key === 'End' && props.count > 0) {
     event.preventDefault()
-    void landOn(props.count - 1, { align: 'end' }, true)
+    // Landing aligns the last row's bottom to the viewport's; the end padding lies below it.
+    void landOn(props.count - 1, { align: 'end', offsetPx: props.endPaddingPx ?? 0 }, true).then(() => {
+      const viewport = viewportElement.value
+      if (props.endPaddingPx && viewport) viewport.scrollTop = viewport.scrollHeight
+    })
   }
 }
 
