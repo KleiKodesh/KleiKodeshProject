@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useDraggable } from '@vueuse/core'
+import { useDraggable, useEventListener } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import {
   IconPlay20Filled,
@@ -49,6 +49,28 @@ function onPlay() {
   else if (r.isPaused.value) r.resume()
   else r.pause()
 }
+
+/**
+ * Space pauses / resumes while the panel is open. Captured before the focused button sees it,
+ * so Space never "clicks" the toolbar's read-aloud button (which would close the panel).
+ */
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+}
+function onSpaceDown(e: KeyboardEvent) {
+  if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target)) return
+  e.preventDefault()
+  e.stopPropagation()
+  if (!e.repeat) onPlay()
+}
+function onSpaceUp(e: KeyboardEvent) {
+  if (e.code !== 'Space' || isTyping(e.target)) return
+  e.preventDefault()
+  e.stopPropagation()
+}
+useEventListener(window, 'keydown', onSpaceDown, { capture: true })
+useEventListener(window, 'keyup', onSpaceUp, { capture: true })
 
 const rateLabel = computed(() => `${r.rate.value.toFixed(1)}×`)
 
