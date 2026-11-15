@@ -84,7 +84,7 @@ namespace FtsLib.Tokenization
             int tagLen = 0;
             bool inTag = false, tagNameDone = false;
             int tagLt = 0;               // the current tag's '<'
-            bool supTransparent = false; // the open <sup> was transparent (HtmlBlockTags.IsTransparentSup)
+            bool supTransparent = false; // the open <sup> / <sub> was transparent (HtmlBlockTags.IsTransparentSup)
             int lastGt = -2;   // last '>' in the text (-1: none), read at the first '<'
             int visible = 0;
             int len = text.Length;
@@ -138,7 +138,7 @@ namespace FtsLib.Tokenization
                     if (ch == '>')
                     {
                         bool breaks;
-                        if (HtmlBlockTags.IsSup(_tagName, tagLen))
+                        if (HtmlBlockTags.IsScriptTag(_tagName, tagLen))
                         {
                             if (text[tagLt + 1] == '/') { breaks = !supTransparent; supTransparent = false; }
                             else { supTransparent = HtmlBlockTags.IsTransparentSup(text, tagLt, i); breaks = !supTransparent; }

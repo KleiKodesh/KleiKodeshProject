@@ -80,9 +80,19 @@ namespace FtsLibTest
             Spans("sup joined: span covers the whole word", A + Q + "<sup>" + B + SH + "</sup>" + G + " " + D, (0, 16), (17, 18));
             Words("SUP with attributes joins", A + "<SUP class=\"x\">" + B + SH + "</SUP>" + G, A + B + G);
             Words("sup digit marker breaks", A + Q + "<sup>1</sup>" + G, A, "1", G);
-            Words("sup unmarked letter mid-word breaks", A + Q + "<sup>" + B + "</sup>" + G, A, B, G);
             Words("sup marker at word end breaks", A + "<sup>" + B + SH + "</sup> " + G, A, B, G);
-            Words("sup with a tag inside breaks", A + "<sup><b>" + B + SH + "</b></sup>" + G, A, B, G);
+            // issue #37: a bare hanging letter in <sup> / <sub> between letters joins; footnote-marker always splits
+            Words("sup bare letter mid-word joins", A + Q + "<sup>" + B + "</sup>" + G, A + B + G);
+            Words("sub bare letter mid-word joins", A + "<sub>" + B + "</sub>" + G, A + B + G);
+            string t37 = "\u05DE\u05E9<sup>\u05D4</sup>\u05D5 \u05D0\u05D1<sup>\u05E8</sup>\u05D4\u05DD \u05D9<sup>\u05E6</sup>\u05D7\u05E7";
+            Words("line 3274701 pattern joins", t37, "\u05DE\u05E9\u05D4\u05D5", "\u05D0\u05D1\u05E8\u05D4\u05DD", "\u05D9\u05E6\u05D7\u05E7");
+            Words("footnote-marker bare letter splits", A + "<sup class=\"footnote-marker\">" + B + "</sup>" + G, A, B, G);
+            Words("footnote-marker marked letter splits", A + "<sup class=\"x footnote-marker\">" + B + SH + "</sup>" + G, A, B, G);
+            Words("presentation form letter joins", A + "<sup>\uFB31</sup>" + G, A + "\u05D1" + G);
+            Words("bidi and CGJ around the letter skipped", A + "\u200F<sup>\u034F" + B + "\u200E</sup>\u202C" + G, A + B + G);
+            Words("two bare letters split", A + "<sup>" + B + B + "</sup>" + G, A, B + B, G);
+            Words("mismatched close splits", A + "<sup>" + B + "</sub>" + G, A, B, G);
+            Words("inline tag inside the sup is skipped", A + "<sup><b>" + B + SH + "</b></sup>" + G, A + B + G);
 
             // fuzzy: a swap of two adjacent letters is ONE edit (Otzaria's transposition)
             Check("swap is one edit", FtsLib.Search.Levenshtein.Distance(A + B + G + D, B + A + G + D, 2) == 1, "");
