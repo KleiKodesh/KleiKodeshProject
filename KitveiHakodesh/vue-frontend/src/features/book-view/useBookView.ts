@@ -352,6 +352,7 @@ export function useBookView(
     getActiveAltTocEntry,
     getTocPath,
     () => linesContentRef()?.readCurrentPosition() ?? null,
+    () => tocEntries.value,
   )
 
   // The alt sections finish loading after the reader is already scrolled, and no
