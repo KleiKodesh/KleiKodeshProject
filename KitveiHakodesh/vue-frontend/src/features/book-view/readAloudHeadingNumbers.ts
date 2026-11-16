@@ -41,26 +41,40 @@ function isOnlyLabels(spoken: string): boolean {
   const words = spoken.trim().split(/[\s,:.]+/).filter(Boolean)
   if (words.length < 2 || words.length % 2 !== 0) return false
   for (let i = 0; i < words.length; i += 2) {
-    if (!LABELS.has(words[i]) || !/^[א-ת'"׳״]{1,6}$/.test(words[i + 1])) return false
+    if (!LABELS.has(words[i]!) || !/^[א-ת'"׳״]{1,6}$/.test(words[i + 1]!)) return false
   }
   return true
 }
 
+/** A number marker at the line's start: "(כה)", "[ז']", "יב)" - the closing bracket is required. */
+const LINE_MARKER = /^[(\[]?([א-ת]{1,4})['"׳״]?[)\]]/
+
+const FINAL_TO_PLAIN: Record<string, string> = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' }
+const plainForms = (letters: string) => letters.replace(/[ךםןףץ]/g, (c) => FINAL_TO_PLAIN[c]!)
+const letterNames = (letters: string) => [...letters].map((c) => LETTER_NAMES[c]).join(' ')
+
 export function withSpelledHeadingNumbers(text: ReadAloudText, isHeading: boolean): ReadAloudText {
   const { spoken } = text
   const lead = spoken.length - spoken.trimStart().length
-  if (!isHeading && !isOnlyLabels(spoken)) return text
   const expansions: Expansion[] = []
   let pos = lead
+  // A line-start number marker is read by its letters on any line: "(כה)" is "כף הא".
+  const marker = LINE_MARKER.exec(spoken.slice(lead))
+  if (marker && isWrittenNumber(plainForms(marker[1]!))) {
+    expansions.push({ start: lead, end: lead + marker[0].length, text: letterNames(marker[1]!) })
+    pos = lead + marker[0].length
+    pos += /^\s*/.exec(spoken.slice(pos))![0].length
+  }
+  if (!isHeading && !isOnlyLabels(spoken.slice(pos))) return withExpansions(text, expansions)
   for (;;) {
     PAIR.lastIndex = pos
     const m = PAIR.exec(spoken)
-    if (!m || !LABELS.has(m[1])) break
-    const numeral = m[2]
+    if (!m || !LABELS.has(m[1]!)) break
+    const numeral = m[2]!
     const letters = numeral.replace(/['"׳״]/g, '')
-    if (!isWrittenNumber(letters.replace(/[ךםןףץ]/g, (c) => ({ 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' })[c]!))) break
+    if (!isWrittenNumber(plainForms(letters))) break
     const start = m.index + m[0].length - numeral.length
-    expansions.push({ start, end: start + numeral.length, text: [...letters].map((c) => LETTER_NAMES[c]).join(' ') })
+    expansions.push({ start, end: start + numeral.length, text: letterNames(letters) })
     pos = m.index + m[0].length
     // Next pair: past a separator and spaces.
     const sep = /^[.,:;\-]?\s*/.exec(spoken.slice(pos))
