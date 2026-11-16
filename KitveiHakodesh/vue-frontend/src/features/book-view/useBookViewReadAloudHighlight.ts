@@ -29,11 +29,11 @@ export function useBookViewReadAloudHighlight(
 ) {
   const word = computed<ReadAloudWordMark | null>(() => {
     const pos = readAloud.position.value
-    if (!pos || pos.wordStart < 0) return null
-    const letterStart = lettersBefore(pos.text, pos.wordStart)
-    const letterCount = lettersBefore(pos.text, pos.wordEnd) - letterStart
+    if (!pos || pos.sentenceStart < 0) return null
+    const letterStart = lettersBefore(pos.text, pos.sentenceStart)
+    const letterCount = lettersBefore(pos.text, pos.sentenceEnd) - letterStart
     if (letterCount <= 0) return null
-    return { lineIndex: pos.lineIndex, letterStart, letterCount, spokenWord: pos.spokenWord }
+    return { lineIndex: pos.lineIndex, letterStart, letterCount }
   })
 
   /** The landing bringing the line being read into view, while it is under way. */

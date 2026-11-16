@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { markReadAloudWord } from './readAloudWordMark'
 import { splitIntoChunks } from '../useBookViewReadAloud'
 
-const mark = (html: string, letterStart: number, letterCount: number, spokenWord = '') =>
-  markReadAloudWord(html, { lineIndex: 0, letterStart, letterCount, spokenWord })
+const mark = (html: string, letterStart: number, letterCount: number) =>
+  markReadAloudWord(html, { lineIndex: 0, letterStart, letterCount })
 
 describe('markReadAloudWord', () => {
   it('wraps the word found by its letters', () => {
@@ -14,15 +14,13 @@ describe('markReadAloudWord', () => {
   it('keeps the HTML well formed when markup is inside the word', () => {
     expect(mark('ב<i>משה</i> אמר', 0, 4)).toBe('<mark class="kh-read-aloud">ב</mark><i><mark class="kh-read-aloud">משה</mark></i> אמר')
   })
-  it('writes the pointed spoken word in, its points in unselectable spans', () => {
-    expect(mark('ויבא משה', 4, 3, 'מֹשֶׁה.')).toBe('ויבא <mark class="kh-read-aloud">מ<span class="kh-read-aloud-points">ֹ</span>ש<span class="kh-read-aloud-points">ֶׁ</span>ה</mark>')
-    // Other letters (an abbreviation read in full): only marked.
-    expect(mark('אמר ר\' יהושע', 3, 1, 'רַבִּי')).toBe('אמר <mark class="kh-read-aloud">ר</mark>\' יהושע')
+  it('marks a whole sentence, the book text unchanged', () => {
+    expect(mark('ויבא משה. אמר לו', 0, 7)).toBe('<mark class="kh-read-aloud">ויבא משה</mark>. אמר לו')
   })
   it('is fast on a long line', () => {
     const line = Array.from({ length: 300 }, () => '<span>ומשה</span> היה רועה').join(' ')
     const t0 = performance.now()
-    for (let i = 0; i < 100; i++) mark(line, 800, 4, 'רוֹעֶה')
+    for (let i = 0; i < 100; i++) mark(line, 800, 40)
     expect((performance.now() - t0) / 100).toBeLessThan(5)
   })
 })

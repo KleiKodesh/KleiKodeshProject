@@ -70,13 +70,9 @@ html[data-fixed-line-height='true'] .reading-column-line font {
   background: rgba(255, 165, 0, 0.9);
   color: #000;
 }
-/* The word being read aloud (readAloudWordMark.ts). The nikkud read aloud adds is not copied;
-   it is not gray: Chromium draws a combining mark in its letter's color, whatever its span says. */
+/* The sentence being read aloud (readAloudWordMark.ts). */
 .reading-column-line mark.kh-read-aloud {
-  background: color-mix(in srgb, var(--accent-color) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 22%, transparent);
   color: inherit;
   border-radius: 2px;
-}
-.reading-column-line .kh-read-aloud-points {
-  user-select: none;
 }
