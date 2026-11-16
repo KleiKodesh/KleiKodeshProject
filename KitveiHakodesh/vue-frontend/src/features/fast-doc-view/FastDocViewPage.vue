@@ -12,6 +12,7 @@ import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSel
 import { useZoomHandler, zoomIn, zoomOut, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useShortcutsStore } from '@/shortcuts/shortcutsStore'
 import { useFastDocViewCommands } from '@/composables/fastDocViewCommands'
 import { useTabStore } from '@/stores/tabStore'
 import { fastDocViewApi, parseFastDocViewOpenFailure } from '@/webview-host/fastDocViewApi'
@@ -48,6 +49,7 @@ import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocVi
 const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+const shortcuts = useShortcutsStore()
 const tabId = paneNavigation.activeTabId
 // Read once: AppPageView keys this page by tab and file, so another file remounts it.
 const filePath = paneNavigation.activeTab.localFilePath ?? null
@@ -412,22 +414,29 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
   if (scrollerElement.value?.contains(focused) || notesScrollerElement.value?.contains(focused)) return
   zoomBoth(isZoomIn ? zoomIn : isZoomOut ? zoomOut : () => ZOOM_CONFIG.DEFAULT)
 })
-// Ctrl+D toggles clean text, as in the book view (the same global setting and toolbar button).
+// doc.cleanText (Ctrl+D) toggles clean text, as in the book view (the same global setting
+// and toolbar button). Combination from the shortcuts store - see shortcutRegistry.ts.
 useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.code !== 'KeyD') return
+  if (!shortcuts.idsFor(event).includes('doc.cleanText')) return
   if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
   if (paneNavigation.activeTab.id !== tabId) return
   event.preventDefault()
   settingsStore.toggleCleanText()
 })
-// Ctrl+Arrow, as in the book view (RTL: Ctrl+Left = next). On the text, outside inputs.
+// doc.nextHeading / doc.previousHeading (Ctrl+Left / Ctrl+Right), as in the book view. On the
+// text, outside inputs. On the default arrow keys the direction follows the document: in an
+// RTL document Left is next, in an LTR one Left is previous - the arrow points where the
+// text moves. Any other key the user chose means just what its row says.
 useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
-  if (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight') return
+  const ids = shortcuts.idsFor(event)
+  const isNext = ids.includes('doc.nextHeading')
+  if (!isNext && !ids.includes('doc.previousHeading')) return
   if (!pageElement.value?.contains(document.activeElement) || (document.activeElement as HTMLElement | null)?.closest('input, textarea')) return
   if (outline.value.length === 0) return
   event.preventDefault()
-  navigateToAdjacentHeading((event.code === 'ArrowLeft') === isRightToLeft.value ? 'next' : 'previous')
+  const isArrow = event.code === 'ArrowLeft' || event.code === 'ArrowRight'
+  const next = isArrow ? (event.code === 'ArrowLeft') === isRightToLeft.value : isNext
+  navigateToAdjacentHeading(next ? 'next' : 'previous')
 })
 function onOutlineSelect(node: FastDocViewOutlineNode) {
   // The overlay stays open on a click, as the book view's (an outside click closes it).

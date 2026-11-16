@@ -337,6 +337,8 @@
     "cycleInReverse": "דפדוף בכיוון ההפוך",
     "closeTab": "סגור לשונית",
     "closeAllTabs": "סגור את כל הלשוניות",
+    "closeCurrentPage": "סגור את הדף הנוכחי",
+    "closeAllPages": "סגור את כל הדפים",
     "navigation": "ניווט",
     "focusTheSearchBar": "מיקוד שורת החיפוש",
     "rightArrow": "חץ ימני",
@@ -402,6 +404,29 @@
     "fullScreen": "מסך מלא",
     "caretBrowsingForNavigationAndSelection": "הפעלת סמן טקסט לניווט ובחירה",
     "keepScreenOn": "השאר מסך דלוק (הפעלה/כיבוי)"
+  },
+  "shortcutsEdit": {
+    "hint": "לחצו „שנה” ליד פעולה והקישו את הצירוף שתרצו. הקיצורים נשמרים בנפרד בתוך וורד ובתוכנה העצמאית.",
+    "change": "שנה",
+    "restore": "שחזר",
+    "restoreAll": "שחזר את כל הקיצורים",
+    "cancel": "ביטול",
+    "replace": "החלף",
+    "none": "ללא קיצור",
+    "fixed": "קבוע",
+    "fixedTip": "מקש קבוע של התוכנה או של הדפדפן, אי אפשר לשנות אותו",
+    "pressCombo": "הקישו צירוף…",
+    "captureHint": "Esc לביטול · Backspace להסרת הקיצור",
+    "conflict": "{combo} כבר משמש ל{action}.",
+    "replaceQuestion": "להעביר אותו לכאן?",
+    "conflictFixed": "{combo} שמור ל{action} ואי אפשר להעביר אותו.",
+    "restoreTaken": "{combo} משמש עכשיו ל{action}, ולכן לא הוחזר לכאן.",
+    "unreachableInWord": "בתוך וורד הצירוף הזה לא מגיע לתוכנה, ולכן הקיצור לא יעבוד כאן. כדאי לבחור צירוף אחר.",
+    "problem": {
+      "needsModifier": "{combo} לבד משמש להקלדה ולתנועה. צירוף צריך לכלול Ctrl או Alt, או להיות אחד המקשים F1–F12.",
+      "editing": "{combo} שמור להעתקה, הדבקה ועריכה.",
+      "system": "{combo} שייך ל-Windows ולא מגיע לתוכנה."
+    }
   },
   "keepScreenOn": {
     "label": "השאר מסך דלוק",

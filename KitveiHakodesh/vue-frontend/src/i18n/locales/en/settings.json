@@ -337,6 +337,8 @@
     "cycleInReverse": "Cycle in reverse",
     "closeTab": "Close tab",
     "closeAllTabs": "Close all tabs",
+    "closeCurrentPage": "Close the current page",
+    "closeAllPages": "Close all pages",
     "navigation": "Navigation",
     "focusTheSearchBar": "Focus the search bar",
     "rightArrow": "Right arrow",
@@ -402,6 +404,29 @@
     "fullScreen": "Full screen",
     "caretBrowsingForNavigationAndSelection": "Caret browsing for navigation and selection",
     "keepScreenOn": "Keep screen on (on/off)"
+  },
+  "shortcutsEdit": {
+    "hint": "Click “Change” next to an action and press the combination you want. Word and the standalone app keep their shortcuts separately.",
+    "change": "Change",
+    "restore": "Restore",
+    "restoreAll": "Restore all shortcuts",
+    "cancel": "Cancel",
+    "replace": "Move it here",
+    "none": "No shortcut",
+    "fixed": "Fixed",
+    "fixedTip": "A fixed key of the app or of the browser; it cannot be changed",
+    "pressCombo": "Press a combination…",
+    "captureHint": "Esc to cancel · Backspace to remove the shortcut",
+    "conflict": "{combo} is already used for {action}.",
+    "replaceQuestion": "Move it here?",
+    "conflictFixed": "{combo} is kept for {action} and cannot be moved.",
+    "restoreTaken": "{combo} is now used for {action}, so it was not put back here.",
+    "unreachableInWord": "Inside Word this combination never reaches the app, so the shortcut does not work here. Choose another one.",
+    "problem": {
+      "needsModifier": "{combo} on its own is for typing and moving around. A shortcut needs Ctrl or Alt, or one of F1–F12.",
+      "editing": "{combo} is kept for copy, paste and editing.",
+      "system": "{combo} belongs to Windows and never reaches the app."
+    }
   },
   "keepScreenOn": {
     "label": "Keep screen on",

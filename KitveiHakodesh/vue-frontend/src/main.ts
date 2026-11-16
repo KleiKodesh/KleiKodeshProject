@@ -1,3 +1,6 @@
+// FIRST, on purpose: the settings grid's key capture must be the first keydown listener on
+// window, so a combination being chosen never also triggers the shortcut it is today.
+import './shortcuts/shortcutCapture'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
