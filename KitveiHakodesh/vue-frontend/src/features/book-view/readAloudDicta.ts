@@ -138,6 +138,61 @@ interface Expansion {
   text: string
 }
 
+/** Shortened words Dicta ranks badly, with what they stand for. */
+const KNOWN_SHORTENINGS: Record<string, string> = {
+  'וגו': 'וגומר',
+  'וכו': 'וכולי',
+}
+
+const FINAL_TO_BASE: Record<string, string> = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' }
+const LETTER_VALUES = 'אבגדהוזחטיכלמנסעפצקרשת'
+const valueOf = (letter: string) => {
+  const i = LETTER_VALUES.indexOf(letter)
+  return i < 9 ? i + 1 : i < 18 ? (i - 8) * 10 : (i - 17) * 100
+}
+
+/** The abbreviation's letters, without its geresh / gershayim, finals as plain letters. */
+function lettersOf(abbreviation: string): string {
+  return [...abbreviation.replace(/[׳״'"]/g, '')].map((ch) => FINAL_TO_BASE[ch] ?? ch).join('')
+}
+
+/** Whether the letters read as a Hebrew number (values never rise: ל"ב, קע"ב, תשפ"ו). */
+function isHebrewNumber(letters: string): boolean {
+  if (!letters || [...letters].some((ch) => !LETTER_VALUES.includes(ch))) return false
+  const values = [...letters].map(valueOf)
+  return values.every((v, i) => i === 0 || v <= values[i - 1])
+}
+
+/** Whether the words begin with the letters in order, each word taking one or more of them (הקב"ה = הקדוש ברוך הוא). */
+function wordsMatchLetters(letters: string, words: string[]): boolean {
+  if (words.length === 0) return letters.length === 0
+  const word = [...words[0]].map((ch) => FINAL_TO_BASE[ch] ?? ch).join('')
+  for (let k = 1; k <= letters.length; k++) {
+    if (!word.startsWith(letters.slice(0, k))) break
+    if (wordsMatchLetters(letters.slice(k), words.slice(1))) return true
+  }
+  return false
+}
+
+/**
+ * What an abbreviation is spoken as, or null to read it as written.
+ * Dicta's first option is taken unless it is the abbreviation itself - its way of saying
+ * "not sure". Then a Hebrew number stays as written, and otherwise the first option whose
+ * words begin with the abbreviation's letters is taken (רשב"י = רבי שמעון בר יוחאי).
+ * A few shortened words Dicta ranks badly come from a short list (וגו' = וגומר).
+ */
+export function chooseExpansion(abbreviation: string, options: string[]): string | null {
+  const letters = lettersOf(abbreviation)
+  const isSelf = (option: string) => lettersOf(option) === letters
+  const known = KNOWN_SHORTENINGS[letters]
+  if (known && /[׳']$/.test(abbreviation)) return known
+  const first = options[0]
+  if (!first) return null
+  if (!isSelf(first)) return first
+  if (isHebrewNumber(letters)) return null
+  return options.find((option) => !isSelf(option) && wordsMatchLetters(letters, option.trim().split(/\s+/))) ?? null
+}
+
 /** The expansions Dicta chose for a line; null if its tokens do not match the line. */
 function expansionsOf(line: string, tokens: DictaToken[]): Expansion[] | null {
   const found: Expansion[] = []
@@ -145,10 +200,8 @@ function expansionsOf(line: string, tokens: DictaToken[]): Expansion[] | null {
   for (const token of tokens) {
     const str = token.str ?? ''
     if (!line.startsWith(str, pos)) return null
-    const best = token.abbreviation?.options?.[0]
-    if (best && best !== token.abbreviation?.word && best !== token.pStr && best !== str) {
-      found.push({ start: pos, end: pos + str.length, text: best })
-    }
+    const best = token.abbreviation ? chooseExpansion(str, token.abbreviation.options ?? []) : null
+    if (best) found.push({ start: pos, end: pos + str.length, text: best })
     pos += str.length
   }
   return pos === line.length ? found : null
