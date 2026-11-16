@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { withExpansions, withVocalization } from './readAloudDicta'
+import { chooseExpansion, withExpansions, withVocalization } from './readAloudDicta'
 import type { ReadAloudText } from './readAloudSkip'
 
 const plain = (s: string): ReadAloudText => ({ full: s, spoken: s, toFull: [...s].map((_, i) => i).concat(s.length) })
@@ -42,5 +42,21 @@ describe('with skipped text (parentheses, source links)', () => {
     expect(Math.max(...out.toFull.slice(0, out.spoken.length))).toBe(full.length - 1)
     // Nothing of the skipped parenthesis is mapped.
     expect(out.toFull.slice(0, out.spoken.length).some((f) => f >= 4 && f <= 9)).toBe(false)
+  })
+})
+
+describe('chooseExpansion (Dicta answers as seen live)', () => {
+  it('opens what the user expects', () => {
+    expect(chooseExpansion("וגו'", ["וגו'", 'וגובה', 'וגומר'])).toBe('וגומר')
+    expect(chooseExpansion('רשב"י', ['רשב"י', 'רבי שמעון בר יוחאי'])).toBe('רבי שמעון בר יוחאי')
+    expect(chooseExpansion('הקב"ה', ['הקדוש ברוך הוא', 'הקב"ה'])).toBe('הקדוש ברוך הוא')
+    expect(chooseExpansion("וכו'", ["וכו'", 'וכור', 'וכו'])).toBe('וכולי')
+    expect(chooseExpansion('ז"ל', ['זכרונו לברכה', 'ז"ל'])).toBe('זכרונו לברכה')
+  })
+  it('keeps numbers and unknowns as written', () => {
+    expect(chooseExpansion('ל"ב', ['ל"ב', 'לא בטל'])).toBeNull()
+    expect(chooseExpansion('קע"ב', ['קע"ב', 'מאה שבעים ושניים'])).toBeNull()
+    expect(chooseExpansion("ג'", ["ג'", 'שלשה'])).toBeNull()
+    expect(chooseExpansion('הרמב"ם', ['הרמב"ם'])).toBeNull()
   })
 })
