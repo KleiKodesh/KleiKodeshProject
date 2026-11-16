@@ -29,9 +29,9 @@ export function useBookViewReadAloudHighlight(
 ) {
   const word = computed<ReadAloudWordMark | null>(() => {
     const pos = readAloud.position.value
-    if (!pos || pos.sentenceStart < 0) return null
-    const letterStart = lettersBefore(pos.text, pos.sentenceStart)
-    const letterCount = lettersBefore(pos.text, pos.sentenceEnd) - letterStart
+    if (!pos || pos.wordStart < 0) return null
+    const letterStart = lettersBefore(pos.text, pos.wordStart)
+    const letterCount = lettersBefore(pos.text, pos.wordEnd) - letterStart
     if (letterCount <= 0) return null
     return { lineIndex: pos.lineIndex, letterStart, letterCount }
   })

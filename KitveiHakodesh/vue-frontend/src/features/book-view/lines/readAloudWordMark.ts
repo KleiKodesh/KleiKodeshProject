@@ -1,12 +1,12 @@
 /**
- * The sentence being read aloud, marked in its rendered line like a search match:
+ * The word being read aloud, marked in its rendered line like a search match:
  * <mark class="kh-read-aloud"> around it. It is found by counting LETTERS (\p{L}\p{N}),
  * the way the read-aloud position counts them in the line's plain text, so markup, vowel
  * points and punctuation in the row never shift it. The book's text is shown as it is.
  */
 export interface ReadAloudWordMark {
   lineIndex: number
-  /** How many letters of the line come before the sentence. */
+  /** How many letters of the line come before the word. */
   letterStart: number
   letterCount: number
 }

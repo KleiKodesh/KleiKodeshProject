@@ -11,7 +11,6 @@ import {
 import { createReadAloudDicta, WAIT_FOR_FIRST_LINE_MS } from './readAloudDicta'
 import { withSpelledHeadingNumbers } from './readAloudHeadingNumbers'
 import { withDivineNamesSpoken } from './readAloudDivineNames'
-import { createGoogleVoice, GOOGLE_MAX_CHUNK_CHARS, GOOGLE_VOICE_URI } from './readAloudGoogleVoice'
 
 /**
  * Reads the book aloud with the browser's own speech (the voices installed in Windows).
@@ -22,8 +21,6 @@ import { createGoogleVoice, GOOGLE_MAX_CHUNK_CHARS, GOOGLE_VOICE_URI } from './r
  * Text goes to the voice a sentence at a time: Chromium cuts off one long utterance part
  * way through. All of a line's sentences are queued at once, so there is no pause between
  * them; stop / skip cancel the queue at once.
- *
- * The Google voice (online) is offered too; when it cannot be reached the Windows voice reads.
  *
  * `position` says which line and which word is being spoken now, for the highlight and
  * for following along; it is null while reading a selection (that text has no line).
@@ -45,9 +42,6 @@ export interface ReadAloudPosition {
   /** The word being spoken, as a range in `text`; -1 before the first word boundary. */
   wordStart: number
   wordEnd: number
-  /** The sentence being spoken (the voice's chunk), as a range in `text`; -1 before the first word. */
-  sentenceStart: number
-  sentenceEnd: number
 }
 
 /**
@@ -114,9 +108,6 @@ export function useBookViewReadAloud() {
   const skipOptions = useStorage<ReadAloudSkipOptions>('bookView.readAloud.skipOptions', { ...DEFAULT_SKIP_OPTIONS }, undefined, { mergeDefaults: true })
   /** Dicta prepares the text before it is spoken, always when reachable: nikkud for unpointed Hebrew, abbreviations in full. */
   const dicta = createReadAloudDicta()
-  const google = createGoogleVoice()
-  /** Set once the Google voice failed: the Windows voice reads on without retrying each line, until the next start. */
-  let googleFailed = false
   /** Ends the line being spoken at once (stop / skip): its promise settles. */
   let endLine: (() => void) | null = null
   const activeSkip = () => (skipEnabled.value ? skipOptions.value : null)
@@ -140,8 +131,6 @@ export function useBookViewReadAloud() {
       null
     )
   }
-
-  const usesGoogle = () => voiceUri.value === GOOGLE_VOICE_URI && !googleFailed
 
   /**
    * Queues all chunks to the Windows voice at once - no gap between them - and resolves
@@ -174,7 +163,7 @@ export function useBookViewReadAloud() {
   /** Speaks one line's text (or a selection, lineIndex -1); false once stopped. */
   async function speakText(text: ReadAloudText, lineIndex: number, voice: SpeechSynthesisVoice | null, gen: number, fromFullChar = 0): Promise<boolean> {
     const { full, spoken, toFull } = text
-    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1, sentenceStart: -1, sentenceEnd: -1 }
+    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1 }
     // Where in the spoken text to begin: the first letter at or after `fromFullChar` of the full text.
     let fromSpoken = 0
     if (fromFullChar > 0) {
@@ -186,39 +175,16 @@ export function useBookViewReadAloud() {
         .filter((c) => c.start + c.text.length > fromSpoken)
         .map((c) => (c.start < fromSpoken ? { start: fromSpoken, text: c.text.slice(fromSpoken - c.start) } : c))
         .filter((c) => c.text.trim())
-    // Spoken range -> full-text range, where the row's letters are counted.
-    const toFullRange = (start: number, end: number) => {
-      const s = toFull[start] ?? full.length
-      return [s, end > start ? (toFull[end - 1] ?? full.length - 1) + 1 : s] as const
-    }
-    const onWord = (chunks: { start: number; text: string }[]) => (chunkIndex: number, charIndex: number, charLength: number) => {
+    const onWord = (chunks: { start: number }[]) => (chunkIndex: number, charIndex: number, charLength: number) => {
       if (gen !== generation || lineIndex < 0) return
-      const chunk = chunks[chunkIndex]!
-      const start = chunk.start + charIndex
+      const start = chunks[chunkIndex]!.start + charIndex
       const end = charLength > 0 ? start + charLength : wordEndAt(spoken, start)
-      const [wordStart, wordEnd] = toFullRange(start, end)
-      const [sentenceStart, sentenceEnd] = toFullRange(chunk.start, chunk.start + chunk.text.trimEnd().length)
-      const prev = position.value
-      // Same sentence: only the word moves (kept for resuming), the mark is not redrawn.
-      if (prev && prev.lineIndex === lineIndex && prev.sentenceStart === sentenceStart && prev.sentenceEnd === sentenceEnd) {
-        prev.wordStart = wordStart
-        prev.wordEnd = wordEnd
-        return
-      }
-      position.value = { lineIndex, text: full, wordStart, wordEnd, sentenceStart, sentenceEnd }
+      // Back to the full text, where the row's letters are counted.
+      const wordStart = toFull[start] ?? full.length
+      const wordEnd = end > start ? (toFull[end - 1] ?? full.length - 1) + 1 : wordStart
+      position.value = { lineIndex, text: full, wordStart, wordEnd }
     }
     if (gen !== generation) return false
-    if (usesGoogle()) {
-      const chunks = chunksFor(GOOGLE_MAX_CHUNK_CHARS)
-      try {
-        await google.speak(chunks.map((c) => c.text), rate.value, onWord(chunks))
-        return gen === generation
-      } catch {
-        // Offline or blocked: the Windows voice reads this line and the rest.
-        googleFailed = true
-        if (gen !== generation) return false
-      }
-    }
     const chunks = chunksFor(MAX_CHUNK_CHARS)
     if (chunks.length) await speakAll(chunks.map((c) => c.text), voice, onWord(chunks))
     return gen === generation
@@ -334,22 +300,18 @@ export function useBookViewReadAloud() {
   function pause() {
     if (!isReading.value || isPaused.value) return
     speechSynthesis.pause()
-    google.pause()
     isPaused.value = true
   }
 
   function resume() {
     if (!isPaused.value) return
     speechSynthesis.resume()
-    google.resume()
     isPaused.value = false
   }
 
   /** Stop for good: the speech ends and everything Dicta prepared is dropped. */
   function stop() {
     halt()
-    // The next start tries the Google voice again.
-    googleFailed = false
     dicta.clear()
   }
 
@@ -365,13 +327,11 @@ export function useBookViewReadAloud() {
       speechSynthesis.resume()
       speechSynthesis.cancel()
     }
-    google.stop()
     endLine?.()
   }
 
   onScopeDispose(() => {
     stop()
-    google.dispose()
     if (isSupported) speechSynthesis.removeEventListener('voiceschanged', refreshVoices)
   })
 
