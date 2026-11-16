@@ -35,8 +35,15 @@ const PAIR = /([א-ת]+)[,:]?\s+([א-ת]{1,4}(?:['"׳״][א-ת])?['׳]?)(?=$|[\s
 
 /** Whether the line is only label + number pairs - a heading even without a heading tag. */
 function isOnlyLabels(spoken: string): boolean {
-  return /^\s*(?:[א-ת]+[,:]?\s+[א-ת'"׳״]{1,6}[.:,]?\s*)+$/.test(spoken)
-    && LABELS.has(spoken.trim().split(/[\s,:]+/)[0] ?? '')
+  // Word by word, not one big regex: a nested-repeat regex backtracks for ages on a long
+  // line and froze the page. A label line is short anyway.
+  if (spoken.length > 60) return false
+  const words = spoken.trim().split(/[\s,:.]+/).filter(Boolean)
+  if (words.length < 2 || words.length % 2 !== 0) return false
+  for (let i = 0; i < words.length; i += 2) {
+    if (!LABELS.has(words[i]) || !/^[א-ת'"׳״]{1,6}$/.test(words[i + 1])) return false
+  }
+  return true
 }
 
 export function withSpelledHeadingNumbers(text: ReadAloudText, isHeading: boolean): ReadAloudText {

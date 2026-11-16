@@ -61,9 +61,9 @@ const REQUEST_TIMEOUT_MS = 8000
 /** After a failed request, none is tried for this long. */
 const BACKOFF_MS = 60_000
 /** How long a line about to be read waits for its preparation before reading plain. */
-const WAIT_FOR_LINE_MS = 400
-/** The first line of a reading has had no time to be prepared ahead; it may wait a little longer. */
-export const WAIT_FOR_FIRST_LINE_MS = 2500
+const WAIT_FOR_LINE_MS = 150
+/** Reading starts at once: the first line is read as it is if Dicta has not answered yet. */
+export const WAIT_FOR_FIRST_LINE_MS = 0
 
 const HEBREW_LETTER = /[א-ת]/g
 const MARK = /[֑-ׇ]/g
@@ -119,11 +119,23 @@ interface DictaToken {
 function tokensPerLine(data: unknown[], lineCount: number): DictaToken[][] | null {
   const groups: DictaToken[][] = [[]]
   for (const item of data as DictaToken[]) {
-    if (item?.str === '\n') groups.push([])
-    else groups[groups.length - 1].push(item)
+    const str = item?.str ?? ''
+    if (!str.includes('\n')) {
+      groups[groups.length - 1].push(item)
+      continue
+    }
+    // Dicta glues punctuation and spaces to the newline (". \n"): split the token there,
+    // each side keeping its own plain text.
+    const parts = str.split('\n')
+    parts.forEach((part, i) => {
+      if (i > 0) groups.push([])
+      if (part) groups[groups.length - 1].push({ str: part, pStr: part })
+    })
   }
   return groups.length === lineCount ? groups : null
 }
+
+export const tokensPerLineForTest = tokensPerLine
 
 /** Nikkud text of a line's tokens: the first option of each word. */
 function pointedTextOf(tokens: DictaToken[]): string {

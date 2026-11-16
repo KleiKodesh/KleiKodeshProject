@@ -10,9 +10,8 @@ import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
  * vowel points), so a word is found by counting LETTERS, like bookmark points are: the n-th
  * letter of the spoken text is the n-th letter of the row.
  *
- * Above the marked word a small label shows the word as it is spoken - with the nikkud
- * read aloud adds, or an abbreviation in full - when that differs from what the row shows.
- * The label floats over the page (fixed position); the row itself is still not touched.
+ * The nikkud read aloud adds shows on the marked word itself, in gray, as if part of the
+ * text: an overlay drawn on top of the word (see showLabel); the row itself is not touched.
  */
 const HIGHLIGHT_NAME = 'kh-read-aloud'
 const LETTER = /[\p{L}\p{N}]/u
@@ -49,18 +48,49 @@ export function useBookViewReadAloudHighlight(
   const supported = typeof CSS !== 'undefined' && 'highlights' in CSS
 
   let label: HTMLElement | null = null
+  /** The word the label sits on; followed every frame so scrolling and reflow keep it attached. */
+  let labelRange: Range | null = null
+  let frame = 0
 
   function hideLabel() {
     label?.remove()
     label = null
+    labelRange = null
+    cancelAnimationFrame(frame)
   }
 
-  /** Shows the spoken form of the word just above the marked range. */
+  /** Puts the label on the word's current place: one rect read per frame, nothing else. */
+  function placeLabel() {
+    if (!label || !labelRange) return
+    const rect = labelRange.getBoundingClientRect()
+    // Scrolled away or re-rendered (the range collapsed): nothing to sit on.
+    if (rect.width === 0 || !labelRange.startContainer.isConnected) {
+      label.style.visibility = 'hidden'
+    } else {
+      label.style.visibility = ''
+      label.style.lineHeight = `${rect.height}px`
+      label.style.height = `${rect.height}px`
+      label.style.top = `${rect.top}px`
+      label.style.left = `${rect.left}px`
+      label.style.width = `${rect.width}px`
+    }
+    frame = requestAnimationFrame(placeLabel)
+  }
+
+  /**
+   * Draws the word's nikkud in gray, exactly on the word itself, as if it were part of the
+   * text. The spoken word (letters + nikkud) is laid over the row word in the same font, with
+   * a blend mode that keeps the row's own letters as they are: on a light page "darken"
+   * (the black letters stay black, only the gray points show on the white), on a dark page
+   * "lighten". The row's DOM is not touched. Shown only when the spoken word is the same
+   * word with points - an abbreviation read in full has nothing to lay over it.
+   */
   function showLabel(range: Range, spokenWord: string) {
     const word = spokenWord.trim()
     const shown = range.toString().trim()
     const rect = range.getBoundingClientRect()
-    if (!word || word === shown || rect.width === 0) {
+    const strip = (s: string) => s.replace(/[֑-ׇ]/g, '')
+    if (!word || word === shown || strip(word) !== strip(shown) || rect.width === 0) {
       hideLabel()
       return
     }
@@ -70,13 +100,17 @@ export function useBookViewReadAloudHighlight(
       label.dir = 'rtl'
       document.body.appendChild(label)
     }
+    const host = range.startContainer.parentElement ?? document.body
+    const style = getComputedStyle(host)
     label.textContent = word
-    const style = getComputedStyle(range.startContainer.parentElement ?? document.body)
-    label.style.fontFamily = style.fontFamily
-    label.style.fontSize = style.fontSize
-    const height = label.offsetHeight
-    label.style.top = `${Math.max(0, rect.top - height - 4)}px`
-    label.style.left = `${rect.left + rect.width / 2}px`
+    label.style.font = style.font
+    label.style.letterSpacing = style.letterSpacing
+    // Dark text = light page.
+    const [r, g, b] = (style.color.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).map(Number)
+    label.style.mixBlendMode = 0.299 * r + 0.587 * g + 0.114 * b < 128 ? 'darken' : 'lighten'
+    labelRange = range
+    cancelAnimationFrame(frame)
+    placeLabel()
   }
 
   function clear() {
