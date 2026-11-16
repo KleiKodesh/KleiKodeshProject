@@ -76,9 +76,6 @@ function restoreSelection(): void {
   sel.addRange(_savedRange)
 }
 
-useDropdownClose(menuRef, () => {
-  visible.value = false
-})
 
 // ── Submenu ──────────────────────────────────────────────────────────────────
 // One submenu can be open at a time. It opens on hover (and on click/tap, for
@@ -91,88 +88,66 @@ const submenuElement = ref<HTMLElement | null>(null)
 function setSubmenuElement(element: unknown): void {
   submenuElement.value = (element as HTMLElement | null) ?? null
 }
-// RTL menu: the submenu opens toward the physical left (inline-start side).
-// `flipped` swaps it to the other side when it would leave the viewport.
-const submenuFlipped = ref(false)
-// Lifts the submenu panel so its FIRST row's text aligns with the parent row's text.
-// The panel has no padding of its own, so this is just the parent row's own top
-// padding (see .context-menu-item) negated.
+// The submenu is its OWN fixed panel, a sibling of the menu box — never a child of
+// it. The menu box scrolls when it is taller than the viewport, and a panel nested
+// inside a scroll box is clipped and widens it into a sideways scroll.
+// Placement: toward the physical left of the menu (RTL inline-start), or the right
+// when the left does not fit; clamped into the viewport when neither side fits.
+// Lifts the panel so its FIRST row's text aligns with the parent row's text (the
+// parent row's own top padding, negated).
 const SUBMENU_TOP_OFFSET = -2
-const submenuTopPx = ref(SUBMENU_TOP_OFFSET)
-// Last-resort horizontal nudge, applied only when NEITHER side fits (a window
-// narrower than parent menu + submenu). Left as null the panel stays purely
-// side-anchored, which is what keeps it glued to the parent row while resizing.
-const submenuShiftPx = ref<number | null>(null)
 const VIEWPORT_MARGIN = 4
-const submenuStyle = computed(() => {
-  const style: Record<string, string> = { top: `${submenuTopPx.value}px` }
-  if (submenuShiftPx.value !== null) style.transform = `translateX(${submenuShiftPx.value}px)`
-  return style
-})
+const submenuLeftPx = ref(0)
+const submenuTopPx = ref(0)
+// Hidden for the one frame between mounting and measuring, so it never flashes at 0,0.
+const submenuPlaced = ref(false)
+const submenuStyle = computed(() => ({
+  left: `${submenuLeftPx.value}px`,
+  top: `${submenuTopPx.value}px`,
+  visibility: submenuPlaced.value ? ('visible' as const) : ('hidden' as const),
+}))
+
+/**
+ * Start coordinate of a box of `size` on one axis: after `forwardFrom` (it extends
+ * forward), else ending at `backFrom` (it extends back), else clamped into the
+ * viewport. `preferBack` tries the back side first.
+ */
+function placeAlong(forwardFrom: number, backFrom: number, size: number, viewport: number, preferBack = false): number {
+  const max = viewport - VIEWPORT_MARGIN - size
+  const forward = forwardFrom <= max ? forwardFrom : null
+  const back = backFrom - size >= VIEWPORT_MARGIN ? backFrom - size : null
+  const chosen = preferBack ? (back ?? forward) : (forward ?? back)
+  return chosen ?? Math.max(VIEWPORT_MARGIN, Math.min(preferBack ? backFrom - size : forwardFrom, max))
+}
 
 function closeSubmenu(): void {
   openSubmenuIndex.value = null
 }
 
-// Does this rect sit fully inside the viewport's horizontal safe area?
-function fitsHorizontally(rect: DOMRect): boolean {
-  return rect.left >= VIEWPORT_MARGIN && rect.right <= window.innerWidth - VIEWPORT_MARGIN
-}
-
-async function openSubmenu(index: number): Promise<void> {
+async function openSubmenu(index: number, row: EventTarget | null): Promise<void> {
   if (openSubmenuIndex.value === index) return
   openSubmenuIndex.value = index
-  submenuFlipped.value = false
-  submenuTopPx.value = SUBMENU_TOP_OFFSET
-  submenuShiftPx.value = null
+  submenuPlaced.value = false
   await nextTick()
-  if (!submenuElement.value) return
+  const panel = submenuElement.value
+  if (!panel || !menuRef.value || !(row instanceof HTMLElement)) return
 
-  // Horizontal: try the natural side, then the flipped side, and only if NEITHER
-  // fits keep whichever overflows less and clamp it into the viewport. Without the
-  // second measurement a flip that also overflows was kept blindly, pushing the
-  // panel off the opposite edge in a narrow window.
-  let rect = submenuElement.value.getBoundingClientRect()
-  if (!fitsHorizontally(rect)) {
-    const naturalRect = rect
-    submenuFlipped.value = true
-    await nextTick()
-    rect = submenuElement.value.getBoundingClientRect()
-    if (!fitsHorizontally(rect)) {
-      if (overflowOf(naturalRect) <= overflowOf(rect)) {
-        submenuFlipped.value = false
-        await nextTick()
-        rect = submenuElement.value.getBoundingClientRect()
-      }
-      submenuShiftPx.value = clampShiftFor(rect)
-      await nextTick()
-      rect = submenuElement.value.getBoundingClientRect()
-    }
-  }
+  const menuRect = menuRef.value.getBoundingClientRect()
+  const rowRect = row.getBoundingClientRect()
+  const { width, height } = panel.getBoundingClientRect()
+  // RTL: prefer the left of the menu, else its right; neither fits → clamped, overlapping the menu.
+  const left = placeAlong(menuRect.right, menuRect.left, width, window.innerWidth, true)
+  // Downward from the row; no room → upward, its bottom on the row's bottom; else clamped.
+  const top = placeAlong(rowRect.top + SUBMENU_TOP_OFFSET, rowRect.bottom - SUBMENU_TOP_OFFSET, height, window.innerHeight)
 
-  // Vertical: lift the panel so its bottom clears the viewport, then guard the top
-  // edge too — a submenu taller than the viewport would otherwise be lifted off it.
-  if (rect.bottom > window.innerHeight - VIEWPORT_MARGIN) {
-    submenuTopPx.value -= rect.bottom - (window.innerHeight - VIEWPORT_MARGIN)
-    await nextTick()
-    rect = submenuElement.value.getBoundingClientRect()
-  }
-  if (rect.top < VIEWPORT_MARGIN) submenuTopPx.value += VIEWPORT_MARGIN - rect.top
+  submenuLeftPx.value = left
+  submenuTopPx.value = top
+  submenuPlaced.value = true
 }
 
-// How far this rect spills past the viewport's horizontal safe area, in px.
-function overflowOf(rect: DOMRect): number {
-  return Math.max(0, VIEWPORT_MARGIN - rect.left) + Math.max(0, rect.right - (window.innerWidth - VIEWPORT_MARGIN))
-}
-
-// Horizontal translation that pulls `rect` back inside the viewport. The right-edge
-// correction is applied first and the left-edge one second, so when the panel is
-// wider than the viewport the left edge wins and its first column stays readable.
-function clampShiftFor(rect: DOMRect): number {
-  let shift = Math.min(0, window.innerWidth - VIEWPORT_MARGIN - rect.right)
-  shift += Math.max(0, VIEWPORT_MARGIN - (rect.left + shift))
-  return shift
-}
+useDropdownClose(menuRef, () => {
+  visible.value = false
+}, { ignore: [submenuElement] })
 
 async function show(event: MouseEvent) {
   event.preventDefault()
@@ -188,9 +163,12 @@ async function showAtPosition(clientX: number, clientY: number) {
   visible.value = true
   await nextTick()
   if (menuRef.value) {
+    // Full size whenever it fits: open down/right of the pointer, flip up/left when that
+    // side lacks room, and only when neither fits clamp into the viewport (the menu
+    // scrolls only when it is taller than the whole window).
     const rect = menuRef.value.getBoundingClientRect()
-    if (x.value + rect.width > window.innerWidth) x.value = window.innerWidth - rect.width - 4
-    if (y.value + rect.height > window.innerHeight) y.value = window.innerHeight - rect.height - 4
+    x.value = placeAlong(clientX, clientX, rect.width, window.innerWidth)
+    y.value = placeAlong(clientY, clientY, rect.height, window.innerHeight)
   }
 }
 
@@ -215,7 +193,7 @@ defineExpose({ show, showAtPosition, hide })
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop @mousedown.prevent>
+    <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop @mousedown.prevent @scroll="closeSubmenu">
       <template v-for="(item, index) in items" :key="index">
         <div v-if="item.type === 'separator'" class="context-menu-separator" />
         <component
@@ -245,34 +223,11 @@ defineExpose({ show, showAtPosition, hide })
           v-else-if="item.type === 'submenu'"
           class="context-menu-item context-menu-submenu-parent"
           :class="{ open: openSubmenuIndex === index }"
-          @mouseenter="openSubmenu(index)"
-          @click="openSubmenu(index)"
+          @mouseenter="openSubmenu(index, $event.currentTarget)"
+          @click="openSubmenu(index, $event.currentTarget)"
         >
           <span class="item-label">{{ (item as ContextMenuSubmenuItem).label }}</span>
           <span class="submenu-chevron"><IconChevronLeft16Regular class="dir-icon" /></span>
-          <div
-            v-if="openSubmenuIndex === index"
-            :ref="setSubmenuElement"
-            class="context-menu submenu-panel"
-            :class="{ flipped: submenuFlipped }"
-            :style="submenuStyle"
-          >
-            <template v-for="(child, childIndex) in (item as ContextMenuSubmenuItem).items" :key="childIndex">
-              <div v-if="child.type === 'separator'" class="context-menu-separator" />
-              <div
-                v-else-if="child.type === 'checkbox'"
-                class="context-menu-item context-menu-checkbox"
-                @click.stop="toggleCheckbox(child as ContextMenuCheckboxItem)"
-              >
-                <span class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
-                <span>{{ (child as ContextMenuCheckboxItem).label }}</span>
-              </div>
-              <div v-else class="context-menu-item" @click.stop="runItem(child as ContextMenuTextItem)">
-                <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
-                <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
-              </div>
-            </template>
-          </div>
         </div>
         <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)" @mouseenter="closeSubmenu">
           <span class="item-label">{{ (item as ContextMenuTextItem).label }}</span>
@@ -280,6 +235,34 @@ defineExpose({ show, showAtPosition, hide })
         </div>
       </template>
     </div>
+    <template v-if="visible">
+      <template v-for="(item, index) in items" :key="index">
+        <div
+          v-if="openSubmenuIndex === index"
+          :ref="setSubmenuElement"
+          class="context-menu submenu-panel"
+          :style="submenuStyle"
+          @click.stop
+          @mousedown.prevent
+        >
+          <template v-for="(child, childIndex) in (item as ContextMenuSubmenuItem).items" :key="childIndex">
+            <div v-if="child.type === 'separator'" class="context-menu-separator" />
+            <div
+              v-else-if="child.type === 'checkbox'"
+              class="context-menu-item context-menu-checkbox"
+              @click.stop="toggleCheckbox(child as ContextMenuCheckboxItem)"
+            >
+              <span class="checkbox-mark">{{ (child as ContextMenuCheckboxItem).checked ? '✓' : '' }}</span>
+              <span>{{ (child as ContextMenuCheckboxItem).label }}</span>
+            </div>
+            <div v-else class="context-menu-item" @click.stop="runItem(child as ContextMenuTextItem)">
+              <span class="item-label">{{ (child as ContextMenuTextItem).label }}</span>
+              <span v-if="(child as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (child as ContextMenuTextItem).shortcut }}</span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </template>
   </Teleport>
 </template>
 
@@ -312,9 +295,11 @@ defineExpose({ show, showAtPosition, hide })
   border-radius: 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  /* No padding-block, and no overflow:hidden — see the ROW METRICS note below for the
-     padding, and note that the submenu panel is positioned outside this box, so
-     clipping overflow would erase it. */
+  /* No padding-block — see the ROW METRICS note below. Scrolls when taller than the
+     viewport; the submenu is a sibling panel, so it is not clipped by this. */
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ── ROW METRICS ───────────────────────────────────────────────────────────────
@@ -402,16 +387,9 @@ defineExpose({ show, showAtPosition, hide })
   width: 12px;
   height: 12px;
 }
-/* Nested panel — reuses the .context-menu chrome but anchors to its parent row
-   instead of the viewport. Declared after .context-menu so position wins. */
+/* Submenu panel — the .context-menu chrome, placed by openSubmenu() beside its row. */
 .submenu-panel {
-  position: absolute;
-  inset-inline-start: 100%;
-  z-index: 1;
-}
-.submenu-panel.flipped {
-  inset-inline-start: auto;
-  inset-inline-end: 100%;
+  z-index: 10000;
 }
 .checkbox-mark {
   display: inline-block;
