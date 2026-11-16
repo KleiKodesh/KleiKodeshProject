@@ -179,6 +179,7 @@
     "previousLine": "Previous line",
     "nextLine": "Next line",
     "highlight": "Highlight the word being read",
+    "expandAbbreviations": "Read abbreviations in full (Dicta)",
     "vocalize": "Add nikkud while reading (Dicta) - better pronunciation of unpointed text",
     "voice": "Voice",
     "drag": "Drag to move",
