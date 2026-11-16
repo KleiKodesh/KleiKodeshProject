@@ -219,17 +219,17 @@ function confirmReplace() {
 }
 
 function restore(id: string) {
-  const taken = store.reset(id)
-  notice.value = taken.length > 0
-    ? { id, kind: 'info', text: t('settings.shortcutsEdit.restoreTaken', { combo: textOf(taken[0].combo), action: '"' + nameOf(taken[0].def.id) + '"' }) }
+  const first = store.reset(id)[0]
+  notice.value = first
+    ? { id, kind: 'info', text: t('settings.shortcutsEdit.restoreTaken', { combo: textOf(first.combo), action: '"' + nameOf(first.def.id) + '"' }) }
     : null
 }
 
 function restoreAll() {
   stopCapture()
-  const cleared = store.resetAll()
-  notice.value = cleared.length > 0
-    ? { id: cleared[0].id, kind: 'info', text: t('settings.shortcutsEdit.personalKeyCleared') }
+  const first = store.resetAll()[0]
+  notice.value = first
+    ? { id: first.id, kind: 'info', text: t('settings.shortcutsEdit.personalKeyCleared') }
     : null
 }
 

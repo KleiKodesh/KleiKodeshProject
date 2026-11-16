@@ -60,7 +60,7 @@ describe('registry', () => {
   })
 
   it('knows which default does not work inside Word', () => {
-    expect(UNREACHABLE_IN_WORD.has(SHORTCUTS_BY_ID.get('book.commentaryRight')!.defaults[0])).toBe(true)
+    expect(UNREACHABLE_IN_WORD.has(SHORTCUTS_BY_ID.get('book.commentaryRight')!.defaults[0]!)).toBe(true)
   })
 })
 

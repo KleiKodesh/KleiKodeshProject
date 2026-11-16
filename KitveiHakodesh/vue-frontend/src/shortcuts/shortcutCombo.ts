@@ -36,7 +36,7 @@ export interface ParsedCombo {
 export function parseCombo(combo: Combo): ParsedCombo {
   const parts = combo.split('+')
   // The code is always the last part; '+' never occurs inside a code ('Equal', 'NumpadAdd').
-  const code = parts[parts.length - 1]
+  const code = parts[parts.length - 1] ?? ''
   return { ctrl: parts.includes('Ctrl'), alt: parts.includes('Alt'), shift: parts.includes('Shift'), code }
 }
 

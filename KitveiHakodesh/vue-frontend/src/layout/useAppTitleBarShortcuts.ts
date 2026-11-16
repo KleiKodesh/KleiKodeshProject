@@ -126,9 +126,9 @@ export function useAppTitleBarShortcuts(options: {
    * Ctrl+F and friends must not fall through to the browser's own find bar elsewhere.
    */
   function runPaneShortcut(id: string, e: KeyboardEvent): boolean {
-    const quick = QUICK_NAV_IDS.indexOf(id)
-    if (quick >= 0) {
-      navigateInNewTab(QUICK_NAV_LABELS[quick])
+    const quickLabel = QUICK_NAV_LABELS[QUICK_NAV_IDS.indexOf(id)]
+    if (quickLabel !== undefined) {
+      navigateInNewTab(quickLabel)
       return true
     }
     switch (id) {
