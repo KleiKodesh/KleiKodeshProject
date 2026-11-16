@@ -12,6 +12,13 @@ const SEPARATOR = '\\'
 const FILE_ROUTES = new Set<string>(['/pdf-view', '/html-view', '/fast-doc-view'])
 
 export function addressBarPath(tab: Tab | undefined, root: CategoryNode, books: Map<number, BookRow>): string {
+  const location = locationPath(tab, root, books)
+  // The reader's current TOC section (book view, PDF, FastDocView publish it on the tab).
+  const toc = tab?.tocPath?.trim()
+  return location && toc ? `${location}${SEPARATOR}${toc}` : location
+}
+
+export function locationPath(tab: Tab | undefined, root: CategoryNode, books: Map<number, BookRow>): string {
   if (!tab) return ''
   // Navigating away leaves localFilePath on the tab, so only file routes may show it.
   if (FILE_ROUTES.has(tab.route)) return tab.localFilePath ?? ''
@@ -68,4 +75,36 @@ export function resolveCatalogPath(text: string, root: CategoryNode): CatalogTar
     return book ? { kind: 'book', book } : null
   }
   return { kind: 'category', node }
+}
+
+/**
+ * A copied address-bar address of a catalog book: category titles, the book title,
+ * then the current TOC section, all joined by '\'. Null when the text does not walk
+ * the catalog down to a book. `tocPath` is '' when the address stops at the book.
+ */
+export function parseBookAddress(text: string, root: CategoryNode): { book: BookRow; tocPath: string } | null {
+  if (!text.includes(SEPARATOR)) return null
+  const segments = text.split(SEPARATOR).map((s) => s.trim())
+  let node = root
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]!
+    const child = node.children.find((c) => c.title === segment)
+    if (child) { node = child; continue }
+    const book = node.books.find((b) => b.title === segment)
+    if (!book) return null
+    return { book, tocPath: segments.slice(i + 1).filter(Boolean).join(SEPARATOR) }
+  }
+  return null
+}
+
+/**
+ * A copied address of a local file: the disk path, optionally followed by '\' and
+ * the TOC section. Returns just the file path (cut after the first segment with an
+ * extension), or null when the text is not a disk path to a file.
+ */
+export function fileFromAddress(text: string): string | null {
+  if (!isDiskPath(text)) return null
+  const segments = text.split(SEPARATOR)
+  const fileIndex = segments.findIndex((s, i) => i > 0 && /\.[^.\s]{1,6}$/.test(s.trim()))
+  return fileIndex < 0 ? null : segments.slice(0, fileIndex + 1).join(SEPARATOR)
 }

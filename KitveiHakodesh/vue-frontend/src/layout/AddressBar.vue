@@ -45,7 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { addressBarPath, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
+import { addressBarPath, locationPath, fileFromAddress, parseBookAddress, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
 
@@ -65,6 +65,8 @@ const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 const { ROOT: catalogRoot, allBooksMap } = storeToRefs(useBooksDataStore())
 const appNavigation = useAppNavigation()
 const initialPath = addressBarPath(pane.activeTab.value, catalogRoot.value, allBooksMap.value)
+// The path without the TOC section: an edit that keeps it reopens just the book/file.
+const initialLocation = locationPath(pane.activeTab.value, catalogRoot.value, allBooksMap.value)
 const searchQuery = ref(initialPath)
 const searchTerm = ref('')
 watch(searchQuery, (v) => { searchTerm.value = v === initialPath ? '' : v })
@@ -337,14 +339,17 @@ function onKeydown(e: KeyboardEvent) {
  * so the caller falls back to full-text search.
  */
 function openTypedPath(): boolean {
-  const text = normalizePastedPath(searchQuery.value)
+  let text = normalizePastedPath(searchQuery.value)
   if (!text || text === initialPath) { close(); return true }
+  if (initialLocation && text.startsWith(initialLocation + '\\')) text = initialLocation
   const bookLink = parseBookLink(text)
   if (bookLink) {
     close()
     void hostSearchStore.openBookLink(bookLink)
     return true
   }
+  // A copied file address carries the TOC section after the file name: open the file.
+  text = fileFromAddress(text) ?? text
   if (isDiskPath(text)) {
     if (looksLikeFile(text)) {
       const fileName = text.split(/[\\/]/).pop()!
@@ -356,7 +361,13 @@ function openTypedPath(): boolean {
     return true
   }
   const target = resolveCatalogPath(text, catalogRoot.value)
-  if (!target) return false
+  if (!target) {
+    // A copied book address with its TOC section: open the book (the section is a result row).
+    const address = parseBookAddress(text, catalogRoot.value)
+    if (!address) return false
+    onSelectCatalogBook(address.book.id, address.book.title)
+    return true
+  }
   if (target.kind === 'book') {
     onSelectCatalogBook(target.book.id, target.book.title)
   } else {
