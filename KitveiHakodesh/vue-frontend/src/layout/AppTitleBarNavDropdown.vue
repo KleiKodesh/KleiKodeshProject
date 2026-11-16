@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, onMounted, nextTick, inject } from 'vue'
 
@@ -164,7 +165,7 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('navSidebar') }"
       data-nav-item
-      :title="$t('layout.showSidebar')"
+      :title="withShortcut($t('layout.showSidebar'), 'nav.sidebar')"
       @click="onShowNavSidebar"
     >
       <span class="nav-icon"><IconChevronDoubleLeft20Regular /></span>

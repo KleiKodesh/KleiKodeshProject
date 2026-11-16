@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import {
   IconZoomIn20Regular,
   IconChevronLeft20Regular,
@@ -115,14 +116,14 @@ function onToggleToc(event: MouseEvent) {
     <!-- The book view's previous / next section buttons: here the previous / next heading. -->
     <button
       :disabled="!hasHeadings"
-      :title="$t('bookView.toolbar.prevSection')"
+      :title="withShortcut($t('bookView.toolbar.prevSection'), 'doc.previousHeading')"
       @click="emit('navigateToPreviousSection')"
     >
       <IconChevronRight20Regular class="dir-icon" />
     </button>
     <button
       :disabled="!hasHeadings"
-      :title="$t('bookView.toolbar.nextSection')"
+      :title="withShortcut($t('bookView.toolbar.nextSection'), 'doc.nextHeading')"
       @click="emit('navigateToNextSection')"
     >
       <IconChevronLeft20Regular class="dir-icon" />
@@ -169,7 +170,7 @@ function onToggleToc(event: MouseEvent) {
       <IconTimeline20Filled v-if="notesSync" />
       <IconTimeline20Regular v-else />
     </button>
-    <button :class="{ active: searchVisible }" :title="$t('fastDocView.search')" @click="emit('toggleSearch')">
+    <button :class="{ active: searchVisible }" :title="withShortcut($t('fastDocView.search'), 'doc.search')" @click="emit('toggleSearch')">
       <IconSearch20Regular />
     </button>
     <!-- the book view's clean-text combo (Ctrl+D): the same global setting and options dropdown -->

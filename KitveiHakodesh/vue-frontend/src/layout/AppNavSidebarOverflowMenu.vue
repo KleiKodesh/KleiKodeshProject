@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shortcutLabel } from '@/shortcuts/shortcutLabel'
 import UnreachableBadge from './UnreachableBadge.vue'
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
@@ -86,7 +87,7 @@ function overflowRow(key: string): OverflowRow {
     return {
       key,
       label: enabled ? t('layout.closeSplitView') : t('layout.openSplitView'),
-      shortcut: 'Ctrl+|',
+      shortcut: shortcutLabel('view.splitView'),
       icon: enabled ? IconSplitVertical20Filled : IconSplitVertical20Regular,
     }
   }

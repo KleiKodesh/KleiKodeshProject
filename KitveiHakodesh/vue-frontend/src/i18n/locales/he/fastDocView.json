@@ -26,7 +26,7 @@
   "searchNext": "התואמה הבאה (Enter)",
   "searchPrevious": "התואמה הקודמת (Shift+Enter)",
   "searchClose": "סגירת החיפוש (Esc)",
-  "search": "חיפוש במסמך (Ctrl+F)",
+  "search": "חיפוש במסמך",
   "closeNotes": "סגירת חלון ההערות",
   "syncNotesOffTitle": "סנכרן הערות\nההערות יעקבו אחר הטקסט שבתצוגה",
   "syncNotesOnTitle": "סנכרן הערות\nלחץ לכיבוי הסנכרון האוטומטי",

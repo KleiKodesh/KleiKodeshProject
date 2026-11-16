@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import { opensInFastDocView } from '@/utils/fastDocViewFiles'
 /**
  * AddressBar — the editable search field hosted inside AppTitleBar (an
@@ -180,17 +181,16 @@ function onClearAllLocations() {
   pane.closeAllPages()
 }
 
-// Tooltip text for the dismiss buttons varies by environment so the user knows
-// which keyboard shortcut to use.
+// Tooltip text for the dismiss buttons names the shortcut that does the same, which differs
+// by environment (combinations from the shortcuts store - the user can change them):
 //
-//   Native strip host  — Ctrl+W closes a real tab, so the history-aware close is Alt+W / Alt+X
-//   VSTO + dev         — Ctrl+W / Ctrl+X do the history-aware close (and Alt+W/X also work)
-const removeLocationTitle = hasNativeChromeTabs
-  ? t('layout.removeFromHistory', { key: 'Alt+W' })
-  : t('layout.removeFromHistory', { key: 'Ctrl+W' })
-const clearAllLocationsTitle = hasNativeChromeTabs
-  ? t('layout.clearHistory', { key: 'Alt+X' })
-  : t('layout.clearHistory', { key: 'Ctrl+X' })
+//   Native strip host  — tabs.close closes a real tab, so the history-aware close is
+//                        pages.close / pages.closeAll (Alt+W / Alt+X)
+//   VSTO + dev         — tabs.close / tabs.closeAll do the history-aware close (Ctrl+W / Ctrl+X)
+const removeLocationTitle = computed(() =>
+  withShortcut(t('layout.removeFromHistory'), hasNativeChromeTabs ? 'pages.close' : 'tabs.close'))
+const clearAllLocationsTitle = computed(() =>
+  withShortcut(t('layout.clearHistory'), hasNativeChromeTabs ? 'pages.closeAll' : 'tabs.closeAll'))
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
 // Width rule: on a narrow ("android-width") shell the dropdown fills the whole

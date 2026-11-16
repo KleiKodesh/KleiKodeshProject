@@ -10,6 +10,8 @@ import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiCh
 import { HAMESHIV_LABEL } from '@/layout/appNavItems'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
+import { isPersonalId, useShortcutsStore } from '@/shortcuts/shortcutsStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -36,32 +38,38 @@ type Pane = ReturnType<typeof useAppShellPane>
  * open settings tab rather than opening another. That rule lives with the tab
  * store's `SINGLE_TAB_ROUTES`, not here.
  *
+ * Which key does what is NOT decided here any more: the combinations live in
+ * `src/shortcuts/shortcutRegistry.ts` (defaults) and the shortcuts store (the user's
+ * changes, from the settings grid). This file asks the store which shortcut id a keydown
+ * is and runs the action for that id. A new shortcut is a registry row plus a case here.
+ * Only Ctrl+Tab (driven by the native strip) and the browser-default guards (Ctrl+N,
+ * Ctrl+T without a strip, Ctrl+P) still match keys directly.
+ *
  * All matching is on `e.code`, never `e.key`: `e.key` returns the character the
  * key produces, which changes with the active keyboard language and would break
  * every shortcut the moment the user types Hebrew.
- *
- * The user-facing reference is `ShortcutsReferenceList.vue` — update it whenever
- * a binding here changes.
  */
 export function useAppTitleBarShortcuts(options: {
   paneId: 1 | 2
   pane: Pane
-  /** Ctrl+H toggles this. Shared per-pane ref from `useUiChromeVisibility`. */
+  /** view.appBar (Ctrl+H by default) toggles this. Shared per-pane ref from `useUiChromeVisibility`. */
   titleBarVisible: Ref<boolean>
-  /** Ctrl+\ is ignored unless split view actually fits on screen. */
+  /** view.splitView (Ctrl+\ by default) is ignored unless split view actually fits on screen. */
   isSplitViewAvailable: ComputedRef<boolean>
-  /** Ctrl+E. Owned by the component because the
+  /** nav.addressBar (Ctrl+E). Owned by the component because the
    *  address bar's visibility drives its template. */
   toggleAddressBar: () => void
-  /** Ctrl+M. Owned by the component for the same reason. */
+  /** nav.mainMenu (Ctrl+M). Owned by the component for the same reason. */
   toggleNavDropdown: () => void
-  /** F8. Owned by the component, which holds the picker's open state. */
+  /** nav.workspaces (F8). Owned by the component, which holds the picker's open state. */
   toggleWorkspaces: () => void
 }) {
   const { paneId, pane, titleBarVisible, isSplitViewAvailable } = options
   const bookViewStore = useBookViewStore()
   const settingsStore = useSettingsStore()
   const themeStore = useThemeStore()
+  const shortcuts = useShortcutsStore()
+  const booksData = useBooksDataStore()
   const { navigateInNewTab } = useAppNavigation()
 
   const activeTab = computed(() => pane.activeTab.value)
@@ -103,48 +111,151 @@ export function useAppTitleBarShortcuts(options: {
     })
   }
 
-  /** Returns true when the event was consumed. */
-  function handlePaneScoped(e: KeyboardEvent): boolean {
-    if (!e.ctrlKey) {
-      if (e.code === 'F1') {
+  /** Quick-nav ids, in the same order as QUICK_NAV_LABELS. */
+  const QUICK_NAV_IDS = [
+    'go.catalog', 'go.search', 'go.hebrewBooks', 'go.openFile', 'go.fileSearch',
+    'go.dictionary', 'go.calendar', 'go.measures', 'go.hameshiv',
+  ]
+
+  /**
+   * One pane-scoped shortcut. Returns true when this handler owns the id (and so the
+   * keydown is consumed), false for ids another handler acts on (the book view's own
+   * Ctrl+D, section keys, ...).
+   *
+   * Book-view and document ids are consumed even when that page is not the active one:
+   * Ctrl+F and friends must not fall through to the browser's own find bar elsewhere.
+   */
+  function runPaneShortcut(id: string, e: KeyboardEvent): boolean {
+    const quickLabel = QUICK_NAV_LABELS[QUICK_NAV_IDS.indexOf(id)]
+    if (quickLabel !== undefined) {
+      navigateInNewTab(quickLabel)
+      return true
+    }
+    switch (id) {
+      case 'go.settings':
         navigateInNewTab('הגדרות')
         return true
-      }
-      // F8 - open the workspace picker. A bare function key rather than a Ctrl pair
-      // because every Ctrl+letter left is one the BROWSER takes before the page ever
-      // sees it: Ctrl+Shift+W closes the window outright, and preventDefault cannot
-      // call that back. F8 has no Chromium binding at all, and it joins the F-key
-      // family this app already has - F1 settings, F9 reading mode, F11 fullscreen.
-      if (e.code === 'F8') {
+      case 'go.userSpace':
+        navigateInNewTab('אזור אישי')
+        return true
+      // F8 by default: a bare function key rather than a Ctrl pair because every Ctrl+letter
+      // left is one the BROWSER takes before the page ever sees it (Ctrl+Shift+W closes the
+      // window outright). F8 has no Chromium binding at all.
+      case 'nav.workspaces':
         options.toggleWorkspaces()
         return true
-      }
-      // Alt+Arrow — the tab's own Back/Forward, like a browser. RTL: back is the
-      // RIGHT arrow, matching the title-bar button icons. Ctrl+Arrow stays with
-      // the book view's section navigation, which is why the modifier is Alt.
-      // stopPropagation too: plain-arrow handlers (tile grids, list navigation)
-      // don't check modifiers, and this must not also move their focus.
-      if (e.altKey && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
+      // The tab's own Back/Forward, like a browser. stopPropagation too: plain-arrow handlers
+      // (tile grids, list navigation) don't check modifiers, and Alt+Arrow must not also move
+      // their focus.
+      case 'nav.back':
         e.stopPropagation()
-        if (e.code === 'ArrowRight') pane.goBack()
-        else pane.goForward()
+        pane.goBack()
         return true
-      }
-      // Alt+W / Alt+X — history-aware close for the native-strip host, where
-      // Ctrl+W/X own the real tab close. Same semantics as Ctrl+W/X in VSTO/dev:
-      // remove the current page (or all pages) from both history stacks.
-      if (e.altKey && e.code === 'KeyW') {
+      case 'nav.forward':
+        e.stopPropagation()
+        pane.goForward()
+        return true
+      // History-aware close for the native-strip host, where tabs.close owns the real tab
+      // close: remove the current page (or all pages) from both history stacks.
+      case 'pages.close':
         pane.closeCurrentPage()
         return true
-      }
-      if (e.altKey && e.code === 'KeyX') {
+      case 'pages.closeAll':
         pane.closeAllPages()
         return true
+      // Closing is meaningless where there is only ever one tab - the store would just
+      // replace it with a fresh home tab, which reads as "my document vanished". In VSTO and
+      // dev (no native strip) this removes the current page from both the per-tab history
+      // stack and recentLocations, then goes back; closeAll does it for every page.
+      case 'tabs.close':
+        if (hasNativeChromeTabs) pane.closeTab(pane.activeTabId.value)
+        else pane.closeCurrentPage()
+        return true
+      case 'tabs.closeAll':
+        if (hasNativeChromeTabs) pane.closeAllTabs()
+        else pane.closeAllPages()
+        return true
+      // Only the demo-app host has a strip, so these exist only there (registry `available`).
+      case 'tabs.new':
+        pane.openNewTab()
+        return true
+      case 'tabs.list':
+        toggleChromeTabList()
+        return true
+      case 'view.toolbar':
+        if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
+        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToolbar')
+        else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
+        return true
+      case 'book.commentaryBottom':
+        if (isBookViewActive.value) bookViewStore.toggleCommentaryPanel(paneId, 'bottom')
+        return true
+      case 'book.commentaryRight':
+        if (isBookViewActive.value) bookViewStore.toggleCommentaryPanel(paneId, 'side')
+        return true
+      case 'book.commentaryLeft':
+        if (isBookViewActive.value) bookViewStore.toggleCommentaryPanel(paneId, 'side-left')
+        return true
+      // The notes pane sits where the book view's bottom commentary does.
+      case 'doc.notes':
+        if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleNotes')
+        return true
+      case 'book.toc':
+        if (isBookViewActive.value) bookViewStore.toggleTocPanel(paneId)
+        return true
+      case 'doc.toc':
+        if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
+        return true
+      // Show all the current book's word-link marker signs, or hide them (all visible ->
+      // hide all; otherwise show all). No-op on books without markers and on schema-v1 DBs.
+      case 'book.markers':
+        if (isBookViewActive.value && activeTab.value?.bookId != null)
+          void settingsStore.toggleWordLinkMarkersForBook(activeTab.value.bookId)
+        return true
+      case 'book.search':
+        if (isBookViewActive.value) bookViewStore.openSearch(paneId)
+        return true
+      case 'doc.search':
+        if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'openSearch')
+        return true
+      case 'nav.addressBar':
+        options.toggleAddressBar()
+        return true
+      case 'nav.home':
+        pane.goHome()
+        return true
+      case 'view.appBar':
+        titleBarVisible.value = !titleBarVisible.value
+        return true
+      case 'view.theme':
+        themeStore.toggleDarkMode()
+        return true
+      // The nav menu as a dropdown, and the same menu docked as this pane's rail - one family,
+      // two presentations. Pane-scoped because each pane owns its own rail.
+      case 'nav.mainMenu':
+        options.toggleNavDropdown()
+        return true
+      case 'nav.sidebar':
+        settingsStore.setNavSidebarVisible(paneId, !settingsStore.getNavSidebarVisible(paneId))
+        return true
+      default: {
+        // The user's own shortcuts. "Open this book" goes through openBookTarget, the path a
+        // book link takes: in place in the single-tab hosts (Word's pane), a new tab where
+        // there is a strip.
+        const own = isPersonalId(id) ? shortcuts.personalById(id) : undefined
+        if (own?.kind === 'openBook') {
+          const title = booksData.allBooksMap.get(own.bookId)?.title ?? own.title
+          pane.openBookTarget({ route: '/book-view', bookId: own.bookId, title })
+          return true
+        }
+        return false
       }
-      return false
     }
+  }
 
-    // Ctrl+Tab / Ctrl+Shift+Tab.
+  /** Returns true when the event was consumed. */
+  function handlePaneScoped(e: KeyboardEvent): boolean {
+    // Ctrl+Tab / Ctrl+Shift+Tab - fixed (registry rows tabs.cycle / nav.historyBack).
     //
     // With a native strip, this opens the strip's tab-list dropdown as an Alt+Tab-style
     // switcher: it stays up while Ctrl is held, each further Tab steps the highlight, and
@@ -157,7 +268,7 @@ export function useAppTitleBarShortcuts(options: {
     //
     // Everywhere else there is exactly one tab by construction, so the same keys walk the
     // tab's own history instead — the same thing the title bar's back/forward arrows do.
-    if (e.code === 'Tab') {
+    if (e.ctrlKey && !e.altKey && e.code === 'Tab') {
       if (e.repeat) return true
       if (hasNativeChromeTabs) toggleChromeTabList(e.shiftKey ? -1 : 1)
       else if (e.shiftKey) pane.goForward()
@@ -165,153 +276,61 @@ export function useAppTitleBarShortcuts(options: {
       return true
     }
 
-    // Ctrl+1..Ctrl+9 — quick-nav in a new tab.
-    if (e.code.startsWith('Digit')) {
-      const index = Number(e.code.slice(5)) - 1
-      const label = QUICK_NAV_LABELS[index]
-      if (label === undefined) return false
-      navigateInNewTab(label)
-      return true
+    // The user's (or default) shortcuts. A combination can be bound to two ids at once only
+    // when they live in pages never active together (book.toc and doc.toc), so running every
+    // id this handler owns is safe.
+    const ids = shortcuts.idsFor(e)
+    if (ids.length > 0) {
+      // Let a focused search input keep its own Ctrl+F (or whatever search is bound to).
+      if ((ids.includes('book.search') || ids.includes('doc.search')) &&
+          document.activeElement?.closest('[data-ctrlf-enabled]')) return false
+      let consumed = false
+      for (const id of ids) if (runPaneShortcut(id, e)) consumed = true
+      if (consumed) return true
     }
 
-    switch (e.code) {
-      // Closing is meaningless where there is only ever one tab — the store would just
-      // replace it with a fresh home tab, which reads as "my document vanished".
-      // In VSTO and dev (no native strip), Ctrl+W instead removes the current page
-      // from both the per-tab history stack and recentLocations, then goes back.
-      // Ctrl+X does the same for all pages at once (clears everything, goes home).
-      case 'KeyW':
-        if (hasNativeChromeTabs) pane.closeTab(pane.activeTabId.value)
-        else pane.closeCurrentPage()
-        return true
-      case 'KeyX':
-        if (hasNativeChromeTabs) pane.closeAllTabs()
-        else pane.closeAllPages()
-        return true
-      case 'KeyB':
-        if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToolbar')
-        else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
-        return true
-      case 'KeyJ':
-        // Ctrl+J toggles the bottom commentary panel, Ctrl+Shift+J the right-side
-        // one, Ctrl+Alt+J the left-side one.
-        if (isBookViewActive.value) {
-          const slot = e.altKey ? 'side-left' : e.shiftKey ? 'side' : 'bottom'
-          bookViewStore.toggleCommentaryPanel(paneId, slot)
-        } else if (isFastDocViewActive.value && !e.altKey && !e.shiftKey) {
-          // The notes pane sits where the book view's bottom commentary does: Ctrl+J.
-          sendFastDocViewCommand(paneId, 'toggleNotes')
-        }
-        return true
-      case 'KeyK':
-        if (isBookViewActive.value) bookViewStore.toggleTocPanel(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
-        return true
-      case 'KeyU':
-        // Ctrl+U — UserSpace in a new tab, like the Ctrl+1..9 destinations (also keeps
-        // the browser's view-source away).
-        // Ctrl+Shift+U — toggle the current book's word-link marker signs (all visible →
-        // hide all; otherwise show all). No-op on books without markers and on
-        // schema-v1 DBs.
-        if (!e.shiftKey) navigateInNewTab('אזור אישי')
-        else if (isBookViewActive.value && activeTab.value?.bookId != null)
-          void settingsStore.toggleWordLinkMarkersForBook(activeTab.value.bookId)
-        return true
-      case 'KeyF':
-        // Let a focused search input keep its own Ctrl+F.
-        if (document.activeElement?.closest('[data-ctrlf-enabled]')) return false
-        if (isBookViewActive.value) bookViewStore.openSearch(paneId)
-        else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'openSearch')
-        return true
-      case 'KeyN':
-        // Swallow the browser's new-window; new tab is Ctrl+T.
-        return true
-      case 'KeyE':
-        options.toggleAddressBar()
-        return true
-      // Only the demo-app host has somewhere to put a new tab. The VSTO task pane
-      // shows one tab with no strip, and the dev browser has no strip either — in
-      // both, Ctrl+T would open a tab the user can never navigate back to.
-      // Ctrl+Shift+T is the tab list, and the native strip is the only thing that has one.
-      case 'KeyT':
-        if (!hasNativeChromeTabs) return true
-        if (e.shiftKey) toggleChromeTabList()
-        else pane.openNewTab()
-        return true
-      case 'KeyG':
-        pane.goHome()
-        return true
-      case 'KeyH':
-        // Ctrl+Shift+H is the app-wide hidden-scrollbars toggle — let it fall
-        // through to handleAppWide instead of also flipping this pane's title bar.
-        if (e.shiftKey) return false
-        titleBarVisible.value = !titleBarVisible.value
-        return true
-      case 'KeyL':
-        themeStore.toggleDarkMode()
-        return true
-      case 'KeyM':
-        // Ctrl+M opens the nav menu as a dropdown, Ctrl+Shift+M docks the same menu
-        // as this pane's rail — one family, since they are two presentations of one
-        // menu. Pane-scoped because each pane owns its own rail, like every other
-        // per-pane chrome toggle.
-        if (e.shiftKey) {
-          settingsStore.setNavSidebarVisible(paneId, !settingsStore.getNavSidebarVisible(paneId))
-          return true
-        }
-        options.toggleNavDropdown()
-        return true
-      default:
-        return false
-    }
+    // Browser defaults that would hurt, swallowed whenever no shortcut claimed the key:
+    // Ctrl+N opens a new browser window; Ctrl+T / Ctrl+Shift+T where there is no tab strip
+    // would open a tab the user can never navigate back to.
+    if (e.ctrlKey && !e.altKey && e.code === 'KeyN') return true
+    if (e.ctrlKey && !e.altKey && e.code === 'KeyT' && !hasNativeChromeTabs) return true
+    return false
   }
 
   /** Returns true when the event was consumed. Pane 1 only. */
   function handleAppWide(e: KeyboardEvent): boolean {
-    if (e.code === 'F11') {
-      toggleFullscreen()
-      return true
-    }
-    // Ctrl+Shift+H — hide scrollbars completely except while scrolling
-    // (persisted setting). App-wide because the mode sits on the one shared
-    // root element. Sits in the Ctrl+H "hide chrome" family; the pane-scoped
-    // KeyH case explicitly lets the Shift variant through.
-    if (e.ctrlKey && e.shiftKey && e.code === 'KeyH') {
-      toggleScrollbarsHidden()
-      return true
-    }
-    // F9 — reading mode: hide/show all chrome at once (title bars, book
-    // toolbars, scrollbars). Check-all semantics live in `toggleReadingMode`.
-    // F9 is Firefox's Reader View key — the closest convention for this — and
-    // has no default in Chromium/WebView2, so there is nothing to suppress.
-    if (e.code === 'F9') {
-      toggleReadingMode()
-      return true
-    }
-    // F4 - keep the screen on: off <-> the last mode chosen in settings. There is no
-    // common key for this in other apps (keep-awake tools all leave it to the user), so
-    // it joins this app's F-key family; F4 has no Chromium/WebView2 binding.
-    if (e.code === 'F4' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      // Safety: always say which way it went, so it never stays on unnoticed.
-      const on = settingsStore.toggleKeepScreenOn()
-      showToast(t(on ? 'settings.keepScreenOn.toastOn' : 'settings.keepScreenOn.toastOff'))
-      return true
-    }
-    if (!e.ctrlKey) return false
-    if (e.code === 'Backslash') {
-      if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
-      return true
-    }
-    if (e.shiftKey && e.code === 'KeyF') {
-      toggleFullscreen()
-      return true
+    for (const id of shortcuts.idsFor(e)) {
+      switch (id) {
+        case 'view.fullscreen':
+          toggleFullscreen()
+          return true
+        // Hide scrollbars completely except while scrolling (persisted setting). App-wide
+        // because the mode sits on the one shared root element.
+        case 'view.scrollbars':
+          toggleScrollbarsHidden()
+          return true
+        // Reading mode: hide/show all chrome at once (title bars, book toolbars, scrollbars).
+        // Check-all semantics live in `toggleReadingMode`.
+        case 'view.readingMode':
+          toggleReadingMode()
+          return true
+        // Keep the screen on: off <-> the last mode chosen in settings.
+        case 'view.keepScreenOn': {
+          // Safety: always say which way it went, so it never stays on unnoticed.
+          const on = settingsStore.toggleKeepScreenOn()
+          showToast(t(on ? 'settings.keepScreenOn.toastOn' : 'settings.keepScreenOn.toastOff'))
+          return true
+        }
+        case 'view.splitView':
+          if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
+          return true
+      }
     }
     // Swallow the browser print dialog. This is preventDefault-only (no
     // stopPropagation), and `usePdfPrintShortcut` relies on that: on the PDF
     // page it still sees this keydown and forwards the print into the PDF.js
     // iframe.
-    if (e.code === 'KeyP') return true
+    if (e.ctrlKey && !e.altKey && e.code === 'KeyP') return true
     return false
   }
 

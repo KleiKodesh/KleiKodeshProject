@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import { computed } from 'vue'
 import {
   IconBrightnessHigh20Regular,
@@ -13,7 +14,7 @@ const isDark = computed(() => store.themePreset.includes('-dark'))
 <template>
   <button
     class="bar-btn"
-    :title="isDark ? $t('theme.toLight') : $t('theme.toDark')"
+    :title="withShortcut(isDark ? $t('theme.toLight') : $t('theme.toDark'), 'view.theme')"
     @click.stop="store.toggleDarkMode()"
   >
     <IconWeatherMoon20Regular v-if="isDark" />

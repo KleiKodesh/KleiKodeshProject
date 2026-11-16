@@ -24,7 +24,9 @@ The section components are independent — each imports the stores it needs dire
 
 **SettingsPageResetSection.vue** — the four reset actions (settings, search index, document locator index, full app reset) with their `ConfirmDialog`. Completely self-contained — no props.
 
-**SettingsPageKeyboardShortcutsSection.vue** — keyboard shortcuts reference grid. No script, no reactivity.
+**SettingsPageKeyboardShortcutsSection.vue** — the keyboard shortcuts section: `ShortcutsReferenceList` in `editable` mode.
+
+**ShortcutsReferenceList.vue** — the shortcuts list, drawn from `src/shortcuts/shortcutRegistry.ts` with the user's own combinations. Read-only in the setup wizard; in settings (`editable`) each changeable row has "change" (press the new combination — `shortcuts/shortcutCapture.ts` records it before any shortcut fires) and, once changed, "restore", plus "restore all" at the bottom. Refuses a reserved combination or one without Ctrl/Alt (F1–F12 excepted) with the reason, refuses one held by a fixed row, asks before moving one from another shortcut, and warns inside Word on a combination Word never delivers. Above the app's groups sits **Personal shortcuts**: "add a shortcut to a book" searches the catalog by title (`searchBookTitleIds`), and picking a book creates the shortcut and goes straight to recording its keys; each personal row can be changed or removed. See `src/shortcuts/README.md`.
 
 **SettingsExcludedFoldersDialog.vue** — dev-mode excluded-folders manager, mirroring the hosted app's WinForms `ExcludedFoldersForm` (list, add via the native folder dialog, remove selected, confirm to persist) in the app's own theme. Nothing is written until אישור. Persists via `setExcludedFolders` in `bridge.ts` to `excluded_folders.json` inside the file-search index directory — the same file and format the hosted DocumentLocator service uses. Hosted mode opens the native dialog instead and never mounts this component.
 

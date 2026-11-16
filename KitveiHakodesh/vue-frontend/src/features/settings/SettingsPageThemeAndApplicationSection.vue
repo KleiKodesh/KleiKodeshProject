@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shortcutLabel, withShortcut } from '@/shortcuts/shortcutLabel'
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -65,7 +66,7 @@ function toggleTitleBarButton(buttonId: string) {
 
     <ThemeBackgroundTintSlider id="nav-background-tint" :data-nav-label="$t('settings.theme.tintNav')" />
 
-    <SettingRow id="nav-dark-mode" :data-nav-label="$t('settings.theme.darkMode')" :label="$t('settings.theme.darkMode')" :hint="$t('settings.theme.darkModeHint')">
+    <SettingRow id="nav-dark-mode" :data-nav-label="$t('settings.theme.darkMode')" :label="$t('settings.theme.darkMode')" :hint="withShortcut($t('settings.theme.darkModeHint'), 'view.theme')">
       <ToggleGroup
         :model-value="isDarkMode"
         :options="[
@@ -87,7 +88,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-scrollbars-hidden" :data-nav-label="$t('settings.theme.hideScrollbars')" :label="$t('settings.theme.hideScrollbars')" :hint="$t('settings.theme.hideScrollbarsHint')">
+    <SettingRow id="nav-scrollbars-hidden" :data-nav-label="$t('settings.theme.hideScrollbars')" :label="$t('settings.theme.hideScrollbars')" :hint="withShortcut($t('settings.theme.hideScrollbarsHint'), 'view.scrollbars')">
       <ToggleGroup
         v-model="scrollbarsHidden"
         :options="[
@@ -149,7 +150,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-keep-screen-on" :data-nav-label="$t('settings.keepScreenOn.label')" :label="$t('settings.keepScreenOn.label')" :hint="$t('settings.keepScreenOn.hint')" wrap>
+    <SettingRow id="nav-keep-screen-on" :data-nav-label="$t('settings.keepScreenOn.label')" :label="$t('settings.keepScreenOn.label')" :hint="shortcutLabel('view.keepScreenOn') ? $t('settings.keepScreenOn.hint', { key: shortcutLabel('view.keepScreenOn') }) : $t('settings.keepScreenOn.hintNoKey')" wrap>
       <ToggleGroup
         v-model="keepScreenOnMode"
         :options="[

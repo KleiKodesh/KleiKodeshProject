@@ -1,3 +1,4 @@
+import { shortcutLabel } from '@/shortcuts/shortcutLabel'
 import { t } from '@/i18n'
 import { watch } from 'vue'
 import type { Ref } from 'vue'
@@ -677,7 +678,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: t('bookView.copy.intoWord'), action: onPasteIntoWord, shortcut: 'Ctrl+V' },
       { label: t('bookView.copy.toSearch'), action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: t('bookView.copy.link'), action: options.onCopyLineLink ?? (() => {}) },
-      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: 'Ctrl+Shift+D' },
+      { label: t('bookView.bookmarks.add'), action: options.onCreateBookmark ?? (() => {}), shortcut: shortcutLabel('book.bookmark') },
       addNoteRow,
       { label: t('bookView.report.title'), action: options.onReportError ?? (() => {}) },
       { type: 'separator' },

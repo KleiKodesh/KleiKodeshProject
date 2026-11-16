@@ -1,22 +1,26 @@
 /**
  * Keyboard shortcuts for the book view.
  *
- * Handles two categories:
+ * Changeable (combinations from the shortcuts store, defaults in shortcutRegistry.ts):
+ * - book.nextSection / book.previousSection (Ctrl+Left / Ctrl+Right; RTL - Left = next).
+ * - book.cleanText (Ctrl+D): toggle clean text (the toolbar's eraser button).
+ * - book.bookmark (Ctrl+Shift+D): create a bookmark at the top line (the toolbar's
+ *   bookmarks dropdown).
+ *
+ * Fixed (matched on the keys here):
  * - Ctrl+±/0: zoom. When focus is inside a scroller, the scroller's own
  *   useZoomHandler takes over (but we still preventDefault to block the browser).
  *   When focus is elsewhere (toolbar, etc.) we zoom both panels together.
- * - Ctrl+Left / Ctrl+Right: section navigation (RTL — Left = next, Right = previous).
  * - Ctrl+Down / Ctrl+Up: with caret browsing on, left to Chromium (paragraph jump).
  *   Otherwise: commentary open → select the next / previous line; no commentary →
  *   scroll one line. Not while typing in a field.
  * - Enter: with a commentary open, select the line the caret is in.
- * - Ctrl+D: toggle clean text (the toolbar's eraser button).
- * - Ctrl+Shift+D: create a bookmark at the top line (the toolbar's bookmarks dropdown).
  */
 import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useShortcutsStore } from '@/shortcuts/shortcutsStore'
 
 // Only `$el` is used here (see below) — the scroller API is not part of this
 // composable's contract.
@@ -44,6 +48,7 @@ export function useBookViewKeyboardShortcuts(
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
   const paneId = inject<1 | 2>('paneId', 1)
+  const shortcuts = useShortcutsStore()
 
   useEventListener(window, 'keydown', (event: KeyboardEvent) => {
     // Only respond when split view is off, or this pane is the focused one.
@@ -61,13 +66,30 @@ export function useBookViewKeyboardShortcuts(
       return
     }
 
+    for (const id of shortcuts.idsFor(event)) {
+      if (id === 'book.cleanText') {
+        event.preventDefault()
+        toggleCleanText()
+        return
+      }
+      if (id === 'book.bookmark') {
+        event.preventDefault()
+        createBookmark()
+        return
+      }
+      if (id === 'book.nextSection' || id === 'book.previousSection') {
+        if (!hasToc()) return
+        event.preventDefault()
+        navigateToAdjacentTocSection(id === 'book.nextSection' ? 'next' : 'previous')
+        return
+      }
+    }
+
     if (!ctrl) return
 
     const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
     const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
     const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
-    const isNextSection = event.code === 'ArrowLeft'
-    const isPreviousSection = event.code === 'ArrowRight'
 
     if ((event.code === 'ArrowDown' || event.code === 'ArrowUp') && !event.shiftKey && !event.altKey) {
       // Typing fields keep their own Ctrl+Up/Down.
@@ -88,19 +110,7 @@ export function useBookViewKeyboardShortcuts(
       return
     }
 
-    if (event.code === 'KeyD' && !event.shiftKey && !event.altKey) {
-      event.preventDefault()
-      toggleCleanText()
-      return
-    }
-
-    if (event.code === 'KeyD' && event.shiftKey && !event.altKey) {
-      event.preventDefault()
-      createBookmark()
-      return
-    }
-
-    if (!isZoomIn && !isZoomOut && !isReset && !isNextSection && !isPreviousSection) return
+    if (!isZoomIn && !isZoomOut && !isReset) return
 
     const focused = document.activeElement
     const linesRoot = linesContentRef()?.$el
@@ -112,13 +122,6 @@ export function useBookViewKeyboardShortcuts(
       focused != null &&
       ((linesRoot != null && linesRoot.contains(focused)) ||
         (focused instanceof Element && focused.closest('[data-commentary-slot]') != null))
-
-    if (isNextSection || isPreviousSection) {
-      if (!hasToc()) return
-      event.preventDefault()
-      navigateToAdjacentTocSection(isNextSection ? 'next' : 'previous')
-      return
-    }
 
     // Prevent the browser from applying its own page zoom regardless of focus.
     event.preventDefault()

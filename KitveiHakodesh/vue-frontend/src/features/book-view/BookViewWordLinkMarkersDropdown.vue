@@ -11,6 +11,7 @@
  * that needs the list, so it is fetched once per book in the background after mount
  * — one indexed query, off the render path, the same one an open would have run.
  */
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import { ref, computed, watch, onMounted, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconLink20Regular, IconLinkDismiss20Regular } from '@iconify-prerendered/vue-fluent'
@@ -196,12 +197,12 @@ function toggleAll() {
       ref="toggleButtonRef"
       :class="{ active: isOpen || anyHiddenGlobally, 'overflow-row': inOverflow }"
       :role="inOverflow ? 'menuitem' : undefined"
-      :title="$t('bookView.markers.title')"
+      :title="withShortcut($t('bookView.markers.title'), 'book.markers')"
       @click="toggleOpen"
     >
       <IconLinkDismiss20Regular v-if="anyHiddenGlobally" />
       <IconLink20Regular v-else />
-      <span v-if="inOverflow">{{ $t('bookView.markers.title') }}</span>
+      <span v-if="inOverflow">{{ withShortcut($t('bookView.markers.title'), 'book.markers') }}</span>
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="inOverflow ? 'overflow-submenu' : `dropdown-${toolbarPosition}`" :style="submenuStyle">
