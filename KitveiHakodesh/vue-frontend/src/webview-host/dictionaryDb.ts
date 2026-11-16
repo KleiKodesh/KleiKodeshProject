@@ -17,6 +17,8 @@ export interface SenseRow {
   text:      string
   source:    string | null
   source_id: number | null
+  /** Dicta's rank of the meaning (1 = likeliest); absent / null when unranked. */
+  rank?:     number | null
 }
 
 export interface DictLink {

@@ -44,9 +44,11 @@ interface SenseGroup {
 }
 
 const senseGroups = computed((): SenseGroup[] => {
-  // Sort dictionary senses by source priority
+  // Dicta's rank first (the likeliest meaning on top), then source priority
+  const rankOf = (s: { rank?: number | null }) => s.rank ?? Number.MAX_SAFE_INTEGER
   const sorted = [...props.data.senses].sort(
-    (a, b) => (SOURCE_ORDER[a.source_id ?? 99] ?? 99) - (SOURCE_ORDER[b.source_id ?? 99] ?? 99)
+    (a, b) => rankOf(a) - rankOf(b) ||
+      (SOURCE_ORDER[a.source_id ?? 99] ?? 99) - (SOURCE_ORDER[b.source_id ?? 99] ?? 99)
   )
 
   // Group everything by the word form (nikud if available, else plain headword)

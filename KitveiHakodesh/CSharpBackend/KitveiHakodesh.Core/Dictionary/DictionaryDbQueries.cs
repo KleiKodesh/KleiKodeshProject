@@ -44,7 +44,7 @@ namespace KitveiHakodesh.Core.Dictionary
         /// <summary>Sense projection shared by the exact / prefix / contains / abbreviation
         /// queries — same column order as <see cref="ReadSenses"/> expects.</summary>
         private const string SenseSelect =
-            "SELECT w.headword, s.nikud, s.text, sk.name AS source, s.source_id " +
+            "SELECT w.headword, s.nikud, s.text, sk.name AS source, s.source_id, s.rank " +
             "FROM word w JOIN sense s ON s.word_id = w.id " +
             "LEFT JOIN source_kind sk ON sk.id = s.source_id";
 
@@ -61,17 +61,20 @@ namespace KitveiHakodesh.Core.Dictionary
         /// guess. Same column shape as <see cref="SenseSelect"/>.
         /// </summary>
         private const string RedirectSelect =
-            "SELECT wbase.headword, s.nikud, s.text, sk.name AS source, s.source_id " +
+            "SELECT wbase.headword, s.nikud, s.text, sk.name AS source, s.source_id, s.rank " +
             "FROM word walias " +
             "JOIN link l ON l.word_id = walias.id " +
             "JOIN link_kind lk ON lk.id = l.kind_id AND lk.name = @kind " +
             "JOIN word wbase ON wbase.id = l.target_id " +
             "JOIN sense s ON s.word_id = wbase.id " +
             "LEFT JOIN source_kind sk ON sk.id = s.source_id " +
-            "WHERE walias.headword = @term LIMIT 100";
+            "WHERE walias.headword = @term " + RankOrder + " LIMIT 100";
+
+        /// <summary>Dicta's rank first (an abbreviation's likeliest meaning on top), unranked senses after in stored order.</summary>
+        private const string RankOrder = "ORDER BY s.rank IS NULL, s.rank, s.id";
 
         private const string ExactSql =
-            SenseSelect + " WHERE w.headword = @term LIMIT 100";
+            SenseSelect + " WHERE w.headword = @term " + RankOrder + " LIMIT 100";
 
         private const string PrefixSql =
             SenseSelect + " WHERE w.headword LIKE @prefix AND w.headword != @term LIMIT 100";
@@ -405,6 +408,7 @@ namespace KitveiHakodesh.Core.Dictionary
                     Text = reader.IsDBNull(2) ? "" : reader.GetString(2),
                     Source = reader.IsDBNull(3) ? null : reader.GetString(3),
                     SourceId = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4),
+                    Rank = reader.IsDBNull(5) ? (int?)null : reader.GetInt32(5),
                 });
             }
             return senses;

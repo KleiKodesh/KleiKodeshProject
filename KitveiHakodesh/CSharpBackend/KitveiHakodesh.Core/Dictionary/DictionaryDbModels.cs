@@ -16,6 +16,8 @@ namespace KitveiHakodesh.Core.Dictionary
         public string Text { get; set; } = "";
         public string? Source { get; set; }
         public int? SourceId { get; set; }
+        /// <summary>Dicta's rank of this meaning for the headword (1 = likeliest); null when unranked.</summary>
+        public int? Rank { get; set; }
     }
 
     /// <summary>A related word and the relation that connects it.</summary>

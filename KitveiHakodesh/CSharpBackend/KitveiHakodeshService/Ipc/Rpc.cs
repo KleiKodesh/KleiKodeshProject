@@ -581,6 +581,8 @@ public sealed class SenseRow
     public string? Source { get; set; }
     /// <summary>Reaches the app as <c>source_id</c>: serviceClient's decodeKey renames it.</summary>
     public int? SourceId { get; set; }
+    /// <summary>Dicta's rank of the meaning (1 = likeliest); null when unranked.</summary>
+    public int? Rank { get; set; }
 }
 
 /// <summary>A related-word link (kind + target headword).</summary>
