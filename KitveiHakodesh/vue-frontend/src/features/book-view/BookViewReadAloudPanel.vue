@@ -60,7 +60,10 @@ function onPlay() {
  */
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+  if (!el) return false
+  if (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true
+  // Space belongs to the panel's own controls and to open menus and links.
+  return !!panelEl.value?.contains(el) || !!el.closest('a, summary, [role="option"], [role="menuitem"], [role="listbox"], [role="menu"]')
 }
 function onSpaceDown(e: KeyboardEvent) {
   if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target)) return
