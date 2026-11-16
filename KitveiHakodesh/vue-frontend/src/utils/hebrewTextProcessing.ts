@@ -8,7 +8,7 @@
  * before filtering so they are caught by the unicode range patterns.
  */
 import {
-  PUNCTUATION_PRESETS, MARK_MODE, markMode,
+  MODERN_PUNCTUATION, QUOTES_REMOVED, MARK_MODE, markMode,
   MARK_QUESTION_EXCLAMATION, MARK_SEMICOLON, MARK_COMMA, MARK_DASH,
 } from './punctuationModes'
 
@@ -36,8 +36,6 @@ export const CLEAN_TEXT = {
   TEAMIM: 1,
   /** Vowel points (NIKKUD_MARKS). */
   NIKKUD: 2,
-  /** Maqaf U+05BE becomes a space, as Otzaria does. */
-  MAQAF: 4,
   /** The first dash-space of a line (after a dibbur hamatchil) becomes a full stop; later ones go. */
   DIBBUR_HAMATCHIL_DASH: 8,
   /**
@@ -59,7 +57,7 @@ export function cleanTextFlagsFor(flags: number, isCommentary: boolean): number 
 /** What "remove nikkud" always did in one go - still what copy-clean-text applies. */
 export const CLEAN_TEXT_LEGACY =
   CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD | CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH |
-  PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+  MODERN_PUNCTUATION | QUOTES_REMOVED
 
 /**
  * Nikkud U+05B0\u2013U+05BD, U+05BF, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7. U+05BF RAFE is
@@ -84,7 +82,7 @@ const BLOCK_BOUNDARY_TAG = /^<\/?(?:div|p|br|li|tr|td|th|h[1-6]|section|article|
  * Transformations applied to text nodes only (tags are passed through unchanged):
  *   - TEAMIM / NIKKUD: the marks above
  *   - DIBBUR_HAMATCHIL_DASH: see separateDibburHamatchil
- *   - MAQAF, and the context-free punctuation marks (finishPunctuation)
+ *   - the context-free punctuation marks (finishPunctuation)
  */
 export function stripNikkudFromHtml(html: string, flags: number = CLEAN_TEXT_LEGACY): string {
   // Entity-encoded nikkud would otherwise survive the one option whose whole job is
@@ -214,11 +212,8 @@ const GLUED_LONG_DASH = /(?<=\S)[\u2012\u2013\u2014\u2015\u2212](?=\S)/g
 /** Punctuation dashes: the long ones anywhere, a hyphen only standing alone. */
 const PUNCTUATION_DASH = /[\u2012\u2013\u2014\u2015\u2212]|(?<!\S)-(?!\S)/g
 
-/** The per-text-node parts of MAQAF and the context-free punctuation marks. */
+/** The per-text-node parts of the context-free punctuation marks. */
 function finishPunctuation(text: string, flags: number): string {
-  // A hyphen joining two Hebrew words is a maqaf typed on the keyboard (437 in a 21k-line
-  // sample). Digit ranges (615-567) and a hyphen inside a Latin word stay.
-  if (flags & CLEAN_TEXT.MAQAF) text = text.replace(/\u05BE|(?<=[\u05D0-\u05EA][\u0591-\u05C7]*)-(?=[\u05D0-\u05EA])/g, ' ')
   // A run like ?! is one mark, so it becomes a single period.
   const questionExclamation = markMode(flags, MARK_QUESTION_EXCLAMATION)
   if (questionExclamation !== MARK_MODE.KEEP) text = text.replace(/[!?]+/g, questionExclamation === MARK_MODE.CONVERT ? '.' : '')
