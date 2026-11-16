@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { chooseExpansion, withExpansions, withVocalization } from './readAloudDicta'
-import type { ReadAloudText } from './readAloudSkip'
+import { DEFAULT_SKIP_OPTIONS, readAloudTextOfPlain, type ReadAloudText } from './readAloudSkip'
 
 const plain = (s: string): ReadAloudText => ({ full: s, spoken: s, toFull: [...s].map((_, i) => i).concat(s.length) })
 
@@ -58,5 +59,12 @@ describe('chooseExpansion (Dicta answers as seen live)', () => {
     expect(chooseExpansion('קע"ב', ['קע"ב', 'מאה שבעים ושניים'])).toBeNull()
     expect(chooseExpansion("ג'", ["ג'", 'שלשה'])).toBeNull()
     expect(chooseExpansion('הרמב"ם', ['הרמב"ם'])).toBeNull()
+  })
+})
+
+describe('source references in parentheses are skipped with the links option', () => {
+  it('drops (book chapter verse) but keeps other parentheses', () => {
+    const t = readAloudTextOfPlain('שנאמר (בראשית י"ב כ\') ויצו ואומר (תהלים צ"א ט"ו) עמו (ר"ל) כן (עי\' לעיל) סוף', { ...DEFAULT_SKIP_OPTIONS, links: true })
+    expect(t.spoken).toBe('שנאמר  ויצו ואומר  עמו (ר"ל) כן (עי\' לעיל) סוף')
   })
 })

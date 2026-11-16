@@ -189,7 +189,7 @@
     "noHebrewVoice": "לא מותקן קול עברי ב-Windows",
     "noHebrewVoiceShort": "אין קול",
     "skipOption": {
-      "links": "מראי מקום (קישורים בטקסט)",
+      "links": "מראי מקום (קישורים בטקסט, ובתוך סוגריים)",
       "noteMarkers": "סימני הערות",
       "parentheses": "כל מה שבסוגריים ( )",
       "squareBrackets": "כל מה שבסוגריים מרובעים [ ]",

@@ -189,7 +189,7 @@
     "noHebrewVoice": "No Hebrew voice is installed in Windows",
     "noHebrewVoiceShort": "No voice",
     "skipOption": {
-      "links": "Source references (links in the text)",
+      "links": "Source references (links, and references in parentheses)",
       "noteMarkers": "Note markers",
       "parentheses": "Everything in parentheses ( )",
       "squareBrackets": "Everything in square brackets [ ]",

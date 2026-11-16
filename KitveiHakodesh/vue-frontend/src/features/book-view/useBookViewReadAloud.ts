@@ -8,7 +8,7 @@ import {
   type ReadAloudSkipOptions,
   type ReadAloudText,
 } from './readAloudSkip'
-import { createReadAloudDicta } from './readAloudDicta'
+import { createReadAloudDicta, WAIT_FOR_FIRST_LINE_MS } from './readAloudDicta'
 
 /**
  * Reads the book aloud with the browser's own speech (the voices installed in Windows).
@@ -180,6 +180,7 @@ export function useBookViewReadAloud() {
       const { bookId, versionId, totalLines } = source
       // The next batch is fetched while this one is read, so Dicta's preparation can see ahead.
       let nextRows: Awaited<ReturnType<typeof getLinesPaged>> | null = null
+      let isFirstLine = true
       for (let offset = Math.max(0, fromLine); offset < totalLines; offset += BATCH_SIZE) {
         const rows = await getLinesPaged(bookId, BATCH_SIZE, offset, versionId ?? 0)
         if (gen !== generation || rows.length === 0) return
@@ -198,7 +199,8 @@ export function useBookViewReadAloud() {
             const more = nextRows as typeof rows | null
             if (more) for (const r of more.slice(0, 8)) ahead.push(readAloudTextOfLine(r.content ?? '', activeSkip()).spoken)
             dicta.prefetch(ahead, rate.value, DICTA_ALWAYS)
-            text = await dicta.prepared(text, DICTA_ALWAYS)
+            text = await dicta.prepared(text, DICTA_ALWAYS, isFirstLine ? WAIT_FOR_FIRST_LINE_MS : undefined)
+            isFirstLine = false
             if (gen !== generation) return
           }
           const done = await speakText(text, row.lineIndex, voice, gen, char)
