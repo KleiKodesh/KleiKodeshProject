@@ -7,7 +7,10 @@
  */
 
 export interface ReadAloudSkipOptions {
-  /** Inline source links (Zayit's מראי מקום, and any other link in the text). */
+  /**
+   * Source references: inline links (Zayit's מראי מקום, any other link in the text), and a
+   * reference written in parentheses - a book name then chapter / verse numbers, (ישעיה ס"ג ט').
+   */
   links: boolean
   /** Footnote and note markers - superscript numbers and letters. */
   noteMarkers: boolean
@@ -52,7 +55,14 @@ function maskMatches(text: string, keep: boolean[], pattern: RegExp) {
   }
 }
 
+/**
+ * A source reference in parentheses: opens with a word, ends with Hebrew numbers written
+ * with geresh / gershayim - (בראשית י"ב כ'), (תהלים צ"א ט"ו). (ר"ל) or (עי' לעיל) are not.
+ */
+const SOURCE_IN_PARENTHESES = /\([א-ת][^()]*?(?:\s[א-ת]{0,3}['"׳״][א-ת]?)+\s*\)/g
+
 function build(full: string, keep: boolean[], options: ReadAloudSkipOptions | null): ReadAloudText {
+  if (options?.links) maskMatches(full, keep, SOURCE_IN_PARENTHESES)
   if (options?.parentheses) maskMatches(full, keep, /\([^()]*\)/g)
   if (options?.squareBrackets) maskMatches(full, keep, /\[[^[\]]*\]/g)
   if (options?.singleLetterWords) maskMatches(full, keep, SINGLE_LETTER_WORD)

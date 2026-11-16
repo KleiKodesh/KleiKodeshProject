@@ -56,12 +56,14 @@ export interface DictaOptions {
 const CHARS_PER_SECOND = 14
 /** How many seconds of reading to keep prepared ahead. */
 const LOOKAHEAD_SECONDS = 25
-const MAX_REQUEST_CHARS = 1800
+const MAX_REQUEST_CHARS = 4000
 const REQUEST_TIMEOUT_MS = 8000
 /** After a failed request, none is tried for this long. */
 const BACKOFF_MS = 60_000
 /** How long a line about to be read waits for its preparation before reading plain. */
 const WAIT_FOR_LINE_MS = 400
+/** The first line of a reading has had no time to be prepared ahead; it may wait a little longer. */
+export const WAIT_FOR_FIRST_LINE_MS = 2500
 
 const HEBREW_LETTER = /[א-ת]/g
 const MARK = /[֑-ׇ]/g
@@ -349,19 +351,31 @@ export function createReadAloudDicta() {
    * Asks for the upcoming lines (in reading order) that are not yet prepared, as many as
    * the reading speed needs for the next while. One request at a time.
    */
+  /** The last prefetch call, so a finished request can carry straight on with the next lines. */
+  let lastAsk: { upcoming: string[]; rate: number; options: DictaOptions } | null = null
+
   function prefetch(upcoming: string[], rate: number, options: DictaOptions) {
+    lastAsk = { upcoming, rate, options }
     if (busy || !available() || (!options.abbreviations && !options.nikkud)) return
-    const budget = Math.min(MAX_REQUEST_CHARS, CHARS_PER_SECOND * LOOKAHEAD_SECONDS * Math.max(0.5, rate))
+    // Look ahead by reading time, but always at least the line being read and the next one,
+    // however long they are - otherwise long lines are only asked for when already due.
+    const budget = Math.max(
+      CHARS_PER_SECOND * LOOKAHEAD_SECONDS * Math.max(0.5, rate),
+      (upcoming[0]?.length ?? 0) + (upcoming[1]?.length ?? 0),
+    )
     const lines: string[] = []
     let chars = 0
+    let requestChars = 0
     for (const line of upcoming) {
       if (chars >= budget) break
-      const have = ready.get(line)
-      if ((have && sameOptions(have.options, options)) || failed.has(line) || inFlight.has(line)) { chars += line.length; continue }
-      if (!worthPreparing(line, options)) continue
-      if (lines.length > 0 && chars + line.length > MAX_REQUEST_CHARS) break
-      lines.push(line)
       chars += line.length
+      const have = ready.get(line)
+      if ((have && sameOptions(have.options, options)) || failed.has(line) || inFlight.has(line)) continue
+      if (!worthPreparing(line, options)) continue
+      // One request stays a sensible size; the rest goes in the next one, right after.
+      if (lines.length > 0 && requestChars + line.length > MAX_REQUEST_CHARS) break
+      lines.push(line)
+      requestChars += line.length
     }
     if (lines.length === 0) return
     busy = true
@@ -371,17 +385,18 @@ export function createReadAloudDicta() {
       if (mine !== controller) return
       busy = false
       for (const line of lines) inFlight.delete(line)
+      if (lastAsk) prefetch(lastAsk.upcoming, lastAsk.rate, lastAsk.options)
     })
     for (const line of lines) inFlight.set(line, request)
   }
 
   /** The line as it should be spoken, if Dicta's answer is ready - or soon: waits a moment for a request already on its way. */
-  async function prepared(text: ReadAloudText, options: DictaOptions): Promise<ReadAloudText> {
+  async function prepared(text: ReadAloudText, options: DictaOptions, waitMs = WAIT_FOR_LINE_MS): Promise<ReadAloudText> {
     try {
       const key = text.spoken
       const pending = inFlight.get(key)
       if (pending && !ready.has(key)) {
-        await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, WAIT_FOR_LINE_MS))])
+        await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, waitMs))])
       }
       const have = ready.get(key)
       if (!have || !sameOptions(have.options, options)) return text
@@ -406,6 +421,7 @@ export function createReadAloudDicta() {
     inFlight.clear()
     failed.clear()
     busy = false
+    lastAsk = null
   }
 
   return { prefetch, prepared, release, clear }
