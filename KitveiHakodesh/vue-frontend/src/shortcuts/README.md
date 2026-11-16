@@ -15,10 +15,15 @@ and `UNREACHABLE_IN_WORD`, the measured list of combinations Word's task pane ne
 (measurement and method in the comment above it).
 
 **shortcutsStore.ts** — the user's changes, only the rows that differ from the defaults, in
-localStorage under `shortcuts.bindings` (`lsGet`/`lsSet`, like every setting). `idsFor(e)` maps
-a keydown to the shortcut ids bound to it; `conflictsFor`, `assign`, `reset`, `resetAll` serve
-the grid. Each host has its own WebView2 profile, so Word's pane and the standalone app keep
-separate shortcuts. "Reset settings" clears the key with the other preferences.
+localStorage under `shortcuts.bindings` (`lsGet`/`lsSet`, like every setting), and the user's
+**personal shortcuts** under `shortcuts.personal` (ids `personal.*`; today one kind, "open this
+book": book id, title, one combination). `idsFor(e)` maps a keydown to the shortcut ids bound
+to it, personal ones included; `conflictsFor`, `assign`, `reset`, `resetAll`,
+`addPersonalBook`, `removePersonal` serve the grid. A personal shortcut acts pane-wide, so it
+collides with every other shortcut. "Restore all" leaves personal shortcuts in place but takes
+back a default key one of them was using. Each host has its own WebView2 profile, so Word's
+pane and the standalone app keep separate shortcuts. "Reset settings" clears both keys with the
+other preferences.
 
 **shortcutCapture.ts** — records the combination the user presses in the grid. Imported FIRST
 in `main.ts` so its keydown listener runs before every shortcut handler and swallows the press
@@ -35,7 +40,9 @@ tooltip follows the user's change.
 The handlers ask the store which id a keydown is and run the action for it:
 
 - `layout/useAppTitleBarShortcuts.ts` — pane-scoped ids (navigation, tabs, panels, quick
-  navigation) and app-wide ones (fullscreen, reading mode, split view, ...).
+  navigation), app-wide ones (fullscreen, reading mode, split view, ...), and personal
+  "open this book" shortcuts, which open the book the way a book link does (`openBookTarget`:
+  in place in Word's single-tab pane, a new tab where there is a tab strip).
 - `features/book-view/useBookViewKeyboardShortcuts.ts` — `book.cleanText`, `book.bookmark`,
   `book.nextSection`, `book.previousSection`.
 - `features/fast-doc-view/FastDocViewPage.vue` — `doc.cleanText`, `doc.nextHeading`,

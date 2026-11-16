@@ -29,7 +29,7 @@ import type { Combo } from './shortcutCombo'
  */
 export type ShortcutScope = 'app' | 'pane' | 'bookView' | 'docView' | 'searchResults' | 'workspaceList'
 
-export type ShortcutGroup = 'tabs' | 'navigation' | 'quickNav' | 'bookView' | 'documents' | 'searchResults' | 'view'
+export type ShortcutGroup = 'personal' | 'tabs' | 'navigation' | 'quickNav' | 'bookView' | 'documents' | 'searchResults' | 'view'
 
 export interface ShortcutDef {
   id: string

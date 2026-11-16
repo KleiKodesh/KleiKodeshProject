@@ -26,6 +26,7 @@ Matching is always on `e.code`, never `e.key`, so shortcuts survive a Hebrew key
 
 ## Groups (screen order)
 
+Personal shortcuts (the user's own — today "open this book", kept in `shortcuts.personal`) ·
 Tab management (native tab strip only) · Navigation · Quick navigation (Ctrl+1–9, Ctrl+U, F1) ·
 Book view · Documents · Search results (fixed) · View. The defaults are the registry's
 `defaults` fields; the user-facing list is the settings grid.

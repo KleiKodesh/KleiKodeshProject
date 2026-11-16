@@ -10,7 +10,8 @@ import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiCh
 import { HAMESHIV_LABEL } from '@/layout/appNavItems'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
-import { useShortcutsStore } from '@/shortcuts/shortcutsStore'
+import { isPersonalId, useShortcutsStore } from '@/shortcuts/shortcutsStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -68,6 +69,7 @@ export function useAppTitleBarShortcuts(options: {
   const settingsStore = useSettingsStore()
   const themeStore = useThemeStore()
   const shortcuts = useShortcutsStore()
+  const booksData = useBooksDataStore()
   const { navigateInNewTab } = useAppNavigation()
 
   const activeTab = computed(() => pane.activeTab.value)
@@ -236,8 +238,18 @@ export function useAppTitleBarShortcuts(options: {
       case 'nav.sidebar':
         settingsStore.setNavSidebarVisible(paneId, !settingsStore.getNavSidebarVisible(paneId))
         return true
-      default:
+      default: {
+        // The user's own shortcuts. "Open this book" goes through openBookTarget, the path a
+        // book link takes: in place in the single-tab hosts (Word's pane), a new tab where
+        // there is a strip.
+        const own = isPersonalId(id) ? shortcuts.personalById(id) : undefined
+        if (own?.kind === 'openBook') {
+          const title = booksData.allBooksMap.get(own.bookId)?.title ?? own.title
+          pane.openBookTarget({ route: '/book-view', bookId: own.bookId, title })
+          return true
+        }
         return false
+      }
     }
   }
 

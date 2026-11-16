@@ -124,4 +124,44 @@ describe('shortcuts store', () => {
     const s = fresh()
     expect(s.idsFor(key('KeyW', { alt: true }))).toEqual(['tabs.close'])
   })
+
+  it('personal "open this book" shortcuts match, collide and survive a reload', async () => {
+    const s = fresh()
+    const id = s.addPersonalBook(42, 'משנה ברורה')
+    expect(s.combosFor(id)).toEqual([])
+    // Ctrl+G is "home": moving it asks first, then takes it from home.
+    expect(s.conflictsFor(id, 'Ctrl+KeyG').map((c) => c.def.id)).toEqual(['nav.home'])
+    s.assign(id, 'Ctrl+KeyG')
+    expect(s.idsFor(key('KeyG', { ctrl: true }))).toEqual([id])
+    expect(s.combosFor('nav.home')).toEqual([])
+    // Another shortcut sees the personal one as a conflict.
+    expect(s.conflictsFor('view.theme', 'Ctrl+KeyG').map((c) => c.def.id)).toEqual([id])
+    await nextTick()
+    const again = fresh()
+    expect(again.personal.map((p) => [p.bookId, p.combo])).toEqual([[42, 'Ctrl+KeyG']])
+    expect(again.idsFor(key('KeyG', { ctrl: true }))).toEqual([id])
+  })
+
+  it('restore all gives a default key back and clears it from the personal shortcut', () => {
+    const s = fresh()
+    const id = s.addPersonalBook(7, 'Book')
+    s.assign(id, 'Ctrl+KeyG')
+    const cleared = s.resetAll()
+    expect(cleared.map((p) => p.id)).toEqual([id])
+    expect(s.combosFor(id)).toEqual([])
+    expect(s.idsFor(key('KeyG', { ctrl: true }))).toEqual(['nav.home'])
+    s.removePersonal(id)
+    expect(s.personal).toEqual([])
+  })
+
+  it('drops malformed personal entries read back from storage', () => {
+    ls.data.set('shortcuts.personal', [
+      { id: 'personal.a', kind: 'openBook', bookId: 1, title: 'A', combo: 'Ctrl+Alt+KeyA' },
+      { id: 'personal.a', kind: 'openBook', bookId: 2, title: 'dup', combo: null },
+      { id: 'x', kind: 'openBook', bookId: 3, title: 'bad id', combo: null },
+      { id: 'personal.b', kind: 'openBook', bookId: 4, title: 'B', combo: 'junk+' },
+    ])
+    const s = fresh()
+    expect(s.personal.map((p) => [p.id, p.combo])).toEqual([['personal.a', 'Ctrl+Alt+KeyA'], ['personal.b', null]])
+  })
 })

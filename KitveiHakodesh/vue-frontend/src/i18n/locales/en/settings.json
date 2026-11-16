@@ -406,6 +406,15 @@
     "keepScreenOn": "Keep screen on (on/off)"
   },
   "shortcutsEdit": {
+    "personalGroup": "Personal shortcuts",
+    "addBook": "Add a shortcut to a book…",
+    "bookPlaceholder": "Type a book name",
+    "bookSearching": "Searching…",
+    "bookNotFound": "No book by that name",
+    "bookSearchUnavailable": "Book search is not available right now",
+    "openBook": "Open {title}",
+    "remove": "Remove",
+    "personalKeyCleared": "This personal shortcut's keys went back to the action they belong to by default. Click “Change” to choose other keys.",
     "hint": "Click “Change” next to an action and press the combination you want. Word and the standalone app keep their shortcuts separately.",
     "change": "Change",
     "restore": "Restore",
