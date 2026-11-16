@@ -14,7 +14,7 @@
  * re-measures. mousedown is prevented so clicking the tooltip doesn't
  * collapse the selection (which would immediately dismiss it).
  */
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import type { AbbrevTooltipData } from './useBookViewAbbrevTooltip'
 
 const props = defineProps<{ data: AbbrevTooltipData }>()
@@ -67,6 +67,9 @@ const style = computed(() => {
 onMounted(() => {
   nextTick(computePosition)
 })
+
+// Dicta's re-ordering may change the size: re-measure once.
+watch(() => props.data.senses, () => nextTick(computePosition))
 </script>
 
 <template>
@@ -74,7 +77,7 @@ onMounted(() => {
     <div ref="tooltipRef" class="abbrev-tooltip" :style="style" dir="rtl" @mousedown.prevent>
       <template v-for="(sense, senseIndex) in data.senses" :key="senseIndex">
         <span v-if="senseIndex > 0" class="abbrev-divider">|</span>
-        <span class="abbrev-sense">{{ sense }}</span>
+        <span class="abbrev-sense" :class="{ 'abbrev-from-dicta': sense.fromDicta }" :title="sense.fromDicta ? $t('bookView.abbrevTooltip.fromDicta') : undefined">{{ sense.text }}</span>
       </template>
     </div>
   </Teleport>
@@ -97,6 +100,11 @@ onMounted(() => {
   max-height: 40vh;
   overflow-y: auto;
   user-select: none;
+}
+
+.abbrev-from-dicta {
+  opacity: 0.75;
+  font-style: italic;
 }
 
 .abbrev-divider {
