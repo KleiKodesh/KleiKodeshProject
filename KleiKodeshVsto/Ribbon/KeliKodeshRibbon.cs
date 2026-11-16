@@ -9,6 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security;
+using System.Text;
 using System.Windows.Forms;
 using Office = Microsoft.Office.Core;
 
@@ -130,6 +132,47 @@ namespace KleiKodesh.Ribbon
 
         public bool getVisible(Office.IRibbonControl control) =>
             SettingsManager.GetBool("Ribbon", control.Id + "_Visible", true);
+
+        // ── External tools menu (ToolRail/ExternalTools.cs, tool-rail.json) ──────
+
+        // One button per item in the file, then "edit the list". Office asks for this
+        // each time the menu opens (invalidateContentOnDrop), so file edits show at once.
+        public string getExternalToolsContent(Office.IRibbonControl control)
+        {
+            var xml = new StringBuilder("<menu xmlns=\"http://schemas.microsoft.com/office/2009/07/customui\">");
+            int n = 0;
+            foreach (var entry in ToolRail.ExternalTools.Load())
+            {
+                xml.AppendFormat(
+                    "<button id=\"ExternalTool_{0}\" tag=\"{1}\" label=\"{2}\" getImage=\"getExternalToolImage\" onAction=\"externalTool_Click\"/>",
+                    n++, SecurityElement.Escape(entry.Id), SecurityElement.Escape(entry.Label()));
+            }
+            if (n > 0) xml.Append("<menuSeparator id=\"ExternalToolsSeparator\"/>");
+            xml.AppendFormat(
+                "<button id=\"ExternalToolsEdit\" label=\"{0}\" imageMso=\"FileOpen\" onAction=\"editExternalTools_Click\"/>",
+                SecurityElement.Escape(AddinText.Label("ExternalToolsEdit")));
+            xml.Append("</menu>");
+            return xml.ToString();
+        }
+
+        public System.Drawing.Image getExternalToolImage(Office.IRibbonControl control)
+        {
+            try { return ToolRail.ToolCatalog.Find(control.Tag)?.LoadIcon?.Invoke(); }
+            catch { return null; }
+        }
+
+        public void externalTool_Click(Office.IRibbonControl control)
+        {
+            try
+            {
+                AddinUiLanguage.Apply();
+                ToolRail.RailPane.Show(control.Tag);
+            }
+            catch (Exception ex) { System.Windows.Forms.MessageBox.Show(ex.Message); }
+        }
+
+        public void editExternalTools_Click(Office.IRibbonControl control) =>
+            ToolRail.ExternalTools.OpenFileForEditing();
 
         #endregion
 

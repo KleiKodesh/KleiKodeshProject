@@ -128,6 +128,49 @@ namespace KleiKodesh.Helpers
         }
 
 
+        /// <summary>
+        /// Wraps a WPF view in the WinForms control a task pane (or a tool-rail slot)
+        /// can hold, with the view's colours following the host's - which
+        /// OfficeThemeWatcher drives from the Office theme.
+        /// </summary>
+        public static WpfHostControl BuildHost(UserControl userControl)
+        {
+            var hostControl = new WpfHostControl();
+            var host = new ElementHost { Dock = WinForms.DockStyle.Fill, Child = userControl };
+            hostControl.Controls.Add(host);
+
+            void setColor()
+            {
+                var foreColor = hostControl.ForeColor;
+                var adjustedForeColor = Color.FromArgb(foreColor.A, foreColor.B, foreColor.G, foreColor.R);
+                userControl.Foreground = new SolidColorBrush(Color.FromArgb(adjustedForeColor.A, adjustedForeColor.R, adjustedForeColor.G, adjustedForeColor.B));
+
+                var backColor = hostControl.BackColor;
+                var adjustedBackColor = Color.FromArgb(backColor.A, backColor.B, backColor.G, backColor.R);
+                userControl.Background = new SolidColorBrush(Color.FromArgb(adjustedBackColor.A, adjustedBackColor.R, adjustedBackColor.G, adjustedBackColor.B));
+            }
+
+            // Both colours: the theme binding may land before or after this runs (the
+            // host is themed when it joins a pane or a rail), and a theme whose fore
+            // colour happens to match the default would never raise ForeColorChanged.
+            setColor();
+            hostControl.ForeColorChanged += (_, __) => setColor();
+            hostControl.BackColorChanged += (_, __) => setColor();
+            return hostControl;
+        }
+
+        /// <summary>
+        /// Hands <paramref name="popOut"/>'s toggle to the WPF view inside a
+        /// WpfHostControl, if the view has a pop-out button. The handler is built
+        /// around the WinForms host, which has no SetPopOutToggleAction of its own.
+        /// </summary>
+        public static void ForwardPopOutToggle(UserControl view, TaskPanePopOut popOut)
+        {
+            var setPopOut = view?.GetType().GetMethod("SetPopOutToggleAction");
+            if (setPopOut != null && popOut != null)
+                setPopOut.Invoke(view, new object[] { new Action<bool>(popOut.Toggle) });
+        }
+
         public static CustomTaskPane CreateNew(
            UserControl userControl,
            string title,
@@ -135,21 +178,7 @@ namespace KleiKodesh.Helpers
         {
             try
             {
-
-                var hostControl = new WpfHostControl();
-                var host = new ElementHost { Dock = WinForms.DockStyle.Fill, Child = userControl };
-                hostControl.Controls.Add(host);
-
-                void setColor()
-                {
-                    var foreColor = hostControl.ForeColor;
-                    var adjustedForeColor = Color.FromArgb(foreColor.A, foreColor.B, foreColor.G, foreColor.R);
-                    userControl.Foreground = new SolidColorBrush(Color.FromArgb(adjustedForeColor.A, adjustedForeColor.R, adjustedForeColor.G, adjustedForeColor.B));
-
-                    var backColor = hostControl.BackColor;
-                    var adjustedBackColor = Color.FromArgb(backColor.A, backColor.B, backColor.G, backColor.R);
-                    userControl.Background = new SolidColorBrush(Color.FromArgb(adjustedBackColor.A, adjustedBackColor.R, adjustedBackColor.G, adjustedBackColor.B));
-                }
+                var hostControl = BuildHost(userControl);
 
                 var pane = TaskPaneManager.CreateNew(hostControl, title, width);
                 pane.Visible = true;
@@ -161,18 +190,14 @@ namespace KleiKodesh.Helpers
                 // that handler rather than constructing a second one: two handlers on one
                 // host both subscribe to the same events and both try to reparent the same
                 // content, so whichever runs second finds the content already moved.
-                var setPopOut = userControl.GetType().GetMethod("SetPopOutToggleAction");
                 var popOut = TaskPanePopOut.For(pane);
-                if (setPopOut != null && popOut != null)
-                    setPopOut.Invoke(userControl, new object[] { new Action<bool>(popOut.Toggle) });
-                else if (setPopOut != null)
+                if (popOut != null)
+                    ForwardPopOutToggle(userControl, popOut);
+                else if (userControl.GetType().GetMethod("SetPopOutToggleAction") != null)
                     // The view wants a pop-out button but no handler was registered, so
                     // clicking it would do nothing at all. Say so rather than shipping a
                     // dead button silently.
                     Console.WriteLine("[WpfTaskPane] No pop-out handler registered for " + title);
-
-                setColor();
-                hostControl.ForeColorChanged += (_, __) => setColor();
 
                 return pane;
             }

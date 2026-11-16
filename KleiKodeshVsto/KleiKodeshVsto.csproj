@@ -333,6 +333,18 @@
     <Compile Include="Ribbon\RibbonSettingsView.xaml.cs">
       <DependentUpon>RibbonSettingsView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ToolRail\ExternalTools.cs" />
+    <Compile Include="ToolRail\RailButton.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="ToolRail\RailPane.cs" />
+    <Compile Include="ToolRail\RailWebView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="ToolRail\ToolCatalog.cs" />
+    <Compile Include="ToolRail\ToolRailHost.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="ThisAddIn.cs">
       <SubType>Code</SubType>
     </Compile>

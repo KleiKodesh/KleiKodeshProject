@@ -65,6 +65,10 @@ namespace KleiKodesh.Ribbon
             LanguageHint.Text   = AddinUiLanguage.T("ייתכן שחלק מההגדרות יחולו רק לאחר הפעלה מחדש של Word.",
                                                     "Some settings may only take effect after Word is restarted.");
             ChkTurnOffUpdates.Content = AddinUiLanguage.T("כבה בדיקת עדכונים אוטומטית", "Turn off automatic update checks");
+            ChkSeparatePanes.Content  = AddinUiLanguage.T("כל כלי בחלונית צד נפרדת", "Open each tool in its own side pane");
+            ChkSeparatePanes.ToolTip  = AddinUiLanguage.T(
+                "כשהאפשרות כבויה, כל הכלים נפתחים בחלונית צד אחת עם סרגל סמלים למעבר ביניהם. השינוי חל על הכלי הבא שנפתח.",
+                "When off, all tools open in one side pane with an icon rail to switch between them. Applies to the next tool you open.");
             BtnReset.Content          = AddinUiLanguage.T("איפוס התוכנה", "Reset the add-in");
 
             bool english = AddinUiLanguage.IsEnglish;
@@ -116,12 +120,14 @@ namespace KleiKodesh.Ribbon
                 {
                     SettingsManager.Save("Ribbon", cb.Name, true);
                     _ribbon.InvalidateControl(cb.Name.Replace("_Visible", ""));
+                    ToolRail.RailPane.RefreshAll();
                 };
                 cb.Unchecked += (_, __) =>
                 {
                     SettingsManager.Save("Ribbon", cb.Name, false);
                     string componentId = cb.Name.Replace("_Visible", "");
                     _ribbon.InvalidateControl(componentId);
+                    ToolRail.RailPane.RefreshAll();
                     // If the corresponding option radio was selected, fall back to Settings
                     var rb = (RadioButton)FindName($"{componentId}_Option");
                     if (rb?.IsChecked == true)
@@ -146,6 +152,11 @@ namespace KleiKodesh.Ribbon
             ChkTurnOffUpdates.Checked   += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", true);
             ChkTurnOffUpdates.Unchecked += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", false);
 
+            // Off (the default) = one shared pane with an icon rail; see ToolRail\README.md.
+            ChkSeparatePanes.IsChecked = !ToolRail.RailPane.Enabled;
+            ChkSeparatePanes.Checked   += (_, __) => SettingsManager.Save("ToolRail", "SeparatePanes", true);
+            ChkSeparatePanes.Unchecked += (_, __) => SettingsManager.Save("ToolRail", "SeparatePanes", false);
+
             BtnReset.Click += (_, __) =>
             {
                 foreach (CheckBox cb in VisibleSettingsPanel.Children.OfType<CheckBox>())
@@ -154,6 +165,7 @@ namespace KleiKodesh.Ribbon
                     if (rb is RadioButton) rb.IsChecked = false;
                 Settings_Option.IsChecked = true;
                 ChkTurnOffUpdates.IsChecked = false;
+                ChkSeparatePanes.IsChecked = false;
                 // Reset never touches the UI language: keep it across the clear.
                 string language = AddinUiLanguage.Current;
                 SettingsManager.ClearAll();

@@ -1,4 +1,5 @@
 ﻿using KleiKodesh.Helpers;
+using KleiKodesh.ToolRail;
 using Nakdan.UI;
 using System;
 using System.Collections.Generic;
@@ -28,6 +29,15 @@ namespace KleiKodesh.Ribbon
             {
                 // Panes and the settings view read CurrentUICulture when built.
                 AddinUiLanguage.Apply();
+
+                // Tools open in the one shared side pane, unless the user chose a
+                // separate pane per tool in Settings.
+                if (RailPane.Enabled && RailPane.Handles(id))
+                {
+                    RailPane.Show(id);
+                    return;
+                }
+
                 switch (id)
                 {
                     case "KitveiHakodesh":
@@ -131,9 +141,11 @@ namespace KleiKodesh.Ribbon
         {
             try
             {
-                var viewers = TaskPaneManager.FindAllUsable(typeof(KitveiHakodeshLib.AppViewer))
-                    .Select(p => p.Control as KitveiHakodeshLib.AppViewer)
-                    .Where(v => v != null)
+                // In the shared tool pane, and in separate (or duplicated) panes.
+                var viewers = RailPane.UsableControls<KitveiHakodeshLib.AppViewer>("KitveiHakodesh")
+                    .Concat(TaskPaneManager.FindAllUsable(typeof(KitveiHakodeshLib.AppViewer))
+                        .Select(p => p.Control as KitveiHakodeshLib.AppViewer)
+                        .Where(v => v != null))
                     .ToList();
                 if (viewers.Count == 0)
                 {
@@ -250,11 +262,15 @@ namespace KleiKodesh.Ribbon
         /// <see cref="KitveiHakodeshLib.AppViewer"/> so callers can drive it directly
         /// without relaunching. The viewer is built through a factory so an open pane
         /// does not pay for a discarded WebView2 on every context-menu search.
+        /// With the shared tool pane on (the default), the viewer is the one in this
+        /// window's rail.
         /// </summary>
-
         public static KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
         {
             AddinUiLanguage.Apply();
+            if (RailPane.Enabled)
+                return RailPane.Show("KitveiHakodesh") as KitveiHakodeshLib.AppViewer;
+
             var pane = TaskPaneManager.Show(
                 () => new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true },
                 AddinText.Label("KitveiHakodesh"), 610, popOutBehavior: true);

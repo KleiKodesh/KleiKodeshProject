@@ -35,6 +35,7 @@ KleiKodeshVsto/
 │   ├── SettingsManager.cs    — Registry-backed settings (INI-style sections/keys)
 │   ├── MsgBox.cs             — Themed message box wrapper
 │   └── JsonExtensions.cs     — JSON serialization helpers
+├── ToolRail/                 — One side pane with an icon rail for all tools, plus user items from tool-rail.json (see ToolRail/README.md)
 ├── DocDesign/                — Torah document formatting (WPF, see DocDesign/README.md)
 ├── RegexInWord/              — Regex find & replace (WPF, see RegexFindLib/README.md)
 │   ├── RegexFindLib/         — WPF library (UserControl + MVVM)
@@ -60,4 +61,6 @@ KleiKodeshVsto/
 
 ## Task Pane Lifecycle
 
-`TaskpaneManager.Show(userControl, title, width)` checks if a pane of the same type already exists for the active Word window. If so it reuses it; otherwise it creates a new one. This prevents duplicate panes when the user clicks the ribbon button again.
+By default every tool opens in **one shared pane per Word window**, with an icon rail to switch between them (`ToolRail/RailPane.Show(id)`, see `ToolRail/README.md`). Tools are built once and kept alive, and each remembers its own width. "Duplicate side pane" opens the current tool in a separate pane of its own.
+
+With the Settings checkbox "כל כלי בחלונית צד נפרדת" (`ToolRail/SeparatePanes`) ticked, tools go back to one pane each: `TaskpaneManager.Show(userControl, title, width)` checks if a pane of the same type already exists for the active Word window. If so it reuses it; otherwise it creates a new one. This prevents duplicate panes when the user clicks the ribbon button again.

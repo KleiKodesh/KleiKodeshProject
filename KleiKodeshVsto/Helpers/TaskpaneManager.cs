@@ -233,6 +233,16 @@ namespace KleiKodesh.Helpers
                 return;
             }
 
+            // The shared tool pane: focus goes into the tool it shows (expanded if the
+            // rail was collapsed), or into that tool's floating window - not into the
+            // pane itself, whose first child is only the content panel.
+            if (pane.Control is ToolRail.ToolRailHost rail)
+            {
+                var target = rail.FocusTarget();
+                if (target != null) FocusInto(target);
+                return;
+            }
+
             Reveal(pane);
             var popOut = TaskPanePopOut.For(pane);
             FocusInto((Control)popOut?.PopOutForm ?? pane.Control);
@@ -245,6 +255,11 @@ namespace KleiKodesh.Helpers
         {
             var info = new GUITHREADINFO { cbSize = Marshal.SizeOf(typeof(GUITHREADINFO)) };
             if (!GetGUIThreadInfo(0, ref info) || info.hwndFocus == IntPtr.Zero) return false;
+
+            // The shared tool pane counts its tools' floating windows as inside it.
+            if (pane.Control is ToolRail.ToolRailHost rail)
+                return rail.FocusRoots().Any(r => r != null && r.IsHandleCreated
+                    && (info.hwndFocus == r.Handle || IsChild(r.Handle, info.hwndFocus)));
 
             var form = TaskPanePopOut.For(pane)?.PopOutForm;
             Control root = (Control)form ?? pane.Control;
@@ -304,6 +319,11 @@ namespace KleiKodesh.Helpers
 
                 if (current == null)
                     return null;
+
+                // The shared tool pane duplicates the tool it is showing, into a
+                // separate pane of that tool's own.
+                if (current.Control is ToolRail.ToolRailHost rail)
+                    return rail.DuplicateActive();
 
                 string baseTitle = current.Title.TrimStart('@');
 
@@ -408,7 +428,7 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        static DockPosition GetDefaultDockPosition()
+        internal static DockPosition GetDefaultDockPosition()
         {
             int uiLang = Globals.ThisAddIn.Application
                 .LanguageSettings
@@ -435,7 +455,7 @@ namespace KleiKodesh.Helpers
             catch { /* Swallow errors silently */ }
         }
 
-        static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
+        internal static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
         {
             try
             {
@@ -448,6 +468,10 @@ namespace KleiKodesh.Helpers
                         // worst case, normally a few ms); never throws.
                         if (userControl is KitveiHakodeshLib.AppViewer viewer)
                             await viewer.FlushPersistenceAsync();
+                        // The shared tool pane does the same for each tool it holds,
+                        // and closes any tool's floating window.
+                        else if (userControl is ToolRail.ToolRailHost rail)
+                            await rail.PrepareCloseAsync();
 
                         // Close the floating window first if the content was popped out.
                         // Disposing the host below would otherwise leave a live window

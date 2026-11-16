@@ -12,12 +12,14 @@ Shared utilities for the KleiKodesh VSTO Word add-in. These handle task pane lif
 - `TriggerUpdateCheck()` — Checks for updates on first pane open
 - Dock position is RTL-aware: Hebrew UI docks left, others dock right
 
-**`WpfTaskPane.cs`** — Hosts a WPF UserControl inside a WinForms-based VSTO task pane. Handles:
+**`WpfTaskPane.cs`** — Hosts a WPF UserControl inside a WinForms-based VSTO task pane. `BuildHost(view)` (the themed `WpfHostControl` wrapper) and `ForwardPopOutToggle` are public so the tool rail can host WPF tools without a pane of their own. Handles:
 - WPF/WinForms interop via `ElementHost`
 - Theme propagation from Office to WPF
 - Keyboard focus management
 
-**`TaskPanePopOut.cs`** — Pops a docked task pane into a floating, resizable window. Uses `HwndSource` to host the WPF content with proper keyboard and focus handling.
+**`TaskPanePopOut.cs`**: pops a docked task pane into a floating, resizable window. It has two modes:
+- **Pane mode**: `new TaskPanePopOut(host, pane)`. The pane hides while its content floats, and it is registered so `TaskPaneManager.Reveal` can find it.
+- **Slot mode**: `new TaskPanePopOut(host, onPoppedOut, onPoppedIn)`. Used for one tool inside the shared tool-rail pane. The pane is left alone, the owner switches the slot, and the handler is not registered.
 
 ### Word Integration
 

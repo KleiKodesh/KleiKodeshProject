@@ -20,16 +20,39 @@ namespace KleiKodesh.Helpers
         string _settingsKey;
         Form _form;
 
+        // What happens to the place the content came from. A whole task pane hides
+        // itself while its content floats and shows itself again on pop-in; one tool
+        // inside the shared tool-rail pane (ToolRail/ToolRailHost) must leave the pane
+        // alone - the other tools are still in it - and only switch its own slot.
+        readonly Action _onPoppedOut;
+        readonly Action _onPoppedIn;
+
         public TaskPanePopOut(UserControl host, CustomTaskPane pane)
         {
             _host = host;
             _pane = pane;
+            _onPoppedOut = () => _pane.Visible = false;
+            _onPoppedIn = () => _pane.Visible = true;
 
             // Prime the settings key now, while the host still holds its content.
             // Popping out empties the host, and the key is first needed after that.
             _settingsKey = BuildSettingsKey();
 
             Register(pane, this);
+        }
+
+        /// <summary>
+        /// A pop-out for one tool that shares its task pane with others. No pane is
+        /// hidden or watched: <paramref name="onPoppedOut"/> and
+        /// <paramref name="onPoppedIn"/> tell the owner to switch the slot instead.
+        /// Not entered in the pane registry - the owner keeps the handler itself.
+        /// </summary>
+        public TaskPanePopOut(UserControl host, Action onPoppedOut, Action onPoppedIn)
+        {
+            _host = host;
+            _onPoppedOut = onPoppedOut ?? (() => { });
+            _onPoppedIn = onPoppedIn ?? (() => { });
+            _settingsKey = BuildSettingsKey();
         }
 
         /// <summary>
@@ -337,9 +360,10 @@ namespace KleiKodesh.Helpers
                     OnPopoutFormHandleCreated(_form, EventArgs.Empty);
 
                 _form.FormClosing += OnFormClosing;
-                _pane.VisibleChanged += OnPaneVisibilityChanged;
+                if (_pane != null)
+                    _pane.VisibleChanged += OnPaneVisibilityChanged;
 
-                _pane.Visible = false;
+                _onPoppedOut();
                 _form.Show();
 
                 // Hiding the pane hides the host control that stayed behind - and for
@@ -389,7 +413,8 @@ namespace KleiKodesh.Helpers
 
             Console.WriteLine("[TaskPanePopOut] Popping in");
 
-            _pane.VisibleChanged -= OnPaneVisibilityChanged;
+            if (_pane != null)
+                _pane.VisibleChanged -= OnPaneVisibilityChanged;
             _form.FormClosing -= OnFormClosing;
 
             // Remove content from form
@@ -420,7 +445,7 @@ namespace KleiKodesh.Helpers
             // content lived in the form, and Word does not necessarily realise an empty
             // task pane control. BeginInvoke on a handle-less control throws, which used
             // to abort the pop-in silently and strand the pane hidden.
-            OnHost(() => _pane.Visible = true);
+            OnHost(_onPoppedIn);
         }
 
         void OnPopoutFormHandleCreated(object sender, EventArgs e)

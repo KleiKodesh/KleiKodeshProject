@@ -76,6 +76,16 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
+							<!-- The user's own items from tool-rail.json (ToolRail/ExternalTools.cs),
+							     built on each open so edits to the file show at once. -->
+							<dynamicMenu id="ExternalTools"
+									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
+									imageMso="AddInManager"
+									invalidateContentOnDrop="true"
+									getContent="getExternalToolsContent"/>
+
 							<button id="DuplicatePane"
 								getLabel="getLabel"
 								getScreentip="getLabel"
