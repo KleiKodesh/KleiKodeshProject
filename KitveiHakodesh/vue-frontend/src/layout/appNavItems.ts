@@ -1,6 +1,7 @@
 import { computed, type Component } from 'vue'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
+import { shortcutLabel } from '@/shortcuts/shortcutLabel'
 import { useHameshivUnreachable } from '@/composables/hameshivReachability'
 
 /**
@@ -23,33 +24,47 @@ export interface AppNavItem {
   icon: Component
   /** Undefined means "no explicit colour" - the icon inherits the surrounding text colour. */
   color: string | undefined
-  shortcut: string
+  /** The shortcut's current combination ("Ctrl+1"), read live from the shortcuts store -
+   *  the user can change it in settings. '' when there is none. */
+  readonly shortcut: string
+  /** Its id in shortcuts/shortcutRegistry.ts ('' = none). */
+  shortcutId: string
   /** One short line on what the destination is for (tooltip / home card subtitle). */
   description: string
   /** An external site that can't be reached right now - surfaces show a broken-connection badge. */
   unreachable?: boolean
 }
 
-function navItem(label: string, iconKey: DocumentIconKey, shortcut: string): AppNavItem {
+/** Gives `item` a live `shortcut` getter. Re-applied after a spread, which copies a getter's
+ *  value rather than the getter. */
+function withLiveShortcut<T extends Omit<AppNavItem, 'shortcut'>>(item: T): AppNavItem {
+  return Object.defineProperty(item, 'shortcut', {
+    get: () => (item.shortcutId ? shortcutLabel(item.shortcutId) : ''),
+    enumerable: true,
+    configurable: true,
+  }) as unknown as AppNavItem
+}
+
+function navItem(label: string, iconKey: DocumentIconKey, shortcutId: string): AppNavItem {
   const icon = documentIcon(iconKey)
   const text = t(`layout.nav.${iconKey}.label`)
   const description = t(`layout.nav.${iconKey}.description`)
-  return { label, text, icon: icon.icon24, color: icon.color || undefined, shortcut, description }
+  return withLiveShortcut({ label, text, icon: icon.icon24, color: icon.color || undefined, shortcutId, description })
 }
 
 const ALL_NAV_ITEMS: AppNavItem[] = [
-  navItem('קטלוג הספרים', 'library', 'Ctrl+1'),
-  navItem('חיפוש', 'search', 'Ctrl+2'),
-  navItem('היברו-בוקס', 'hbooks', 'Ctrl+3'),
-  navItem('פתח קובץ', 'folder', 'Ctrl+4'),
-  navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5'),
-  navItem('אזור אישי', 'userSpace', 'Ctrl+U'),
+  navItem('קטלוג הספרים', 'library', 'go.catalog'),
+  navItem('חיפוש', 'search', 'go.search'),
+  navItem('היברו-בוקס', 'hbooks', 'go.hebrewBooks'),
+  navItem('פתח קובץ', 'folder', 'go.openFile'),
+  navItem('חיפוש קבצים', 'fileSearch', 'go.fileSearch'),
+  navItem('אזור אישי', 'userSpace', 'go.userSpace'),
   // In development: shown in dev builds only until the user-space index exists.
   ...(import.meta.env.DEV ? [navItem('חיפוש באזור האישי', 'userSpaceSearch', '')] : []),
-  navItem('מילון', 'dict', 'Ctrl+6'),
-  navItem('לוח שנה', 'calendar', 'Ctrl+7'),
-  navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
-  navItem('המשיב', 'hameshiv', 'Ctrl+9'),
+  navItem('מילון', 'dict', 'go.dictionary'),
+  navItem('לוח שנה', 'calendar', 'go.calendar'),
+  navItem('מידות ושיעורים', 'ruler', 'go.measures'),
+  navItem('המשיב', 'hameshiv', 'go.hameshiv'),
 ]
 
 /** Label of the external hameshiv.com item. */
@@ -58,7 +73,7 @@ export const HAMESHIV_LABEL = 'המשיב'
 /** The destinations to show. Reactive so callers that `.value` it keep working. */
 const hameshivUnreachable = useHameshivUnreachable()
 export const APP_NAV_ITEMS = computed<AppNavItem[]>(() =>
-  ALL_NAV_ITEMS.map((item) => item.label === HAMESHIV_LABEL ? { ...item, unreachable: hameshivUnreachable.value } : item))
+  ALL_NAV_ITEMS.map((item) => item.label === HAMESHIV_LABEL ? withLiveShortcut({ ...item, unreachable: hameshivUnreachable.value }) : item))
 
 /**
  * Workspaces is deliberately NOT in the list above, and has no route at all: it is not a
@@ -68,4 +83,4 @@ export const APP_NAV_ITEMS = computed<AppNavItem[]>(() =>
  */
 
 /** Settings sits below a divider in both surfaces, so it is not part of the list above. */
-export const APP_NAV_SETTINGS_ITEM: AppNavItem = navItem('הגדרות', 'settings', 'F1')
+export const APP_NAV_SETTINGS_ITEM: AppNavItem = navItem('הגדרות', 'settings', 'go.settings')

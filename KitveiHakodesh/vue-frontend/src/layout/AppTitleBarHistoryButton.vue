@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import { ref, computed } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { onLongPress } from '@vueuse/core'
@@ -32,8 +33,8 @@ const isEnabled = computed(() => (isBack.value ? pane.canGoBack.value : pane.can
 
 const HOLD_HINT = t('layout.holdHint')
 const title = computed(() => isBack.value
-  ? t('layout.back') + '\n' + HOLD_HINT
-  : t('layout.forward') + '\n' + HOLD_HINT)
+  ? withShortcut(t('layout.back'), 'nav.back') + '\n' + HOLD_HINT
+  : withShortcut(t('layout.forward'), 'nav.forward') + '\n' + HOLD_HINT)
 
 /** The frames on this button's side of the cursor, nearest step first — like
  *  the browser's own hold-to-show list. Each keeps its real entries index so a

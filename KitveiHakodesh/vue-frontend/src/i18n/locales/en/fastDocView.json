@@ -26,7 +26,7 @@
   "searchNext": "Next match (Enter)",
   "searchPrevious": "Previous match (Shift+Enter)",
   "searchClose": "Close search (Esc)",
-  "search": "Search in the document (Ctrl+F)",
+  "search": "Search in the document",
   "closeNotes": "Close the notes pane",
   "syncNotesOffTitle": "Sync notes\nThe notes pane will follow the text in view",
   "syncNotesOnTitle": "Sync notes\nClick to turn off auto-sync",

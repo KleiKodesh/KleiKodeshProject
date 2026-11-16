@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent, watch, nextTick } from 'vue'
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { useResizeObserver } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
@@ -119,9 +120,8 @@ const isOcrAvailable = computed(() =>
 
 // A click always enters search mode; the address-bar dropdown lists recent
 // locations (shown while the field is empty / has no results) — not open tabs.
-const barTitleHint = t('layout.barTitleHint')
-
 const barTitle = computed(() => {
+  const barTitleHint = withShortcut(t('layout.barTitleHint'), 'nav.addressBar')
   const full = activeTab.value?.tocPath
     ? activeTabTitle.value + ' · ' + activeTab.value.tocPath
     : activeTabTitle.value
@@ -316,8 +316,8 @@ useAppTitleBarShortcuts({
           :class="{ 'bar-btn--dot': updateItem }"
           :style="updateItem ? { '--update-color': updateItem.color } : undefined"
           tabindex="-1"
-          :title="updateItem ? `${t('layout.menu')}
-${updateItem.text}` : t('layout.menu')"
+          :title="updateItem ? `${withShortcut(t('layout.menu'), 'nav.mainMenu')}
+${updateItem.text}` : withShortcut(t('layout.menu'), 'nav.mainMenu')"
           @click.stop="toggleNavDropdown"
         >
           <IconLineHorizontal320Regular />
@@ -342,7 +342,7 @@ ${updateItem.text}` : t('layout.menu')"
         direction="forward"
         key="history-forward"
       />
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" :title="t('layout.home')" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" :title="withShortcut(t('layout.home'), 'nav.home')" @click.stop="pane.goHome()"><IconHome20Regular /></button>
     </div>
 
     <!-- Search mode — the title turns into an editable address-bar search. -->
@@ -395,7 +395,7 @@ ${updateItem.text}` : t('layout.menu')"
         class="bar-btn"
         :class="{ active: workspacesOpen }"
         tabindex="-1"
-        :title="t('layout.workspaces')"
+        :title="withShortcut(t('layout.workspaces'), 'nav.workspaces')"
         :aria-expanded="workspacesOpen"
         @click.stop="workspacesSubmenu?.toggle()"
       >

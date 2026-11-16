@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withShortcut } from '@/shortcuts/shortcutLabel'
 import UnreachableBadge from './UnreachableBadge.vue'
 import { computed, inject, ref, watch } from 'vue'
 import {
@@ -186,7 +187,7 @@ ${updateItem.text}` : t('layout.moreItems')"
       <button
         class="nav-btn nav-btn-sm"
         tabindex="-1"
-        :title="t('layout.hideSidebar')"
+        :title="withShortcut(t('layout.hideSidebar'), 'nav.sidebar')"
         @click="settingsStore.setNavSidebarVisible(paneId, false)"
       >
         <IconChevronDoubleRight20Regular />

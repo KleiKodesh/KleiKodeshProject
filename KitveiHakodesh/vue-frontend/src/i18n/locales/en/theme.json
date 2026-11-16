@@ -1,4 +1,4 @@
 {
-  "toLight": "Switch to light mode (Ctrl+L)",
-  "toDark": "Switch to dark mode (Ctrl+L)"
+  "toLight": "Switch to light mode",
+  "toDark": "Switch to dark mode"
 }
