@@ -9,21 +9,28 @@
  * the outline entry for the section the reader is in now — read at click time, so it is
  * wherever they scrolled to, not where they were when the book opened.
  *
- * The button renders only when the book has editions, which the toolbar decides — see
- * `hasHebrewBooksEditions` there. It is collapsible: in the toolbar's "more" flyout it is a
+ * The button shows in every book (see `hasHebrewBooksEditions` in the toolbar): with no
+ * catalog suggestions it still lists the reader's own items and the add options. It hosts
+ * the "add from HebrewBooks" search window, which outlives the closed panel. It is collapsible: in the toolbar's "more" flyout it is a
  * row whose list opens as a side submenu (useToolbarOverflowSubmenu).
  */
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconDocumentPdf20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import BookViewHebrewBooksEditionsList from './BookViewHebrewBooksEditionsList.vue'
+import BookViewHebrewBooksAddDialog from './BookViewHebrewBooksAddDialog.vue'
+import { useBookEditionOpen, userItemAsEdition } from './useBookEditionOpen'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useUserEditionsStore } from '@/stores/userEditionsStore'
+import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import { useToolbarOverflowSubmenu } from '@/composables/useToolbarOverflowSubmenu'
 import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 
 const props = defineProps<{
   editions: HebrewBooksEdition[]
+  talmudPdfPath: string | null
   /** Renders as a row of the toolbar's "more" flyout, its panel a side submenu. */
   inOverflow?: boolean
 }>()
@@ -53,6 +60,25 @@ function toggleOpen() {
   setOpen(!isOpen.value)
 }
 
+// ── Add from HebrewBooks ─────────────────────────────────────────────────────
+
+const paneNavigation = usePaneNavigation()
+const userEditionsStore = useUserEditionsStore()
+const editionOpen = useBookEditionOpen(inject<1 | 2>('paneId', 1))
+const isAddDialogOpen = ref(false)
+
+function openAddDialog() {
+  setOpen(false)
+  isAddDialogOpen.value = true
+}
+
+/** Saves the pick as this book's user item, then opens it at the current section. */
+async function onAddHebrewBook(book: HebrewBook) {
+  isAddDialogOpen.value = false
+  const row = await userEditionsStore.addHebrewBook(paneNavigation.activeTab.bookId ?? 0, String(book.id), book.title)
+  if (row) editionOpen.openHebrewBooksEdition(userItemAsEdition(row))
+}
+
 const dropdownPositionClass = computed(() => `dropdown-${toolbarPosition.value}`)
 const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen, toggleButtonRef, dropdownRef)
 
@@ -75,8 +101,14 @@ const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen,
 
     <div v-if="isOpen" ref="dropdownRef" class="editions-dropdown" :class="inOverflow ? 'overflow-submenu' : dropdownPositionClass" :style="submenuStyle">
       <div class="editions-header">{{ $t('bookView.hebrewBooks.title') }}</div>
-      <BookViewHebrewBooksEditionsList :editions="editions" @picked="setOpen(false)" />
+      <BookViewHebrewBooksEditionsList :editions="editions" :talmud-pdf-path="talmudPdfPath" @picked="setOpen(false)" @add-hebrew-book="openAddDialog" />
     </div>
+    <BookViewHebrewBooksAddDialog
+      v-if="isAddDialogOpen"
+      :initial-term="paneNavigation.activeTab.title"
+      @pick="onAddHebrewBook"
+      @close="isAddDialogOpen = false"
+    />
   </div>
 </template>
 

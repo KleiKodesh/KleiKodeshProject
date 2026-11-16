@@ -12,7 +12,7 @@ import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
   BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
-  LineRow, BookVersionRow, HebrewBooksEdition, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
+  LineRow, BookVersionRow, HebrewBooksEdition, HebrewBooksEditionsResult, UserEdition, ReverseLineRefRow, BookLineRange, CommentaryLinkRow, CommentaryLinkGroups, WordLinkAnchor, WordLinkTargetRow, LineNote,
   RelatedBook, RelatedBooksList, CommentaryFilterGroup,
 } from './queries.types'
 
@@ -153,13 +153,68 @@ export async function getBookVersions(bookId: number): Promise<BookVersionRow[]>
  * [] means "none to offer" - the book has none, or the library carries no editions map
  * (Zayit, or a map file that is missing). The toolbar then shows no editions control.
  */
-export async function getHebrewBooksEditions(bookId: number): Promise<HebrewBooksEdition[]> {
-  if (bookId <= 0) return []
+export async function getHebrewBooksEditions(
+  bookId: number,
+  localFolder?: string | null,
+): Promise<HebrewBooksEditionsResult> {
+  const none: HebrewBooksEditionsResult = { editions: [], talmudPdfPath: null }
+  if (bookId <= 0) return none
   try {
-    return (await seforimOp<{ editions: HebrewBooksEdition[] }>('getHebrewBooksEditions', { bookId })).editions ?? []
+    const r = await seforimOp<Partial<HebrewBooksEditionsResult>>('getHebrewBooksEditions', {
+      bookId,
+      localFolder: localFolder ?? null,
+    })
+    return { editions: r.editions ?? [], talmudPdfPath: r.talmudPdfPath ?? null }
   } catch {
     // Service not ready, or the DB swapped under us - same answer as "no editions".
+    return none
+  }
+}
+
+/** The user's own scanned editions of a book, newest first; [] on any failure. */
+export async function listUserEditions(bookId: number, localFolder?: string | null): Promise<UserEdition[]> {
+  if (bookId <= 0) return []
+  try {
+    return (
+      (await seforimOp<{ editions: UserEdition[] }>('listUserEditions', { bookId, localFolder: localFolder ?? null }))
+        .editions ?? []
+    )
+  } catch {
     return []
+  }
+}
+
+/** Attaches an edition to a book; returns the row (an existing one for a duplicate), or null. */
+export async function addUserEdition(edition: {
+  bookId: number
+  kind: 'file' | 'hb'
+  filePath?: string | null
+  hbId?: string | null
+  title: string
+}): Promise<UserEdition | null> {
+  try {
+    return (
+      (
+        await seforimOp<{ edition: UserEdition | null }>('addUserEdition', {
+          bookId: edition.bookId,
+          kind: edition.kind,
+          filePath: edition.filePath ?? null,
+          hbId: edition.hbId ?? null,
+          title: edition.title,
+        })
+      ).edition ?? null
+    )
+  } catch {
+    return null
+  }
+}
+
+/** Removes a user edition; true when it was there. */
+export async function removeUserEdition(id: number): Promise<boolean> {
+  try {
+    return (await seforimOp<{ ok: boolean }>('removeUserEdition', { id })).ok === true
+  } catch {
+    return false
   }
 }
 

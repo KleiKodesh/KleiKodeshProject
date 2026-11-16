@@ -17,6 +17,8 @@ import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
 import BookViewHebrewBooksSideEdition from './BookViewHebrewBooksSideEdition.vue'
+import { useUserEditionsStore } from '@/stores/userEditionsStore'
+import { userItemAsEdition } from './useBookEditionOpen'
 import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
 import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -83,7 +85,7 @@ const {
   bookHasTeamim,
   bookIsCommentary,
   versions, activeVersionId, selectVersion, versionPersistState,
-  hebrewBooksEditions,
+  hebrewBooksEditions, hebrewBooksTalmudPdfPath,
   filterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
   tocEntries, tocSearchTree, altTocPane, tocLoading, tocError, restoredTocState,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
@@ -213,6 +215,7 @@ const toolbarProps = computed(() => ({
   versions: versions.value,
   activeVersionId: activeVersionId.value,
   hebrewBooksEditions: hebrewBooksEditions.value,
+  hebrewBooksTalmudPdfPath: hebrewBooksTalmudPdfPath.value,
   currentScrollLineIndex: currentScrollLineIndex.value,
   lines: lines.value,
   bookmarkLabelForLine,
@@ -456,8 +459,17 @@ const paneNavigation = usePaneNavigation()
 const sideEditionStore = useHebrewBooksSideEditionStore()
 const { opensSideBySide: editionOpensSideBySide } = useHebrewBooksSideEditionMode(paneId)
 
+// The reader's own HebrewBooks items can show side by side too; their own PDFs cannot
+// (the side panel is a HebrewBooks scan).
+const userEditionsStore = useUserEditionsStore()
+if (bookId) void userEditionsStore.load(bookId)
+const sideCandidateEditions = computed(() => [
+  ...userEditionsStore.editionsOf(bookId ?? 0).filter((e) => e.kind === 'hb' && e.hbId).map(userItemAsEdition),
+  ...hebrewBooksEditions.value,
+])
+
 const sideEdition = computed(() => {
-  const editions = hebrewBooksEditions.value
+  const editions = sideCandidateEditions.value
   if (!editionOpensSideBySide.value || !editions.length) return null
   const pickedId = sideEditionStore.getPickedEditionId(tabId, bookId)
   return editions.find((e) => e.id === pickedId) ?? editions.find((e) => e.isBest) ?? editions[0]!

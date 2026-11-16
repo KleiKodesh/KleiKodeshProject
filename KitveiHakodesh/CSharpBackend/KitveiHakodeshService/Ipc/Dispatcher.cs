@@ -681,7 +681,35 @@ public sealed class Dispatcher(
                 case "getHebrewBooksEditions":
                 {
                     var a = MsgPack.De<HebrewBooksEditionsArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new HebrewBooksEditionsResult { Editions = hebrewBooks.EditionsOf(a.BookId) }));
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
+                    string? talmudPdf = null;
+                    try { talmudPdf = global::KitveiHakodesh.Core.TalmudPdf.TalmudBavliPdfLocator.TalmudPdfPathOf(a.BookId); }
+                    catch (Exception ex) { logger.LogError(ex, "TalmudPdfPathOf failed"); }
+                    return RpcResponse.Ok(MsgPack.Ser(new HebrewBooksEditionsResult { Editions = hebrewBooks.EditionsOf(a.BookId, folder), TalmudPdfPath = talmudPdf }));
+                }
+
+                case "listUserEditions":
+                {
+                    var a = MsgPack.De<ListUserEditionsArgs>(req.Args);
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
+                    var rows = userSettings.ListEditions(a.BookId);
+                    var dtos = new List<UserEditionDto>(rows.Count);
+                    foreach (var e in rows) dtos.Add(ToUserEditionDto(e, hebrewBooks, folder));
+                    return RpcResponse.Ok(MsgPack.Ser(new ListUserEditionsResult { Editions = dtos }));
+                }
+
+                case "addUserEdition":
+                {
+                    var a = MsgPack.De<AddUserEditionArgs>(req.Args);
+                    var row = userSettings.AddEdition(a.BookId, a.Kind ?? "", a.FilePath, a.HbId, a.Title);
+                    string folder = HebrewBooksLocalFolder.Resolve(null);
+                    return RpcResponse.Ok(MsgPack.Ser(new AddUserEditionResult { Edition = row is null ? null : ToUserEditionDto(row, hebrewBooks, folder) }));
+                }
+
+                case "removeUserEdition":
+                {
+                    var a = MsgPack.De<RemoveUserEditionArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new RemoveUserEditionResult { Ok = userSettings.RemoveEdition(a.Id) }));
                 }
 
                 case "checkHbLocalFiles":
@@ -1275,4 +1303,22 @@ public sealed class Dispatcher(
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 
     private static List<string> Candidates(byte[]? args) => MsgPack.De<DictCandidatesArgs>(args).Candidates ?? [];
+
+    /// <summary>Core's edition row plus the on-disk facts the dropdown shows.</summary>
+    private static UserEditionDto ToUserEditionDto(global::KitveiHakodesh.Core.UserEditions.UserEdition e, HebrewBooksService hebrewBooks, string? hbFolder)
+    {
+        bool isFile = e.Kind == global::KitveiHakodesh.Core.UserEditions.UserEditionStore.KindFile;
+        bool fileExists = false;
+        if (isFile && !string.IsNullOrWhiteSpace(e.FilePath))
+        {
+            try { fileExists = File.Exists(e.FilePath); } catch (Exception) { /* unreachable drive = missing */ }
+        }
+        return new UserEditionDto
+        {
+            Id = e.Id, BookId = e.BookId, Kind = e.Kind, FilePath = e.FilePath, HbId = e.HbId,
+            Title = e.Title, AddedAt = e.AddedAt,
+            FileExists = fileExists,
+            IsOnDisk = !isFile && e.HbId != null && hebrewBooks.IsOnDisk(e.HbId, hbFolder),
+        };
+    }
 }

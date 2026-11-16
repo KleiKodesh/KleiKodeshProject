@@ -9,7 +9,7 @@ let gate: Promise<void> | null = null
 vi.mock('@/webview-host/seforimApi', () => ({
   getBookById: vi.fn(async () => ({ totalLines: TOTAL })),
   getBookVersions: vi.fn(async () => []),
-  getHebrewBooksEditions: vi.fn(async () => []),
+  getHebrewBooksEditions: vi.fn(async () => ({ editions: [], talmudPdfPath: null })),
   getLineCharCounts: vi.fn(async () => null),
   getLineIds: vi.fn(async (_id: number, start: number, end: number) =>
     Array.from({ length: end - start }, (_, i) => 1000 + start + i)),
@@ -21,6 +21,9 @@ vi.mock('@/webview-host/seforimApi', () => ({
     return rows
   }),
 }))
+
+// useLines reads the HebrewBooks folder setting; the real store needs a browser window.
+vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: () => ({ hebrewBooksLocalFolder: '' }) }))
 
 import { useLines } from './useBookViewLinesTable'
 

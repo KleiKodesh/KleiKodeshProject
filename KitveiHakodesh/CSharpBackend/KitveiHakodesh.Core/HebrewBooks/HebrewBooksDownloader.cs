@@ -301,6 +301,19 @@ namespace KitveiHakodesh.Core.HebrewBooks
             return HebrewBookAcquireResult.Success(partPath);
         }
 
+        /// <summary>Whether the book's PDF is already on disk - in the user's folder or the app
+        /// cache - so opening it needs no download. Same lookup as <see cref="AcquireAsync"/>.</summary>
+        public bool IsOnDisk(string bookId, string? localFolder)
+        {
+            if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) return false;
+            try
+            {
+                if (HebrewBooksLocalFolder.LocalFolderHit(localFolder, bookId) != null) return true;
+                return File.Exists(Path.Combine(_cacheDirectory, bookId + ".pdf"));
+            }
+            catch (Exception) { return false; /* disconnected drive or permission */ }
+        }
+
         /// <summary>Which of <paramref name="bookIds"/> already have a PDF in the user's folder.
         /// A per-file I/O error skips that id rather than failing the batch — one disconnected
         /// drive should not blank the whole list.</summary>

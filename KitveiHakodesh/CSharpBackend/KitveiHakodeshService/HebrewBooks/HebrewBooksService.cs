@@ -52,7 +52,7 @@ public sealed class HebrewBooksService
     /// when there is no map beside the library in use, or that library is Zayit's — its book
     /// ids are not the ones the map describes.
     /// </summary>
-    public List<HebrewBooksEdition> EditionsOf(int bookId)
+    public List<HebrewBooksEdition> EditionsOf(int bookId, string? localFolder)
     {
         try
         {
@@ -63,7 +63,10 @@ public sealed class HebrewBooksService
                 cached = new EditionsMap(seforimDbPath, CoreHebrewBooks.OtzariaHebrewBooksCatalogDbQueries.LocateBeside(seforimDbPath));
                 _editionsMap = cached;
             }
-            return cached.Map?.EditionsOf(bookId) ?? new List<HebrewBooksEdition>();
+            var editions = cached.Map?.EditionsOf(bookId) ?? new List<HebrewBooksEdition>();
+            foreach (var edition in editions)
+                edition.IsOnDisk = _downloader.IsOnDisk(edition.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), localFolder);
+            return editions;
         }
         catch (Exception ex)
         {
@@ -147,6 +150,9 @@ public sealed class HebrewBooksService
         };
         return mapped with { Detail = $"{result.Failure}: {result.Detail}" };
     }
+
+    /// <summary>Whether a HebrewBooks PDF is in the user's folder or the app cache.</summary>
+    public bool IsOnDisk(string bookId, string? localFolder) => _downloader.IsOnDisk(bookId, localFolder);
 
     public List<string> CheckLocalFiles(IEnumerable<string> bookIds, string? localFolder) =>
         _downloader.WhichAreDownloaded(bookIds, localFolder);

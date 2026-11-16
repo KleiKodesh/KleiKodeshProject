@@ -68,8 +68,11 @@ const props = defineProps<{
   // The book's alternate versions. Empty for most books, which hides the control.
   versions: BookVersionRow[]
   activeVersionId: number | null
-  // The book's scanned editions on HebrewBooks. Empty for most books, which hides the control.
+  // The book's scanned editions on HebrewBooks (catalog suggestions; often empty). The control
+  // shows in every book regardless: it also lists the reader's own items and the add options.
   hebrewBooksEditions: HebrewBooksEdition[]
+  /** Otzaria's scanned tractate PDF on this computer (Talmud Bavli), or null. */
+  hebrewBooksTalmudPdfPath: string | null
   currentScrollLineIndex: number
   lines: LinesTable
   /** The default name for a bookmark on a line - its TOC path. */
@@ -244,7 +247,8 @@ const isVerticalToolbar = computed(
 )
 
 const hasVersions = computed(() => props.versions.length > 0)
-const hasHebrewBooksEditions = computed(() => props.hebrewBooksEditions.length > 0)
+// Always present: even with no catalog suggestions the reader can add their own scans.
+const hasHebrewBooksEditions = computed(() => true)
 
 /** Whether the word-link markers control is on the toolbar - it tells us; see its own note. */
 const wordLinkMarkersPresent = ref(false)
@@ -371,12 +375,13 @@ defineExpose({ tocBtnRef, createBookmark })
       :active-version-id="activeVersionId"
       @select="$emit('selectVersion', $event)"
     />
-    <!-- Only for books with scanned editions on HebrewBooks; absent otherwise, like versions. -->
+    <!-- Scanned editions: catalog suggestions, the reader's own items, and adding more. -->
     <BookViewHebrewBooksEditionsDropdown
       v-if="hasHebrewBooksEditions"
       v-bind="collapseAttrs('hebrewbooks-editions')"
       class="dropdown-host"
       :editions="hebrewBooksEditions"
+      :talmud-pdf-path="hebrewBooksTalmudPdfPath"
     />
     <BookViewWordLinkMarkersDropdown
       v-bind="collapseAttrs('word-link-markers')"
@@ -552,6 +557,7 @@ defineExpose({ tocBtnRef, createBookmark })
         v-if="isOverflowed('hebrewbooks-editions')"
         in-overflow
         :editions="hebrewBooksEditions"
+        :talmud-pdf-path="hebrewBooksTalmudPdfPath"
       />
       <BookViewVersionsDropdown
         v-if="isOverflowed('versions')"
