@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { cleanHebrewText } from './hebrewTextCleaning'
 import { MARK_MODE, MARK_COLON, MARK_PASSAGE_END_COLON, MARK_QUOTES, MARK_COMMA, PUNCTUATION_PRESETS, withMarkMode } from './punctuationModes'
-import { CLEAN_TEXT } from './hebrewTextProcessing'
+import { CLEAN_TEXT, CLEAN_TEXT_LEGACY } from './hebrewTextProcessing'
+
+const KEEP_COLONS = withMarkMode(CLEAN_TEXT_LEGACY, MARK_COLON, MARK_MODE.KEEP)
 
 describe('cleanHebrewText — colon handling', () => {
   it('keeps chapter:verse citation colons between Hebrew letters', () => {
@@ -15,9 +17,9 @@ describe('cleanHebrewText — colon handling', () => {
     expect(cleanHebrewText('2:ב')).toBe('2:ב')
   })
 
-  it('keeps every mid-line colon by default (classic keeps colons)', () => {
-    expect(cleanHebrewText('הוא : שני')).toBe('הוא : שני')
-    expect(cleanHebrewText('הוא: שני')).toBe('הוא: שני')
+  it('keeps every mid-line colon when colons are set to keep', () => {
+    expect(cleanHebrewText('הוא : שני', KEEP_COLONS)).toBe('הוא : שני')
+    expect(cleanHebrewText('הוא: שני', KEEP_COLONS)).toBe('הוא: שני')
   })
 
   it('colon "to period": a sentence colon becomes a period, loose artifacts go', () => {
@@ -28,9 +30,9 @@ describe('cleanHebrewText — colon handling', () => {
   })
 
   it('still keeps end-of-line colons', () => {
-    expect(cleanHebrewText('סוף הפסוק:')).toBe('סוף הפסוק:')
-    expect(cleanHebrewText('סוף הפסוק:<br>')).toBe('סוף הפסוק:<br>')
-    expect(cleanHebrewText('סוף הפסוק: <span>')).toBe('סוף הפסוק: <span>')
+    expect(cleanHebrewText('סוף הפסוק:', KEEP_COLONS)).toBe('סוף הפסוק:')
+    expect(cleanHebrewText('סוף הפסוק:<br>', KEEP_COLONS)).toBe('סוף הפסוק:<br>')
+    expect(cleanHebrewText('סוף הפסוק: <span>', KEEP_COLONS)).toBe('סוף הפסוק: <span>')
   })
 
   it('keeps a colon that is followed by a tag (pre-existing end-of-line branch)', () => {
@@ -101,9 +103,6 @@ describe('cleanHebrewText - separate options', () => {
     expect(cleanHebrewText(`${ALEF}${PATAH}${TIPCHA}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF}${PATAH}`)
   })
 
-  it('turns maqaf into a space', () => {
-    expect(cleanHebrewText(`${ALEF}־${BET}`, CLEAN_TEXT.MAQAF)).toBe(`${ALEF} ${BET}`)
-  })
 
   it('remove punctuation keeps only the line-end period and parenthesized marks', () => {
     const input = `${ALEF}, ${BET}; ${ALEF}! ${BET}. ${ALEF} — ${BET} (${ALEF}:${BET}. ${ALEF}) ${BET}.`
@@ -116,7 +115,9 @@ describe('cleanHebrewText - separate options', () => {
     expect(cleanHebrewText(`${ALEF}${BET}"${ALEF} "${BET}"`, NONE)).toBe(`${ALEF}${BET}"${ALEF} ${BET}`)
   })
 
-  const N = PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+  const MODERN = PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+  /** Modern-only plus quotes removed, with mid-line colons kept. */
+  const N = withMarkMode(withMarkMode(MODERN, MARK_QUOTES, MARK_MODE.REMOVE), MARK_COLON, MARK_MODE.KEEP)
 
   it('passage-end colon can become a period while citations stay', () => {
     const flags = withMarkMode(0, MARK_PASSAGE_END_COLON, MARK_MODE.CONVERT)
@@ -134,6 +135,11 @@ describe('cleanHebrewText - separate options', () => {
 
   it('each mark is set on its own', () => {
     expect(cleanHebrewText(`${ALEF}, ${BET}; ${ALEF}?`, withMarkMode(0, MARK_COMMA, MARK_MODE.REMOVE))).toBe(`${ALEF} ${BET}; ${ALEF}?`)
+  })
+
+  it('modern-only turns ?! and a mid-line colon into periods, ; into a comma, keeps quotes', () => {
+    expect(cleanHebrewText(`"${ALEF}": ${BET}; ${ALEF}?`, MODERN)).toBe(`"${ALEF}". ${BET}, ${ALEF}.`)
+    expect(cleanHebrewText(`${ALEF}:`, MODERN)).toBe(`${ALEF}:`)
   })
 
   it('original level leaves punctuation untouched', () => {
@@ -156,10 +162,6 @@ describe('cleanHebrewText - separate options', () => {
     expect(cleanHebrewText(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`, N)).toBe(`${ALEF}${BET}${GERSHAYIM}\u200E${ALEF}`)
   })
 
-  it('turns a hyphen joining two Hebrew words into a space under maqaf, not a digit range', () => {
-    expect(cleanHebrewText(`${ALEF}${BET}-${BET}${ALEF}`, CLEAN_TEXT.MAQAF)).toBe(`${ALEF}${BET} ${BET}${ALEF}`)
-    expect(cleanHebrewText('615-567', CLEAN_TEXT.MAQAF)).toBe('615-567')
-  })
 
   it('removes a paseq without leaving a double space', () => {
     expect(cleanHebrewText(`${ALEF} \u05C0 ${BET}`, CLEAN_TEXT.TEAMIM)).toBe(`${ALEF} ${BET}`)

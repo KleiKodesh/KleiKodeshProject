@@ -1,12 +1,10 @@
 <script setup lang="ts">
 /**
  * The clean-text combo button in the BookView toolbar: the eraser half turns cleaning
- * on/off (Ctrl+D), the chevron half opens what cleaning does. Two kinds of choice:
- *   - reading preferences: vowels, cantillation, maqaf, the dibbur hamatchil dash;
- *   - punctuation, from modern to the classic rabbinic style: a level picks every mark at
- *     once, and each mark can then be set on its own (keep / convert / remove).
+ * on/off (Ctrl+D), the chevron half opens five checkboxes: nikkud, teamim, remove all
+ * punctuation, remove only modern punctuation (with the dibbur hamatchil dash), quotes.
+ * The two punctuation options exclude each other; "all" already removes quotes.
  * Both the on/off state and the options are global settings - one choice for every book.
- * The split button itself is the shared ToolbarSplitDropdown.
  */
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -14,10 +12,7 @@ import { IconEraser20Regular, IconEraser20Filled } from '@iconify-prerendered/vu
 import ToolbarSplitDropdown from '@/components/ToolbarSplitDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { CLEAN_TEXT } from '@/utils/hebrewTextProcessing'
-import {
-  MARK_MODE, PUNCTUATION_MARKS, PUNCTUATION_MASK, PUNCTUATION_PRESETS, markMode, withMarkMode,
-  type MarkMode, type PunctuationMark,
-} from '@/utils/punctuationModes'
+import { ALL_PUNCTUATION, MODERN_PUNCTUATION, PUNCTUATION_MASK, QUOTES_MASK, QUOTES_REMOVED } from '@/utils/punctuationModes'
 
 defineProps<{
   /** Renders as a row of the toolbar's "more" flyout. */
@@ -27,33 +22,34 @@ defineProps<{
 const settingsStore = useSettingsStore()
 const { cleanTextFlags, cleanTextOptions } = storeToRefs(settingsStore)
 
-/** One checkbox per reading-preference toggle, in the order the dropdown lists them. */
-const TOGGLES = [
-  { flag: CLEAN_TEXT.NIKKUD, labelKey: 'bookView.toolbar.cleanNikkud' },
-  { flag: CLEAN_TEXT.TEAMIM, labelKey: 'bookView.toolbar.cleanTeamim' },
-  { flag: CLEAN_TEXT.MAQAF, labelKey: 'bookView.toolbar.cleanMaqaf' },
-  { flag: CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH, labelKey: 'bookView.toolbar.cleanDibburHamatchilDash' },
-] as const
+/** Punctuation bits other than quotes - what picks "all" vs "modern only". */
+const punctuation = computed(() => cleanTextOptions.value & PUNCTUATION_MASK & ~(QUOTES_MASK))
+const removeAll = computed(() => punctuation.value === (ALL_PUNCTUATION & ~(QUOTES_MASK)))
+const removeModern = computed(() => punctuation.value === MODERN_PUNCTUATION)
+const removeQuotes = computed(() => (cleanTextOptions.value & QUOTES_MASK) === QUOTES_REMOVED)
 
-function toggleOption(flag: number) {
+function toggleFlag(flag: number) {
   cleanTextOptions.value ^= flag
 }
 
-/** The level whose marks match the current ones exactly; none means "custom". */
-const activePreset = computed(() => PUNCTUATION_PRESETS.find((p) => p.value === (cleanTextOptions.value & PUNCTUATION_MASK))?.key)
-
-function applyPreset(value: number) {
-  cleanTextOptions.value = (cleanTextOptions.value & ~PUNCTUATION_MASK) | value
+/** Sets the punctuation preset (or none), keeping nikkud/teamim and the quotes toggle. */
+function setPunctuation(preset: number, dibburHamatchil: boolean) {
+  const kept = cleanTextOptions.value & ~PUNCTUATION_MASK & ~CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH
+  // Quotes removed only because "all" was on go with it.
+  const quotes = removeQuotes.value && !removeAll.value ? QUOTES_REMOVED : 0
+  cleanTextOptions.value = kept | preset | quotes | (dibburHamatchil ? CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH : 0)
 }
 
-function setMark(mark: PunctuationMark, mode: MarkMode) {
-  cleanTextOptions.value = withMarkMode(cleanTextOptions.value, mark, mode)
+function toggleAll() {
+  setPunctuation(removeAll.value ? 0 : ALL_PUNCTUATION, false)
 }
 
-function modeLabelKey(mark: PunctuationMark, mode: MarkMode): string {
-  if (mode === MARK_MODE.KEEP) return 'bookView.toolbar.markMode.keep'
-  if (mode === MARK_MODE.REMOVE) return 'bookView.toolbar.markMode.remove'
-  return `bookView.toolbar.markMode.${mark.convertTo}`
+function toggleModern() {
+  setPunctuation(removeModern.value ? 0 : MODERN_PUNCTUATION, !removeModern.value)
+}
+
+function toggleQuotes() {
+  cleanTextOptions.value ^= QUOTES_REMOVED
 }
 </script>
 
@@ -71,88 +67,25 @@ function modeLabelKey(mark: PunctuationMark, mode: MarkMode): string {
       <IconEraser20Regular v-else />
     </template>
     <template #label>{{ $t('bookView.toolbar.cleanText') }}</template>
-    <label v-for="toggle in TOGGLES" :key="toggle.flag" class="option-row">
-      <input
-        type="checkbox"
-        :checked="(cleanTextOptions & toggle.flag) !== 0"
-        @change="toggleOption(toggle.flag)"
-      />
-      <span>{{ $t(toggle.labelKey) }}</span>
+    <label class="option-row">
+      <input type="checkbox" :checked="(cleanTextOptions & CLEAN_TEXT.NIKKUD) !== 0" @change="toggleFlag(CLEAN_TEXT.NIKKUD)" />
+      <span>{{ $t('bookView.toolbar.cleanNikkud') }}</span>
     </label>
-
-    <div class="section-title">{{ $t('bookView.toolbar.punctuation') }}</div>
-    <label v-for="level in PUNCTUATION_PRESETS" :key="level.key" class="option-row">
-      <input
-        type="radio"
-        name="clean-text-punctuation-level"
-        :checked="activePreset === level.key"
-        @change="applyPreset(level.value)"
-      />
-      <span>{{ $t(`bookView.toolbar.punctuationLevel.${level.key}`) }}</span>
+    <label class="option-row">
+      <input type="checkbox" :checked="(cleanTextOptions & CLEAN_TEXT.TEAMIM) !== 0" @change="toggleFlag(CLEAN_TEXT.TEAMIM)" />
+      <span>{{ $t('bookView.toolbar.cleanTeamim') }}</span>
     </label>
-    <label v-if="!activePreset" class="option-row">
-      <input type="radio" name="clean-text-punctuation-level" checked disabled />
-      <span>{{ $t('bookView.toolbar.punctuationLevel.custom') }}</span>
+    <label class="option-row">
+      <input type="checkbox" :checked="removeAll" @change="toggleAll" />
+      <span>{{ $t('bookView.toolbar.cleanAllPunctuation') }}</span>
     </label>
-
-    <div class="section-title">{{ $t('bookView.toolbar.punctuationMarks') }}</div>
-    <div v-for="mark in PUNCTUATION_MARKS" :key="mark.key" class="option-row mark-row">
-      <span class="mark-label">{{ $t(`bookView.toolbar.mark.${mark.key}`) }}</span>
-      <span class="mark-modes" role="radiogroup" :aria-label="$t(`bookView.toolbar.mark.${mark.key}`)">
-        <button
-          v-for="mode in mark.modes"
-          :key="mode"
-          type="button"
-          role="radio"
-          class="mark-mode"
-          :class="{ selected: markMode(cleanTextOptions, mark) === mode }"
-          :aria-checked="markMode(cleanTextOptions, mark) === mode"
-          @click="setMark(mark, mode)"
-        >
-          {{ $t(modeLabelKey(mark, mode)) }}
-        </button>
-      </span>
-    </div>
+    <label class="option-row">
+      <input type="checkbox" :checked="removeModern" @change="toggleModern" />
+      <span>{{ $t('bookView.toolbar.cleanModernPunctuation') }}</span>
+    </label>
+    <label class="option-row">
+      <input type="checkbox" :checked="removeAll || removeQuotes" :disabled="removeAll" @change="toggleQuotes" />
+      <span>{{ $t('bookView.toolbar.cleanQuotes') }}</span>
+    </label>
   </ToolbarSplitDropdown>
 </template>
-
-<style scoped>
-.section-title {
-  padding: 6px 10px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-top: 1px solid var(--border-color);
-  margin-top: 4px;
-}
-.mark-row {
-  justify-content: space-between;
-  cursor: default;
-}
-.mark-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mark-modes {
-  display: inline-flex;
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.mark-mode {
-  padding: 1px 6px;
-  font-size: 11px;
-  background: transparent;
-  color: var(--text-primary);
-  border: none;
-  cursor: pointer;
-}
-.mark-mode + .mark-mode {
-  border-inline-start: 1px solid var(--border-color);
-}
-.mark-mode.selected {
-  background: var(--accent-color);
-  color: #fff;
-}
-</style>

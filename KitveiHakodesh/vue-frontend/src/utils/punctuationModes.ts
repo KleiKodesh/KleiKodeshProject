@@ -13,12 +13,12 @@ export const MARK_MODE = { KEEP: 0, CONVERT: 1, REMOVE: 2 } as const
 export type MarkMode = (typeof MARK_MODE)[keyof typeof MARK_MODE]
 
 export interface PunctuationMark {
-  /** i18n key suffix: bookView.toolbar.mark.<key> */
+  /** Stable name of the mark. */
   key: string
   shift: number
   /** The modes this mark offers, in menu order. */
   modes: readonly MarkMode[]
-  /** i18n key suffix of the CONVERT label: bookView.toolbar.markMode.<convertTo> */
+  /** What CONVERT turns the mark into. */
   convertTo?: 'toPeriod' | 'toComma'
 }
 
@@ -63,13 +63,19 @@ function preset(modes: [MarkMode, MarkMode, MarkMode, MarkMode, MarkMode, MarkMo
 }
 
 /**
- * Levels from modern to classic. Order of each row: ?! ; , colon passage-end-colon period
- * quotes dash.
+ * Presets, by key. Order of each row: ?! ; , colon passage-end-colon period quotes dash.
+ *   - classic: "remove modern punctuation only" - ?! and mid-line colons become periods,
+ *     semicolons commas, punctuation dashes go. Quotes are their own toggle.
+ *   - none: "remove punctuation" - everything but the passage-end colon and the line's last period.
  */
 export const PUNCTUATION_PRESETS: readonly { key: string; value: number }[] = [
   { key: 'original', value: 0 },
-  { key: 'classic', value: preset([C, C, K, K, K, K, R, R]) },
-  { key: 'periodsColons', value: preset([C, R, R, K, K, K, R, R]) },
-  { key: 'periodsOnly', value: preset([C, R, R, C, K, K, R, R]) },
+  { key: 'classic', value: preset([C, C, K, C, K, K, K, R]) },
   { key: 'none', value: preset([R, R, R, R, K, R, R, R]) },
 ]
+
+export const MODERN_PUNCTUATION = PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value
+export const ALL_PUNCTUATION = PUNCTUATION_PRESETS.find((p) => p.key === 'none')!.value
+/** The quotes bits; removing quotes is a toggle of its own beside the two presets. */
+export const QUOTES_REMOVED = withMarkMode(0, MARK_QUOTES, MARK_MODE.REMOVE)
+export const QUOTES_MASK = 3 << MARK_QUOTES.shift
