@@ -86,7 +86,8 @@ export function buildSelectedResultsHtml(
   renderSnippet: (result: FullTextSearchResult) => string,
   /** The result's citation ("title › path"), resolved from its ids by the caller. */
   renderReference: (result: FullTextSearchResult) => string,
-  cleanText: boolean,
+  /** settingsStore.copyCleanFlags; 0 = as-is. */
+  cleanFlags: number,
 ): string | null {
   if (!rowIndexRange) return null
   const { firstRowIndex, lastRowIndex } = rowIndexRange
@@ -107,5 +108,5 @@ export function buildSelectedResultsHtml(
   const html = blocks.join('')
   // The same "clean text" toggle the book view and the global menu honour, applied
   // once over the whole payload rather than per result.
-  return cleanText ? cleanHebrewText(html) : html
+  return cleanFlags ? cleanHebrewText(html, cleanFlags) : html
 }

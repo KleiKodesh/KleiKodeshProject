@@ -9,7 +9,6 @@
   "menu": {
     "copy": "Copy",
     "selectAll": "Select all",
-    "copyJoinLines": "Copy as one line (no line breaks)",
-    "copyCleanText": "Copy clean text"
+    "copyJoinLines": "Copy as one line (no line breaks)"
   }
 }
