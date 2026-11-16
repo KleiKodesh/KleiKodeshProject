@@ -121,7 +121,7 @@ function tokensPerLine(data: unknown[], lineCount: number): DictaToken[][] | nul
   for (const item of data as DictaToken[]) {
     const str = item?.str ?? ''
     if (!str.includes('\n')) {
-      groups[groups.length - 1].push(item)
+      groups[groups.length - 1]!.push(item)
       continue
     }
     // Dicta glues punctuation and spaces to the newline (". \n"): split the token there,
@@ -129,7 +129,7 @@ function tokensPerLine(data: unknown[], lineCount: number): DictaToken[][] | nul
     const parts = str.split('\n')
     parts.forEach((part, i) => {
       if (i > 0) groups.push([])
-      if (part) groups[groups.length - 1].push({ str: part, pStr: part })
+      if (part) groups[groups.length - 1]!.push({ str: part, pStr: part })
     })
   }
   return groups.length === lineCount ? groups : null
@@ -171,7 +171,7 @@ function lettersOf(abbreviation: string): string {
 /** Whether the words begin with the letters in order, each word taking one or more of them (הקב"ה = הקדוש ברוך הוא). */
 function wordsMatchLetters(letters: string, words: string[]): boolean {
   if (words.length === 0) return letters.length === 0
-  const word = [...words[0]].map((ch) => FINAL_TO_BASE[ch] ?? ch).join('')
+  const word = [...words[0]!].map((ch) => FINAL_TO_BASE[ch] ?? ch).join('')
   for (let k = 1; k <= letters.length; k++) {
     if (!word.startsWith(letters.slice(0, k))) break
     if (wordsMatchLetters(letters.slice(k), words.slice(1))) return true
@@ -228,7 +228,7 @@ export function withExpansions(text: ReadAloudText, expansions: Expansion[]): Re
   const copyUntil = (end: number) => {
     for (; pos < end; pos++) {
       spoken += text.spoken[pos]
-      toFull.push(text.toFull[pos])
+      toFull.push(text.toFull[pos]!)
     }
   }
   for (const e of expansions) {
@@ -236,12 +236,12 @@ export function withExpansions(text: ReadAloudText, expansions: Expansion[]): Re
     const span = e.end - e.start
     for (let j = 0; j < e.text.length; j++) {
       spoken += e.text[j]
-      toFull.push(text.toFull[e.start + Math.min(j, span - 1)])
+      toFull.push(text.toFull[e.start + Math.min(j, span - 1)]!)
     }
     pos = e.end
   }
   copyUntil(text.spoken.length)
-  toFull.push(text.toFull[text.spoken.length])
+  toFull.push(text.toFull[text.spoken.length]!)
   return { full: text.full, spoken, toFull }
 }
 
@@ -257,17 +257,17 @@ export function withVocalization(text: ReadAloudText, pointed: string): ReadAlou
   for (const ch of pointed) {
     if (IS_MARK.test(ch)) {
       // A mark Dicta added (or one already there) rides on the letter before it.
-      toFull.push(toFull[toFull.length - 1] ?? text.toFull[0])
+      toFull.push(toFull[toFull.length - 1] ?? text.toFull[0]!)
       if (source < text.spoken.length && text.spoken[source] === ch) source++
     } else {
       // A mark of ours that Dicta dropped is passed over, so the letter keeps its place.
-      while (source < text.spoken.length && IS_MARK.test(text.spoken[source])) source++
-      toFull.push(text.toFull[source])
+      while (source < text.spoken.length && IS_MARK.test(text.spoken[source]!)) source++
+      toFull.push(text.toFull[source]!)
       source++
     }
     spoken += ch
   }
-  toFull.push(text.toFull[text.spoken.length])
+  toFull.push(text.toFull[text.spoken.length]!)
   return { full: text.full, spoken, toFull }
 }
 
@@ -313,7 +313,7 @@ export function createReadAloudDicta() {
     if (!groups) return result // an answer that does not line up: read the lines as they are
     let k = 0
     lines.forEach((line, i) => {
-      if (marked[i]) result[i] = expansionsOf(line, groups[k++]) ?? []
+      if (marked[i]) result[i] = expansionsOf(line, groups[k++]!) ?? []
     })
     return result
   }
@@ -325,7 +325,7 @@ export function createReadAloudDicta() {
     const groups = tokensPerLine(data, expandedLines.length)
     if (!groups) return expandedLines.map(() => undefined)
     return expandedLines.map((line, i) => {
-      const pointed = pointedTextOf(groups[i])
+      const pointed = pointedTextOf(groups[i]!)
       return stripMarks(pointed) === stripMarks(line) ? pointed : undefined
     })
   }
@@ -337,13 +337,13 @@ export function createReadAloudDicta() {
       if (!expansions) throw new Error('unreachable')
       let pointed: (string | undefined)[] = lines.map(() => undefined)
       if (options.nikkud) {
-        const expanded = lines.map((line, i) => withExpansions({ full: line, spoken: line, toFull: [...line].map((_, k) => k).concat(line.length) }, expansions[i]).spoken)
+        const expanded = lines.map((line, i) => withExpansions({ full: line, spoken: line, toFull: [...line].map((_, k) => k).concat(line.length) }, expansions[i]!).spoken)
         const result = await addNikkud(expanded, signal)
         if (signal.aborted) return
         if (!result) throw new Error('unreachable')
         pointed = result
       }
-      lines.forEach((line, i) => ready.set(line, { options, expansions: expansions[i], pointed: pointed[i] }))
+      lines.forEach((line, i) => ready.set(line, { options, expansions: expansions[i]!, pointed: pointed[i] }))
     } catch {
       // Not reachable: the lines are read as they are, and Dicta is left alone for a while.
       for (const line of lines) failed.add(line)
