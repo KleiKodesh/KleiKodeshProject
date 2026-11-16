@@ -2,7 +2,7 @@
 /**
  * App-wide fallback right-click menu. Mounted once at the app root, it offers
  * "העתק" (Copy), "העתק לתוך וורד" (Copy into Word) and the persistent
- * "העתק טקסט נקי" toggle (shared settingsStore.copyCleanText, same as the book/txt/FTS
+ * copy-cleaning toggles (shared settingsStore.copyCleanFlags, same as the book/txt/FTS
  * menus) on any selected text that isn't already served by a more specific menu
  * (book view, commentary, txt, PDF).
  *
@@ -16,6 +16,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
+import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
@@ -61,12 +62,7 @@ const items = computed<ContextMenuItem[]>(() => [
   { label: t('components.copy'), action: onCopy, shortcut: 'Ctrl+C' },
   { label: t('components.copyIntoWord'), action: onPasteIntoWord },
   { type: 'separator' },
-  {
-    type: 'checkbox',
-    label: t('components.copyCleanText'),
-    get checked() { return settingsStore.copyCleanText },
-    onChange: (value: boolean) => { settingsStore.copyCleanText = value },
-  },
+  ...copyCleanMenuItems(),
 ])
 
 // Honors the clean-text toggle for generic copies (menu העתק, Ctrl+C). Document-level
@@ -75,7 +71,8 @@ const items = computed<ContextMenuItem[]>(() => [
 // and wins; editable fields keep their native copy untouched.
 useEventListener(document, 'copy', (event: ClipboardEvent) => {
   if (event.defaultPrevented) return // a scoped copy handler already wrote the payload
-  if (!settingsStore.copyCleanText) return // native copy is fine as-is
+  const flags = settingsStore.copyCleanFlags
+  if (!flags) return // native copy is fine as-is
 
   const target = event.target as HTMLElement | null
   if (target?.closest('input, textarea, [contenteditable]')) return
@@ -87,7 +84,7 @@ useEventListener(document, 'copy', (event: ClipboardEvent) => {
   const tmp = document.createElement('div')
   tmp.appendChild(fragment)
 
-  const html = cleanHebrewText(tmp.innerHTML)
+  const html = cleanHebrewText(tmp.innerHTML, flags)
   if (!html.trim()) return
 
   event.clipboardData?.setData('text/html', wrapRtlHtml(html))

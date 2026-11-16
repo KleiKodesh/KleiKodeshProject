@@ -299,7 +299,7 @@ function buildSelectedResultsCopyHtml(): string | null {
     rowIndexRange,
     (result) => shownSnippetHtml(renderSnippet(snippetHtmlOf(result) ?? '')),
     referenceOf,
-    settingsStore.copyCleanText,
+    settingsStore.copyCleanFlags,
   )
 }
 

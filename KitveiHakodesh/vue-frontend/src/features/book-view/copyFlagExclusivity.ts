@@ -38,7 +38,7 @@
  *      radio (you can switch between them but never turn both off). Endnotes still
  *      make no sense on a single inline quote, so quotation ⊗ withNotes remains.
  *
- * copyJoinLines and copyCleanText are fully independent (no rules) and are
+ * copyJoinLines and the copy-cleaning flags are fully independent (no rules) and are
  * intentionally NOT modelled here.
  */
 

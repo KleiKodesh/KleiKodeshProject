@@ -9,7 +9,6 @@
   "recentSearches": "Recent searches",
   "copy": "Copy",
   "copyIntoWord": "Copy into Word",
-  "copyCleanText": "Copy clean text",
   "service": {
     "notRunningTitle": "The Kitvei Hakodesh service is not responding",
     "notRunningBody": "Books and search are unavailable right now. The service may be restarting - please click \"Try again\".",

@@ -9,7 +9,6 @@
   "menu": {
     "copy": "העתק",
     "selectAll": "בחר הכל",
-    "copyJoinLines": "העתק כרצף (ללא מעברי שורה)",
-    "copyCleanText": "העתק טקסט נקי"
+    "copyJoinLines": "העתק כרצף (ללא מעברי שורה)"
   }
 }

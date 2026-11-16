@@ -2,6 +2,8 @@ import { t } from '@/i18n'
 import { nextTick, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
+import { cleanTextFlagsFor } from '@/utils/hebrewTextProcessing'
 import { buildLineLink } from '@/utils/appDeepLink'
 import {
   appLinkHtml,
@@ -523,13 +525,15 @@ export function useCommentaryCopy(
       html = `<span>${inline}</span>`
     }
 
-    // ── Step 3: copyCleanText ────────────────────────────────────────────────
+    // ── Step 3: copyCleanFlags ────────────────────────────────────────────────
     // Clean BOTH the body and the endnotes so a single copy has one consistent
     // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
     // purpose — a מקור reference is not book text and must not be stripped.
-    if (settingsStore.copyCleanText) {
-      html = cleanHebrewText(html)
-      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml)
+    // Commentary: a short plain heading before the dash also counts as a dibbur hamatchil.
+    const flags = cleanTextFlagsFor(settingsStore.copyCleanFlags, true)
+    if (flags) {
+      html = cleanHebrewText(html, flags)
+      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml, flags)
     }
 
     // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
@@ -581,7 +585,7 @@ export function useCommentaryCopy(
           inlineText = stripNoteMarkers(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
         }
       }
-      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
+      if (flags) inlineText = cleanHebrewText(inlineText, flags)
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). The source arrives already escaped from
@@ -609,7 +613,7 @@ export function useCommentaryCopy(
   /**
    * Loads what the export needs, then fires the native copy event — useScopedCopy
    * intercepts it and applies all active flags (copyJoinLines, copySourcePosition,
-   * copyWithNotes, copyCleanText).
+   * copyWithNotes, copyCleanFlags).
    *
    * The await is what makes copy-with-notes independent of what happens to be
    * scrolled into view. It stays inside the browser's user-activation window because
@@ -758,12 +762,7 @@ export function useCommentaryCopy(
           get checked() { return settingsStore.copyWithNotes },
           onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
         },
-        {
-          type: 'checkbox',
-          label: t('bookView.copy.plain'),
-          get checked() { return settingsStore.copyCleanText },
-          onChange: (value: boolean) => { settingsStore.copyCleanText = value },
-        },
+        ...copyCleanMenuItems(),
       ],
     },
     { type: 'separator' },

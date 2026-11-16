@@ -42,7 +42,7 @@ const referenceOf = (result: FullTextSearchResult) => {
 }
 
 function build(range: { firstRowIndex: number; lastRowIndex: number } | null) {
-  return buildSelectedResultsHtml(RESULTS, range, passThrough, referenceOf, false)
+  return buildSelectedResultsHtml(RESULTS, range, passThrough, referenceOf, 0)
 }
 
 describe('resultReference', () => {
@@ -118,7 +118,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     expect(html).not.toContain('<mark')
     expect(html).toContain('plain hit text')
@@ -139,7 +139,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     expect(html).toContain('words and more')
     expect(html).not.toContain('wor d')
@@ -158,7 +158,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     expect(html).toContain('two  spaces')
   })
@@ -178,7 +178,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     // Asserts the CHARACTERS, not merely that the entity source is gone: a
     // hand-rolled decoder that maps both of these to an ordinary space would satisfy
@@ -202,7 +202,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     expect(html).toContain('Book &lt;One&gt;')
     expect(html).toContain('A &amp; B')
@@ -219,7 +219,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       referenceOf,
-      false,
+      0,
     )!
     // The reference still lands; only the empty text block is skipped.
     expect(html).toContain('BookOne › ChapterA')
@@ -234,7 +234,7 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       (result) => passThrough(result).replace("first", "RENDERED"),
       referenceOf,
-      false,
+      0,
     )!
     expect(html).toContain('RENDERED snippet')
   })

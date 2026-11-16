@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
-import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { toHebrewSearchQuery } from '@/features/book-view/lines/useBookViewLineCopyMenu'
 
@@ -16,7 +16,6 @@ export function useFastDocViewContextMenu(options: {
   selectAllInContainer: () => void
   paneNavigation: PaneNavigation
 }) {
-  const settingsStore = useSettingsStore()
 
   function onCopy(): boolean {
     try {
@@ -52,12 +51,7 @@ export function useFastDocViewContextMenu(options: {
       type: 'submenu',
       label: t('bookView.copy.options'),
       items: [
-        {
-          type: 'checkbox',
-          label: t('bookView.copy.plain'),
-          get checked() { return settingsStore.copyCleanText },
-          onChange: (value: boolean) => { settingsStore.copyCleanText = value },
-        },
+        ...copyCleanMenuItems(),
       ],
     },
   ]

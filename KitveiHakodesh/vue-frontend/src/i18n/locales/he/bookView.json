@@ -53,11 +53,13 @@
     "joinLines": "העתק כרצף (ללא מעברי שורה)",
     "link": "העתק קישור לקטע זה",
     "options": "אפשרויות העתקה",
-    "plain": "העתק טקסט נקי",
     "quote": "העתק מקור עם ציטוט",
     "searchTabTitle": "חיפוש: {query}",
     "sourceEnd": "העתק עם מקור בסוף",
     "sourceStart": "העתק עם מקור בהתחלה",
+    "stripModernPunctuation": "הסר סימני פיסוק מודרניים",
+    "stripNikkud": "העתק ללא ניקוד",
+    "stripTeamim": "העתק ללא טעמים",
     "toSearch": "העתק לחיפוש במאגר",
     "withNotes": "העתק עם הערות"
   },
@@ -197,13 +199,9 @@
     "skipOptions": "על מה לדלג",
     "noHebrewVoice": "לא מותקן קול עברי ב-Windows",
     "noHebrewVoiceShort": "אין קול",
-    "googleVoice": "גוגל (מקוון)",
-    "googleVoiceShort": "גוגל",
-    "googleVoiceHint": "הקול של גוגל, דרך האינטרנט. כשאין חיבור, קורא הקול של Windows.",
     "skipOption": {
-      "links": "מראי מקום (קישורים בטקסט, ובתוך סוגריים)",
-      "noteMarkers": "סימני הערות",
-      "parentheses": "כל מה שבסוגריים ( )",
+      "links": "מראי מקומות",
+      "parentheses": "כל מה שבסוגריים עגולות ( )",
       "squareBrackets": "כל מה שבסוגריים מרובעים [ ]",
       "singleLetterWords": "מילים של אות אחת",
       "headings": "כותרות"
@@ -213,32 +211,32 @@
     "cleanDibburHamatchilDash": "מקף דיבור המתחיל לנקודה",
     "cleanMaqaf": "מקף לרווח",
     "cleanNikkud": "ניקוד",
-        "mark": {
-            "colon": "נקודתיים באמצע שורה",
-            "comma": "פסיק",
-            "dash": "מקף",
-            "passageEndColon": "נקודתיים בסוף קטע",
-            "period": "נקודה באמצע שורה",
-            "questionExclamation": "? ו־!",
-            "quotes": "מרכאות",
-            "semicolon": "נקודה ופסיק"
-        },
-        "markMode": {
-            "keep": "השאר",
-            "remove": "הסר",
-            "toComma": "ל־,",
-            "toPeriod": "ל־."
-        },
-        "punctuation": "פיסוק",
-        "punctuationLevel": {
-            "classic": "כבספרים: נקודות, פסיקים, נקודתיים",
-            "custom": "מותאם אישית",
-            "none": "ללא (רק סוף שורה)",
-            "original": "מקורי",
-            "periodsColons": "נקודות ונקודתיים",
-            "periodsOnly": "נקודות בלבד"
-        },
-        "punctuationMarks": "כל סימן לחוד",
+    "mark": {
+      "colon": "נקודתיים באמצע שורה",
+      "comma": "פסיק",
+      "dash": "מקף",
+      "passageEndColon": "נקודתיים בסוף קטע",
+      "period": "נקודה באמצע שורה",
+      "questionExclamation": "? ו־!",
+      "quotes": "מרכאות",
+      "semicolon": "נקודה ופסיק"
+    },
+    "markMode": {
+      "keep": "השאר",
+      "remove": "הסר",
+      "toComma": "ל־,",
+      "toPeriod": "ל־."
+    },
+    "punctuation": "פיסוק",
+    "punctuationLevel": {
+      "classic": "כבספרים: נקודות, פסיקים, נקודתיים",
+      "custom": "מותאם אישית",
+      "none": "ללא (רק סוף שורה)",
+      "original": "מקורי",
+      "periodsColons": "נקודות ונקודתיים",
+      "periodsOnly": "נקודות בלבד"
+    },
+    "punctuationMarks": "כל סימן לחוד",
     "cleanTeamim": "טעמים",
     "cleanText": "נקה טקסט",
     "cleanTextOptions": "מה לנקות",

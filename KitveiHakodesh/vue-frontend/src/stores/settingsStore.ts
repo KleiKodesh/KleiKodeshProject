@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsDelete, lsKeys } from '@/utils/persistence'
-import { CLEAN_TEXT_LEGACY } from '@/utils/hebrewTextProcessing'
+import { CLEAN_TEXT, CLEAN_TEXT_LEGACY } from '@/utils/hebrewTextProcessing'
+import { PUNCTUATION_PRESETS } from '@/utils/punctuationModes'
 
 /**
  * Disk names for the settings this store owns. Nothing else reads them.
@@ -43,7 +44,9 @@ const KEYS = {
   SETTINGS_CENSOR_OTHER_NAMES: 'censor.otherNamesMode',
 
   // Copy flags
-  SETTINGS_COPY_CLEAN_TEXT: 'copy.cleanText',
+  SETTINGS_COPY_STRIP_NIKKUD: 'copy.stripNikkud',
+  SETTINGS_COPY_STRIP_TEAMIM: 'copy.stripTeamim',
+  SETTINGS_COPY_STRIP_MODERN_PUNCTUATION: 'copy.stripModernPunctuation',
   // FastDocView: the text column ignores the document's page width / margins (book view column width instead)
   SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS: 'fastDocView.ignoreMargins',
   SETTINGS_COPY_JOIN_LINES: 'copy.joinLines',
@@ -231,7 +234,9 @@ const DEFAULTS = {
   searchGrammarPrefix: false,
   searchGrammarSuffix: false,
   searchFuzzy: false,
-  copyCleanText: false,
+  copyStripNikkud: false,
+  copyStripTeamim: false,
+  copyStripModernPunctuation: false,
   fastDocViewIgnoreMargins: false,
   // Join the selected lines into one continuous run of text with NO line break
   // between them (default off = keep one line break per source line on paste).
@@ -361,7 +366,18 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchGrammarPrefix = ref(DEFAULTS.searchGrammarPrefix)
   const searchGrammarSuffix = ref(DEFAULTS.searchGrammarSuffix)
   const searchFuzzy = ref(DEFAULTS.searchFuzzy)
-  const copyCleanText = ref(DEFAULTS.copyCleanText)
+  const copyStripNikkud = ref(DEFAULTS.copyStripNikkud)
+  const copyStripTeamim = ref(DEFAULTS.copyStripTeamim)
+  const copyStripModernPunctuation = ref(DEFAULTS.copyStripModernPunctuation)
+  /**
+   * The clean-text flags every copy path applies (0 = copy as-is). Independent of the
+   * toolbar's clean-text view. Modern punctuation always brings the dibbur hamatchil dash
+   * with it - the classic style has no dash after a dibbur hamatchil.
+   */
+  const copyCleanFlags = computed(() =>
+    (copyStripNikkud.value ? CLEAN_TEXT.NIKKUD : 0) |
+    (copyStripTeamim.value ? CLEAN_TEXT.TEAMIM : 0) |
+    (copyStripModernPunctuation.value ? CLEAN_TEXT.DIBBUR_HAMATCHIL_DASH | PUNCTUATION_PRESETS.find((p) => p.key === 'classic')!.value : 0))
   const fastDocViewIgnoreMargins = ref(DEFAULTS.fastDocViewIgnoreMargins)
   const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
@@ -566,7 +582,9 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX, searchGrammarPrefix)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX, searchGrammarSuffix)
     loadSetting(KEYS.SETTINGS_SEARCH_FUZZY, searchFuzzy)
-    loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
+    loadSetting(KEYS.SETTINGS_COPY_STRIP_NIKKUD, copyStripNikkud)
+    loadSetting(KEYS.SETTINGS_COPY_STRIP_TEAMIM, copyStripTeamim)
+    loadSetting(KEYS.SETTINGS_COPY_STRIP_MODERN_PUNCTUATION, copyStripModernPunctuation)
     loadSetting(KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS, fastDocViewIgnoreMargins)
     loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
@@ -675,7 +693,9 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchGrammarPrefix, KEYS.SETTINGS_SEARCH_GRAMMAR_PREFIX)
   persistSetting(searchGrammarSuffix, KEYS.SETTINGS_SEARCH_GRAMMAR_SUFFIX)
   persistSetting(searchFuzzy, KEYS.SETTINGS_SEARCH_FUZZY)
-  persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
+  persistSetting(copyStripNikkud, KEYS.SETTINGS_COPY_STRIP_NIKKUD)
+  persistSetting(copyStripTeamim, KEYS.SETTINGS_COPY_STRIP_TEAMIM)
+  persistSetting(copyStripModernPunctuation, KEYS.SETTINGS_COPY_STRIP_MODERN_PUNCTUATION)
   persistSetting(fastDocViewIgnoreMargins, KEYS.SETTINGS_FAST_DOC_VIEW_IGNORE_MARGINS)
   persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
@@ -858,7 +878,9 @@ export const useSettingsStore = defineStore('settings', () => {
     searchGrammarPrefix.value = DEFAULTS.searchGrammarPrefix
     searchGrammarSuffix.value = DEFAULTS.searchGrammarSuffix
     searchFuzzy.value = DEFAULTS.searchFuzzy
-    copyCleanText.value = DEFAULTS.copyCleanText
+    copyStripNikkud.value = DEFAULTS.copyStripNikkud
+    copyStripTeamim.value = DEFAULTS.copyStripTeamim
+    copyStripModernPunctuation.value = DEFAULTS.copyStripModernPunctuation
     fastDocViewIgnoreMargins.value = DEFAULTS.fastDocViewIgnoreMargins
     copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
@@ -912,7 +934,7 @@ export const useSettingsStore = defineStore('settings', () => {
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandInflections, searchExpandSynonyms, searchWildcardPrefix, searchWildcardSuffix, searchGrammarPrefix, searchGrammarSuffix, searchFuzzy,
-    copyCleanText,
+    copyStripNikkud, copyStripTeamim, copyStripModernPunctuation, copyCleanFlags,
     fastDocViewIgnoreMargins,
     copyJoinLines,
     copySourcePosition,
