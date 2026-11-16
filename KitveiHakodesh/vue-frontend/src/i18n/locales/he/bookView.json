@@ -271,9 +271,6 @@
     "default": "נוסח ברירת המחדל",
     "title": "נוסחים"
   },
-  "abbrevTooltip": {
-    "fromDicta": "הצעת דיקטה"
-  },
   "wordLink": {
     "zoomIn": "הגדל טקסט",
     "zoomOut": "הקטן טקסט"

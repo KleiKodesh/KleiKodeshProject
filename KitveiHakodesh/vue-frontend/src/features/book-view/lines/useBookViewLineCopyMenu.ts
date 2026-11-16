@@ -313,9 +313,9 @@ function extractSelectionWithUnmountedLines(
 //   ON:  convert user-note-marker superscripts to numbered endnotes
 //   OFF: strip note markers from the HTML
 //
-// copyCleanText (independent checkbox)
-//   ON:  run cleanHebrewText() (strips diacritics/cantillation marks)
-//   OFF: leave text as-is
+// copyCleanFlags (three independent checkboxes: nikkud, teamim, modern punctuation)
+//   cleanHebrewText() with settingsStore.copyCleanFlags; 0 = leave text as-is.
+//   Independent of the toolbar's clean-text view.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void, buildSource: (firstLineIndex: number | null) => string, wholeBookReady: () => Promise<LineItem[]> } {
@@ -373,11 +373,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   /** The toolbar's clean-text flags (per-book). */
   function screenCleanTextFlags(): number {
     return options.cleanTextFlags?.() ?? settingsStore.cleanTextFlags
-  }
-
-  /** "Copy clean text" follows the toolbar flags, but always strips nikkud and teamim at minimum. */
-  function copyCleanTextFlags(): number {
-    return screenCleanTextFlags() | CLEAN_TEXT.TEAMIM | CLEAN_TEXT.NIKKUD
   }
 
   /**
@@ -498,12 +493,12 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       html = `<span>${inline}</span>`
     }
 
-    // ── Step 3: copyCleanText ────────────────────────────────────────────────
+    // ── Step 3: copyCleanFlags ────────────────────────────────────────────────
     // Clean BOTH the body and the endnotes so a single copy has one consistent
     // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
     // purpose — a מקור reference is not book text and must not be stripped.
-    if (settingsStore.copyCleanText) {
-      const flags = copyCleanTextFlags()
+    const flags = settingsStore.copyCleanFlags
+    if (flags) {
       html = cleanHebrewText(html, flags)
       if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml, flags)
     }
@@ -538,7 +533,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         const blobHtml = blobResult ? blobResult.joined : html
         inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       }
-      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText, copyCleanTextFlags())
+      if (flags) inlineText = cleanHebrewText(inlineText, flags)
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). The source is escaped inside
@@ -566,7 +561,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   /**
    * Loads what the export needs, then fires the native copy event — useScopedCopy
    * intercepts it and applies all active flags (copyJoinLines, copySourcePosition,
-   * copyWithNotes, copyCleanText).
+   * copyWithNotes, copyCleanFlags).
    *
    * The await is what makes copy-with-notes independent of what happens to be
    * scrolled into view. It stays inside the browser's user-activation window because
@@ -721,12 +716,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
             get checked() { return settingsStore.copyWithNotes },
             onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
           },
-          {
-            type: 'checkbox',
-            label: t('bookView.copy.plain'),
-            get checked() { return settingsStore.copyCleanText },
-            onChange: (value: boolean) => { settingsStore.copyCleanText = value },
-          },
+          ...copyCleanMenuItems(),
         ],
       },
       { type: 'separator' },

@@ -24,13 +24,12 @@
 import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { dictAbbrevSenses } from '@/webview-host/dictionaryDb'
-import { contextAround, fetchDictaOptions, mergeDictaRanking, type RankedSense } from './abbrevDicta'
 
 export interface AbbrevTooltipData {
   /** Unique per lookup — used as component key so a new selection remounts/re-measures. */
   id: number
-  /** Display-ready sense labels (headword-prefixed when it differs from the matched term), re-ordered once by Dicta when it answers. */
-  senses: RankedSense[]
+  /** Display-ready sense labels (headword-prefixed when it differs from the matched term). */
+  senses: string[]
   anchorRect: DOMRect
 }
 
@@ -131,12 +130,9 @@ export function useBookViewAbbrevTooltip(
 ) {
   const abbrevTooltip = ref<AbbrevTooltipData | null>(null)
   let lookupToken = 0
-  let dictaAbort: AbortController | null = null
 
   function closeAbbrevTooltip() {
     lookupToken++
-    dictaAbort?.abort()
-    dictaAbort = null
     abbrevTooltip.value = null
   }
 
@@ -169,10 +165,6 @@ export function useBookViewAbbrevTooltip(
     if (!isFullWordSelection(wordRange)) { closeAbbrevTooltip(); return }
 
     const token = ++lookupToken
-    dictaAbort?.abort()
-    dictaAbort = new AbortController()
-    // Dicta runs in parallel; the dictionary never waits for it.
-    const dictaPromise = askDicta(wordRange, dictaAbort.signal)
     let result
     try {
       result = await dictAbbrevSenses(abbrevCandidates(term))
@@ -193,38 +185,7 @@ export function useBookViewAbbrevTooltip(
     }
     if (!senses.length) { abbrevTooltip.value = null; return }
 
-    abbrevTooltip.value = {
-      id: token,
-      senses: senses.map((text) => ({ text, fromDicta: false })),
-      anchorRect: wordRange.getBoundingClientRect(),
-    }
-
-    const dictaOptions = await dictaPromise
-    if (token !== lookupToken || !dictaOptions || !abbrevTooltip.value) return
-    const ranked = mergeDictaRanking(term, senses, dictaOptions)
-    const current = abbrevTooltip.value.senses
-    if (ranked.length === current.length && ranked.every((r, i) => r.text === current[i]!.text)) return
-    abbrevTooltip.value = { ...abbrevTooltip.value, senses: ranked }
-  }
-
-  /** Dicta's options for the selected word, sending its line as context. Never throws. */
-  async function askDicta(wordRange: Range, signal: AbortSignal): Promise<string[] | null> {
-    try {
-      const start = wordRange.startContainer
-      const startEl = start.nodeType === Node.ELEMENT_NODE ? (start as Element) : start.parentElement
-      const lineEl = startEl?.closest('[data-line-id],[data-index]') ?? startEl
-      if (!lineEl) return null
-      const before = document.createRange()
-      before.setStart(lineEl, 0)
-      before.setEnd(wordRange.startContainer, wordRange.startOffset)
-      const offset = before.toString().length
-      const word = wordRange.toString()
-      const line = lineEl.textContent ?? ''
-      if (line.slice(offset, offset + word.length) !== word) return null
-      return await fetchDictaOptions(contextAround(line, offset, offset + word.length), signal)
-    } catch {
-      return null
-    }
+    abbrevTooltip.value = { id: token, senses, anchorRect: wordRange.getBoundingClientRect() }
   }
 
   function onMouseUp(event: MouseEvent) {

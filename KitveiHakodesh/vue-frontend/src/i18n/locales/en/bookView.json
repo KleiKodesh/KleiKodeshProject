@@ -271,9 +271,6 @@
     "default": "Default version",
     "title": "Versions"
   },
-  "abbrevTooltip": {
-    "fromDicta": "Suggested by Dicta"
-  },
   "wordLink": {
     "zoomIn": "Larger text",
     "zoomOut": "Smaller text"
