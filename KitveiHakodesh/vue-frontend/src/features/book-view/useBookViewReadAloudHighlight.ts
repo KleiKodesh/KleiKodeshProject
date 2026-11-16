@@ -1,42 +1,24 @@
-import { onScopeDispose, watch } from 'vue'
-import type { BookViewReadAloud, ReadAloudPosition } from './useBookViewReadAloud'
+import { computed, nextTick, watch } from 'vue'
+import type { BookViewReadAloud } from './useBookViewReadAloud'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import type { ReadAloudWordMark } from './lines/readAloudWordMark'
 
 /**
- * Marks the word being read aloud in the lines pane, and always keeps the line being read in view.
+ * The word being read aloud, for the lines pane to mark (the line renderer wraps it, like a
+ * search match - see readAloudWordMark), and following along: the line being read is
+ * brought into view, and on a line taller than the view, the word itself.
  *
- * The mark is a CSS Custom Highlight (`::highlight(kh-read-aloud)`), so the rendered line's
- * DOM is never touched. The spoken text and the rendered line can differ (markers, notes,
- * vowel points), so a word is found by counting LETTERS, like bookmark points are: the n-th
- * letter of the spoken text is the n-th letter of the row.
- *
- * The nikkud read aloud adds shows on the marked word itself, in gray, as if part of the
- * text: an overlay drawn on top of the word (see showLabel); the row itself is not touched.
+ * The spoken text and the rendered line can differ (markers, notes, vowel points), so a
+ * word is given by LETTERS: the n-th letter of the spoken text is the n-th letter of the row.
  */
-const HIGHLIGHT_NAME = 'kh-read-aloud'
 const LETTER = /[\p{L}\p{N}]/u
+/** Where a word that left the view is put back: this far below the viewport's top. */
+const WORD_TOP_PX = 48
 
 function lettersBefore(text: string, end: number): number {
   let count = 0
   for (let i = 0; i < end && i < text.length; i++) if (LETTER.test(text[i]!)) count++
   return count
-}
-
-/** The (node, offset) just before the row's `letterIndex`-th letter, or its end. */
-function pointAtLetter(row: HTMLElement, letterIndex: number): { node: Text; offset: number } | null {
-  const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
-  let seen = 0
-  let last: Text | null = null
-  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
-    last = node
-    const data = node.data
-    for (let i = 0; i < data.length; i++) {
-      if (!LETTER.test(data[i]!)) continue
-      if (seen === letterIndex) return { node, offset: i }
-      seen++
-    }
-  }
-  return last ? { node: last, offset: last.data.length } : null
 }
 
 export function useBookViewReadAloudHighlight(
@@ -45,136 +27,79 @@ export function useBookViewReadAloudHighlight(
   /** Resolves true once the line is landed and mounted; false when a newer landing superseded it. */
   scrollToLine: (lineIndex: number) => Promise<boolean>,
 ) {
-  const supported = typeof CSS !== 'undefined' && 'highlights' in CSS
+  const word = computed<ReadAloudWordMark | null>(() => {
+    const pos = readAloud.position.value
+    if (!pos || pos.wordStart < 0) return null
+    const letterStart = lettersBefore(pos.text, pos.wordStart)
+    const letterCount = lettersBefore(pos.text, pos.wordEnd) - letterStart
+    if (letterCount <= 0) return null
+    return { lineIndex: pos.lineIndex, letterStart, letterCount, spokenWord: pos.spokenWord }
+  })
 
-  let label: HTMLElement | null = null
-  /** The word the label sits on; followed every frame so scrolling and reflow keep it attached. */
-  let labelRange: Range | null = null
-  let frame = 0
+  /** The landing bringing the line being read into view, while it is under way. */
+  let landing: Promise<boolean> | null = null
 
-  function hideLabel() {
-    label?.remove()
-    label = null
-    labelRange = null
-    cancelAnimationFrame(frame)
+  /** Brings the line into view when it is not on screen. */
+  function followLine(lineIndex: number) {
+    if (scroller()?.isRowFullyVisible(lineIndex)) return
+    // A line taller than the view is never fully visible: when its marked word shows, it is followed by the word.
+    if (scroller()?.rowElement(lineIndex)?.querySelector('mark.kh-read-aloud') && wordIsVisible()) return
+    const current = scrollToLine(lineIndex)
+    landing = current
+    void current.finally(() => {
+      if (landing === current) landing = null
+    })
   }
 
-  /** Puts the label on the word's current place: one rect read per frame, nothing else. */
-  function placeLabel() {
-    if (!label || !labelRange) return
-    const rect = labelRange.getBoundingClientRect()
-    // Scrolled away or re-rendered (the range collapsed): nothing to sit on.
-    if (rect.width === 0 || !labelRange.startContainer.isConnected) {
-      label.style.visibility = 'hidden'
-    } else {
-      label.style.visibility = ''
-      label.style.lineHeight = `${rect.height}px`
-      label.style.height = `${rect.height}px`
-      label.style.top = `${rect.top}px`
-      label.style.left = `${rect.left}px`
-      label.style.width = `${rect.width}px`
-    }
-    frame = requestAnimationFrame(placeLabel)
-  }
-
-  /**
-   * Draws the word's nikkud in gray, exactly on the word itself, as if it were part of the
-   * text. The spoken word (letters + nikkud) is laid over the row word in the same font, with
-   * a blend mode that keeps the row's own letters as they are: on a light page "darken"
-   * (the black letters stay black, only the gray points show on the white), on a dark page
-   * "lighten". The row's DOM is not touched. Shown only when the spoken word is the same
-   * word with points - an abbreviation read in full has nothing to lay over it.
-   */
-  function showLabel(range: Range, spokenWord: string) {
-    const word = spokenWord.trim()
-    const shown = range.toString().trim()
-    const rect = range.getBoundingClientRect()
-    const strip = (s: string) => s.replace(/[֑-ׇ]/g, '')
-    if (!word || word === shown || strip(word) !== strip(shown) || rect.width === 0) {
-      hideLabel()
-      return
-    }
-    if (!label) {
-      label = document.createElement('div')
-      label.className = 'kh-read-aloud-word'
-      label.dir = 'rtl'
-      document.body.appendChild(label)
-    }
-    const host = range.startContainer.parentElement ?? document.body
-    const style = getComputedStyle(host)
-    label.textContent = word
-    label.style.font = style.font
-    label.style.letterSpacing = style.letterSpacing
-    // Dark text = light page.
-    const [r, g, b] = (style.color.match(/\d+(\.\d+)?/g) ?? ['0', '0', '0']).map(Number)
-    label.style.mixBlendMode = 0.299 * r + 0.587 * g + 0.114 * b < 128 ? 'darken' : 'lighten'
-    labelRange = range
-    cancelAnimationFrame(frame)
-    placeLabel()
-  }
-
-  function clear() {
-    if (supported) CSS.highlights.delete(HIGHLIGHT_NAME)
-    hideLabel()
-  }
-
-  function rowFor(lineIndex: number): HTMLElement | null {
+  function markedWord(): HTMLElement | null {
+    const lineIndex = word.value?.lineIndex
+    if (lineIndex == null) return null
     const api = scroller()
-    return api?.isRowRendered(lineIndex) ? api.rowElement(lineIndex) : null
+    if (!api?.isRowRendered(lineIndex)) return null
+    return api.rowElement(lineIndex)?.querySelector<HTMLElement>('mark.kh-read-aloud') ?? null
   }
 
-  /** Brings the line into view when it is not on screen. Null when it already shows. */
-  function follow(lineIndex: number): Promise<boolean> | null {
-    if (scroller()?.isRowFullyVisible(lineIndex)) return null
-    return scrollToLine(lineIndex)
+  function wordIsVisible(): boolean {
+    const mark = markedWord()
+    const viewport = scroller()?.scrollerElement
+    if (!mark || !viewport) return true
+    const m = mark.getBoundingClientRect()
+    const v = viewport.getBoundingClientRect()
+    return m.top >= v.top && m.bottom <= v.bottom
   }
 
-  /** Marks the word at `pos` in its drawn row. */
-  function markWord(pos: ReadAloudPosition) {
-    const row = rowFor(pos.lineIndex)
-    if (!row) return
-    const firstLetter = lettersBefore(pos.text, pos.wordStart)
-    const letterCount = lettersBefore(pos.text, pos.wordEnd) - firstLetter
-    if (letterCount <= 0) return
-    const start = pointAtLetter(row, firstLetter)
-    const end = pointAtLetter(row, firstLetter + letterCount - 1)
-    if (!start || !end) return
-    const range = document.createRange()
-    range.setStart(start.node, start.offset)
-    // Past the last letter and any vowel points riding on it.
-    let endOffset = end.offset + 1
-    while (endOffset < end.node.data.length && /\p{M}/u.test(end.node.data[endOffset]!)) endOffset++
-    range.setEnd(end.node, endOffset)
-    CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(range))
-    showLabel(range, pos.spokenWord)
+  /** Scrolls the marked word back into view when it left it (a line taller than the view). */
+  function followWord() {
+    const mark = markedWord()
+    const api = scroller()
+    const viewport = api?.scrollerElement
+    if (!mark || !api || !viewport) return
+    const m = mark.getBoundingClientRect()
+    const v = viewport.getBoundingClientRect()
+    if (m.top >= v.top && m.bottom <= v.bottom) return
+    api.nudge(Math.round(m.top - v.top - WORD_TOP_PX))
   }
 
   watch(
-    readAloud.position,
-    async (pos, previous) => {
-      if (!pos) {
-        clear()
-        return
-      }
-      const landing = pos.lineIndex !== previous?.lineIndex ? follow(pos.lineIndex) : null
-      if (!supported || !readAloud.highlightWords.value || pos.wordStart < 0) {
-        clear()
-        return
-      }
-      if (rowFor(pos.lineIndex)) {
-        markWord(pos)
-        return
-      }
-      clear()
-      // The line is being landed and is not mounted yet: mark it once the landing has
-      // mounted it - unless a newer landing or a newer word took over meanwhile.
-      if (landing && (await landing) && readAloud.position.value === pos && rowFor(pos.lineIndex)) markWord(pos)
+    () => readAloud.position.value?.lineIndex,
+    (lineIndex, previous) => {
+      if (lineIndex != null && lineIndex !== previous) followLine(lineIndex)
     },
   )
 
-  watch(readAloud.highlightWords, (on) => {
-    if (!on) clear()
+  // After the row is re-rendered with the new word marked: follow the word, once any
+  // landing of its line has mounted it - the scroller's own landing promise, no timers.
+  // nextTick: past the scroller's own update, which holds its anchor row in place - a
+  // move made before it would be undone.
+  watch(word, async (w) => {
+    if (!w) return
+    if (landing) {
+      const pending = landing
+      if (!(await pending) || word.value !== w) return
+    }
+    await nextTick()
+    if (word.value === w) followWord()
   })
 
-  onScopeDispose(clear)
+  return { word }
 }

@@ -26,6 +26,7 @@ import {
   annotationOffsetLength,
   contentInAnnotationOffsetSpace,
 } from './useBookViewLineRenderer'
+import type { ReadAloudWordMark } from './readAloudWordMark'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewLineLink } from './useBookViewLineLink'
 import BookViewErrorReportDialog from '../errorReport/BookViewErrorReportDialog.vue'
@@ -88,6 +89,8 @@ const props = defineProps<
     searchHighlightQuery?: string
     searchHighlightSnippet?: string
     searchHighlightTerms?: string[]
+    /** The word being read aloud, marked in its line. */
+    readAloudWord?: ReadAloudWordMark | null
     getActiveTocEntry?: (lineIndex: number) => TocEntry | null
     getActiveAltTocEntry?: (lineIndex: number) => TocEntry | null
     getTocPath?: (entry: TocEntry) => string
@@ -311,6 +314,7 @@ const { lineContent, forgetLines: forgetRenderedLines } = useBookViewLineRendere
   getNotesForLine,
   getWordLinkAnchorsForLine,
   getLineNotesForLine,
+  readAloudWord: props.readAloudWord,
 }))
 
 // Apply .current class via DOM toggle — no re-render needed when only occurrence changes.

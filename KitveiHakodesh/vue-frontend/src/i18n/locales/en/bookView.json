@@ -188,7 +188,6 @@
     "stop": "Stop",
     "previousLine": "Previous line",
     "nextLine": "Next line",
-    "highlight": "Highlight the word being read",
     "voice": "Voice",
     "drag": "Drag to move",
     "close": "Close",
@@ -198,6 +197,9 @@
     "skipOptions": "What to skip",
     "noHebrewVoice": "No Hebrew voice is installed in Windows",
     "noHebrewVoiceShort": "No voice",
+    "googleVoice": "Google (online)",
+    "googleVoiceShort": "Google",
+    "googleVoiceHint": "Google's voice, through the internet. When it cannot be reached, the Windows voice reads.",
     "skipOption": {
       "links": "Source references (links, and references in parentheses)",
       "noteMarkers": "Note markers",

@@ -10,6 +10,7 @@ import { appendUnmarkedNotesMarker, lineNotesSig } from './lineNotes'
 import type { useSettingsStore } from '@/stores/settingsStore'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
+import { markReadAloudWord, type ReadAloudWordMark } from './readAloudWordMark'
 
 type SettingsStore = ReturnType<typeof useSettingsStore>
 
@@ -32,6 +33,8 @@ interface LineRenderProps {
   getNotesForLine?: (lineId: number) => Note[]
   getWordLinkAnchorsForLine?: (lineId: number) => WordLinkAnchor[]
   getLineNotesForLine?: (lineId: number) => LineNote[]
+  /** The word being read aloud: marked on its line only, on top of the cached render. */
+  readAloudWord?: ReadAloudWordMark | null
 }
 
 // Precompiled diacritic range check — faster than /[\u0591-\u05C7]/.test(ch) in tight loops.
@@ -511,7 +514,7 @@ export function useBookViewLineRenderer(
     }
 
     const cached = renderCache.get(lineIndex)
-    if (cached !== undefined && cached.raw === raw) return cached.html
+    if (cached !== undefined && cached.raw === raw) return withReadAloudWord(cached.html, lineIndex)
 
     const p = getProps()
     // Word-link splicing runs FIRST, on the raw content — the anchors' offsets are in
@@ -551,7 +554,16 @@ export function useBookViewLineRenderer(
 
     renderCache.set(lineIndex, { raw, html: content })
     indexOfLineId.set(lineId, lineIndex)
-    return content
+    return withReadAloudWord(content, lineIndex)
+  }
+
+  /**
+   * The read-aloud word is applied after the cache, never stored in it: each word only
+   * re-marks the one line being read; every other row is served its cached string unchanged.
+   */
+  function withReadAloudWord(html: string, lineIndex: number): string {
+    const word = getProps().readAloudWord
+    return word && word.lineIndex === lineIndex ? markReadAloudWord(html, word) : html
   }
 
   return { lineContent, forgetLines }

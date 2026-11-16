@@ -8,8 +8,6 @@ import {
   IconStop20Filled,
   IconPrevious20Regular,
   IconNext20Regular,
-  IconHighlight20Regular,
-  IconHighlight20Filled,
   IconDismiss20Regular,
   IconReOrderDotsVertical20Regular,
   IconFastForward20Regular,
@@ -110,14 +108,6 @@ function onVoiceChange(voiceUri: string) {
       <IconFastForward20Regular class="rtl-flip" />
     </button>
     <div class="separator" />
-    <button
-      :class="{ active: r.highlightWords.value }"
-      :title="t('bookView.readAloud.highlight')"
-      @click="r.highlightWords.value = !r.highlightWords.value"
-    >
-      <IconHighlight20Filled v-if="r.highlightWords.value" />
-      <IconHighlight20Regular v-else />
-    </button>
     <BookViewReadAloudSkipDropdown
       v-model:enabled="r.skipEnabled.value"
       v-model:options="r.skipOptions.value"
@@ -202,22 +192,5 @@ button:disabled {
 .drag-handle svg {
   width: 16px;
   height: 16px;
-}
-</style>
-
-<style>
-/* The word being read; global because ::highlight() names live on the document. */
-::highlight(kh-read-aloud) {
-  background-color: color-mix(in srgb, var(--accent-color) 30%, transparent);
-}
-/* The nikkud of that word, drawn in gray on the word itself (see useBookViewReadAloudHighlight). */
-.kh-read-aloud-word {
-  position: fixed;
-  z-index: 1000;
-  color: #8a8a8a;
-  text-align: center;
-  white-space: nowrap;
-  overflow: visible;
-  pointer-events: none;
 }
 </style>

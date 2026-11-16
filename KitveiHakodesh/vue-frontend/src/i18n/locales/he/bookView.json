@@ -188,7 +188,6 @@
     "stop": "עצור",
     "previousLine": "שורה קודמת",
     "nextLine": "שורה הבאה",
-    "highlight": "סמן את המילה הנקראת",
     "voice": "קול",
     "drag": "גרור כדי להזיז",
     "close": "סגור",
@@ -198,6 +197,9 @@
     "skipOptions": "על מה לדלג",
     "noHebrewVoice": "לא מותקן קול עברי ב-Windows",
     "noHebrewVoiceShort": "אין קול",
+    "googleVoice": "גוגל (מקוון)",
+    "googleVoiceShort": "גוגל",
+    "googleVoiceHint": "הקול של גוגל, דרך האינטרנט. כשאין חיבור, קורא הקול של Windows.",
     "skipOption": {
       "links": "מראי מקום (קישורים בטקסט, ובתוך סוגריים)",
       "noteMarkers": "סימני הערות",
