@@ -1,4 +1,5 @@
 import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
 import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
 import { LinesTable } from './linesTable'
@@ -61,6 +62,8 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
 
   // The book's scanned editions on HebrewBooks: same rules as versions.
   const hebrewBooksEditions = ref<HebrewBooksEdition[]>([])
+  /** Otzaria's own tractate PDF for this book (Talmud Bavli), or null. */
+  const hebrewBooksTalmudPdfPath = ref<string | null>(null)
 
   let currentBookId: number | undefined
   // The reader's latest window: eviction keeps the text around it.
@@ -254,6 +257,7 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     versions.value = []
     activeVersionId.value = null
     hebrewBooksEditions.value = []
+    hebrewBooksTalmudPdfPath.value = null
     lineCharacterCounts.value = null
     void getLineCharCounts(id)
       .then((counts) => { if (currentBookId === id) lineCharacterCounts.value = counts?.length ? counts : null })
@@ -290,8 +294,10 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     linesWritten()
 
     // Toolbar-only extras: trail the text; a failure just hides the control.
-    void getHebrewBooksEditions(id).then((rows) => {
-      if (currentBookId === id) hebrewBooksEditions.value = rows
+    void getHebrewBooksEditions(id, useSettingsStore().hebrewBooksLocalFolder || null).then((result) => {
+      if (currentBookId !== id) return
+      hebrewBooksEditions.value = result.editions
+      hebrewBooksTalmudPdfPath.value = result.talmudPdfPath
     })
     try {
       const rows = await getBookVersions(id)
@@ -314,5 +320,6 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     hasCommentaries, hasRelatedBooks, hasTeamim, isCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
     hebrewBooksEditions,
+    hebrewBooksTalmudPdfPath,
   }
 }

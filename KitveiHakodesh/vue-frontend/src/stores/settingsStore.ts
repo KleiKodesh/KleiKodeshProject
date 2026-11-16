@@ -396,7 +396,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // Per-pane: does picking a HebrewBooks edition in the book view show it in the left side
   // panel (true) or open it in a new tab (false). Only honoured where the side panel can
   // host it - see useHebrewBooksEditionSidePanelAvailable.
-  const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: true, 2: true })
+  const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: false, 2: false })
 
   function getHbEditionInSidePanel(paneId: 1 | 2 = 1): boolean {
     return hbEditionInSidePanelByPane.value[paneId]
@@ -881,7 +881,7 @@ export const useSettingsStore = defineStore('settings', () => {
       1: DEFAULTS.navSidebarVisible,
       2: DEFAULTS.navSidebarVisible,
     }
-    hbEditionInSidePanelByPane.value = { 1: true, 2: true }
+    hbEditionInSidePanelByPane.value = { 1: false, 2: false }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
     keepScreenOnMode.value = DEFAULTS.keepScreenOnMode

@@ -1,4 +1,5 @@
 using KitveiHakodesh.Core.UserAnnotations;
+using KitveiHakodesh.Core.UserEditions;
 
 namespace KitveiHakodeshService.UserSettings;
 
@@ -18,6 +19,7 @@ namespace KitveiHakodeshService.UserSettings;
 public sealed class UserSettingsService
 {
     private readonly UserAnnotationStore? _annotations;
+    private readonly UserEditionStore? _editions;
     private readonly object _initLock = new();
     private bool _initialized;
 
@@ -25,7 +27,11 @@ public sealed class UserSettingsService
     {
         string? seforimDbPath = SeforimDb.SeforimDbLocator.Resolve();
         if (!string.IsNullOrWhiteSpace(seforimDbPath))
-            _annotations = new UserAnnotationStore(UserAnnotationStore.DeriveDatabasePath(seforimDbPath!));
+        {
+            string dbPath = UserAnnotationStore.DeriveDatabasePath(seforimDbPath!);
+            _annotations = new UserAnnotationStore(dbPath);
+            _editions = new UserEditionStore(dbPath);
+        }
     }
 
     /// <summary>False when no seforim library is configured, so there is nowhere for the
@@ -47,6 +53,15 @@ public sealed class UserSettingsService
         EnsureInitialized();
         return _annotations.Execute(sql, ToParameters(parameters));
     }
+
+    /// <summary>The user's scanned editions of a book, newest first. Empty with no library.</summary>
+    public List<UserEdition> ListEditions(int bookId) => _editions?.List(bookId) ?? [];
+
+    /// <summary>Adds (or finds the existing) edition; null with no library.</summary>
+    public UserEdition? AddEdition(int bookId, string kind, string? filePath, string? hbId, string? title) =>
+        _editions?.Add(bookId, kind, filePath, hbId, title);
+
+    public bool RemoveEdition(long id) => _editions?.Remove(id) ?? false;
 
     /// <summary>Creates the schema on first use. Core's EnsureCreated is idempotent; the lock
     /// keeps two concurrent RPCs from racing into it on a cold database.</summary>

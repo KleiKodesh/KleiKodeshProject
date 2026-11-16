@@ -156,6 +156,31 @@ export interface HebrewBooksEdition {
   isBest: boolean
   /** False when the book-to-edition match is only probable. */
   isCertain: boolean
+  /** Already on disk (user's HebrewBooks folder or the app cache) - opens without a download. */
+  isOnDisk: boolean
+}
+
+/** Result of getHebrewBooksEditions. */
+export interface HebrewBooksEditionsResult {
+  editions: HebrewBooksEdition[]
+  /** Otzaria's own PDF of this tractate (Talmud Bavli only), or null. */
+  talmudPdfPath: string | null
+}
+
+/** A scanned edition the user attached to a book: their own PDF ('file') or a HebrewBooks id ('hb'). */
+export interface UserEdition {
+  id: number
+  bookId: number
+  kind: 'file' | 'hb'
+  filePath: string | null
+  hbId: string | null
+  title: string
+  /** Unix ms. */
+  addedAt: number
+  /** kind 'file' only: the file is still there. */
+  fileExists: boolean
+  /** kind 'hb' only: in the user's HebrewBooks folder or the app cache. */
+  isOnDisk: boolean
 }
 
 /** Reverse source/targum lookup — which lines point AT the given ones. */

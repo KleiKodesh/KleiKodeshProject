@@ -154,7 +154,7 @@ export function useBookView(
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
-    hebrewBooksEditions,
+    hebrewBooksEditions, hebrewBooksTalmudPdfPath,
   } = useLines(() => bookId, {
     retainedRanges: () => linesContentRef()?.retainedLineRanges() ?? [],
     onTextEvicted: (lineIds) => linesContentRef()?.onLinesTextEvicted(lineIds),
@@ -773,8 +773,8 @@ export function useBookView(
     bookIsCommentary,
     // alternate versions (empty for most books — the toolbar control hides)
     versions, activeVersionId, selectVersion, versionPersistState,
-    // scanned editions on HebrewBooks (empty for most books — the toolbar control hides)
-    hebrewBooksEditions,
+    // scanned editions: catalog suggestions on HebrewBooks, and Otzaria's tractate PDF (Talmud)
+    hebrewBooksEditions, hebrewBooksTalmudPdfPath,
     // UI state
     selectedLineId,
     searchMode: searchPanel.searchMode,

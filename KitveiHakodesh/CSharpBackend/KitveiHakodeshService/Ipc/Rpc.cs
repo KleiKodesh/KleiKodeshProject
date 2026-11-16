@@ -330,6 +330,8 @@ public sealed class HbDownloadResult
 public sealed class HebrewBooksEditionsArgs
 {
     public int BookId { get; set; }
+    /// <summary>User's HebrewBooks folder; null = the saved setting. Drives IsOnDisk.</summary>
+    public string? LocalFolder { get; set; }
 }
 
 /// <summary>Result of <c>getHebrewBooksEditions</c>: the book's HebrewBooks scans, best first;
@@ -338,6 +340,74 @@ public sealed class HebrewBooksEditionsArgs
 public sealed class HebrewBooksEditionsResult
 {
     public List<HebrewBooksEdition> Editions { get; set; } = new();
+    /// <summary>Otzaria's own PDF of this tractate when the book is a Talmud Bavli tractate
+    /// and the PDF is on disk; otherwise null.</summary>
+    public string? TalmudPdfPath { get; set; }
+}
+
+/// <summary>Args for <c>listUserEditions</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ListUserEditionsArgs
+{
+    public int BookId { get; set; }
+    /// <summary>User's HebrewBooks folder; null = the saved setting. Drives IsOnDisk of 'hb' rows.</summary>
+    public string? LocalFolder { get; set; }
+}
+
+/// <summary>One user-attached scanned edition. FileExists is meaningful for kind 'file',
+/// IsOnDisk for kind 'hb'.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserEditionDto
+{
+    public long Id { get; set; }
+    public int BookId { get; set; }
+    public string Kind { get; set; } = "";
+    public string? FilePath { get; set; }
+    public string? HbId { get; set; }
+    public string Title { get; set; } = "";
+    public long AddedAt { get; set; }
+    public bool FileExists { get; set; }
+    public bool IsOnDisk { get; set; }
+}
+
+/// <summary>Result of <c>listUserEditions</c>: newest first.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ListUserEditionsResult
+{
+    public List<UserEditionDto> Editions { get; set; } = new();
+}
+
+/// <summary>Args for <c>addUserEdition</c>: kind 'file' needs FilePath, 'hb' needs HbId.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class AddUserEditionArgs
+{
+    public int BookId { get; set; }
+    public string? Kind { get; set; }
+    public string? FilePath { get; set; }
+    public string? HbId { get; set; }
+    public string? Title { get; set; }
+}
+
+/// <summary>Result of <c>addUserEdition</c>: the new row, or the existing duplicate; null when
+/// no library is configured.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class AddUserEditionResult
+{
+    public UserEditionDto? Edition { get; set; }
+}
+
+/// <summary>Args for <c>removeUserEdition</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RemoveUserEditionArgs
+{
+    public long Id { get; set; }
+}
+
+/// <summary>Result of <c>removeUserEdition</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class RemoveUserEditionResult
+{
+    public bool Ok { get; set; }
 }
 
 /// <summary>Args for <c>checkHbLocalFiles</c>.</summary>

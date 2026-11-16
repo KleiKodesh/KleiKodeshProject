@@ -96,6 +96,12 @@ namespace KitveiHakodeshLib.LocalFile
                 && initialDirProp.ValueKind == JsonValueKind.String
                     ? initialDirProp.GetString()
                     : null;
+            // pickOnly: reply with the chosen path and open nothing (the book view's editions
+            // dropdown saves the path as a user item and opens it itself, at the current section).
+            bool pickOnly =
+                root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("pickOnly", out var pickOnlyProp)
+                && pickOnlyProp.ValueKind == JsonValueKind.True;
             // Lib's own WinForms dialog, not Core's NativeFilePicker: that one runs on its own STA
             // thread, and in VSTO (no WinForms sync context) the await resumed off the UI thread,
             // so RegisterFolder threw "CoreWebView2 can only be accessed from the UI thread".
@@ -116,6 +122,8 @@ namespace KitveiHakodeshLib.LocalFile
                     }
                 }
                 catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
+
+                if (pickOnly) { _bridge.Reply(id, new { filePath, fileName = System.IO.Path.GetFileName(filePath) }); return; }
 
                 // async void: an escaped exception would crash the host, so catch it here.
                 try { await OpenAsync(filePath, openInNewTab: false, replyId: id); }

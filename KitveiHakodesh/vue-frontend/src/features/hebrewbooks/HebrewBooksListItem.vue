@@ -8,7 +8,14 @@ import {
 import type { HebrewBook } from './hebrewBooksCatalog'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
-const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean; downloading?: boolean }>()
+const props = defineProps<{
+  book: HebrewBook
+  focused?: boolean
+  hasLocalFile?: boolean
+  downloading?: boolean
+  /** Details only, no download / folder buttons (the book view's add-from-HebrewBooks window). */
+  hideActions?: boolean
+}>()
 const emit = defineEmits<{
   'book-clicked': [book: HebrewBook, openInNewTab: boolean]
   'download-clicked': [book: HebrewBook]
@@ -49,7 +56,7 @@ const tooltip = computed(() => {
         <span class="title">{{ book.title }}</span>
         <span v-if="book.author" class="author">{{ book.author }}</span>
       </div>
-      <div class="actions">
+      <div v-if="!hideActions" class="actions">
         <button
           v-if="hasLocalFile"
           class="dl-btn reveal-btn"

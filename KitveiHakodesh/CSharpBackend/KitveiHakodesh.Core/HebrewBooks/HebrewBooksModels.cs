@@ -39,6 +39,9 @@ namespace KitveiHakodesh.Core.HebrewBooks
         public int? Pages { get; set; }
         public bool IsBest { get; set; }
         public bool IsCertain { get; set; }
+        /// <summary>Already on disk: in the user's HebrewBooks folder or the app's hb-cache.
+        /// Filled by the host per request, not by the map query.</summary>
+        public bool IsOnDisk { get; set; }
     }
 
     /// <summary>Why an acquire did not produce a file. The caller turns this into a message —
