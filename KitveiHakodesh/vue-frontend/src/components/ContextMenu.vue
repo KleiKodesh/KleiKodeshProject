@@ -120,6 +120,11 @@ function placeAlong(forwardFrom: number, backFrom: number, size: number, viewpor
   return chosen ?? Math.max(VIEWPORT_MARGIN, Math.min(preferBack ? backFrom - size : forwardFrom, max))
 }
 
+// The submenu opens toward inline-start: the left in Hebrew, the right in English.
+function isRtl(): boolean {
+  return document.documentElement.dir !== 'ltr'
+}
+
 function closeSubmenu(): void {
   openSubmenuIndex.value = null
 }
@@ -136,7 +141,7 @@ async function openSubmenu(index: number, row: EventTarget | null): Promise<void
   const rowRect = row.getBoundingClientRect()
   const { width, height } = panel.getBoundingClientRect()
   // RTL: prefer the left of the menu, else its right; neither fits → clamped, overlapping the menu.
-  const left = placeAlong(menuRect.right, menuRect.left, width, window.innerWidth, true)
+  const left = placeAlong(menuRect.right, menuRect.left, width, window.innerWidth, isRtl())
   // Downward from the row; no room → upward, its bottom on the row's bottom; else clamped.
   const top = placeAlong(rowRect.top + SUBMENU_TOP_OFFSET, rowRect.bottom - SUBMENU_TOP_OFFSET, height, window.innerHeight)
 

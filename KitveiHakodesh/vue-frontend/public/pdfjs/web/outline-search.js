@@ -1753,10 +1753,18 @@
         menu.append(button);
       }
       document.body.append(menu);
-      // Clamp to the viewport; in RTL open toward the left of the cursor.
+      // Same placement as the app's ContextMenu: full size beside the pointer, flipped
+      // to the side with room; clamped (and scrolling, via CSS max-height) only when the
+      // window is too small for either side.
       var rect = menu.getBoundingClientRect();
-      var x = Math.max(4, Math.min(clientX, window.innerWidth - rect.width - 4));
-      var y = Math.max(4, Math.min(clientY, window.innerHeight - rect.height - 4));
+      function placeAlong(at, size, viewport) {
+        var max = viewport - 4 - size;
+        if (at <= max) return at;
+        if (at - size >= 4) return at - size;
+        return Math.max(4, Math.min(at, max));
+      }
+      var x = placeAlong(clientX, rect.width, window.innerWidth);
+      var y = placeAlong(clientY, rect.height, window.innerHeight);
       menu.style.left = x + 'px';
       menu.style.top = y + 'px';
       contextMenu = menu;

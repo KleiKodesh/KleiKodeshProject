@@ -11,6 +11,7 @@ import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import BookViewAddNoteMenuRow from './BookViewAddNoteMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { copyCleanMenuItems } from '@/components/copyCleanMenuItems'
+import { cleanTextFlagsFor } from '@/utils/hebrewTextProcessing'
 import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
@@ -55,6 +56,8 @@ interface CopyMenuOptions {
   getRenderedLineContent?: (raw: string, lineIndex: number, lineId: number) => string
   /** The flags the screen renders with (per-book), so model lines copy the same way. */
   cleanTextFlags?: () => number
+  /** The book is commentary: a short plain heading before the dash is a dibbur hamatchil too. */
+  isCommentary?: () => boolean
   onHighlight?: (colorArgb: number) => void
   onClearHighlight?: () => void
   onAddNote?: () => void
@@ -497,7 +500,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     // Clean BOTH the body and the endnotes so a single copy has one consistent
     // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
     // purpose — a מקור reference is not book text and must not be stripped.
-    const flags = settingsStore.copyCleanFlags
+    const flags = cleanTextFlagsFor(settingsStore.copyCleanFlags, options.isCommentary?.() ?? false)
     if (flags) {
       html = cleanHebrewText(html, flags)
       if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml, flags)

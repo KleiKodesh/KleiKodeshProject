@@ -704,6 +704,10 @@
   background: var(--doorhanger-bg-color);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
   direction: rtl;
+  /* Scrolls only in a window too small to hold it. */
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .outlineMenuItem {
   display: flex;

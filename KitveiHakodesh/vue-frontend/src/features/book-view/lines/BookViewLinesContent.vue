@@ -373,6 +373,7 @@ const { items: contextMenuItems, buildFormattedHtml, wholeBookReady, onCopy, onP
   getNoteById,
   getRenderedLineContent: lineContent,
   cleanTextFlags: () => cleanTextFlags.value,
+  isCommentary: () => !!props.bookIsCommentary,
   onHighlight,
   onClearHighlight,
   onAddNote,
