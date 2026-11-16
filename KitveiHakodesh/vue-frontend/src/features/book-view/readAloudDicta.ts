@@ -198,6 +198,8 @@ export function withVocalization(text: ReadAloudText, pointed: string): ReadAlou
       toFull.push(toFull[toFull.length - 1] ?? text.toFull[0])
       if (source < text.spoken.length && text.spoken[source] === ch) source++
     } else {
+      // A mark of ours that Dicta dropped is passed over, so the letter keeps its place.
+      while (source < text.spoken.length && IS_MARK.test(text.spoken[source])) source++
       toFull.push(text.toFull[source])
       source++
     }
@@ -307,7 +309,10 @@ export function createReadAloudDicta() {
     }
     if (lines.length === 0) return
     busy = true
-    const request = send(lines, options, controller.signal).finally(() => {
+    const mine = controller
+    const request = send(lines, options, mine.signal).finally(() => {
+      // After a stop the state belongs to a newer run; leave it alone.
+      if (mine !== controller) return
       busy = false
       for (const line of lines) inFlight.delete(line)
     })
