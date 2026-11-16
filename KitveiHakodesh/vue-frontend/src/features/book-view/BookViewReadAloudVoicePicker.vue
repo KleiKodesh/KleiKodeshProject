@@ -5,19 +5,16 @@ import { IconChevronDown12Regular, IconCheckmark16Regular } from '@iconify-prere
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { isOfferedVoice } from './useBookViewReadAloud'
-import { GOOGLE_VOICE_URI } from './readAloudGoogleVoice'
 
 /**
  * The read-aloud voice choice: the offered voices only (isOfferedVoice). The button shows the voice's short name
  * ("Asaf"); the list shows the full names. The empty value means the first Hebrew voice.
- * Last comes the Google voice (online), read through the internet.
  */
 const props = defineProps<{ voices: SpeechSynthesisVoice[]; modelValue: string }>()
 const emit = defineEmits<{ 'update:modelValue': [voiceUri: string] }>()
 const { t } = useI18n()
 
 const hebrewVoices = computed(() => props.voices.filter(isOfferedVoice))
-const isGoogle = computed(() => props.modelValue === GOOGLE_VOICE_URI)
 const current = computed(
   () => hebrewVoices.value.find((v) => v.voiceURI === props.modelValue) ?? hebrewVoices.value[0] ?? null,
 )
@@ -53,12 +50,12 @@ function choose(voiceUri: string) {
     <button
       ref="buttonRef"
       class="voice-button"
-      :title="isGoogle ? `${t('bookView.readAloud.voice')}: ${t('bookView.readAloud.googleVoice')}` : current ? `${t('bookView.readAloud.voice')}: ${current.name}` : t('bookView.readAloud.noHebrewVoice')"
+      :title="current ? `${t('bookView.readAloud.voice')}: ${current.name}` : t('bookView.readAloud.noHebrewVoice')"
       aria-haspopup="listbox"
       :aria-expanded="isOpen"
       @click="toggle"
     >
-      <span>{{ isGoogle ? t('bookView.readAloud.googleVoiceShort') : current ? shortName(current) : t('bookView.readAloud.noHebrewVoiceShort') }}</span>
+      <span>{{ current ? shortName(current) : t('bookView.readAloud.noHebrewVoiceShort') }}</span>
       <IconChevronDown12Regular class="chevron" />
     </button>
     <div v-if="isOpen" ref="dropdownRef" class="voice-dropdown" role="listbox">
@@ -68,15 +65,11 @@ function choose(voiceUri: string) {
         :key="v.voiceURI"
         role="option"
         class="voice-row"
-        :aria-selected="!isGoogle && v === current"
+        :aria-selected="v === current"
         @click="choose(v.voiceURI)"
       >
-        <IconCheckmark16Regular class="check" :class="{ hidden: isGoogle || v !== current }" />
+        <IconCheckmark16Regular class="check" :class="{ hidden: v !== current }" />
         <span>{{ v.name }}</span>
-      </button>
-      <button role="option" class="voice-row" :aria-selected="isGoogle" :title="t('bookView.readAloud.googleVoiceHint')" @click="choose(GOOGLE_VOICE_URI)">
-        <IconCheckmark16Regular class="check" :class="{ hidden: !isGoogle }" />
-        <span>{{ t('bookView.readAloud.googleVoice') }}</span>
       </button>
     </div>
   </div>

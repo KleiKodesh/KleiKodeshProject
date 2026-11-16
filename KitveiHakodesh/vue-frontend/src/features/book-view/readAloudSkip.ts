@@ -12,8 +12,6 @@ export interface ReadAloudSkipOptions {
    * reference written in parentheses - a book name then chapter / verse numbers, (ישעיה ס"ג ט').
    */
   links: boolean
-  /** Footnote and note markers - superscript numbers and letters. */
-  noteMarkers: boolean
   /** Everything in round brackets ( ). */
   parentheses: boolean
   /** Everything in square brackets [ ]. */
@@ -26,7 +24,6 @@ export interface ReadAloudSkipOptions {
 
 export const DEFAULT_SKIP_OPTIONS: ReadAloudSkipOptions = {
   links: true,
-  noteMarkers: true,
   parentheses: false,
   squareBrackets: false,
   singleLetterWords: false,
@@ -88,11 +85,12 @@ export function readAloudTextOfLine(html: string, options: ReadAloudSkipOptions 
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement
+    // Note markers (superscript numbers and letters) are never read.
     const skipped =
-      !!options &&
-      ((options.links && !!parent?.closest('a')) ||
-        (options.noteMarkers && !!parent?.closest('sup')) ||
-        (options.headings && !!parent?.closest('h1,h2,h3,h4,h5,h6')))
+      !!parent?.closest('sup') ||
+      (!!options &&
+        ((options.links && !!parent?.closest('a')) ||
+          (options.headings && !!parent?.closest('h1,h2,h3,h4,h5,h6'))))
     const data = (node as Text).data
     if (data.trim() && parent?.closest('h1,h2,h3,h4,h5,h6')) heading = true
     full += data
