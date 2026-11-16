@@ -24,3 +24,23 @@ describe('withVocalization', () => {
     expect(withVocalization(t, 'שלמה')).toBeNull()
   })
 })
+
+describe('with skipped text (parentheses, source links)', () => {
+  it('keeps every spoken letter on its place in the full text', () => {
+    // full: "אמר (מראה) רש"י" - the parenthesis is skipped, so spoken has a gap in toFull.
+    const full = 'אמר (מראה) רש"י'
+    const spoken = 'אמר  רש"י'
+    const toFull: number[] = []
+    for (let i = 0; i < full.length; i++) if (i < 4 || i > 9) toFull.push(i)
+    toFull.push(full.length)
+    const text: ReadAloudText = { full, spoken, toFull }
+    const start = spoken.indexOf('רש')
+    const out = withExpansions(text, [{ start, end: start + 4, text: 'רבי שלמה יצחקי' }])
+    expect(out.spoken).toBe('אמר  רבי שלמה יצחקי')
+    // The expansion lands on the abbreviation in the full text, after the skipped part.
+    expect(out.toFull[start]).toBe(full.indexOf('רש'))
+    expect(Math.max(...out.toFull.slice(0, out.spoken.length))).toBe(full.length - 1)
+    // Nothing of the skipped parenthesis is mapped.
+    expect(out.toFull.slice(0, out.spoken.length).some((f) => f >= 4 && f <= 9)).toBe(false)
+  })
+})

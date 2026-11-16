@@ -10,10 +10,6 @@ import {
   IconNext20Regular,
   IconHighlight20Regular,
   IconHighlight20Filled,
-  IconTextFont20Regular,
-  IconTextFont20Filled,
-  IconTextExpand20Regular,
-  IconTextExpand20Filled,
   IconDismiss20Regular,
   IconReOrderDotsVertical20Regular,
   IconFastForward20Regular,
@@ -121,22 +117,6 @@ function onVoiceChange(voiceUri: string) {
     >
       <IconHighlight20Filled v-if="r.highlightWords.value" />
       <IconHighlight20Regular v-else />
-    </button>
-    <button
-      :class="{ active: r.vocalize.value }"
-      :title="t('bookView.readAloud.vocalize')"
-      @click="r.vocalize.value = !r.vocalize.value"
-    >
-      <IconTextFont20Filled v-if="r.vocalize.value" />
-      <IconTextFont20Regular v-else />
-    </button>
-    <button
-      :class="{ active: r.expandAbbreviations.value }"
-      :title="t('bookView.readAloud.expandAbbreviations')"
-      @click="r.expandAbbreviations.value = !r.expandAbbreviations.value"
-    >
-      <IconTextExpand20Filled v-if="r.expandAbbreviations.value" />
-      <IconTextExpand20Regular v-else />
     </button>
     <BookViewReadAloudSkipDropdown
       v-model:enabled="r.skipEnabled.value"
