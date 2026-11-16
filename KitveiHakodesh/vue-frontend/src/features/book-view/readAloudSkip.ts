@@ -42,6 +42,8 @@ export interface ReadAloudText {
   spoken: string
   /** spoken[i] is full[toFull[i]]; one extra entry maps the end. */
   toFull: number[]
+  /** The line is a heading (chapter / section title). */
+  heading?: boolean
 }
 
 const htmlParser = new DOMParser()
@@ -82,6 +84,7 @@ export function readAloudTextOfLine(html: string, options: ReadAloudSkipOptions 
   const body = htmlParser.parseFromString(html, 'text/html').body
   let full = ''
   const keep: boolean[] = []
+  let heading = false
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement
@@ -91,10 +94,11 @@ export function readAloudTextOfLine(html: string, options: ReadAloudSkipOptions 
         (options.noteMarkers && !!parent?.closest('sup')) ||
         (options.headings && !!parent?.closest('h1,h2,h3,h4,h5,h6')))
     const data = (node as Text).data
+    if (data.trim() && parent?.closest('h1,h2,h3,h4,h5,h6')) heading = true
     full += data
     for (let i = 0; i < data.length; i++) keep.push(!skipped)
   }
-  return build(full, keep, options)
+  return { ...build(full, keep, options), heading }
 }
 
 /** Selected text (already plain) as read-aloud text. */
