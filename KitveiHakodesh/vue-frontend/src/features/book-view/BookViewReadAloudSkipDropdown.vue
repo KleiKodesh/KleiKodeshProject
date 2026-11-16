@@ -16,7 +16,10 @@ function toggleEnabled() {
   emit('changed')
 }
 function toggleOption(key: keyof ReadAloudSkipOptions) {
-  options.value = { ...options.value, [key]: !options.value[key] }
+  const on = !options.value[key]
+  options.value = { ...options.value, [key]: on }
+  // Ticking what to skip while skipping is off would change nothing - it turns skipping on.
+  if (on) enabled.value = true
   emit('changed')
 }
 </script>

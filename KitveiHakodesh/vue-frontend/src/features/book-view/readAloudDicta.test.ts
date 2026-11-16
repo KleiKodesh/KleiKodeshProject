@@ -66,3 +66,11 @@ describe('source references in parentheses are skipped with the links option', (
     expect(t.spoken).toBe('שנאמר  ויצו ואומר  עמו (ר"ל) כן (עי\' לעיל) סוף')
   })
 })
+
+describe('batched lines', () => {
+  it('splits Dicta tokens that glue punctuation to the newline', async () => {
+    const { tokensPerLineForTest } = await import('./readAloudDicta')
+    const groups = tokensPerLineForTest([{ str: 'אומר' }, { str: '. \n' }, { str: 'אמר' }, { str: ' \n' }, { str: 'סוף' }], 3)!
+    expect(groups.map((g) => g.map((t) => t.str).join(''))).toEqual(['אומר. ', 'אמר ', 'סוף'])
+  })
+})
