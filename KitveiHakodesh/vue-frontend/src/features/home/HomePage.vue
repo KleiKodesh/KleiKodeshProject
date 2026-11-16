@@ -11,7 +11,7 @@ import HomePageDateBar from './HomePageDateBar.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import type { FileSearchResult } from '@/features/global-search/useGlobalSearch'
-import { isDiskPath, looksLikeFile, normalizePastedPath } from '@/layout/addressBarPath'
+import { fileFromAddress, isDiskPath, looksLikeFile, normalizePastedPath } from '@/layout/addressBarPath'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeSuggestionCards } from './useHomeSuggestionCards'
@@ -72,7 +72,9 @@ const searchBar = useHomeSearchBar({
   clearResults,
   onSubmit: (query) => {
     // A pasted disk path to a file opens it (html → the html page) instead of searching.
-    const path = normalizePastedPath(query)
+    // A copied address may carry the TOC section after the file name.
+    const pasted = normalizePastedPath(query)
+    const path = fileFromAddress(pasted) ?? pasted
     if (isDiskPath(path) && looksLikeFile(path)) {
       void navigation.onSelectFile({ fullPath: path, fileName: path.split(/[\\/]/).pop()! } as FileSearchResult)
       return

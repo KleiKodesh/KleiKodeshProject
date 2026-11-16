@@ -46,6 +46,7 @@ import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewB
 import { normalizeAddinQuery, queryTargetsAddins } from '@/features/local-file-search/otzariaAddins'
 import { catalogTocSearch, fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { parseBookAddress } from '@/layout/addressBarPath'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
@@ -259,6 +260,22 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
    * own order is preserved within each, so book hits still lead.
    * Hits whose book is not in the loaded catalog (e.g. a stale index row) drop.
    */
+  /**
+   * Reorders hits for a pasted address: the addressed book's own title hit, then its
+   * section whose path matches the address, lead. The book row is added when the
+   * engine did not return it, so the address always shows its book.
+   */
+  function addressHitsFirst(hits: CatalogTocServiceHit[], address: { book: BookRow; tocPath: string }): CatalogTocServiceHit[] {
+    const flat = (path: string) => path.replace(/\s*[\\/]\s*/g, ' ').replace(/\s+/g, ' ').trim()
+    const wantedToc = flat(address.tocPath)
+    const ofBook = hits.filter((h) => h.bookId === address.book.id)
+    const bookHit = ofBook.find((h) => h.level === 0)
+      ?? ({ bookId: address.book.id, level: 0, lineIndex: -1, tocPath: '', treeOrder: -1 } as CatalogTocServiceHit)
+    const tocHit = wantedToc ? ofBook.find((h) => h.level > 0 && flat(h.tocPath) === wantedToc) : undefined
+    const lead = [bookHit, ...(tocHit ? [tocHit] : [])]
+    return [...lead, ...hits.filter((h) => !lead.includes(h))]
+  }
+
   function applyCatalogHits(hits: CatalogTocServiceHit[]): void {
     const bookById = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
     const books: CatalogSearchResult[] = []
@@ -345,10 +362,16 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
     const generation = ++catalogGeneration
 
     isLoadingCatalogToc.value = true
+    // A pasted address-bar address (categoriesook\section): search for the book and
+    // section words, then put that book and that exact section first.
+    const address = parseBookAddress(effectiveQuery, booksDataStore.ROOT)
+    const engineQuery = address
+      ? `${address.book.title} ${address.tocPath.replace(/[\\/]/g, ' ')}`.replace(/\s+/g, ' ').trim()
+      : effectiveQuery
     try {
       // Retry while the index is still building — a newer search supersedes the loop.
       for (;;) {
-        const res = await catalogTocSearch(effectiveQuery)
+        const res = await catalogTocSearch(engineQuery)
         if (generation !== catalogGeneration) return
         reportCatalogTocSearchResponse(res)
         // A hard failure (index missing or unreadable, or no seforim DB) is terminal —
@@ -360,7 +383,7 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
           break
         }
         if (res.ready && !res.superseded) {
-          applyCatalogHits(res.results ?? [])
+          applyCatalogHits(address ? addressHitsFirst(res.results ?? [], address) : (res.results ?? []))
           appliedCatalogQuery = effectiveQuery
           break
         }

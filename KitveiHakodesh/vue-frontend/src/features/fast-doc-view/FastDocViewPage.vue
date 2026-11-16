@@ -344,6 +344,16 @@ const activeOutlineNodeId = computed(() => {
   }
   return found
 })
+// The current heading's chain, published as the tab's tocPath (as the book view and PDF do)
+// so the address bar can show it after the file path.
+watch(activeOutlineNodeId, (id) => {
+  const byId = new Map(outline.value.map((node) => [node.id, node]))
+  const chain: string[] = []
+  for (let node = id != null ? byId.get(id) : undefined; node; node = node.parentId != null ? byId.get(node.parentId) : undefined) {
+    chain.unshift(node.text)
+  }
+  tabStore.updateTab(tabId, { tocPath: chain.length ? chain.join(' / ') : undefined })
+}, { immediate: true })
 function toggleToc(toggleButton?: HTMLElement | null) {
   if (toggleButton) tocToggleButton.value = toggleButton
   tocVisible.value = !tocVisible.value
