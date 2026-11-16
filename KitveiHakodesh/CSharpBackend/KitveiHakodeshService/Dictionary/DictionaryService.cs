@@ -118,6 +118,7 @@ public sealed class DictionaryService
                 Text = sense.Text,
                 Source = sense.Source,
                 SourceId = sense.SourceId,
+                Rank = sense.Rank,
             });
         }
         return rows;
