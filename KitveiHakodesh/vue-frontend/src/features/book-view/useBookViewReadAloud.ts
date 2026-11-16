@@ -9,6 +9,7 @@ import {
   type ReadAloudText,
 } from './readAloudSkip'
 import { createReadAloudDicta, WAIT_FOR_FIRST_LINE_MS } from './readAloudDicta'
+import { withSpelledHeadingNumbers } from './readAloudHeadingNumbers'
 
 /**
  * Reads the book aloud with the browser's own speech (the voices installed in Windows).
@@ -39,6 +40,8 @@ export interface ReadAloudPosition {
   /** The word being spoken, as a range in `text`; -1 before the first word boundary. */
   wordStart: number
   wordEnd: number
+  /** The word as it is spoken - with the nikkud added, or an abbreviation in full. */
+  spokenWord: string
 }
 
 /**
@@ -138,7 +141,7 @@ export function useBookViewReadAloud() {
   /** Speaks one line's text (or a selection, lineIndex -1); false once stopped. */
   async function speakText(text: ReadAloudText, lineIndex: number, voice: SpeechSynthesisVoice | null, gen: number, fromFullChar = 0): Promise<boolean> {
     const { full, spoken, toFull } = text
-    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1 }
+    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1, spokenWord: '' }
     // Where in the spoken text to begin: the first letter at or after `fromFullChar` of the full text.
     let fromSpoken = 0
     if (fromFullChar > 0) {
@@ -157,10 +160,16 @@ export function useBookViewReadAloud() {
         // Back to the full text, where the row's letters are counted.
         const wordStart = toFull[start] ?? full.length
         const wordEnd = end > start ? (toFull[end - 1] ?? full.length - 1) + 1 : wordStart
-        position.value = { lineIndex, text: full, wordStart, wordEnd }
+        position.value = { lineIndex, text: full, wordStart, wordEnd, spokenWord: spoken.slice(start, end) }
       })
     }
     return gen === generation
+  }
+
+  /** A line as read aloud: skipped parts out, heading numbers spelled out by their letters. */
+  function lineText(row: { content?: string | null }): ReadAloudText {
+    const text = readAloudTextOfLine(row.content ?? '', activeSkip())
+    return withSpelledHeadingNumbers(text, !!text.heading)
   }
 
   async function run(fromLine: number, readSelection: boolean, fromChar = 0) {
@@ -188,7 +197,7 @@ export function useBookViewReadAloud() {
         if (offset + BATCH_SIZE < totalLines) {
           void getLinesPaged(bookId, BATCH_SIZE, offset + BATCH_SIZE, versionId ?? 0).then((r) => { nextRows = r }, () => {})
         }
-        const texts = rows.map((row) => readAloudTextOfLine(row.content ?? '', activeSkip()))
+        const texts = rows.map(lineText)
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i]
           let text = texts[i]
@@ -197,7 +206,7 @@ export function useBookViewReadAloud() {
           {
             const ahead = texts.slice(i, i + 1 + 8).map((t) => t.spoken)
             const more = nextRows as typeof rows | null
-            if (more) for (const r of more.slice(0, 8)) ahead.push(readAloudTextOfLine(r.content ?? '', activeSkip()).spoken)
+            if (more) for (const r of more.slice(0, 8)) ahead.push(lineText(r).spoken)
             dicta.prefetch(ahead, rate.value, DICTA_ALWAYS)
             text = await dicta.prepared(text, DICTA_ALWAYS, isFirstLine ? WAIT_FOR_FIRST_LINE_MS : undefined)
             isFirstLine = false

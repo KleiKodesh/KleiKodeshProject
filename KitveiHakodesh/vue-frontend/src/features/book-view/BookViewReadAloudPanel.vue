@@ -210,4 +210,17 @@ button:disabled {
 ::highlight(kh-read-aloud) {
   background-color: color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
+/* The spoken form of that word (nikkud, abbreviation in full), floating just above it. */
+.kh-read-aloud-word {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-primary, Canvas);
+  color: var(--text-primary, CanvasText);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+  white-space: nowrap;
+  pointer-events: none;
+}
 </style>

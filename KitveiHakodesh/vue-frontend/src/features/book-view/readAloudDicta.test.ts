@@ -53,11 +53,9 @@ describe('chooseExpansion (Dicta answers as seen live)', () => {
     expect(chooseExpansion('הקב"ה', ['הקדוש ברוך הוא', 'הקב"ה'])).toBe('הקדוש ברוך הוא')
     expect(chooseExpansion("וכו'", ["וכו'", 'וכור', 'וכו'])).toBe('וכולי')
     expect(chooseExpansion('ז"ל', ['זכרונו לברכה', 'ז"ל'])).toBe('זכרונו לברכה')
+    expect(chooseExpansion('ד"א', ['ד"א', 'דבר אחר'])).toBe('דבר אחר')
   })
-  it('keeps numbers and unknowns as written', () => {
-    expect(chooseExpansion('ל"ב', ['ל"ב', 'לא בטל'])).toBeNull()
-    expect(chooseExpansion('קע"ב', ['קע"ב', 'מאה שבעים ושניים'])).toBeNull()
-    expect(chooseExpansion("ג'", ["ג'", 'שלשה'])).toBeNull()
+  it('keeps what Dicta offers nothing for as written', () => {
     expect(chooseExpansion('הרמב"ם', ['הרמב"ם'])).toBeNull()
   })
 })

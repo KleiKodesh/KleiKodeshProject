@@ -9,6 +9,10 @@ import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
  * DOM is never touched. The spoken text and the rendered line can differ (markers, notes,
  * vowel points), so a word is found by counting LETTERS, like bookmark points are: the n-th
  * letter of the spoken text is the n-th letter of the row.
+ *
+ * Above the marked word a small label shows the word as it is spoken - with the nikkud
+ * read aloud adds, or an abbreviation in full - when that differs from what the row shows.
+ * The label floats over the page (fixed position); the row itself is still not touched.
  */
 const HIGHLIGHT_NAME = 'kh-read-aloud'
 const LETTER = /[\p{L}\p{N}]/u
@@ -44,8 +48,40 @@ export function useBookViewReadAloudHighlight(
 ) {
   const supported = typeof CSS !== 'undefined' && 'highlights' in CSS
 
+  let label: HTMLElement | null = null
+
+  function hideLabel() {
+    label?.remove()
+    label = null
+  }
+
+  /** Shows the spoken form of the word just above the marked range. */
+  function showLabel(range: Range, spokenWord: string) {
+    const word = spokenWord.trim()
+    const shown = range.toString().trim()
+    const rect = range.getBoundingClientRect()
+    if (!word || word === shown || rect.width === 0) {
+      hideLabel()
+      return
+    }
+    if (!label) {
+      label = document.createElement('div')
+      label.className = 'kh-read-aloud-word'
+      label.dir = 'rtl'
+      document.body.appendChild(label)
+    }
+    label.textContent = word
+    const style = getComputedStyle(range.startContainer.parentElement ?? document.body)
+    label.style.fontFamily = style.fontFamily
+    label.style.fontSize = style.fontSize
+    const height = label.offsetHeight
+    label.style.top = `${Math.max(0, rect.top - height - 4)}px`
+    label.style.left = `${rect.left + rect.width / 2}px`
+  }
+
   function clear() {
     if (supported) CSS.highlights.delete(HIGHLIGHT_NAME)
+    hideLabel()
   }
 
   function rowFor(lineIndex: number): HTMLElement | null {
@@ -76,6 +112,7 @@ export function useBookViewReadAloudHighlight(
     while (endOffset < end.node.data.length && /\p{M}/u.test(end.node.data[endOffset]!)) endOffset++
     range.setEnd(end.node, endOffset)
     CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(range))
+    showLabel(range, pos.spokenWord)
   }
 
   watch(
