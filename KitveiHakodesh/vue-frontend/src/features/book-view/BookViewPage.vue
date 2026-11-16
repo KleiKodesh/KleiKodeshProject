@@ -180,7 +180,7 @@ function createBookmark() {
 // or the top line in view; closing the panel stops. A book or version change stops too.
 const readAloud = useBookViewReadAloud()
 const readAloudOpen = ref(false)
-useBookViewReadAloudHighlight(
+const { word: readAloudWord } = useBookViewReadAloudHighlight(
   readAloud,
   () => linesContentRef.value?.scrollerApi() ?? null,
   (lineIndex) => linesContentRef.value?.scrollToLine(lineIndex) ?? Promise.resolve(false),
@@ -650,6 +650,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :lines-revision="linesRevision"
                     :ensure-lines="ensureLines"
                     :read-lines="readLines"
+                    :read-aloud-word="readAloudWord"
                     :line-character-counts="lineCharacterCounts"
                     :alt-toc-label-map="altTocLabelMap"
                     :selected-line-id="selectedLineId"
