@@ -24,6 +24,8 @@ import { createReadAloudDicta } from './readAloudDicta'
  */
 const BATCH_SIZE = 20
 const MAX_CHUNK_CHARS = 200
+/** Both Dicta preparations are always on; when Dicta is not reachable the text is read as it is. */
+const DICTA_ALWAYS = { abbreviations: true, nikkud: true }
 
 /** Speed steps: 0.1 apart, 0.5 to 3. */
 export const READ_ALOUD_RATE_STEP = 0.1
@@ -43,7 +45,7 @@ export interface ReadAloudPosition {
  * The voices read aloud offers: Hebrew ones, except Hila - left out at the user's request.
  */
 export function isOfferedVoice(voice: SpeechSynthesisVoice): boolean {
-  return voice.lang.toLowerCase().startsWith('he') && !/hila/i.test(voice.name)
+  return voice.lang.toLowerCase().startsWith('he') && !/hila|הילה/i.test(`${voice.name} ${voice.voiceURI}`)
 }
 
 /** The voice list arrives late on first use; waits for it once. */
@@ -94,11 +96,8 @@ export function useBookViewReadAloud() {
   /** Skipping on/off, and what it skips. */
   const skipEnabled = useStorage<boolean>('bookView.readAloud.skip', true)
   const skipOptions = useStorage<ReadAloudSkipOptions>('bookView.readAloud.skipOptions', { ...DEFAULT_SKIP_OPTIONS }, undefined, { mergeDefaults: true })
-  /** Dicta prepares the text before it is spoken: nikkud for unpointed Hebrew, abbreviations in full. */
-  const vocalize = useStorage<boolean>('bookView.readAloud.vocalize', true)
-  const expandAbbreviations = useStorage<boolean>('bookView.readAloud.expandAbbreviations', true)
+  /** Dicta prepares the text before it is spoken, always when reachable: nikkud for unpointed Hebrew, abbreviations in full. */
   const dicta = createReadAloudDicta()
-  const dictaOptions = () => ({ abbreviations: expandAbbreviations.value, nikkud: vocalize.value })
   const activeSkip = () => (skipEnabled.value ? skipOptions.value : null)
 
   /** What the last start() was for, so skip and a changed setting can restart from the line. */
@@ -194,12 +193,12 @@ export function useBookViewReadAloud() {
           let text = texts[i]
           const char = row.lineIndex === fromLine ? fromChar : 0
           if (!text.spoken.trim()) continue
-          if (vocalize.value || expandAbbreviations.value) {
+          {
             const ahead = texts.slice(i, i + 1 + 8).map((t) => t.spoken)
             const more = nextRows as typeof rows | null
             if (more) for (const r of more.slice(0, 8)) ahead.push(readAloudTextOfLine(r.content ?? '', activeSkip()).spoken)
-            dicta.prefetch(ahead, rate.value, dictaOptions())
-            text = await dicta.prepared(text, dictaOptions())
+            dicta.prefetch(ahead, rate.value, DICTA_ALWAYS)
+            text = await dicta.prepared(text, DICTA_ALWAYS)
             if (gen !== generation) return
           }
           const done = await speakText(text, row.lineIndex, voice, gen, char)
@@ -299,7 +298,7 @@ export function useBookViewReadAloud() {
 
   return {
     isSupported, isReading, isPaused, position, voices,
-    rate, voiceUri, highlightWords, vocalize, expandAbbreviations, skipEnabled, skipOptions,
+    rate, voiceUri, highlightWords, skipEnabled, skipOptions,
     start, pause, resume, stop, skip, changeRate, applySettingsChange,
   }
 }
