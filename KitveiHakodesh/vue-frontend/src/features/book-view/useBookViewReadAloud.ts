@@ -45,8 +45,9 @@ export interface ReadAloudPosition {
   /** The word being spoken, as a range in `text`; -1 before the first word boundary. */
   wordStart: number
   wordEnd: number
-  /** The word as it is spoken - with the nikkud added, or an abbreviation in full. */
-  spokenWord: string
+  /** The sentence being spoken (the voice's chunk), as a range in `text`; -1 before the first word. */
+  sentenceStart: number
+  sentenceEnd: number
 }
 
 /**
@@ -173,7 +174,7 @@ export function useBookViewReadAloud() {
   /** Speaks one line's text (or a selection, lineIndex -1); false once stopped. */
   async function speakText(text: ReadAloudText, lineIndex: number, voice: SpeechSynthesisVoice | null, gen: number, fromFullChar = 0): Promise<boolean> {
     const { full, spoken, toFull } = text
-    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1, spokenWord: '' }
+    if (lineIndex >= 0) position.value = { lineIndex, text: full, wordStart: -1, wordEnd: -1, sentenceStart: -1, sentenceEnd: -1 }
     // Where in the spoken text to begin: the first letter at or after `fromFullChar` of the full text.
     let fromSpoken = 0
     if (fromFullChar > 0) {
@@ -185,14 +186,26 @@ export function useBookViewReadAloud() {
         .filter((c) => c.start + c.text.length > fromSpoken)
         .map((c) => (c.start < fromSpoken ? { start: fromSpoken, text: c.text.slice(fromSpoken - c.start) } : c))
         .filter((c) => c.text.trim())
-    const onWord = (chunks: { start: number }[]) => (chunkIndex: number, charIndex: number, charLength: number) => {
+    // Spoken range -> full-text range, where the row's letters are counted.
+    const toFullRange = (start: number, end: number) => {
+      const s = toFull[start] ?? full.length
+      return [s, end > start ? (toFull[end - 1] ?? full.length - 1) + 1 : s] as const
+    }
+    const onWord = (chunks: { start: number; text: string }[]) => (chunkIndex: number, charIndex: number, charLength: number) => {
       if (gen !== generation || lineIndex < 0) return
-      const start = chunks[chunkIndex]!.start + charIndex
+      const chunk = chunks[chunkIndex]!
+      const start = chunk.start + charIndex
       const end = charLength > 0 ? start + charLength : wordEndAt(spoken, start)
-      // Back to the full text, where the row's letters are counted.
-      const wordStart = toFull[start] ?? full.length
-      const wordEnd = end > start ? (toFull[end - 1] ?? full.length - 1) + 1 : wordStart
-      position.value = { lineIndex, text: full, wordStart, wordEnd, spokenWord: spoken.slice(start, end) }
+      const [wordStart, wordEnd] = toFullRange(start, end)
+      const [sentenceStart, sentenceEnd] = toFullRange(chunk.start, chunk.start + chunk.text.trimEnd().length)
+      const prev = position.value
+      // Same sentence: only the word moves (kept for resuming), the mark is not redrawn.
+      if (prev && prev.lineIndex === lineIndex && prev.sentenceStart === sentenceStart && prev.sentenceEnd === sentenceEnd) {
+        prev.wordStart = wordStart
+        prev.wordEnd = wordEnd
+        return
+      }
+      position.value = { lineIndex, text: full, wordStart, wordEnd, sentenceStart, sentenceEnd }
     }
     if (gen !== generation) return false
     if (usesGoogle()) {
