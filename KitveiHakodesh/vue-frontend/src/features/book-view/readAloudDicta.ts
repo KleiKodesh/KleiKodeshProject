@@ -88,7 +88,10 @@ async function postToDicta(settings: object, text: string, signal: AbortSignal):
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // A "simple" request on purpose: Dicta's server fails the CORS preflight that a JSON
+        // content type triggers (500), so the browser would block every call. It reads the
+        // JSON body just the same as text, as Dicta's own site sends it.
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body,
         signal: AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]),
       })
