@@ -8,7 +8,7 @@ import {
   type ReadAloudSkipOptions,
   type ReadAloudText,
 } from './readAloudSkip'
-import { createReadAloudVocalizer } from './readAloudVocalizer'
+import { createReadAloudDicta } from './readAloudDicta'
 
 /**
  * Reads the book aloud with the browser's own speech (the voices installed in Windows).
@@ -94,9 +94,11 @@ export function useBookViewReadAloud() {
   /** Skipping on/off, and what it skips. */
   const skipEnabled = useStorage<boolean>('bookView.readAloud.skip', true)
   const skipOptions = useStorage<ReadAloudSkipOptions>('bookView.readAloud.skipOptions', { ...DEFAULT_SKIP_OPTIONS }, undefined, { mergeDefaults: true })
-  /** Adds nikkud to the text before it is spoken (Dicta Nakdan), so unpointed Hebrew reads well. */
+  /** Dicta prepares the text before it is spoken: nikkud for unpointed Hebrew, abbreviations in full. */
   const vocalize = useStorage<boolean>('bookView.readAloud.vocalize', true)
-  const vocalizer = createReadAloudVocalizer()
+  const expandAbbreviations = useStorage<boolean>('bookView.readAloud.expandAbbreviations', true)
+  const dicta = createReadAloudDicta()
+  const dictaOptions = () => ({ abbreviations: expandAbbreviations.value, nikkud: vocalize.value })
   const activeSkip = () => (skipEnabled.value ? skipOptions.value : null)
 
   /** What the last start() was for, so skip and a changed setting can restart from the line. */
@@ -177,7 +179,7 @@ export function useBookViewReadAloud() {
       }
       if (!source) return
       const { bookId, versionId, totalLines } = source
-      // The next batch is fetched while this one is read, so the vocalizer can see ahead.
+      // The next batch is fetched while this one is read, so Dicta's preparation can see ahead.
       let nextRows: Awaited<ReturnType<typeof getLinesPaged>> | null = null
       for (let offset = Math.max(0, fromLine); offset < totalLines; offset += BATCH_SIZE) {
         const rows = await getLinesPaged(bookId, BATCH_SIZE, offset, versionId ?? 0)
@@ -192,24 +194,24 @@ export function useBookViewReadAloud() {
           let text = texts[i]
           const char = row.lineIndex === fromLine ? fromChar : 0
           if (!text.spoken.trim()) continue
-          if (vocalize.value) {
+          if (vocalize.value || expandAbbreviations.value) {
             const ahead = texts.slice(i, i + 1 + 8).map((t) => t.spoken)
             const more = nextRows as typeof rows | null
             if (more) for (const r of more.slice(0, 8)) ahead.push(readAloudTextOfLine(r.content ?? '', activeSkip()).spoken)
-            vocalizer.prefetch(ahead, rate.value)
-            text = await vocalizer.pointed(text)
+            dicta.prefetch(ahead, rate.value, dictaOptions())
+            text = await dicta.prepared(text, dictaOptions())
             if (gen !== generation) return
           }
           const done = await speakText(text, row.lineIndex, voice, gen, char)
           if (!done) return
-          vocalizer.release(texts[i])
+          dicta.release(texts[i])
         }
       }
     } catch {
       // A failed fetch ends the reading.
     } finally {
       if (gen === generation) {
-        vocalizer.clear()
+        dicta.clear()
         isReading.value = false
         isPaused.value = false
         position.value = null
@@ -270,13 +272,13 @@ export function useBookViewReadAloud() {
     isPaused.value = false
   }
 
-  /** Stop for good: the speech ends and every vocalization is dropped. */
+  /** Stop for good: the speech ends and everything Dicta prepared is dropped. */
   function stop() {
     halt()
-    vocalizer.clear()
+    dicta.clear()
   }
 
-  /** Stops the speech only; vocalized lines stay, for a restart (speed, voice, skip). */
+  /** Stops the speech only; prepared lines stay, for a restart (speed, voice, skip). */
   function halt() {
     generation++
     isReading.value = false
@@ -297,7 +299,7 @@ export function useBookViewReadAloud() {
 
   return {
     isSupported, isReading, isPaused, position, voices,
-    rate, voiceUri, highlightWords, vocalize, skipEnabled, skipOptions,
+    rate, voiceUri, highlightWords, vocalize, expandAbbreviations, skipEnabled, skipOptions,
     start, pause, resume, stop, skip, changeRate, applySettingsChange,
   }
 }
