@@ -688,6 +688,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
   getThumbRect: () => scroller()?.thumbRect() ?? null,
   getTopRow: () => scroller()?.readFirstVisible(0)?.index ?? null,
+  getRowElement: (index) => scroller()?.rowElement(index) ?? null,
   getBookTitle: () => '',
   getLabelAt: (index) => {
     const header = headerAt(index)
