@@ -49,5 +49,7 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
   Release builds use the pins, so these keep library work from silently missing a release.
 - Adding a submodule to any repo: add both files to that repo if missing (copy from here).
   If the new submodule has its own submodules, add them in its repo too.
+- Every commit inside a submodule: push it, then commit the new pin in the parent repo and
+  push that too, right away (don't wait for Dependabot).
 - Local builds use the submodule folders on disk, not the pins. Never enable
   `submodule.recurse`: a pull would reset those folders to an older pinned commit.
