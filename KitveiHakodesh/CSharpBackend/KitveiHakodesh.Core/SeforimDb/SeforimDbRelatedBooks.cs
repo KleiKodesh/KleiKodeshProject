@@ -125,8 +125,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             return BuildSections(bookId, ownGroups, sourceIds, sourceGroups, memberBases, books);
         }
 
-        /// <summary>The dropdown's sections: the open book's groups by category, then right after
-        /// the base-text section(s) one section per base text with that text's commentaries.</summary>
+        /// <summary>The dropdown's sections: the open book's groups by category, then one section
+        /// per base text with that text's commentaries.</summary>
         private static RelatedBooksList BuildSections(
             int bookId, List<StaticGroup> ownGroups, List<int> sourceIds,
             Dictionary<int, List<StaticGroup>> sourceGroups, Dictionary<int, List<int>> memberBases,
@@ -154,11 +154,8 @@ namespace KitveiHakodesh.Core.SeforimDb
                 });
             }
 
-            int lastSourceSection = -1;
-            for (int i = 0; i < sections.Count; i++)
-                if (sections[i].Books.Any(b => b.IsBaseText)) lastSourceSection = i;
-            int insertAt = lastSourceSection + 1;
-
+            // The base texts' commentaries come after the open book's own groups: only the
+            // open book's own commentaries lead the list.
             foreach (int sourceId in sourceIds)
             {
                 var groups = sourceGroups[sourceId];
@@ -187,7 +184,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                         ChainBaseBookId = baseBookId != null && baseBookId != sourceId ? baseBookId : null,
                     });
                 }
-                sections.Insert(insertAt++, section);
+                sections.Add(section);
             }
 
             return new RelatedBooksList { Sections = sections.Where(s => s.Books.Count > 0).ToList() };
