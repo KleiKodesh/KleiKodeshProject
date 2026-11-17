@@ -39,7 +39,7 @@ public static class LocalFolderListing
                 // Hidden and system entries ($Recycle.Bin, desktop.ini...) are not the user's books.
                 if ((entry.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
                 if (entry is DirectoryInfo) result.Folders.Add(entry.Name);
-                else if (LocalFileOpenRules.IsSupported(entry.Name, out _)) result.Files.Add(entry.Name);
+                else if (LocalFileOpenRules.IsSupported(entry.FullName, out _)) result.Files.Add(entry.Name);   // full path: .xml is told apart by content
             }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
