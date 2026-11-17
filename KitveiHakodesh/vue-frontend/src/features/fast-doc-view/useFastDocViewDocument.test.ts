@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { effectScope } from 'vue'
+import { effectScope, shallowRef } from 'vue'
 import { useFastDocViewDocument, FAST_DOC_VIEW_SCAN_RETRY_DELAYS_MS } from './useFastDocViewDocument'
 import { useFastDocViewNotes } from './useFastDocViewNotes'
 import { FastDocViewBlockCache } from './fastDocViewBlockCache'
@@ -9,6 +9,7 @@ import {
   decodeFastDocViewWeights,
   type FastDocViewApi,
   type FastDocViewBlock,
+  type FastDocViewSummary,
 } from '@/webview-host/fastDocViewApi'
 
 function block(index: number): FastDocViewBlock {
@@ -387,6 +388,25 @@ describe('useFastDocViewNotes', () => {
     expect(notes.noteAt(0)).toMatchObject({ label: '1', index: 0, blockIndex: 5 })
     expect(await notes.findNote(5, 0, (note) => note.label === '1')).toBe(0)
     expect(await notes.findNote(4, 0, () => true)).toBeNull()
+    scope.stop()
+  })
+
+  it('a reference clicked before the note list caught up waits for its note (first open)', async () => {
+    let noteList = new Int32Array(0)
+    const api = {
+      noteBlocks: async () => noteList,
+      notes: async (_id: string, start: number, count: number) =>
+        [{ kind: 'footnote', number: 1, label: '1', html: '<p>n</p>' }].slice(start, start + count),
+    } as unknown as Parameters<typeof useFastDocViewNotes>[0]['api']
+    const summary = shallowRef<FastDocViewSummary | null>({ documentId: 'd', footnoteCount: 0, endnoteCount: 0, isIndexComplete: false } as FastDocViewSummary)
+    const scope = effectScope()
+    const notes = scope.run(() => useFastDocViewNotes({ api, summary }))!
+    await flush()
+    const found = notes.findNote(5, 0, (note) => note.label === '1')   // block 5's text is shown, its note not yet listed
+    await flush()
+    noteList = Int32Array.from([5])
+    summary.value = { ...summary.value!, footnoteCount: 1, isIndexComplete: true }
+    expect(await found).toBe(0)
     scope.stop()
   })
 })
