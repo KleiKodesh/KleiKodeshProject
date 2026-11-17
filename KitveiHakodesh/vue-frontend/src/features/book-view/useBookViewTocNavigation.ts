@@ -19,6 +19,7 @@ import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 type LinesContentInstance = {
   scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
   scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
+  readCurrentPosition: () => { lineIndex: number; fullLineIndex: number } | null
 }
 
 const SECTION_NAVIGATION_LAG_WINDOW_MS = 500
@@ -113,6 +114,14 @@ export function useBookViewTocNavigation(
       }
     } else {
       const currentLineIndex = activeEntry?.lineIndex ?? null
+      // Mid-section with its heading scrolled out of view: go back to the section's start first.
+      const topLineIndex = lagWindowActive ? null : linesContentRef()?.readCurrentPosition()?.lineIndex
+      if (activeEntry != null && currentLineIndex != null && topLineIndex != null && topLineIndex > currentLineIndex) {
+        lastSectionNavigationEntryId = activeEntry.id
+        lastSectionNavigationTimestamp = Date.now()
+        linesContentRef()?.scrollToLine(currentLineIndex, { force: true })
+        return
+      }
       for (let i = currentIndex - 1; i >= 0; i--) {
         const candidate = entries[i]!
         if (
