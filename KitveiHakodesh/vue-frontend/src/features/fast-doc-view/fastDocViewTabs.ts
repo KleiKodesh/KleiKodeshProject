@@ -101,7 +101,11 @@ function widthOnLine(range: Range, line: DOMRect): number {
   return right > left ? right - left : 0
 }
 
-/** The text after `tab` up to the next tab (or the paragraph's end), and the part of it before its first decimal point (null: none). */
+// Not the run text after a tab: what sits inside the paragraph's text but is not part of it (note marks, fields shown as
+// placeholders, shapes and text boxes, list labels, nested cells, equations) - a decimal point there does not count
+const NOT_RUN_TEXT = '.note-reference, .note-mark, .field-page-placeholder, .text-box, .word-shape, .word-picture-missing, .list-marker, td, math, sup, sub'
+
+/** The text after `tab` up to the next tab (or the paragraph's end), and the part of it before its first decimal point in the run text (null: none). */
 function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLElement | undefined): { segment: Range; decimal: Range | null } {
   const segment = document.createRange()
   segment.setStartAfter(tab)
@@ -110,6 +114,8 @@ function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLEleme
   const walker = document.createTreeWalker(segment.commonAncestorContainer, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!segment.intersectsNode(node)) continue
+    const nested = node.parentElement?.closest(NOT_RUN_TEXT)
+    if (nested && paragraph.contains(nested)) continue
     const at = (node.nodeValue ?? '').indexOf('.')
     if (at < 0) continue
     decimal = document.createRange()
@@ -120,21 +126,36 @@ function segmentRanges(paragraph: HTMLElement, tab: HTMLElement, next: HTMLEleme
   return { segment, decimal }
 }
 
+/**
+ * Bar stops: a vertical line through the paragraph at the stop. Measured like the tabs, from the text's start edge less the
+ * start indent: a paragraph border's line and space sit inside the box here (Word draws them in the indent), so the line moves
+ * in with the text by the box's start padding and border.
+ */
 function drawBars(paragraph: Paragraph) {
   const { element, data } = paragraph
   for (const old of element.querySelectorAll(':scope > .tab-bar')) old.remove()
   const bars = data.stops.filter((s) => s.alignment === 'b')
   if (!bars.length) return
-  if (getComputedStyle(element).position === 'static') element.style.position = 'relative'
+  const style = getComputedStyle(element)
+  if (style.position === 'static') element.style.position = 'relative'
+  // the bar's inset counts from the padding box; the text starts after the padding (CSS px -> pt: 3/4)
+  const padding = parseFloat(style.direction === 'rtl' ? style.paddingRight : style.paddingLeft) * 0.75
   for (const bar of bars) {
     const line = document.createElement('span')
     line.className = 'tab-bar'
-    line.style.insetInlineStart = `${bar.position - data.start}pt`
+    line.style.insetInlineStart = `${+(bar.position - data.start + padding).toFixed(2)}pt`
     element.appendChild(line)
   }
 }
 
-/** Lays out the tabs of every marked paragraph inside `root`: wrap and zero (writes), measure (one layout), set widths (writes). */
+type Job = { paragraph: Paragraph; from: number; wrapped?: number }
+
+/**
+ * Lays out the tabs of every marked paragraph inside `root`: wrap and zero (writes), measure (one layout), set widths (writes),
+ * then once more for each paragraph where a tab or its text landed on another line than it was measured on - from that tab
+ * on, measured on its new line, as Word measures a tab on the line it ends up on. Each round fixes at least one more tab (a
+ * tab's own place depends only on what comes before it), so it ends after at most one round per tab.
+ */
 export function layoutTabs(root: Element) {
   const paragraphs: Paragraph[] = []
   const candidates = new Set<HTMLElement>(root.querySelectorAll<HTMLElement>('[data-tabs]'))
@@ -145,68 +166,100 @@ export function layoutTabs(root: Element) {
     const paragraph: Paragraph = { element, data, tabs: hasTab ? ownTabs(element) : [], rightToLeft: false }
     if (data.stops.some((s) => s.alignment === 'b')) drawBars(paragraph)
     if (!paragraph.tabs.length) continue
-    for (const { span } of paragraph.tabs) { span.style.paddingInlineEnd = '0px'; delete span.dataset.leader }
     paragraphs.push(paragraph)
   }
   if (!paragraphs.length) return
 
-  // one layout: the scale (pt -> px, zoom included) from a probe, then every tab and its text
-  const probe = paragraphs[0]!.tabs[0]!.span
-  probe.style.paddingInlineEnd = '100pt'
-  const pixelsPerPoint = probe.getBoundingClientRect().width / 100 || 4 / 3
-  probe.style.paddingInlineEnd = '0px'
-  const plans = paragraphs.map((paragraph) => {
-    const { element, data, tabs } = paragraph
-    const style = getComputedStyle(element)
-    paragraph.rightToLeft = style.direction === 'rtl'
-    const box = element.getBoundingClientRect()
-    const contentStart = paragraph.rightToLeft ? box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth)
-                                               : box.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth)
-    const contentEnd = paragraph.rightToLeft ? box.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth)
-                                             : box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth)
-    const toPoints = (x: number) => (paragraph.rightToLeft ? contentStart - x : x - contentStart) / pixelsPerPoint + data.start
-    const right = toPoints(contentEnd)
-    return tabs.map((tab, i) => {
-      const line = tab.span.getBoundingClientRect()
-      // the text after the tab is measured only for a stop that needs it (right / centre / decimal), still before any write
-      let ranges: ReturnType<typeof segmentRanges> | null = null
-      const measure = () => (ranges ??= segmentRanges(element, tab.span, tabs[i + 1]?.span))
-      return {
-        tab, line, right,
-        x: toPoints(paragraph.rightToLeft ? line.right : line.left),
-        segment: () => widthOnLine(measure().segment, line) / pixelsPerPoint,
-        decimal: () => { const decimal = measure().decimal; return decimal ? widthOnLine(decimal, line) / pixelsPerPoint : null },
-      }
-    })
-  })
-
-  // widths, line by line (a tab moves everything after it on its line); every read is done before the first write
-  const widths = paragraphs.map((paragraph, p) => {
-    let shift = 0, lineTop = NaN
-    return plans[p]!.map((plan) => {
-      if (Math.abs(plan.line.top - lineTop) > 1) { shift = 0; lineTop = plan.line.top }
-      const x = plan.x + shift
-      let stop: Stop
-      if (plan.tab.ptab) {
-        const [alignment = 'l', leader = '-', relativeTo = 'm'] = plan.tab.ptab
-        const from = relativeTo === 'i' ? paragraph.data.start : 0
-        stop = { position: alignment === 'r' ? plan.right : alignment === 'c' ? (from + plan.right) / 2 : from, alignment, leader: leader === '-' ? '' : leader }
-      } else stop = nextStop(paragraph.data, x, plan.right)
-      const width = tabWidth(stop, x, stop.alignment === 'l' ? 0 : plan.segment(), stop.alignment === 'd' ? plan.decimal() : null, plan.right)
-      shift += width
-      return { span: plan.tab.span, width, leader: width > 0 ? stop.leader : '' }
-    })
-  })
-  for (const paragraph of widths)
-    for (const { span, width, leader } of paragraph) {
-      span.style.paddingInlineEnd = `${Math.floor(width * 100) / 100}pt`
-      if (leader) span.dataset.leader = leader
+  let jobs: Job[] = paragraphs.map((paragraph) => ({ paragraph, from: 0 }))
+  let pixelsPerPoint = 0
+  const rounds = Math.max(...paragraphs.map((p) => p.tabs.length)) + 1
+  for (let round = 0; round < rounds && jobs.length; round++) {
+    for (const { paragraph, from, wrapped } of jobs)
+      paragraph.tabs.slice(from).forEach(({ span }, k) => {
+        span.style.paddingInlineEnd = '0px'
+        delete span.dataset.leader
+        const previous = span.previousSibling
+        if (from + k !== wrapped && previous instanceof HTMLBRElement && previous.classList.contains('tab-break')) previous.remove()
+      })
+    // one layout: the scale (pt -> px, zoom included) from a probe, then every tab and its text
+    if (!pixelsPerPoint) {
+      const probe = jobs[0]!.paragraph.tabs[0]!.span
+      probe.style.paddingInlineEnd = '100pt'
+      pixelsPerPoint = probe.getBoundingClientRect().width / 100 || 4 / 3
+      probe.style.paddingInlineEnd = '0px'
     }
+    const results = jobs.map((job) => planTabs(job, pixelsPerPoint))
+    for (const result of results)
+      for (const { span, width, leader, wraps } of result) {
+        // a left stop past the line's end: the tab goes to the next line (txttab.cxx PreFormat bFull) - a break before it
+        const previous = span.previousSibling
+        if (wraps && !(previous instanceof HTMLBRElement && previous.classList.contains('tab-break'))) {
+          const lineBreak = document.createElement('br'); lineBreak.className = 'tab-break'; span.before(lineBreak)
+        }
+        span.style.paddingInlineEnd = `${Math.floor(width * 100) / 100}pt`
+        if (leader) span.dataset.leader = leader
+      }
+    // where a set width sent a tab or its text to another line, or a tab went to the next line, it is laid out again there
+    const next: Job[] = []
+    results.forEach((result, j) => {
+      const { paragraph, from } = jobs[j]!
+      const wrapped = result.findIndex((r) => r.wraps)
+      if (wrapped === 0 && jobs[j]!.wrapped === from) return     // already on its own line: no stop fits there either
+      if (wrapped >= 0) { next.push({ paragraph, from: from + wrapped, wrapped: from + wrapped }); return }
+      const moved = result.findIndex(({ span, line }, k) => k > 0 && Math.abs(span.getBoundingClientRect().top - line) > 1)
+      if (moved > 0) next.push({ paragraph, from: from + moved })
+    })
+    jobs = next
+  }
+}
+
+/** Widths of the job's tabs (from its first one on; the ones before keep theirs), from one measuring pass - reads only. */
+function planTabs({ paragraph, from }: Job, pixelsPerPoint: number) {
+  const { element, data, tabs } = paragraph
+  const style = getComputedStyle(element)
+  paragraph.rightToLeft = style.direction === 'rtl'
+  const box = element.getBoundingClientRect()
+  const contentStart = paragraph.rightToLeft ? box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth)
+                                             : box.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth)
+  const contentEnd = paragraph.rightToLeft ? box.left + parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth)
+                                           : box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth)
+  const toPoints = (x: number) => (paragraph.rightToLeft ? contentStart - x : x - contentStart) / pixelsPerPoint + data.start
+  const right = toPoints(contentEnd)
+  // widths, line by line (a tab moves everything after it on its line); positions read live, so earlier tabs count as set
+  let shift = 0, lineTop = NaN
+  const lineStart = data.start + Math.max(0, data.firstLine) + 0.5
+  const planned: { span: HTMLElement; line: number; width: number; leader: string; wraps: boolean }[] = []
+  for (let i = from; i < tabs.length; i++) {
+    const tab = tabs[i]!
+    const line = tab.span.getBoundingClientRect()
+    if (Math.abs(line.top - lineTop) > 1) { shift = 0; lineTop = line.top }
+    const x = toPoints(paragraph.rightToLeft ? line.right : line.left) + shift
+    // the text after the tab is measured only for a stop that needs it (right / centre / decimal)
+    let ranges: ReturnType<typeof segmentRanges> | null = null
+    const measure = () => (ranges ??= segmentRanges(element, tab.span, tabs[i + 1]?.span))
+    let stop: Stop
+    if (tab.ptab) {
+      const [alignment = 'l', leader = '-', relativeTo = 'm'] = tab.ptab
+      const start = relativeTo === 'i' ? data.start : 0
+      stop = { position: alignment === 'r' ? right : alignment === 'c' ? (start + right) / 2 : start, alignment, leader: leader === '-' ? '' : leader }
+    } else stop = nextStop(data, x, right)
+    if (!tab.ptab && stop.alignment === 'l' && stop.position >= right - 0.01 && x > lineStart) {   // bFull: Width() <= X + PrtWidth()
+      planned.push({ span: tab.span, line: line.top, width: 0, leader: '', wraps: true })
+      break                                    // the rest is laid out after the break, on the next line
+    }
+    const segment = stop.alignment === 'l' ? 0 : widthOnLine(measure().segment, line) / pixelsPerPoint
+    const decimalRange = stop.alignment === 'd' ? measure().decimal : null
+    const decimal = decimalRange ? widthOnLine(decimalRange, line) / pixelsPerPoint : null
+    const width = tabWidth(stop, x, segment, decimal, right)
+    shift += width
+    planned.push({ span: tab.span, line: line.top, width, leader: width > 0 ? stop.leader : '', wraps: false })
+  }
+  return planned
 }
 
 /** `v-fast-doc-view-tabs` on the element that holds block HTML: lays out its tabs after each render and when its width changes. */
 export const vFastDocViewTabs = {
-  mounted(element: HTMLElement) { run(element); watchWidth(element) },
+  mounted(element: HTMLElement) { run(element) },
   updated(element: HTMLElement) { run(element) },
   unmounted(element: HTMLElement) { widthObserver.unobserve(element); widths.delete(element) },
 }
@@ -214,6 +267,7 @@ export const vFastDocViewTabs = {
 function run(element: HTMLElement) {
   if (!element.querySelector('[data-tabs], [data-ptab]')) return
   layoutTabs(element)
+  watchWidth(element)
   // web fonts still loading change every width: once more when they are in
   if (document.fonts?.status === 'loading') document.fonts.ready.then(() => { if (element.isConnected) layoutTabs(element) })
 }
@@ -227,9 +281,8 @@ const widthObserver = new ResizeObserver((entries) => {
   for (const entry of entries) {
     const width = Math.round(entry.contentRect.width)
     if (widths.get(entry.target) === width) continue
-    const first = !widths.has(entry.target)
     widths.set(entry.target, width)
-    if (!first) pending.add(entry.target as HTMLElement)
+    pending.add(entry.target as HTMLElement)
   }
   if (pending.size && !frame) frame = requestAnimationFrame(() => {
     frame = 0
@@ -238,4 +291,10 @@ const widthObserver = new ResizeObserver((entries) => {
   })
 })
 
-function watchWidth(element: HTMLElement) { widthObserver.observe(element) }
+/** Watches a block that has tabs; its width now is the one the pass just used (a change before the first observation counts too). */
+function watchWidth(element: HTMLElement) {
+  if (widths.has(element)) return
+  const style = getComputedStyle(element)          // the content box, as the observer's contentRect measures it
+  widths.set(element, Math.round(element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)))
+  widthObserver.observe(element)
+}
