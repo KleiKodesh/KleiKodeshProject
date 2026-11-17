@@ -649,7 +649,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     if (!query) return
     const nav: PaneNavigation | undefined = options.paneNavigation
     if (nav) {
-      nav.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
+      nav.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
     } else {
       tabStore.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
     }
