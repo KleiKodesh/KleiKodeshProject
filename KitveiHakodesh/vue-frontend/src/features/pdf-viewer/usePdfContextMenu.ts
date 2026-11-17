@@ -4,6 +4,7 @@ import type ContextMenu from '@/components/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { attachScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { pasteIntoWord, copyImageToClipboard } from '@/webview-host/bridge'
+import { toHebrewSearchQuery } from '@/features/book-view/lines/useBookViewLineCopyMenu'
 
 // The page is rendered at the highest scale that still fits within
 // MAX_IMAGE_DIMENSION (longest side, px) — PDF pages are vector, so more pixels
@@ -168,7 +169,7 @@ function selectionToText(win: Window): string {
 export function usePdfContextMenu(
   getIframe: () => HTMLIFrameElement | null,
   menuRef: Ref<InstanceType<typeof ContextMenu> | null>,
-  options: { isBlocked?: () => boolean; notify?: (message: string) => void } = {},
+  options: { isBlocked?: () => boolean; notify?: (message: string) => void; searchInLibrary?: (query: string) => void } = {},
 ) {
   const items = ref<ContextMenuItem[]>([])
 
@@ -238,6 +239,11 @@ export function usePdfContextMenu(
       pasteIntoWord().catch(() => {})
     })
     if (!copied) options.notify?.(t('pdfViewer.menu.copyFailed'))
+  }
+
+  function onSearchInLibrary(): void {
+    const query = toHebrewSearchQuery(capturedText)
+    if (query) options.searchInLibrary?.(query)
   }
 
   async function copyPageAsImage(): Promise<void> {
@@ -325,6 +331,7 @@ export function usePdfContextMenu(
     if (hasSelection) {
       list.push({ label: t('pdfViewer.menu.copy'), action: onCopy, shortcut: 'Ctrl+C' })
       list.push({ label: t('pdfViewer.menu.copyIntoWord'), action: onCopyIntoWord })
+      if (options.searchInLibrary) list.push({ label: t('bookView.copy.toSearch'), action: onSearchInLibrary, shortcut: 'Ctrl+Shift+C' })
     }
     list.push({ label: t('pdfViewer.menu.copyPageAsImage'), action: () => void copyPageAsImage() })
     return list
@@ -375,11 +382,25 @@ export function usePdfContextMenu(
 
   let detachCopy: (() => void) | null = null
 
+  // Ctrl+Shift+C: search the library for the selected text, as in the book view.
+  function onIframeKeyDown(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.code !== 'KeyC') return
+    if (!options.searchInLibrary || options.isBlocked?.()) return
+    const win = (event.target as Node | null)?.ownerDocument?.defaultView ?? getIframe()?.contentWindow
+    if (!win) return
+    const query = toHebrewSearchQuery(selectionToText(win))
+    if (!query) return
+    event.preventDefault()
+    event.stopPropagation()
+    options.searchInLibrary(query)
+  }
+
   function attach(win: Window): void {
     // Capture phase so we intercept the right-click before PDF.js's own handlers
     // and reliably suppress the browser's native context menu.
     win.document.addEventListener('contextmenu', onContextMenu, true)
     win.document.addEventListener('pointerdown', onIframePointerDown, true)
+    win.document.addEventListener('keydown', onIframeKeyDown, true)
 
     // Intercept copies inside the iframe and rewrite the payload into the RTL
     // Word-friendly shape. This serves BOTH our menu's העתק and the user's own Ctrl+C
@@ -403,6 +424,7 @@ export function usePdfContextMenu(
   function detach(win: Window | null): void {
     win?.document.removeEventListener('contextmenu', onContextMenu, true)
     win?.document.removeEventListener('pointerdown', onIframePointerDown, true)
+    win?.document.removeEventListener('keydown', onIframeKeyDown, true)
     detachCopy?.()
     detachCopy = null
     capturedRange = null

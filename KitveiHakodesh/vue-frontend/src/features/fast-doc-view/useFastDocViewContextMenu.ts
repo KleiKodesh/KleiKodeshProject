@@ -38,7 +38,7 @@ export function useFastDocViewContextMenu(options: {
     holder.appendChild(selection.getRangeAt(0).cloneContents())
     const query = toHebrewSearchQuery(holder.innerHTML)
     if (!query) return
-    options.paneNavigation.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
+    options.paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
   }
 
   const items: ContextMenuItem[] = [

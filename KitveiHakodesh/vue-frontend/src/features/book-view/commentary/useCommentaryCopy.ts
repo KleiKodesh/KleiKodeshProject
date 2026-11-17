@@ -695,7 +695,7 @@ export function useCommentaryCopy(
     const rawText = tmp.innerHTML.replace(/<[^>]*>/g, ' ')
     const query = rawText.replace(/[^א-ת\s]/g, '').replace(/\s+/g, ' ').trim()
     if (!query) return
-    paneNavigation.updateActiveTab({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
+    paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query })
   }
 
   // ── Context menu ────────────────────────────────────────────────────────────

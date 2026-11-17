@@ -51,6 +51,7 @@ const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, 
   // OCR mode has its own selection overlay — don't shadow it with our menu.
   isBlocked: () => pdfOcrStore.isActive,
   notify: showToast,
+  searchInLibrary: (query) => paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query }),
 })
 
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
