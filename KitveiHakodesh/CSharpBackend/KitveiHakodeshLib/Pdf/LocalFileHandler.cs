@@ -113,7 +113,7 @@ namespace KitveiHakodeshLib.LocalFile
                     using (var dlg = new OpenFileDialog())
                     {
                         dlg.Title  = HostText.OpenFileTitle;
-                        dlg.Filter = HostText.Documents + " (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|" + HostText.AllFiles + " (*.*)|*.*";
+                        dlg.Filter = HostText.Documents + " (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml|" + HostText.AllFiles + " (*.*)|*.*";
                         // A folder that has since been deleted must not sink the pick: the dialog
                         // silently falls back to its default when InitialDirectory does not exist.
                         if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
@@ -162,7 +162,7 @@ namespace KitveiHakodeshLib.LocalFile
 
                 if (!LocalFileOpenRules.IsSupported(filePath, out bool needsConvert))
                 {
-                    Fail(HostText.FileTypeNotSupported + ": " + Path.GetExtension(filePath).ToLowerInvariant());
+                    Fail(Path.GetExtension(filePath).Equals(".xml", StringComparison.OrdinalIgnoreCase) ? HostText.NotAWordXmlFile : HostText.FileTypeNotSupported + ": " + Path.GetExtension(filePath).ToLowerInvariant());
                     return;
                 }
 
@@ -282,7 +282,7 @@ namespace KitveiHakodeshLib.LocalFile
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = HostText.FileNotFound }); return; }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                if (!LocalFileOpenRules.IsSupported(filePath, out _)) { _bridge.Reply(id, new { error = HostText.FileTypeNotSupported }); return; }
+                if (!LocalFileOpenRules.IsSupported(filePath, out _)) { _bridge.Reply(id, new { error = ext == ".xml" ? HostText.NotAWordXmlFile : HostText.FileTypeNotSupported }); return; }
                 if (ext == ".txt")
                 {
                     // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).

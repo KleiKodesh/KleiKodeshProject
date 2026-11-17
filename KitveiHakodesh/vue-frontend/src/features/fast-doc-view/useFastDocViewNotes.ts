@@ -40,6 +40,8 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
   let loadedFor: string | null = null
   let refreshTimer: ReturnType<typeof setTimeout> | null = null
   let refreshing: Promise<void> | null = null
+  /** Reference lookups waiting for their block's notes (whenBlockNotesKnown): released when the page closes. */
+  const pendingWaits = new Set<() => void>()
 
   async function refreshNoteBlocks(documentId: string) {
     try {
@@ -103,6 +105,7 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
 
   // The pane's page closed: no refresh may fire after it.
   onScopeDispose(() => {
+    for (const done of [...pendingWaits]) done()   // a reference waiting for its note gives up with the page
     if (refreshTimer) clearTimeout(refreshTimer)
     refreshTimer = null
   })
@@ -157,6 +160,29 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
     })
   }
 
+  /**
+   * Resolves once every note of block `blockIndex` is in the note list: a known note lies past the
+   * block (the list is in body order), or the list is final (index complete, no refresh pending),
+   * or the document went away. A reference clicked on a first open - its block rendered before the
+   * note list caught up (a Word 2003 XML file is translated, then indexed) - waits for its note
+   * instead of finding none.
+   */
+  function whenBlockNotesKnown(blockIndex: number): Promise<void> {
+    const documentId = options.summary.value?.documentId
+    const isSettled = () => {
+      const summary = options.summary.value
+      const blocks = noteBlocks.value
+      if (summary?.documentId !== documentId || (blocks.length > 0 && blocks[blocks.length - 1]! > blockIndex)) return true
+      return !!summary?.isIndexComplete && !isRefreshing.value && refreshTimer == null
+    }
+    if (isSettled()) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const done = () => { stop(); pendingWaits.delete(done); resolve() }
+      const stop = watch(isSettled, (settled) => { if (settled) done() }, { flush: 'post' })
+      pendingWaits.add(done)
+    })
+  }
+
   /** The notes scroller's row source: resolves once notes [start, end) are cached. */
   async function ensureNotes(start: number, end: number): Promise<void> {
     await whenNoteKnown(start)
@@ -199,7 +225,7 @@ export function useFastDocViewNotes(options: FastDocViewNotesOptions) {
    * place among the block's references) is the fallback. Null when the note is not known yet.
    */
   async function findNote(blockIndex: number, occurrence: number, matches: (note: FastDocViewIndexedNote) => boolean): Promise<number | null> {
-    if (refreshing) await refreshing
+    await whenBlockNotesKnown(blockIndex)
     const [first, end] = notesOfBlock(blockIndex)
     if (first >= end) return null
     await ensureNotes(first, end).catch(() => {})
