@@ -470,6 +470,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getTargetLineIndex: (clientY) => scroller()?.barTargetAt(clientY) ?? null,
   getThumbRect: () => scroller()?.thumbRect() ?? null,
   getTopRow: () => scroller()?.readFirstVisible(0)?.index ?? null,
+  getRowElement: (index) => scroller()?.rowElement(index) ?? null,
   getBookTitle: () => bookTitle,
   getActiveTocEntry: () => props.getActiveTocEntry,
   getActiveAltTocEntry: () => props.getActiveAltTocEntry,

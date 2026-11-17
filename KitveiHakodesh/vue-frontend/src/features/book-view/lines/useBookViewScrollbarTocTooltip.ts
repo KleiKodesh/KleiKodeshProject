@@ -43,8 +43,12 @@ export interface ScrollbarTocTooltipData {
 const HOVER_DELAY_MS = 120
 /** How long the scroll-follow label stays after the scrolling stops. */
 const SCROLL_LINGER_MS = 700
-/** How many rows the reader scrolls from where the scroll began before the label shows. */
-const JOURNEY_ROWS = 5
+/**
+ * How far the reader scrolls from where the scroll began before the label shows, in
+ * screens - measured in real pixels, so it is the same whether the rows are one word
+ * or a whole page, and however long the book is.
+ */
+const JOURNEY_SCREENS = 1
 /** Books shorter than this many screens never get the scroll-follow label. */
 const MIN_SCREENS = 4
 
@@ -77,8 +81,10 @@ export function useBookViewScrollbarTocTooltip(
      * (its `move` event): landings (a TOC jump, a restore) do not show it.
      */
     getThumbRect?: () => WindowedScrollerThumbRect | null
-    /** The row at the top of the scroller (its readFirstVisible) - how far the reader has scrolled. */
+    /** The row at the top of the scroller (its readFirstVisible) - where the scroll began. */
     getTopRow?: () => number | null
+    /** That row's element while it is mounted (the scroller's rowElement) - how far it has moved, in pixels. */
+    getRowElement?: (index: number) => HTMLElement | null
   },
 ) {
   const scrollbarTocTooltip = ref<ScrollbarTocTooltipData | null>(null)
@@ -95,7 +101,7 @@ export function useBookViewScrollbarTocTooltip(
     clearHoverTimer()
     clearScrollLinger()
     isScrollFollow = false
-    scrollStartRow = null
+    scrollStart = null
     scrollbarTocTooltip.value = null
   }
 
@@ -120,22 +126,31 @@ export function useBookViewScrollbarTocTooltip(
     }
   }
 
-  /** The top row where the reader's scrolling began: set by their first scroll, cleared when the label goes or the app lands. */
-  let scrollStartRow: number | null = null
+  /**
+   * The top row where the reader's scrolling began, and its element's top then: set
+   * by their first scroll, cleared when the label goes or the app lands.
+   */
+  let scrollStart: { row: number; top: number } | null = null
 
   /**
    * Worth labelling only when the book is long (thumb under a quarter of the track)
-   * and the reader has scrolled JOURNEY_ROWS rows from where they started - read from
-   * the scroller's own top row, no timing. Once shown, it keeps following until it
-   * lingers out.
+   * and the reader has scrolled JOURNEY_SCREENS screens from where they started -
+   * read off the start row's own element, so row heights do not matter, and no
+   * timing. When that row has left the mounted window the reader is far past a
+   * screen. Once shown, it keeps following until it lingers out.
    */
-  function isJourney(thumbHeight: number, trackHeight: number): boolean {
-    const row = options.getTopRow?.() ?? options.getCurrentLineIndex()
-    if (row == null) return false
-    if (scrollStartRow === null) scrollStartRow = row
+  function isJourney(thumb: WindowedScrollerThumbRect): boolean {
+    if (scrollStart === null) {
+      const row = options.getTopRow?.()
+      const el = row == null ? null : options.getRowElement?.(row)
+      if (row == null || !el) return false
+      scrollStart = { row, top: el.getBoundingClientRect().top }
+    }
     if (isScrollFollow) return true
-    if (!thumbHeight || thumbHeight * MIN_SCREENS > trackHeight) return false
-    return Math.abs(row - scrollStartRow) >= JOURNEY_ROWS
+    if (!thumb.height || thumb.height * MIN_SCREENS > thumb.trackHeight) return false
+    const el = options.getRowElement?.(scrollStart.row)
+    if (!el) return true
+    return Math.abs(el.getBoundingClientRect().top - scrollStart.top) >= thumb.trackHeight * JOURNEY_SCREENS
   }
 
   function followScroll() {
@@ -143,7 +158,7 @@ export function useBookViewScrollbarTocTooltip(
     // Where the thumb is GOING, not where its glide has got to.
     const thumb = options.getThumbRect?.()
     if (!bar || !thumb || options.isSuspended?.()) return
-    if (!isJourney(thumb.height, thumb.trackHeight)) return
+    if (!isJourney(thumb)) return
     const thumbCenterY = thumb.top + thumb.height / 2
     const index = lineIndexForPointer(thumbCenterY)
     const bookTitle = titleAt(index)
@@ -266,7 +281,7 @@ export function useBookViewScrollbarTocTooltip(
 
   /** The scroller's `moveend`: an app landing moves the start; the reader's own pauses do not. */
   function onScrollerMoveEnd(source?: WindowedScrollerMoveSource) {
-    if (source === 'landing') scrollStartRow = null
+    if (source === 'landing') scrollStart = null
   }
 
   return { scrollbarTocTooltip, closeScrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd }
