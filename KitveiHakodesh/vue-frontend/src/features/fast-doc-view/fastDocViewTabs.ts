@@ -151,6 +151,15 @@ function drawBars(paragraph: Paragraph) {
 type Job = { paragraph: Paragraph; from: number; wrapped?: number }
 
 /**
+ * The line break before a tab that goes to the next line: an empty span whose break is CSS generated content (library stylesheet
+ * `.tab-break::before { content: "\A"; white-space: pre }`), not a <br> - generated content is not text, so copying the paragraph
+ * gives exactly the document's text (the tab, no extra line break).
+ */
+function isTabBreak(node: Node | null): node is HTMLElement {
+  return node instanceof HTMLElement && node.classList.contains('tab-break')
+}
+
+/**
  * Lays out the tabs of every marked paragraph inside `root`: wrap and zero (writes), measure (one layout), set widths (writes),
  * then once more for each paragraph where a tab or its text landed on another line than it was measured on - from that tab
  * on, measured on its new line, as Word measures a tab on the line it ends up on. Each round fixes at least one more tab (a
@@ -179,7 +188,7 @@ export function layoutTabs(root: Element) {
         span.style.paddingInlineEnd = '0px'
         delete span.dataset.leader
         const previous = span.previousSibling
-        if (from + k !== wrapped && previous instanceof HTMLBRElement && previous.classList.contains('tab-break')) previous.remove()
+        if (from + k !== wrapped && isTabBreak(previous)) previous.remove()
       })
     // one layout: the scale (pt -> px, zoom included) from a probe, then every tab and its text
     if (!pixelsPerPoint) {
@@ -193,8 +202,8 @@ export function layoutTabs(root: Element) {
       for (const { span, width, leader, wraps } of result) {
         // a left stop past the line's end: the tab goes to the next line (txttab.cxx PreFormat bFull) - a break before it
         const previous = span.previousSibling
-        if (wraps && !(previous instanceof HTMLBRElement && previous.classList.contains('tab-break'))) {
-          const lineBreak = document.createElement('br'); lineBreak.className = 'tab-break'; span.before(lineBreak)
+        if (wraps && !isTabBreak(previous)) {
+          const lineBreak = document.createElement('span'); lineBreak.className = 'tab-break'; span.before(lineBreak)
         }
         span.style.paddingInlineEnd = `${Math.floor(width * 100) / 100}pt`
         if (leader) span.dataset.leader = leader
