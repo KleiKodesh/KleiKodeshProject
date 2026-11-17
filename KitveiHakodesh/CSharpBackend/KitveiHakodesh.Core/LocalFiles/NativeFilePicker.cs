@@ -65,8 +65,8 @@ public static class NativeFilePicker
 
     // Same document family the hosted picker offers (LocalFileHandler), Win32 \0-separated form.
     public const string DocumentFilter =
-        "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)\0" +
-        "*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt\0" +
+        "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml)\0" +
+        "*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt;*.xml\0" +
         "כל הקבצים (*.*)\0*.*\0\0";
 
     /// <summary>SQLite database filter — used by the settings page's seforim DB path picker.

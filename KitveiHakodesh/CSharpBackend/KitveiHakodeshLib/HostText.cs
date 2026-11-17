@@ -49,6 +49,7 @@ namespace KitveiHakodeshLib
         // ── Local files ──
         public static string FileNotFound => T("הקובץ לא נמצא", "File not found");
         public static string FileTypeNotSupported => T("סוג קובץ זה אינו נתמך", "This file type is not supported");
+        public static string NotAWordXmlFile => T("קובץ ה-XML הזה אינו מסמך Word", "This XML file is not a Word document");
         public static string CannotConvertFile => T("לא ניתן להמיר את הקובץ", "The file could not be converted");
         public static string MakeSureWordInstalled => T("ודא ש-Microsoft Word מותקן.", "Make sure Microsoft Word is installed.");
 

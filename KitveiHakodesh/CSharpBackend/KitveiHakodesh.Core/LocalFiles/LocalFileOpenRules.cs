@@ -27,8 +27,28 @@ public static class LocalFileOpenRules
     public static bool IsSupported(string path, out bool needsConvert)
     {
         string ext = Path.GetExtension(path).ToLowerInvariant();
+        // .xml is opened only when its content is a Word document (FastDocView reads it; Word converts it)
+        if (ext == ".xml") { needsConvert = true; return IsWordXml(path); }
         needsConvert = Array.IndexOf(ConvertExtensions, ext) >= 0;
         return needsConvert || Array.IndexOf(DirectExtensions, ext) >= 0;
+    }
+
+    /// <summary>True when an .xml file is a Word document: its root element is Flat OPC's pkg:package
+    /// ("Word XML Document") or Word 2003 XML's w:wordDocument. Only the root start tag is read.</summary>
+    public static bool IsWordXml(string path)
+    {
+        try
+        {
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = System.Xml.XmlReader.Create(file, new System.Xml.XmlReaderSettings { DtdProcessing = System.Xml.DtdProcessing.Ignore });
+            if (reader.MoveToContent() != System.Xml.XmlNodeType.Element) return false;
+            return (reader.NamespaceURI, reader.LocalName) is ("http://schemas.microsoft.com/office/2006/xmlPackage", "package")
+                or ("http://schemas.microsoft.com/office/word/2003/wordml", "wordDocument");
+        }
+        catch (Exception exception) when (exception is System.Xml.XmlException or IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     /// <summary>True for a plain-text file, which the viewer shows from its decoded text.</summary>
