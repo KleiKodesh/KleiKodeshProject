@@ -1,6 +1,6 @@
 # hebrew-calendar
 
-Hebrew calendar page. Singleton route `/hebrew-calendar`. Two views — monthly grid and weekly detail — switchable from the header. City selection for zmanim is persisted to localStorage.
+Hebrew calendar widget (features/widgets): opens in a floating window, not a tab. Two views — monthly grid and weekly detail — switchable from the header. City selection for zmanim is persisted to localStorage.
 
 **HebrewCalendarPage.vue** — orchestrator. Owns the view-mode toggle, city picker, and routes between `MonthlyView` and `WeeklyView`.
 
