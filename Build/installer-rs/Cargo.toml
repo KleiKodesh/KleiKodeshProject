@@ -35,6 +35,7 @@ windows = { version = "0.58", features = [
 
 [build-dependencies]
 slint-build = "1"
+winresource = "0.1"
 
 [profile.release]
 opt-level = "s"

@@ -176,11 +176,19 @@ export component CheckRow inherits HorizontalLayout {
     if Lang.en: VerticalLayout { alignment: start; CheckBox { text: ""; enabled: root.enabled; checked: root.checked; toggled => { root.toggled(); } } }
     if Lang.en && root.icon != "": VerticalLayout { alignment: start; ProductIcon { id: root.icon; size: 32px; opacity: root.enabled ? 1 : 0.5; } }
     if !Lang.en: Text { text: root.side-note; color: Theme.muted; font-size: 12px; vertical-alignment: top; }
-    VerticalLayout {
+    // The caption toggles too, like a native checkbox label.
+    Rectangle {
         horizontal-stretch: 1;
-        spacing: 2px;
-        Text { text: root.text; color: root.enabled ? Theme.text : Theme.muted; font-size: 13px; horizontal-alignment: Lang.start; }
-        if root.detail != "": Text { text: root.detail; color: Theme.muted; font-size: 12px; horizontal-alignment: Lang.start; wrap: word-wrap; }
+        VerticalLayout {
+            spacing: 2px;
+            Text { text: root.text; color: root.enabled ? Theme.text : Theme.muted; font-size: 13px; horizontal-alignment: Lang.start; }
+            if root.detail != "": Text { text: root.detail; color: Theme.muted; font-size: 12px; horizontal-alignment: Lang.start; wrap: word-wrap; }
+        }
+        TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.toggled(); }
+        }
     }
     if Lang.en: Text { text: root.side-note; color: Theme.muted; font-size: 12px; vertical-alignment: top; }
     if !Lang.en && root.icon != "": VerticalLayout { alignment: start; ProductIcon { id: root.icon; size: 32px; opacity: root.enabled ? 1 : 0.5; } }
