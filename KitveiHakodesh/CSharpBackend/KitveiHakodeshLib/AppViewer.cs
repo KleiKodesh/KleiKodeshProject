@@ -514,14 +514,65 @@ namespace KitveiHakodeshLib
                 // InitAsync is fire-and-forget — swallowed exceptions leave the splash up forever.
                 // Hide the splash and surface the error so the user isn't stuck on a blank screen.
                 _HideSplash();
-                string message = BuildErrorMessage(ex);
-                if (InvokeRequired)
-                    Invoke(new Action(() => MessageBox.Show(
-                        message, HostText.ErrorBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error)));
-                else
-                    MessageBox.Show(
-                        message, HostText.ErrorBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (InvokeRequired) Invoke(new Action(() => ShowInitError(ex)));
+                else ShowInitError(ex);
             }
+        }
+
+        private void ShowInitError(Exception ex)
+        {
+            // This Word is the elevated one and the host can reopen the document in a
+            // normal Word, where the pane works: offer that instead of a dead end.
+            if (IsElevationClash(ex) && _reopenUnelevated != null && ProcessIsElevated())
+            {
+                var answer = MessageBox.Show(
+                    HostText.ThisWordIsAdminReopen, HostText.ErrorBoxTitle,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (answer == DialogResult.Yes && _reopenUnelevated()) return;
+                if (answer == DialogResult.Yes)
+                    MessageBox.Show(HostText.OtherWordDifferentElevation, HostText.ErrorBoxTitle,
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            MessageBox.Show(BuildErrorMessage(ex), HostText.ErrorBoxTitle,
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        // Set by the Word host: reopens the pane's document in a normal (non-admin) Word
+        // and closes it here. Returns false when it could not (no saved file, user
+        // cancelled Word's save prompt).
+        private Func<bool> _reopenUnelevated;
+        public void SetReopenUnelevatedAction(Func<bool> reopen) => _reopenUnelevated = reopen;
+
+        /// <summary>
+        /// 0x8007139F (ERROR_INVALID_STATE) anywhere in the exception chain. WebView2
+        /// refuses a data folder already in use by a process of different elevation; the
+        /// code can arrive wrapped (AggregateException / TargetInvocation), and checking
+        /// only the outer exception showed users the raw error instead of the explanation.
+        /// </summary>
+        private static bool IsElevationClash(Exception ex)
+        {
+            const int ErrorInvalidState = unchecked((int)0x8007139F);
+            for (var e = ex; e != null; e = e.InnerException)
+            {
+                if (e.HResult == ErrorInvalidState) return true;
+                if (e is AggregateException agg)
+                    foreach (var inner in agg.InnerExceptions)
+                        if (IsElevationClash(inner)) return true;
+            }
+            return false;
+        }
+
+        private static bool ProcessIsElevated()
+        {
+            try
+            {
+                using (var id = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    return new System.Security.Principal.WindowsPrincipal(id)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
         }
 
         /// <summary>
@@ -533,7 +584,7 @@ namespace KitveiHakodeshLib
         {
             // 0x8007139F (ERROR_INVALID_STATE): another Word with a different elevation
             // (admin vs. normal) already holds the shared WebView2 data folder.
-            if (ex.HResult == unchecked((int)0x8007139F))
+            if (IsElevationClash(ex))
                 return HostText.OtherWordDifferentElevation;
 
             string baseMessage = HostText.InitFailed + "\n" + ex.Message;
