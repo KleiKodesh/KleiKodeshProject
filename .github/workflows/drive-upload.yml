@@ -3,7 +3,7 @@
 #   previous subfolder   = the release before it (fallback in case of bugs)
 # Anything older, or of a deleted release, goes to the Drive trash. Other files in the folder are untouched.
 # The run reads the current releases, so it is safe to start any number of times.
-# Started by build-installer.ps1 after the assets are uploaded (CI releases fire no release events),
+# Started by release.yml (Publish step) after the assets are uploaded (CI releases fire no release events),
 # and by release events from manual edits/deletes.
 # Weekly it only compares Drive's installer names with the releases and syncs on a mismatch: a cheap
 # safety net that also keeps the Google login in use (Google expires one unused for 6 months).
