@@ -43,6 +43,7 @@ import { useFastDocViewPictures } from './useFastDocViewPictures'
 import { vFastDocViewFontwork } from './fastDocViewFontwork'
 import { vFastDocViewShapeText } from './fastDocViewShapeText'
 import { vFastDocViewMath } from './fastDocViewMath'
+import { vFastDocViewTabs } from './fastDocViewTabs'
 import { useFastDocViewNotes, type FastDocViewIndexedNote } from './useFastDocViewNotes'
 
 const paneNavigation = usePaneNavigation()
@@ -918,7 +919,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
                     class="reading-column-line fast-doc-view-block"
                     :style="blockColumnStyle(index)"
                   >
-                    <div v-fast-doc-view-fontwork v-fast-doc-view-shape-text v-fast-doc-view-math class="fast-doc-view-block-text word-document" :style="blockTextStyle" v-html="blockHtml(index)" />
+                    <div v-fast-doc-view-tabs v-fast-doc-view-fontwork v-fast-doc-view-shape-text v-fast-doc-view-math class="fast-doc-view-block-text word-document" :style="blockTextStyle" v-html="blockHtml(index)" />
                   </div>
                 </template>
               </WindowedScroller>
