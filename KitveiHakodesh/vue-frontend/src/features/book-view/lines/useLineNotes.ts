@@ -9,6 +9,7 @@ import { onScopeDispose, shallowRef, triggerRef, watch, type Ref } from 'vue'
 import { getLineNotesForLines } from '@/webview-host/seforimApi'
 import type { LineNote } from '@/webview-host/queries.types'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useLinkPreviewTooltip } from './useWordLinkTooltip'
 import { LINE_NOTE_SELECTOR, notesForMarker } from './lineNotes'
@@ -136,7 +137,11 @@ export function useLineNotesTooltip(
       const terms = at ? searchTermsForLine?.(at.lineId) ?? [] : []
       const marked = (body: string) => terms.reduce((html, term) => highlightSearchMatches(html, term), body)
       const html = notes
-        .map((note) => `<div class="line-note-body">${marked(cleanHebrewText(note.body, settingsStore.cleanTextFlags))}</div>`)
+        // Same order as the book view's lines: clean, then divine names, then search marks.
+        .map((note) => {
+          const cleaned = cleanHebrewText(note.body, settingsStore.cleanTextFlags)
+          return `<div class="line-note-body">${marked(censorDivineNames(cleaned, settingsStore.censorOptions))}</div>`
+        })
         .join('')
       return { bookTitle: '', tocPath: '', html }
     },
