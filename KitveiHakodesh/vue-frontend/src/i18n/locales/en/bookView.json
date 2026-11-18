@@ -81,6 +81,9 @@
     "possibleMatch": "Possible match",
     "recommended": "Recommended",
     "showInSidePanel": "Show in side panel",
+    "sidePanelSide": "Side",
+    "sidePanelRight": "Right",
+    "sidePanelLeft": "Left",
     "sideLoadFailed": "Loading the edition failed",
     "sideLoading": "Loading edition...",
     "title": "Scanned editions on HebrewBooks"

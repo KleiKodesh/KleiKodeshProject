@@ -328,10 +328,10 @@ function onSplitPointerMove(e: PointerEvent) {
   // so dragging one column wide can never squeeze the text out between them.
   const otherSlot: CommentarySlot = slot === 'side' ? 'side-left' : 'side'
   const otherOpen = otherSlot === 'side' ? sideCommentaryOpen.value : sideLeftCommentaryOpen.value
-  const otherFraction = otherSlot === 'side-left' ? leftColumnFraction.value : panels.side.fraction.value
+  const otherFraction = sideColumnFraction(otherSlot)
   const max = otherOpen ? 1 - MIN_LINES_FRACTION - otherFraction : 0.9
   const fraction = Math.min(max, Math.max(0.1, distance / rect.width))
-  if (slot === 'side-left' && sideEditionShown.value) sideEditionFraction.value = fraction
+  if (isSideEditionIn(slot)) sideEditionFraction.value = fraction
   else panels[slot].fraction.value = fraction
 }
 function onSplitPointerUp() {
@@ -449,11 +449,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
 
 // ── HebrewBooks edition side by side ─────────────────────────────────────────
 // With the editions toggle on (and room for it - see useHebrewBooksSideEditionMode), the
-// left side column shows a scanned edition instead of commentary: the one picked in the
-// editions dropdown, else the book's best. Picking one opens the column.
+// side column the reader chose (left or right) shows a scanned edition instead of
+// commentary: the one picked in the editions dropdown, else the book's best. Picking one
+// opens that column.
 const paneNavigation = usePaneNavigation()
 const sideEditionStore = useHebrewBooksSideEditionStore()
-const { opensSideBySide: editionOpensSideBySide } = useHebrewBooksSideEditionMode(paneId)
+const { opensSideBySide: editionOpensSideBySide, slot: editionSlot } = useHebrewBooksSideEditionMode(paneId)
 
 // The reader's own HebrewBooks items can show side by side too; their own PDFs cannot
 // (the side panel is a HebrewBooks scan).
@@ -470,18 +471,28 @@ const sideEdition = computed(() => {
   const pickedId = sideEditionStore.getPickedEditionId(tabId, bookId)
   return editions.find((e) => e.id === pickedId) ?? editions.find((e) => e.isBest) ?? editions[0]!
 })
-const sideEditionShown = computed(() => sideLeftCommentaryOpen.value && sideEdition.value != null)
+type SideSlot = 'side' | 'side-left'
+function isSideSlotOpen(slot: CommentarySlot): boolean {
+  return slot === 'side' ? sideCommentaryOpen.value : slot === 'side-left' ? sideLeftCommentaryOpen.value : false
+}
+const sideEditionShown = computed(() => isSideSlotOpen(editionSlot.value) && sideEdition.value != null)
+/** Whether this side column shows the edition (not commentary) right now. */
+function isSideEditionIn(slot: CommentarySlot): boolean {
+  return sideEditionShown.value && editionSlot.value === slot
+}
 
 // A scanned page needs room to be readable, so the edition gets its own width - half
 // and half with the text by default - instead of the commentary column's saved one.
-// With the right commentary open too, it splits what that column leaves.
+// With the other side's commentary open too, it splits what that column leaves.
 const sideEditionFraction = ref<number | null>(null)
-const sideEditionDefaultFraction = computed(() =>
-  sideCommentaryOpen.value ? (1 - panels.side.fraction.value) / 2 : 0.5,
-)
-const leftColumnFraction = computed(() =>
-  sideEditionShown.value ? (sideEditionFraction.value ?? sideEditionDefaultFraction.value) : panels['side-left'].fraction.value,
-)
+const sideEditionDefaultFraction = computed(() => {
+  const otherSlot: SideSlot = editionSlot.value === 'side' ? 'side-left' : 'side'
+  return isSideSlotOpen(otherSlot) ? (1 - panels[otherSlot].fraction.value) / 2 : 0.5
+})
+/** A side column's width as a fraction of the row - the edition's own while it shows one. */
+function sideColumnFraction(slot: SideSlot): number {
+  return isSideEditionIn(slot) ? (sideEditionFraction.value ?? sideEditionDefaultFraction.value) : panels[slot].fraction.value
+}
 
 watch(
   () => (sideEditionShown.value ? sideEdition.value!.id : null),
@@ -501,16 +512,23 @@ function sideEditionPersistState(): SideEditionPersistState {
 }
 
 watch(() => sideEditionStore.pickSignal, (signal) => {
-  if (signal.paneId === paneId && isWideScreen.value) panels['side-left'].visible.value = true
+  if (signal.paneId === paneId && isWideScreen.value) panels[editionSlot.value].visible.value = true
+})
+// Switching sides while an edition is on screen moves it: the new side opens, and the side
+// it leaves closes (it was open only to show the edition).
+watch(editionSlot, (newSlot, oldSlot) => {
+  if (!isWideScreen.value || !panels[oldSlot].visible.value || !sideEdition.value) return
+  panels[oldSlot].visible.value = false
+  panels[newSlot].visible.value = true
 })
 onBeforeUnmount(() => {
   sideEditionStore.setShownEditionId(paneId, null)
 })
 
-// The left column is not commentary while an edition is shown, so the search bar must not
-// offer (or stay on) searching it - its host is not mounted.
+// The edition's column is not commentary while an edition is shown, so the search bar must
+// not offer (or stay on) searching it - its host is not mounted.
 const searchableCommentarySlots = computed(() =>
-  sideEditionShown.value ? openCommentarySlots.value.filter((slot) => slot !== 'side-left') : openCommentarySlots.value,
+  sideEditionShown.value ? openCommentarySlots.value.filter((slot) => slot !== editionSlot.value) : openCommentarySlots.value,
 )
 
 function getSideEditionOutlineTarget(): string | undefined {
@@ -615,8 +633,14 @@ function getSideEditionOutlineTarget(): string | undefined {
             @pointerup="onSplitPointerUp"
           >
             <template v-if="sideCommentaryOpen">
-              <div class="side-commentary" :style="{ width: `${panels.side.fraction.value * 100}%` }">
+              <div class="side-commentary" :style="{ width: `${sideColumnFraction('side') * 100}%` }">
+                <BookViewHebrewBooksSideEdition
+                  v-if="isSideEditionIn('side')"
+                  :edition="sideEdition!"
+                  :get-outline-target="getSideEditionOutlineTarget"
+                />
                 <CommentaryPanelHost
+                  v-else
                   ref="sideHostRef"
                   :panel="panels.side"
                   v-bind="commentarySharedProps"
@@ -708,10 +732,10 @@ function getSideEditionOutlineTarget(): string | undefined {
               />
               <div
                 class="side-commentary"
-                :style="{ width: `${leftColumnFraction * 100}%` }"
+                :style="{ width: `${sideColumnFraction('side-left') * 100}%` }"
               >
                 <BookViewHebrewBooksSideEdition
-                  v-if="sideEditionShown"
+                  v-if="isSideEditionIn('side-left')"
                   :edition="sideEdition!"
                   :get-outline-target="getSideEditionOutlineTarget"
                 />

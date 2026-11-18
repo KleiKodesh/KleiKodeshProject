@@ -81,6 +81,9 @@
     "possibleMatch": "התאמה אפשרית",
     "recommended": "מומלץ",
     "showInSidePanel": "הצג בחלונית הצד",
+    "sidePanelSide": "צד",
+    "sidePanelRight": "ימין",
+    "sidePanelLeft": "שמאל",
     "sideLoadFailed": "טעינת המהדורה נכשלה",
     "sideLoading": "טוען מהדורה...",
     "title": "מהדורות סרוקות בהיברו בוקס"

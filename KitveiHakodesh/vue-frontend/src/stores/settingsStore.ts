@@ -82,6 +82,7 @@ const KEYS = {
   SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
   SETTINGS_HB_EDITION_IN_SIDE_PANEL: 'app.hbEditionInSidePanel',
   SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2: 'app.hbEditionInSidePanel.pane2',
+  SETTINGS_HB_EDITION_SIDE: 'app.hbEditionSide',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
@@ -136,6 +137,8 @@ import {
  * the whole app while it is visible. The idle limit is a separate setting.
  */
 export type KeepScreenOnMode = 'off' | 'always' | 'reading' | 'fullscreen'
+/** Physical side of the book view a HebrewBooks edition shows in, side by side with the text. */
+export type HbEditionSide = 'left' | 'right'
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 /**
  * How the book's lines are laid out: a block per line, or flowing on as one
@@ -271,6 +274,8 @@ const DEFAULTS = {
   // A default, not a lock: once the reader has toggled the rail either way, their stored
   // value is what loads (see init), per pane.
   navSidebarVisible: hasNativeChromeTabs,
+  // Which side column of the book view shows a HebrewBooks edition side by side.
+  hbEditionSide: 'left' as HbEditionSide,
   showRecentlyOpened: true,
   showFrequentFolders: true,
   keepScreenOnMode: 'reading' as KeepScreenOnMode,
@@ -409,8 +414,8 @@ export const useSettingsStore = defineStore('settings', () => {
   function setNavSidebarVisible(paneId: 1 | 2, value: boolean): void {
     navSidebarVisibleByPane.value[paneId] = value
   }
-  // Per-pane: does picking a HebrewBooks edition in the book view show it in the left side
-  // panel (true) or open it in a new tab (false). Only honoured where the side panel can
+  // Per-pane: does picking a HebrewBooks edition in the book view show it in a side
+  // panel (the one hbEditionSide names) (true) or open it in a new tab (false). Only honoured where the side panel can
   // host it - see useHebrewBooksEditionSidePanelAvailable.
   const hbEditionInSidePanelByPane = ref<Record<1 | 2, boolean>>({ 1: false, 2: false })
 
@@ -421,6 +426,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function setHbEditionInSidePanel(paneId: 1 | 2, value: boolean): void {
     hbEditionInSidePanelByPane.value[paneId] = value
   }
+  const hbEditionSide = ref<HbEditionSide>(DEFAULTS.hbEditionSide)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
   const keepScreenOnMode = ref<KeepScreenOnMode>(DEFAULTS.keepScreenOnMode)
@@ -636,6 +642,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (hbEditionInSidePanel1 != null) hbEditionInSidePanelByPane.value[1] = hbEditionInSidePanel1
     const hbEditionInSidePanel2 = lsGet<boolean>(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2)
     if (hbEditionInSidePanel2 != null) hbEditionInSidePanelByPane.value[2] = hbEditionInSidePanel2
+    loadSetting(KEYS.SETTINGS_HB_EDITION_SIDE, hbEditionSide)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_KEEP_SCREEN_ON_LAST_MODE, keepScreenOnLastMode)
@@ -732,6 +739,7 @@ export const useSettingsStore = defineStore('settings', () => {
     () => hbEditionInSidePanelByPane.value[2],
     (value) => lsSet(KEYS.SETTINGS_HB_EDITION_IN_SIDE_PANEL_PANE2, value),
   )
+  persistSetting(hbEditionSide, KEYS.SETTINGS_HB_EDITION_SIDE)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
   persistSetting(keepScreenOnMode, KEYS.SETTINGS_KEEP_SCREEN_ON_MODE)
@@ -904,6 +912,7 @@ export const useSettingsStore = defineStore('settings', () => {
       2: DEFAULTS.navSidebarVisible,
     }
     hbEditionInSidePanelByPane.value = { 1: false, 2: false }
+    hbEditionSide.value = DEFAULTS.hbEditionSide
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     showFrequentFolders.value = DEFAULTS.showFrequentFolders
     keepScreenOnMode.value = DEFAULTS.keepScreenOnMode
@@ -950,6 +959,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setNavSidebarVisible,
     getHbEditionInSidePanel,
     setHbEditionInSidePanel,
+    hbEditionSide,
     showRecentlyOpened,
     showFrequentFolders,
     keepScreenOnMode,
