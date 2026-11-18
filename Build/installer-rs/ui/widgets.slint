@@ -96,6 +96,70 @@ component LanguageToggle inherits BarButton {
 }
 
 // Office-style top bar: logo + name at the start, language and theme switches at the end.
+// The project's email: one click copies it to the clipboard and shows "Copied" for a moment.
+component EmailLabel inherits Text {
+    text: Lang.t("דוא״ל:", "Email:");
+    color: Theme.muted;
+    font-size: 12px;
+    vertical-alignment: center;
+}
+
+// "Copied ✓": a small chip, centered in the bar.
+component CopiedChip inherits VerticalLayout {
+    alignment: center;
+    Rectangle {
+        height: 18px;
+        border-radius: 4px;
+        background: Theme.accent;
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            Text { text: Lang.t("הועתק ✓", "Copied ✓"); color: #ffffff; font-size: 11px; vertical-alignment: center; }
+        }
+    }
+}
+
+component ContactEmail inherits HorizontalLayout {
+    property <bool> copied;
+    alignment: center;
+    spacing: 6px;
+    // Reading order: label, address, then "Copied" - mirrored for Hebrew (right to left).
+    if !Lang.en && root.copied: CopiedChip { }
+    if Lang.en: EmailLabel { }
+    // One click copies the address (the text box's own copy), and "Copied" shows briefly.
+    Rectangle {
+        width: address.preferred-width;
+        address := TextInput {
+            text: "kleikodeshproject@gmail.com";
+            read-only: true;
+            single-line: true;
+            color: click.has-hover ? Theme.accent : Theme.muted;
+            selection-background-color: Theme.accent;
+            selection-foreground-color: #ffffff;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: left; // an address always reads left to right
+        }
+        click := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                address.select-all();
+                address.copy();
+                address.clear-selection();
+                root.copied = true;
+                hide-copied.running = true;
+            }
+        }
+    }
+    if !Lang.en: EmailLabel { }
+    if Lang.en && root.copied: CopiedChip { }
+    hide-copied := Timer {
+        interval: 1500ms;
+        running: false;
+        triggered => { root.copied = false; self.running = false; }
+    }
+}
+
 export component TopBar inherits HorizontalLayout {
     padding-left: 16px;
     padding-right: 16px;
@@ -106,7 +170,7 @@ export component TopBar inherits HorizontalLayout {
     if Lang.en: Text { text: "Klei Kodesh"; color: Theme.text; font-size: 13px; font-weight: 600; vertical-alignment: center; }
     if !Lang.en: VerticalLayout { alignment: center; ThemeToggle { } }
     if !Lang.en: VerticalLayout { alignment: center; LanguageToggle { } }
-    Rectangle { horizontal-stretch: 1; }
+    ContactEmail { horizontal-stretch: 1; }
     if Lang.en: VerticalLayout { alignment: center; LanguageToggle { } }
     if Lang.en: VerticalLayout { alignment: center; ThemeToggle { } }
     if !Lang.en: Text { text: "כלי קודש"; color: Theme.text; font-size: 13px; font-weight: 600; vertical-alignment: center; }
