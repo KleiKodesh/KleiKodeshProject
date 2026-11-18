@@ -13,6 +13,14 @@ namespace KitveiHakodeshLib.Bridge
         /// Bridge script injected into the top-level frame on document creation.
         /// Sets up the Promise-based RPC channel between Vue and C#.
         /// </summary>
+        /// <summary>
+        /// Wraps a document-created script so it runs only in the app's own documents: the top
+        /// frame and the app's frames on http://kitvei* hosts. A Torah website's iframe (web-view
+        /// tab) gets none of the app's bridge or host facts.
+        /// </summary>
+        public static string ForAppFramesOnly(string script) =>
+            "if (window === window.top || /^http:\\/\\/kitvei/i.test(location.origin)) {\n" + script + "\n}";
+
         public const string Script = @"
 (function () {
     const pending = new Map();
@@ -70,6 +78,10 @@ namespace KitveiHakodeshLib.Bridge
         public const string IframeScrollScript = @"
 (function () {
     if (window === window.top) return;
+    // Only the app's own frames (local files, PDF.js - all on http://kitvei* hosts). A Torah
+    // website's frame is left alone: the host takes its shortcuts (AppViewerSiteShortcuts.cs),
+    // and a site must not be able to post app key events.
+    if (!/^http:\/\/kitvei/i.test(location.origin)) return;
 
     // Throttled scroll reporter — posts current scrollY to the Vue app parent.
     var scrollTimer = null;

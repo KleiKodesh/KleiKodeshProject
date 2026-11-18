@@ -1,3 +1,4 @@
+import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
 import { computed, ref, watch } from 'vue'
 import { useDocumentVisibility, useEventListener, useIntervalFn, useWindowSize } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
@@ -68,6 +69,8 @@ export function useKeepScreenOn() {
       frameDocument.addEventListener(type, markActive, { capture: true, passive: true })
   }, { capture: true })
   useEventListener(window, 'message', (e: MessageEvent) => {
+    // A Torah website's frame cannot keep the screen awake by posting messages.
+    if (isFromWebsiteFrame(e.source)) return
     const type = e.data?.type
     if (type === 'htmlViewScroll' || type === 'iframeKeydown') markActive()
   })

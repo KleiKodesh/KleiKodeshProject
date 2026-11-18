@@ -1,5 +1,7 @@
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
+import WebsiteFavicon from '@/features/websites/WebsiteFavicon.vue'
+import { displayHost } from '@/features/websites/websitesList'
 import { storeToRefs } from 'pinia'
 import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
@@ -84,6 +86,7 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
       const tocPath = tocPathByDocumentKey.value.get(locationKey(entry as unknown as NavLocation))
       return bookResumePath(booksDataStore.allBooksMap.get(entry.bookId), catalogBookTitle(entry), tocPath)
     }
+    if (entry.route === '/web-view' && entry.webUrl) return displayHost(entry.webUrl)
     return pathDisplay.pathOf(entry.localFilePath, false) || entry.localFilePath || entry.localFileName || ''
   }
 
@@ -94,8 +97,8 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
         key: `recent:${entry.key}`,
         title: catalogBookTitle(entry),
         path: recentPath(entry),
-        icon: icon.icon24,
-        color: icon.color,
+        icon: entry.route === '/web-view' && entry.webUrl ? () => h(WebsiteFavicon, { url: entry.webUrl! }) : icon.icon24,
+        color: entry.route === '/web-view' ? undefined : icon.color,
         open: (openInNewTab) => actions.openRecent(entry, openInNewTab),
         pinning: {
           pinned: !!entry.pinned,

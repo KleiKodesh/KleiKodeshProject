@@ -1,4 +1,7 @@
-import { computed, type ComputedRef, type Ref } from 'vue'
+import { computed, onScopeDispose, type ComputedRef, type Ref } from 'vue'
+import { hasHostBridge } from '@/webview-host/seforimDb'
+import { onWebviewEvent } from '@/webview-host/seforimDb'
+import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
 import { sendFastDocViewCommand } from '@/composables/fastDocViewCommands'
 import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -7,7 +10,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
 import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiChromeVisibility'
-import { HAMESHIV_LABEL } from '@/layout/appNavItems'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
@@ -81,26 +83,39 @@ export function useAppTitleBarShortcuts(options: {
     'מילון',
     'לוח שנה',
     'מידות ושיעורים',
-    HAMESHIV_LABEL,
+    'אתרים',
   ]
 
-  // Forward Ctrl+key shortcuts from child iframes (HTML/txt viewer) back into the
-  // top-level keydown pipeline. Only pane 1 needs this — iframes only appear there.
+  // Shortcut keys pressed inside an iframe, replayed into the top-level keydown pipeline.
+  // Registered once (pane 1's instance); the replayed event reaches both panes' handlers.
+  //  - App frames (HTML/txt viewer, PDF.js) post 'iframeKeydown' (JsBridge.IframeScrollScript).
+  //  - A Torah website's frame: hosted, the host takes the keys and pushes 'siteFrameShortcut'
+  //    (AppViewerSiteShortcuts.cs); in dev the dev proxy's injected forwarder posts 'iframeKeydown'.
+  //    Hosted, an 'iframeKeydown' from a website frame is refused: no app script runs there, so
+  //    it could only be the site itself faking app shortcuts.
   if (paneId === 1) {
-    useEventListener('message', (e: MessageEvent) => {
-      if (!e.data || e.data.type !== 'iframeKeydown') return
+    const replay = (d: { code: string; key?: string; repeat?: boolean; ctrlKey?: boolean; shiftKey?: boolean; metaKey?: boolean; altKey?: boolean }) =>
       window.dispatchEvent(
         new KeyboardEvent('keydown', {
-          code: e.data.code,
-          ctrlKey: e.data.ctrlKey,
-          shiftKey: e.data.shiftKey,
-          metaKey: e.data.metaKey,
-          altKey: e.data.altKey,
+          code: d.code,
+          key: d.key ?? '',
+          repeat: !!d.repeat,
+          ctrlKey: !!d.ctrlKey,
+          shiftKey: !!d.shiftKey,
+          metaKey: !!d.metaKey,
+          altKey: !!d.altKey,
           bubbles: true,
           cancelable: true,
         }),
       )
+    useEventListener('message', (e: MessageEvent) => {
+      if (!e.data || e.data.type !== 'iframeKeydown') return
+      if (hasHostBridge && isFromWebsiteFrame(e.source)) return
+      replay(e.data)
     })
+    onScopeDispose(onWebviewEvent((msg) => {
+      if (msg.event === 'siteFrameShortcut') replay(msg as unknown as Parameters<typeof replay>[0])
+    }))
   }
 
   /** Returns true when the event was consumed. */

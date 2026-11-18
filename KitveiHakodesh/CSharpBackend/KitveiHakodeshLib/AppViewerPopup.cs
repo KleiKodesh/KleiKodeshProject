@@ -18,8 +18,20 @@ namespace KitveiHakodeshLib
     {
         private async void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
-            // Only sized popups are ours; plain _blank links keep WebView2's default.
             var features = e.WindowFeatures;
+            // A plain new-window link inside a Torah website: a whitelisted address opens as an app
+            // tab, anything else in the system browser - never a bare browser window over the app.
+            if (!features.HasSize && _webSites != null && _webSites.IsWebsiteAddress(e.OriginalSourceFrameInfo?.Source))
+            {
+                e.Handled = true;
+                if (_webSites.IsWebsiteAddress(e.Uri))
+                    _bridge?.PushEvent(new { @event = "siteOpenInNewTab", url = e.Uri });
+                else if (Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri external) &&
+                         (external.Scheme == Uri.UriSchemeHttp || external.Scheme == Uri.UriSchemeHttps))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = external.AbsoluteUri, UseShellExecute = true });
+                return;
+            }
+            // Only sized popups are ours; plain _blank links keep WebView2's default.
             if (!features.HasSize) return;
 
             var deferral = e.GetDeferral();

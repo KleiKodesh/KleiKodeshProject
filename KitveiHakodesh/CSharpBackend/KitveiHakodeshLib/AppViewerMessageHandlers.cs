@@ -85,6 +85,11 @@ namespace KitveiHakodeshLib
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
                         case "revealInFolder": _localFile.HandleRevealInFolder(root, id); break;
                         case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
+                        // A website's iframe gained / lost focus: app shortcuts are taken from it meanwhile (AppViewerSiteShortcuts.cs).
+                        case "siteFrameFocus":
+                            SetSiteFrameFocus(root.TryGetProperty("focused", out var sff) && sff.ValueKind == JsonValueKind.True);
+                            _bridge.Reply(id, new { });
+                            break;
                         case "writePdfTail": _localFile.HandleWritePdfTail(root, id); break;
                         case "readTxtFileContent":await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;

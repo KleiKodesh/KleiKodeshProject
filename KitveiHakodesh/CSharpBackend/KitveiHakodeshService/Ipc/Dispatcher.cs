@@ -30,6 +30,7 @@ public sealed class Dispatcher(
     HttpHostState httpState,
     LocalFileGrants localFileGrants,
     global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments fastDocViewDocuments,
+    global::KitveiHakodesh.Core.WebsiteIcons.WebsiteIconCache websiteIcons,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
     KitveiHakodeshService.KitveiHakodesh.Updater updater,
@@ -221,6 +222,14 @@ public sealed class Dispatcher(
                     try { picture = fastDocViewDocuments.Picture(a.DocumentId, a.PictureId); }
                     catch (global::KitveiHakodesh.Core.FastDocView.FastDocViewSourceChangedException) { picture = null; }
                     return RpcResponse.Ok(picture is null ? null : MsgPack.Ser(picture));
+                }
+                case "websiteIcon":
+                {
+                    // the hosted app's leg (its relay serves POST only); dev <img>s use GET /website-icon
+                    // An icon that cannot be had is an EMPTY result, not an error: the page shows its globe.
+                    var a = MsgPack.De<global::KitveiHakodesh.Core.WebsiteIcons.WebsiteIconArgs>(req.Args);
+                    var icon = await websiteIcons.GetAsync(a.Url, ct);
+                    return RpcResponse.Ok(icon is null ? null : MsgPack.Ser(icon));
                 }
                 case "fastDocViewSections":
                     return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));

@@ -13,7 +13,8 @@ import {
   IconRuler20Filled,
   IconApps20Filled,
   IconFolder20Filled,
-  IconChatSparkle20Regular,
+  IconGlobe20Filled,
+  IconGlobe24Filled,
   IconDocumentPdf24Regular,
   IconDocumentText24Regular,
   IconDocumentGlobe24Regular,
@@ -27,7 +28,6 @@ import {
   IconRuler24Filled,
   IconApps24Filled,
   IconFolder24Filled,
-  IconChatSparkle24Regular,
   IconFolderPerson20Filled,
   IconFolderPerson24Filled,
   IconDocumentSearch20Filled,
@@ -71,7 +71,7 @@ export type DocumentIconKey =
   | 'fileSearch'
   | 'userSpace'
   | 'userSpaceSearch'
-  | 'hameshiv'
+  | 'globe'
   | 'settings'
   | 'home'
   | 'search'
@@ -113,8 +113,8 @@ const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   // tiles use them and take no colour of their own.
   search:   { key: 'search',   color: '',        icon20: IconSearchSparkle24,       icon24: IconSearchSparkle24 },
   fileSearch: { key: 'fileSearch', color: '',    icon20: IconEverythingSearch,      icon24: IconEverythingSearch },
-  // External site (hameshiv.com), opened in a popup window, never a tab. Warm sand beige, after the site's palette.
-  hameshiv: { key: 'hameshiv', color: '#ddb57f', icon20: IconChatSparkle20Regular,   icon24: IconChatSparkle24Regular },
+  // Torah websites (the Websites page and a site's tab before its own favicon loads).
+  globe:    { key: 'globe',    color: '#2b88d8', icon20: IconGlobe20Filled,          icon24: IconGlobe24Filled },
   settings: { key: 'settings', color: '',        icon20: IconSettings24,            icon24: IconSettings24 },
   // Home has no tile of its own — it IS the tile grid — so it keeps a plain
   // theme-coloured glyph.
@@ -157,6 +157,9 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'calendar'
     case '/midot':
       return 'ruler'
+    case '/websites':
+    case '/web-view':
+      return 'globe'
     case '/file-search':
       return 'fileSearch'
     case '/user-space':

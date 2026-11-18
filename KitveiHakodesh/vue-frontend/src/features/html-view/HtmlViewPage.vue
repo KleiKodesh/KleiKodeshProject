@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
@@ -139,6 +140,8 @@ async function retry() {
 // into the iframe to restore the saved position.
 
 function onWindowMessage(event: MessageEvent) {
+  // A Torah website's frame (WebViewPage) must not be able to post app messages.
+  if (isFromWebsiteFrame(event.source)) return
   if (!event.data || event.data.type !== 'htmlViewScroll') return
   const scrollTop = event.data.scrollTop as number
   if (scrollSaveTimer !== null) clearTimeout(scrollSaveTimer)

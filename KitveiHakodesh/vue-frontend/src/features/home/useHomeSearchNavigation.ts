@@ -132,6 +132,10 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
   }
 
   function openRecentEntry(entry: RecentlyOpenedEntry, openInNewTab = false) {
+    if (entry.route === '/web-view' && entry.webUrl) {
+      paneNavigation.openOrUpdateActiveTab({ route: '/web-view', title: entry.title, webUrl: entry.webUrl }, openInNewTab)
+      return
+    }
     if (entry.route === '/book-view' && entry.bookId !== undefined) {
       // Resume where the reader stopped: the recents location for this book carries
       // the saved position (the home card shows its breadcrumb), exactly as the

@@ -45,6 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
+import { asWebAddress, displayHost, loadWebsites, websiteForUrl, websiteName } from '@/features/websites/websitesList'
 import { addressBarPath, locationPath, fileFromAddress, parseBookAddress, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
@@ -346,6 +347,17 @@ function openTypedPath(): boolean {
   if (bookLink) {
     close()
     void hostSearchStore.openBookLink(bookLink)
+    return true
+  }
+  // A pasted web address opens in a web-view tab. One that is not on the websites list
+  // opens there too, and the page says it is not allowed - never a full-text search for a URL.
+  const webAddress = asWebAddress(text)
+  if (webAddress) {
+    close()
+    void loadWebsites().then(() => {
+      const site = websiteForUrl(webAddress)
+      pane.updateActiveTab({ route: '/web-view', title: site ? websiteName(site) : displayHost(webAddress), webUrl: webAddress })
+    })
     return true
   }
   // A copied file address carries the TOC section after the file name: open the file.

@@ -1,3 +1,4 @@
+import { isFromWebsiteFrame } from '@/features/websites/websiteFrameSource'
 import { ref, onUnmounted } from 'vue'
 import type { Worker } from 'tesseract.js'
 import { PDF_OCR_INJECTED_SCRIPT } from './pdfOcrInjectedScript'
@@ -132,6 +133,8 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   // ── postMessage handler ────────────────────────────────────────────────────
 
   async function onMessage(event: MessageEvent) {
+    // A Torah website's frame (WebViewPage) must not be able to post app messages.
+    if (isFromWebsiteFrame(event.source)) return
     if (event.data?.type === 'kitvei-hakodesh-ocr-result') {
       const cleanText = event.data.text
         .split('\n')

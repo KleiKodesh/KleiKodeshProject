@@ -150,12 +150,13 @@ internal static class HttpProtocol
     /// <summary>Writes a complete buffered response (status + headers + Content-Length body).</summary>
     public static async Task WriteBufferedAsync(
         Stream stream, int status, string reason, string contentType,
-        ReadOnlyMemory<byte> body, string? origin, CancellationToken ct)
+        ReadOnlyMemory<byte> body, string? origin, CancellationToken ct, string? cacheControl = null)
     {
         string head =
             $"HTTP/1.1 {status} {reason}\r\n" +
             $"Content-Type: {contentType}\r\n" +
             $"Content-Length: {body.Length}\r\n" +
+            (cacheControl is null ? "" : $"Cache-Control: {cacheControl}\r\n") +
             Cors(origin) +
             "Connection: close\r\n\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head), ct);

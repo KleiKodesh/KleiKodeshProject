@@ -128,6 +128,7 @@ namespace KitveiHakodeshLib
         private KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher _serviceLauncher;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
+        private KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper _webSites;
         private string _dbInjectionScriptId;
         // The one-shot script carrying the launch files' open events (InjectStartupOpenEventsAsync).
         private string _startupEventsScriptId;
@@ -730,7 +731,7 @@ namespace KitveiHakodeshLib
             // Only HOST facts are injected; the database path and folder settings are the
             // service's and the page asks it for them.
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.Script + "\n" + HostFactsScript());
+                JsBridge.ForAppFramesOnly(JsBridge.Script + "\n" + HostFactsScript()));
 
             // IframeScrollScript runs in every frame including local file iframes.
             // It is registered separately because it must not share the same document-created
@@ -783,6 +784,9 @@ namespace KitveiHakodeshLib
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
+            _webSites = KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.Attach(_webView.CoreWebView2, AppDir);
+            AttachSiteFrameShortcuts();
+            AttachSiteFrameNavigation();
 
             await InjectStartupOpenEventsAsync();
 
@@ -862,6 +866,7 @@ namespace KitveiHakodeshLib
                 // handles after the process exits.
                 _localFile?.DisposeAllHosts();
                 _serviceRelay?.Detach();
+                _webSites?.Detach();
                 if (_serviceRelay != null) KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowClosed();
 
             }
