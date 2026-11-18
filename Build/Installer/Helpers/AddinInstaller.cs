@@ -321,33 +321,52 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
         // ── Register ─────────────────────────────────────────────────────────────
 
+        // No catch: a failed registration used to be swallowed, so the install reported
+        // success and Word simply never showed the ribbon. InstallPage shows the error.
         public static async Task RegisterAddInAsync(IProgress<double> progress)
         {
-            try
+            using (RegistryKey addinKey = Registry.CurrentUser.CreateSubKey(AddinRegistryPath))
             {
-                using (RegistryKey addinKey = Registry.CurrentUser.CreateSubKey(AddinRegistryPath))
-                {
-                    addinKey.SetValue("Description",  AppDisplayName);
-                    addinKey.SetValue("FriendlyName", AppDisplayName);
-                    progress?.Report(103);
-                    addinKey.SetValue("Manifest",     $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                    progress?.Report(106);
-                    addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
-                    progress?.Report(109);
-                }
-
-                using (RegistryKey addinDataKey = Registry.CurrentUser.CreateSubKey(AddinDataRegistryPath))
-                {
-                    addinDataKey.SetValue("Description",  AppDisplayName);
-                    addinDataKey.SetValue("FriendlyName", AppDisplayName);
-                    addinDataKey.SetValue("Manifest",     $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
-                    addinDataKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
-                    progress?.Report(112);
-                }
-
-                await AddToOfficeInclusionListAsync();
+                addinKey.SetValue("Description",  AppDisplayName);
+                addinKey.SetValue("FriendlyName", AppDisplayName);
+                progress?.Report(103);
+                addinKey.SetValue("Manifest",     $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
+                progress?.Report(106);
+                addinKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                progress?.Report(109);
             }
-            catch { }
+
+            using (RegistryKey addinDataKey = Registry.CurrentUser.CreateSubKey(AddinDataRegistryPath))
+            {
+                addinDataKey.SetValue("Description",  AppDisplayName);
+                addinDataKey.SetValue("FriendlyName", AppDisplayName);
+                addinDataKey.SetValue("Manifest",     $"file:///{InstallPath}\\{VstoFileName}|vstolocal");
+                addinDataKey.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
+                progress?.Report(112);
+            }
+
+            AddToDoNotDisableList();
+            await AddToOfficeInclusionListAsync();
+        }
+
+        /// <summary>
+        /// Tells Word never to disable the add-in for loading slowly. Word's slow-add-in
+        /// check flips LoadBehavior from 3 to 2, and the ribbon is gone on the next start
+        /// until the user re-enables it by hand. Value name = the Addins key name, 1 = keep.
+        /// Insurance only: failing to write it must not fail the install.
+        /// </summary>
+        private static void AddToDoNotDisableList()
+        {
+            foreach (string officeVersion in new[] { "15.0", "16.0" })
+            {
+                try
+                {
+                    using (RegistryKey key = Registry.CurrentUser.CreateSubKey(
+                        $@"Software\Microsoft\Office\{officeVersion}\Word\Resiliency\DoNotDisableAddinList"))
+                        key.SetValue(AppName, 1, RegistryValueKind.DWord);
+                }
+                catch { }
+            }
         }
 
         // ── VBA macros template ──────────────────────────────────────────────────
@@ -367,19 +386,42 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     string[] vstoFiles = Directory.GetFiles(InstallPath, "*.vsto", SearchOption.AllDirectories);
                     if (vstoFiles.Length == 0) return;
 
-                    string vstoPath    = vstoFiles[0];
-                    string manifestUrl = $"file:///{vstoPath.Replace('\\', '/')}|vstolocal";
-                    string keyName     = Convert.ToBase64String(Encoding.UTF8.GetBytes(manifestUrl));
+                    string vstoPath  = vstoFiles[0];
+                    // The bare manifest URL - no "|vstolocal". That suffix belongs to the
+                    // Addins\Manifest value only; VSTO matches Inclusion entries against the
+                    // plain URL, so an entry carrying it never matched and Word still showed
+                    // the "Install this add-in?" prompt on first load. Verified against the
+                    // entry VSTO itself writes when the user accepts that prompt.
+                    string manifestUrl = $"file:///{vstoPath.Replace('\\', '/')}";
                     string publicKey   = ExtractPublicKeyFromManifest(vstoPath);
+                    // Without the key an entry is useless to VSTO - and replacing a good one
+                    // (e.g. the one VSTO wrote when the user accepted the prompt) would break
+                    // trust that already works.
+                    if (string.IsNullOrEmpty(publicKey)) return;
 
                     const string inclusionPath = @"SOFTWARE\Microsoft\VSTO\Security\Inclusion";
                     using (RegistryKey inclusionKey = Registry.CurrentUser.CreateSubKey(inclusionPath))
-                    using (RegistryKey entryKey     = inclusionKey.CreateSubKey(keyName))
+                    {
+                        // Drop our earlier entries (old "|vstolocal" form, or a previous run)
+                        // so the list holds one entry for this manifest.
+                        foreach (string sub in inclusionKey.GetSubKeyNames())
+                        {
+                            using (RegistryKey k = inclusionKey.OpenSubKey(sub))
+                            {
+                                string url = k?.GetValue("Url") as string ?? "";
+                                if (!url.StartsWith(manifestUrl, StringComparison.OrdinalIgnoreCase)) continue;
+                            }
+                            inclusionKey.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);
+                        }
+                    }
+
+                    using (RegistryKey inclusionKey = Registry.CurrentUser.CreateSubKey(inclusionPath))
+                    using (RegistryKey entryKey     = inclusionKey.CreateSubKey(Guid.NewGuid().ToString()))
                     {
                         entryKey.SetValue("Url", manifestUrl);
+                        // Same two values VSTO writes itself, nothing else.
                         if (!string.IsNullOrEmpty(publicKey))
                             entryKey.SetValue("PublicKey", publicKey);
-                        entryKey.SetValue("AllowsUnsafeCode", false, RegistryValueKind.DWord);
                     }
 
                     AddFolderToTrustedLocations();
