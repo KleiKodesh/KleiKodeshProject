@@ -29,12 +29,12 @@
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
     <!-- Win32 version-resource fields. AssemblyTitle becomes FileDescription, which is the
          program name Windows shows in the UAC consent dialog; Company fills the publisher
-         line for an unsigned exe. Keep these Hebrew — with nothing set the SDK defaults
+         line for an unsigned exe. Keep these in both languages (the install may be Hebrew or English) — with nothing set the SDK defaults
          them to the assembly name and the prompt reads "KitveiHakodeshService". Matters
          whenever this exe elevates (SCM register/unregister of the indexing service). -->
-    <AssemblyTitle>כתבי הקודש (שירות)</AssemblyTitle>
-    <Product>כלי קודש</Product>
-    <Company>כלי קודש</Company>
+    <AssemblyTitle>Kitvei Hakodesh Service – כתבי הקודש (שירות)</AssemblyTitle>
+    <Product>Klei Kodesh – כלי קודש</Product>
+    <Company>Klei Kodesh – כלי קודש</Company>
     <Description>שירות אינדוקס קבצים — כלי קודש</Description>
     <!-- Embed the UAC manifest. It requests asInvoker, NOT elevation — correct for both the
          dev spawn (inherits the terminal token, stays rebuildable) and the production

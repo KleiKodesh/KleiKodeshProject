@@ -10,7 +10,8 @@
 
 use std::path::Path;
 
-use crate::layout::{Layout, DISPLAY_NAME_HE, PRODUCT_KEY, VSTO_MANIFEST};
+use super::addin_settings::MACRO_TEMPLATES;
+use crate::layout::{Layout, DISPLAY_NAME_EN, DISPLAY_NAME_HE, PRODUCT_KEY, VSTO_MANIFEST};
 use crate::system::registry::Hkcu;
 
 const ADDINS: &str = r"Software\Microsoft\Office\Word\Addins\KleiKodesh";
@@ -18,20 +19,20 @@ const ADDINS_DATA: &str = r"Software\Microsoft\Office\Word\AddinsData\KleiKodesh
 const INCLUSION: &str = r"Software\Microsoft\VSTO\Security\Inclusion";
 const TRUSTED_PATHS: &str = r"Software\Microsoft\VSTO\Security\TrustedPaths";
 const OFFICE_VERSIONS: [&str; 2] = ["15.0", "16.0"];
-/// The legacy macro templates the add-in can place in Word's STARTUP folder.
-const MACRO_TEMPLATES: [&str; 3] = ["KleiKodeshMacros.dotm", "KleiKodeshMacros.he.dotm", "KleiKodeshMacros.en.dotm"];
 
 pub fn is_registered(layout: &Layout) -> bool {
     Hkcu::new(layout).exists(ADDINS)
 }
 
-pub fn register(layout: &Layout) -> std::io::Result<()> {
+/// The name Word's COM Add-ins list shows follows the install language.
+pub fn register(layout: &Layout, english: bool) -> std::io::Result<()> {
     let reg = Hkcu::new(layout);
+    let name = if english { DISPLAY_NAME_EN } else { DISPLAY_NAME_HE };
     let manifest = layout.file(VSTO_MANIFEST);
     let load_value = format!("file:///{}|vstolocal", manifest.display());
     for key in [ADDINS, ADDINS_DATA] {
-        reg.set_str(key, "Description", DISPLAY_NAME_HE)?;
-        reg.set_str(key, "FriendlyName", DISPLAY_NAME_HE)?;
+        reg.set_str(key, "Description", name)?;
+        reg.set_str(key, "FriendlyName", name)?;
         reg.set_str(key, "Manifest", &load_value)?;
         reg.set_dword(key, "LoadBehavior", 3)?;
     }

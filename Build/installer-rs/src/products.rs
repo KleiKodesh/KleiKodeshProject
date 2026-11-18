@@ -38,7 +38,7 @@ impl Product {
         match self {
             Product::WordAddin => Text::new("תוסף לוורד", "Word add-in"),
             Product::KitveiApp => Text::new("כתבי הקודש", "Kitvei Hakodesh"),
-            Product::TypingTutor => Text::new("מאמן הקלדה", "Typing Tutor"),
+            Product::TypingTutor => Text::new("הקלדה עיוורת", "Touch Typing"),
         }
     }
 

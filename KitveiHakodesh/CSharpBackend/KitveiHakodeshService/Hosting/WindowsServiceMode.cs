@@ -19,7 +19,8 @@ namespace KitveiHakodeshService.Hosting;
 public static class WindowsServiceMode
 {
     public const string ServiceName = "KitveiHakodeshSvc";
-    public const string DisplayName = "Kitvei Hakodesh";
+    // Both languages: the Services list shows it, and the install may be Hebrew or English.
+    public const string DisplayName = "Kitvei Hakodesh – כתבי הקודש";
 
     /// <summary>True when the SCM started this process.</summary>
     public static bool IsWindowsService { get; } = OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService();

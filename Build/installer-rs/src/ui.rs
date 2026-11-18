@@ -19,6 +19,8 @@ use crate::products::{Product, ALL};
 use crate::system::{launch, registry};
 use crate::{AppWindow, Choice, Installer, Lang, Page};
 
+const MACROS_TITLE: Text = Text::new("התקן פקודות מאקרו (VBA)", "Install VBA macros");
+
 type Products = Rc<VecModel<crate::ProductRow>>;
 
 /// The Word add-in options: what is saved, and the copy being edited on screen.
@@ -26,11 +28,13 @@ struct AddinOptions {
     saved: RefCell<AddinSettings>,
     tools: Rc<VecModel<Choice>>,
     websites: Rc<VecModel<Choice>>,
+    /// One row: install the VBA macros template.
+    macros: Rc<VecModel<Choice>>,
 }
 
 impl AddinOptions {
     fn new(saved: AddinSettings) -> Rc<Self> {
-        let options = Rc::new(Self { saved: RefCell::new(saved), tools: Rc::default(), websites: Rc::default() });
+        let options = Rc::new(Self { saved: RefCell::new(saved), tools: Rc::default(), websites: Rc::default(), macros: Rc::default() });
         options.show_saved(false);
         options
     }
@@ -41,10 +45,15 @@ impl AddinOptions {
         self.tools.set_vec(
             TOOLS.iter().zip(&saved.tools_visible).map(|((_, name), on)| Choice { title: name.get(english).into(), on: *on }).collect::<Vec<_>>(),
         );
+        self.macros.set_vec(vec![Choice { title: MACROS_TITLE.get(english).into(), on: saved.macros }]);
         self.websites.set_vec(saved.sites.iter().map(|s| Choice { title: s.name.as_str().into(), on: s.visible }).collect::<Vec<_>>());
     }
 
     fn retitle(&self, english: bool) {
+        if let Some(mut row) = self.macros.row_data(0) {
+            row.title = MACROS_TITLE.get(english).into();
+            self.macros.set_row_data(0, row);
+        }
         for (i, (_, name)) in TOOLS.iter().enumerate() {
             if let Some(mut row) = self.tools.row_data(i) {
                 row.title = name.get(english).into();
@@ -57,6 +66,7 @@ impl AddinOptions {
     fn edited(&self) -> AddinSettings {
         let mut settings = self.saved.borrow().clone();
         settings.tools_visible = self.tools.iter().map(|c| c.on).collect();
+        settings.macros = self.macros.row_data(0).is_some_and(|c| c.on);
         for (site, choice) in settings.sites.iter_mut().zip(self.websites.iter()) {
             site.visible = choice.on;
         }
@@ -141,6 +151,7 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     addin.show_saved(english);
     st.set_ribbon_tools(ModelRc::from(addin.tools.clone()));
     st.set_websites(ModelRc::from(addin.websites.clone()));
+    st.set_macros(ModelRc::from(addin.macros.clone()));
     show_websites_if_tool_on(&ui, &addin);
     retranslate(&ui, &products);
     st.set_has_notes(crate::release_notes::any());
@@ -174,6 +185,8 @@ fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mut
         });
         let a = addin.clone();
         st.on_toggle_website(move |i| flip(&a.websites, i));
+        let a = addin.clone();
+        st.on_toggle_macros(move || flip(&a.macros, 0));
         let (a, w) = (addin.clone(), ui.as_weak());
         st.on_discard_addin_options(move || {
             if let Some(ui) = w.upgrade() {
@@ -184,10 +197,10 @@ fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mut
         let (a, layout) = (addin.clone(), ctx.layout.clone());
         st.on_save_addin_options(move || {
             let edited = a.edited();
-            if let Err(e) = edited.save(&layout) {
-                crate::log::line(&format!("saving add-in options failed: {e}"));
+            match edited.save(&layout) {
+                Ok(()) => *a.saved.borrow_mut() = edited,
+                Err(e) => crate::log::line(&format!("saving add-in options failed: {e}")),
             }
-            *a.saved.borrow_mut() = edited;
         });
     }
     {

@@ -7,7 +7,11 @@ use std::path::PathBuf;
 use crate::layout::{Layout, TUTOR_DIR};
 use crate::system::{registry, shortcut};
 
-const SHORTCUT_NAME: &str = "מאמן הקלדה.lnk";
+use crate::i18n::Text;
+
+const SHORTCUT: Text = Text::new("הקלדה עיוורת", "Touch Typing");
+/// Every name the shortcut may have now or had before (first builds: the old Hebrew name).
+const SHORTCUT_NAMES: [&str; 3] = [SHORTCUT.he, SHORTCUT.en, "מאמן הקלדה"];
 const PAGE: &str = "index.html";
 const ICON: &str = "tutor.ico";
 /// The tutor's own icon (its favicon, a blue aleph), written beside the page so the
@@ -36,7 +40,7 @@ pub fn edge_arguments(layout: &Layout) -> String {
     format!("--app=\"{url}\"")
 }
 
-pub fn register(layout: &Layout, desktop_shortcut: bool) -> std::io::Result<()> {
+pub fn register(layout: &Layout, desktop_shortcut: bool, english: bool) -> std::io::Result<()> {
     let edge = edge_exe().ok_or_else(|| std::io::Error::other("Microsoft Edge was not found"))?;
     let arguments = edge_arguments(layout);
     let tutor_dir = layout.install_dir.join(TUTOR_DIR);
@@ -47,20 +51,13 @@ pub fn register(layout: &Layout, desktop_shortcut: bool) -> std::io::Result<()> 
         arguments: &arguments,
         working_dir: &tutor_dir,
         icon: &icon,
-        description: "מאמן הקלדה בעברית",
+        description: Text::new("הקלדה עיוורת בעברית", "Hebrew touch typing").get(english),
     };
-    shortcut::create(&layout.start_menu_dir.join(SHORTCUT_NAME), &link).map_err(std::io::Error::other)?;
-    let desktop = layout.desktop_dir.join(SHORTCUT_NAME);
-    if desktop_shortcut {
-        shortcut::create(&desktop, &link).map_err(std::io::Error::other)?;
-    } else {
-        let _ = std::fs::remove_file(desktop);
-    }
+    layout.place_shortcut(&SHORTCUT_NAMES, SHORTCUT.get(english), english, desktop_shortcut, &link)?;
     Ok(())
 }
 
 pub fn unregister(layout: &Layout) {
-    let _ = std::fs::remove_file(layout.start_menu_dir.join(SHORTCUT_NAME));
-    let _ = std::fs::remove_file(layout.desktop_dir.join(SHORTCUT_NAME));
+    layout.remove_shortcuts(&SHORTCUT_NAMES);
     let _ = std::fs::remove_dir_all(layout.install_dir.join(TUTOR_DIR));
 }

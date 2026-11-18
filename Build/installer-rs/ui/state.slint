@@ -47,6 +47,8 @@ export global Installer {
     in property <bool> addin-selected;
     in property <[Choice]> ribbon-tools;
     in property <[Choice]> websites;
+    // One row: install the VBA macros template.
+    in property <[Choice]> macros;
     // The Websites tool is shown on the ribbon: only then does its site list matter.
     in property <bool> websites-tool-on;
     // Where the add-in options screen returns to.
@@ -71,6 +73,7 @@ export global Installer {
     callback toggle-product(int);
     callback toggle-tool(int);
     callback toggle-website(int);
+    callback toggle-macros();
     // From the Modify screen the add-in options apply at once (no reinstall).
     callback save-addin-options();
     // Cancel: back to the options as they were when the screen opened.

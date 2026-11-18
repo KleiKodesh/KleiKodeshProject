@@ -59,7 +59,8 @@ impl Payload {
         let mut file = File::open(&self.exe)?;
         file.seek(SeekFrom::Start(self.footer.offset))?;
         let compressed = file.take(self.footer_payload_len());
-        let mut archive = tar::Archive::new(zstd::stream::read::Decoder::new(compressed)?);
+        let decoder = xz2::read::XzDecoder::new(compressed);
+        let mut archive = tar::Archive::new(decoder);
 
         let total = self.footer.total_bytes.max(1) as f32;
         let mut done = 0u64;

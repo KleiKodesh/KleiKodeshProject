@@ -1,12 +1,19 @@
 //! The payload's on-disk shape, shared by the setup exe (reader) and `pack-payload` (writer).
 //!
-//!   [ setup exe bytes ][ zstd( tar ) ][ footer ]
+//!   [ setup exe bytes ][ xz( tar ) ][ footer ]
 //!
 //! The tar holds the install folder as-is: the core files (add-in build output, which
 //! includes the Kitvei Hakodesh app and its service) at the root, the typing tutor
 //! under `TypingTutor\`. The footer sits in the last `FOOTER_LEN` bytes of the exe.
 
-pub const MAGIC: &[u8; 8] = b"KKPAYLD1";
+pub const MAGIC: &[u8; 8] = b"KKPAYLD2";
+
+/// LZMA2 dictionary (128 MB) the packer uses; the setup needs about this much RAM to unpack.
+#[allow(dead_code)] // used by pack-payload
+pub const DICT_SIZE: u32 = 128 << 20;
+/// liblzma's "extreme" preset flag (LZMA_PRESET_EXTREME).
+#[allow(dead_code)]
+pub const PRESET_EXTREME: u32 = 0x8000_0000;
 pub const FOOTER_LEN: usize = 32;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

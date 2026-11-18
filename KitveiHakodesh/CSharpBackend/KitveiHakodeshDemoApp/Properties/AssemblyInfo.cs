@@ -5,11 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("כתבי הקודש")]
+// Both languages: Task Manager shows the title, and the install may be Hebrew or English.
+[assembly: AssemblyTitle("Kitvei Hakodesh – כתבי הקודש")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("כתבי הקודש")]
+[assembly: AssemblyProduct("Kitvei Hakodesh – כתבי הקודש")]
 [assembly: AssemblyCopyright("Copyright ©  2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
