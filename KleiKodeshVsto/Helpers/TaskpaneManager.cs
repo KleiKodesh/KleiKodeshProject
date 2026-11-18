@@ -375,6 +375,18 @@ namespace KleiKodesh.Helpers
                 if (setPopupOwnerMethod != null)
                     setPopupOwnerMethod.Invoke(userControl, new object[] { new Action<IntPtr>(TaskPanePopOut.SetOwner) });
 
+                // Elevated Word next to a normal one: the pane can offer to move this
+                // document to a normal Word. The document of the window the pane belongs
+                // to - not ActiveDocument, which can be another window's during a restore.
+                var setReopenMethod = userControl.GetType().GetMethod("SetReopenUnelevatedAction");
+                if (setReopenMethod != null)
+                {
+                    Word.Document doc = null;
+                    try { doc = (pane.Window as Word.Window)?.Document; } catch { }
+                    if (doc != null)
+                        setReopenMethod.Invoke(userControl, new object[] { new Func<bool>(() => ReopenUnelevated(doc)) });
+                }
+
                 if (matchOfficeTheme)
                     OfficeThemeWatcher.Attach(userControl);
 
@@ -385,6 +397,56 @@ namespace KleiKodesh.Helpers
                 MessageBox.Show(ex.ToString(), "Error");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Closes <paramref name="doc"/> in this (elevated) Word and opens it again through
+        /// Explorer, which runs without admin rights - so the file lands in a normal Word,
+        /// where the pane can use the shared WebView2 data folder.
+        ///
+        /// Close goes first, with Word's own save prompt: launching first and then having
+        /// the user cancel the prompt would leave the file open twice. Returns false when
+        /// there is no file on disk yet. Quits this Word when the document was its last
+        /// one - an empty admin Word only invites the next clash.
+        ///
+        /// The close / launch / quit run on a one-shot timer, after the pane's own call
+        /// has returned: closing the document disposes the pane, and quitting tears down
+        /// the add-in - neither may happen while the pane's code is still on the stack.
+        /// A cancelled save prompt just leaves everything as it was, with no message.
+        /// </summary>
+        static bool ReopenUnelevated(Word.Document doc)
+        {
+            string path;
+            try
+            {
+                path = doc.FullName;
+                if (string.IsNullOrEmpty(doc.Path) || !System.IO.File.Exists(path)) return false;
+            }
+            catch { return false; }
+
+            var timer = new Timer { Interval = 1 };
+            timer.Tick += (s, e) =>
+            {
+                timer.Stop();
+                timer.Dispose();
+                try
+                {
+                    var app = Globals.ThisAddIn.Application;
+                    object prompt = Word.WdSaveOptions.wdPromptToSaveChanges;
+                    doc.Close(ref prompt);   // throws if the user cancels the save prompt
+
+                    System.Diagnostics.Process.Start("explorer.exe", "\"" + path + "\"")?.Dispose();
+
+                    if (app.Documents.Count == 0)
+                    {
+                        object noSave = Word.WdSaveOptions.wdDoNotSaveChanges;
+                        app.Quit(ref noSave);
+                    }
+                }
+                catch { /* cancelled at the save prompt: the document stays open here */ }
+            };
+            timer.Start();
+            return true;
         }
 
         static void RestoreDockPosition(CustomTaskPane pane, string type)

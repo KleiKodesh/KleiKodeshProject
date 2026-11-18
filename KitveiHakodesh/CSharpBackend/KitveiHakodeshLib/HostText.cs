@@ -36,6 +36,11 @@ namespace KitveiHakodeshLib
             "The pane can't open in this Word because another Word is already open with different " +
             "permissions (one of them runs as administrator).\n" +
             "Close all Word windows and open the file again normally (not as administrator).");
+        public static string ThisWordIsAdminReopen => T(
+            "וורד זה רץ כמנהל, ולכן לא ניתן לפתוח בו את החלונית כל עוד וורד רגיל פתוח.\n" +
+            "לפתוח את המסמך הזה מחדש בוורד רגיל? (וורד יבקש לשמור שינויים קודם.)",
+            "This Word is running as administrator, so the pane can't open here while a normal Word is open.\n" +
+            "Reopen this document in a normal Word? (Word will ask to save changes first.)");
 
         // ── File dialogs ──
         public static string AllFiles => T("כל הקבצים", "All files");
