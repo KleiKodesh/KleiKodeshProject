@@ -127,14 +127,21 @@ public static class ToratEmetNames
     /// under an install's Books also the Hebrew name of every folder on the way and of the book (its title and ForcedBookName).
     /// Quote forms are added both ways (the program writes a double quote as two single quotes).
     /// </summary>
-    public static IReadOnlyList<string> SearchTerms(string? fullPath)
+    public static IReadOnlyList<string> SearchTerms(string? fullPath) => SearchTerms(fullPath, ownNameOnly: false);
+
+    /// <summary>The <see cref="SearchTerms(string?)"/> that name the path ITSELF (the book's Hebrew title and ForcedBookName),
+    /// without the phrase and the folders above it: the search ranks a match on these as a match on the file's name.</summary>
+    public static IReadOnlyList<string> OwnNameSearchTerms(string? fullPath) => SearchTerms(fullPath, ownNameOnly: true);
+
+    private static IReadOnlyList<string> SearchTerms(string? fullPath, bool ownNameOnly)
     {
         var terms = new List<string>();
         if (!IsToratEmetPath(fullPath)) return terms;
-        terms.Add(SearchPhrase);
+        if (!ownNameOnly) terms.Add(SearchPhrase);
         var rest = SegmentsUnderInstallBooks(fullPath);
         if (rest == null) return terms;
-        var seen = new HashSet<string>(StringComparer.Ordinal) { SearchPhrase };
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        if (!ownNameOnly) seen.Add(SearchPhrase);
         void Add(string? name)
         {
             if (string.IsNullOrWhiteSpace(name)) return;
@@ -143,7 +150,7 @@ public static class ToratEmetNames
             var quoted = lower.Replace("''", "\"");
             if (quoted != lower && seen.Add(quoted)) terms.Add(quoted);
         }
-        for (int i = 0; i < rest.Length - 1; i++)
+        for (int i = 0; i < rest.Length - 1 && !ownNameOnly; i++)
             if (Data.Value.FolderTitles.TryGetValue(FolderToken(rest[i]), out var folder)) Add(folder);
         if (rest.Length > 0)
         {

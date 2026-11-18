@@ -131,6 +131,15 @@ internal static class ToratEmetNamesCheck
             var scopedName = index.Search(BereshitHe, null, [install], 0, out total);
             Check(scopedName.Count == 1, "scoped: Hebrew book name");
             Check(index.Search("plain", null, 0, out total).Count == 1, "plain names still found");
+
+            // The book named by the Hebrew word before a file that only sits in the folder named
+            // by it (which sorts first by path).
+            index.AddOrUpdate(install + @"\001_TORA\01_BERESHIT\000_other.txt");
+            var ranked = index.Search(BereshitHe, null, 0, out total);
+            Check(ranked.Count == 2 && ranked[0].Path.EndsWith("a01_genesis.txt") && ranked[1].Path.EndsWith("000_other.txt"),
+                "the book named by the Hebrew word ranks before a file in the folder named by it");
+            var own = ToratEmetNames.OwnNameSearchTerms(install + @"\001_TORA\01_BERESHIT\a01_Genesis.txt");
+            Check(own.Contains(BereshitHe) && !own.Contains(ToraHe) && !own.Contains(ToratEmetHe), "own-name terms: the book name only");
         }
         finally { try { Directory.Delete(dir, true); } catch { } }
         BigSearch();

@@ -32,6 +32,10 @@ internal struct RankKeys
     public bool LeafAddsWord;
     /// <summary>How many of the query's words, COUNTED WITH REPETITION, the path holds.</summary>
     public int WordsMatched;
+    /// <summary>Local files only (0 for a catalog hit): how many typed words the file's name
+    /// holds WITHOUT being a whole word of it - inside a longer word, in the extension, or in
+    /// the file's add-in name or Hebrew name alias. Below <see cref="WordsMatched"/>: whole words first.</summary>
+    public int WordsPartlyMatched;
     /// <summary>0 = a book title (a file is always one), 1+ = TOC depth. Ranked only as TITLE OR
     /// NOT: below <see cref="WordsMatched"/> — "perek 1 / mishnah 5" (2 words) beats "perek 5"
     /// (1) — and above <see cref="LeafCovered"/>: a book whose title holds the word beats a
@@ -70,7 +74,8 @@ internal static class SeforimDbCatalogRankingKeys
     ///
     ///   literal match; every word in the hit's own title/path or author; the query names the
     ///   book (then the title explaining more of the query, then the one sized like it); more
-    ///   query words in the path, repeats counted; the title written as the typed acronym;
+    ///   query words in the path, repeats counted; for a file, more typed words inside its
+    ///   name; the title written as the typed acronym;
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
     ///   in typed order, closest together - the typed address "hilchot 3" is the TOC line
     ///   "hilchot 3", not a book titled "... volume 3" that merely shares its words;
@@ -88,6 +93,9 @@ internal static class SeforimDbCatalogRankingKeys
         if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
         if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
         if (a.WordsMatched != b.WordsMatched) return b.WordsMatched.CompareTo(a.WordsMatched);
+        // A file whose name holds a typed word inside a longer word before one that has it
+        // only in a folder name.
+        if (a.WordsPartlyMatched != b.WordsPartlyMatched) return b.WordsPartlyMatched.CompareTo(a.WordsPartlyMatched);
         // The book written as the typed acronym, quote and all, before lines that merely cite
         // the acronym however tightly: above proximity.
         if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;

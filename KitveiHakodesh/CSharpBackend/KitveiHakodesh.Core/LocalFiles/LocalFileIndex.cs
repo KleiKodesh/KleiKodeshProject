@@ -34,6 +34,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         private const string        FLD_PATH      = "path";
         private const string        FLD_DATE      = "date";       // last-write time as Unix ms (stored, not indexed)
         private const string        FLD_ALIAS_TERMS = "alias_terms"; // indexed only: extra search words of a path (Torat Emet Hebrew names), one term each, lower-cased
+        private const string        FLD_NAME_ALIAS_TERMS = "name_alias_terms"; // indexed only: the alias_terms that name the file ITSELF (its Torat Emet Hebrew title), not a folder above it
         private const string        FLD_ADDIN_NAME = "addin_name"; // optional: "תוסף אוצריא: {name}" (indexed + stored, lower-cased)
         private const string        FLD_ADDIN_NAME_DISPLAY = "addin_name_display"; // same value, original case, stored only
 
@@ -61,8 +62,9 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// what the older index still held from them.
         /// v5: path_trigrams (substring search by exact term lookups instead of a *word* scan);
         /// name_seq and quoted_keys, so every ranking key is index data (no re-rank on paths).
+        /// v6: name_alias_terms (a Torat Emet book found by its Hebrew title ranks as a name match).
         /// </summary>
-        internal const string IndexFormatVersion = "5";
+        internal const string IndexFormatVersion = "6";
         // No "_" in the name: Lucene.Net's writer deletes, as a stale index file, any file whose
         // name CONTAINS "_x.y" (its codec-file pattern is not anchored) - "index_format.txt" went.
         private const string IndexFormatFileName = "format-version.txt";
@@ -697,6 +699,8 @@ namespace KitveiHakodesh.Core.LocalFiles
                     doc.Add(new Field(FLD_FOLDER_WORDS, word, WordFieldType));
             foreach (var term in ToratEmet.ToratEmetNames.SearchTerms(fullPath))
                 doc.Add(new Field(FLD_ALIAS_TERMS, term, WordFieldType));
+            foreach (var term in ToratEmet.ToratEmetNames.OwnNameSearchTerms(fullPath))
+                doc.Add(new Field(FLD_NAME_ALIAS_TERMS, term, WordFieldType));
             foreach (var trigram in PathTrigrams(lowerPath))
                 doc.Add(new Field(FLD_PATH_TRIGRAMS, trigram, WordFieldType));
             // The same name words once more as ONE positioned sequence (the analyzer splits it
@@ -847,23 +851,39 @@ namespace KitveiHakodesh.Core.LocalFiles
             {
                 // Per check word: the docs the word reaches through addin_name / alias_terms.
                 // Those pass the re-check whatever their path holds. Few docs have either field.
+                // Kept for EVERY word, apart, for the ranking: an add-in name or a name alias
+                // (name_alias_terms) is the file's own name; any other alias term names a folder
+                // above it (Torat Emet), so it counts like a folder word.
+                var lowerWords = Array.ConvertAll(words, w => w.ToLowerInvariant());
+                var ownNameDocsOfWord = new HashSet<int>[lowerWords.Length];
+                var aliasDocsOfWord = new HashSet<int>[lowerWords.Length];
                 var otherFieldDocs = new List<HashSet<int>>(checkWords.Count);
-                foreach (var lower in checkWords)
+                for (int w = 0; w < lowerWords.Length; w++)
                 {
+                    string lower = lowerWords[w];
                     var pattern = "*" + EscapeWildcard(lower) + "*";
-                    var other = new BooleanQuery
+                    var addinDocs = new DocSetCollector();
+                    searcher.Search(new BooleanQuery
                     {
                         { new WildcardQuery(new Term(FLD_ADDIN_NAME, pattern)), Occur.SHOULD },
-                        { new WildcardQuery(new Term(FLD_ALIAS_TERMS, pattern)), Occur.SHOULD },
-                    };
-                    var docs = new DocSetCollector();
-                    searcher.Search(other, docs);
-                    otherFieldDocs.Add(docs.Docs);
+                        { new WildcardQuery(new Term(FLD_NAME_ALIAS_TERMS, pattern)), Occur.SHOULD },
+                    }, addinDocs);
+                    var aliasDocs = new DocSetCollector();
+                    searcher.Search(new WildcardQuery(new Term(FLD_ALIAS_TERMS, pattern)), aliasDocs);
+                    ownNameDocsOfWord[w] = addinDocs.Docs;
+                    aliasDocsOfWord[w] = aliasDocs.Docs;
+                    if (lower.Length > 3)   // same order as checkWords
+                    {
+                        var either = new HashSet<int>(addinDocs.Docs);
+                        either.UnionWith(aliasDocs.Docs);
+                        otherFieldDocs.Add(either);
+                    }
                 }
 
                 var collector = new FolderRankCollector(input,
                     SeforimDbCatalog.SeforimDbCatalogTextNormalizer.TokenizeQuery(input), prefixes,
-                    checkWords.Count > 0 ? new PathContainsCheck(checkWords, otherFieldDocs) : null);
+                    checkWords.Count > 0 ? new PathContainsCheck(checkWords, otherFieldDocs) : null,
+                    lowerWords, ownNameDocsOfWord, aliasDocsOfWord);
                 searcher.Search(query, collector);
                 total = collector.Count;
                 Materialize(searcher, collector.Top(cap, searcher.IndexReader.Leaves), results);
@@ -1032,6 +1052,13 @@ namespace KitveiHakodesh.Core.LocalFiles
             private readonly bool _measureProximity;
             private readonly List<string> _prefixes;
             private readonly PathContainsCheck _check;   // null: every match is real (no trigram query)
+            private readonly string[] _lowerSearchWords;   // the typed words, lower-cased (MeasureWordsInsideName)
+            private readonly byte[][] _upperSearchWords;   // the same as the sort key spells them (see PathSortKey)
+            private readonly ulong[] _searchWordBit;       // each typed word's index words, as bits in the name / folder word sets
+            private readonly HashSet<int>[] _ownNameDocsOfWord;   // per typed word: docs whose add-in name or name alias holds it (null: none)
+            private readonly HashSet<int>[] _aliasDocsOfWord;       // per typed word: docs with an alias term holding it (null: none)
+            private readonly BytesRef _nameScratch = new BytesRef();
+            private AtomicReader _reader;
 
             private readonly List<List<Entry>> _segments = new List<List<Entry>>();
             private readonly List<int> _segmentLeaves = new List<int>();   // leaf ord of each segment
@@ -1055,10 +1082,24 @@ namespace KitveiHakodesh.Core.LocalFiles
             public int Count { get; private set; }
 
             public FolderRankCollector(string query, List<SeforimDbCatalog.SeforimDbCatalogTextNormalizer.QueryToken> tokens, List<string> prefixes,
-                PathContainsCheck check = null)
+                PathContainsCheck check = null, string[] lowerSearchWords = null,
+                HashSet<int>[] ownNameDocsOfWord = null, HashSet<int>[] aliasDocsOfWord = null)
             {
                 _prefixes = prefixes;
                 _check = check;
+                _lowerSearchWords = lowerSearchWords ?? Array.Empty<string>();
+                _ownNameDocsOfWord = ownNameDocsOfWord;
+                _aliasDocsOfWord = aliasDocsOfWord;
+                _upperSearchWords = new byte[_lowerSearchWords.Length][];
+                _searchWordBit = new ulong[_lowerSearchWords.Length];
+                for (int i = 0; i < _lowerSearchWords.Length; i++)
+                {
+                    _upperSearchWords[i] = System.Text.Encoding.UTF8.GetBytes(_lowerSearchWords[i].ToUpperInvariant());
+                    // The word as the index spells it: "bava-kamma" is the name words bava + kamma.
+                    foreach (var word in SeforimDbCatalog.SeforimDbCatalogTextNormalizer.Tokenize(
+                                 LocalFileNameWords.SeparatorsToSpaces(_lowerSearchWords[i])))
+                        _searchWordBit[i] |= Bit(WordIndex(word));
+                }
                 _tokenAlternatives = new int[tokens.Count][][];
                 for (int t = 0; t < tokens.Count; t++)
                 {
@@ -1118,6 +1159,7 @@ namespace KitveiHakodesh.Core.LocalFiles
             public void SetNextReader(AtomicReaderContext context)
             {
                 var reader = context.AtomicReader;
+                _reader = reader;
                 _docBase = context.DocBase;
                 _check?.SetNextReader(context);
                 _entries = new List<Entry>();
@@ -1184,13 +1226,26 @@ namespace KitveiHakodesh.Core.LocalFiles
                 // Covered: every distinct name word is a query word.
                 bool covered = titleDistinct > 0 && distinctFound == titleDistinct;
 
+                // The name HOLDS a typed word when the word is inside it ("shas" in "shasnotes",
+                // "pdf" in "a.pdf") or inside its add-in name / Hebrew name alias. A file whose
+                // name holds every word ranks as a title match, above a file that only sits in a
+                // folder named by the words; whole words still lead within the title matches
+                // (TitleCovered / WordsMatched below).
+                bool nameHoldsEveryWord = EveryToken(inName);
+                bool everyWordPlaced = false;
+                int partlyMatched = 0;
+                if (!nameHoldsEveryWord)
+                    nameHoldsEveryWord = MeasureWordsInsideName(doc, inName, inFolders, out partlyMatched, out everyWordPlaced);
+
                 var keys = new RankKeys
                 {
                     // Literal = every query word is a whole word of the name or of a folder on the
-                    // path; a file matched only by substrings is a non-literal match.
-                    IsLiteral = EveryToken(inName | inFolders),
+                    // path, or is held by the name; a file matched by a substring of a folder
+                    // name is a non-literal match.
+                    IsLiteral = nameHoldsEveryWord || everyWordPlaced || EveryToken(inName | inFolders),
                     // The file's name plays the title; there is no author.
-                    MatchesTitleOrAuthor = EveryToken(inName),
+                    MatchesTitleOrAuthor = nameHoldsEveryWord,
+                    WordsPartlyMatched = partlyMatched,
                     TitleCovered = covered,
                     TitleDistinctWords = distinctFound,
                     TitleLengthGap = Math.Abs(titleWords - _queryWordCount),
@@ -1212,6 +1267,82 @@ namespace KitveiHakodesh.Core.LocalFiles
                 _entries.Add(new Entry { Doc = _docBase + doc, Root = root, Ord = ord, Keys = keys });
                 Count++;
             }
+
+            /// <summary>
+            /// Which typed words the file's name HOLDS: inside the name, extension included
+            /// ("pdf" holds for "a.pdf"), or inside the file's add-in name or name alias (its
+            /// Torat Emet Hebrew title).
+            /// Returns whether it holds them all. <paramref name="partlyMatched"/> counts the held
+            /// words that are not a whole word of the name; <paramref name="everyWordPlaced"/> is
+            /// true when each word is held, is a whole word of the name or of a folder, or is in
+            /// an alias term (the Torat Emet Hebrew name of a folder above the file).
+            /// The name is read from path_sort_dv - the UPPER-cased path's UTF-8, compared as
+            /// bytes - or from the stored path when the doc-values copy does not lower-case back
+            /// to it (ShapeStoredRead).
+            /// </summary>
+            private bool MeasureWordsInsideName(int doc, ulong inName, ulong inFolders, out int partlyMatched, out bool everyWordPlaced)
+            {
+                partlyMatched = 0;
+                everyWordPlaced = false;
+                int n = _upperSearchWords.Length;
+                if (n == 0) return false;
+
+                bool fromDocValues = _pathSort != null && _shape != null && (_shape.Get(doc) & ShapeStoredRead) == 0;
+                string storedName = null;
+                byte[] bytes = null;
+                int start = 0, end = 0;
+                if (fromDocValues)
+                {
+                    _pathSort.Get(doc, _nameScratch);
+                    bytes = _nameScratch.Bytes;
+                    end = _nameScratch.Offset + _nameScratch.Length;
+                    // '\' is a single byte that never occurs inside a multi-byte UTF-8 char.
+                    start = end;
+                    while (start > _nameScratch.Offset && bytes[start - 1] != (byte)'\\') start--;
+                }
+                else
+                {
+                    storedName = System.IO.Path.GetFileName(_reader.Document(doc).Get(FLD_PATH) ?? "");
+                }
+
+                int held = 0;
+                everyWordPlaced = true;
+                for (int i = 0; i < n; i++)
+                {
+                    bool holds = _ownNameDocsOfWord != null && _ownNameDocsOfWord[i].Contains(_docBase + doc);
+                    if (!holds && fromDocValues)
+                    {
+                        var needle = _upperSearchWords[i];
+                        for (int at = start; at + needle.Length <= end && !holds; at++)
+                        {
+                            int k = 0;
+                            while (k < needle.Length && bytes[at + k] == needle[k]) k++;
+                            holds = k == needle.Length;
+                        }
+                    }
+                    else if (!holds)
+                    {
+                        holds = storedName.IndexOf(_lowerSearchWords[i], StringComparison.Ordinal) >= 0;
+                    }
+
+                    if (holds)
+                    {
+                        held++;
+                        if (!WholeWordsIn(inName, _searchWordBit[i])) partlyMatched++;
+                    }
+                    else if (!WholeWordsIn(inName | inFolders, _searchWordBit[i])
+                             &&(_aliasDocsOfWord == null || !_aliasDocsOfWord[i].Contains(_docBase + doc)))
+                    {
+                        everyWordPlaced = false;
+                    }
+                }
+                return held == n;
+            }
+
+            /// <summary>Every index word of one typed word (<paramref name="wordBits"/>) is in
+            /// <paramref name="present"/>. A typed word with no index word (only signs) never is.</summary>
+            private static bool WholeWordsIn(ulong present, ulong wordBits)
+                => wordBits != 0 && (present & wordBits) == wordBits;
 
             private int ClearPositions(int word)
             {

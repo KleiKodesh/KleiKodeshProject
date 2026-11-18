@@ -343,6 +343,29 @@ internal static class UserSpaceSearchCheck
             [@"C:\Lib\bava.pdf", @"C:\Lib\bava\x.pdf"],
             @"C:\Lib\bava\x.pdf", @"C:\Lib\bava.pdf");
 
+        // A name that merely CONTAINS the word still beats a file that only sits in a folder
+        // named by it; a whole-word name stays first.
+        Order("name containing the word before folder-only match", "bava", lib,
+            [@"C:\Lib\bava.pdf", @"C:\Lib\bavanotes.pdf", @"C:\Lib\bava\x.pdf"],
+            @"C:\Lib\bava\x.pdf", @"C:\Lib\bavanotes.pdf", @"C:\Lib\bava.pdf");
+        Order("2 words inside the name before both in folders", "bava kamma", lib,
+            [@"C:\Lib\bavakamma.pdf", @"C:\Lib\bava\kamma\x.pdf"],
+            @"C:\Lib\bava\kamma\x.pdf", @"C:\Lib\bavakamma.pdf");
+
+        // The extension is part of the name: typing "pdf" puts .pdf files above files that only
+        // sit in a folder named pdf; a name with the whole word stays first.
+        Order("extension match before folder-only match", "pdf", lib,
+            [@"C:\Lib\pdf guide.docx", @"C:\Lib\a.pdf", @"C:\Lib\pdf\x.docx"],
+            @"C:\Lib\pdf\x.docx", @"C:\Lib\a.pdf", @"C:\Lib\pdf guide.docx");
+        Order("name typed with its extension", "berachot.pdf", lib,
+            [@"C:\Lib\berachot.pdf", @"C:\Lib\berachot.pdf.bak\x.txt"],
+            @"C:\Lib\berachot.pdf.bak\x.txt", @"C:\Lib\berachot.pdf");
+        // One word in a folder, the other only inside a longer word of the name: above a file
+        // that has both in folders.
+        Order("part-of-name word before folder-only words", "talmud berach", [@"C:\Talmud"],
+            [@"C:\Talmud\z\berachot.pdf", @"C:\Talmud\berachot\x.pdf"],
+            @"C:\Talmud\berachot\x.pdf", @"C:\Talmud\z\berachot.pdf");
+
         // Separators in file names are word breaks (fixed: they used to glue words).
         Order("underscore/hyphen names match words whole", "bava kamma", lib,
             [@"C:\Lib\bava_kamma.pdf", @"C:\Lib\bava-kamma-notes.pdf", @"C:\Lib\bavakamma.pdf"],
