@@ -54,7 +54,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('dict', 'מילון'),
       navDestination('calendar', 'לוח שנה'),
       navDestination('ruler', 'מידות ושיעורים'),
-      navDestination('globe', 'אתרים'),
+      navDestination('globe', 'אתרים ותוספים'),
       navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({

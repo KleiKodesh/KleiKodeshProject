@@ -48,7 +48,7 @@ const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
-  navItem('אתרים', 'globe', 'Ctrl+9'),
+  navItem('אתרים ותוספים', 'globe', 'Ctrl+9'),
 ]
 
 

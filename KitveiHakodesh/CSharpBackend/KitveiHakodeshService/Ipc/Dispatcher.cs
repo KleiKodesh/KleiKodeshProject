@@ -231,6 +231,13 @@ public sealed class Dispatcher(
                     var icon = await websiteIcons.GetAsync(a.Url, ct);
                     return RpcResponse.Ok(icon is null ? null : MsgPack.Ser(icon));
                 }
+                case "otzariaAddinIcon":
+                {
+                    // An addin's own icon from its manifest.json; empty when it has none (the page shows the puzzle piece).
+                    var a = MsgPack.De<global::KitveiHakodesh.Core.LocalFiles.OtzariaAddinIconArgs>(req.Args);
+                    var icon = global::KitveiHakodesh.Core.LocalFiles.OtzariaAddinIcon.Read(a.Path);
+                    return RpcResponse.Ok(icon is null ? null : MsgPack.Ser(icon));
+                }
                 case "fastDocViewSections":
                     return RpcResponse.Ok(MsgPack.SerList(fastDocViewDocuments.Sections(MsgPack.De<FastDocViewDocumentArgs>(req.Args).DocumentId)));
                 case "fastDocViewWeights":

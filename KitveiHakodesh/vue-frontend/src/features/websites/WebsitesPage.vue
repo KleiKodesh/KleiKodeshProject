@@ -3,13 +3,25 @@ import { computed, h, onMounted } from 'vue'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as HomeSuggestionCardData } from '@/features/home/homeSuggestionCard'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useHomeSearchNavigation } from '@/features/home/useHomeSearchNavigation'
 import WebsiteFavicon from './WebsiteFavicon.vue'
+import OtzariaAddinIcon from './OtzariaAddinIcon.vue'
+import { loadOtzariaAddins, otzariaAddinsRef, type OtzariaAddin } from './otzariaAddinsList'
 import { displayHost, loadWebsites, sortedWebsites, websiteName, websitesRef, type Website } from './websitesList'
 
-/** The Websites destination: every whitelisted Torah site as a card. A click opens it in a tab. */
+/** The Websites & add-ins destination: every whitelisted Torah site and every installed Otzaria addin as a card. A click opens it in a tab. */
 const paneNavigation = usePaneNavigation()
 
-onMounted(() => void loadWebsites())
+const fileNavigation = useHomeSearchNavigation(() => {})
+
+onMounted(() => {
+  void loadWebsites()
+  void loadOtzariaAddins()
+})
+
+function openAddin(addin: OtzariaAddin, openInNewTab: boolean): void {
+  void fileNavigation.onSelectFile({ source: 'files', fileName: addin.fileName, fullPath: addin.path, addinName: addin.addinName }, openInNewTab)
+}
 
 function openSite(site: Website, openInNewTab: boolean): void {
   paneNavigation.openOrUpdateActiveTab({ route: '/web-view', title: websiteName(site), webUrl: site.url }, openInNewTab)
@@ -24,12 +36,24 @@ const cards = computed<HomeSuggestionCardData[]>(() =>
     open: (openInNewTab) => openSite(site, openInNewTab),
   })),
 )
+
+const addinCards = computed<HomeSuggestionCardData[]>(() =>
+  [...otzariaAddinsRef.value]
+    .sort((a, b) => a.name.localeCompare(b.name, 'he'))
+    .map((addin) => ({
+      key: `addin:${addin.path}`,
+      title: addin.name,
+      path: addin.path,
+      icon: () => h(OtzariaAddinIcon, { path: addin.path }),
+      open: (openInNewTab) => openAddin(addin, openInNewTab),
+    })),
+)
 </script>
 
 <template>
   <div class="websites-page">
     <div class="websites-grid">
-      <HomeSuggestionCard v-for="card in cards" :key="card.key" :card="card" />
+      <HomeSuggestionCard v-for="card in [...cards, ...addinCards]" :key="card.key" :card="card" />
     </div>
   </div>
 </template>

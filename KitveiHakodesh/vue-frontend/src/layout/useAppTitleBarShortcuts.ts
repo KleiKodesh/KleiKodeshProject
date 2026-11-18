@@ -83,7 +83,7 @@ export function useAppTitleBarShortcuts(options: {
     'מילון',
     'לוח שנה',
     'מידות ושיעורים',
-    'אתרים',
+    'אתרים ותוספים',
   ]
 
   // Shortcut keys pressed inside an iframe, replayed into the top-level keydown pipeline.
