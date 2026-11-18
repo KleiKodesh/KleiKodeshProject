@@ -42,12 +42,11 @@ const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('היברו-בוקס', 'hbooks', 'Ctrl+3'),
   navItem('פתח קובץ', 'folder', 'Ctrl+4'),
   navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5'),
-  navItem('אזור אישי', 'userSpace', 'Ctrl+U'),
+  navItem('אזור אישי', 'userSpace', 'Ctrl+6'),
   // In development: shown in dev builds only until the user-space index exists.
-  ...(import.meta.env.DEV ? [navItem('חיפוש באזור האישי', 'userSpaceSearch', '')] : []),
-  navItem('מילון', 'dict', 'Ctrl+6'),
-  navItem('לוח שנה', 'calendar', 'Ctrl+7'),
-  navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
+  ...(import.meta.env.DEV ? [navItem('חיפוש באזור האישי', 'userSpaceSearch', 'Ctrl+7')] : []),
+  // Dictionary, calendar and halachic units are not destinations any more: they are
+  // widgets (features/widgets) and open from the title bar's widgets & tools menu.
   navItem('אתרים ותוספים', 'globe', 'Ctrl+9'),
 ]
 

@@ -8,6 +8,7 @@
     "splitView": "Split view",
     "home": "Home",
     "workspaces": "Workspaces",
+    "widgets": "Widgets & tools",
     "back": "Back",
     "forward": "Forward"
   },
@@ -361,6 +362,10 @@
     "fileSearch": "File search",
     "dictionary": "Dictionary",
     "calendar": "Calendar",
+    "worldClockWidget": "World clock",
+    "zmanimWidget": "Today's zmanim",
+    "learningWidget": "Daily learning",
+    "userSpaceSearch": "Search UserSpace",
     "userSpace": "UserSpace",
     "websites": "Websites",
     "measuresAndQuantities": "Measurements and quantities",

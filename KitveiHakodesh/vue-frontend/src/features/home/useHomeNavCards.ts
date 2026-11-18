@@ -51,9 +51,6 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('folder', 'פתח קובץ'),
       navDestination('fileSearch', 'חיפוש קבצים'),
       navDestination('userSpace', 'אזור אישי'),
-      navDestination('dict', 'מילון'),
-      navDestination('calendar', 'לוח שנה'),
-      navDestination('ruler', 'מידות ושיעורים'),
       navDestination('globe', 'אתרים ותוספים'),
       navDestination('settings', 'הגדרות'),
     ]

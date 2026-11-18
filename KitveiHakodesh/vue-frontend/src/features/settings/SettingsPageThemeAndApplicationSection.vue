@@ -37,6 +37,7 @@ const TITLE_BAR_BUTTONS = computed(() => [
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: t('settings.titleBarButton.home') },
   { id: 'workspaces',     label: t('settings.titleBarButton.workspaces') },
+  { id: 'widgets',        label: t('settings.titleBarButton.widgets') },
   { id: 'prev-tab',       label: t('settings.titleBarButton.back') },
   { id: 'next-tab',       label: t('settings.titleBarButton.forward') },
 ])

@@ -38,11 +38,16 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>3</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.hebrewbooks') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>4</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.openFile') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>5</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.fileSearch') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>6</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.dictionary') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.calendar') }}</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>8</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.measuresAndQuantities') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>6</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.userSpace') }}</span></div>
+    <div v-if="isDev" class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.userSpaceSearch') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.websites') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>U</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.userSpace') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>1</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.dictionary') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>2</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.calendar') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>3</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.measuresAndQuantities') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>4</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.worldClockWidget') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>5</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.zmanimWidget') }}</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>6</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.learningWidget') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F1</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.settings') }}</span></div>
     <!-- Book view -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.bookView') }}</div>
@@ -99,6 +104,8 @@
 </template>
 
 <script setup lang="ts">
+// User-space search is in development: its shortcut shows in dev builds only.
+const isDev = import.meta.env.DEV
 import { computed } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import { isVstoEnvironment, hasNativeChromeTabs } from '@/webview-host/bridge'

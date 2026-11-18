@@ -8,6 +8,7 @@
     "splitView": "תצוגה מפוצלת",
     "home": "בית",
     "workspaces": "סביבות עבודה",
+    "widgets": "ווידג'טים וכלים",
     "back": "חזור",
     "forward": "קדימה"
   },
@@ -361,6 +362,10 @@
     "fileSearch": "חיפוש קבצים",
     "dictionary": "מילון",
     "calendar": "לוח שנה",
+    "worldClockWidget": "שעון עולמי",
+    "zmanimWidget": "זמני היום",
+    "learningWidget": "לימוד יומי",
+    "userSpaceSearch": "חיפוש באזור האישי",
     "userSpace": "אזור אישי",
     "websites": "אתרים",
     "measuresAndQuantities": "מידות ושיעורים",

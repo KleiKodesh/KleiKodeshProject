@@ -4,6 +4,7 @@ import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
 import SiteFrameLayer from '@/features/websites/SiteFrameLayer.vue'
+import WidgetWindowLayer from '@/features/widgets/WidgetWindowLayer.vue'
 import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
@@ -208,6 +209,8 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <SiteFrameLayer />
     <HomePageDateBar v-if="settingsStore.dateBarPinned" status-bar class="app-status-bar" />
 
+    <!-- Widgets & tools: floating tool windows over both panes. -->
+    <WidgetWindowLayer />
     <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone || !termsAccepted" />
     <GlobalContextMenu />
