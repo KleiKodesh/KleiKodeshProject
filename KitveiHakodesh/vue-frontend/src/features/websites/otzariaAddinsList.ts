@@ -1,12 +1,11 @@
 import { shallowRef } from 'vue'
-import { fileSystemSearch } from '@/webview-host/bridge'
 import { serviceCall } from '@/webview-host/serviceClient'
-import { addinDisplayTitle, normalizeAddinQuery } from '@/features/local-file-search/otzariaAddins'
 
 /**
  * The Otzaria addins installed on this computer, for the Websites & add-ins page, and each
  * addin's own icon (the "icon" of its manifest.json, read by Core's `otzariaAddinIcon` op).
- * The list comes from the file index, the same place the file search finds addins.
+ * The list comes from Otzaria's plugins folder (Core `otzariaInstalledAddins`), so it does not
+ * wait for the file index.
  */
 export interface OtzariaAddin {
   /** The addin's name from its manifest. */
@@ -14,7 +13,7 @@ export interface OtzariaAddin {
   fileName: string
   /** The entry-point file's full path. */
   path: string
-  /** The baked index value ("תוסף אוצריא: {name}") — what the file-open flow keys on. */
+  /** The file index's form of the name ("תוסף אוצריא: {name}") — what the file-open flow keys on. */
   addinName: string
 }
 
@@ -25,18 +24,19 @@ export const otzariaAddinsRef = addins
 
 /** Loaded once per session; reactive through `otzariaAddinsRef`. */
 export function loadOtzariaAddins(): Promise<OtzariaAddin[]> {
-  loading ??= fileSystemSearch(normalizeAddinQuery('תוספים'), -1).then((reply) => {
-    const seen = new Set<string>()
-    const list: OtzariaAddin[] = []
-    for (const hit of reply.results ?? []) {
-      const path = hit.path ? `${hit.path}\${hit.fileName}` : hit.fileName
-      if (!hit.addinName || seen.has(path.toLowerCase())) continue
-      seen.add(path.toLowerCase())
-      list.push({ name: addinDisplayTitle(hit.addinName), fileName: hit.fileName, path, addinName: hit.addinName })
-    }
-    if (reply.error) loading = null // try again next time the page opens
-    return (addins.value = list)
-  })
+  loading ??= serviceCall<{ name: string; entryPath: string }[] | undefined>('otzariaInstalledAddins')
+    .then((reply) =>
+      (addins.value = (reply ?? []).map((a) => ({
+        name: a.name,
+        fileName: a.entryPath.substring(a.entryPath.lastIndexOf('\\') + 1),
+        path: a.entryPath,
+        addinName: `תוסף אוצריא: ${a.name}`,
+      }))),
+    )
+    .catch(() => {
+      loading = null // try again next time the page opens
+      return addins.value
+    })
   return loading
 }
 
