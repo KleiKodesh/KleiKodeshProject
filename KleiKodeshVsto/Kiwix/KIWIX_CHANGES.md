@@ -71,6 +71,10 @@ $wc.DownloadFile(
 | `www/js/init.js` | When the host language is not `he`, swaps `#bootstrapCss` to `css/bootstrap-ltr.min.css` (next to the existing `lang`/`dir` setting). |
 | `KiwixLib.csproj` | `bootstrap-ltr.min.css` added as Content (copied to output). |
 
+Only in `KiwixLib/Kiwix.js`: the source copy `kiwix-js-main` does NOT have this LTR swap
+(no `bootstrap-ltr.min.css`, no `id="bootstrapCss"`). The host-theme block in `init.js`
+(`window.__khDarkTheme`, 2026-11) IS mirrored there. Carry both over when re-copying.
+
 ---
 
 ## C# Host (KiwixWebview.cs)
