@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { highlightSearchMatches } from '@/utils/searchMatchHighlight'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
+import { vFastDocViewTabs } from './fastDocViewTabs'
 
 /**
  * Every footnote / endnote of the document, in body order, as ONE windowed scroller (the app's
@@ -152,6 +153,7 @@ export function fastDocViewNoteKey(kind: string, number: number, label: string):
               @click="emit('goToReference', noteAt(index)!)"
             >{{ noteAt(index)!.label }}</button>
             <span
+              v-fast-doc-view-tabs
               class="note-body word-document"
               @click="onBodyActivate($event, noteAt(index)!)"
               @keydown.enter="onBodyActivate($event, noteAt(index)!)"
