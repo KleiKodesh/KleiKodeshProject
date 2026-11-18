@@ -26,9 +26,23 @@ let loading: Promise<Website[]> | null = null
 export function loadWebsites(): Promise<Website[]> {
   loading ??= fetch(`${import.meta.env.BASE_URL}websites.json`)
     .then((r) => (r.ok ? r.json() : { sites: [] }))
-    .then((data: { sites?: Website[] }) => (websites.value = data.sites ?? []))
-    .catch(() => (websites.value = []))
+    .then((data: { sites?: Website[] }) => (websites.value = [...(data.sites ?? []), ...installedLocalSites()]))
+    .catch(() => (websites.value = installedLocalSites()))
   return loading
+}
+
+/**
+ * Readers installed on this computer rather than on the web. Kiwix (offline books) is the Word
+ * add-in's Kiwix.js folder; the host serves it and reports its address only when it is installed
+ * (AppViewerKiwix.cs), so without it Kiwix is simply not listed.
+ */
+function installedLocalSites(): Website[] {
+  const kiwixUrl = window.__webviewKiwixUrl
+  if (!kiwixUrl) return []
+  return [{
+    id: 'kiwix', name: 'קיוויקס - ספרים אופליין', nameEn: 'Kiwix - offline books', url: kiwixUrl,
+    domains: [new URL(kiwixUrl).hostname], icon: 'websites-icons/kiwix.png',
+  }]
 }
 
 export const websitesRef = websites

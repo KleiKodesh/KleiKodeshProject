@@ -34,6 +34,19 @@ namespace KitveiHakodeshLib
   }, true);
 })();";
 
+        // Word pane only: a site page's own scripts see the iPhone identity its page request was sent
+        // with (WebSitesFrameHeaderStripper.UseIosUserAgent). Only in the app's site frames, and not
+        // for the sites that keep the real identity (dicta) or the local Kiwix reader.
+        private static readonly string SiteFrameIosScript = @"(function () {
+  if (window === window.top || !/^site-/.test(window.name) || /dicta|^kiwix-app$/.test(location.hostname)) return;
+  var ua = '" + KitveiHakodeshLib.WebSites.WebSitesFrameHeaderStripper.IosUserAgent + @"';
+  try {
+    Object.defineProperty(Navigator.prototype, 'userAgent', { get: function () { return ua; } });
+    Object.defineProperty(Navigator.prototype, 'platform', { get: function () { return 'iPhone'; } });
+    Object.defineProperty(Navigator.prototype, 'vendor', { get: function () { return 'Apple Computer, Inc.'; } });
+  } catch (e) { }
+})();";
+
         private Timer _lowMemoryTimer;
         private IntPtr _lowMemoryNotification = IntPtr.Zero;
 
@@ -41,6 +54,12 @@ namespace KitveiHakodeshLib
         {
             _webView.CoreWebView2.FrameCreated += OnAppChildFrameCreated;
             _ = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(SiteFrameActivityScript);
+            if (IsVstoHost && _webSites != null)
+            {
+                // Word pane: sites in phone layout, like the add-in's Websites pane.
+                _webSites.UseIosUserAgent = true;
+                _ = _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(SiteFrameIosScript);
+            }
             WatchLowMemory();
             WatchMinimized();
         }
@@ -142,7 +161,7 @@ namespace KitveiHakodeshLib
             if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri uri)) return;
             if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return; // about:, data:, blob:
 
-            if (_webSites.IsWebsiteAddress(uri.AbsoluteUri))
+            if (_webSites.IsWebsiteAddress(uri.AbsoluteUri) || IsKiwixAddress(uri))
             {
                 _bridge?.PushEvent(new { @event = "siteFrameNavigated", frame = name, url = uri.AbsoluteUri });
                 return;

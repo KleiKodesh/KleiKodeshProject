@@ -17,6 +17,8 @@ declare global {
   interface Window {
     __webviewAction?: (action: string, args?: object) => Promise<unknown>
     __webviewIsVsto?: boolean
+    /** The Kiwix reader's address, when the Word add-in's Kiwix.js is installed beside the app (AppViewerKiwix.cs). */
+    __webviewKiwixUrl?: string
     __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
   }
 }
