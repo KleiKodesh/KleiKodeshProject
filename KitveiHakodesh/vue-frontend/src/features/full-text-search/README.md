@@ -10,7 +10,7 @@ Full-text search using Category and book filters, virtual-scrolled results, inde
 
 **FullTextSearchResultsList.vue** — virtual-scrolled results list. Accepts `results` (filtered), `totalResults` (unfiltered count), and `zoom` (optional number, 50–200). Applies zoom as a font-size scaling on the scroller element. Shows live count during streaming.
 
-**FullTextSearchFilterPanel.vue** — slide-in filter panel. Contains the category/book tree and a book-name search input at the bottom. The book-name query is owned by `useFullTextSearchFilters` (via `v-model:filter-book-query`) so it persists when the panel closes. When a query is typed the tree is replaced by a flat matching-book list (`FullTextSearchFilterBookList`).
+**FullTextSearchFilterPanel.vue** — filter dropdown under the search bar. Contains the category/book tree and a book-name search input at the bottom. The book-name query is owned by `useFullTextSearchFilters` (via `v-model:filter-book-query`) so it persists when the panel closes. When a query is typed the tree is replaced by a flat matching-book list (`FullTextSearchFilterBookList`).
 
 **FullTextSearchFilterRow.vue** — one row of the filter tree (category, book or computer file, with checkbox), drawn by TreeView. **fullTextSearchFilterTree.ts** builds the rows and the per-category totals and check states once per change.
 

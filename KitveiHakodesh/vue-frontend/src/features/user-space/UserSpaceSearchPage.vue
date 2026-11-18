@@ -144,7 +144,6 @@ onMounted(async () => {
     :is-options-open="isOptionsOpen"
     :is-filter-open="isFilterOpen"
     :instance-key="`us-${tabId}`"
-    @close-filter="isFilterOpen = false"
   >
     <template #bar>
       <FullTextSearchBar
