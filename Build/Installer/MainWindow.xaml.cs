@@ -62,7 +62,7 @@ namespace KleiKodeshVstoInstallerWpf
         //
         // Normal install flow (interactive):
         //   LandingPage → InstallPage → WhatsNewPage → SettingsPage → GeneralSettingsPage → ComponentSettingsPage → exit
-        //   (WhatsNewPage is skipped when no release notes are embedded, e.g. local builds)
+        //   (WhatsNewPage is skipped on a first install, and when no release notes are embedded, e.g. local builds)
         //
         // Auto-update (--silent / --install arg) takes the SAME path as a manual install:
         //   LandingPage → InstallPage → WhatsNewPage → SettingsPage → ...
@@ -76,10 +76,11 @@ namespace KleiKodeshVstoInstallerWpf
         public void NavigateToSettings(bool fromLanding = false) => MainFrame.Navigate(new SettingsPage(this, fromLanding));
         public void NavigateToGeneralSettings(bool fromLanding = false) => MainFrame.Navigate(new GeneralSettingsPage(this, fromLanding));
 
-        /// <summary>Shows the release notes, or goes straight to SettingsPage when none are embedded.</summary>
+        /// <summary>Shows the release notes on updates only; first installs and builds without
+        /// embedded notes go straight to SettingsPage.</summary>
         public void NavigateToWhatsNew()
         {
-            var notes = ReleaseNotes.Load();
+            var notes = Helpers.InstallRunner.IsCleanInstall ? null : ReleaseNotes.Load();
             if (notes == null) NavigateToSettings();
             else MainFrame.Navigate(new WhatsNewPage(this, notes));
         }
