@@ -34,6 +34,10 @@ watch(
       <p>{{ $t('settings.terms.p4') }}</p>
       <p>{{ $t('settings.terms.p5') }}</p>
 
+      <h3>{{ $t('settings.terms.p15') }}</h3>
+      <p>{{ $t('settings.terms.p16') }}</p>
+      <p>{{ $t('settings.terms.p17') }}</p>
+
       <h3>{{ $t('settings.terms.p6') }}</h3>
       <p>{{ $t('settings.terms.p7') }}</p>
 
