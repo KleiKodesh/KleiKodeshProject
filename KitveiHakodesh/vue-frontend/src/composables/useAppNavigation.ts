@@ -27,7 +27,7 @@ export function useAppNavigation() {
     'לוח שנה': '/hebrew-calendar',
     מילון: '/dictionary',
     'מידות ושיעורים': '/midot',
-    אתרים: '/websites',
+    'אתרים ותוספים': '/websites',
     'חיפוש קבצים': '/file-search',
     'אזור אישי': '/user-space',
     'חיפוש באזור האישי': '/user-space-search',

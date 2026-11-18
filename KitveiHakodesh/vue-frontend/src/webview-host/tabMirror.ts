@@ -4,7 +4,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
 import { rasterizeTabIcons } from './rasterizeTabIcons'
-import { rasterizeSiteTabIcons, siteTabIconKey } from './rasterizeSiteTabIcons'
+import { addinTabIconKey, rasterizeAddinTabIcons, rasterizeSiteTabIcons, siteTabIconKey } from './rasterizeSiteTabIcons'
 import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/websitesList'
 import { iconKeyForEntry } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
@@ -73,26 +73,41 @@ export function initTabMirror(): void {
   const siteIconKeys = ref(new Set<string>())
   let lastRatio = 0
   let lastSiteCount = -1
+  let lastAddinPaths = ''
+  // Otzaria addins add theirs ("addin:<entry path>") for every addin open in a tab.
+  const openAddinPaths = computed(() =>
+    [...new Set([...tabStore.pane1Tabs, ...tabStore.pane2Tabs]
+      .filter((t) => t.route === '/html-view' && t.isOtzariaAddin && t.localFilePath)
+      .map((t) => t.localFilePath!))].sort(),
+  )
   function sendTabIcons() {
     const ratio = window.devicePixelRatio || 1
     const sites = websitesRef.value
-    if (ratio === lastRatio && sites.length === lastSiteCount) return
+    const addinPaths = openAddinPaths.value
+    const addinKey = addinPaths.join('|').toLowerCase()
+    if (ratio === lastRatio && sites.length === lastSiteCount && addinKey === lastAddinPaths) return
     lastRatio = ratio
     lastSiteCount = sites.length
-    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites)]).then(([icons, siteIcons]) => {
-      siteIconKeys.value = new Set(siteIcons.map((icon) => icon.key))
-      const all = [...icons, ...siteIcons]
+    lastAddinPaths = addinKey
+    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites), rasterizeAddinTabIcons(addinPaths)]).then(([icons, siteIcons, addinIcons]) => {
+      siteIconKeys.value = new Set([...siteIcons, ...addinIcons].map((icon) => icon.key))
+      const all = [...icons, ...siteIcons, ...addinIcons]
       if (all.length) notifyTabIcons(all)
     })
   }
   sendTabIcons()
   void loadWebsites()
   watch(websitesRef, sendTabIcons)
+  watch(openAddinPaths, sendTabIcons)
   // devicePixelRatio changes fire as a resize, not as their own event.
   window.addEventListener('resize', sendTabIcons)
 
-  /** A website tab's own icon, once it is rasterized (else the route's globe). */
+  /** A website's or Otzaria addin's tab icon, once it is rasterized (else the route's globe / puzzle piece). */
   function siteIconKeyFor(t: Tab): string | undefined {
+    if (t.route === '/html-view' && t.isOtzariaAddin && t.localFilePath) {
+      const key = addinTabIconKey(t.localFilePath)
+      return siteIconKeys.value.has(key) ? key : undefined
+    }
     if (t.route !== '/web-view' || !t.webUrl) return undefined
     const site = websiteForUrl(t.webUrl, websitesRef.value)
     const key = site && siteTabIconKey(site)

@@ -1,6 +1,7 @@
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { ref, computed, onMounted, watch, h } from 'vue'
 import WebsiteFavicon from '@/features/websites/WebsiteFavicon.vue'
+import OtzariaAddinIcon from '@/features/websites/OtzariaAddinIcon.vue'
 import { displayHost } from '@/features/websites/websitesList'
 import { storeToRefs } from 'pinia'
 import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
@@ -97,8 +98,12 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
         key: `recent:${entry.key}`,
         title: catalogBookTitle(entry),
         path: recentPath(entry),
-        icon: entry.route === '/web-view' && entry.webUrl ? () => h(WebsiteFavicon, { url: entry.webUrl! }) : icon.icon24,
-        color: entry.route === '/web-view' ? undefined : icon.color,
+        icon: entry.route === '/web-view' && entry.webUrl
+          ? () => h(WebsiteFavicon, { url: entry.webUrl! })
+          : entry.isOtzariaAddin && entry.localFilePath
+            ? () => h(OtzariaAddinIcon, { path: entry.localFilePath! })
+            : icon.icon24,
+        color: entry.route === '/web-view' || (entry.isOtzariaAddin && entry.localFilePath) ? undefined : icon.color,
         open: (openInNewTab) => actions.openRecent(entry, openInNewTab),
         pinning: {
           pinned: !!entry.pinned,
