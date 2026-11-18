@@ -433,12 +433,15 @@ watchDebounced(
 // clamp only covers the column being dragged.
 watch([sideCommentaryOpen, sideLeftCommentaryOpen], ([rightOpen, leftOpen]) => {
   if (!rightOpen || !leftOpen) return
-  const total = panels.side.fraction.value + panels['side-left'].fraction.value
+  // A column showing the edition has its own width (sideColumnFraction), so scale that one.
+  const total = sideColumnFraction('side') + sideColumnFraction('side-left')
   const max = 1 - MIN_LINES_FRACTION
   if (total <= max) return
   const scale = max / total
-  panels.side.fraction.value *= scale
-  panels['side-left'].fraction.value *= scale
+  for (const slot of ['side', 'side-left'] as const) {
+    if (isSideEditionIn(slot)) sideEditionFraction.value = sideColumnFraction(slot) * scale
+    else panels[slot].fraction.value *= scale
+  }
 })
 
 watch(() => bookViewStore.openSearchSignal, (signal) => { if (signal.paneId === paneId) openContentSearch() })
@@ -499,6 +502,13 @@ watch(
   (shownId) => sideEditionStore.setShownEditionId(paneId, shownId),
   { immediate: true },
 )
+// Dragging the edition's divider moves the bottom filter button sideways too (see the
+// measure watch above, which runs before sideEditionFraction exists).
+watch(sideEditionFraction, async () => {
+  if (!panels.bottom.filterOpen.value) return
+  await nextTick()
+  measureBottomFilterOffset()
+})
 // Session restore (tab, last-read, back/forward) hands back the saved pick and width.
 watch(restoredSideEdition, (saved) => {
   if (!saved) return
