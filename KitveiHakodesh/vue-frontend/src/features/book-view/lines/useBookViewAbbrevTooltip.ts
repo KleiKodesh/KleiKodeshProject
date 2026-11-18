@@ -21,6 +21,7 @@
  * Dismissal: selection collapses or leaves, or the scroller scrolls
  * (the anchor rect goes stale).
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { dictAbbrevSenses } from '@/webview-host/dictionaryDb'
@@ -128,6 +129,7 @@ export function useBookViewAbbrevTooltip(
   scrollerEl: Ref<HTMLElement | null>,
   options?: { ignoreWithin?: string },
 ) {
+  const hostWindow = useHostWindow()
   const abbrevTooltip = ref<AbbrevTooltipData | null>(null)
   let lookupToken = 0
 
@@ -145,7 +147,7 @@ export function useBookViewAbbrevTooltip(
   }
 
   async function onSelectionSettled() {
-    const sel = window.getSelection()
+    const sel = hostWindow.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) { closeAbbrevTooltip(); return }
     const range = sel.getRangeAt(0)
     const root = scrollerEl.value
@@ -196,8 +198,8 @@ export function useBookViewAbbrevTooltip(
 
   useEventListener(scrollerEl, 'mouseup', onMouseUp)
   useEventListener(scrollerEl, 'scroll', closeAbbrevTooltip, { passive: true })
-  useEventListener(document, 'selectionchange', () => {
-    const sel = window.getSelection()
+  useEventListener(hostWindow.document, 'selectionchange', () => {
+    const sel = hostWindow.getSelection()
     if (!sel || sel.isCollapsed) closeAbbrevTooltip()
   })
 

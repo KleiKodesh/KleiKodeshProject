@@ -13,6 +13,7 @@
  *   - Delete button calls deleteNote() and emits 'deleted' so the parent can
  *     remove the note from its composable before unmounting.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { IconDelete24Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -40,26 +41,28 @@ const resolvedTop = ref<number | null>(null)
 const resolvedLeft = ref<number | null>(null)
 const resolvedWidth = ref<number | null>(null)
 
+const hostWindow = useHostWindow()
+
 function computePosition() {
   const MARGIN = 8
   const MAX_WIDTH = 360
 
-  const availableWidth = window.innerWidth - MARGIN * 2
+  const availableWidth = hostWindow.innerWidth - MARGIN * 2
   const bubbleWidth = Math.min(MAX_WIDTH, availableWidth)
 
   let left = props.anchorRect.left
   let top = props.anchorRect.bottom + MARGIN
 
   // Clamp left so bubble doesn't overflow the right viewport edge
-  if (left + bubbleWidth > window.innerWidth - MARGIN) {
-    left = Math.max(MARGIN, window.innerWidth - bubbleWidth - MARGIN)
+  if (left + bubbleWidth > hostWindow.innerWidth - MARGIN) {
+    left = Math.max(MARGIN, hostWindow.innerWidth - bubbleWidth - MARGIN)
   }
 
   // Use real bubble height when available, fall back to a safe estimate
   const bubbleHeight = bubbleRef.value?.offsetHeight ?? 320
 
   // Flip vertically if too close to bottom
-  if (top + bubbleHeight > window.innerHeight - MARGIN) {
+  if (top + bubbleHeight > hostWindow.innerHeight - MARGIN) {
     top = props.anchorRect.top - bubbleHeight - MARGIN
   }
 
@@ -79,7 +82,7 @@ const style = computed(() => {
       position: 'fixed' as const,
       top: '-9999px',
       left: '-9999px',
-      width: `${Math.min(360, window.innerWidth - 16)}px`,
+      width: `${Math.min(360, hostWindow.innerWidth - 16)}px`,
       zIndex: '9998',
       visibility: 'hidden' as const,
     }
@@ -134,7 +137,7 @@ async function onDelete() {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div dir="rtl" ref="bubbleRef" class="note-bubble" :style="style" @click.stop>
       <div class="note-bubble-header">
         <span class="note-bubble-quote" :title="note.quote">{{ note.quote }}</span>

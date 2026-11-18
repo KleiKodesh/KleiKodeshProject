@@ -28,6 +28,7 @@
  * main.css, since the global `* { user-select: none }` reset opts in by selector
  * and this element is Teleported outside all of them.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { getLineIndexFromLineId, getWordLinkPreview, type WordLinkPreview } from '@/webview-host/seforimApi'
@@ -188,6 +189,7 @@ export function useWordLinkTooltip(
 
 /** The hover-preview lifecycle (see the file comment) over any LinkPreviewSource. */
 export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, source: LinkPreviewSource) {
+  const hostWindow = useHostWindow()
   const wordLinkTooltip = ref<WordLinkTooltipData | null>(null)
   let hoverToken = 0
   let hoverTimer: ReturnType<typeof setTimeout> | null = null
@@ -234,7 +236,7 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
    * running an item) needs no bookkeeping here.
    */
   function contextMenuOpen(): boolean {
-    return document.querySelector('.context-menu') !== null
+    return hostWindow.document.querySelector('.context-menu') !== null
   }
 
   /**
@@ -368,7 +370,7 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
     if (!el) return
     // A drag to select text ends with a click too — don't hijack it (same guard
     // as the line-click handler).
-    if (hasActiveTextSelection()) return
+    if (hasActiveTextSelection(hostWindow.document)) return
     // Claimed synchronously: an inline ref's target resolves after an await, by which
     // time the browser would already have followed its seforim:// href.
     event.preventDefault()
@@ -390,7 +392,7 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
   // Deliberately unconditional on the button — only a left press takes the pin,
   // so any release ends that drag, and skipping some buttons here is what left
   // the flag set forever after a right-click.
-  useEventListener(() => document, 'mouseup', () => {
+  useEventListener(hostWindow.document, 'mouseup', () => {
     if (!selectingInTooltip) return
     selectingInTooltip = false
     if (!pointerInTooltip) scheduleClose()
@@ -401,7 +403,7 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
   // the preview would hang around. A click anywhere dismisses the menu, so
   // re-check on the next one; by then `.context-menu` is detached and the usual
   // gate lets the close through.
-  useEventListener(() => document, 'click', () => {
+  useEventListener(hostWindow.document, 'click', () => {
     if (!wordLinkTooltip.value || pointerInTooltip || contextMenuOpen()) return
     scheduleClose()
   })
@@ -412,7 +414,7 @@ export function useLinkPreviewTooltip(scrollerEl: Ref<HTMLElement | null>, sourc
   // Escape is heavily overloaded here (search bars, bubbles, menus), and a preview
   // is the shallowest thing on screen — swallowing the key would strand whatever
   // else the user meant to close.
-  useEventListener(() => document, 'keydown', (event: KeyboardEvent) => {
+  useEventListener(hostWindow.document, 'keydown', (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || !wordLinkTooltip.value) return
     closeWordLinkTooltip()
   })

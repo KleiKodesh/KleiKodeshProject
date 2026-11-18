@@ -55,6 +55,7 @@
  * Attributes fall through to the viewport (`tabindex`, data-*, style, native
  * listeners), so the caller treats it as the scroll element it is.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, nextTick, onBeforeUnmount, onBeforeUpdate, onUpdated, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import WindowedScrollerBar from './WindowedScrollerBar.vue'
@@ -390,14 +391,17 @@ function onViewportScrollEnd() {
   landingScrollEndOwed = null
   emit('moveend', source)
 }
+
+const hostWindow = useHostWindow()
+
 function onBarPointerDown() {
   isBarPressed = true
-  window.addEventListener('pointerup', onBarPointerUp, { capture: true })
-  window.addEventListener('pointercancel', onBarPointerUp, { capture: true })
+  hostWindow.addEventListener('pointerup', onBarPointerUp, { capture: true })
+  hostWindow.addEventListener('pointercancel', onBarPointerUp, { capture: true })
 }
 function onBarPointerUp() {
-  window.removeEventListener('pointerup', onBarPointerUp, { capture: true })
-  window.removeEventListener('pointercancel', onBarPointerUp, { capture: true })
+  hostWindow.removeEventListener('pointerup', onBarPointerUp, { capture: true })
+  hostWindow.removeEventListener('pointercancel', onBarPointerUp, { capture: true })
   if (!isBarPressed) return
   isBarPressed = false
   landingScrollEndOwed = null
@@ -453,8 +457,8 @@ useResizeObserver(contentElement, () => {
   holdAnchor()
   fill()
   bar.syncFromViewport()
-})
-useResizeObserver(viewportElement, () => fill())
+}, { window: hostWindow })
+useResizeObserver(viewportElement, () => fill(), { window: hostWindow })
 
 // ── The first window ───────────────────────────────────────────────────────────
 //

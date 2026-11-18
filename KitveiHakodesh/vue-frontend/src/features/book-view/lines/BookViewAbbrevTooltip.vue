@@ -14,6 +14,7 @@
  * re-measures. mousedown is prevented so clicking the tooltip doesn't
  * collapse the selection (which would immediately dismiss it).
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, nextTick } from 'vue'
 import type { AbbrevTooltipData } from './useBookViewAbbrevTooltip'
 
@@ -26,6 +27,8 @@ const resolvedLeft = ref<number | null>(null)
 const MARGIN = 8
 const MAX_WIDTH = 460
 
+const hostWindow = useHostWindow()
+
 function computePosition() {
   const rect = props.data.anchorRect
   const width = tooltipRef.value?.offsetWidth ?? MAX_WIDTH
@@ -33,7 +36,7 @@ function computePosition() {
 
   // Center horizontally on the selection, clamped to the viewport
   let left = rect.left + rect.width / 2 - width / 2
-  left = Math.min(Math.max(MARGIN, left), window.innerWidth - width - MARGIN)
+  left = Math.min(Math.max(MARGIN, left), hostWindow.innerWidth - width - MARGIN)
 
   // Prefer above the selection; flip below when clipped by the top edge
   let top = rect.top - height - MARGIN
@@ -50,7 +53,7 @@ const style = computed(() => {
       position: 'fixed' as const,
       top: '-9999px',
       left: '-9999px',
-      maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
+      maxWidth: `${Math.min(MAX_WIDTH, hostWindow.innerWidth - MARGIN * 2)}px`,
       zIndex: '9998',
       visibility: 'hidden' as const,
     }
@@ -59,7 +62,7 @@ const style = computed(() => {
     position: 'fixed' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
+    maxWidth: `${Math.min(MAX_WIDTH, hostWindow.innerWidth - MARGIN * 2)}px`,
     zIndex: '9998',
   }
 })
@@ -70,7 +73,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div ref="tooltipRef" class="abbrev-tooltip" :style="style" dir="rtl" @mousedown.prevent>
       <template v-for="(sense, senseIndex) in data.senses" :key="senseIndex">
         <span v-if="senseIndex > 0" class="abbrev-divider">|</span>

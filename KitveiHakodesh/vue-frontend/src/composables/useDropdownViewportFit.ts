@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { watch, onScopeDispose } from 'vue'
 import { unrefElement, useEventListener, type MaybeElementRef } from '@vueuse/core'
 
@@ -20,6 +21,7 @@ const MINIMUM_USEFUL_HEIGHT = 160
  * dropdown's own CSS still decides where it opens and how it looks.
  */
 export function useDropdownViewportFit(target: MaybeElementRef<MaybeElement>) {
+  const hostWindow = useHostWindow()
   let resizeObserver: ResizeObserver | undefined
   let fittedElement: HTMLElement | undefined
   let isFitting = false
@@ -36,8 +38,8 @@ export function useDropdownViewportFit(target: MaybeElementRef<MaybeElement>) {
     isFitting = true
     clearFit(element)
     const rectangle = element.getBoundingClientRect()
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
+    const viewportWidth = hostWindow.innerWidth
+    const viewportHeight = hostWindow.innerHeight
     const usableWidth = viewportWidth - VIEWPORT_MARGIN * 2
     const usableHeight = viewportHeight - VIEWPORT_MARGIN * 2
 
@@ -76,7 +78,7 @@ export function useDropdownViewportFit(target: MaybeElementRef<MaybeElement>) {
 
     if (shiftX !== 0 || shiftY !== 0) element.style.translate = `${shiftX}px ${shiftY}px`
     // The observer reports our own max-height change; ignore that echo.
-    requestAnimationFrame(() => (isFitting = false))
+    hostWindow.requestAnimationFrame(() => (isFitting = false))
   }
 
   function stopObserving() {
@@ -91,16 +93,16 @@ export function useDropdownViewportFit(target: MaybeElementRef<MaybeElement>) {
       stopObserving()
       if (!element) return
       fittedElement = element
-      requestAnimationFrame(() => {
+      hostWindow.requestAnimationFrame(() => {
         if (fittedElement === element) fitInsideViewport(element)
       })
-      resizeObserver = new ResizeObserver(() => fitInsideViewport(element))
+      resizeObserver = new hostWindow.ResizeObserver(() => fitInsideViewport(element))
       resizeObserver.observe(element)
     },
     { immediate: true, flush: 'post' },
   )
 
-  useEventListener(window, 'resize', () => {
+  useEventListener(hostWindow, 'resize', () => {
     if (fittedElement) fitInsideViewport(fittedElement)
   })
 

@@ -8,6 +8,18 @@ import type { WindowedScrollerApi, WindowedScrollerMoveSource } from '@/componen
  * opens with its header just under the nav rather than flush against it.
  */
 const NAV_HEIGHT = 32
+
+/**
+ * What covers the top of the text when a match is landed: the nav, plus a find bar
+ * floating over the text when one is open (a detached panel's own bar sets
+ * --commentary-find-inset on an ancestor while it is open).
+ */
+function coveredTopPx(element: HTMLElement | null | undefined): number {
+  if (!element) return NAV_HEIGHT
+  const view = element.ownerDocument.defaultView ?? window
+  const findInset = parseFloat(view.getComputedStyle(element).getPropertyValue('--commentary-find-inset')) || 0
+  return NAV_HEIGHT + findInset
+}
 const LANDING_GAP_PX = 8
 
 /** A row and how far into it — what a WindowedScroller is created at, or told to go to. */
@@ -157,7 +169,7 @@ export function useCommentaryScroll(
   function rowOf(request: Request): CommentaryRow | null {
     if (request.kind === 'flatIndex') {
       return request.flatIndex < flatItems().length
-        ? { index: request.flatIndex, offsetPx: -(NAV_HEIGHT + LANDING_GAP_PX) }
+        ? { index: request.flatIndex, offsetPx: -(coveredTopPx(scroller()?.scrollerElement) + LANDING_GAP_PX) }
         : null
     }
     const index = resolveGroupIndex(request.bookId, request.sectionLabel, request.subSectionLabel)
@@ -250,10 +262,11 @@ export function useCommentaryScroll(
         const scrollerRect = element.getBoundingClientRect()
         const relativeTop = markRect.top - scrollerRect.top
         const relativeBottom = markRect.bottom - scrollerRect.top
-        const visible = relativeTop >= NAV_HEIGHT + 4 && relativeBottom <= scrollerRect.height - 4
+        const coveredTop = coveredTopPx(element)
+        const visible = relativeTop >= coveredTop + 4 && relativeBottom <= scrollerRect.height - 4
         // Through the scroller's nudge: part of this landing, so its end is not taken
         // for the reader moving (which would re-pin the panel to the hit's commentator).
-        if (!visible) api.nudge(relativeTop - NAV_HEIGHT - LANDING_GAP_PX)
+        if (!visible) api.nudge(relativeTop - coveredTop - LANDING_GAP_PX)
       }
     }
     scrollTop.value = element?.scrollTop ?? 0

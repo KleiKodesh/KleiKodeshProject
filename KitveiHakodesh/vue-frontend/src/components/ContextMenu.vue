@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, nextTick } from 'vue'
 import { IconChevronLeft16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -59,8 +60,10 @@ const menuStyle = computed(() => ({ left: `${x.value}px`, top: `${y.value}px` })
 // any action so that copy operations can read the user's original text selection.
 let _savedRange: Range | null = null
 
+const hostWindow = useHostWindow()
+
 function saveSelection(): void {
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
     _savedRange = sel.getRangeAt(0).cloneRange()
   } else {
@@ -70,7 +73,7 @@ function saveSelection(): void {
 
 function restoreSelection(): void {
   if (!_savedRange) return
-  const sel = window.getSelection()
+  const sel = hostWindow.getSelection()
   if (!sel) return
   sel.removeAllRanges()
   sel.addRange(_savedRange)
@@ -122,7 +125,7 @@ function placeAlong(forwardFrom: number, backFrom: number, size: number, viewpor
 
 // The submenu opens toward inline-start: the left in Hebrew, the right in English.
 function isRtl(): boolean {
-  return document.documentElement.dir !== 'ltr'
+  return hostWindow.document.documentElement.dir !== 'ltr'
 }
 
 function closeSubmenu(): void {
@@ -141,9 +144,9 @@ async function openSubmenu(index: number, row: EventTarget | null): Promise<void
   const rowRect = row.getBoundingClientRect()
   const { width, height } = panel.getBoundingClientRect()
   // RTL: prefer the left of the menu, else its right; neither fits → clamped, overlapping the menu.
-  const left = placeAlong(menuRect.right, menuRect.left, width, window.innerWidth, isRtl())
+  const left = placeAlong(menuRect.right, menuRect.left, width, hostWindow.innerWidth, isRtl())
   // Downward from the row; no room → upward, its bottom on the row's bottom; else clamped.
-  const top = placeAlong(rowRect.top + SUBMENU_TOP_OFFSET, rowRect.bottom - SUBMENU_TOP_OFFSET, height, window.innerHeight)
+  const top = placeAlong(rowRect.top + SUBMENU_TOP_OFFSET, rowRect.bottom - SUBMENU_TOP_OFFSET, height, hostWindow.innerHeight)
 
   submenuLeftPx.value = left
   submenuTopPx.value = top
@@ -172,8 +175,8 @@ async function showAtPosition(clientX: number, clientY: number) {
     // side lacks room, and only when neither fits clamp into the viewport (the menu
     // scrolls only when it is taller than the whole window).
     const rect = menuRef.value.getBoundingClientRect()
-    x.value = placeAlong(clientX, clientX, rect.width, window.innerWidth)
-    y.value = placeAlong(clientY, clientY, rect.height, window.innerHeight)
+    x.value = placeAlong(clientX, clientX, rect.width, hostWindow.innerWidth)
+    y.value = placeAlong(clientY, clientY, rect.height, hostWindow.innerHeight)
   }
 }
 
@@ -197,7 +200,7 @@ defineExpose({ show, showAtPosition, hide })
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop @mousedown.prevent @scroll="closeSubmenu">
       <template v-for="(item, index) in items" :key="index">
         <div v-if="item.type === 'separator'" class="context-menu-separator" />

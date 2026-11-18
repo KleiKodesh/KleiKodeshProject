@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -79,6 +80,8 @@ const seedText = props.selectedText
 const proposedText = ref(seedText)
 
 const isProposingCorrection = computed(() => proposedText.value !== seedText)
+
+const hostWindow = useHostWindow()
 
 /** Puts the box back to the text as it reads now, which withdraws the proposal. */
 function resetProposedText(): void {
@@ -186,7 +189,7 @@ async function onSaveForLater(): Promise<void> {
   }
 }
 
-useEventListener('keydown', (event: KeyboardEvent) => {
+useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
     event.preventDefault()
     emit('close')
@@ -203,7 +206,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div class="report-backdrop" @click.self="emit('close')">
       <div class="report-dialog">
         <div class="report-titlebar">

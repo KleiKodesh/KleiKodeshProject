@@ -23,7 +23,7 @@
  *     Range by DOM containment, so Chromium paints them selected with no help.
  *   - Chromium's own selection autoscroll keeps working, because the drag never
  *     leaves a valid Range.
- *   - window.getSelection() stays the single source of truth, so the copy paths,
+ *   - hostWindow.getSelection() stays the single source of truth, so the copy paths,
  *     hasActiveTextSelection(), the abbreviation tooltip and useSelectAllInContainer
  *     all keep working untouched.
  *
@@ -41,6 +41,7 @@
  * as stripped-text offsets and restored afterwards. Only the annotating panes need
  * that; a list that never re-renders a row under the selection can ignore it.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, ref, watch, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import {
@@ -73,13 +74,14 @@ export function useVirtualizedTextSelection(
    */
   rowListIdentity: () => unknown,
 ) {
+  const hostWindow = useHostWindow()
   // The rows the current selection starts and ends in. Null when there is no
   // selection inside this scroller.
   const anchorBoundary = ref<SelectionBoundary | null>(null)
   const focusBoundary = ref<SelectionBoundary | null>(null)
 
   function rowElementFromNode(node: Node | null): HTMLElement | null {
-    const element = node instanceof Element ? node : node?.parentElement ?? null
+    const element = (node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement) ?? null
     const row = element?.closest('[data-index]') as HTMLElement | null
     return row && scrollerElement.value?.contains(row) ? row : null
   }
@@ -93,7 +95,7 @@ export function useVirtualizedTextSelection(
    * only by restoreSelectionFromPinnedRows and only annotations need that.
    */
   function lineElementFromNode(node: Node | null): HTMLElement | null {
-    const element = node instanceof Element ? node : node?.parentElement ?? null
+    const element = (node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement) ?? null
     const line = element?.closest('.line') as HTMLElement | null
     return line && scrollerElement.value?.contains(line) ? line : null
   }
@@ -131,7 +133,7 @@ export function useVirtualizedTextSelection(
    * or moved to another element entirely) clears the pins.
    */
   function readPinnedRowsFromSelection() {
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       clearPinnedRows()
       return
@@ -175,7 +177,7 @@ export function useVirtualizedTextSelection(
     }
   })
 
-  useEventListener(document, 'selectionchange', readPinnedRowsFromSelection)
+  useEventListener(hostWindow.document, 'selectionchange', readPinnedRowsFromSelection)
 
   // The list was rebuilt under the pins — see the rowListIdentity parameter.
   watch(rowListIdentity, clearPinnedRows)
@@ -241,9 +243,9 @@ export function useVirtualizedTextSelection(
     const endPosition = domPositionForBoundary(scroller, endBoundary)
     if (!startPosition || !endPosition) return
 
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection) return
-    const range = document.createRange()
+    const range = hostWindow.document.createRange()
     range.setStart(startPosition.node, startPosition.offset)
     range.setEnd(endPosition.node, endPosition.offset)
     selection.removeAllRanges()
