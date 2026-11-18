@@ -1,0 +1,21 @@
+{
+  "_comment": "Torah websites the app opens in its own tabs. Read by the Vue Websites page AND by the host (WebSitesFrameHeaderStripper.cs), which lets every listed domain load inside the app's iframe. Optional \"nameEn\": the English name, only for a site that has one (the English UI shows it). Optional \"icon\": the site's icon when it is not at /favicon.ico - an address, or a file in websites-icons/ shipped with the app (for a site whose own icon does not load). Only sites whose content is the books themselves (text or scans).",
+  "_loginDomainsComment": "Not sites: login pages a listed site sends you to, which must load inside its frame too (the Otzar HaChochma library login goes through OpenAthens). Read by the host only.",
+  "loginDomains": ["openathens.net"],
+  "sites": [
+    { "id": "alhatorah", "name": "על התורה", "nameEn": "AlHaTorah", "url": "https://library.alhatorah.org/", "domains": ["alhatorah.org"] },
+    { "id": "otzar-tablet", "name": "אוצר החכמה", "nameEn": "Otzar HaHochma", "url": "https://tablet.otzar.org/", "domains": ["otzar.org"] },
+    { "id": "tashma", "name": "תא שמע", "url": "https://tashma.co.il/", "domains": ["tashma.co.il"], "icon": "https://tashma.co.il/img/newtashma.svg" },
+    { "id": "hameshiv", "name": "המשיב", "url": "https://hameshiv.com/", "domains": ["hameshiv.com"], "icon": "https://hameshiv.com/static/favicon-48.png" },
+    { "id": "responsa", "name": "פרויקט השו\"ת", "nameEn": "Bar-Ilan Responsa Project", "url": "https://www.responsa.co.il/", "domains": ["responsa.co.il"], "icon": "https://www.responsa.co.il/NetisUtils/images/HomePage/logo.gif" },
+    { "id": "hebrewbooks", "name": "היברו-בוקס", "nameEn": "HebrewBooks", "url": "https://hebrewbooks.org/", "domains": ["hebrewbooks.org"] },
+    { "id": "wikisource", "name": "ויקיטקסט", "nameEn": "Hebrew Wikisource", "url": "https://he.wikisource.org/", "domains": ["he.wikisource.org"] },
+    { "id": "dicta", "name": "הספרייה של דיקטה", "nameEn": "Dicta Library", "url": "https://library.dicta.org.il/", "domains": ["library.dicta.org.il"], "icon": "https://library.dicta.org.il/favicon.png" },
+    { "id": "shitufta", "name": "שיתופתא", "url": "https://shitufta.org.il/", "domains": ["shitufta.org.il"], "icon": "https://shitufta.org.il/logo.svg" },
+    { "id": "mgketer", "name": "מקראות גדולות הכתר", "nameEn": "Mikraot Gedolot HaKeter", "url": "https://www.mgketer.org/", "domains": ["mgketer.org"] },
+    { "id": "daf-yomi", "name": "פורטל הדף היומי", "nameEn": "Daf Yomi Portal", "url": "https://daf-yomi.com/dafYomi.aspx", "domains": ["daf-yomi.com"], "icon": "websites-icons/daf-yomi.png" },
+    { "id": "themercava", "name": "המרכבה", "nameEn": "Mercava", "url": "https://www.themercava.com/app/", "domains": ["themercava.com"] },
+    { "id": "jewishbooks", "name": "ויקי ספרי קודש", "url": "https://wiki.jewishbooks.org.il/", "domains": ["wiki.jewishbooks.org.il"], "icon": "https://wiki.jewishbooks.org.il/mediawiki/Fi/favicon.ico" },
+    { "id": "toratemet", "name": "תורת אמת", "nameEn": "Torat Emet", "url": "https://www.toratemetfreeware.com/", "domains": ["toratemetfreeware.com"] }
+  ]
+}

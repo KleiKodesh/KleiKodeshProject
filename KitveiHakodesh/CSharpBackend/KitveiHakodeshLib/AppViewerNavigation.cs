@@ -158,7 +158,7 @@ namespace KitveiHakodeshLib
             if (_dbInjectionScriptId != null)
                 _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_dbInjectionScriptId);
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.Script + "\n" + HostFactsScript());
+                JsBridge.ForAppFramesOnly(JsBridge.Script + "\n" + HostFactsScript()));
 
             _webView.CoreWebView2.Navigate(AppShellUrl);
         }

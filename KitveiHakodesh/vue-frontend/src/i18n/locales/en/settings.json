@@ -327,6 +327,9 @@
     "p12": "The Klei Kodesh project",
     "p13": "The Klei Kodesh project develops a free toolkit for Torah editors and all learners: a library of holy books with search, Torah libraries and websites, Torah document design, vowelization and advanced search. More information and updates on the project site: kleikodesh.github.io",
     "p14": "May we merit to make Torah great and glorious.",
+    "p15": "Otzaria",
+    "p16": "Kitvei Hakodesh uses the book database and other materials of the Otzaria Project (otzaria.org), such as dictionaries and acronym lists, with its permission. All rights in these materials belong to the Otzaria Project and are subject to its license terms. Credit: the Otzaria Project (otzaria.org).",
+    "p17": "The books in the Otzaria library are not covered by the Otzaria software license. Each book remains subject to its own license and permissions, as set by its source and rights holders.",
     "agree": "I have read and agree to the terms"
   },
   "shortcutsList": {
@@ -359,7 +362,7 @@
     "dictionary": "Dictionary",
     "calendar": "Calendar",
     "userSpace": "UserSpace",
-    "hameshiv": "Hameshiv",
+    "websites": "Websites",
     "measuresAndQuantities": "Measurements and quantities",
     "settings": "Settings",
     "bookView": "Book view",

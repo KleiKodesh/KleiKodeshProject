@@ -1,7 +1,6 @@
 import { computed, type Component } from 'vue'
 import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { t } from '@/i18n'
-import { useHameshivUnreachable } from '@/composables/hameshivReachability'
 
 /**
  * The one list of app destinations, in menu order.
@@ -49,16 +48,12 @@ const ALL_NAV_ITEMS: AppNavItem[] = [
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
-  navItem('המשיב', 'hameshiv', 'Ctrl+9'),
+  navItem('אתרים', 'globe', 'Ctrl+9'),
 ]
 
-/** Label of the external hameshiv.com item. */
-export const HAMESHIV_LABEL = 'המשיב'
 
 /** The destinations to show. Reactive so callers that `.value` it keep working. */
-const hameshivUnreachable = useHameshivUnreachable()
-export const APP_NAV_ITEMS = computed<AppNavItem[]>(() =>
-  ALL_NAV_ITEMS.map((item) => item.label === HAMESHIV_LABEL ? { ...item, unreachable: hameshivUnreachable.value } : item))
+export const APP_NAV_ITEMS = computed<AppNavItem[]>(() => ALL_NAV_ITEMS)
 
 /**
  * Workspaces is deliberately NOT in the list above, and has no route at all: it is not a

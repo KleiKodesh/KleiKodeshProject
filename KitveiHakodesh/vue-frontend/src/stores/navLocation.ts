@@ -1,3 +1,4 @@
+import { webOrigin } from '@/features/websites/websitesList'
 import type { Tab, TabRoute } from './tabStore'
 
 /**
@@ -58,6 +59,8 @@ export interface NavLocation {
   localFileHbBookTitle?: string
   isOtzariaAddin?: boolean
   searchQuery?: string
+  /** A /web-view location's address. */
+  webUrl?: string
 
   /** Where in it the reader was. Absent when never captured. */
   position?: LocationPosition
@@ -73,6 +76,9 @@ export interface NavLocation {
  */
 export function locationKey(loc: NavLocation | Tab): string {
   if (loc.route === '/book-view' && loc.bookId !== undefined) return `book:${loc.bookId}`
+  // One entry per SITE (its origin): the address inside it changes as the user browses, and the
+  // entry then resumes at the latest page.
+  if (loc.route === '/web-view' && loc.webUrl) return `web:${webOrigin(loc.webUrl)}`
   if (loc.localFileHbBookId) return `hb:${loc.localFileHbBookId}`
   if (loc.localFilePath) return `file:${loc.localFilePath}`
   if (loc.localFileName) return `filename:${loc.localFileName}`
@@ -118,6 +124,7 @@ const NON_DOCUMENT_ROUTES = new Set<TabRoute>([
   '/hebrew-calendar',
   '/dictionary',
   '/midot',
+  '/websites',
   '/file-search',
   '/user-space',
   '/user-space-search',
@@ -139,6 +146,7 @@ export function locationFromTab(tab: Tab, recentStamp: number, position?: Locati
   if (tab.localFileHbBookTitle) loc.localFileHbBookTitle = tab.localFileHbBookTitle
   if (tab.isOtzariaAddin) loc.isOtzariaAddin = true
   if (tab.searchQuery) loc.searchQuery = tab.searchQuery
+  if (tab.webUrl) loc.webUrl = tab.webUrl
   if (position) loc.position = position
   return loc
 }
@@ -156,5 +164,6 @@ export function tabPatchForLocation(loc: NavLocation): Partial<Omit<Tab, 'id'>> 
     localFileHbBookTitle: loc.localFileHbBookTitle,
     isOtzariaAddin: loc.isOtzariaAddin,
     searchQuery: loc.searchQuery,
+    webUrl: loc.webUrl,
   }
 }

@@ -463,6 +463,15 @@ export function disposeLocalFileHost(filePath: string): void {
  * Toggle the host user control visibility — pops the viewer out into a floating window
  * or returns it to the VSTO task pane / host form.
  */
+/**
+ * Tells the host whether a Torah website's iframe has keyboard focus: while it does, the host
+ * takes the app's shortcut keys from it (AppViewerSiteShortcuts.cs). No-op without a host.
+ */
+export function reportSiteFrameFocus(focused: boolean): void {
+  if (typeof window.__webviewAction !== 'function') return
+  void action('siteFrameFocus', { focused }).catch(() => {})
+}
+
 export function togglePopOut(): void {
   if (!hasHostBridge) return
   action('TogglePopOut').catch(() => {})

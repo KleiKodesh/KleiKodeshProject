@@ -54,6 +54,7 @@ import {
   pruneUncheckedCommentary,
 } from '@/features/book-view/commentary/uncheckedCommentaryBooks'
 import { t } from '@/i18n'
+import { websiteForUrl, websitesRef } from '@/features/websites/websitesList'
 
 export type TabRoute =
   | '/'
@@ -68,6 +69,8 @@ export type TabRoute =
   | '/hebrew-calendar'
   | '/dictionary'
   | '/midot'
+  | '/websites'
+  | '/web-view'
   | '/file-search'
   | '/user-space'
   | '/user-space-search'
@@ -148,6 +151,8 @@ export interface Tab {
   tocPath?: string
   /** Persisted — true when this /html-view tab is hosting an Otzaria addin (manifest.json detected next to the HTML file). */
   isOtzariaAddin?: boolean
+  /** Persisted — the address a /web-view tab shows (a site from public/websites.json). */
+  webUrl?: string
 }
 
 /**
@@ -175,6 +180,7 @@ const IDENTITY_FIELDS = [
   'localFileHbBookId',
   'localFileName',
   'searchQuery',
+  'webUrl',
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
@@ -193,6 +199,7 @@ const HOME_PATCH = {
   localFileHbBookTitle: undefined,
   isOtzariaAddin: undefined,
   searchQuery: undefined,
+  webUrl: undefined,
   tocPath: undefined,
 } satisfies Partial<Omit<Tab, 'id'>>
 
@@ -252,6 +259,7 @@ const WATCHED_FIELDS = [
   'localFileHbBookTitle',
   'pdfViewerTitleBarVisible',
   'isOtzariaAddin',
+  'webUrl',
   'bookId',
   'searchQuery',
   'catalogQuery',
@@ -404,6 +412,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/hebrew-calendar',
     '/dictionary',
     '/midot',
+    '/websites',
     '/file-search',
     '/user-space',
     '/user-space-search',
@@ -415,6 +424,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/hebrew-calendar': t('stores.tabTitle.calendar'),
     '/dictionary': t('stores.tabTitle.dictionary'),
     '/midot': t('stores.tabTitle.midot'),
+    '/websites': t('stores.tabTitle.websites'),
     '/file-search': t('stores.tabTitle.fileSearch'),
     '/user-space': t('stores.tabTitle.userSpace'),
     '/user-space-search': t('stores.tabTitle.userSpaceSearch'),
@@ -1010,6 +1020,10 @@ export const useTabStore = defineStore('tabs', () => {
   function trackTabNavigation(tab: Tab) {
     if (tab.localFileConverting) return
     if (tab.route === '/book-view' && !tab.bookId) return
+    // Only a site on the websites list is a place worth returning to; an address that is not
+    // allowed only shows the "not allowed" message.
+    // (While the list is still loading - a tab restored at startup - the visit is kept.)
+    if (tab.route === '/web-view' && (!tab.webUrl || (websitesRef.value.length > 0 && !websiteForUrl(tab.webUrl)))) return
     if (
       (tab.route === '/pdf-view' ||
         tab.route === '/html-view' ||
@@ -1030,6 +1044,7 @@ export const useTabStore = defineStore('tabs', () => {
       tab.localFileHbBookTitle,
       tab.localFileName,
       tab.isOtzariaAddin,
+      tab.webUrl,
     )
 
     // Folder popularity counts only folders the user actually browsed to. A

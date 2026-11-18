@@ -8,5 +8,5 @@
     // emitted copy silently shadows this config's source. Type-check only.
     "noEmit": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "websitesDevProxy.ts"]
 }

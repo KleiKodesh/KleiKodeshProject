@@ -9,6 +9,7 @@
  *
  * Only this store may access the `app-recently-opened` IDB database.
  */
+import { webOrigin } from '@/features/websites/websitesList'
 import { defineStore } from 'pinia'
 import type { TabRoute } from '@/stores/tabStore'
 import {
@@ -22,7 +23,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/fast-doc-view'
+export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/fast-doc-view' | '/web-view'
 
 export interface RecentlyOpenedEntry extends PopularityScored {
   /** Stable unique key; also what a visit is matched on. */
@@ -47,6 +48,8 @@ export interface RecentlyOpenedEntry extends PopularityScored {
   lastAccessedAt: number
   /** True when the /html-view entry is an Otzaria addin (manifest.json detected next to the HTML file). */
   isOtzariaAddin?: boolean
+  /** Present for /web-view entries: the site address (a site from public/websites.json). */
+  webUrl?: string
 }
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'
@@ -163,8 +166,11 @@ function deriveKey(
   localFilePath?: string,
   localFileHbBookId?: string,
   localFileName?: string,
+  webUrl?: string,
 ): string {
   if (route === '/book-view' && bookId !== undefined) return `book:${bookId}`
+  // One entry per site (origin), resuming at the latest page - see navLocation.locationKey.
+  if (route === '/web-view' && webUrl) return `web:${webOrigin(webUrl)}`
   if (localFileHbBookId) return `hb:${localFileHbBookId}`
   if (localFilePath) return `file:${localFilePath}`
   if (localFileName) return `filename:${localFileName}`
@@ -269,6 +275,7 @@ export const TRACKABLE_ROUTES = new Set<TabRoute>([
   '/pdf-view',
   '/html-view',
   '/fast-doc-view',
+  '/web-view',
 ])
 
 export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
@@ -297,9 +304,10 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     localFileHbBookTitle?: string,
     localFileName?: string,
     isOtzariaAddin?: boolean,
+    webUrl?: string,
   ): void {
-    const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName)
-    const displayTitle = route === '/book-view' ? title : stripFileExtension(title)
+    const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName, webUrl)
+    const displayTitle = route === '/book-view' || route === '/web-view' ? title : stripFileExtension(title)
 
     const now = Date.now()
     const baseEntry: RecentlyOpenedEntry = {
@@ -318,6 +326,7 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
       ...(localFileHbBookTitle ? { localFileHbBookTitle } : {}),
       ...(localFileName ? { localFileName } : {}),
       ...(isOtzariaAddin ? { isOtzariaAddin: true } : {}),
+      ...(webUrl ? { webUrl } : {}),
     }
 
     // The fresh entry carries the current metadata (title, path, flags) but none

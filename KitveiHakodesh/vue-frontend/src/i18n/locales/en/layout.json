@@ -36,10 +36,6 @@
       "label": "Calendar",
       "description": "Hebrew date and daily zmanim"
     },
-    "hameshiv": {
-      "label": "Hameshiv",
-      "description": "Study aid and source finder (needs an internet connection)"
-    },
     "ruler": {
       "label": "Measurements",
       "description": "Convert halachic measures"
@@ -51,6 +47,10 @@
       "failed": "Install did not start - click to retry",
       "installHint": "Click to install. Installing closes Word and the program.",
       "retryHint": "Click to try starting the installer again."
+    },
+    "globe": {
+      "label": "Websites",
+      "description": "Known Torah-book websites, inside the app"
     },
     "settings": {
       "label": "Settings",

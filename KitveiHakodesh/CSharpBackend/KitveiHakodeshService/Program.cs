@@ -90,6 +90,7 @@ internal static partial class Program
             return new global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments(
                 (message, exception) => logger.LogError(exception, "{Message}", message));
         });
+        builder.Services.AddSingleton(_ => new global::KitveiHakodesh.Core.WebsiteIcons.WebsiteIconCache());
         builder.Services.AddSingleton<KitveiHakodeshService.Pdf.WordConversionService>();
         builder.Services.AddSingleton<OwnerRegistry>();
         builder.Services.AddSingleton<Dispatcher>();

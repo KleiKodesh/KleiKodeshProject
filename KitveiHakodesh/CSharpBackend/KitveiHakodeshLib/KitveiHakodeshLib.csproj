@@ -117,6 +117,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="HostTestMode.cs" />
+    <Compile Include="WebSites\WebSitesFrameHeaderStripper.cs" />
+    <Compile Include="AppViewerSiteFrames.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="AppViewerSiteShortcuts.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>

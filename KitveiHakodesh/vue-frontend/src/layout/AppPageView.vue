@@ -52,6 +52,8 @@ const pages: Record<string, unknown> = {
   ),
   '/dictionary': defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue')),
   '/midot': defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue')),
+  '/websites': defineAsyncComponent(() => import('@/features/websites/WebsitesPage.vue')),
+  '/web-view': defineAsyncComponent(() => import('@/features/websites/WebViewPage.vue')),
   '/file-search': defineAsyncComponent(() => import('@/features/local-file-search/LocalFileSearchPage.vue')),
   '/user-space': defineAsyncComponent(() => import('@/features/user-space/UserSpacePage.vue')),
   '/user-space-search': defineAsyncComponent(() => import('@/features/user-space/UserSpaceSearchPage.vue')),

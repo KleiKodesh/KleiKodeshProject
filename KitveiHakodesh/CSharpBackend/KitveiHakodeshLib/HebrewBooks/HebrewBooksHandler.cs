@@ -86,7 +86,9 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 Log("OnDownloadStarting: uri=" + e.DownloadOperation.Uri + " pendingSaveAs=" + _pendingSaveAs.HasValue);
-                if (_pendingSaveAs.HasValue)
+                // Only the HebrewBooks download endpoint: a website download that starts meanwhile
+                // (a site in a web-view tab) must not be saved as the pending book.
+                if (_pendingSaveAs.HasValue && (e.DownloadOperation.Uri ?? "").IndexOf("hebrewbooks.org", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     var saveAs = _pendingSaveAs.Value;
                     _pendingSaveAs = null;

@@ -11,6 +11,7 @@ import net from 'node:net'
 import http from 'node:http'
 import { spawn, exec, type ChildProcess } from 'node:child_process'
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { websitesDevProxy } from './websitesDevProxy.js'
 import { buildBridgeStubScript } from './src/features/html-view/otzariaAddinBridgeStub.js'
 
 // ── KitveiHakodesh service (loopback HTTP host + private pipe handshake) ────────
@@ -851,6 +852,7 @@ function devSqlitePlugin(): Plugin {
 export default defineConfig({
   plugins: [
     devSqlitePlugin(),
+    websitesDevProxy(),
     vue(),
     // Precompiles src/i18n/locales/**/*.json so the runtime-only vue-i18n build ships (no message compiler).
     VueI18nPlugin({ include: [fileURLToPath(new URL('./src/i18n/locales/**', import.meta.url))], runtimeOnly: true, compositionOnly: true, fullInstall: false }),

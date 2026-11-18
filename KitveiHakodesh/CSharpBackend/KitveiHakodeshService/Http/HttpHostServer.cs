@@ -36,6 +36,7 @@ public sealed class HttpHostServer(
     KitveiHakodeshService.Catalog.CatalogTocSearchService catalogToc,
     KitveiHakodeshService.LocalFiles.LocalFileIndexService localFiles,
     global::KitveiHakodesh.Core.FastDocView.FastDocViewOpenDocuments fastDocViewDocuments,
+    global::KitveiHakodesh.Core.WebsiteIcons.WebsiteIconCache websiteIcons,
     ILogger<HttpHostServer> logger) : BackgroundService
 {
     private TcpListener? _listener;
@@ -174,6 +175,16 @@ public sealed class HttpHostServer(
                 if (req.Method == "GET" && req.Path.StartsWith(FastDocViewPicturePrefix, StringComparison.Ordinal))
                 {
                     await ServeFastDocViewPictureAsync(stream, req, ct);
+                    return;
+                }
+
+                // GET /website-icon?url=<icon address> - a Websites-page icon from Core's disk cache, for a
+                // plain <img>. Tokenless like the picture route: Core only fetches http(s) image responses
+                // (2 MB cap) from PUBLIC internet addresses only (no localhost / LAN), and keeps at most 200.
+                // Unknown = a plain 404.
+                if (req.Method == "GET" && req.Path.StartsWith(WebsiteIconPath, StringComparison.Ordinal))
+                {
+                    await ServeWebsiteIconAsync(stream, req, ct);
                     return;
                 }
 
@@ -352,6 +363,24 @@ public sealed class HttpHostServer(
                 await CopyExactAsync(fs, stream, length, ct);
             }
         }
+    }
+
+    private const string WebsiteIconPath = "/website-icon?url=";
+
+    /// <summary>One website icon (see the route above). The browser keeps it a day too.</summary>
+    private async Task ServeWebsiteIconAsync(NetworkStream stream, HttpProtocol.Request req, CancellationToken ct)
+    {
+        string url = UnescapePath(req.Path[WebsiteIconPath.Length..]);
+        global::KitveiHakodesh.Core.WebsiteIcons.WebsiteIcon? icon = null;
+        try { icon = await websiteIcons.GetAsync(url, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogDebug(ex, "Website icon not served"); }
+        if (icon is null)
+        {
+            await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+            return;
+        }
+        await HttpProtocol.WriteBufferedAsync(stream, 200, "OK", icon.ContentType, icon.Bytes, req.Origin, ct,
+            cacheControl: "private, max-age=86400");
     }
 
     private const string FastDocViewPicturePrefix = "/fast-doc-view-picture/";

@@ -7,7 +7,7 @@ import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
-import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM, HAMESHIV_LABEL } from '@/layout/appNavItems'
+import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from '@/layout/appNavItems'
 import { t } from '@/i18n'
 import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
 
@@ -54,7 +54,7 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
       navDestination('dict', 'מילון'),
       navDestination('calendar', 'לוח שנה'),
       navDestination('ruler', 'מידות ושיעורים'),
-      navDestination('hameshiv', HAMESHIV_LABEL),
+      navDestination('globe', 'אתרים'),
       navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({
