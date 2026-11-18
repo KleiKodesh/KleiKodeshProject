@@ -62,27 +62,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
-        /// Exits the installer after a successful install. On a clean install (not an
-        /// update) the add-in only finishes setting up the first time Word loads it, so
-        /// offer to open Word first.
+        /// Exits the installer after a successful install. There used to be an "open Word
+        /// to finish the installation" prompt here: Word's first load showed VSTO's
+        /// "install this add-in?" trust prompt. The installer now writes the trust entry
+        /// in the form VSTO accepts, so there is nothing left to finish in Word.
         /// </summary>
-        public static void ExitAfterInstall()
-        {
-            if (InstallRunner.IsCleanInstall && !IsWordRunning())
-            {
-                var r = MessageBox.Show(
-                    Strings.Word_OpenToFinish,
-                    Strings.Word_OpenToFinishTitle,
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question,
-                    MessageBoxResult.Yes,
-                    UiLanguage.MessageBoxOptions);
-
-                if (r == MessageBoxResult.Yes)
-                    try { Process.Start(new ProcessStartInfo("winword.exe") { UseShellExecute = true }); } catch { }
-            }
-            Environment.Exit(0);
-        }
+        public static void ExitAfterInstall() => Environment.Exit(0);
 
         /// <summary>
         /// Variant used by RepairPage — asks to close Word before cleanup (not install).
