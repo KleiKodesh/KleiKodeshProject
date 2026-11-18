@@ -36,7 +36,9 @@ export interface WidgetWindowState {
 }
 
 const FIT_CONTENT = new Set<WidgetId>(['worldClock', 'zmanim', 'learning'])
-const CUSTOM_SIZE = { width: 480, height: 560 }
+/** A widget window's size; also the size of a panel moved to its own window (DetachedWindow). */
+export const WIDGET_WINDOW_SIZE = { width: 480, height: 560 }
+const CUSTOM_SIZE = WIDGET_WINDOW_SIZE
 const DEFAULT_SIZE: Record<BuiltinWidgetId, { width: number; height: number }> = {
   dict: { width: 400, height: 560 },
   calendar: { width: 440, height: 560 },

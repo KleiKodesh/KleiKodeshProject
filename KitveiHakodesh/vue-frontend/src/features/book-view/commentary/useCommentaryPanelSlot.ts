@@ -13,6 +13,9 @@
  *   - scroll position, and its save/restore across close and remount
  *   - the in-panel search (Ctrl+F) and its render cache
  *   - the divider position
+ *   - whether it is shown in its own window (useCommentaryPanelDetach)
+ *   - which line it shows: the book's, or its own while it does not follow the
+ *     book (useCommentaryPanelSource)
  *
  * That is what makes the two panels genuinely independent views of one line.
  */
@@ -23,6 +26,8 @@ import { useCommentaryRender } from './useCommentaryRender'
 import { useGroupsForDisplay, filterVisibleGroups } from './useCommentary'
 import { commentaryScopeKey } from './uncheckedCommentaryBooks'
 import { usePinnedCommentary } from '../useBookViewPinnedCommentary'
+import { useCommentaryPanelDetach } from './useCommentaryPanelDetach'
+import { useCommentaryPanelSource } from './useCommentaryPanelSource'
 import { useBookViewCommentaryPanel } from '../useBookViewCommentaryPanel'
 import type { CommentaryGroup } from './useCommentary'
 import type { CommentarySlot, CommentaryTreeState } from '../bookViewTypes'
@@ -83,6 +88,12 @@ export interface SharedCommentaryDeps {
    *  whose POSITION comes from that ordering. */
   staticFilterGroupsLoaded: import('vue').Ref<boolean>
   loading: import('vue').Ref<boolean>
+  loadError: import('vue').Ref<boolean>
+  /** The lines the commentary covers when a whole section or a range is picked. */
+  sectionLineIds: () => number[] | null
+  sectionRange: () => { fromIndex: number; toIndex: number } | null
+  ensureLineContents: (lineIds: number[], readAheadLineIds?: number[]) => Promise<void>
+  trimLineContents: (panel: CommentarySlot, keep: ((lineId: number) => boolean) | null) => void
   selectedLineId: import('vue').Ref<number | null>
   commentaryLineId: import('vue').Ref<number | null>
   hasCommentaries: import('vue').Ref<boolean>
@@ -109,25 +120,30 @@ export function useCommentaryPanelSlot(
   const getCommentaryZoom = () =>
     shared.bookId != null ? bookViewStore.getCommentaryZoom(tabId, shared.bookId, slot) : 100
 
+  // The line this panel shows and its commentary: the book's, unless the panel is in
+  // its own window and was told to stop following the book.
+  const detachment = useCommentaryPanelDetach()
+  const source = useCommentaryPanelSource(slot, shared.bookId, shared, detachment.followsBook)
+
   const treeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
   const fraction = ref(DEFAULT_FRACTION[slot])
 
   const { pinnedCommentaryGroup, isPinSettled, restorePin, setCommentator, pinExplicitly } = usePinnedCommentary(
     shared.bookId,
-    () => shared.commentaryLineId.value,
-    () => shared.groups.value,
+    () => source.commentaryLineId.value,
+    () => source.groups.value,
     DEFAULT_COMMENTATOR_RANK[slot],
     FALLS_BACK_TO_FIRST_DEFAULT[slot],
   )
 
   const groupsForDisplay = useGroupsForDisplay(
-    () => shared.groups.value,
+    () => source.groups.value,
     () => pinnedCommentaryGroup.value?.bookId ?? null,
     () => shared.staticFilterGroups.value,
-    () => shared.loading.value,
-    () => shared.selectedLineId.value,
+    () => source.loading.value,
+    () => source.selectedLineId.value,
     () => shared.staticFilterGroupsLoaded.value,
-    () => shared.commentaryLineId.value,
+    () => source.commentaryLineId.value,
   )
 
   // Exactly the rows this panel renders. The panel's search scans this same list,
@@ -169,8 +185,12 @@ export function useCommentaryPanelSlot(
   // narrowing past the side columns' minimum width. All three funnel through
   // commentaryVisible, so watching it covers every path - an orphaned tree with
   // no panel beside it was the failure mode worth designing out.
+  // A detached panel that closes is no longer detached: reopening it puts it back in
+  // its place in the book view.
   watch(panel.commentaryVisible, (visible) => {
-    if (!visible) filterOpen.value = false
+    if (visible) return
+    filterOpen.value = false
+    detachment.attach()
   })
 
   // Per panel: the render cache is keyed partly by the active search query, and
@@ -197,6 +217,8 @@ export function useCommentaryPanelSlot(
     toggleFilter,
     closeFilter,
     fraction,
+    detachment,
+    source,
     pinnedCommentaryGroup,
     isPinSettled,
     restorePin,

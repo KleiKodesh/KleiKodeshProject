@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 
@@ -19,6 +20,7 @@ import { useEventListener } from '@vueuse/core'
  * genuine whole-container selection is intact.
  */
 export function useSelectAllInContainer(containerRef: Ref<HTMLElement | null>) {
+  const hostWindow = useHostWindow()
   const isSelectAll = ref(false)
   // The range selectAll() put in place. A live Range, so it follows the container's
   // children as virtualized rows mount and unmount — the select-all stays recognised
@@ -28,9 +30,9 @@ export function useSelectAllInContainer(containerRef: Ref<HTMLElement | null>) {
   function selectAll(): void {
     const container = containerRef.value
     if (!container) return
-    const selection = window.getSelection()
+    const selection = hostWindow.getSelection()
     if (!selection) return
-    const range = document.createRange()
+    const range = hostWindow.document.createRange()
     range.selectNodeContents(container)
     selection.removeAllRanges()
     selection.addRange(range)
@@ -53,9 +55,9 @@ export function useSelectAllInContainer(containerRef: Ref<HTMLElement | null>) {
   // whole-container select-all. Not only on collapse: a new partial selection can
   // replace the select-all without ever collapsing (double-click, Shift+click,
   // keyboard), and copy would then still export the whole book.
-  useEventListener('selectionchange', () => {
+  useEventListener(hostWindow, 'selectionchange', () => {
     if (!isSelectAll.value) return
-    if (isStillSelectAll(window.getSelection())) return
+    if (isStillSelectAll(hostWindow.getSelection())) return
     isSelectAll.value = false
     selectAllRange = null
   })

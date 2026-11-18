@@ -45,7 +45,7 @@ interface CommentaryErrorReportOptions {
 
 /** The selected text as PLAIN text, or '' when nothing in this pane is selected. */
 function readSelectedText(scrollerEl: HTMLElement | null): string {
-  const selection = window.getSelection()
+  const selection = (scrollerEl?.ownerDocument ?? document).getSelection()
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return ''
   if (scrollerEl && !scrollerEl.contains(selection.anchorNode)) return ''
   return selection.toString().trim()
@@ -62,7 +62,7 @@ export function useCommentaryErrorReport(options: CommentaryErrorReportOptions):
   let pressedLineId: number | null = null
 
   function lineIdFromNode(node: Node | null): number | null {
-    const element = node instanceof Element ? node : (node?.parentElement ?? null)
+    const element = (node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement) ?? null
     const lineEl = element?.closest('[data-line-id]') as HTMLElement | null
     const raw = lineEl?.dataset['lineId']
     if (raw == null) return null

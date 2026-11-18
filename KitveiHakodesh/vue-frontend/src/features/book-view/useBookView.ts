@@ -45,6 +45,7 @@ import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotat
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { CommentaryPanel } from './commentary/useCommentaryPanelSlot'
+import type { OwnCommentaryAnchor } from './commentary/useCommentaryPanelSource'
 import type {
   CommentaryPanelLiveStates,
   CommentarySlot,
@@ -231,6 +232,11 @@ export function useBookView(
     staticFilterGroups,
     staticFilterGroupsLoaded,
     loading: commentaryLoading,
+    loadError: commentaryLoadError,
+    sectionLineIds: () => selectedSectionLineIds.value,
+    sectionRange: () => selectedSectionLineRange.value,
+    ensureLineContents,
+    trimLineContents,
     selectedLineId,
     commentaryLineId,
     hasCommentaries,
@@ -439,6 +445,7 @@ export function useBookView(
       })
     },
     userScrollTick,
+    (slot) => panels[slot].detachment.isDetached.value,
   )
 
   // In-session search query: restore the last query for this tab (kept in the
@@ -541,8 +548,31 @@ export function useBookView(
     panels[slot].pinExplicitly(commentaryBookId)
   }
 
+  /**
+   * Section navigation for a panel that does not follow the book: the same steps, over
+   * the panel's own line. The book's line, selection and scroll place are not touched.
+   */
+  const ownAnchorNavigation = new WeakMap<OwnCommentaryAnchor, ReturnType<typeof useCommentaryNavigation>>()
+  function navigationOverOwnAnchor(slot: CommentarySlot, anchor: OwnCommentaryAnchor) {
+    let navigation = ownAnchorNavigation.get(anchor)
+    if (!navigation) {
+      navigation = useCommentaryNavigation(
+        bookId, anchor.selectedLineId, anchor.commentaryLineId, panels[slot].visible,
+        () => lines.value, () => tocEntries.value, () => null,
+        () => null,
+        anchor.clearSection,
+        (_targetLineId, commentaryBookId, anchorChanges) =>
+          stagePinsForNavigation(slot, commentaryBookId, anchorChanges),
+      )
+      ownAnchorNavigation.set(anchor, navigation)
+    }
+    return navigation
+  }
+
   function onNavigateSection(slot: CommentarySlot, direction: 'next' | 'prev', commentaryBookId: number) {
-    return commentaryNavigation[slot].onNavigateSection(direction, commentaryBookId)
+    const ownAnchor = panels[slot].source.ownAnchor.value
+    const navigation = ownAnchor ? navigationOverOwnAnchor(slot, ownAnchor) : commentaryNavigation[slot]
+    return navigation.onNavigateSection(direction, commentaryBookId)
   }
 
   function openBookTarget(targetBookId: number, lineIndex: number | undefined) {

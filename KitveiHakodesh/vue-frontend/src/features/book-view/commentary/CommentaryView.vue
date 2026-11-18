@@ -6,6 +6,7 @@ import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import WindowedScroller from '@/components/WindowedScroller.vue'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -86,7 +87,7 @@ const props = defineProps<{
    * Resolves once these lines have their text. The windowed scroller asks for a
    * range's lines before mounting it, so a line is never on screen without its text.
    */
-  ensureLineContents: (lineIds: number[]) => Promise<void>
+  ensureLineContents: (lineIds: number[], readAheadLineIds?: number[]) => Promise<void>
   /**
    * Releases the text of lines far from the window, keeping the ones `keep` names
    * (see useCommentary's bounded text cache). Called after the window moves.
@@ -113,6 +114,9 @@ const props = defineProps<{
   currentMatchOccurrence?: number
   pinnedGroup?: PinnedCommentaryGroup | null
   filterVisible?: boolean
+  /** The panel is shown in its own window, and whether it follows the book there. */
+  detached?: boolean
+  followsBook?: boolean
   /**
    * The place this panel was last at (row + pixels into it), or null. Kept by the
    * panel's owner so it outlives this view. It is what a scroller is CREATED at when
@@ -129,6 +133,8 @@ const emit = defineEmits<{
   'open-book': [bookId: number, lineIndex: number]
   'toggle-filter-panel': []
   'toggle-search': []
+  'toggle-detached': []
+  'toggle-follows-book': []
   scroll: [scrollIndex: number, scrollOffset: number]
   /** The reader put this panel on a commentator (scrolled it there, or picked it). */
   commentator: [group: { bookId: number; sectionLabel: string; subSectionLabel: string }]
@@ -167,6 +173,8 @@ type FlatItem =
   // rebuilt only when the groups change - TOC paths arriving do not touch it. Text arriving in (or
   // released from) a line re-renders that row alone, not the whole list.
   | { type: 'line'; line: CommentaryLine }
+
+const hostWindow = useHostWindow()
 
 // The windowed scroller mounts only the rows around the viewport, fetched before
 // they are mounted. Its viewport is the scroll element every listener below uses;
@@ -244,7 +252,7 @@ const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   // Ctrl+C is intercepted so it takes the same path as the menu's copy: the export
   // warm-up has to be awaited before the clipboard event fires (see prepareAndCopy).
   onCtrlC: () => onCommentaryCopy(),
-  onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
+  onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {}), hostWindow.document),
   onCtrlShiftC: () => onCommentarySearchInRepository(),
 })
 
@@ -281,9 +289,21 @@ function lineIdsIn(start: number, end: number): number[] {
   return ids
 }
 
+// Rows of text fetched beyond the ones the scroller asks for, on the side it is moving
+// to: the window grows a few rows at a time, and a request per step leaves a fast
+// scroll waiting at the end of the mounted rows.
+const READ_AHEAD_ROWS = 0
+
 /** The scroller's row source: the text of a range's lines, fetched before the range mounts. */
 function ensureRows(start: number, end: number): Promise<void> {
-  return props.ensureLineContents(lineIdsIn(start, end))
+  const mounted = windowedScroller.value?.renderedRange
+  const isGrowingUp = mounted != null && mounted.end > mounted.start && end <= mounted.start
+  const isGrowingDown = mounted != null && mounted.end > mounted.start && start >= mounted.end
+  const readAhead = [
+    ...(isGrowingDown ? [] : lineIdsIn(start - READ_AHEAD_ROWS, start)),
+    ...(isGrowingUp ? [] : lineIdsIn(end, end + READ_AHEAD_ROWS)),
+  ]
+  return props.ensureLineContents(lineIdsIn(start, end), readAhead)
 }
 
 /** Every real line id the panel shows, in reading order: the select-all copy scope. */
@@ -797,6 +817,10 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
           :active-pinned-group="isScrollerOpen ? activePinnedGroup : (props.pinnedGroup ?? null)"
           :filter-visible="props.filterVisible"
           :active-toc-path="activeTocPath"
+          :detached="props.detached"
+          :follows-book="props.followsBook"
+          @toggle-detached="emit('toggle-detached')"
+          @toggle-follows-book="emit('toggle-follows-book')"
           @navigate-section="(d, id) => emit('navigate-section', d, id)"
           @toggle-filter="emit('toggle-filter-panel')"
           @toggle-search="emit('toggle-search')"

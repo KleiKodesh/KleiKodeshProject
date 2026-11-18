@@ -10,6 +10,7 @@
  * and clamped to the viewport vertically. It hangs off the scrollbar's inner edge,
  * so it reads into the page rather than off the window edge.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import type { ScrollbarTocTooltipData } from './useBookViewScrollbarTocTooltip'
@@ -17,6 +18,8 @@ import type { ScrollbarTocTooltipData } from './useBookViewScrollbarTocTooltip'
 const props = defineProps<{ data: ScrollbarTocTooltipData }>()
 
 const labelEl = ref<HTMLElement | null>(null)
+const hostWindow = useHostWindow()
+
 // Observed rather than measured once: this component is NOT remounted per update
 // (there is no changing key), and the box resizes on its own as a drag swaps in
 // paths that wrap to a different number of lines. A one-shot onMounted read would
@@ -28,7 +31,7 @@ const labelEl = ref<HTMLElement | null>(null)
 // the ResizeObserver first fires. Left at the content-box default, the label would
 // paint centred on the first frame, then drop by half its 12px of chrome on the next
 // and stay 6px low from then on. Same trap, same fix as useBookViewToolbarOverflow.
-const { height } = useElementSize(labelEl, undefined, { box: 'border-box' })
+const { height } = useElementSize(labelEl, undefined, { box: 'border-box', window: hostWindow })
 
 const GAP_PX = 8
 const VIEWPORT_MARGIN_PX = 4
@@ -36,7 +39,7 @@ const VIEWPORT_MARGIN_PX = 4
 const style = computed(() => {
   const top = Math.min(
     Math.max(VIEWPORT_MARGIN_PX, props.data.pointerY - height.value / 2),
-    Math.max(VIEWPORT_MARGIN_PX, window.innerHeight - height.value - VIEWPORT_MARGIN_PX),
+    Math.max(VIEWPORT_MARGIN_PX, hostWindow.innerHeight - height.value - VIEWPORT_MARGIN_PX),
   )
   const style: Record<string, string> = {
     top: `${top}px`,
@@ -48,14 +51,14 @@ const style = computed(() => {
   if (props.data.side === 'left') {
     style.left = `${props.data.edgeX + GAP_PX}px`
   } else {
-    style.right = `${Math.max(0, window.innerWidth - props.data.edgeX) + GAP_PX}px`
+    style.right = `${Math.max(0, hostWindow.innerWidth - props.data.edgeX) + GAP_PX}px`
   }
   return style
 })
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div dir="rtl" ref="labelEl" class="scrollbar-toc-tooltip" :class="{ 'follows-thumb': data.followsThumb }" :style="style">
       <div v-if="data.bookTitle" class="book-title">{{ data.bookTitle }}</div>
       <div v-if="data.path" class="toc-path">{{ data.path }}</div>

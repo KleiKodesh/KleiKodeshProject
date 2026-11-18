@@ -9,8 +9,9 @@ import { onLongPress, type MaybeElementRef } from '@vueuse/core'
  * a click that changes the commentary line, or a long-press that pops the context
  * menu over the text the user is in the middle of selecting.
  */
-export function hasActiveTextSelection(): boolean {
-  const selection = window.getSelection()
+/** `selectionOwner`: the document the text is in - a detached window has its own selection. */
+export function hasActiveTextSelection(selectionOwner: Document = document): boolean {
+  const selection = selectionOwner.getSelection()
   return !!selection && !selection.isCollapsed && selection.toString().trim() !== ''
 }
 
@@ -42,7 +43,7 @@ export function useContextMenuLongPress(
     target,
     (event) => {
       if (event.pointerType === 'mouse') return
-      if (hasActiveTextSelection()) return
+      if (hasActiveTextSelection((event.target as Node | null)?.ownerDocument ?? document)) return
       onTrigger(event)
     },
     { delay: LONG_PRESS_DELAY },

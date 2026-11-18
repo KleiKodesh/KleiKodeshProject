@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { t } from '@/i18n'
 import { nextTick, watch } from 'vue'
 import type { Ref } from 'vue'
@@ -114,6 +115,7 @@ export function useCommentaryCopy(
   /** Opens the "report a mistake" dialog for the pressed commentary line. */
   onReportError?: () => void,
 ) {
+  const hostWindow = useHostWindow()
   const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
@@ -183,7 +185,7 @@ export function useCommentaryCopy(
   function extractSelectionOnCommentaryLines(): SelectionOnCommentaryLine[] {
     const scroller = scrollerEl.value
     if (!scroller) return []
-    const sel = window.getSelection()
+    const sel = hostWindow.getSelection()
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return []
     const range = sel.getRangeAt(0)
 
@@ -206,7 +208,7 @@ export function useCommentaryCopy(
       const strippedText = (lineEl.textContent ?? '').replace(/[\u0591-\u05C7]/g, '')
 
       function countStrippedOffset(node: Node, offsetInNode: number): number {
-        const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
+        const walker = hostWindow.document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT)
         let stripped = 0
         let current: Text | null
         while ((current = walker.nextNode() as Text | null)) {
@@ -301,7 +303,7 @@ export function useCommentaryCopy(
     const lines = extractSelectionOnCommentaryLines()
     if (!lines.length) return
     const firstLine = lines[0]!
-    const rawQuote = window.getSelection()?.toString() ?? ''
+    const rawQuote = hostWindow.getSelection()?.toString() ?? ''
     const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
     restoreSelectionAfterAnnotation([
       onAddNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote),
@@ -457,7 +459,7 @@ export function useCommentaryCopy(
       joined = getAllContentHtml()
       if (!joined.trim()) return null
     } else {
-      const sel = window.getSelection()
+      const sel = hostWindow.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
 
@@ -574,7 +576,7 @@ export function useCommentaryCopy(
         // Normal selection: re-collect from the intersected DOM lines for complete
         // line content (the range may cut a line short, but the whole line is wanted).
         const scroller = scrollerEl.value
-        const sel = window.getSelection()
+        const sel = hostWindow.getSelection()
         if (scroller && sel && sel.rangeCount > 0) {
           const range = sel.getRangeAt(0)
           const blobLines = Array.from(scroller.querySelectorAll('.line'))
@@ -603,7 +605,7 @@ export function useCommentaryCopy(
 
   /** The current selection's rendered markup, for resolving the citations inside it. */
   function selectionHtml(): string {
-    const sel = window.getSelection()
+    const sel = hostWindow.getSelection()
     if (!sel || sel.rangeCount === 0) return ''
     const holder = document.createElement('div')
     holder.appendChild(sel.getRangeAt(0).cloneContents())
@@ -658,7 +660,7 @@ export function useCommentaryCopy(
         await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
     }
-    triggerCopy(afterCopy)
+    triggerCopy(afterCopy, hostWindow.document)
   }
 
   // Select-all is the one case whose warm-up can be big, so it runs here — outside
@@ -686,7 +688,7 @@ export function useCommentaryCopy(
   }
 
   function onSearchInRepository(): void {
-    const sel = window.getSelection()
+    const sel = hostWindow.getSelection()
     if (!sel || sel.rangeCount === 0) return
     const range = sel.getRangeAt(0)
     const fragment = range.cloneContents()

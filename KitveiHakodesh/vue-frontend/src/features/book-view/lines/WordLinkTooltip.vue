@@ -23,6 +23,7 @@
  * dead space where a `mouseout` would look like leaving — it hangs off whichever
  * edge faces the anchor, hence the `is-above`/`is-below` class.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
@@ -64,6 +65,8 @@ const headingStyle = computed(() => ({
 const bodyStyle = computed(() => ({
   fontFamily: settingsStore.commentaryTextFont,
 }))
+
+const hostWindow = useHostWindow()
 
 /**
  * Adjust the font size for the tooltip. Size is stored in percent (50-200).
@@ -201,8 +204,8 @@ const resolvedMaxWidth = ref<number | null>(null)
  */
 function computePosition() {
   const rect = props.data.anchorRect
-  const viewportW = window.innerWidth
-  const viewportH = window.innerHeight
+  const viewportW = hostWindow.innerWidth
+  const viewportH = hostWindow.innerHeight
   const width = tooltipRef.value?.offsetWidth ?? MAX_WIDTH
   const height = tooltipRef.value?.offsetHeight ?? 60
 
@@ -422,7 +425,7 @@ function scrollToFocusLine() {
     if (isSamePosition(el.scrollTop, target) || ++passes > MAX_SCROLL_PASSES) return
     el.scrollTop = target
     written = el.scrollTop
-    requestAnimationFrame(settle)
+    hostWindow.requestAnimationFrame(settle)
   }
   settle()
 }
@@ -463,13 +466,13 @@ onMounted(() => {
  * the scroll listener in useWordLinkTooltip). A hover preview is cheap to
  * re-summon and has no state worth preserving across a layout change.
  */
-useEventListener(() => window, 'resize', () => emit('close'))
+useEventListener(hostWindow, 'resize', () => emit('close'))
 
 
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <div
       ref="tooltipRef"
       class="word-link-tooltip"

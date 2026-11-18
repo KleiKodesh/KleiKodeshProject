@@ -45,7 +45,13 @@
     "prevSection": "Previous section",
     "searchPlaceholder": "Find commentary...",
     "tree": "Commentary tree",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "attach": "Return to the book window",
+    "detach": "Open in a separate window",
+    "detachBlocked": "The separate window could not be opened",
+    "detachedTitle": "{book} - Commentaries",
+    "followBookStart": "Follow the book again",
+    "followBookStop": "Stop following the book (stay on this line)"
   },
   "copy": {
     "copy": "Copy",

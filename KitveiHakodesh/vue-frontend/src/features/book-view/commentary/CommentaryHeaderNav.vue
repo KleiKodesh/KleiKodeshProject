@@ -9,8 +9,11 @@ import {
   IconMinimize20Regular,
   IconBookOpen20Regular,
   IconFilter20Regular,
+  IconLink20Regular,
+  IconLinkDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryGroup } from './useCommentary'
+import PaneWindowGlyph from '@/components/PaneWindowGlyph.vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { commentaryDisplayTitle } from './commentaryGroupBuilder'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
@@ -24,6 +27,10 @@ const props = defineProps<{
   activePinnedGroup: PinnedCommentaryGroup | null
   filterVisible?: boolean
   activeTocPath?: string
+  /** The panel is shown in its own window. */
+  detached?: boolean
+  /** A detached panel: whether it changes with the line picked in the book. */
+  followsBook?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,6 +38,8 @@ const emit = defineEmits<{
   'toggle-filter': []
   'toggle-search': []
   'open-book': [bookId: number, lineIndex: number]
+  'toggle-detached': []
+  'toggle-follows-book': []
   close: []
 }>()
 
@@ -212,6 +221,25 @@ function handleKeydown(e: KeyboardEvent) {
       @click.stop="openActiveBook()"
     >
       <IconBookOpen20Regular />
+    </button>
+    <button
+      v-if="detached"
+      class="btn c-pointer hover-bg"
+      :class="{ active: followsBook }"
+      data-testid="commentary-follow-book"
+      :title="followsBook ? $t('bookView.commentary.followBookStop') : $t('bookView.commentary.followBookStart')"
+      @click.stop="emit('toggle-follows-book')"
+    >
+      <IconLink20Regular v-if="followsBook" />
+      <IconLinkDismiss20Regular v-else />
+    </button>
+    <button
+      class="btn c-pointer hover-bg"
+      data-testid="commentary-toggle-detached"
+      :title="detached ? $t('bookView.commentary.attach') : $t('bookView.commentary.detach')"
+      @click.stop="emit('toggle-detached')"
+    >
+      <PaneWindowGlyph :kind="detached ? 'pop-in' : 'pop-out'" />
     </button>
     <button
       class="btn c-pointer hover-bg close-btn"

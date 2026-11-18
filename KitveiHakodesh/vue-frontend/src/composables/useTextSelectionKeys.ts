@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useSelectAllInContainer } from './useSelectAllInContainer'
@@ -18,13 +19,15 @@ export function useScopedKeys(
     onCtrlShiftC?: () => void
   },
 ) {
+  const hostWindow = useHostWindow()
+
   // Select-all detection lives in a standalone composable so features that only need
   // the boolean (not the key handling) can reuse it. Ctrl+A here just drives it.
   const { isSelectAll, selectAll: selectAllInContainer } = useSelectAllInContainer(containerRef)
 
-  useEventListener('keydown', (event: KeyboardEvent) => {
+  useEventListener(hostWindow, 'keydown', (event: KeyboardEvent) => {
     const container = containerRef.value
-    if (!container || document.activeElement !== container) return
+    if (!container || hostWindow.document.activeElement !== container) return
     const ctrl = event.ctrlKey || event.metaKey
     if (!ctrl) return
 

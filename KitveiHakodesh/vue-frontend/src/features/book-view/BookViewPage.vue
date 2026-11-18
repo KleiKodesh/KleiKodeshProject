@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, inject, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, inject, onBeforeUnmount, shallowReactive } from 'vue'
 import { useResizeObserver, watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
@@ -16,6 +16,7 @@ import SidePanel from '@/components/SidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
+import DetachedWindow from '@/components/DetachedWindow.vue'
 import BookViewHebrewBooksSideEdition from './BookViewHebrewBooksSideEdition.vue'
 import { useUserEditionsStore } from '@/stores/userEditionsStore'
 import { userItemAsEdition } from './useBookEditionOpen'
@@ -24,7 +25,7 @@ import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionS
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { cancelWordExport } from '@/webview-host/bridge'
 import { useSidePanelLayout } from '@/composables/useSidePanelLayout'
-import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
+import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS, COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot, SideEditionPersistState } from './bookViewTypes'
 import { useI18n } from 'vue-i18n'
 import BookViewReadAloudPanel from './BookViewReadAloudPanel.vue'
@@ -42,6 +43,14 @@ const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const bottomHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const sideHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const sideLeftHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
+// A panel shown in its own window is rendered by a different host (see "Commentary
+// panels in their own window" below); while it exists it is that slot's panel.
+type PanelHost = InstanceType<typeof CommentaryPanelHost>
+const detachedHostRefs = shallowReactive<Record<CommentarySlot, PanelHost | null>>({
+  bottom: null,
+  side: null,
+  'side-left': null,
+})
 // The TOC renders docked beside the text on a wide pane and as an overlay
 // otherwise — never both, so persistence reads whichever is live.
 const tocTreeDockedRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
@@ -112,9 +121,9 @@ const {
   () => linesContentRef.value,
   () => searchBarRef.value,
   {
-    bottom: () => bottomHostRef.value?.view ?? null,
-    side: () => sideHostRef.value?.view ?? null,
-    'side-left': () => sideLeftHostRef.value?.view ?? null,
+    bottom: () => (detachedHostRefs.bottom ?? bottomHostRef.value)?.view ?? null,
+    side: () => (detachedHostRefs.side ?? sideHostRef.value)?.view ?? null,
+    'side-left': () => (detachedHostRefs['side-left'] ?? sideLeftHostRef.value)?.view ?? null,
   },
   // Only one of the two ever renders (docked on a wide pane, overlay otherwise).
   () => tocTreeDockedRef.value ?? tocTreeOverlayRef.value ?? null,
@@ -123,23 +132,42 @@ const {
 // The side panels need a pane wide enough to sit beside the text. Rendering is
 // gated on both flags so a pane that narrows never shows a cramped column, and
 // the watcher below closes them so their toggles and the search bar agree.
-const sideCommentaryOpen = computed(() => panels.side.visible.value && isWideScreen.value)
-const sideLeftCommentaryOpen = computed(() => panels['side-left'].visible.value && isWideScreen.value)
+// ── Commentary panels in their own window ───────────────────────────────────
+// A detached panel leaves its place in the book view (the text takes the room) and
+// is rendered inside a DetachedWindow at the end of the template. It is the same
+// panel object, so its commentator, filter, search and place carry over both ways.
+function isDetached(slot: CommentarySlot): boolean {
+  return panels[slot].visible.value && panels[slot].detachment.isDetached.value
+}
+const detachedSlots = computed(() => COMMENTARY_SLOTS.filter(isDetached))
+const detachedWindowTitle = computed(() => t('bookView.commentary.detachedTitle', { book: bookTitle }))
+
+/** The window could not open (a browser's popup blocker): the panel stays in its place. */
+function onDetachBlocked(slot: CommentarySlot) {
+  panels[slot].detachment.attach()
+  showToast(t('bookView.commentary.detachBlocked'), { variant: 'error' })
+}
+
+/** Open in its place inside the book view (not closed, not in its own window). */
+function isOpenInPlace(slot: CommentarySlot): boolean {
+  return panels[slot].visible.value && !panels[slot].detachment.isDetached.value
+}
+const bottomCommentaryOpen = computed(() => isOpenInPlace('bottom'))
+const sideCommentaryOpen = computed(() => isOpenInPlace('side') && isWideScreen.value)
+const sideLeftCommentaryOpen = computed(() => isOpenInPlace('side-left') && isWideScreen.value)
 
 // Re-keys the lines scroller: opening or closing EITHER side column re-wraps the
 // text, so both belong in the key (see the capture watcher below).
 const sideColumnsKey = computed(() => `${sideCommentaryOpen.value}:${sideLeftCommentaryOpen.value}`)
 
 // Everything a commentary panel needs that is NOT per panel. Bound with v-bind on
-// every host so the shared list is written once.
+// every host so the shared list is written once. (A panel's line and its commentary
+// are per panel: the host takes them from panel.source.)
 const commentarySharedProps = computed(() => ({
   bookId,
-  selectedLineId: selectedLineId.value,
   // The filter tree's rows. Shared: every panel filters the same book list, and
   // which of those rows are checked is per panel (treeState + scopeKey).
   filterGroups: filterGroups.value,
-  loading: commentaryLoading.value,
-  loadError: commentaryLoadError.value,
   getHighlightsForLine,
   applyHighlight,
   clearHighlight,
@@ -151,8 +179,6 @@ const commentarySharedProps = computed(() => ({
   prepareExportData: prepareCommentaryExportData,
   prepareExportTargets: prepareCommentaryExportTargets,
   resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
-  ensureLineContents,
-  trimLineContents,
   createNote,
   updateNote,
   deleteNote,
@@ -221,8 +247,8 @@ const toolbarProps = computed(() => ({
   bookmarkLabelForLine,
   readBookmarkPoint: () => linesContentRef.value?.readBookmarkPoint() ?? null,
   bottomCommentaryVisible: panels.bottom.visible.value,
-  sideCommentaryVisible: sideCommentaryOpen.value,
-  sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
+  sideCommentaryVisible: sideCommentaryOpen.value || isDetached('side'),
+  sideLeftCommentaryVisible: sideLeftCommentaryOpen.value || isDetached('side-left'),
   canUseSidePanel: isWideScreen.value,
   readAloudOpen: readAloudOpen.value,
 }))
@@ -344,7 +370,8 @@ function onSplitPointerUp() {
 // ── Panel toggles ────────────────────────────────────────────────────────────
 
 function toggleCommentaryPanel(slot: CommentarySlot) {
-  if (isSideCommentarySlot(slot) && !isWideScreen.value) return
+  // A side panel needs a wide pane to OPEN in; closing one (its own window included) never does.
+  if (isSideCommentarySlot(slot) && !isWideScreen.value && !panels[slot].visible.value) return
   panels[slot].visible.value = !panels[slot].visible.value
 }
 
@@ -420,10 +447,12 @@ watch(sideColumnsKey, () => {
 // not destroy panel state. Rendering is gated on isWideScreen directly, so a
 // genuinely narrow pane still hides the columns instantly.
 watchDebounced(
-  [() => SIDE_COMMENTARY_SLOTS.map((slot) => panels[slot].visible.value), isWideScreen],
+  // isDetached too: a side panel coming back from its own window to a narrow pane has no place.
+  [() => SIDE_COMMENTARY_SLOTS.map((slot) => panels[slot].visible.value && !isDetached(slot)), isWideScreen],
   () => {
     if (isWideScreen.value) return
-    for (const slot of SIDE_COMMENTARY_SLOTS) panels[slot].visible.value = false
+    // A panel in its own window does not depend on this pane's width.
+    for (const slot of SIDE_COMMENTARY_SLOTS) if (!isDetached(slot)) panels[slot].visible.value = false
   },
   { debounce: 300 },
 )
@@ -522,13 +551,18 @@ function sideEditionPersistState(): SideEditionPersistState {
 }
 
 watch(() => sideEditionStore.pickSignal, (signal) => {
-  if (signal.paneId === paneId && isWideScreen.value) panels[editionSlot.value].visible.value = true
+  if (signal.paneId !== paneId || !isWideScreen.value) return
+  // The edition takes that side column, so a commentary detached from it comes back first.
+  panels[editionSlot.value].detachment.attach()
+  panels[editionSlot.value].visible.value = true
 })
 // Switching sides while an edition is on screen moves it: the new side opens, and the side
 // it leaves closes (it was open only to show the edition).
 watch(editionSlot, (newSlot, oldSlot) => {
-  if (!isWideScreen.value || !panels[oldSlot].visible.value || !sideEdition.value) return
+  // Only a column open in place can be showing the edition; a commentary in its own window is not one.
+  if (!isWideScreen.value || !isOpenInPlace(oldSlot) || !sideEdition.value) return
   panels[oldSlot].visible.value = false
+  panels[newSlot].detachment.attach()
   panels[newSlot].visible.value = true
 })
 onBeforeUnmount(() => {
@@ -537,8 +571,11 @@ onBeforeUnmount(() => {
 
 // The edition's column is not commentary while an edition is shown, so the search bar must
 // not offer (or stay on) searching it - its host is not mounted.
+// Nor a panel in its own window: that one has a find bar of its own there.
 const searchableCommentarySlots = computed(() =>
-  sideEditionShown.value ? openCommentarySlots.value.filter((slot) => slot !== editionSlot.value) : openCommentarySlots.value,
+  openCommentarySlots.value.filter(
+    (slot) => !isDetached(slot) && !(sideEditionShown.value && slot === editionSlot.value),
+  ),
 )
 
 function getSideEditionOutlineTarget(): string | undefined {
@@ -666,7 +703,7 @@ function getSideEditionOutlineTarget(): string | undefined {
             </template>
 
             <div class="side-lines">
-              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value">
+              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="bottomCommentaryOpen">
                 <template #top>
                   <!-- Created only once the saved position has been read: a windowed
                        scroller takes its start row as an argument of its creation,
@@ -697,6 +734,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :search-highlight-line-index="searchHighlightLineIndex"
                     :search-highlight-query="searchHighlightQuery"
                     :search-highlight-snippet="searchHighlightSnippet"
+                    :search-highlight-offset="searchHighlightOffset"
                     :search-highlight-terms="searchHighlightTerms"
                     :open-note-index="openNoteIndex"
                     :search-bar-visible="searchVisible"
@@ -728,7 +766,6 @@ function getSideEditionOutlineTarget(): string | undefined {
                     @navigate-section="(direction, id) => onNavigateSection('bottom', direction, id)"
                     @toggle-filter-panel="onToggleBottomFilter()"
                     @toggle-search="openCommentarySearch('bottom')"
-                    :search-highlight-offset="searchHighlightOffset"
                     @open-book="openBookTarget"
                   />
                 </template>
@@ -812,7 +849,7 @@ function getSideEditionOutlineTarget(): string | undefined {
             being clipped to the bottom panel.
           -->
           <div
-            v-if="panels.bottom.filterOpen.value"
+            v-if="panels.bottom.filterOpen.value && bottomCommentaryOpen"
             ref="bottomFilterRef"
             class="bottom-filter-dropdown"
             :style="{
@@ -850,6 +887,26 @@ function getSideEditionOutlineTarget(): string | undefined {
       @select-version="selectVersion"
       @toggle-read-aloud="toggleReadAloud"
     />
+
+    <!-- Commentary panels the reader moved to their own window. -->
+    <DetachedWindow
+      v-for="slot in detachedSlots"
+      :key="slot"
+      :name="`commentary-${paneId}-${slot}`"
+      :title="detachedWindowTitle"
+      @closed="panels[slot].detachment.attach()"
+      @blocked="onDetachBlocked(slot)"
+    >
+      <CommentaryPanelHost
+        :ref="(host) => { detachedHostRefs[slot] = host as PanelHost | null }"
+        :panel="panels[slot]"
+        v-bind="commentarySharedProps"
+        :search-active="false"
+        @close="panels[slot].visible.value = false"
+        @navigate-section="(direction, id) => onNavigateSection(slot, direction, id)"
+        @open-book="openBookTarget"
+      />
+    </DetachedWindow>
   </div>
 </template>
 

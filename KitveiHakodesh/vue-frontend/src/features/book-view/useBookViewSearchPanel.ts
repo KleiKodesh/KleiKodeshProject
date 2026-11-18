@@ -60,6 +60,8 @@ export function useBookViewSearchPanel(
    * they scrolled to.
    */
   userScrollTick: import('vue').Ref<number>,
+  /** A panel with a find bar of its own (it is in its own window): this bar leaves its search alone. */
+  hasOwnFindBar: (slot: CommentarySlot) => boolean = () => false,
 ) {
   const searchVisible = ref(false)
   const searchMode = ref<SearchMode>('content')
@@ -201,7 +203,7 @@ export function useBookViewSearchPanel(
   function onModeChange(mode: SearchMode) {
     const currentQuery = activeSearch.value.query.value
     contentSearch.clear()
-    for (const slot of COMMENTARY_SLOTS) commentarySearches[slot].clear()
+    for (const slot of COMMENTARY_SLOTS) if (!hasOwnFindBar(slot)) commentarySearches[slot].clear()
     searchMode.value = mode
     searchNavigationState[mode] = false
     if (!currentQuery) return

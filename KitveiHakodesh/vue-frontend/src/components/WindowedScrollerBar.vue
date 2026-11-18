@@ -19,6 +19,7 @@
  * `targetAt` tells a hover label what is under the pointer: the thumb (the current
  * position) or the position a drag of the thumb to there would land on.
  */
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useElementSize, useEventListener, useIntervalFn } from '@vueuse/core'
 import { revealScrollbarOnHover } from '@/composables/useUiChromeVisibility'
@@ -72,6 +73,8 @@ const REVEAL_KEEPALIVE_MS = 400
 
 // ── Native width ───────────────────────────────────────────────────────────────
 
+const hostWindow = useHostWindow()
+
 // Measured from a real scroll container, once per page: the width follows the OS,
 // the zoom level and `scrollbar-width`, and the bar must match its siblings exactly.
 const measuredNativeWidths = { regular: 0, thin: 0 }
@@ -81,7 +84,7 @@ function nativeScrollbarWidth(thin: boolean): number {
   const probe = document.createElement('div')
   probe.style.cssText = 'position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden'
   if (thin) probe.className = 'toc-thin-scroll'
-  document.body.appendChild(probe)
+  hostWindow.document.body.appendChild(probe)
   measuredNativeWidths[kind] = probe.offsetWidth - probe.clientWidth || (thin ? 10 : 17)
   probe.remove()
   return measuredNativeWidths[kind]
@@ -95,10 +98,10 @@ onMounted(() => { barWidth.value = nativeScrollbarWidth(!!props.thin) })
 const barElement = ref<HTMLElement | null>(null)
 /** The part between the arrows that the thumb travels in. */
 const trackElement = ref<HTMLElement | null>(null)
-const { height: trackHeight } = useElementSize(trackElement)
+const { height: trackHeight } = useElementSize(trackElement, undefined, { window: hostWindow })
 // Observed, not read once: a pane resize changes it, and everything below —
 // scrollable, the thumb's length, the drag mapping — must follow.
-const { height: observedViewportHeight } = useElementSize(() => props.viewport)
+const { height: observedViewportHeight } = useElementSize(() => props.viewport, undefined, { window: hostWindow })
 const viewportHeight = computed(() => observedViewportHeight.value || trackHeight.value)
 const isScrollable = computed(() => totalHeight.value > viewportHeight.value + 1)
 const maxPosition = computed(() => Math.max(1, totalHeight.value - viewportHeight.value))
@@ -250,8 +253,8 @@ function onPointerReleased() {
   emit('trackRelease')
 }
 
-useEventListener(window, 'pointerup', onPointerReleased)
-useEventListener(window, 'pointercancel', onPointerReleased)
+useEventListener(hostWindow, 'pointerup', onPointerReleased)
+useEventListener(hostWindow, 'pointercancel', onPointerReleased)
 
 useEventListener(barElement, 'wheel', (event: WheelEvent) => {
   if (!props.viewport) return

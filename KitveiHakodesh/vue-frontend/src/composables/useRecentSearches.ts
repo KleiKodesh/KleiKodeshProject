@@ -138,7 +138,7 @@ export function useRecentSearches(opts: UseRecentSearchesOptions): RecentSearche
     }
     // Read "was it already focused" BEFORE focusing, or the answer is always yes.
     const el = inputEl.value
-    const wasFocused = el != null && document.activeElement === el
+    const wasFocused = el != null && el.ownerDocument.activeElement === el
     el?.focus()
     // select() after focus(): focusing an input places the caret and, in some
     // browsers, collapses any prior selection, so selecting first would be undone.

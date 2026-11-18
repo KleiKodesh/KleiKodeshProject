@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Renders one commentary panel: the per-panel state from its CommentaryPanel slot,
- * plus the line-level data every panel shares.
+ * Renders one commentary panel: the per-panel state from its CommentaryPanel slot
+ * (its line and commentary included - panel.source), plus the line-level data every
+ * panel shares.
  *
  * It exists so BookViewPage does not carry one near-identical thirty-prop
  * CommentaryView block per panel - the panels differ only in which slot they are
@@ -11,10 +12,17 @@
  * A SIDE panel's filter dropdown is rendered here, clipped to its own column.
  * The bottom panel's is not: it runs the full book-view body height, which a
  * dropdown clipped to the bottom pane cannot do, so BookViewPage renders that one.
+ * A panel in its own window always renders its dropdown here: the window is its column.
+ * It also gets a find bar of its own there (useCommentaryPanelFind): the book view's
+ * search bar is in the other window.
  */
 import { computed, ref } from 'vue'
 import CommentaryView from './CommentaryView.vue'
 import CommentaryTreePanel from './CommentaryTreePanel.vue'
+import ReadingSearchBar from '@/components/ReadingSearchBar.vue'
+import { useCommentaryPanelFind } from './useCommentaryPanelFind'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
+import { searchModeForSlot } from '../bookViewTypes'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { isSideCommentarySlot } from '../bookViewTypes'
 import type { CommentaryPanel } from './useCommentaryPanelSlot'
@@ -28,17 +36,14 @@ import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 
 const props = defineProps<{
   panel: CommentaryPanel
-  /** Re-key the inner view when the book changes, as the single panel used to. */
+  /** Re-key the inner view when the book changes (and when the panel changes what it follows). */
   bookId: number | undefined
-  /** True when the search bar is open and targeting THIS panel. */
+  /** True when the book view's search bar is open and targeting THIS panel (a panel in place). */
   searchActive: boolean
   /** Every commentary book of this book — the filter tree's rows. */
   filterGroups: CommentaryGroup[]
 
   // ── Shared across every panel (see useBookViewCommentaryAnnotations) ───────
-  selectedLineId: number | null
-  loading: boolean
-  loadError?: boolean
   getHighlightsForLine: (lineId: number) => Highlight[]
   // Promise-returning: the panel's selection restore waits on the write before
   // re-creating the selection (see CommentaryView's own prop declaration).
@@ -59,10 +64,6 @@ const props = defineProps<{
   prepareExportData?: (lineIds: number[]) => Promise<void>
   prepareExportTargets?: (html: string) => Promise<void>
   resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
-  /** Resolves once these lines have their text: the windowed scroller's row source. */
-  ensureLineContents: (lineIds: number[]) => Promise<void>
-  /** Releases held text far from the panel's window (useCommentary's bounded text cache). */
-  trimLineContents?: (panel: CommentarySlot, keep: ((lineId: number) => boolean) | null) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
@@ -84,7 +85,9 @@ const view = ref<InstanceType<typeof CommentaryView> | null>(null)
 // The bottom panel's tree is a full-height column instead, so BookViewPage renders
 // that one - a popup clipped to the bottom panel's height would be unusable.
 const showFilterPopup = computed(
-  () => isSideCommentarySlot(props.panel.slot) && props.panel.filterOpen.value,
+  () =>
+    (isSideCommentarySlot(props.panel.slot) || props.panel.detachment.isDetached.value) &&
+    props.panel.filterOpen.value,
 )
 
 const popupRef = ref<HTMLElement | null>(null)
@@ -110,15 +113,31 @@ function scrollToBook(targetBookId: number) {
   view.value?.scrollToGroup(targetBookId)
 }
 
+// ── Find ────────────────────────────────────────────────────────────────────
+// In place, the book view's bar searches this panel (searchActive, and Ctrl+F goes up
+// to it). In its own window the panel has its own bar.
+const isDetached = computed(() => props.panel.detachment.isDetached.value)
+const find = useCommentaryPanelFind(
+  props.panel.search,
+  (flatIndex, occurrence) => view.value?.scrollToFlatIndex(flatIndex, occurrence),
+  useHostWindow(),
+)
+const searchActive = computed(() => (isDetached.value ? find.visible.value : props.searchActive))
+
+function onToggleSearch() {
+  if (isDetached.value) find.toggle()
+  else emit('toggle-search')
+}
+
 // Search results are only shown while the bar is open AND aimed at this panel;
 // the query itself survives so reopening the bar restores it.
 // The query as of the typing pause (highlightQuery), not as typed: see useCommentarySearch.
-const searchQuery = computed(() => (props.searchActive ? props.panel.search.highlightQuery.value : ''))
+const searchQuery = computed(() => (searchActive.value ? props.panel.search.highlightQuery.value : ''))
 const currentMatchFlatIndex = computed(() =>
-  props.searchActive ? props.panel.search.currentMatchFlatIndex.value : undefined,
+  searchActive.value ? props.panel.search.currentMatchFlatIndex.value : undefined,
 )
 const currentMatchOccurrence = computed(() =>
-  props.searchActive ? props.panel.search.currentMatchOccurrence.value : undefined,
+  searchActive.value ? props.panel.search.currentMatchOccurrence.value : undefined,
 )
 
 const pinnedGroup = computed<PinnedCommentaryGroup | null>(
@@ -129,16 +148,20 @@ defineExpose({ view })
 </script>
 
 <template>
-  <div class="panel-host">
+  <div class="panel-host" :class="{ 'find-open': isDetached && find.visible.value }">
     <CommentaryView
       ref="view"
-      :key="bookId"
+      :key="`${bookId}:${panel.source.generation.value}`"
       :slot-name="panel.slot"
-      :selected-line-id="selectedLineId"
+      :selected-line-id="panel.source.selectedLineId.value"
       :groups="panel.visibleGroups.value"
-      :loading="loading"
-      :load-error="loadError"
+      :loading="panel.source.loading.value"
+      :load-error="panel.source.loadError.value"
       :pinned-group="pinnedGroup"
+      :detached="panel.detachment.isDetached.value"
+      :follows-book="panel.detachment.followsBook.value"
+      @toggle-detached="panel.detachment.toggleDetached()"
+      @toggle-follows-book="panel.detachment.toggleFollowsBook()"
       :filter-visible="panel.filterOpen.value"
       :get-highlights-for-line="getHighlightsForLine"
       :apply-highlight="applyHighlight"
@@ -151,8 +174,8 @@ defineExpose({ view })
       :prepare-export-data="prepareExportData"
       :prepare-export-targets="prepareExportTargets"
       :resolve-word-link-target="resolveWordLinkTarget"
-      :ensure-line-contents="ensureLineContents"
-      :trim-line-contents="trimLineContents"
+      :ensure-line-contents="panel.source.ensureLineContents"
+      :trim-line-contents="panel.source.trimLineContents"
       :saved-scroll-index="panel.scrollIndex.value"
       :saved-scroll-offset="panel.scrollOffset.value"
       :pin-settled="panel.isPinSettled.value"
@@ -174,9 +197,25 @@ defineExpose({ view })
       @scroll="panel.onScroll"
       @commentator="panel.setCommentator"
       @toggle-filter-panel="onToggleFilter"
-      @toggle-search="emit('toggle-search')"
+      @toggle-search="onToggleSearch"
       @open-book="(id, lineIndex) => emit('open-book', id, lineIndex)"
     />
+    <div v-if="isDetached" class="find-bar-anchor">
+      <ReadingSearchBar
+        :visible="find.visible.value"
+        toolbar-position="top"
+        :match-count="panel.search.matchCount.value"
+        :current-match="panel.search.currentMatchIdx.value"
+        :commentary-visible="false"
+        :open-commentary-slots="[panel.slot]"
+        :mode="searchModeForSlot(panel.slot)"
+        :query="panel.search.query.value"
+        @close="find.close()"
+        @query-change="find.onQueryChange"
+        @next="find.next()"
+        @prev="find.prev()"
+      />
+    </div>
     <div v-if="showFilterPopup" ref="popupRef" class="filter-popup">
       <CommentaryTreePanel
         :groups="filterGroups"
@@ -208,6 +247,20 @@ defineExpose({ view })
 .panel-host > :deep(.commentary-view) {
   flex: 1;
   min-height: 0;
+}
+
+/* A detached panel's find bar sits below the nav (32px). The bar positions itself
+   inside this zero-height anchor and floats over the text; while it is open a match is
+   landed below it (--commentary-find-inset, read by useCommentaryScroll). */
+.panel-host.find-open {
+  --commentary-find-inset: 40px;
+}
+.find-bar-anchor {
+  position: absolute;
+  top: 32px;
+  inset-inline: 0;
+  height: 0;
+  z-index: 70;
 }
 
 /* Hangs below the sticky nav (32px), on the RTL start edge under the filter

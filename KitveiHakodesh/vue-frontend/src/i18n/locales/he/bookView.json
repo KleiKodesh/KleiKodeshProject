@@ -45,7 +45,13 @@
     "prevSection": "קטע קודם",
     "searchPlaceholder": "חפש מפרש...",
     "tree": "עץ מפרשים",
-    "showAll": "הצג הכל"
+    "showAll": "הצג הכל",
+    "attach": "החזר לחלון הספר",
+    "detach": "פתח בחלון נפרד",
+    "detachBlocked": "לא ניתן היה לפתוח את החלון הנפרד",
+    "detachedTitle": "{book} - מפרשים",
+    "followBookStart": "חזור לעקוב אחר הספר",
+    "followBookStop": "הפסק לעקוב אחר הספר (הישאר בשורה זו)"
   },
   "copy": {
     "copy": "העתק",

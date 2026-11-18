@@ -1,3 +1,4 @@
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { onClickOutside, useEventListener, type MaybeElementRef } from '@vueuse/core'
 import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
@@ -43,6 +44,7 @@ export function useDropdownClose(
     fitToViewport?: boolean
   },
 ) {
+  const hostWindow = useHostWindow()
   if (options?.fitToViewport !== false) useDropdownViewportFit(target)
 
   const justClosed = ref(false)
@@ -73,7 +75,7 @@ export function useDropdownClose(
       }
       close(e)
     },
-    { ignore: options?.ignore },
+    { ignore: options?.ignore, window: hostWindow },
   )
 
   // A press on the native chrome (tab strip / title bar) dispatches no DOM event,
@@ -89,20 +91,19 @@ export function useDropdownClose(
   })
 
   if (options?.closeOnBlur !== false) {
-    useEventListener(window, 'blur', (e: FocusEvent) => {
-      // Use setTimeout so document.activeElement settles before we check focus.
+    useEventListener(hostWindow, 'blur', (e: FocusEvent) => {
+      // Use setTimeout so hostWindow.document.activeElement settles before we check focus.
       setTimeout(() => {
         if (!isEnabled()) return
         if (!toValue(target)) return
-        // document.hasFocus() returns true when focus is inside a child iframe
+        // hostWindow.document.hasFocus() returns true when focus is inside a child iframe
         // (the top-level document is still considered focused). We must also
         // close when focus has moved into an iframe — detect that by checking
-        // whether document.activeElement is an iframe or object element.
-        const activeElement = document.activeElement
+        // whether hostWindow.document.activeElement is an iframe or object element.
+        const activeElement = hostWindow.document.activeElement
         const focusMovedIntoFrame =
-          activeElement instanceof HTMLIFrameElement ||
-          activeElement instanceof HTMLObjectElement
-        if (!document.hasFocus() || focusMovedIntoFrame) close(e)
+          activeElement?.tagName === 'IFRAME' || activeElement?.tagName === 'OBJECT'
+        if (!hostWindow.document.hasFocus() || focusMovedIntoFrame) close(e)
       }, 0)
     })
   }
