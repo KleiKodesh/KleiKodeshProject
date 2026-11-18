@@ -29,6 +29,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Version = $Version.TrimStart('v')
+# Resolved now, relative to where the script was started: later steps change folder.
+if ($Notes) { $Notes = (Resolve-Path $Notes).Path }
 
 $BuildDir     = $PSScriptRoot
 $ProjectRoot  = Split-Path -Parent $BuildDir
@@ -173,7 +175,7 @@ try {
     Push-Location $InstallerDir
     try {
         $env:KK_VERSION = $Version
-        $env:KK_NOTES = if ($Notes) { (Resolve-Path $Notes).Path } else { "" }
+        $env:KK_NOTES = if ($Notes) { $Notes } else { "" }
         cargo build --release
         Assert-Success "cargo build"
     } finally {
