@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Typing tutor icon: flat, in the Kitvei Hakodesh logo's colours
+       (lavender #DDD6FB, purple #7B3BEB, violet #5F58C0). No gradients, no text. -->
+  <rect x="4" y="11" width="40" height="27" rx="5" fill="#7B3BEB"/>
+  <g fill="#DDD6FB">
+    <rect x="9"    y="16" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="15.3" y="16" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="21.6" y="16" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="34.2" y="16" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="9"    y="22.6" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="15.3" y="22.6" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="21.6" y="22.6" width="4.8" height="4.8" rx="1.2"/>
+    <rect x="27.9" y="22.6" width="11.1" height="4.8" rx="1.2"/>
+    <rect x="15.3" y="29.2" width="17.4" height="4" rx="1.2"/>
+  </g>
+  <!-- The key being practised -->
+  <rect x="27.9" y="16" width="4.8" height="4.8" rx="1.2" fill="#5F58C0"/>
+</svg>

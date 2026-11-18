@@ -1,0 +1,11 @@
+// Installer UI language. Rust sets `en` at startup from the Windows display language;
+// the top-bar button flips it. Hebrew is right-to-left, English left-to-right.
+export global Lang {
+    in-out property <bool> en;
+    out property <TextHorizontalAlignment> start: Lang.en ? TextHorizontalAlignment.left : TextHorizontalAlignment.right;
+
+    // Pick the Hebrew or English text.
+    public pure function t(he: string, en: string) -> string {
+        return Lang.en ? en : he;
+    }
+}

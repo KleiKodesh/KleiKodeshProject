@@ -1,0 +1,50 @@
+export enum Page { welcome, options, progress, done, manage }
+
+export struct ProductRow {
+    id: string,
+    title: string,
+    description: string,
+    size: string,
+    note: string,
+    selected: bool,
+    installed: bool,
+    available: bool,
+}
+
+// Everything the screens show or trigger. Rust owns the logic (src/ui.rs).
+export global Installer {
+    in-out property <Page> page: Page.welcome;
+    in property <string> version;
+    // True when the product is already installed and this setup carries a newer payload.
+    in property <bool> updating;
+    in property <[ProductRow]> products;
+    in property <[ProductRow]> launchables;
+    in property <string> summary;
+    in property <bool> any-selected;
+    in property <bool> kitvei-selected;
+    in property <bool> has-changes;
+    in-out property <bool> desktop-shortcut: true;
+    in-out property <bool> file-associations: true;
+
+    in property <float> progress;
+    in property <string> progress-title;
+    in property <string> step-text;
+    // Non-empty while the engine waits for permission to close these programs.
+    in property <string> apps-to-close;
+
+    in property <bool> failed;
+    in property <string> done-title;
+    in property <string> done-text;
+    in-out property <bool> confirm-uninstall;
+
+    callback toggle-product(int);
+    callback install();
+    callback apply-changes();
+    callback repair();
+    callback uninstall();
+    callback close-apps(bool);
+    callback launch(string);
+    callback quit();
+    callback theme-changed(bool);
+    callback language-changed(bool);
+}

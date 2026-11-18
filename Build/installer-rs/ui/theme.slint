@@ -1,0 +1,17 @@
+import { Palette } from "std-widgets.slint";
+
+// Plain installer palette. Accent = Kitvei Hakodesh blue.
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    // Starts light (set in AppWindow init); the corner button flips it.
+    public function toggle() {
+        Palette.color-scheme = Theme.dark ? ColorScheme.light : ColorScheme.dark;
+    }
+    out property <color> bg: Theme.dark ? #202020 : #ffffff;
+    out property <color> header: Theme.dark ? #2b2b2b : #f3f3f3;
+    out property <color> border: Theme.dark ? #3a3a3a : #e0e0e0;
+    out property <color> text: Theme.dark ? #f3f3f3 : #1b1b1b;
+    out property <color> muted: Theme.dark ? #a0a0a0 : #616161;
+    out property <color> accent: Theme.dark ? #60cdff : #0078d4;
+    out property <color> danger: Theme.dark ? #ff99a4 : #c42b1c;
+}

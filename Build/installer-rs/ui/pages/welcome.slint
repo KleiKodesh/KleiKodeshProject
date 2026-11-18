@@ -1,0 +1,143 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer, Page } from "../state.slint";
+import { PageTitle, ShotCard, ProductIcon } from "../widgets.slint";
+
+struct Slide { title: string, shot: image }
+
+// One product: checkbox + icon + name on top, screenshot(s) below with a caption.
+// More than one slide = a small gallery that cycles, with the current pane's name and dots.
+// All screenshots share one size (a Word task pane, 600 x 678 px), shown here at 3:4-ish.
+component ProductCard inherits Rectangle {
+    in property <string> id;
+    in property <string> title;
+    in property <string> blurb;
+    in property <bool> selected;
+    in property <bool> available: true;
+    in property <[Slide]> slides;
+    property <int> at: 0;
+    callback toggled();
+
+    vertical-stretch: 0;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.selected ? Theme.accent : Theme.border;
+    background: Theme.bg;
+
+    Timer {
+        interval: 2600ms;
+        running: root.slides.length > 1;
+        triggered => { root.at = Math.mod(root.at + 1, root.slides.length); }
+    }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 8px;
+            if Lang.en: CheckBox { text: ""; enabled: root.available; checked: root.selected; toggled => { root.toggled(); } }
+            if Lang.en: VerticalLayout { alignment: center; ProductIcon { id: root.id; size: 20px; } }
+            if Lang.en: Text { text: root.title; color: Theme.text; font-size: 12.5px; font-weight: 600; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            if !Lang.en: Text { text: root.title; color: Theme.text; font-size: 12.5px; font-weight: 600; vertical-alignment: center; }
+            if !Lang.en: VerticalLayout { alignment: center; ProductIcon { id: root.id; size: 20px; } }
+            if !Lang.en: CheckBox { text: ""; enabled: root.available; checked: root.selected; toggled => { root.toggled(); } }
+        }
+        ShotCard {
+            // 600 x 678 shown at 160 x 181: exact ratio, nothing cropped.
+            width: 160px;
+            height: 181px;
+            source: root.slides[root.at].shot;
+            opacity: root.selected ? 1 : 0.45;
+        }
+        Text {
+            text: root.slides.length > 1 ? root.slides[root.at].title : root.blurb;
+            color: Theme.muted;
+            font-size: 12px;
+            horizontal-alignment: Lang.start;
+            overflow: elide;
+        }
+        // Gallery position, centred under the caption (empty row for single shots keeps cards equal).
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+            height: 6px;
+            for s[i] in (root.slides.length > 1 ? root.slides : []): Rectangle {
+                width: i == root.at ? 12px : 5px;
+                height: 5px;
+                border-radius: 2.5px;
+                background: i == root.at ? Theme.accent : Theme.border;
+                animate width { duration: 150ms; }
+            }
+        }
+    }
+}
+
+component AddinCard inherits ProductCard {
+    id: "addin";
+    title: Installer.products[0].title;
+    available: Installer.products[0].available;
+    selected: Installer.products[0].selected;
+    slides: [
+        { title: Lang.t("כתבי הקודש", "Kitvei Hakodesh"), shot: Lang.en ? @image-url("../images/en/kitvei.png") : @image-url("../images/he/kitvei.png") },
+        { title: Lang.t("עיצוב תורני", "Torah formatting"), shot: Lang.en ? @image-url("../images/en/pane-docdesign.png") : @image-url("../images/he/pane-docdesign.png") },
+        { title: Lang.t("ניקוד", "Nakdan"), shot: Lang.en ? @image-url("../images/en/pane-nakdan.png") : @image-url("../images/he/pane-nakdan.png") },
+        { title: Lang.t("חיפוש רגקס", "Regex search"), shot: Lang.en ? @image-url("../images/en/pane-regex.png") : @image-url("../images/he/pane-regex.png") },
+        { title: Lang.t("דרך האתרים", "Websites"), shot: Lang.en ? @image-url("../images/en/pane-websites.png") : @image-url("../images/he/pane-websites.png") },
+        { title: Lang.t("קיוויקס", "Kiwix"), shot: Lang.en ? @image-url("../images/en/pane-kiwix.png") : @image-url("../images/he/pane-kiwix.png") },
+    ];
+    toggled => { Installer.toggle-product(0); }
+}
+
+component KitveiCard inherits ProductCard {
+    id: "kitvei";
+    title: Installer.products[1].title;
+    blurb: Lang.t("הספרייה כתוכנה עצמאית, בלי וורד", "The library as its own app, no Word needed");
+    selected: Installer.products[1].selected;
+    slides: [{ title: "", shot: Lang.en ? @image-url("../images/en/kitvei.png") : @image-url("../images/he/kitvei.png") }];
+    toggled => { Installer.toggle-product(1); }
+}
+
+component TutorCard inherits ProductCard {
+    id: "tutor";
+    title: Installer.products[2].title;
+    blurb: Lang.t("שיעורים, מקלדת וידיים על המסך", "Lessons, on-screen keyboard and hands");
+    selected: Installer.products[2].selected;
+    slides: [{ title: "", shot: Lang.en ? @image-url("../images/en/tutor.png") : @image-url("../images/he/tutor.png") }];
+    toggled => { Installer.toggle-product(2); }
+}
+
+export component WelcomePage inherits VerticalLayout {
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-bottom: 14px;
+    spacing: 0px;
+    PageTitle {
+        title: Installer.updating ? Lang.t("עדכון כלי קודש", "Update Klei Kodesh") : Lang.t("התקנת כלי קודש", "Install Klei Kodesh");
+        subtitle: Lang.t("סמנו מה להתקין. אפשר להוסיף או להסיר רכיבים בכל זמן.", "Choose what to install. You can add or remove parts at any time.");
+    }
+    Rectangle { height: 12px; }
+    // Reading order: add-in first (right in Hebrew, left in English).
+    HorizontalLayout {
+        alignment: center;
+        spacing: 12px;
+        vertical-stretch: 0;
+        if Lang.en: AddinCard { }
+        if Lang.en: KitveiCard { }
+        if Lang.en: TutorCard { }
+        if !Lang.en: TutorCard { }
+        if !Lang.en: KitveiCard { }
+        if !Lang.en: AddinCard { }
+    }
+    Rectangle { vertical-stretch: 1; min-height: 14px; }
+    HorizontalLayout {
+        spacing: 8px;
+        if Lang.en: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; vertical-alignment: center; overflow: elide; }
+        if Lang.en: Button { text: "Options…"; min-width: 100px; clicked => { Installer.page = Page.options; } }
+        if Lang.en: Button { text: Installer.updating ? "Update" : "Install"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
+        if !Lang.en: Button { text: Installer.updating ? "עדכן" : "התקן"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
+        if !Lang.en: Button { text: "אפשרויות…"; min-width: 100px; clicked => { Installer.page = Page.options; } }
+        if !Lang.en: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+    }
+}

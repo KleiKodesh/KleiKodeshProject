@@ -1,0 +1,80 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer } from "../state.slint";
+import { PageTitle, ProductIcon } from "../widgets.slint";
+
+// One way into an installed product: its icon and "Open ...". The add-in opens Word.
+component LaunchTile inherits Rectangle {
+    in property <string> id;
+    in property <string> title;
+    callback clicked();
+    width: 132px;
+    height: 104px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.accent : Theme.border;
+    background: ta.has-hover ? Theme.header : Theme.bg;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+        alignment: center;
+        HorizontalLayout { alignment: center; ProductIcon { id: root.id; size: 36px; } }
+        Text {
+            text: root.id == "addin" ? Lang.t("פתח את וורד", "Open Word") : Lang.t("פתח את ", "Open ") + root.title;
+            color: Theme.text;
+            font-size: 12.5px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component DonePage inherits VerticalLayout {
+    VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        padding-left: 32px;
+        padding-right: 32px;
+        spacing: 0px;
+        HorizontalLayout {
+            alignment: center;
+            if !Installer.failed: Image { width: 52px; height: 52px; source: @image-url("../images/done.svg"); }
+            if Installer.failed: Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 26px;
+                background: Theme.danger;
+                Text { text: "!"; color: #ffffff; font-size: 28px; font-weight: 700; }
+            }
+        }
+        Rectangle { height: 16px; }
+        PageTitle { centered: true; title: Installer.done-title; subtitle: Installer.done-text; }
+        if Installer.launchables.length > 0: VerticalLayout {
+            padding-top: 28px;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 12px;
+                for p in Installer.launchables: LaunchTile {
+                    id: p.id;
+                    title: p.title;
+                    clicked => { Installer.launch(p.id); }
+                }
+            }
+        }
+    }
+    // Close sits where a wizard's last button sits: bottom, at the end side.
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 12px;
+        height: 42px;
+        if !Lang.en: Button { text: "סגור"; primary: true; min-width: 80px; clicked => { Installer.quit(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Close"; primary: true; min-width: 80px; clicked => { Installer.quit(); } }
+    }
+}
