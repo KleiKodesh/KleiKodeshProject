@@ -16,7 +16,10 @@ function block(index: number): FastDocViewBlock {
   return { index, kind: 'paragraph', html: `<p>${index}</p>`, notes: index === 5 ? [{ kind: 'footnote', number: 1, label: '1', html: 'n' }] : [] }
 }
 
-const SECTIONS = [{ firstBlockIndex: 0, textWidthTwips: 9360 }, { firstBlockIndex: 50, textWidthTwips: 13680 }]
+const SECTIONS = [
+  { firstBlockIndex: 0, textWidthTwips: 9360, topMarginTwips: 1440, bottomMarginTwips: 1080 },
+  { firstBlockIndex: 50, textWidthTwips: 13680, topMarginTwips: 720, bottomMarginTwips: 2160 },
+]
 
 function fakeApi(total: number) {
   const calls: { op: string; args: unknown[] }[] = []
@@ -355,6 +358,20 @@ describe('useFastDocViewDocument', () => {
     scope.stop()
   })
 
+  it('reports no top / bottom margin when the document does not say', async () => {
+    const { api } = fakeApi(100)
+    const unknownMargins = [{ firstBlockIndex: 0, textWidthTwips: 9360, topMarginTwips: -1, bottomMarginTwips: -1 }]
+    const open = api.open
+    api.open = async (path) => ({ ...(await open(path)), sections: unknownMargins })
+    api.sections = async () => unknownMargins
+    const scope = effectScope()
+    const document = scope.run(() => useFastDocViewDocument({ api }))!
+    await document.open('x')
+    await flush()
+    expect([document.topMarginTwips.value, document.bottomMarginTwips.value]).toEqual([undefined, undefined])
+    scope.stop()
+  })
+
   it('builds landmark tiers, weights and notes, and closes on dispose', async () => {
     const { api, calls } = fakeApi(100)
     const scope = effectScope()
@@ -364,6 +381,8 @@ describe('useFastDocViewDocument', () => {
     expect(document.landmarkTiers.value).toEqual([[0, 20], [50]])
     expect(document.rowWeights.value?.length).toBe(100)
     expect([document.textWidthTwipsAt(0), document.textWidthTwipsAt(49), document.textWidthTwipsAt(50), document.textWidthTwipsAt(99)]).toEqual([9360, 9360, 13680, 13680])
+    // the top margin comes from the first section, the bottom one from the last
+    expect([document.topMarginTwips.value, document.bottomMarginTwips.value]).toEqual([1440, 2160])
     scope.stop()
     await flush()
     expect(calls.some((call) => call.op === 'close' && call.args[0] === 'doc1')).toBe(true)

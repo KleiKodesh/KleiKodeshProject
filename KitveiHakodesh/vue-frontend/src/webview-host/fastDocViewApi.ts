@@ -76,6 +76,9 @@ export interface FastDocViewSearchStep {
 export interface FastDocViewSection {
   firstBlockIndex: number
   textWidthTwips: number
+  /** The page's top / bottom margin (twips); -1 = not known. */
+  topMarginTwips: number
+  bottomMarginTwips: number
 }
 
 /** Everything the page needs from the service - injectable so the composable is testable. */

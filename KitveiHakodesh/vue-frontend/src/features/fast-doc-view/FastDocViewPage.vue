@@ -167,6 +167,19 @@ function blockColumnStyle(index: number): Record<string, string> | undefined {
  */
 const textScale = computed(() => fontPx.value / documentFontPx.value)
 const blockTextStyle = computed(() => ({ zoom: String(textScale.value), fontSize: `${documentFontPx.value}px` }))
+/**
+ * Space above the first block and below the last one (not a paged view - just the scroller's ends).
+ * With margins ignored, a small fixed padding; otherwise the document's top margin (first section)
+ * above and bottom margin (last section) below, at the text's scale - 24px when the file does not say.
+ */
+function scrollerEndPadding(twips: number | undefined): string {
+  if (settingsStore.fastDocViewIgnoreMargins || twips == null) return '24px'
+  return `${((twips / 15) * textScale.value).toFixed(1)}px`
+}
+const scrollerEndsStyle = computed(() => ({
+  '--fast-doc-view-scroller-start-padding': scrollerEndPadding(fastDocument.topMarginTwips.value),
+  '--fast-doc-view-scroller-end-padding': scrollerEndPadding(fastDocument.bottomMarginTwips.value),
+}))
 
 // The book view's text context menu, with the items a Word document can serve (useFastDocViewContextMenu).
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -885,6 +898,7 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
               <WindowedScroller
                 :ref="onScrollerMounted"
                 class="fast-doc-view-scroller"
+                :style="scrollerEndsStyle"
                 :count="fastDocument.blockCount.value"
                 :initial-index="initialIndex"
                 :initial-offset-px="initialOffsetPx"
@@ -1029,8 +1043,11 @@ async function goToNoteReference(note: FastDocViewIndexedNote) {
   font-family: inherit;
   line-height: inherit;
 }
-.fast-doc-view-scroller :deep(.windowed-scroller-content) {
-  padding-block-end: 24px;
+/* The scroller's class lands on its inner viewport (not the component root), which carries no scope
+   attribute: anchor on this page's own element instead. */
+.fast-doc-view-content :deep(.fast-doc-view-scroller > .windowed-scroller-content) {
+  padding-block-start: var(--fast-doc-view-scroller-start-padding, 24px);
+  padding-block-end: var(--fast-doc-view-scroller-end-padding, 24px);
 }
 /* An empty paragraph keeps one line, as in Word (and an empty block is one line too): a
    zero-height row could never be scrolled into view, so the document's last rows - often
