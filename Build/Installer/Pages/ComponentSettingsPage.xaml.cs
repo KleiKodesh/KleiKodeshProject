@@ -379,8 +379,30 @@ namespace KleiKodeshVstoInstallerWpf
                 sb.AppendLine();
                 sb.Append("  }");
             }
+            // Keep the AllowedUrls entry (extra domains allowed in the pane, e.g. logins).
+            string allowed = FindAllowedUrlsBlock(ReadInstalledJson()) ?? FindAllowedUrlsBlock(LoadDefaultJson());
+            if (allowed != null)
+            {
+                if (!first) sb.AppendLine(",");
+                sb.Append("  ").Append(allowed);
+            }
             sb.AppendLine(); sb.Append("]");
             return sb.ToString();
+        }
+
+        /// <summary>The raw { "AllowedUrls": [...] } object, or null when absent.</summary>
+        private static string FindAllowedUrlsBlock(string json)
+        {
+            if (json == null) return null;
+            var m = Regex.Match(json, @"\{\s*""AllowedUrls""\s*:\s*\[[^\]]*\]\s*\}", RegexOptions.Singleline);
+            return m.Success ? m.Value : null;
+        }
+
+        private static string ReadInstalledJson()
+        {
+            string path = Path.Combine(AddinInstaller.InstallPath, "WebSitesWhitelist.json");
+            try { return File.Exists(path) ? File.ReadAllText(path) : null; }
+            catch { return null; }
         }
 
         private static string J(string s) =>

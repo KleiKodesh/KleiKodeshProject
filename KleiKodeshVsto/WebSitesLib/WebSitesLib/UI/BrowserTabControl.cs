@@ -113,6 +113,7 @@ namespace WebSitesLib.UI
         {
             if (!File.Exists(WhitelistPath))
             {
+                _allowedHosts = new List<string>();
                 WebAddressModels = new ObservableCollection<WebAddressModel>();
                 return;
             }
@@ -125,7 +126,10 @@ namespace WebSitesLib.UI
             // User-customised files (written by the installer) omit the field entirely,
             // so IsVisible defaults to true and all entries are shown.
             WebAddressModels = new ObservableCollection<WebAddressModel>(
-                all.Where(m => m.IsVisible));
+                all.Where(m => m.IsVisible && m.AllowedUrls == null));
+            _allowedHosts = all.Where(m => m.AllowedUrls != null)
+                .SelectMany(m => m.AllowedUrls)
+                .Select(ToHost).Where(h => h.Length > 0).ToList();
         }
 
         /// <summary>
@@ -138,9 +142,20 @@ namespace WebSitesLib.UI
             if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return true;
             string host = StripWww(uri.Host);
             if (host == "kiwix-app") return true;
-            return WebAddressModels.Any(m =>
+            return _allowedHosts.Any(d => IsSameOrSubdomain(host, d)) ||
+                WebAddressModels.Any(m =>
                 Uri.TryCreate(m.Url, UriKind.Absolute, out Uri allowed) &&
                 IsSameOrSubdomain(host, StripWww(allowed.Host)));
+        }
+
+        List<string> _allowedHosts = new List<string>();
+
+        /// <summary>"openathens.net" or "https://www.x.com/y" → bare host.</summary>
+        static string ToHost(string entry)
+        {
+            entry = (entry ?? "").Trim();
+            if (!entry.Contains("://")) entry = "https://" + entry;
+            return Uri.TryCreate(entry, UriKind.Absolute, out Uri u) ? StripWww(u.Host) : "";
         }
 
         static string StripWww(string host) =>
