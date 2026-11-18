@@ -3,6 +3,7 @@ import AppShell from '@/layout/AppShell.vue'
 import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
+import SiteFrameLayer from '@/features/websites/SiteFrameLayer.vue'
 import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
@@ -203,6 +204,8 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
       <!-- Pane 2 — only in split view -->
       <AppShell v-if="bookViewStore.splitViewEnabled" :pane-id="2" />
     </div>
+    <!-- Website iframes: after the panes (their CSS anchors must come first), never moved. -->
+    <SiteFrameLayer />
     <HomePageDateBar v-if="settingsStore.dateBarPinned" status-bar class="app-status-bar" />
 
     <ClockWidget v-if="showClock" />

@@ -45,7 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { asWebAddress, displayHost, loadWebsites, websiteForUrl, websiteName } from '@/features/websites/websitesList'
+import { asWebAddress, displayHost, loadWebsites, matchWebsites, websiteForUrl, websiteName, type Website } from '@/features/websites/websitesList'
 import { addressBarPath, locationPath, fileFromAddress, parseBookAddress, isDiskPath, looksLikeFile, normalizePastedPath, resolveCatalogPath } from './addressBarPath'
 
 const { t } = useI18n()
@@ -111,8 +111,6 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
-  hasIndexFailureToShow,
-  isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
@@ -137,8 +135,17 @@ const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleLocations.val
 // flight shows spinners, and hiding the panel until the first row lands would
 // make it flicker in and out mid-type. A failed index counts too: its section says why
 // there are no results from it (same rule as the home page's search bar).
+// Websites matching the typed text (the first rows).
+void loadWebsites()
+const websiteMatches = computed(() => matchWebsites(searchQuery.value))
+function onSelectWebsite(site: Website, openInNewTab = false) {
+  close()
+  pane.openOrUpdateActiveTab({ route: '/web-view', title: websiteName(site), webUrl: site.url }, openInNewTab)
+}
+
+// Only real rows open the panel: no panel that is all "loading" or an empty section.
 const hasDropdownContent = computed(
-  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny() || hasIndexFailureToShow(),
+  () => dropdownTabs.value.length > 0 || hasAnyResults() || websiteMatches.value.length > 0,
 )
 
 // The one condition the panel renders on. The field's merged styling reads this
@@ -560,6 +567,7 @@ nextTick(() => {
       :catalog-toc-results="catalogTocResults"
       :hebrew-books-results="hebrewBooksResults"
       :file-results="fileResults"
+      :website-results="websiteMatches"
       :source-priority="sourcePriority"
       :is-loading-catalog-toc="isLoadingCatalogToc"
       :is-loading-hebrew-books="isLoadingHebrewBooks"
@@ -576,6 +584,7 @@ nextTick(() => {
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
       @select-file="onSelectFile"
+      @select-website="onSelectWebsite"
       @select-tab="onSelectLocation"
       @forget-tab="onForgetLocation"
       @clear-all-tabs="onClearAllLocations"
