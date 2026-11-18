@@ -8,6 +8,11 @@
              FlowDirection="RightToLeft"
              FontFamily="Segoe UI"
              FontSize="13">
+    <!--
+        Looks like the new installer (Build/installer-rs): flat sections with small semibold headings, thin dividers, plenty of space, Office's own
+        controls. Colours come from the pane's Background/Foreground (OfficeThemeWatcher), so
+        it follows Word's light and dark themes.
+    -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -18,109 +23,105 @@
                 <kk:SharedResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-        <Style TargetType="CheckBox" BasedOn="{StaticResource OfficeCheckBox}">
-            <Setter Property="Margin"  Value="0,0,0,6"/>
-            <Setter Property="Padding" Value="6,0"/>
-        </Style>
+            <Style TargetType="CheckBox" BasedOn="{StaticResource OfficeCheckBox}">
+                <Setter Property="Margin"  Value="0,0,0,8"/>
+                <Setter Property="Padding" Value="8,0"/>
+            </Style>
 
-        <Style TargetType="RadioButton" BasedOn="{StaticResource OfficeRadioButton}">
-            <Setter Property="Margin"  Value="0,0,0,6"/>
-            <Setter Property="Padding" Value="6,0"/>
-        </Style>
+            <Style TargetType="RadioButton" BasedOn="{StaticResource OfficeRadioButton}">
+                <Setter Property="Margin"  Value="0,0,0,8"/>
+                <Setter Property="Padding" Value="8,0"/>
+            </Style>
 
-        <Style TargetType="Separator" BasedOn="{StaticResource OfficeSeparator}">
-            <Setter Property="Margin" Value="0,8"/>
-        </Style>
+            <!-- Muted secondary text: the hints under a section. -->
+            <Style x:Key="Muted" TargetType="TextBlock">
+                <Setter Property="FontSize"     Value="12"/>
+                <Setter Property="Opacity"      Value="0.7"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+            </Style>
 
-        <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml, merged above. -->
+            <!-- Section heading: small and semibold. -->
+            <Style x:Key="SectionHeading" TargetType="TextBlock">
+                <Setter Property="FontSize"   Value="13"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Margin"     Value="0,0,0,10"/>
+            </Style>
 
-        <!-- ActionButton is this, with the standard 12,5 padding rather than
-             14,5 and the palette's hover instead of a full colour inversion. -->
-        <Style TargetType="Button" BasedOn="{StaticResource ActionButton}">
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-        </Style>
+            <!-- Thin divider between sections, in the pane's own text colour, faint. -->
+            <Style x:Key="SectionDivider" TargetType="Border">
+                <Setter Property="Height"     Value="1"/>
+                <Setter Property="Margin"     Value="0,14,0,16"/>
+                <Setter Property="Opacity"    Value="0.15"/>
+                <Setter Property="Background" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            </Style>
+
+            <!-- The reset button sits at the start, sized to its text. -->
+            <Style TargetType="Button" BasedOn="{StaticResource ActionButton}">
+                <Setter Property="HorizontalAlignment" Value="Left"/>
+                <Setter Property="MinWidth"            Value="120"/>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
-        <StackPanel Margin="12" Background="Transparent">
+        <StackPanel Margin="20,16,20,20" Background="Transparent">
 
-            <Border Style="{StaticResource Card}">
-                <Expander>
-                    <Expander.Header>
-                        <TextBlock x:Name="VisibleHeader" Style="{StaticResource GroupHeader}"/>
-                    </Expander.Header>
-                    <StackPanel x:Name="VisibleSettingsPanel">
-                        <Separator/>
-                        <!--
-                        IMPORTANT — control names are registry settings keys.
-                        InitializeControls() iterates VisibleSettingsPanel.Children and passes cb.Name
-                        directly to SettingsManager as the key (e.g. "KitveiHakodesh_Visible").
-                        Do NOT rename these — the name IS the key.
-                        Format: {ComponentId}_Visible
-                    -->
-                        <CheckBox x:Name="KitveiHakodesh_Visible"   />
-                        <CheckBox x:Name="Kiwix_Visible"     />
-                        <CheckBox x:Name="WebSites_Visible"  />
-                        <CheckBox x:Name="KleiKodesh_Visible"/>
-                        <CheckBox x:Name="Nakdan_Visible"/>
-                        <CheckBox x:Name="RegexFind_Visible"  Margin="0"/>
-                    </StackPanel>
-                </Expander>
-            </Border>
+            <!-- No title or intro: the task pane's caption names it, the ribbon button's tooltip explains it. -->
 
-            <Border Style="{StaticResource Card}">
-                <Expander>
-                    <Expander.Header>
-                        <TextBlock x:Name="OptionsHeader" Style="{StaticResource GroupHeader}"/>
-                    </Expander.Header>
-                    <StackPanel x:Name="OptionsSettingsPanel">
-                        <Separator/>
-                        <!--
-                        IMPORTANT — control names encode the settings value.
-                        InitializeControls() iterates OptionsSettingsPanel.Children and derives the
-                        DefaultButton value by stripping "_Option" from rb.Name (e.g. "KitveiHakodesh_Option" → "KitveiHakodesh").
-                        Do NOT rename these — the name IS the value.
-                        Format: {ComponentId}_Option  (ComponentId must match the one used in _Visible above)
-                        Settings_Option is the fallback and is not tied to a visibility checkbox.
-                    -->
-                        <RadioButton x:Name="KitveiHakodesh_Option"           IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
-                        <RadioButton x:Name="Kiwix_Option"          IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
-                        <RadioButton x:Name="WebSites_Option"    IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
-                        <RadioButton x:Name="KleiKodesh_Option" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
-                        <RadioButton x:Name="Nakdan_Option" IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
-                        <RadioButton x:Name="RegexFind_Option"   IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
-                        <RadioButton x:Name="Settings_Option"        Margin="0"/>
-                    </StackPanel>
-                </Expander>
-            </Border>
+            <TextBlock x:Name="VisibleHeader" Style="{StaticResource SectionHeading}"/>
+            <StackPanel x:Name="VisibleSettingsPanel">
+                <!--
+                IMPORTANT — control names are registry settings keys.
+                InitializeControls() iterates VisibleSettingsPanel.Children and passes cb.Name
+                directly to SettingsManager as the key (e.g. "KitveiHakodesh_Visible").
+                Do NOT rename these — the name IS the key.
+                Format: {ComponentId}_Visible
+                -->
+                <CheckBox x:Name="KitveiHakodesh_Visible"/>
+                <CheckBox x:Name="Kiwix_Visible"/>
+                <CheckBox x:Name="WebSites_Visible"/>
+                <CheckBox x:Name="KleiKodesh_Visible"/>
+                <CheckBox x:Name="Nakdan_Visible"/>
+                <CheckBox x:Name="RegexFind_Visible" Margin="0"/>
+            </StackPanel>
+            <Border Style="{StaticResource SectionDivider}"/>
 
-            <CheckBox x:Name="ChkTurnOffUpdates"
-                      Margin="0,0,0,8"/>
+            <TextBlock x:Name="OptionsHeader" Style="{StaticResource SectionHeading}"/>
+            <StackPanel x:Name="OptionsSettingsPanel">
+                <!--
+                IMPORTANT — control names encode the settings value.
+                InitializeControls() iterates OptionsSettingsPanel.Children and derives the
+                DefaultButton value by stripping "_Option" from rb.Name (e.g. "KitveiHakodesh_Option" → "KitveiHakodesh").
+                Do NOT rename these — the name IS the value.
+                Format: {ComponentId}_Option  (ComponentId must match the one used in _Visible above)
+                Settings_Option is the fallback and is not tied to a visibility checkbox.
+                -->
+                <RadioButton x:Name="KitveiHakodesh_Option" IsEnabled="{Binding IsChecked, ElementName=KitveiHakodesh_Visible}"/>
+                <RadioButton x:Name="Kiwix_Option"          IsEnabled="{Binding IsChecked, ElementName=Kiwix_Visible}"/>
+                <RadioButton x:Name="WebSites_Option"       IsEnabled="{Binding IsChecked, ElementName=WebSites_Visible}"/>
+                <RadioButton x:Name="KleiKodesh_Option"     IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                <RadioButton x:Name="Nakdan_Option"         IsEnabled="{Binding IsChecked, ElementName=KleiKodesh_Visible}"/>
+                <RadioButton x:Name="RegexFind_Option"      IsEnabled="{Binding IsChecked, ElementName=RegexFind_Visible}"/>
+                <RadioButton x:Name="Settings_Option"       Margin="0"/>
+            </StackPanel>
+            <Border Style="{StaticResource SectionDivider}"/>
 
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock x:Name="LanguageHeader" Style="{StaticResource GroupHeader}"/>
-                    <Separator/>
-                    <!-- General/UiLanguage, shared with the installer (Helpers/AddinUiLanguage.cs). -->
-                    <RadioButton x:Name="HebrewLanguageRadio"  GroupName="UiLanguage" Content="&#x05E2;&#x05D1;&#x05E8;&#x05D9;&#x05EA;"/>
-                    <RadioButton x:Name="EnglishLanguageRadio" GroupName="UiLanguage" Content="English"/>
-                    <TextBlock x:Name="LanguageHint" TextWrapping="Wrap" Opacity="0.7" FontSize="12"/>
-                </StackPanel>
-            </Border>
+            <!-- General/UiLanguage, shared with the installer (Helpers/AddinUiLanguage.cs). -->
+            <TextBlock x:Name="LanguageHeader" Style="{StaticResource SectionHeading}"/>
+            <RadioButton x:Name="HebrewLanguageRadio"  GroupName="UiLanguage" Content="&#x05E2;&#x05D1;&#x05E8;&#x05D9;&#x05EA;"/>
+            <RadioButton x:Name="EnglishLanguageRadio" GroupName="UiLanguage" Content="English"/>
+            <TextBlock x:Name="LanguageHint" Style="{StaticResource Muted}"/>
+            <Border Style="{StaticResource SectionDivider}"/>
 
             <!-- Optional VBA macros template (Helpers/VbaMacrosTemplate.cs) -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock x:Name="MacrosHeader" Style="{StaticResource GroupHeader}"/>
-                    <Separator/>
-                    <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
-                    <RadioButton x:Name="MacrosInstallRadio" GroupName="VbaMacros"/>
-                    <TextBlock x:Name="MacrosHint" TextWrapping="Wrap" Opacity="0.7" FontSize="12"/>
-                </StackPanel>
-            </Border>
+            <TextBlock x:Name="MacrosHeader" Style="{StaticResource SectionHeading}"/>
+            <RadioButton x:Name="MacrosNoneRadio"    GroupName="VbaMacros"/>
+            <RadioButton x:Name="MacrosInstallRadio" GroupName="VbaMacros"/>
+            <TextBlock x:Name="MacrosHint" Style="{StaticResource Muted}"/>
+            <Border Style="{StaticResource SectionDivider}"/>
 
+            <CheckBox x:Name="ChkTurnOffUpdates" Margin="0,0,0,16"/>
             <Button x:Name="BtnReset"/>
 
         </StackPanel>
