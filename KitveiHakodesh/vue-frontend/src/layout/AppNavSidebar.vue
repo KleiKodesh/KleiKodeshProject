@@ -4,7 +4,6 @@ import { computed, inject, ref, watch } from 'vue'
 import {
   IconChevronDoubleRight20Regular,
   IconMoreHorizontal24Regular,
-  IconOpen28Regular,
   IconSplitVertical20Regular,
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
@@ -16,7 +15,6 @@ import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { togglePopOut } from '@/webview-host/bridge'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -87,7 +85,6 @@ const overflowButtonEl = ref<HTMLElement | null>(null)
 function onOverflowRowSelect(key: string) {
   if (key === APP_NAV_UPDATE_KEY) void installUpdate()
   else if (key === 'split-view') bookViewStore.toggleSplitView()
-  else if (key === 'pop-out') togglePopOut()
   else navigateInNewTab(key)
 }
 
@@ -142,15 +139,6 @@ ${item.description}`"
       >
         <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
         <IconSplitVertical20Regular v-else />
-      </button>
-      <button
-        v-if="railButtonVisible('pop-out')"
-        class="nav-btn"
-        tabindex="-1"
-        :title="t('layout.popOutToggle')"
-        @click="togglePopOut()"
-      >
-        <IconOpen28Regular />
       </button>
       <button
         v-if="railButtonVisible(APP_NAV_SETTINGS_ITEM.label)"

@@ -4,7 +4,6 @@ import { ref, computed, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import {
-  IconOpen28Regular,
   IconSplitVertical20Filled,
   IconSplitVertical20Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -90,7 +89,6 @@ function overflowRow(key: string): OverflowRow {
       icon: enabled ? IconSplitVertical20Filled : IconSplitVertical20Regular,
     }
   }
-  if (key === 'pop-out') return { key, label: t('layout.popOutLabel'), icon: IconOpen28Regular }
   if (key === APP_NAV_UPDATE_KEY && updateItem.value) {
     const u = updateItem.value
     return { key, label: u.text, icon: u.icon, color: u.color, title: u.title, disabled: u.disabled }

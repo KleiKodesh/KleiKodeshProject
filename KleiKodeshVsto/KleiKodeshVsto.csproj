@@ -290,14 +290,21 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Helpers\JsonExtensions.cs" />
-    <Compile Include="Helpers\TaskPanePopOut.cs" />
     <Compile Include="Helpers\TrackedCompare.cs" />
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\AddinUiLanguage.cs" />
     <Compile Include="Helpers\VbaMacrosTemplate.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
-    <Compile Include="Helpers\TaskPaneChrome.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\Native.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\Fluent.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\ChromeWindow.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\ChromeToolTip.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\PaneMenu.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\RibbonPanes.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\OfficeTitleStrip.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\SidePanes.cs" />
+    <Compile Include="Helpers\OfficePaneChrome\PopOutWindow.cs" />
     <Compile Include="Helpers\WdActionManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
@@ -365,7 +372,7 @@
     <Content Include="Resources\KitveiHakodesh.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Resources\DuplicatePane.png">
+    <Content Include="Resources\NewPane.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Resources\Settings.png">

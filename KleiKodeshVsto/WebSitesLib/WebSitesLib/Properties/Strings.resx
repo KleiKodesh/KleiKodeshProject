@@ -7,7 +7,6 @@
   <data name="ShowAllTabs" xml:space="preserve"><value>הצג את כל הכרטיסיות</value></data>
   <data name="NewTab" xml:space="preserve"><value>כרטיסייה חדשה</value></data>
   <data name="CloseTab" xml:space="preserve"><value>סגור כרטיסייה</value></data>
-  <data name="PopOut" xml:space="preserve"><value>הצג בחלונית \ חלון צד</value></data>
   <data name="Refresh" xml:space="preserve"><value>רענן</value></data>
   <data name="Back" xml:space="preserve"><value>חזור אחורה</value></data>
   <data name="Forward" xml:space="preserve"><value>קדימה</value></data>

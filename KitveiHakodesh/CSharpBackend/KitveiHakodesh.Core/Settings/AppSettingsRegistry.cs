@@ -135,34 +135,11 @@ namespace KitveiHakodesh.Core.Settings
         public static void SetMainWindowMaximized(bool maximized) =>
             Set(AppKitveiHakodesh, "MainWindow", "Maximized", maximized ? "1" : "0");
 
-        /// <summary>
-        /// Pop-out window bounds as four separate values. Core deals in ints; the host turns
-        /// them into whatever rectangle type it uses (System.Drawing on the WinForms side) —
-        /// Core owns no UI types.
-        ///
-        /// Read with TryParse, not Parse. The registry fallback only applies when the value
-        /// is MISSING; a value that exists but is empty or corrupt reaches the parser, and
-        /// Parse would throw right through the caller. The defaults differ per field
-        /// (-1 means "not positioned yet", the size defaults are a usable window).
-        /// </summary>
-        public static (int X, int Y, int Width, int Height) GetPopoutBounds() => (
-            ReadInt("Popout", "X", -1),
-            ReadInt("Popout", "Y", -1),
-            ReadInt("Popout", "W", 900),
-            ReadInt("Popout", "H", 750));
-
-        public static void SetPopoutBounds(int x, int y, int width, int height)
-        {
-            WriteInt("Popout", "X", x);
-            WriteInt("Popout", "Y", y);
-            WriteInt("Popout", "W", width);
-            WriteInt("Popout", "H", height);
-        }
 
         /// <summary>
         /// Last bounds of a window.open popup, keyed by its window name (e.g. "hameshiv").
         /// The size falls back to what the page requested; X/Y -1 means "not positioned
-        /// yet" (the host centres it), same convention as the pop-out bounds.
+        /// yet" (the host centres it).
         /// </summary>
         public static (int X, int Y, int Width, int Height) GetPopupBounds(string name, int width, int height) => (
             ReadInt("Popup_" + name, "X", -1),

@@ -24,7 +24,6 @@ namespace WebSitesLib.Properties
         public static string ShowAllTabs => Get(nameof(ShowAllTabs));
         public static string NewTab => Get(nameof(NewTab));
         public static string CloseTab => Get(nameof(CloseTab));
-        public static string PopOut => Get(nameof(PopOut));
         public static string Refresh => Get(nameof(Refresh));
         public static string Back => Get(nameof(Back));
         public static string Forward => Get(nameof(Forward));

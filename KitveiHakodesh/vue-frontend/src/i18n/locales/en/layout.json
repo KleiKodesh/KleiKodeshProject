@@ -66,8 +66,6 @@
   "searchContent": "Search library text (Enter)",
   "closeSplitView": "Close split view",
   "openSplitView": "Open split view",
-  "popOutToggle": "Open in a separate window or return to the pane",
-  "popOutLabel": "Window / pane",
   "moreItems": "More items",
   "hideSidebar": "Hide sidebar (Ctrl+Shift+M)",
   "showSidebar": "Show sidebar (Ctrl+Shift+M)",

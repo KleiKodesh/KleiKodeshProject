@@ -26,9 +26,9 @@ KleiKodeshVsto/
 ├── Common/
 │   └── KleiKodeshWebView.cs  — WebView2 wrapper for HTML task panes
 ├── Helpers/
-│   ├── TaskpaneManager.cs    — Creates/reuses custom task panes; triggers update check
-│   ├── WpfTaskPane.cs        — Hosts WPF UserControls inside a task pane
-│   ├── TaskPanePopOut.cs     — Pop-out task pane into a floating window
+│   ├── TaskpaneManager.cs    — The add-in's side panes (plugs the add-in into OfficePaneChrome)
+│   ├── WpfTaskPane.cs        — Shows WPF views as side-pane views
+│   ├── OfficePaneChrome/     — Reusable: shared side panes, title-strip selector, pop-out window
 │   ├── WdActionManager.cs    — Word document action helpers
 │   ├── WordWindowHelper.cs   — Window snapping / child document helpers
 │   ├── OfficeThemeWatcher.cs — Detects Office theme changes and notifies task panes
@@ -60,4 +60,4 @@ KleiKodeshVsto/
 
 ## Task Pane Lifecycle
 
-`TaskpaneManager.Show(userControl, title, width)` checks if a pane of the same type already exists for the active Word window. If so it reuses it; otherwise it creates a new one. This prevents duplicate panes when the user clicks the ribbon button again.
+Each document window has one side pane (a custom task pane) that hosts views: `TaskpaneManager.Show(id, factory, title)` brings view `id` (its ribbon button id) into the current side pane, building it only if that side pane doesn't have it yet; views moved out stay alive with their state. The side pane's title strip shows a selector (current view's icon and name) whose menu lists the ribbon buttons tagged `tag="pane"`, plus "open new side pane", and a pop-out button that moves the side pane into its own window. Office's X closes the side pane and disposes its views. See `Helpers/OfficePaneChrome/SidePanes.cs`.

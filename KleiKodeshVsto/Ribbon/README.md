@@ -43,7 +43,7 @@ Custom ribbon tab injected into Microsoft Word. Defines buttons, their icons, to
 3. Add the image to `Resources/` folder
 4. Add visibility toggle in `RibbonSettingsControl.cs` if the component should be optional
 5. Add checkbox entry in `RibbonSettingsView.xaml`
-6. Wire the task pane creation in `TaskpaneManager.Show()`
+6. Show it with `TaskpaneManager.Show(id, ...)` / `WpfTaskPane.Show(id, ...)` in `AddinCommands.Run`, and give the button `tag="pane"` so the side pane's selector lists it
 
 ## Conditional Visibility
 
@@ -60,4 +60,4 @@ Ribbon buttons respect user settings stored in registry:
 - `build_macros_template.py` — builds `Resources\KleiKodeshMacros.en.dotm` from `VbaCommands.cs` - ASCII macro names only (Hebrew names failed with "Sub or Function not defined" where the non-Unicode language is not Hebrew, issue #266), writing the VBA straight into the zip (MS-CFB + MS-OVBA, no Word needed) on top of `macros_template_base.dotm` (not shipped). Each macro goes through a guard that shows a message, not a VBA error, when the add-in is missing or disabled.
 - Installing the macros is opt-in: None / Install in the installer's SettingsPage and in this pane (`RibbonSettingsView`), both via `Helpers\VbaMacrosTemplate.cs` (linked into the installer). It copies the .dotm into Word's STARTUP folder and tells the user to restart Word. Never installed by setup itself; repair (`FullSystemCleaner`) and the NSIS uninstaller remove it and the retired Hebrew-names one.
 
-Adding a command: add the case to `AddinCommands.Run`, the row to `AddinText`, the two methods to `VbaCommands`, then rebuild the .dotm. Settings and DuplicatePane are deliberately left out of `VbaCommands` (they act on the add-in's own panes) - keep them out.
+Adding a command: add the case to `AddinCommands.Run`, the row to `AddinText`, the two methods to `VbaCommands`, then rebuild the .dotm. Settings and NewPane are deliberately left out of `VbaCommands` (they act on the add-in's own panes) - keep them out.

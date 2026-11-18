@@ -13,6 +13,10 @@ namespace RegexFindLib.UI
         const int StyleRefreshThrottleMs = 5000;
         int _lastStyleRefreshTick = System.Environment.TickCount - StyleRefreshThrottleMs;
 
+        // True until OnLoaded's deferred first load has run. The first show must not walk the
+        // styles itself: OnLoaded already does, after the first paint.
+        bool _initialLoadPending = true;
+
         public RegexFindView(
             Microsoft.Office.Interop.Word.Application app,
             Microsoft.Office.Tools.Word.ApplicationFactory factory)
@@ -34,11 +38,14 @@ namespace RegexFindLib.UI
 
             Loaded += OnLoaded;
 
-            // Refresh styles when control becomes visible
+            // Refresh styles when the control is shown again - after it has painted. Walking
+            // doc.Styles (~370 styles, slow COM reads) synchronously here held the pane's first
+            // paint for most of a second; the first show is left to OnLoaded's deferred load.
             IsVisibleChanged += (_, e) =>
             {
-                if ((bool)e.NewValue && DataContext is RegexFindViewModel vm)
-                    vm.EnsureStylesLoaded();
+                if (!(bool)e.NewValue || _initialLoadPending || !(DataContext is RegexFindViewModel vm)) return;
+                Dispatcher.BeginInvoke(new System.Action(vm.EnsureStylesLoaded),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             };
 
             // Refresh styles when focus returns to the pane - the user may have
@@ -74,13 +81,17 @@ namespace RegexFindLib.UI
             // the control is fully painted and visible before any loading begins.
             Dispatcher.BeginInvoke(new System.Action(() =>
             {
-                RegexFindViewModel.LoadRecentSearches();
-                RegexFindViewModel.ScheduleFontLoad();
+                try
+                {
+                    RegexFindViewModel.LoadRecentSearches();
+                    RegexFindViewModel.ScheduleFontLoad();
 
-                if (DataContext is RegexFindViewModel vm)
-                    vm.EnsureStylesLoaded();
+                    if (DataContext is RegexFindViewModel vm)
+                        vm.EnsureStylesLoaded();
 
-                RegexPalette.InsertAction = InsertSymbolAtCursor;
+                    RegexPalette.InsertAction = InsertSymbolAtCursor;
+                }
+                finally { _initialLoadPending = false; }   // later shows refresh even if this first load failed
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
 
