@@ -1,0 +1,59 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer } from "../state.slint";
+import { PageTitle, CheckRow } from "../widgets.slint";
+
+// Like Office's "Change your installation": modify components, repair, or remove.
+export component ManagePage inherits VerticalLayout {
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 14px;
+        PageTitle {
+            title: Lang.t("שינוי ההתקנה", "Change your installation");
+            subtitle: Lang.t("הוסיפו או הסירו רכיבים, תקנו את ההתקנה או הסירו את כלי קודש.", "Add or remove parts, repair the installation, or remove Klei Kodesh.");
+        }
+        for p[i] in Installer.products: CheckRow {
+            text: p.installed ? p.title + Lang.t(" (מותקן)", " (installed)") : p.title;
+            detail: p.available ? p.description : p.note;
+            side-note: p.size;
+            icon: p.id;
+            enabled: p.available;
+            checked: p.selected;
+            toggled => { Installer.toggle-product(i); }
+        }
+        Rectangle { vertical-stretch: 1; }
+        if Installer.confirm-uninstall: Text {
+            text: Lang.t("להסיר את כל רכיבי כלי קודש? לחצו שוב על \"הסר\" לאישור.", "Remove all of Klei Kodesh? Click \"Remove\" again to confirm.");
+            color: Theme.danger;
+            font-size: 12.5px;
+            horizontal-alignment: Lang.start;
+            wrap: word-wrap;
+        }
+    }
+    // Hebrew: [Cancel] ... [Remove] [Repair] [Change]. English: [Change] [Repair] [Remove] ... [Cancel].
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 12px;
+        height: 42px;
+        spacing: 8px;
+        if Lang.en: Button { text: "Change"; primary: true; min-width: 80px; enabled: Installer.has-changes; clicked => { Installer.apply-changes(); } }
+        if Lang.en: Button { text: "Repair"; min-width: 80px; clicked => { Installer.repair(); } }
+        if Lang.en: Button { text: "Remove"; min-width: 80px; clicked => { root.remove(); } }
+        if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { Installer.quit(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { Installer.quit(); } }
+        if !Lang.en: Button { text: "הסר"; min-width: 80px; clicked => { root.remove(); } }
+        if !Lang.en: Button { text: "תיקון"; min-width: 80px; clicked => { Installer.repair(); } }
+        if !Lang.en: Button { text: "שינוי"; primary: true; min-width: 80px; enabled: Installer.has-changes; clicked => { Installer.apply-changes(); } }
+    }
+
+    // First click asks, second click removes.
+    function remove() {
+        if Installer.confirm-uninstall { Installer.uninstall(); } else { Installer.confirm-uninstall = true; }
+    }
+}

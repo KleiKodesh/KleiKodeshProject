@@ -1,0 +1,188 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Lang } from "lang.slint";
+import { Installer } from "state.slint";
+
+// Rows are written per direction: Slint has no layout mirroring, so each row lists its
+// children for Hebrew (right-to-left) and, behind `Lang.en`, in reverse for English.
+
+// A product screenshot in a thin frame.
+export component ShotCard inherits Rectangle {
+    in property <image> source;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: #ffffff;
+    clip: true;
+    Image {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        source: root.source;
+        image-fit: cover;
+        vertical-alignment: top;
+    }
+}
+
+// Icons: the real logos plus the Fluent sets that Kitvei Hakodesh uses.
+export component ProductIcon inherits Rectangle {
+    in property <string> id;
+    in property <length> size: 36px;
+    width: root.size;
+    height: root.size;
+    Image {
+        width: parent.width;
+        height: parent.height;
+        // Add-in: the Word icon itself (taken from WINWORD.EXE), badged below as an add-in.
+        source: root.id == "addin" ? @image-url("images/word.png")
+            : root.id == "kitvei" ? @image-url("images/kitvei-logo.png")
+            : root.id == "kleikodesh" ? @image-url("images/kleikodesh-logo.png")
+            : @image-url("images/tutor.png");
+    }
+    // "Add-in" badge: Office's add-in glyph on a white disc in the bottom corner.
+    if root.id == "addin": Rectangle {
+        width: root.size * 0.5;
+        height: root.size * 0.5;
+        x: root.width - self.width + root.size * 0.08;
+        y: root.height - self.height + root.size * 0.08;
+        border-radius: self.width / 2;
+        background: #ffffff;
+        border-width: 1px;
+        border-color: #d0d0d0;
+        Image {
+            width: parent.width * 0.66;
+            height: parent.height * 0.66;
+            source: @image-url("images/addin.svg");
+            colorize: #185abd;
+        }
+    }
+}
+
+component BarButton inherits Rectangle {
+    callback clicked();
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    background: ta.has-hover ? Theme.header : transparent;
+    @children
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Light/dark switch.
+component ThemeToggle inherits BarButton {
+    Image {
+        width: 16px;
+        height: 16px;
+        source: Theme.dark ? @image-url("images/sun.svg") : @image-url("images/moon.svg");
+        colorize: Theme.muted;
+    }
+    clicked => {
+        Theme.toggle();
+        Installer.theme-changed(Theme.dark);
+    }
+}
+
+// Hebrew / English switch: shows the language it switches to.
+component LanguageToggle inherits BarButton {
+    Text { text: Lang.en ? "עב" : "EN"; color: Theme.muted; font-size: 12px; font-weight: 600; }
+    clicked => {
+        Lang.en = !Lang.en;
+        Installer.language-changed(Lang.en);
+    }
+}
+
+// Office-style top bar: logo + name at the start, language and theme switches at the end.
+export component TopBar inherits HorizontalLayout {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 8px;
+    height: 42px;
+    spacing: 8px;
+    if Lang.en: VerticalLayout { alignment: center; ProductIcon { id: "kleikodesh"; size: 22px; } }
+    if Lang.en: Text { text: "Klei Kodesh"; color: Theme.text; font-size: 13px; font-weight: 600; vertical-alignment: center; }
+    if !Lang.en: VerticalLayout { alignment: center; ThemeToggle { } }
+    if !Lang.en: VerticalLayout { alignment: center; LanguageToggle { } }
+    Rectangle { horizontal-stretch: 1; }
+    if Lang.en: VerticalLayout { alignment: center; LanguageToggle { } }
+    if Lang.en: VerticalLayout { alignment: center; ThemeToggle { } }
+    if !Lang.en: Text { text: "כלי קודש"; color: Theme.text; font-size: 13px; font-weight: 600; vertical-alignment: center; }
+    if !Lang.en: VerticalLayout { alignment: center; ProductIcon { id: "kleikodesh"; size: 22px; } }
+}
+
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+// Page title: large and light, like Office setup.
+export component PageTitle inherits VerticalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> centered;
+    spacing: 4px;
+    Text {
+        text: root.title;
+        color: Theme.text;
+        font-size: 21px;
+        font-weight: 300;
+        horizontal-alignment: root.centered ? TextHorizontalAlignment.center : Lang.start;
+    }
+    if root.subtitle != "": Text {
+        text: root.subtitle;
+        color: Theme.muted;
+        font-size: 12px;
+        horizontal-alignment: root.centered ? TextHorizontalAlignment.center : Lang.start;
+        wrap: word-wrap;
+    }
+}
+
+// Bottom button row. Hebrew: [Cancel] ... [Next] [Back]. English: [Back] [Next] ... [Cancel].
+// Fixed height so the buttons stay normal size.
+export component WizardButtons inherits HorizontalLayout {
+    in property <string> next-text: Lang.t("הבא", "Next");
+    in property <bool> next-enabled: true;
+    in property <bool> show-back: true;
+    callback next();
+    callback back();
+    callback cancel();
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-bottom: 12px;
+    height: 42px;
+    spacing: 8px;
+    if Lang.en && root.show-back: Button { text: "Back"; min-width: 80px; clicked => { root.back(); } }
+    if Lang.en: Button { text: root.next-text; primary: true; enabled: root.next-enabled; min-width: 80px; clicked => { root.next(); } }
+    if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { root.cancel(); } }
+    Rectangle { horizontal-stretch: 1; }
+    if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { root.cancel(); } }
+    if !Lang.en: Button { text: root.next-text; primary: true; enabled: root.next-enabled; min-width: 80px; clicked => { root.next(); } }
+    if !Lang.en && root.show-back: Button { text: "הקודם"; min-width: 80px; clicked => { root.back(); } }
+}
+
+// Checkbox row: box at the start, then icon, text, and a side note at the end.
+export component CheckRow inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> detail;
+    in property <string> side-note;
+    in property <string> icon;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    callback toggled();
+    spacing: 10px;
+    if Lang.en: VerticalLayout { alignment: start; CheckBox { text: ""; enabled: root.enabled; checked: root.checked; toggled => { root.toggled(); } } }
+    if Lang.en && root.icon != "": VerticalLayout { alignment: start; ProductIcon { id: root.icon; size: 32px; opacity: root.enabled ? 1 : 0.5; } }
+    if !Lang.en: Text { text: root.side-note; color: Theme.muted; font-size: 12px; vertical-alignment: top; }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: 2px;
+        Text { text: root.text; color: root.enabled ? Theme.text : Theme.muted; font-size: 13px; horizontal-alignment: Lang.start; }
+        if root.detail != "": Text { text: root.detail; color: Theme.muted; font-size: 12px; horizontal-alignment: Lang.start; wrap: word-wrap; }
+    }
+    if Lang.en: Text { text: root.side-note; color: Theme.muted; font-size: 12px; vertical-alignment: top; }
+    if !Lang.en && root.icon != "": VerticalLayout { alignment: start; ProductIcon { id: root.icon; size: 32px; opacity: root.enabled ? 1 : 0.5; } }
+    if !Lang.en: VerticalLayout { alignment: start; CheckBox { text: ""; enabled: root.enabled; checked: root.checked; toggled => { root.toggled(); } } }
+}

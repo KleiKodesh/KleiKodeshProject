@@ -1,0 +1,40 @@
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer, Page } from "../state.slint";
+import { PageTitle, WizardButtons, CheckRow } from "../widgets.slint";
+
+// The install folder is fixed (%LOCALAPPDATA%\KleiKodesh): the apps and the service
+// recognise an installed product by that path, so it is not offered here.
+export component OptionsPage inherits VerticalLayout {
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 14px;
+        PageTitle {
+            title: Lang.t("אפשרויות התקנה", "Install options");
+            subtitle: Lang.t("ההתקנה למשתמש הנוכחי בלבד ואינה דורשת הרשאות מנהל.", "Installs for the current user only. No administrator rights needed.");
+        }
+        Rectangle { height: 4px; }
+        CheckRow {
+            text: Lang.t("צור קיצורי דרך בשולחן העבודה", "Create desktop shortcuts");
+            checked: Installer.desktop-shortcut;
+            toggled => { Installer.desktop-shortcut = !Installer.desktop-shortcut; }
+        }
+        if Installer.kitvei-selected: CheckRow {
+            text: Lang.t("הוסף את כתבי הקודש ל\"פתח באמצעות\" עבור PDF ו־DOCX", "Add Kitvei Hakodesh to \"Open with\" for PDF and DOCX");
+            detail: Lang.t("לא משנה את תוכנת ברירת המחדל.", "Does not change your default programs.");
+            checked: Installer.file-associations;
+            toggled => { Installer.file-associations = !Installer.file-associations; }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+    WizardButtons {
+        next-text: Lang.t("התקן", "Install");
+        next-enabled: Installer.any-selected;
+        next => { Installer.install(); }
+        back => { Installer.page = Page.welcome; }
+        cancel => { Installer.quit(); }
+    }
+}

@@ -1,0 +1,33 @@
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Lang } from "lang.slint";
+import { TopBar } from "widgets.slint";
+import { Installer, Page } from "state.slint";
+import { WelcomePage } from "pages/welcome.slint";
+import { OptionsPage } from "pages/options.slint";
+import { ProgressPage } from "pages/progress.slint";
+import { DonePage } from "pages/done.slint";
+import { ManagePage } from "pages/manage.slint";
+
+export { Installer, Page, ProductRow } from "state.slint";
+export { Lang } from "lang.slint";
+
+// Fixed-size installer window, like standard Windows / Office setup.
+export component AppWindow inherits Window {
+    title: Lang.t("התקנת כלי קודש ", "Klei Kodesh Setup ") + Installer.version;
+    width: 640px;
+    height: 460px;
+    background: Theme.bg;
+    default-font-family: "Segoe UI";
+    icon: @image-url("images/kleikodesh-logo.png");
+    init => { Palette.color-scheme = ColorScheme.light; }
+
+    VerticalLayout {
+        TopBar { }
+        if Installer.page == Page.welcome: WelcomePage { vertical-stretch: 1; }
+        if Installer.page == Page.options: OptionsPage { vertical-stretch: 1; }
+        if Installer.page == Page.progress: ProgressPage { vertical-stretch: 1; }
+        if Installer.page == Page.done: DonePage { vertical-stretch: 1; }
+        if Installer.page == Page.manage: ManagePage { vertical-stretch: 1; }
+    }
+}

@@ -1,0 +1,43 @@
+import { ProgressIndicator, Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer } from "../state.slint";
+import { PageTitle, ProductIcon } from "../widgets.slint";
+
+// Office-style: row of the products being installed, light title, status line, thin bar.
+export component ProgressPage inherits VerticalLayout {
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-bottom: 32px;
+    spacing: 0px;
+    alignment: center;
+    HorizontalLayout {
+        alignment: center;
+        spacing: 22px;
+        for p in Installer.products: ProductIcon { id: p.id; size: 40px; opacity: p.selected || p.installed ? 1 : 0.25; }
+    }
+    Rectangle { height: 24px; }
+    PageTitle { centered: true; title: Installer.progress-title; subtitle: Installer.step-text; }
+    Rectangle { height: 20px; }
+    ProgressIndicator { progress: Installer.progress; height: 4px; }
+    Rectangle { height: 16px; }
+    // The engine is waiting: these programs hold our files and must close first.
+    if Installer.apps-to-close != "": VerticalLayout {
+        spacing: 10px;
+        Text {
+            text: Lang.t("כדי להמשיך יש לסגור את: ", "To continue, setup needs to close: ") + Installer.apps-to-close
+                + Lang.t(". תתבקשו לשמור מסמכים פתוחים.", ". You will be asked to save open documents.");
+            color: Theme.text;
+            font-size: 12.5px;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 8px;
+            if !Lang.en: Button { text: "ביטול"; clicked => { Installer.close-apps(false); } }
+            Button { text: Lang.t("סגור והמשך", "Close and continue"); primary: true; clicked => { Installer.close-apps(true); } }
+            if Lang.en: Button { text: "Cancel"; clicked => { Installer.close-apps(false); } }
+        }
+    }
+}
