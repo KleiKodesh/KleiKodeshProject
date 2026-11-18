@@ -66,9 +66,6 @@ export type TabRoute =
   | '/book-view'
   | '/hebrewbooks'
   | '/search'
-  | '/hebrew-calendar'
-  | '/dictionary'
-  | '/midot'
   | '/websites'
   | '/web-view'
   | '/file-search'
@@ -405,7 +402,7 @@ export const useTabStore = defineStore('tabs', () => {
   // These used to be "singletons", enforced as one-tab-per-route. Almost none are
   // now: a tab shows one thing at a time, so a destination is unique within a tab
   // for free, and across tabs most should not be unique at all — two tabs may each
-  // hold their own מילון. The exception is SINGLE_TAB_ROUTES (settings), which is
+  // hold their own search. The exception is SINGLE_TAB_ROUTES (settings), which is
   // app-wide state rather than a view. What survives here is this list, which
   // decides what is stripped from the persisted tab list and what stays out of
   // recents — membership here says nothing about one-tab-per-route.
@@ -414,9 +411,6 @@ export const useTabStore = defineStore('tabs', () => {
     '/settings',
     '/books',
     '/hebrewbooks',
-    '/hebrew-calendar',
-    '/dictionary',
-    '/midot',
     '/websites',
     '/file-search',
     '/user-space',
@@ -426,9 +420,6 @@ export const useTabStore = defineStore('tabs', () => {
     '/settings': t('stores.tabTitle.settings'),
     '/books': t('stores.tabTitle.catalog'),
     '/hebrewbooks': t('stores.tabTitle.hebrewbooks'),
-    '/hebrew-calendar': t('stores.tabTitle.calendar'),
-    '/dictionary': t('stores.tabTitle.dictionary'),
-    '/midot': t('stores.tabTitle.midot'),
     '/websites': t('stores.tabTitle.websites'),
     '/file-search': t('stores.tabTitle.fileSearch'),
     '/user-space': t('stores.tabTitle.userSpace'),

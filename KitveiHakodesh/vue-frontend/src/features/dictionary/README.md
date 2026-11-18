@@ -1,6 +1,6 @@
 # dictionary/
 
-Dictionary page. Singleton route `/dictionary`. Queries two databases: `public/dictionary/KitveiHakodesh_dictionary.db` for the dictionary, and the main seforim DB for מצודת ציון, מלבי"ם באור המילות, and מחברת מנחם.
+Dictionary widget (features/widgets): opens in a floating window, not a tab. Queries two databases: `public/dictionary/KitveiHakodesh_dictionary.db` for the dictionary, and the main seforim DB for מצודת ציון, מלבי"ם באור המילות, and מחברת מנחם.
 
 ## Files
 

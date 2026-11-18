@@ -7,7 +7,7 @@ import { useWidgetWindowStore, type WidgetId, type CustomWidget } from './widget
 
 export interface WidgetItem {
   id: WidgetId
-  /** The page's route - the widget's stand-in tab carries it so a tab page behaves as "active". */
+  /** The stand-in tab's route: '/html-view' for a custom page (the HTML viewer reads it), '/' otherwise. */
   route: TabRoute
   text: string
   description: string
@@ -22,10 +22,10 @@ export interface WidgetItem {
 }
 
 /** A former tab page (dictionary, calendar, halachic units): text and icon shared with the nav tables. */
-function pageWidget(id: WidgetId & DocumentIconKey, route: TabRoute, shortcut: string, page: Component): WidgetItem {
+function pageWidget(id: WidgetId & DocumentIconKey, shortcut: string, page: Component): WidgetItem {
   const icon = documentIcon(id)
   return {
-    id, route, shortcut, page,
+    id, route: '/', shortcut, page,
     text: t(`layout.nav.${id}.label`),
     description: t(`layout.nav.${id}.description`),
     icon: icon.icon24,
@@ -33,7 +33,7 @@ function pageWidget(id: WidgetId & DocumentIconKey, route: TabRoute, shortcut: s
   }
 }
 
-/** A widget born from the home date bar. It reads no route; home is a placeholder. */
+/** A widget born from the home date bar. */
 function barWidget(id: WidgetId, icon: Component, color: string, shortcut: string, page: Component): WidgetItem {
   return {
     id, route: '/', shortcut, page, icon, color,
@@ -44,9 +44,9 @@ function barWidget(id: WidgetId, icon: Component, color: string, shortcut: strin
 
 /** The widgets & tools menu, in order. Ctrl+Shift+1..6 toggle them. */
 export const WIDGET_ITEMS: WidgetItem[] = [
-  pageWidget('dict', '/dictionary', 'Ctrl+Shift+1', defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue'))),
-  pageWidget('calendar', '/hebrew-calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue'))),
-  pageWidget('ruler', '/midot', 'Ctrl+Shift+3', defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue'))),
+  pageWidget('dict', 'Ctrl+Shift+1', defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue'))),
+  pageWidget('calendar', 'Ctrl+Shift+2', defineAsyncComponent(() => import('@/features/hebrew-calendar/HebrewCalendarPage.vue'))),
+  pageWidget('ruler', 'Ctrl+Shift+3', defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue'))),
   barWidget('worldClock', IconClock24Filled, '#2b88d8', 'Ctrl+Shift+4', defineAsyncComponent(() => import('./WorldClockWidget.vue'))),
   barWidget('zmanim', IconWeatherSunnyLow24Filled, '#e3a21a', 'Ctrl+Shift+5', defineAsyncComponent(() => import('./ZmanimWidget.vue'))),
   barWidget('learning', IconBookClock24Filled, '#c1440e', 'Ctrl+Shift+6', defineAsyncComponent(() => import('./DailyLearningWidget.vue'))),

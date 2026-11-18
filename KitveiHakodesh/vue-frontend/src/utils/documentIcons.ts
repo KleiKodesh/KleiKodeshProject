@@ -151,12 +151,6 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'library'
     case '/hebrewbooks':
       return 'hbooks'
-    case '/dictionary':
-      return 'dict'
-    case '/hebrew-calendar':
-      return 'calendar'
-    case '/midot':
-      return 'ruler'
     case '/websites':
     case '/web-view':
       return 'globe'

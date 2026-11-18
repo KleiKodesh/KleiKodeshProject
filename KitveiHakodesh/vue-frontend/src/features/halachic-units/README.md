@@ -1,6 +1,6 @@
 # halachic-units
 
-Halachic unit converter. Singleton route `/midot`. Converts between biblical, Talmudic, and modern units across six measurement systems: length, area, volume, weight, coins, and time. Supports multiple halachic opinions for the Talmudic-to-metric conversion factor.
+Halachic unit converter widget (features/widgets): opens in a floating window, not a tab. Converts between biblical, Talmudic, and modern units across six measurement systems: length, area, volume, weight, coins, and time. Supports multiple halachic opinions for the Talmudic-to-metric conversion factor.
 
 **HalachicUnitsPage.vue** — the full converter UI. System selector, opinion selector, from/to unit pickers, numeric input, result display, metric hint, and a step-by-step conversion explanation with source attribution. Shows a one-time disclaimer before first use (persisted via `settingsStore.midotDisclaimerAccepted`).
 

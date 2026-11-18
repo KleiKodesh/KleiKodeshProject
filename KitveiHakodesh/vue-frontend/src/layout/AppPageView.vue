@@ -47,11 +47,6 @@ const pages: Record<string, unknown> = {
     () => import('@/features/hebrewbooks/HebrewBooksPage.vue'),
   ),
   '/search': defineAsyncComponent(() => import('@/features/full-text-search/FullTextSearchPage.vue')),
-  '/hebrew-calendar': defineAsyncComponent(
-    () => import('@/features/hebrew-calendar/HebrewCalendarPage.vue'),
-  ),
-  '/dictionary': defineAsyncComponent(() => import('@/features/dictionary/DictionaryPage.vue')),
-  '/midot': defineAsyncComponent(() => import('@/features/halachic-units/HalachicUnitsPage.vue')),
   '/websites': defineAsyncComponent(() => import('@/features/websites/WebsitesPage.vue')),
   '/web-view': defineAsyncComponent(() => import('@/features/websites/WebViewPage.vue')),
   '/file-search': defineAsyncComponent(() => import('@/features/local-file-search/LocalFileSearchPage.vue')),

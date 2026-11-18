@@ -46,8 +46,9 @@ const paneNavigation = usePaneNavigation()
 const paneActiveTab = computed(() => paneNavigation.activeTab)
 const { dictionaryZoom: zoom } = storeToRefs(settingsStore)
 
-const isDictionaryActive = computed(() => paneNavigation.activeTab?.route === '/dictionary')
-useZoomHandler({ zoom, enabled: isDictionaryActive })
+// Lives in a widget window: zoom keys and Ctrl+wheel act only inside it.
+const pageRef = ref<HTMLElement | null>(null)
+useZoomHandler({ zoom, target: pageRef })
 
 const fontPx = computed(() => (zoom.value / 100) * 13)
 
@@ -63,10 +64,6 @@ onMounted(() => {
   const saved = paneActiveTab.value?.searchQuery
   if (saved) searchQuery.value = saved
   focusSearchInput()
-})
-
-watch(() => paneActiveTab.value?.route, (route) => {
-  if (route === '/dictionary') focusSearchInput()
 })
 
 const debouncedQuery = useDebounce(searchQuery, 300)
@@ -186,7 +183,7 @@ function onSelect(headword: string) {
 </script>
 
 <template>
-  <div class="dict-page">
+  <div ref="pageRef" class="dict-page">
     <TopSearchBar>
       <input
         ref="searchInputRef"
