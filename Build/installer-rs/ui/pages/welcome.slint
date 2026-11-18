@@ -26,6 +26,14 @@ component ProductCard inherits Rectangle {
     border-color: root.selected ? Theme.accent : Theme.border;
     background: Theme.bg;
 
+    // Anywhere on the card toggles it (underneath the content, so the checkbox and
+    // gallery still get their own clicks).
+    TouchArea {
+        enabled: root.available;
+        mouse-cursor: root.available ? pointer : default;
+        clicked => { root.toggled(); }
+    }
+
     Timer {
         interval: 2600ms;
         running: root.slides.length > 1;

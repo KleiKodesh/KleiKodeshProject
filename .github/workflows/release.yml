@@ -112,6 +112,13 @@ jobs:
         with:
           submodules: recursive   # WpfLib, ChromeTabs, FastDocView + its submodules
 
+      # The typing tutor ships in the setup but is its own repo (not tracked here):
+      # the latest version, beside the project as on a dev machine.
+      - uses: actions/checkout@v7
+        with:
+          repository: KleiKodesh/hebrew-typing-tutor
+          path: hebrew-typing-tutor
+
       - uses: microsoft/setup-msbuild@v3
 
       # The runner has the Office build targets but not the VSTO runtime they load.
