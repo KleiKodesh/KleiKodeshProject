@@ -35,3 +35,18 @@ export const SITE_FRAME_KEY_FORWARDER = `(function () {
     window.top.postMessage({ type: 'iframeKeydown', code: e.code, key: e.key, repeat: e.repeat, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, metaKey: e.metaKey, altKey: e.altKey }, '*');
   }, true);
 })();`
+
+/**
+ * Injected into every website page (host: WebSitesFrameActivity in AppViewerSiteFrames.cs; dev:
+ * websitesDevProxy.ts): tells the app once per page that the reader typed, so the site is
+ * protected from automatic unloading (siteFrames.ts). Only in the app's own site frames.
+ */
+export const SITE_FRAME_ACTIVITY_SCRIPT = `(function () {
+  if (window === window.top || window.parent !== window.top || !/^site-/.test(window.name)) return;
+  var told = false;
+  window.addEventListener('input', function () {
+    if (told) return;
+    told = true;
+    window.parent.postMessage({ type: 'kitveiSiteInput' }, '*');
+  }, true);
+})();`

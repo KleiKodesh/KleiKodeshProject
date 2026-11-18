@@ -4,6 +4,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useEventListener, useElementSize } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSuggestionCard from './HomeSuggestionCard.vue'
+import { loadWebsites, matchWebsites, websiteName, type Website } from '@/features/websites/websitesList'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
 import { t } from '@/i18n'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
@@ -53,8 +55,6 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
-  hasIndexFailureToShow,
-  isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
@@ -64,11 +64,21 @@ const {
 // shell decides what it means, so the bar itself never imports navigation. Both
 // cross-references are passed as arrow functions, which defers resolution to call
 // time — neither declaration depends on the other's position.
+void loadWebsites()
+const websiteMatches = computed(() => matchWebsites(homeSearchQuery.value))
+const homePane = usePaneNavigation()
+function onSelectWebsite(site: Website, openInNewTab = false) {
+  searchBar.reset()
+  homePane.openOrUpdateActiveTab({ route: '/web-view', title: websiteName(site), webUrl: site.url }, openInNewTab)
+}
+
 const searchBar = useHomeSearchBar({
   query: homeSearchQuery,
   searchBarRef,
-  hasAnyResults: () => hasAnyResults() || hasIndexFailureToShow(),
-  isLoadingAny,
+  // Only real rows open the dropdown: websites matching the query, or search results - never a
+  // panel that is only "loading" or an index notice.
+  hasAnyResults: () => hasAnyResults() || websiteMatches.value.length > 0,
+  isLoadingAny: () => false,
   clearResults,
   onSubmit: (query) => {
     // A pasted disk path to a file opens it (html → the html page) instead of searching.
@@ -183,6 +193,7 @@ onMounted(focusSearchInput)
             :catalog-toc-results="catalogTocResults"
             :hebrew-books-results="hebrewBooksResults"
             :file-results="fileResults"
+            :website-results="websiteMatches"
             :source-priority="sourcePriority"
             :is-loading-catalog-toc="isLoadingCatalogToc"
             :is-loading-hebrew-books="isLoadingHebrewBooks"
@@ -195,6 +206,7 @@ onMounted(focusSearchInput)
             @select-catalog-toc="navigation.onSelectCatalogToc"
             @select-hebrew-book="navigation.onSelectHebrewBook"
             @select-file="navigation.onSelectFile"
+            @select-website="onSelectWebsite"
           />
         </div>
       </div>

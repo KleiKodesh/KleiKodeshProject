@@ -28,6 +28,8 @@ import type {
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { NavLocation } from '@/stores/navLocation'
+import WebsiteFavicon from '@/features/websites/WebsiteFavicon.vue'
+import { displayHost, websiteName, type Website } from '@/features/websites/websitesList'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
@@ -38,6 +40,8 @@ const props = defineProps<{
   catalogTocResults: TocFsItem[]
   hebrewBooksResults: HebrewBooksSearchResult[]
   fileResults: FileSearchResult[]
+  /** Websites matching the query (matchWebsites): shown first, only when there are any. */
+  websiteResults?: Website[]
   sourcePriority: SearchSourcePriority
   isLoadingCatalogToc: boolean
   isLoadingHebrewBooks: boolean
@@ -79,6 +83,7 @@ const emit = defineEmits<{
   selectCatalogToc: [item: TocFsItem, openInNewTab: boolean]
   selectHebrewBook: [book: HebrewBook, openInNewTab: boolean]
   selectFile: [item: FileSearchResult, openInNewTab: boolean]
+  selectWebsite: [site: Website, openInNewTab: boolean]
   selectTab: [id: string, openInNewTab: boolean]
   forgetTab: [id: string]
   clearAllTabs: []
@@ -144,9 +149,13 @@ const allItems = computed(() => {
     | { kind: 'catalogToc'; item: TocFsItem }
     | { kind: 'hebrewBooks'; book: HebrewBook }
     | { kind: 'file'; item: FileSearchResult }
+    | { kind: 'website'; site: Website }
   > = []
   for (const tab of props.tabs ?? []) {
     items.push({ kind: 'tab', id: tab.id })
+  }
+  for (const site of props.websiteResults ?? []) {
+    items.push({ kind: 'website', site })
   }
   for (const source of sectionOrder.value) {
     if (source === 'catalog') {
@@ -176,6 +185,7 @@ function activateItem(index: number, openInNewTab = false) {
   else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title, openInNewTab)
   else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item, openInNewTab)
   else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book, openInNewTab)
+  else if (item.kind === 'website') emit('selectWebsite', item.site, openInNewTab)
   else emit('selectFile', item.item, openInNewTab)
 }
 
@@ -276,10 +286,30 @@ function getTabIcon(route: string): FileIconInfo {
         </div>
       </template>
 
+      <!-- ── Websites: only when the query matches one ── -->
+      <template v-if="websiteResults?.length">
+        <div class="global-search-dropdown__section-header ui-chrome">{{ $t('websites.settingsTitle') }}</div>
+        <div
+          v-for="site in websiteResults"
+          :key="site.id"
+          role="option"
+          class="global-search-dropdown__item"
+          :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'website' && i.site.id === site.id) }"
+          data-nav-item
+          :title="withNewTabHint(site.url)"
+          @click="emit('selectWebsite', site, wantsNewTab($event))"
+          @auxclick.middle="emit('selectWebsite', site, wantsNewTab($event))"
+        >
+          <WebsiteFavicon :url="site.url" :size="20" class="global-search-dropdown__item-icon" />
+          <span class="global-search-dropdown__item-title">{{ websiteName(site) }}</span>
+          <span class="global-search-dropdown__item-path">{{ displayHost(site.url) }}</span>
+        </div>
+      </template>
+
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
-        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc || isCatalogIndexUnavailable)">
+        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0)">
           <div
             class="global-search-dropdown__section-header ui-chrome"
             role="button"
@@ -339,7 +369,7 @@ function getTabIcon(route: string): FileIconInfo {
         </template>
 
         <!-- ── HebrewBooks section ── -->
-        <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
+        <template v-if="source === 'hebrewbooks' && hebrewBooksResults.length > 0">
           <div
             class="global-search-dropdown__section-header ui-chrome"
             role="button"
@@ -377,7 +407,7 @@ function getTabIcon(route: string): FileIconInfo {
         </template>
 
         <!-- ── File search section ── -->
-        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles || isFileIndexUnavailable)">
+        <template v-if="source === 'files' && fileResults.length > 0">
           <div
             class="global-search-dropdown__section-header ui-chrome"
             role="button"

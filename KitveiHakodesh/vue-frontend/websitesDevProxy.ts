@@ -1,7 +1,7 @@
 import http from 'node:http'
 import fs from 'node:fs'
 import type { Plugin } from 'vite'
-import { SITE_FRAME_KEY_FORWARDER } from './src/features/websites/siteFrameShortcutKeys.js'
+import { SITE_FRAME_ACTIVITY_SCRIPT, SITE_FRAME_KEY_FORWARDER } from './src/features/websites/siteFrameShortcutKeys.js'
 
 /**
  * DEV ONLY: the browser stand-in for the host's WebSitesFrameHeaderStripper.cs.
@@ -83,7 +83,8 @@ export function websitesDevProxy(): Plugin {
               // latin1 round-trips every byte, so a windows-1255 page is not damaged (the tag is ASCII).
               const html = body.toString('latin1')
               const at = html.search(/<head[^>]*>/i)
-              const tag = `<script>${SITE_FRAME_KEY_FORWARDER}</script>`
+              const tag = `<script>${SITE_FRAME_KEY_FORWARDER}
+${SITE_FRAME_ACTIVITY_SCRIPT}</script>`
               body = Buffer.from(at >= 0 ? html.replace(/<head[^>]*>/i, (m) => m + tag) : tag + html, 'latin1')
             }
             res.writeHead(upstream.status, out)

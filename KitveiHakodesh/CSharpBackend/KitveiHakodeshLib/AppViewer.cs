@@ -854,7 +854,7 @@ namespace KitveiHakodeshLib
                 _localFile?.DisposeAllHosts();
                 _serviceRelay?.Detach();
                 _webSites?.Detach();
-                _lowMemoryTimer?.Dispose();
+                StopWatchingLowMemory();
                 if (_serviceRelay != null) KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowClosed();
 
             }

@@ -4,6 +4,8 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
 import { rasterizeTabIcons } from './rasterizeTabIcons'
+import { rasterizeSiteTabIcons, siteTabIconKey } from './rasterizeSiteTabIcons'
+import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/websitesList'
 import { iconKeyForEntry } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
 import {
@@ -66,18 +68,36 @@ export function initTabMirror(): void {
   // (moving the window to a differently-scaled monitor), because the bitmaps are
   // rendered for the exact pixel size the strip draws them at — that is what keeps
   // them crisp instead of scaled-and-soft.
+  // Websites add their own icons ("site:<id>"); the strip takes the whole set at once, so both
+  // kinds are sent together, again whenever the websites list arrives.
+  const siteIconKeys = ref(new Set<string>())
   let lastRatio = 0
+  let lastSiteCount = -1
   function sendTabIcons() {
     const ratio = window.devicePixelRatio || 1
-    if (ratio === lastRatio) return
+    const sites = websitesRef.value
+    if (ratio === lastRatio && sites.length === lastSiteCount) return
     lastRatio = ratio
-    void rasterizeTabIcons().then((icons) => {
-      if (icons.length) notifyTabIcons(icons)
+    lastSiteCount = sites.length
+    void Promise.all([rasterizeTabIcons(), rasterizeSiteTabIcons(sites)]).then(([icons, siteIcons]) => {
+      siteIconKeys.value = new Set(siteIcons.map((icon) => icon.key))
+      const all = [...icons, ...siteIcons]
+      if (all.length) notifyTabIcons(all)
     })
   }
   sendTabIcons()
+  void loadWebsites()
+  watch(websitesRef, sendTabIcons)
   // devicePixelRatio changes fire as a resize, not as their own event.
   window.addEventListener('resize', sendTabIcons)
+
+  /** A website tab's own icon, once it is rasterized (else the route's globe). */
+  function siteIconKeyFor(t: Tab): string | undefined {
+    if (t.route !== '/web-view' || !t.webUrl) return undefined
+    const site = websiteForUrl(t.webUrl, websitesRef.value)
+    const key = site && siteTabIconKey(site)
+    return key && siteIconKeys.value.has(key) ? key : undefined
+  }
 
   const snapshot = computed(() => {
     void resizeTick.value
@@ -94,7 +114,7 @@ export function initTabMirror(): void {
           pane: t.pane === 2 ? 2 : 1,
           // Favicon key into the set pushed by sendTabIcons — same shared mapping
           // the in-page lists use, so the strip shows the identical glyph.
-          iconKey: iconKeyForEntry(t),
+          iconKey: siteIconKeyFor(t) ?? iconKeyForEntry(t),
         })),
       activeTabId: tabStore.activeTabId,
       pane2ActiveTabId: splitOn ? tabStore.pane2ActiveTabId : '',

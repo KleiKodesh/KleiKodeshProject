@@ -79,6 +79,14 @@ export function faviconUrl(url: string): string {
   }
 }
 
+/** Websites whose name (Hebrew or English) or address contains the typed text - the address-bar rows. */
+export function matchWebsites(query: string, list: Website[] = websites.value): Website[] {
+  const q = query.trim().toLowerCase()
+  if (q.length < 2) return []
+  return sortedWebsites(list.filter((site) =>
+    site.name.toLowerCase().includes(q) || (site.nameEn ?? '').toLowerCase().includes(q) || displayHost(site.url).includes(q)))
+}
+
 /** The site part of an address (scheme + host), for one history entry per site. */
 export function webOrigin(url: string): string {
   try {

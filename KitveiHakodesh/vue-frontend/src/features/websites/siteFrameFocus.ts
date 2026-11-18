@@ -9,7 +9,7 @@ let reported = false
 
 /** Re-reads which element has focus; call after any focus change that may involve a site frame. */
 export function refreshSiteFrameFocus(): void {
-  const focused = document.activeElement instanceof HTMLIFrameElement && document.activeElement.classList.contains('web-view-frame')
+  const focused = document.activeElement instanceof HTMLIFrameElement && document.activeElement.classList.contains('site-frame')
   if (focused === reported) return
   reported = focused
   reportSiteFrameFocus(focused)

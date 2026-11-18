@@ -86,6 +86,7 @@ namespace KitveiHakodeshLib
                         case "revealInFolder": _localFile.HandleRevealInFolder(root, id); break;
                         case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
                         // A website's iframe gained / lost focus: app shortcuts are taken from it meanwhile (AppViewerSiteShortcuts.cs).
+                        case "siteFrameMemory": await HandleSiteFrameMemory(id); break;
                         case "siteFrameFocus":
                             SetSiteFrameFocus(root.TryGetProperty("focused", out var sff) && sff.ValueKind == JsonValueKind.True);
                             _bridge.Reply(id, new { });
