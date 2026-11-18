@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, useId } from 'vue'
+import { computed, inject, ref, watch, nextTick, useId } from 'vue'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import {
@@ -43,6 +43,8 @@ import {
 import { useToolbarDrag } from '@/composables/useToolbarDrag'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useHebrewBooksSideEditionStore } from '@/stores/hebrewBooksSideEditionStore'
+import { useHebrewBooksSideEditionMode } from './useHebrewBooksSideEditionMode'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { LinesTable } from './lines/linesTable'
@@ -214,15 +216,23 @@ const bottomCommentaryTitle = computed(() =>
     : t('bookView.toolbar.open_bottom'),
 )
 
+// While a side column shows a scanned edition instead of commentary, its button says so.
+const toolbarPaneId = inject<1 | 2>('paneId', 1)
+const sideEditionStore = useHebrewBooksSideEditionStore()
+const { slot: editionSlot } = useHebrewBooksSideEditionMode(toolbarPaneId)
+function showsEdition(slot: 'side' | 'side-left'): boolean {
+  return sideEditionStore.isEditionShown(toolbarPaneId) && editionSlot.value === slot
+}
+
 const sideCommentaryTitle = computed(() =>
   props.sideCommentaryVisible
-    ? t('bookView.toolbar.close_right')
+    ? t(showsEdition('side') ? 'bookView.toolbar.close_right_edition' : 'bookView.toolbar.close_right')
     : t('bookView.toolbar.open_right'),
 )
 
 const sideLeftCommentaryTitle = computed(() =>
   props.sideLeftCommentaryVisible
-    ? t('bookView.toolbar.close_left')
+    ? t(showsEdition('side-left') ? 'bookView.toolbar.close_left_edition' : 'bookView.toolbar.close_left')
     : t('bookView.toolbar.open_left'),
 )
 
