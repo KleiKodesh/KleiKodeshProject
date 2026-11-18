@@ -43,7 +43,7 @@ const paneId = inject<1 | 2>('paneId', 1)
 const paneNavigation = usePaneNavigation()
 const sideEditionStore = useHebrewBooksSideEditionStore()
 const userEditionsStore = useUserEditionsStore()
-const { isSideBySideAvailable, isToggleOn } = useHebrewBooksSideEditionMode(paneId)
+const { isSideBySideAvailable, isToggleOn, side } = useHebrewBooksSideEditionMode(paneId)
 const editionOpen = useBookEditionOpen(paneId)
 const isOnline = useOnline()
 
@@ -124,6 +124,17 @@ async function onAddFile() {
     <input v-model="isToggleOn" type="checkbox" />
     <span>{{ $t('bookView.hebrewBooks.showInSidePanel') }}</span>
   </label>
+  <div
+    v-if="isSideBySideAvailable && isToggleOn"
+    class="side-panel-side-row"
+    role="radiogroup"
+    :aria-label="$t('bookView.hebrewBooks.sidePanelSide')"
+    @click.stop
+  >
+    <span>{{ $t('bookView.hebrewBooks.sidePanelSide') }}</span>
+    <label><input v-model="side" type="radio" value="right" />{{ $t('bookView.hebrewBooks.sidePanelRight') }}</label>
+    <label><input v-model="side" type="radio" value="left" />{{ $t('bookView.hebrewBooks.sidePanelLeft') }}</label>
+  </div>
 
   <template v-if="userEditions.length">
     <div class="section-label">{{ $t('bookView.hebrewBooks.userItems') }}</div>
@@ -206,6 +217,24 @@ async function onAddFile() {
   cursor: pointer;
   user-select: none;
 }
+.side-panel-side-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+}
+.side-panel-side-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.side-panel-side-row input,
 .side-panel-toggle-row input {
   margin: 0;
   accent-color: var(--accent-color);
