@@ -24,6 +24,8 @@ const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
 import AppTitleBarHistoryButton from './AppTitleBarHistoryButton.vue'
 import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
+const WidgetsDropdown = defineAsyncComponent(() => import('@/features/widgets/WidgetsDropdown.vue'))
+import { IconWrench20Regular } from '@iconify-prerendered/vue-fluent'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
@@ -101,6 +103,9 @@ const activeTab = computed(() => pane.activeTab.value)
 const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
+// Widgets & tools: dictionary, calendar and halachic units open in floating windows.
+const widgetsOpen = ref(false)
+const widgetsBtnRef = ref<HTMLElement | null>(null)
 
 // const isPdfTab = computed(
 //   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
@@ -390,6 +395,19 @@ ${updateItem.text}` : t('layout.menu')"
 
     <div class="bar-end">
       <button
+        v-if="isTitleBarButtonVisible('widgets')"
+        ref="widgetsBtnRef"
+        class="bar-btn"
+        :class="{ active: widgetsOpen }"
+        tabindex="-1"
+        :title="t('layout.widgets.title')"
+        :aria-expanded="widgetsOpen"
+        data-widgets-button
+        @click.stop="widgetsOpen = !widgetsOpen"
+      >
+        <IconWrench20Regular />
+      </button>
+      <button
         v-if="isTitleBarButtonVisible('workspaces')"
         ref="workspacesButtonEl"
         class="bar-btn"
@@ -456,6 +474,12 @@ ${updateItem.text}` : t('layout.menu')"
 
   <!-- Outside the header for the same reason as the dropdown: it must survive the header
        being hidden. It hangs straight down from the button, right edges aligned. -->
+  <WidgetsDropdown
+    v-if="widgetsOpen"
+    :toggle-button-el="widgetsBtnRef"
+    @close="widgetsOpen = false"
+    @click.stop
+  />
   <WorkspaceSubmenu
     ref="workspacesSubmenu"
     v-model:open="workspacesOpen"

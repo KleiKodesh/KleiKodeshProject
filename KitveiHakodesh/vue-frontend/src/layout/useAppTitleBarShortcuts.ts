@@ -1,3 +1,5 @@
+import { WIDGET_ITEMS } from '@/features/widgets/widgetItems'
+import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
 import { computed, onScopeDispose, type ComputedRef, type Ref } from 'vue'
 import { hasHostBridge } from '@/webview-host/seforimDb'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
@@ -65,6 +67,7 @@ export function useAppTitleBarShortcuts(options: {
   const settingsStore = useSettingsStore()
   const themeStore = useThemeStore()
   const { navigateInNewTab } = useAppNavigation()
+  const widgets = useWidgetWindowStore()
 
   const activeTab = computed(() => pane.activeTab.value)
   const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
@@ -80,9 +83,10 @@ export function useAppTitleBarShortcuts(options: {
     'היברו-בוקס',
     'פתח קובץ',
     'חיפוש קבצים',
-    'מילון',
-    'לוח שנה',
-    'מידות ושיעורים',
+    'אזור אישי',
+    // In development, like its menu row (appNavItems).
+    import.meta.env.DEV ? 'חיפוש באזור האישי' : '',
+    '',
     'אתרים ותוספים',
   ]
 
@@ -180,11 +184,11 @@ export function useAppTitleBarShortcuts(options: {
       return true
     }
 
-    // Ctrl+1..Ctrl+9 — quick-nav in a new tab.
-    if (e.code.startsWith('Digit')) {
+    // Ctrl+1..Ctrl+9 — quick-nav in a new tab. Ctrl+Shift+digit is the widgets' (handleAppWide).
+    if (!e.shiftKey && e.code.startsWith('Digit')) {
       const index = Number(e.code.slice(5)) - 1
       const label = QUICK_NAV_LABELS[index]
-      if (label === undefined) return false
+      if (!label) return false
       navigateInNewTab(label)
       return true
     }
@@ -224,7 +228,7 @@ export function useAppTitleBarShortcuts(options: {
         else if (isFastDocViewActive.value) sendFastDocViewCommand(paneId, 'toggleToc')
         return true
       case 'KeyU':
-        // Ctrl+U — UserSpace in a new tab, like the Ctrl+1..9 destinations (also keeps
+        // Ctrl+U — UserSpace in a new tab, same as Ctrl+6 (also keeps
         // the browser's view-source away).
         // Ctrl+Shift+U — toggle the current book's word-link marker signs (all visible →
         // hide all; otherwise show all). No-op on books without markers and on
@@ -284,6 +288,14 @@ export function useAppTitleBarShortcuts(options: {
 
   /** Returns true when the event was consumed. Pane 1 only. */
   function handleAppWide(e: KeyboardEvent): boolean {
+    // Ctrl+Shift+1..6 — the widgets & tools (dictionary, calendar, halachic units, world
+    // clock, zmanim, daily learning). App-wide: focus may sit inside a widget, outside both panes.
+    if (e.ctrlKey && e.shiftKey && !e.altKey && e.code.startsWith('Digit')) {
+      const widget = WIDGET_ITEMS[Number(e.code.slice(5)) - 1]
+      if (!widget) return false
+      widgets.toggle(widget.id)
+      return true
+    }
     if (e.code === 'F11') {
       toggleFullscreen()
       return true

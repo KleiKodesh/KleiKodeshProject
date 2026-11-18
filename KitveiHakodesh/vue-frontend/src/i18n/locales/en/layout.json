@@ -83,6 +83,28 @@
   "findInText": "Find in text (Ctrl+F)",
   "ocrSelect": "Select text in an area (OCR)",
   "home": "Home (Ctrl+G)",
+  "widgets": {
+    "title": "Widgets & tools",
+    "close": "Close",
+    "loading": "Loading…",
+    "add": "Add widget…",
+    "addTitle": "Add a local HTML page or an Otzaria add-in (its index.html) as a widget",
+    "remove": "Remove from widgets",
+    "htmlOnly": "Choose an HTML file (.html or .htm).",
+    "fileMissing": "Could not open {path}",
+    "worldClock": {
+      "label": "World clock",
+      "description": "The time in other cities"
+    },
+    "zmanim": {
+      "label": "Today's zmanim",
+      "description": "All of today’s halachic times"
+    },
+    "learning": {
+      "label": "Daily learning",
+      "description": "Daf Yomi and the other daily cycles"
+    }
+  },
   "workspaces": "Workspaces (F8)",
   "ws": {
     "save": "Save",

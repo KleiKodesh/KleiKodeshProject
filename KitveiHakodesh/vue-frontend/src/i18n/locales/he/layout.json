@@ -83,6 +83,28 @@
   "findInText": "חיפוש בטקסט (Ctrl+F)",
   "ocrSelect": "בחירת טקסט באזור (OCR)",
   "home": "בית (Ctrl+G)",
+  "widgets": {
+    "title": "ווידג'טים וכלים",
+    "close": "סגור",
+    "loading": "טוען…",
+    "add": "הוסף ווידג'ט…",
+    "addTitle": "הוסף דף HTML מקומי או תוסף אוצריא (קובץ index.html שלו) כווידג'ט",
+    "remove": "הסר מהווידג'טים",
+    "htmlOnly": "בחר קובץ HTML (‎.html או .htm‎).",
+    "fileMissing": "לא ניתן לפתוח את {path}",
+    "worldClock": {
+      "label": "שעון עולמי",
+      "description": "השעה בערים אחרות"
+    },
+    "zmanim": {
+      "label": "זמני היום",
+      "description": "כל זמני היום"
+    },
+    "learning": {
+      "label": "לימוד יומי",
+      "description": "דף יומי ושאר המחזורים"
+    }
+  },
   "workspaces": "סביבות עבודה (F8)",
   "ws": {
     "save": "שמור",

@@ -1,30 +1,20 @@
 <script setup lang="ts">
+import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
 import { t } from '@/i18n'
-import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useNow, useWindowSize } from '@vueuse/core'
-import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useListKeys } from '@/composables/useListKeyNav'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
-import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useHomeDailyLearningEntries } from './useHomeDailyLearning'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
-import NextZmanPopup from './NextZmanPopup.vue'
 import { useNextZman } from './useNextZman'
 import { useHomeDateBarFit } from './useHomeDateBarFit'
-import { computeBarPopupAnchor, type BarPopupAnchor } from './homeBarPopupAnchor'
-import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
-// Lazy — the month grid pulls in @hebcal/core, kept out of the home bundle.
-const HomeCalendarPopup = defineAsyncComponent(() => import('./HomeCalendarPopup.vue'))
 import { dateInfo, loadDateInfo } from './homeDateInfo'
-import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
-import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
 
 const props = defineProps<{
   /** Rendered by App.vue as the window's status bar (pinned) rather than under the home page. */
   statusBar?: boolean
 }>()
 
-const paneNavigation = usePaneNavigation()
 const { showClock, dateBarPinned } = storeToRefs(useSettingsStore())
 
 // Current clock time. Hidden when the floating fullscreen ClockWidget (App.vue)
@@ -43,8 +33,6 @@ const {
   displayTime: nextZmanTime,
   tzeit: zmanTzeit,
   now: zmanNow,
-  rows: zmanRows,
-  city: zmanCity,
 } = useNextZman()
 
 // The Hebrew date/daf yomi rolls over at צאת הכוכבים, not civil midnight. Reuse
@@ -76,8 +64,6 @@ const nextZmanCountdown = computed(() => {
 })
 
 const dailyLearningEntries = useHomeDailyLearningEntries()
-// Keyboard nav walks only the rows that can open (their book is in the library).
-const navigableLearningEntries = computed(() => dailyLearningEntries.value.filter((entry) => entry.open))
 
 const dateBarRef = ref<HTMLElement | null>(null)
 const hasNextZman = computed(() => !!nextZman.value)
@@ -90,255 +76,64 @@ const { showClockInBar, showZmanInBar, remeasure } = useHomeDateBarFit(
 // Re-measure when the content itself changes (zman appears, learning loads, etc.).
 watch([showBarClock, nextZman, () => dailyLearningEntries.value.length, clockTime], remeasure)
 
-// ── Zmanim popup ──────────────────────────────────────────────────────────────
-
-const isZmanPopupOpen = ref(false)
-const zmanBarItemRef = ref<HTMLElement | null>(null)
-const zmanButtonRef = ref<HTMLElement | null>(null)
-const zmanPopupRef = ref<InstanceType<typeof NextZmanPopup> | null>(null)
-const zmanPopupEl = computed<HTMLElement | null>(
-  () => (zmanPopupRef.value?.$el as HTMLElement) ?? null,
-)
-
-const zmanPopupLeft = ref(0)
-const zmanPopupBottom = ref(0)
-const zmanPopupMaxHeight = ref(0)
-const zmanPopupStyle = computed(() => ({
-  left: `${zmanPopupLeft.value}px`,
-  bottom: `${zmanPopupBottom.value}px`,
-  maxHeight: `${zmanPopupMaxHeight.value}px`,
-}))
-
-function computeZmanPopupAnchor() {
-  const button = zmanButtonRef.value
-  if (!button) return
-  // Best-effort width (falls back to the popup's min-width before it mounts).
-  const anchor = computeBarPopupAnchor(button, zmanPopupEl.value?.offsetWidth || 220)
-  zmanPopupLeft.value = anchor.left
-  zmanPopupBottom.value = anchor.bottom
-  zmanPopupMaxHeight.value = anchor.maxHeight
-}
-
-const zmanCloser = useDropdownClose(
-  zmanBarItemRef,
-  () => {
-    isZmanPopupOpen.value = false
-  },
-  // The wrapper is the inline bar item; only the popup is fitted.
-  { ignore: [zmanPopupEl], fitToViewport: false },
-)
-
-function toggleZmanPopup() {
-  if (zmanCloser.justClosed.value) return
-  const opening = !isZmanPopupOpen.value
-  isZmanPopupOpen.value = opening
-  if (opening) {
-    computeZmanPopupAnchor()
-    // Re-clamp once the popup has rendered and its real width is known.
-    nextTick(computeZmanPopupAnchor)
-  }
-}
-
-// ── Calendar popup ────────────────────────────────────────────────────────────
-
-const isCalendarOpen = ref(false)
-const calendarBarItemRef = ref<HTMLElement | null>(null)
-const calendarButtonRef = ref<HTMLElement | null>(null)
-const calendarPopupRef = ref<HTMLElement | null>(null)
-const calendarAnchor = ref<BarPopupAnchor>({ left: 0, bottom: 0, maxHeight: 0 })
-const calendarPopupStyle = computed(() => ({
-  left: `${calendarAnchor.value.left}px`,
-  bottom: `${calendarAnchor.value.bottom}px`,
-  maxHeight: `${calendarAnchor.value.maxHeight}px`,
-}))
-
-function computeCalendarAnchor() {
-  const button = calendarButtonRef.value
-  if (!button) return
-  calendarAnchor.value = computeBarPopupAnchor(button, calendarPopupRef.value?.offsetWidth || 440)
-}
-
-const calendarCloser = useDropdownClose(
-  calendarBarItemRef,
-  () => {
-    isCalendarOpen.value = false
-  },
-  // The wrapper is the inline bar item; only the popup is fitted.
-  { ignore: [calendarPopupRef], fitToViewport: false },
-)
-
-function toggleCalendarPopup() {
-  if (calendarCloser.justClosed.value) return
-  const opening = !isCalendarOpen.value
-  isCalendarOpen.value = opening
-  if (opening) {
-    computeCalendarAnchor()
-    nextTick(computeCalendarAnchor)
-  }
-}
-
-function openHebrewCalendar() {
-  isCalendarOpen.value = false
-  paneNavigation.navigateToDestination('/hebrew-calendar')
-}
-
-// ── Daily learning dropdown ───────────────────────────────────────────────────
-
-const isLearningOpen = ref(false)
-const learningBarItemRef = ref<HTMLElement | null>(null)
-const learningButtonRef = ref<HTMLElement | null>(null)
-const learningMenuRef = ref<HTMLElement | null>(null)
-const learningMenuAnchor = ref<BarPopupAnchor>({ left: 0, bottom: 0, maxHeight: 0 })
-const learningMenuStyle = computed(() => ({
-  left: `${learningMenuAnchor.value.left}px`,
-  bottom: `${learningMenuAnchor.value.bottom}px`,
-  maxHeight: `${learningMenuAnchor.value.maxHeight}px`,
-}))
-
-function computeLearningMenuAnchor() {
-  const button = learningButtonRef.value
-  if (!button) return
-  learningMenuAnchor.value = computeBarPopupAnchor(button, learningMenuRef.value?.offsetWidth || 220)
-}
-
-const learningCloser = useDropdownClose(
-  learningBarItemRef,
-  () => {
-    isLearningOpen.value = false
-  },
-  // The wrapper is the inline bar item; only the popup is fitted.
-  { ignore: [learningMenuRef], fitToViewport: false },
-)
-
-function toggleLearningMenu() {
-  if (learningCloser.justClosed.value) return
-  const opening = !isLearningOpen.value
-  isLearningOpen.value = opening
-  if (opening) {
-    learningFocusedIndex.value = 0
-    computeLearningMenuAnchor()
-    nextTick(() => {
-      computeLearningMenuAnchor()
-      learningMenuRef.value?.focus()
-    })
-  }
-}
-
-function openLearningItem(entry: HomeDailyLearningEntry, openInNewTab: boolean) {
-  if (!entry.open) return
-  isLearningOpen.value = false
-  entry.open(openInNewTab)
-}
-
-// Arrow/Home/End/Enter (Ctrl+Enter = new tab) via the shared list-keys helper.
-const { focusedIndex: learningFocusedIndex } = useListKeys(
-  learningMenuRef,
-  () => navigableLearningEntries.value.length,
-  (index, openInNewTab) => {
-    const entry = navigableLearningEntries.value[index]
-    if (entry) openLearningItem(entry, openInNewTab)
-  },
-)
-
-function onLearningMenuKeydown(event: KeyboardEvent) {
-  if (event.code !== 'Escape') return
-  event.preventDefault()
-  isLearningOpen.value = false
-  learningButtonRef.value?.focus()
-}
+// ── Widgets ─────────────────────────────────────────────────────────────────
+// Each bar item toggles its widget window (features/widgets) instead of a popup.
+const widgets = useWidgetWindowStore()
 </script>
 
 <template>
   <div ref="dateBarRef" class="date-bar" :class="{ 'date-bar--status': props.statusBar }">
     <template v-if="showClockInBar">
-      <HomeWorldClockDropdown :clock-time="clockTime" />
+      <div class="world-clock-wrap">
+        <button
+          class="bar-item bar-item--btn bar-clock"
+          :class="{ on: widgets.isOpen('worldClock') }"
+          :title="$t('home.worldClock.title')"
+          @click="widgets.toggle('worldClock')"
+        >
+          {{ clockTime }}
+        </button>
+      </div>
       <span class="bar-sep">·</span>
     </template>
     <template v-if="nextZman && showZmanInBar">
-      <div ref="zmanBarItemRef" class="zman-wrap">
+      <div class="zman-wrap">
         <button
-          ref="zmanButtonRef"
           class="bar-item bar-item--btn zman"
           :class="[
             `zman--${nextZman.urgency}`,
-            { on: isZmanPopupOpen, 'zman--flash': nextZman.flash },
+            { on: widgets.isOpen('zmanim'), 'zman--flash': nextZman.flash },
           ]"
           :title="$t('home.dateBar.nextZmanTitle', { countdown: nextZmanCountdown })"
-          @click="toggleZmanPopup"
+          @click="widgets.toggle('zmanim')"
         >
           <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}
         </button>
       </div>
-      <Teleport to="body">
-        <div v-if="isZmanPopupOpen" class="zman-popup-anchor" :style="zmanPopupStyle">
-          <NextZmanPopup ref="zmanPopupRef" :rows="zmanRows" :city-name="cityDisplayName(zmanCity)" />
-        </div>
-      </Teleport>
       <span class="bar-sep">·</span>
     </template>
-    <div ref="calendarBarItemRef" class="calendar-wrap">
+    <div class="calendar-wrap">
       <button
-        ref="calendarButtonRef"
         class="bar-item bar-item--btn calendar-btn"
-        :class="{ on: isCalendarOpen }"
+        :class="{ on: widgets.isOpen('calendar') }"
         :title="$t('home.dateBar.calendarTitle')"
-        @click="toggleCalendarPopup"
+        @click="widgets.toggle('calendar')"
       >
         {{ dateInfo.hebrewDate }}
       </button>
     </div>
-    <Teleport to="body">
-      <div
-        v-if="isCalendarOpen"
-        ref="calendarPopupRef"
-        class="calendar-popup-anchor"
-        :style="calendarPopupStyle"
-      >
-        <HomeCalendarPopup @open-full="openHebrewCalendar" />
-      </div>
-    </Teleport>
     <template v-if="dailyLearningEntries.length">
       <span class="bar-sep">·</span>
-      <div ref="learningBarItemRef" class="learning-wrap">
+      <div class="learning-wrap">
         <button
-          ref="learningButtonRef"
           class="bar-item bar-item--btn learning-btn"
-          :class="{ on: isLearningOpen }"
+          :class="{ on: widgets.isOpen('learning') }"
           :title="$t('home.dateBar.dailyLearningTitle')"
-          @click="toggleLearningMenu"
+          @click="widgets.toggle('learning')"
         >
           {{ $t('home.dateBar.dailyLearning') }}
         </button>
       </div>
-      <Teleport to="body">
-        <div
-          v-if="isLearningOpen"
-          ref="learningMenuRef"
-          class="learning-menu"
-          :style="learningMenuStyle"
-          tabindex="-1"
-          @keydown="onLearningMenuKeydown"
-        >
-          <button
-            v-for="entry in dailyLearningEntries"
-            :key="entry.key"
-            class="learning-menu-item"
-            :class="{
-              focused:
-                !!entry.open && navigableLearningEntries.indexOf(entry) === learningFocusedIndex,
-            }"
-            :disabled="!entry.open"
-            :data-nav-item="entry.open ? '' : undefined"
-            :title="entry.open ? undefined : $t('home.dateBar.bookNotInLibrary')"
-            tabindex="-1"
-            @click="openLearningItem(entry, wantsNewTab($event))"
-            @mouseenter="entry.open && (learningFocusedIndex = navigableLearningEntries.indexOf(entry))"
-          >
-            <span class="learning-menu-label">{{ entry.label }}</span>
-            <span class="learning-menu-path">{{ entry.location }}</span>
-          </button>
-        </div>
-      </Teleport>
     </template>
     <!-- Shown on hover; pinned, the bar is rendered by App.vue under every page. -->
     <button
@@ -395,56 +190,14 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   background: var(--hover-bg);
   color: var(--text-primary);
 }
-/* Status-bar mode, after classic Outlook / Office: full width, short, two groups at the
-   two edges (learning + date at the start, zman + clock + pin at the end), quiet grey
-   regular text, no colours, no separators - the chrome surface is the only edge. Reordered with `order` so the
-   home layout's markup stays as is. */
-.date-bar--status {
-  height: 20px;
-  padding: 0 4px;
-  gap: 0;
-  justify-content: flex-start;
-  font-size: 12px;
-  background: var(--bg-secondary);
+/* Pinned (date-bar--status) it is the same bar, just shown under every page. */
+.bar-clock {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
 }
-.date-bar--status .bar-sep {
-  display: none;
-}
-.date-bar--status .learning-wrap { order: 1; }
-.date-bar--status .calendar-wrap { order: 2; }
-.date-bar--status .zman-wrap { order: 3; margin-inline-start: auto; }
-.date-bar--status :deep(.world-clock-wrap) { order: 4; }
-.date-bar--status:not(:has(.zman-wrap)) :deep(.world-clock-wrap) { margin-inline-start: auto; }
-.date-bar--status .pin-btn {
-  order: 5;
-  position: static;
-  transform: none;
-  margin-inline-start: 2px;
-}
-.date-bar--status:not(:has(.zman-wrap, :deep(.world-clock-wrap))) .pin-btn { margin-inline-start: auto; }
-.date-bar--status :deep(.bar-item--btn),
-.date-bar--status .bar-lbl {
-  font-weight: 400;
-  color: var(--text-secondary);
-}
-.date-bar--status :deep(.bar-item--btn) {
+.world-clock-wrap {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  height: 18px;
-  line-height: 18px;
-  padding: 0 8px;
-  border-radius: 3px;
-}
-.date-bar--status :deep(.bar-item--btn:hover) {
-  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  color: var(--text-primary);
-}
-.date-bar--status .zman .bar-lbl {
-  color: inherit;
-}
-.date-bar--status .zman--flash {
-  animation: none;
 }
 .bar-sep {
   color: var(--text-secondary);
@@ -526,61 +279,6 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
   color: var(--accent-color);
 }
 /* Density matches NextZmanPopup (12px rows, 1.4 line-height, 2px row padding). */
-.learning-menu {
-  position: fixed;
-  z-index: 200;
-  min-width: 220px;
-  overflow-y: auto;
-  padding: 6px 8px;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
-  outline: none;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-.learning-menu-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 2px 4px;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: start;
-  cursor: pointer;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-.learning-menu-item:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-.learning-menu-item:not(:disabled):hover,
-.learning-menu-item.focused {
-  background: var(--hover-bg);
-}
-.learning-menu-label {
-  color: var(--text-secondary);
-}
-.learning-menu-path {
-  font-weight: 600;
-}
-.zman-popup-anchor,
-.calendar-popup-anchor {
-  position: fixed;
-  z-index: 200;
-}
-.calendar-popup-anchor {
-  display: flex;
-}
 .calendar-wrap {
   position: relative;
   display: inline-flex;

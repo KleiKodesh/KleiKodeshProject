@@ -108,7 +108,8 @@ function onIframeLoad() {
     // it again with the corrected title replaces the existing entry without adding a duplicate.
     const tab = paneNavigation.activeTab
     const filePath = tab.localFilePath
-    if (filePath) {
+    // A widget's stand-in tab is not something the user opened as a document.
+    if (filePath && !tabId.startsWith('widget:')) {
       const recentlyOpenedStore = useRecentlyOpenedStore()
       recentlyOpenedStore.trackNavigation(
         '/html-view',

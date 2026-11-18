@@ -5,6 +5,14 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import type { TabRoute } from '@/stores/tabStore'
 import { t } from '@/i18n'
 import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownload'
+import { useWidgetWindowStore, type WidgetId } from '@/features/widgets/widgetWindowStore'
+
+/** Labels that open a widget window instead of navigating (old labels kept so every caller lands on the widget). */
+const WIDGET_LABELS: Partial<Record<string, WidgetId>> = {
+  מילון: 'dict',
+  'לוח שנה': 'calendar',
+  'מידות ושיעורים': 'ruler',
+}
 
 /**
  * Central navigation handler for all app destinations.
@@ -19,14 +27,12 @@ import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownlo
 export function useAppNavigation() {
   const pane = usePaneNavigation()
   const libraryDownload = useSeforimLibraryDownload()
+  const widgets = useWidgetWindowStore()
 
   const DESTINATION_ROUTES: Partial<Record<string, TabRoute>> = {
     'קטלוג הספרים': '/books',
     הגדרות: '/settings',
     'היברו-בוקס': '/hebrewbooks',
-    'לוח שנה': '/hebrew-calendar',
-    מילון: '/dictionary',
-    'מידות ושיעורים': '/midot',
     'אתרים ותוספים': '/websites',
     'חיפוש קבצים': '/file-search',
     'אזור אישי': '/user-space',
@@ -71,6 +77,8 @@ export function useAppNavigation() {
   // ── Public navigation functions ───────────────────────────────────────────
 
   async function navigate(label: string): Promise<void> {
+    const widget = WIDGET_LABELS[label]
+    if (widget) { widgets.open(widget); return }
     const destination = DESTINATION_ROUTES[label]
     if (destination) {
       pane.navigateToDestination(destination)
@@ -87,6 +95,8 @@ export function useAppNavigation() {
   }
 
   async function navigateInNewTab(label: string): Promise<void> {
+    const widget = WIDGET_LABELS[label]
+    if (widget) { widgets.open(widget); return }
     const destination = DESTINATION_ROUTES[label]
     if (destination) {
       // openInNewTab=true: opens a new tab unless the current tab is home (/), in
