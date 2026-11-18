@@ -390,6 +390,11 @@ namespace KleiKodesh.Helpers
                 if (matchOfficeTheme)
                     OfficeThemeWatcher.Attach(userControl);
 
+                // Title-strip chrome: pane switcher (from the ribbon's tag="pane" buttons) and an
+                // X that really closes. Optional - falls back to a stock pane on anything unexpected.
+                TaskPaneChrome.UseRibbon(() => new KleiKodesh.Ribbon.KeliKodeshRibbon());
+                TaskPaneChrome.Attach(pane, () => _ = ClosePaneAsync(pane, userControl));
+
                 return pane;
             }
             catch (Exception ex)
@@ -502,31 +507,41 @@ namespace KleiKodesh.Helpers
             try
             {
                 Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
-                    .CloseEvent += async () =>
-                    {
-                        // The page's pending persistence writes (tab list, recents, reading
-                        // position) go out before its WebView2 is disposed below - the pane
-                        // closes without any of the page's unload events. Bounded (~500 ms
-                        // worst case, normally a few ms); never throws.
-                        if (userControl is KitveiHakodeshLib.AppViewer viewer)
-                            await viewer.FlushPersistenceAsync();
-
-                        // Close the floating window first if the content was popped out.
-                        // Disposing the host below would otherwise leave a live window
-                        // owned by a document that no longer exists, with a pop-in target
-                        // that has already been disposed.
-                        TaskPanePopOut.For(pane)?.ClosePopOut();
-
-                        // Don't leave the "last revealed" pointer on a pane that is going
-                        // away - it would keep a dead pane alive and win the preference in
-                        // FindReusable over a live one.
-                        if (_lastRevealed == pane) _lastRevealed = null;
-
-                        try { Globals.ThisAddIn.CustomTaskPanes.Remove(pane); } catch { }
-                        userControl?.Dispose();
-                    };
+                    .CloseEvent += async () => await ClosePaneAsync(pane, userControl);
             }
             catch { /* Swallow errors silently */ }
+        }
+
+        /// <summary>
+        /// Closes a pane for good: on its document closing, and on Office's X (TaskPaneChrome).
+        /// Safe to call twice - the second call finds the pane already removed.
+        /// </summary>
+        static async Task ClosePaneAsync(CustomTaskPane pane, UserControl userControl)
+        {
+            try
+            {
+                // The page's pending persistence writes (tab list, recents, reading
+                // position) go out before its WebView2 is disposed below - the pane
+                // closes without any of the page's unload events. Bounded (~500 ms
+                // worst case, normally a few ms); never throws.
+                if (userControl is KitveiHakodeshLib.AppViewer viewer && !viewer.IsDisposed)
+                    await viewer.FlushPersistenceAsync();
+
+                // Close the floating window first if the content was popped out.
+                // Disposing the host below would otherwise leave a live window
+                // owned by a document that no longer exists, with a pop-in target
+                // that has already been disposed.
+                TaskPanePopOut.For(pane)?.ClosePopOut();
+
+                // Don't leave the "last revealed" pointer on a pane that is going
+                // away - it would keep a dead pane alive and win the preference in
+                // FindReusable over a live one.
+                if (_lastRevealed == pane) _lastRevealed = null;
+
+                try { Globals.ThisAddIn.CustomTaskPanes.Remove(pane); } catch { }
+                if (userControl != null && !userControl.IsDisposed) userControl.Dispose();
+            }
+            catch { /* closing must never throw into Office */ }
         }
     }
 }
