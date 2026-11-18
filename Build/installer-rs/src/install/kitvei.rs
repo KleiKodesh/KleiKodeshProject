@@ -7,8 +7,11 @@
 use crate::layout::{Layout, KITVEI_EXE};
 use crate::system::{self, registry::Hkcu, shortcut};
 
-const SHORTCUT_NAME: &str = "כתבי הקודש.lnk";
-const FRIENDLY_NAME: &str = "כתבי הקודש";
+use crate::i18n::Text;
+
+const SHORTCUT: Text = Text::new("כתבי הקודש", "Kitvei Hakodesh");
+/// Every name the shortcut may have now or had before.
+const SHORTCUT_NAMES: [&str; 2] = [SHORTCUT.he, SHORTCUT.en];
 const URL_SCHEME: &str = r"Software\Classes\kitveihakodeshapp";
 const OPEN_WITH: &str = r"Software\Classes\Applications\כתבי הקודש.exe";
 /// Written by old versions; removed whenever we touch associations.
@@ -19,7 +22,7 @@ const OPEN_WITH_TYPES: [&str; 1] = [".pdf"];
 const LEGACY_TYPES: [&str; 7] = [".pdf", ".doc", ".docx", ".rtf", ".txt", ".htm", ".html"];
 
 pub fn is_registered(layout: &Layout) -> bool {
-    layout.start_menu_dir.join(SHORTCUT_NAME).exists()
+    layout.has_shortcut(&SHORTCUT_NAMES, false)
 }
 
 pub fn has_open_with(layout: &Layout) -> bool {
@@ -27,36 +30,30 @@ pub fn has_open_with(layout: &Layout) -> bool {
 }
 
 pub fn has_desktop_shortcut(layout: &Layout) -> bool {
-    layout.desktop_dir.join(SHORTCUT_NAME).exists()
+    layout.has_shortcut(&SHORTCUT_NAMES, true)
 }
 
-pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool) -> std::io::Result<()> {
+pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool, english: bool) -> std::io::Result<()> {
     let exe = layout.file(KITVEI_EXE);
     let link = shortcut::Shortcut {
         target: &exe,
         arguments: "",
         working_dir: &layout.install_dir,
         icon: &exe,
-        description: "כתבי הקודש — מאגר ספרי קודש",
+        description: Text::new("כתבי הקודש — מאגר ספרי קודש", "Kitvei Hakodesh - a library of Torah texts").get(english),
     };
-    shortcut::create(&layout.start_menu_dir.join(SHORTCUT_NAME), &link).map_err(std::io::Error::other)?;
-    let desktop = layout.desktop_dir.join(SHORTCUT_NAME);
-    if desktop_shortcut {
-        shortcut::create(&desktop, &link).map_err(std::io::Error::other)?;
-    } else {
-        let _ = std::fs::remove_file(desktop);
-    }
+    layout.place_shortcut(&SHORTCUT_NAMES, SHORTCUT.get(english), english, desktop_shortcut, &link)?;
 
     let reg = Hkcu::new(layout);
     let command = format!("\"{}\" \"%1\"", exe.display());
-    reg.set_str(URL_SCHEME, "", &format!("URL:{FRIENDLY_NAME}"))?;
+    reg.set_str(URL_SCHEME, "", &format!("URL:{}", SHORTCUT.get(english)))?;
     reg.set_str(URL_SCHEME, "URL Protocol", "")?;
     reg.set_str(&format!(r"{URL_SCHEME}\DefaultIcon"), "", &format!("{},0", exe.display()))?;
     reg.set_str(&format!(r"{URL_SCHEME}\shell\open\command"), "", &command)?;
 
     remove_legacy_prog_id(&reg);
     if open_with {
-        reg.set_str(OPEN_WITH, "FriendlyAppName", FRIENDLY_NAME)?;
+        reg.set_str(OPEN_WITH, "FriendlyAppName", SHORTCUT.get(english))?;
         reg.delete_tree(&format!(r"{OPEN_WITH}\SupportedTypes"));
         for ext in OPEN_WITH_TYPES {
             reg.set_str(&format!(r"{OPEN_WITH}\SupportedTypes"), ext, "")?;
@@ -70,8 +67,7 @@ pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool) -> std
 }
 
 pub fn unregister(layout: &Layout) {
-    let _ = std::fs::remove_file(layout.start_menu_dir.join(SHORTCUT_NAME));
-    let _ = std::fs::remove_file(layout.desktop_dir.join(SHORTCUT_NAME));
+    layout.remove_shortcuts(&SHORTCUT_NAMES);
     let reg = Hkcu::new(layout);
     reg.delete_tree(URL_SCHEME);
     reg.delete_tree(OPEN_WITH);

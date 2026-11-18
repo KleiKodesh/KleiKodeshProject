@@ -196,7 +196,9 @@ fn uninstall(layout: &Layout, reporter: &dyn Reporter) -> Result<(), Failure> {
     kitvei::unregister(layout);
     tutor::unregister(layout);
     state::forget_everything(layout);
-    let _ = std::fs::remove_dir(&layout.start_menu_dir);
+    for dir in layout.start_menu_dirs() {
+        let _ = std::fs::remove_dir(dir);
+    }
     reporter.progress(0.6);
 
     reporter.step(Text::new("מוחק קבצים", "Deleting files"));
@@ -227,7 +229,7 @@ fn check_prerequisites(layout: &Layout, wanted: &HashSet<Product>, reporter: &dy
             .map_err(|e| Failure::new(Text::new("התקנת WebView2 נכשלה.", "Installing WebView2 failed."), e))?;
     }
     if wanted.contains(&Product::TypingTutor) && tutor::edge_exe().is_none() {
-        return Err(Failure::new(Text::new("מאמן ההקלדה דורש את Microsoft Edge.", "The typing tutor needs Microsoft Edge."), "edge missing"));
+        return Err(Failure::new(Text::new("ההקלדה העיוורת דורשת את Microsoft Edge.", "Touch Typing needs Microsoft Edge."), "edge missing"));
     }
     Ok(())
 }
@@ -280,17 +282,17 @@ fn copy_files(layout: &Layout, payload: Option<&Payload>, selection: Selection, 
 fn register_products(layout: &Layout, wanted: &HashSet<Product>, options: &Options) -> Result<(), Failure> {
     let failed = |e: std::io::Error| Failure::new(Text::new("הרישום נכשל.", "Registration failed."), e.to_string());
     if wanted.contains(&Product::WordAddin) {
-        addin::register(layout).map_err(failed)?;
+        addin::register(layout, options.english).map_err(failed)?;
     } else {
         addin::unregister(layout);
     }
     if wanted.contains(&Product::KitveiApp) {
-        kitvei::register(layout, options.desktop_shortcut, options.open_with).map_err(failed)?;
+        kitvei::register(layout, options.desktop_shortcut, options.open_with, options.english).map_err(failed)?;
     } else {
         kitvei::unregister(layout);
     }
     if wanted.contains(&Product::TypingTutor) {
-        tutor::register(layout, options.desktop_shortcut).map_err(failed)?;
+        tutor::register(layout, options.desktop_shortcut, options.english).map_err(failed)?;
     } else {
         tutor::unregister(layout);
     }
@@ -305,7 +307,7 @@ fn finish(layout: &Layout, payload: Option<&Payload>, wanted: &HashSet<Product>,
         payload.write_bare_exe(&layout.installed_setup_exe()).map_err(failed)?;
     }
     state::save(layout, wanted, VERSION).map_err(failed)?;
-    state::write_uninstall_entry(layout, VERSION, folder_size_kb(&layout.install_dir)).map_err(failed)?;
+    state::write_uninstall_entry(layout, VERSION, folder_size_kb(&layout.install_dir), english).map_err(failed)?;
     state::set_addin_language(layout, english);
     let _ = std::fs::remove_dir_all(layout.install_dir.join("setup-downloads"));
     Ok(())

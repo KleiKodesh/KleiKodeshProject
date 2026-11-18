@@ -11,6 +11,21 @@ component SectionTitle inherits Text {
     horizontal-alignment: Lang.start;
 }
 
+// The optional VBA macros template, under the ribbon tools.
+component MacrosSection inherits VerticalLayout {
+    spacing: 8px;
+    padding-top: 12px;
+    SectionTitle { text: Lang.t("פקודות מאקרו", "Macros"); }
+    for m in Installer.macros: CheckRow { text: m.title; checked: m.on; toggled => { Installer.toggle-macros(); } }
+    Text {
+        text: Lang.t("פקודות התוסף כמאקרו, לסרגל הגישה המהירה ולקיצורי מקשים.", "The add-in's commands as macros, for the Quick Access Toolbar and keyboard shortcuts.");
+        color: Theme.muted;
+        font-size: 12px;
+        wrap: word-wrap;
+        horizontal-alignment: Lang.start;
+    }
+}
+
 // Word add-in options, edited here only: which tools the ribbon shows, which sites the
 // Websites pane lists. Two columns: tools (start side), websites (scrolls).
 export component AddinOptionsPage inherits VerticalLayout {
@@ -34,6 +49,7 @@ export component AddinOptionsPage inherits VerticalLayout {
                 spacing: 8px;
                 SectionTitle { text: "On the ribbon"; }
                 for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+                MacrosSection { }
                 Rectangle { vertical-stretch: 1; }
             }
             if !Installer.websites-tool-on: Rectangle { horizontal-stretch: 1; }
@@ -60,6 +76,7 @@ export component AddinOptionsPage inherits VerticalLayout {
                 spacing: 8px;
                 SectionTitle { text: "בסרגל של וורד"; }
                 for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+                MacrosSection { }
                 Rectangle { vertical-stretch: 1; }
             }
         }

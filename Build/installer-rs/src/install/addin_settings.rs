@@ -3,7 +3,9 @@
 //!    = "True"/"False", the add-in's own settings format, read by its `getVisible`;
 //!  * which sites the Websites pane lists: `IsVisible` in `WebSitesWhitelist.json` beside
 //!    the add-in. Entries with `AllowedUrls` are login helpers, not listed sites, and are
-//!    left untouched.
+//!    left untouched;
+//!  * whether the optional VBA macros template sits in Word's STARTUP folder (the file
+//!    is the record, as in the add-in's `VbaMacrosTemplate`).
 
 use std::path::PathBuf;
 
@@ -15,6 +17,10 @@ use crate::system::registry::Hkcu;
 
 const RIBBON: &str = r"Software\VB and VBA Program Settings\KleiKodesh\Ribbon";
 const SITES_FILE: &str = "WebSitesWhitelist.json";
+/// The macros template the add-in ships, and every name it ever installed (for removal).
+const MACROS_FILE: &str = "KleiKodeshMacros.en.dotm";
+const MACROS_SOURCE: &str = r"Resources\KleiKodeshMacros.en.dotm";
+pub const MACRO_TEMPLATES: [&str; 3] = [MACROS_FILE, "KleiKodeshMacros.he.dotm", "KleiKodeshMacros.dotm"];
 /// The list the add-in ships with, used until the add-in's own copy exists.
 const DEFAULT_SITES: &str = include_str!("../../../../KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json");
 
@@ -40,6 +46,8 @@ pub struct AddinSettings {
     /// Same order as `TOOLS`.
     pub tools_visible: Vec<bool>,
     pub sites: Vec<Site>,
+    /// The VBA macros template is installed in Word's STARTUP folder.
+    pub macros: bool,
 }
 
 impl AddinSettings {
@@ -55,7 +63,8 @@ impl AddinSettings {
                 visible: entry["IsVisible"].as_bool().unwrap_or(true),
             })
             .collect();
-        Self { tools_visible, sites }
+        let macros = layout.word_startup_dir.join(MACROS_FILE).exists();
+        Self { tools_visible, sites, macros }
     }
 
     /// Writes both. The sites file goes beside the add-in, so this runs after its files exist.
@@ -74,7 +83,32 @@ impl AddinSettings {
             }
         }
         let text = serde_json::to_string_pretty(&all).map_err(std::io::Error::other)?;
-        std::fs::write(sites_path(layout), text)
+        std::fs::write(sites_path(layout), text)?;
+        self.save_macros(layout)
+    }
+
+    /// Installs (or refreshes) the macros template, or removes every one we ever installed.
+    /// Untouched when the choice did not change: Word locks the file while it runs.
+    fn save_macros(&self, layout: &Layout) -> std::io::Result<()> {
+        if self.macros == layout.word_startup_dir.join(MACROS_FILE).exists() {
+            return Ok(());
+        }
+        let source = layout.file(MACROS_SOURCE);
+        if self.macros && !source.exists() {
+            crate::log::line(&format!("macros template missing, not installed: {}", source.display()));
+            return Ok(());
+        }
+        for name in MACRO_TEMPLATES {
+            let path = layout.word_startup_dir.join(name);
+            if path.exists() {
+                std::fs::remove_file(path)?;
+            }
+        }
+        if self.macros {
+            std::fs::create_dir_all(&layout.word_startup_dir)?;
+            std::fs::copy(source, layout.word_startup_dir.join(MACROS_FILE))?;
+        }
+        Ok(())
     }
 }
 

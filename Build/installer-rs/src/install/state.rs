@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 
 use crate::install::{addin, kitvei, tutor};
-use crate::layout::{Layout, DISPLAY_NAME_HE, PRODUCT_KEY, PUBLISHER_HE};
+use crate::layout::{Layout, DISPLAY_NAME_EN, DISPLAY_NAME_HE, PRODUCT_KEY, PUBLISHER_EN, PUBLISHER_HE};
 use crate::products::{Product, ALL};
 use crate::system::registry::Hkcu;
 
@@ -43,14 +43,15 @@ pub fn save(layout: &Layout, products: &HashSet<Product>, version: &str) -> std:
     reg.set_str(STATE_KEY, "InstallerVariant", "AnyCPU")
 }
 
-pub fn write_uninstall_entry(layout: &Layout, version: &str, size_kb: u32) -> std::io::Result<()> {
+/// Names follow the install language.
+pub fn write_uninstall_entry(layout: &Layout, version: &str, size_kb: u32, english: bool) -> std::io::Result<()> {
     let reg = Hkcu::new(layout);
     let setup = layout.installed_setup_exe();
     let setup = setup.display();
     reg.delete_tree(UNINSTALL_KEY); // drop values only the old NSIS entry had (NoModify...)
-    reg.set_str(UNINSTALL_KEY, "DisplayName", DISPLAY_NAME_HE)?;
+    reg.set_str(UNINSTALL_KEY, "DisplayName", if english { DISPLAY_NAME_EN } else { DISPLAY_NAME_HE })?;
     reg.set_str(UNINSTALL_KEY, "DisplayVersion", version)?;
-    reg.set_str(UNINSTALL_KEY, "Publisher", PUBLISHER_HE)?;
+    reg.set_str(UNINSTALL_KEY, "Publisher", if english { PUBLISHER_EN } else { PUBLISHER_HE })?;
     reg.set_str(UNINSTALL_KEY, "DisplayIcon", &format!("{setup},0"))?;
     reg.set_str(UNINSTALL_KEY, "InstallLocation", &layout.install_dir.display().to_string())?;
     reg.set_str(UNINSTALL_KEY, "UninstallString", &format!("\"{setup}\" --uninstall"))?;
