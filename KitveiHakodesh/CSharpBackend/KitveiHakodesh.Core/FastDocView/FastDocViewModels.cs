@@ -152,6 +152,9 @@ public sealed class FastDocViewSection
 {
     public int FirstBlockIndex { get; set; }
     public int TextWidthTwips { get; set; }
+    /// <summary>The page's top / bottom margin in twips; -1 = not known.</summary>
+    public int TopMarginTwips { get; set; } = -1;
+    public int BottomMarginTwips { get; set; } = -1;
 }
 
 [MessagePackObject(keyAsPropertyName: true)]

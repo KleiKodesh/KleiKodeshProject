@@ -174,14 +174,18 @@ public sealed class FastDocViewOpenDocuments : IDisposable
             ? new FastDocViewPicture { ContentType = picture.ContentType, Bytes = picture.Bytes }
             : null);
 
-    /// <summary>Page text width per section (index-time data); the known ones while the index builds.</summary>
+    /// <summary>Page text width and top / bottom margins per section (index-time data); the known ones while the index builds.</summary>
     public List<FastDocViewSection> Sections(string documentId) => Use(documentId, SectionsOf);
 
     private static List<FastDocViewSection> SectionsOf(IWordWindowedDocument document)
     {
         var sections = new List<FastDocViewSection>(document.Sections.Count);
         foreach (WordDocumentSection section in document.Sections)
-            sections.Add(new FastDocViewSection { FirstBlockIndex = section.FirstBlockIndex, TextWidthTwips = section.TextWidthTwips });
+            sections.Add(new FastDocViewSection
+            {
+                FirstBlockIndex = section.FirstBlockIndex, TextWidthTwips = section.TextWidthTwips,
+                TopMarginTwips = section.TopMarginTwips, BottomMarginTwips = section.BottomMarginTwips,
+            });
         return sections;
     }
 

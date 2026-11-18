@@ -393,6 +393,17 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     return list[low]!.textWidthTwips
   }
 
+  /** The first section's page top margin (twips), or undefined before sections load / when the document does not say. */
+  const topMarginTwips = computed(() => {
+    const margin = sections.value[0]?.topMarginTwips
+    return margin != null && margin >= 0 ? margin : undefined
+  })
+  /** The last section's page bottom margin (twips), or undefined before sections load / when the document does not say. */
+  const bottomMarginTwips = computed(() => {
+    const margin = sections.value[sections.value.length - 1]?.bottomMarginTwips
+    return margin != null && margin >= 0 ? margin : undefined
+  })
+
   /** Row weights, only while they describe exactly the scroller's rows. */
   const rowWeights = computed(() =>
     weights.value && weights.value.length === blockCount.value ? weights.value : undefined,
@@ -425,6 +436,8 @@ export function useFastDocViewDocument(options: FastDocViewDocumentOptions) {
     headings,
     sections,
     textWidthTwipsAt,
+    topMarginTwips,
+    bottomMarginTwips,
     isLoading,
     error,
     readError,
