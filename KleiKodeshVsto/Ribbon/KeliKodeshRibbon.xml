@@ -17,7 +17,7 @@
 
 						<menu itemSize="large">
 
-							<button id="KitveiHakodesh"
+							<button id="KitveiHakodesh" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"
 									getSupertip="getSupertip"
@@ -25,7 +25,7 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="Kiwix"
+							<button id="Kiwix" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"
 									getSupertip="getSupertip"
@@ -44,7 +44,7 @@
 -->
 
 
-							<button id="WebSites"
+							<button id="WebSites" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"
 									getSupertip="getSupertip"
@@ -52,7 +52,7 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="DocDesign"
+							<button id="DocDesign" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"
 									getSupertip="getSupertip"
@@ -60,7 +60,7 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="Nakdan"
+							<button id="Nakdan" tag="pane"
 								getLabel="getLabel"
 								getScreentip="getLabel"
 								getSupertip="getSupertip"
@@ -68,7 +68,7 @@
 								onAction="button_Click"
 								getVisible="getVisible"/>
 							
-							<button id="RegexFind"
+							<button id="RegexFind" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"
 									getSupertip="getSupertip"
@@ -90,7 +90,7 @@
 							getImage="getImage"
 							onAction="button_Click"/>-->
 
-							<button id="Settings"
+							<button id="Settings" tag="pane"
 									getLabel="getLabel"
 									getImage="getImage"
 									onAction="button_Click"/>

@@ -297,6 +297,7 @@
     <Compile Include="Helpers\VbaMacrosTemplate.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
+    <Compile Include="Helpers\TaskPaneChrome.cs" />
     <Compile Include="Helpers\WdActionManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
