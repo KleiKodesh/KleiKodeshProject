@@ -79,6 +79,8 @@ jobs:
   plan:
     needs: gate
     if: needs.gate.outputs.go == 'true' && needs.gate.outputs.renew != 'true'
+    # A test run still builds when Gemini is down (patch version, no notes).
+    continue-on-error: ${{ inputs.test == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -104,7 +106,7 @@ jobs:
   release:
     needs: [gate, plan]
     # A renewal release skips Gemini, so `plan` is skipped then.
-    if: always() && needs.gate.outputs.go == 'true' && (needs.plan.result == 'success' || needs.gate.outputs.renew == 'true')
+    if: always() && needs.gate.outputs.go == 'true' && (needs.plan.result == 'success' || needs.gate.outputs.renew == 'true' || inputs.test)
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
@@ -135,6 +137,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         if: needs.gate.outputs.renew != 'true'
+        continue-on-error: ${{ inputs.test == true }}   # no notes when Gemini was down
         with:
           name: release-notes
 

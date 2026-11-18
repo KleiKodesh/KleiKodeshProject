@@ -148,7 +148,7 @@ function Resolve-Area([string]$name) {
 }
 
 # The whole run stays well inside the release job's timeout; past this budget the step
-# fails and Release retries by itself in an hour.
+# fails; the daily scheduled Release tries again the next day.
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $budgetMinutes = 25
 
@@ -160,7 +160,7 @@ function Invoke-Gemini([string]$text, $schema, [string[]]$chain, [scriptblock]$v
     } | ConvertTo-Json -Depth 30
     foreach ($model in $chain) {
         foreach ($attempt in 1..2) {
-            if ($clock.Elapsed.TotalMinutes -gt $budgetMinutes) { throw "Gemini took over $budgetMinutes minutes - no release now; Release retries by itself in an hour." }
+            if ($clock.Elapsed.TotalMinutes -gt $budgetMinutes) { throw "Gemini took over $budgetMinutes minutes - no release now; the daily scheduled Release tries again tomorrow." }
             try {
                 $resp = Invoke-RestMethod -Method Post -TimeoutSec 150 `
                     -Uri "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent" `
@@ -232,7 +232,7 @@ $($numbered -join "`n`n")
 "@
     Write-Host "Step 1, batch $([int]($i / $size) + 1)"
     $r = Invoke-Gemini $prompt $verdictSchema $models { param($o) $null -ne $o.notes }
-    if (-not $r) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
+    if (-not $r) { throw "Gemini failed on every model - no release now; the daily scheduled Release tries again tomorrow." }
     $found += @($r.notes | Where-Object { $_.visible -and $_.section -ne 'none' -and $_.en })
 }
 # Same area next to each other, so steps of one feature sit together.
@@ -296,7 +296,7 @@ $lines
 "@
 Write-Host "Step 2 (merge)"
 $plan = Invoke-Gemini $prompt $planSchema $mergeChain { param($o) @($o.changes).Count -and $o.bump }
-if (-not $plan) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
+if (-not $plan) { throw "Gemini failed on every model - no release now; the daily scheduled Release tries again tomorrow." }
 if ($plan.bump -notin 'major', 'minor', 'patch') { throw "Gemini returned bump '$($plan.bump)'" }
 
 # Section from the commits' own verdicts, not the merge model: mostly fixes -> fixed;
@@ -387,7 +387,7 @@ $($numbered -join "`n")
 "@
     Write-Host "Step 3, Hebrew batch $([int]($i / 15) + 1)"
     $r = Invoke-Gemini $prompt $heSchema $heChain { param($o) Test-Hebrew $o $batch.Count }
-    if (-not $r) { throw "Gemini failed on every model - no release now; Release retries by itself in an hour." }
+    if (-not $r) { throw "Gemini failed on every model - no release now; the daily scheduled Release tries again tomorrow." }
     $heText += @($r.he)
 }
 # Proofreading: may only correct, never add or remove lines (count checked).
