@@ -6,18 +6,16 @@ Shared utilities for the KleiKodesh VSTO Word add-in. These handle task pane lif
 
 ### Task Pane Management
 
-**`TaskpaneManager.cs`** — Creates/reuses custom task panes. Key methods:
-- `Show(UserControl control, string title, double width)` — Shows a task pane; reuses existing pane of same type for the active Word window, else creates new via `CustomTaskPanes.Add()`
-- `CloseAll()` — Closes all open task panes (called on shutdown)
-- `TriggerUpdateCheck()` — Checks for updates on first pane open
-- Dock position is RTL-aware: Hebrew UI docks left, others dock right
+**`TaskpaneManager.cs`** — The add-in's side panes, on top of `OfficePaneChrome.SidePanes`. Key methods:
+- `Show(id, factory, title)` — Shows view `id` (ribbon button id) in the current side pane of the active window; builds it only when that side pane doesn't have it
+- `OpenNewPane()` — Another side pane in the active window (ribbon "open new side pane")
+- `FindAll<T>(id)` — Live views of an id, without creating one
+- `ToggleFocus()` — Macro shortcut: keyboard focus between document and current view
+- Plugs in the add-in's specifics: dock position (RTL-aware default), the side pane's width (one for all views, 510 by default), pop-out bounds, Office theme, flushing views before disposal, popup owners, closing with the document
 
-**`WpfTaskPane.cs`** — Hosts a WPF UserControl inside a WinForms-based VSTO task pane. Handles:
-- WPF/WinForms interop via `ElementHost`
-- Theme propagation from Office to WPF
-- Keyboard focus management
+**`WpfTaskPane.cs`** — Shows WPF views as side-pane views (wrapped in an `ElementHost`, following the Office theme colours).
 
-**`TaskPanePopOut.cs`** — Pops a docked task pane into a floating, resizable window. Uses `HwndSource` to host the WPF content with proper keyboard and focus handling.
+**`OfficePaneChrome/`** — Self-contained and reusable (no add-in types): `SidePanes` (shared side panes, view shuffling, pop-out, X closes), `OfficeTitleStrip` (selector and pop-out button drawn into Office's title strip), `PaneMenu`, `RibbonPanes` (pane list from the ribbon's `tag="pane"` buttons and its own callbacks), `ChromeWindow` (custom-title-bar window ported from FluentChromeTabs), `PopOutWindow`.
 
 ### Word Integration
 
@@ -65,6 +63,6 @@ Shared utilities for the KleiKodesh VSTO Word add-in. These handle task pane lif
 
 ## Key Patterns
 
-- **Pane reuse** — `TaskpaneManager` checks `CustomTaskPanes` for an existing pane of the same type before creating a new one. This prevents duplicate panes.
+- **One side pane, many views** — ribbon buttons shuffle views into the current side pane instead of opening a pane each; a second side pane is opened on purpose ("open new side pane").
 - **Theme propagation** — WPF task panes subscribe to `OfficeThemeWatcher.ThemeChanged` and update their resource dictionaries dynamically.
 - **RAII for Word interop** — Operations that modify the Word document use `ScreenFreeze` and `UndoRecord` wrappers (defined in DocDesignLib) to prevent flicker and group undo steps.

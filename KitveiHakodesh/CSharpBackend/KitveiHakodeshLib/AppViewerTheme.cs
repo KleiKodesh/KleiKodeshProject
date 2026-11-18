@@ -37,14 +37,11 @@ namespace KitveiHakodeshLib
 
     // Title-bar theme (DarkNet) wiring for AppViewer.
     // Owns: OnParentChanged, OnHostFormHandleCreated, ApplyTitleBarTheme,
-    //       ApplyTitleBarThemeToForm, HandleSetTheme, _extraThemeForm.
+    //       HandleSetTheme.
     public partial class AppViewer
     {
         /// <summary>Raised when Vue reports a theme change, carrying the chrome-strip color.</summary>
         public event EventHandler<ChromeThemeChangedEventArgs> ChromeThemeChanged;
-
-        // Extra form to keep in sync with theme toggles (used by VSTO popout).
-        private Form _extraThemeForm;
 
         private void OnParentChanged(object sender, EventArgs e)
         {
@@ -116,24 +113,6 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
-        /// Applies the current persisted dark mode preference to an explicitly provided Form.
-        /// Used by VSTO's TaskPanePopOut, which moves the WebView2 child control directly into
-        /// a new floating Form — bypassing the normal ParentChanged path that only fires when
-        /// AppViewer itself is re-parented.
-        /// Call this after the popout Form is created but before or after Show().
-        /// </summary>
-        public void ApplyTitleBarThemeToForm(Form form)
-        {
-            if (form == null) return;
-            bool isDark = AppSettingsRegistry.GetDarkMode();
-            try { DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
-            catch { /* best-effort */ }
-            // Track this form so live toggles from HandleSetTheme also update it.
-            _extraThemeForm = form;
-            form.FormClosed += (_, __) => { if (_extraThemeForm == form) _extraThemeForm = null; };
-        }
-
-        /// <summary>
         /// Handles the "setTheme" bridge action sent by Vue whenever the user toggles
         /// dark/light mode. Persists the preference and updates the host Form's title bar.
         /// </summary>
@@ -175,14 +154,6 @@ namespace KitveiHakodeshLib
             {
                 ApplyTitleBarTheme(isDark);
                 ApplyBrowserUiColorScheme(isDark);
-            }
-
-            // Also update the VSTO popout window if one is active.
-            // That form hosts the WebView2 directly and is not reachable via FindForm().
-            if (_extraThemeForm != null && !_extraThemeForm.IsDisposed)
-            {
-                try { DarkNet.Instance.SetWindowThemeForms(_extraThemeForm, isDark ? Theme.Dark : Theme.Light); }
-                catch { }
             }
 
             ApplyThemeToPopups(isDark);

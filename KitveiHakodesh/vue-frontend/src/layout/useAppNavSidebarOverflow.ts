@@ -1,7 +1,6 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
-import { showPopOutButton } from '@/webview-host/bridge'
 import { APP_NAV_UPDATE_KEY } from './appNavUpdateItem'
 
 /**
@@ -60,7 +59,7 @@ export function useAppNavSidebarOverflow(
   )
 
   // Every COLLAPSIBLE button, in visual order - hide-rail is deliberately not among them
-  // (see above), so it has no key at all. The conditional ones (split view, pop-out) are
+  // (see above), so it has no key at all. The conditional ones (update, split view) are
   // simply absent when unavailable, so visible and collapsed are always read off one list.
   // Destinations - settings included - are keyed by their labels, because the label IS the
   // routing key; the buttons that are not destinations get names of their own.
@@ -72,7 +71,6 @@ export function useAppNavSidebarOverflow(
     ...APP_NAV_ITEMS.value.map((item) => item.label),
     ...(isUpdateButtonVisible.value ? [APP_NAV_UPDATE_KEY] : []),
     ...(isSplitViewButtonVisible.value ? ['split-view'] : []),
-    ...(showPopOutButton ? ['pop-out'] : []),
     APP_NAV_SETTINGS_ITEM.label,
   ])
 

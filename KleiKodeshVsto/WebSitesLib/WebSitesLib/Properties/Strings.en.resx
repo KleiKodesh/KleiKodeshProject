@@ -7,7 +7,6 @@
   <data name="ShowAllTabs" xml:space="preserve"><value>Show all tabs</value></data>
   <data name="NewTab" xml:space="preserve"><value>New tab</value></data>
   <data name="CloseTab" xml:space="preserve"><value>Close tab</value></data>
-  <data name="PopOut" xml:space="preserve"><value>Show in task pane / side window</value></data>
   <data name="Refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="Back" xml:space="preserve"><value>Back</value></data>
   <data name="Forward" xml:space="preserve"><value>Forward</value></data>

@@ -100,7 +100,6 @@ namespace KitveiHakodeshLib
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
                         case "recycleHbLocalFile": _hb.HandleRecycleHbLocalFile(root, id); break;
-                        case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
@@ -134,15 +133,6 @@ namespace KitveiHakodeshLib
             _bridge.Reply(id, new { groups });
         }
 
-        private void HandleTogglePopOut(string id)
-        {
-            _bridge.Reply(id, new { });
-            if (InvokeRequired)
-                Invoke(new Action(() => TogglePopOut?.Invoke(false)));
-            else
-                TogglePopOut?.Invoke(false);
-        }
-
         private void HandleToggleFullscreen(string id)
         {
             _bridge.Reply(id, new { });
@@ -158,19 +148,16 @@ namespace KitveiHakodeshLib
 
         private void ToggleFormFullscreen()
         {
-            // AppViewer itself stays in the task pane host even when popped out —
-            // TaskPanePopOut moves _webView (the first child) into the floating form.
-            // So we must look for the form that contains _webView, not AppViewer itself.
             Form hostForm = _webView.FindForm();
 
-            // If not hosted in a window (e.g., still in the VSTO task pane), pop out first.
+            // Not in a window (the Word task pane): the host puts the viewer into a full-screen window.
             if (hostForm == null)
             {
-                TogglePopOut?.Invoke(true); // pop out and go fullscreen in one step
+                RequestFullscreenWindow?.Invoke();
                 return;
             }
 
-            // Already in a floating window — just toggle fullscreen, never touch popout.
+            // In a window: toggle that window's fullscreen.
             var chromeTabsForm = hostForm as FluentChromeTabs.FluentChromeTabsForm;
 
             if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
@@ -261,7 +248,7 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
-        /// Wipes the host's whole KitveiHakodesh settings subtree (window geometry, pop-out
+        /// Wipes the host's whole KitveiHakodesh settings subtree (window geometry, popup
         /// bounds, the theme mirror). The data settings are reset through the service by the
         /// page before it calls this. Clearing the persisted dark mode means the app comes back
         /// light, so the title bar goes light at once to match the theme Vue applies after the

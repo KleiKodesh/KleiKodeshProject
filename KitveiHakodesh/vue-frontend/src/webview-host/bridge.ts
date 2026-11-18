@@ -16,24 +16,18 @@ import { t } from '@/i18n'
 declare global {
   interface Window {
     __webviewAction?: (action: string, args?: object) => Promise<unknown>
-    __webviewShowPopOut?: boolean
+    __webviewIsVsto?: boolean
     __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
   }
 }
 
 /**
- * True when C# sets ShowPopOutButton = true on AppViewer (VSTO task-pane context).
- * Controls visibility of the "חלון עצמאי / חלונית" button in the hamburger menu.
- * Defaults to false in all other environments (standalone demo, browser dev).
- */
-export const showPopOutButton = window.__webviewShowPopOut === true
-
-/**
- * True when running inside the VSTO task-pane context (Word add-in).
+ * True only when running inside the Word task-pane host (C# injects
+ * window.__webviewIsVsto = true there).
  * Use this to conditionally hide features that don't make sense in the narrow
  * task-pane environment (e.g. split view).
  */
-export const isVstoEnvironment = showPopOutButton
+export const isVstoEnvironment = window.__webviewIsVsto === true
 
 /**
  * True where a destination page must take over the current tab instead of opening
@@ -472,9 +466,18 @@ export function reportSiteFrameFocus(focused: boolean): void {
   void action('siteFrameFocus', { focused }).catch(() => {})
 }
 
-export function togglePopOut(): void {
-  if (!hasHostBridge) return
-  action('TogglePopOut').catch(() => {})
+/**
+ * Private memory (MB) of each website iframe's process, by frame name ("site-<tab id>"),
+ * measured by the host from WebView2's process list. Null without a host (dev).
+ */
+export async function measureSiteFrameMemory(): Promise<Record<string, number> | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  try {
+    const reply = await action<{ frames?: Record<string, number> }>('siteFrameMemory')
+    return reply?.frames ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Ceiling for a single hosted reset step. Generous: the FTS wipe legitimately blocks

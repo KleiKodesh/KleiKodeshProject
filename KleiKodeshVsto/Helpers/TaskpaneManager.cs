@@ -1,6 +1,8 @@
-﻿using Microsoft.Office.Tools;
+﻿using OfficePaneChrome;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -10,36 +12,66 @@ using Word = Microsoft.Office.Interop.Word;
 
 namespace KleiKodesh.Helpers
 {
+    /// <summary>
+    /// The add-in's side panes. Every ribbon pane is a view shuffled into the shared side pane of the
+    /// document window (OfficePaneChrome.SidePanes): one Office task pane per window, the views inside it
+    /// keep their state, the title strip carries the view selector and the pop-out button, Office's X
+    /// closes the side pane for real. This class only plugs the add-in's specifics into SidePanes:
+    /// saved dock position / width / pop-out bounds, theme, flushing views before disposal, owners for
+    /// window.open popups, closing with the document. Configured on first use, not at startup.
+    /// </summary>
     public static class TaskPaneManager
     {
+        const string Section = "SidePane";
+        static bool _configured;
 
-        // The pane the user most recently opened or brought forward. VSTO exposes no
-        // "active pane", and insertion order is not a stand-in for one: with several
-        // panes visible at once, the first in the collection is whichever was created
-        // earliest, not whichever the user is looking at.
-        private static CustomTaskPane _lastRevealed;
+        static void EnsureConfigured()
+        {
+            if (_configured) return;
+            _configured = true;
 
-        public static CustomTaskPane Show(
-            UserControl userControl,
-            string title,
-            int width = 600,
-            bool matchOfficeTheme = true,
-            bool popOutBehavior = true)
+            SidePanes.Log = s => Console.WriteLine("[SidePanes] " + s);
+            SidePanes.Configure(Globals.ThisAddIn.CustomTaskPanes, ActiveWindowHandle);
+            SidePanes.UseRibbon(() => new KleiKodesh.Ribbon.KeliKodeshRibbon());
+            SidePanes.MenuTitle = rtl => AddinUiLanguage.T("חלוניות", "Panes");
+            SidePanes.NewPaneText = rtl => KleiKodesh.Ribbon.AddinText.Label("NewPane");
+
+            try
+            {
+                var icon = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico");
+                if (File.Exists(icon)) SidePanes.PopOutIcon = new Icon(icon);
+            }
+            catch { }
+
+            SidePanes.PaneCreated = OnPaneCreated;
+            SidePanes.ViewCreated = OnViewCreated;
+            SidePanes.ViewClosing = FlushView;
+
+            SidePanes.LoadPaneWidth = () => { int w = SettingsManager.GetInt(Section, "Width", -1); return w > 0 ? w : (int?)null; };
+            SidePanes.SavePaneWidth = w => SettingsManager.Save(Section, "Width", w);
+            SidePanes.LoadPopOutBounds = () =>
+            {
+                int x = SettingsManager.GetInt(Section, "PopOutX", int.MinValue), y = SettingsManager.GetInt(Section, "PopOutY", int.MinValue);
+                int w = SettingsManager.GetInt(Section, "PopOutW", 0), h = SettingsManager.GetInt(Section, "PopOutH", 0);
+                return x == int.MinValue || w <= 0 || h <= 0 ? (Rectangle?)null : new Rectangle(x, y, w, h);
+            };
+            SidePanes.SavePopOutBounds = r =>
+            {
+                SettingsManager.Save(Section, "PopOutX", r.X); SettingsManager.Save(Section, "PopOutY", r.Y);
+                SettingsManager.Save(Section, "PopOutW", r.Width); SettingsManager.Save(Section, "PopOutH", r.Height);
+            };
+        }
+
+        /// <summary>
+        /// Shows view <paramref name="id"/> (a ribbon pane id) in the current side pane of the active window,
+        /// building it with <paramref name="factory"/> only if that side pane doesn't have it yet. Returns the view.
+        /// </summary>
+        public static T Show<T>(string id, Func<T> factory, string title) where T : Control
         {
             try
             {
-                var panes = Globals.ThisAddIn.CustomTaskPanes;
-                var type = userControl.GetType();
-
-                // Reuse a pane of this control type in this window, and otherwise build
-                // one. Both halves matter: matching on type alone reused another
-                // document's pane and nothing appeared here, while never matching at all
-                // added a fresh pane on every ribbon click and context-menu search.
-                var pane = FindReusable(panes, type)
-                    ?? CreateNew(userControl, title, width, matchOfficeTheme, popOutBehavior);
-
-                Reveal(pane);
-                return pane;
+                EnsureConfigured();
+                return SidePanes.ShowView(id, title, () => factory()) as T;
             }
             catch (Exception ex)
             {
@@ -48,184 +80,114 @@ namespace KleiKodesh.Helpers
             }
         }
 
-        /// <summary>
-        /// Makes <paramref name="pane"/> visible to the user - which, when its content
-        /// has been popped out into a floating window, means focusing that window rather
-        /// than showing the pane.
-        ///
-        /// Popping out reparents the content control into the form and leaves the pane's
-        /// own control empty. Setting Visible on the pane in that state shows an empty
-        /// task pane, which is what a context-menu search into a popped-out app used to
-        /// produce: the search itself reached the live control in the floating window,
-        /// but a blank pane opened alongside it.
-        /// </summary>
-        /// <summary>
-        /// Shows the pane hosting a <typeparamref name="T"/>, building one only when
-        /// there is no pane to reuse. The eager overload above has to construct the
-        /// control just to learn its type - and an AppViewer constructor spins up a
-        /// WebView2 and starts initialising it - so a context-menu search into an
-        /// already-open pane would build and discard a whole browser control.
-        /// </summary>
-        public static CustomTaskPane Show<T>(
-            Func<T> factory,
-            string title,
-            int width = 600,
-            bool matchOfficeTheme = true,
-            bool popOutBehavior = true)
-            where T : UserControl
-        {
-            try
-            {
-                var pane = FindReusable(Globals.ThisAddIn.CustomTaskPanes, typeof(T))
-                    ?? CreateNew(factory(), title, width, matchOfficeTheme, popOutBehavior);
+        /// <summary>Opens another side pane in the active window (ribbon "open new side pane").</summary>
+        public static void OpenNewPane() { EnsureConfigured(); SidePanes.OpenNewPane(); }
 
-                Reveal(pane);
-                return pane;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "Error");
-                return null;
-            }
-        }
+        /// <summary>Every live view of <paramref name="id"/>, the current side pane's first. Never creates one.</summary>
+        public static List<T> FindAll<T>(string id) where T : Control =>
+            _configured ? SidePanes.FindAllViews(id).OfType<T>().ToList() : new List<T>();
 
-        /// <summary>
-        /// The type of a pane's hosted control, or null if the pane is disposed.
-        /// A pane whose document has gone throws from every member - and not always
-        /// ObjectDisposedException: a released RCW gives COMException (RPC_E_DISCONNECTED)
-        /// or InvalidComObjectException instead. A throw from inside a LINQ predicate
-        /// escapes the whole lookup and reaches the user as an error dialog on an ordinary
-        /// ribbon click, so any failure here means the same thing: not a match.
-        /// </summary>
-        static Type ControlTypeOf(CustomTaskPane pane)
-        {
-            try { return pane.Control?.GetType(); }
-            catch { return null; }
-        }
-
-        /// <summary>
-        /// The pane hosting <paramref name="type"/> that the ribbon should bring forward,
-        /// or null if there is none to reuse.
-        ///
-        /// Duplicating a pane creates a second one of the same type, so a type match can
-        /// find more than one. Prefer the one the user is actually working in - the one
-        /// last brought forward, then any that is shown or popped out - over one that was
-        /// merely created first and has since been closed. Revealing a hidden original
-        /// while its duplicate is on screen looks like the wrong pane opening.
-        /// </summary>
-        static CustomTaskPane FindReusable(CustomTaskPaneCollection panes, Type type)
-        {
-            var activeHwnd = ActiveWindowHandle();
-
-            var matches = panes.Cast<CustomTaskPane>()
-                .Where(p => ControlTypeOf(p) == type && IsForWindow(p, activeHwnd))
-                .ToList();
-
-            return matches.FirstOrDefault(IsLastRevealed)
-                ?? matches.FirstOrDefault(IsUsable)
-                ?? matches.FirstOrDefault();
-        }
-
-        /// <summary>
-        /// The window handle of the window the user is in, or zero if there is none.
-        /// Read once per lookup rather than per pane: each read is a COM call, and two
-        /// reads inside one lookup could disagree.
-        /// </summary>
+        /// <summary>The window handle of the window the user is in, or zero if there is none.</summary>
         public static int ActiveWindowHandle()
         {
             try { return Globals.ThisAddIn.Application.ActiveWindow.Hwnd; }
             catch { return 0; }
         }
 
+        // ---------------- hooks ----------------
+
+        static void OnPaneCreated(Microsoft.Office.Tools.CustomTaskPane pane)
+        {
+            RestoreDockPosition(pane);
+            OfficeThemeWatcher.Attach(pane.Control);
+
+            // The side pane closes with its document.
+            try
+            {
+                int window = (pane.Window as Word.Window)?.Hwnd ?? 0;
+                var doc = (pane.Window as Word.Window)?.Document;
+                if (doc != null)
+                    Globals.Factory.GetVstoObject(doc).CloseEvent += () => SidePanes.CloseAllFor(window);
+            }
+            catch { /* best effort: Office's X still closes it */ }
+        }
+
+        static void OnViewCreated(string id, Control view)
+        {
+            // Office theme colours: the watcher follows controls added to the root it is given, so each view is a root.
+            OfficeThemeWatcher.Attach(view);
+
+            // window.open popups (e.g. Hameshiv) become owned windows of Word.
+            var setPopupOwner = view.GetType().GetMethod("SetPopupOwnerAction");
+            setPopupOwner?.Invoke(view, new object[] { new Action<IntPtr>(SetPopupOwner) });
+
+            // Elevated Word next to a normal one: the view can offer to move this document to a normal Word.
+            // The document of the window the view is created for.
+            var setReopen = view.GetType().GetMethod("SetReopenUnelevatedAction");
+            if (setReopen != null)
+            {
+                Word.Document doc = null;
+                try { doc = Globals.ThisAddIn.Application.ActiveWindow.Document; } catch { }
+                if (doc != null)
+                    setReopen.Invoke(view, new object[] { new Func<bool>(() => ReopenUnelevated(doc)) });
+            }
+        }
+
         /// <summary>
-        /// Whether <paramref name="pane"/> belongs to the window with
-        /// <paramref name="activeHwnd"/>.
-        ///
-        /// A pane is owned by the window that was active when it was added, and Word
-        /// only ever draws it there. Reusing one across documents is what stopped the
-        /// pane appearing in a second document: the lookup matched the first document's
-        /// pane on control type, revealed it, and Word showed it in the document it
-        /// belonged to - so nothing opened where the user had asked, with no error.
-        ///
-        /// Compare handles, not the objects. CustomTaskPane.Window is typed object, so
-        /// `pane.Window == someWindow` is a reference comparison, and two fetches of the
-        /// same Word window can hand back two different wrappers - which compares false
-        /// for the very window the pane belongs to. That failure mode is silent and
-        /// total: no pane is ever reused, and a new one is added on every ribbon click.
-        ///
-        /// Same disposed-pane hazard as ControlTypeOf: a pane whose document has gone
-        /// throws from Window, and a throw here is not a match.
+        /// The page's pending persistence writes (tab list, recents, reading position) go out before its
+        /// WebView2 is disposed - the view closes without any of the page's unload events. Bounded; never throws.
         /// </summary>
-        public static bool IsForWindow(CustomTaskPane pane, int activeHwnd)
+        static async Task FlushView(Control view)
         {
-            if (activeHwnd == 0) return false;
-
-            try { return (pane.Window as Word.Window)?.Hwnd == activeHwnd; }
-            catch { return false; }
+            if (view is KitveiHakodeshLib.AppViewer viewer && !viewer.IsDisposed)
+                await viewer.FlushPersistenceAsync();
         }
+
+        /// <summary>Makes a top-level window (a window.open popup) an owned window of Word's frame.</summary>
+        static void SetPopupOwner(IntPtr formHandle)
+        {
+            int hwnd = ActiveWindowHandle();
+            if (hwnd == 0) return;
+            SetWindowLongPtr(formHandle, -8 /*GWLP_HWNDPARENT*/, GetAncestor((IntPtr)hwnd, 2 /*GA_ROOT*/));
+        }
+
+        static void RestoreDockPosition(Microsoft.Office.Tools.CustomTaskPane pane)
+        {
+            try
+            {
+                pane.DockPosition = SettingsManager.GetEnum(Section, "DockPosition", GetDefaultDockPosition());
+                pane.DockPositionChanged += (s, e) => SettingsManager.Save(Section, "DockPosition", pane.DockPosition);
+            }
+            catch
+            {
+                pane.DockPosition = DockPosition.msoCTPDockPositionLeft;
+            }
+        }
+
+        static DockPosition GetDefaultDockPosition()
+        {
+            int uiLang = Globals.ThisAddIn.Application
+                .LanguageSettings
+                .LanguageID[Microsoft.Office.Core.MsoAppLanguageID.msoLanguageIDUI];
+
+            return (uiLang == 1037 || uiLang == 1025)
+                ? DockPosition.msoCTPDockPositionLeft
+                : DockPosition.msoCTPDockPositionRight;
+        }
+
+        // ---------------- focus toggle (macro shortcut) ----------------
 
         /// <summary>
-        /// Every live pane hosting <paramref name="controlType"/> that is shown or
-        /// popped out, the one the user last brought forward first. Never creates one -
-        /// for features that read from a pane rather than show it. Returns all
-        /// candidates rather than picking one: with duplicated panes only the caller
-        /// can tell which pane's content is the one the user meant.
-        /// </summary>
-        public static List<CustomTaskPane> FindAllUsable(Type controlType) =>
-            Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
-                .Where(p => ControlTypeOf(p) == controlType && IsUsable(p))
-                .OrderByDescending(IsLastRevealed)
-                .ToList();
-
-        // Whether this is the pane the user last brought forward.
-        public static bool IsLastRevealed(CustomTaskPane pane) => pane == _lastRevealed;
-
-        // A pane still worth acting on: alive, and either shown or popped out. Visible
-        // alone is not enough - popping out hides the pane by design.
-        public static bool IsUsable(CustomTaskPane pane)
-        {
-            if (ControlTypeOf(pane) == null) return false;
-            var popOut = TaskPanePopOut.For(pane);
-            return IsVisible(pane) || (popOut != null && popOut.IsPoppedOut);
-        }
-
-        // Same disposed-pane hazard as ControlTypeOf.
-        static bool IsVisible(CustomTaskPane pane)
-        {
-            try { return pane.Visible; }
-            catch { return false; }
-        }
-
-        public static void Reveal(CustomTaskPane pane)
-        {
-            if (pane == null) return;
-
-            _lastRevealed = pane;
-
-            var popOut = TaskPanePopOut.For(pane);
-            if (popOut != null && popOut.IsPoppedOut)
-                popOut.FocusPopOutWindow();
-            else
-                pane.Visible = true;
-        }
-
-        /// <summary>
-        /// Keyboard focus toggle for a macro shortcut: from the document into the pane
-        /// the user is working in (showing it if hidden), and from that pane back to the
-        /// document. The pane is the last revealed one in this window, else any shown
-        /// one; with none, nothing happens.
+        /// Keyboard focus toggle for a macro shortcut: from the document into the current side pane's view
+        /// (showing the side pane if needed), and from there back to the document. With no side pane, nothing.
         /// </summary>
         public static void ToggleFocus()
         {
-            var activeHwnd = ActiveWindowHandle();
-            var panes = Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
-                .Where(p => ControlTypeOf(p) != null && IsForWindow(p, activeHwnd))
-                .ToList();
-            var pane = panes.FirstOrDefault(IsLastRevealed)
-                ?? panes.FirstOrDefault(IsUsable);
-            if (pane == null) return;
+            if (!_configured) return;
+            var view = SidePanes.CurrentView;
+            if (view == null) return;
 
-            if (HasFocus(pane))
+            if (HasFocus(view))
             {
                 var window = Globals.ThisAddIn.Application.ActiveWindow;
                 window.Activate();   // leaves a popped-out window
@@ -233,42 +195,32 @@ namespace KleiKodesh.Helpers
                 return;
             }
 
-            Reveal(pane);
-            var popOut = TaskPanePopOut.For(pane);
-            FocusInto((Control)popOut?.PopOutForm ?? pane.Control);
+            SidePanes.RevealCurrent();
+            FocusInto(view);
         }
 
-        // Whether keyboard focus is inside the pane or its pop-out window. Read from
-        // the foreground thread: WebView2 content is a window of another process, so
-        // GetFocus on this thread does not see it, but it is still a child window here.
-        static bool HasFocus(CustomTaskPane pane)
+        // Whether keyboard focus is inside the view. Read from the foreground thread: WebView2 content is a
+        // window of another process, so GetFocus on this thread does not see it, but it is still a child window.
+        static bool HasFocus(Control view)
         {
             var info = new GUITHREADINFO { cbSize = Marshal.SizeOf(typeof(GUITHREADINFO)) };
             if (!GetGUIThreadInfo(0, ref info) || info.hwndFocus == IntPtr.Zero) return false;
-
-            var form = TaskPanePopOut.For(pane)?.PopOutForm;
-            Control root = (Control)form ?? pane.Control;
-            return root.IsHandleCreated
-                && (info.hwndFocus == root.Handle || IsChild(root.Handle, info.hwndFocus));
+            return view.IsHandleCreated && (info.hwndFocus == view.Handle || IsChild(view.Handle, info.hwndFocus));
         }
 
-        static void FocusInto(Control root)
+        static void FocusInto(Control view)
         {
-            if (root is KitveiHakodeshLib.AppViewer viewer) { viewer.FocusWebContent(); return; }
+            if (view is KitveiHakodeshLib.AppViewer viewer) { viewer.FocusWebContent(); return; }
 
-            var wpf = root.Controls.OfType<System.Windows.Forms.Integration.ElementHost>().FirstOrDefault();
+            var wpf = view.Controls.OfType<System.Windows.Forms.Integration.ElementHost>().FirstOrDefault();
             if (wpf?.Child != null)
             {
                 wpf.Focus();
                 wpf.Child.Focus();
-                wpf.Child.MoveFocus(new System.Windows.Input.TraversalRequest(
-                    System.Windows.Input.FocusNavigationDirection.First));
+                wpf.Child.MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.First));
                 return;
             }
-
-            // A popped-out AppViewer hosts its bare WebView2 in the form.
-            var first = root.Controls.Count > 0 ? root.Controls[0] : root;
-            first.Focus();
+            (view.Controls.Count > 0 ? view.Controls[0] : view).Focus();
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -281,128 +233,10 @@ namespace KleiKodesh.Helpers
 
         [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
         [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent, IntPtr child);
+        [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr h, int i, IntPtr v);
+        [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint f);
 
-        public static CustomTaskPane DuplicateCurrent()
-        {
-            try
-            {
-                var panes = Globals.ThisAddIn.CustomTaskPanes
-                    .Cast<CustomTaskPane>()
-                    .ToList();
-
-                // Prefer the pane the user last brought forward; fall back to the first
-                // visible one. Without the preference, duplicating with both Kitvei
-                // Hakodesh and Settings open would duplicate whichever was created first
-                // rather than the one being used - and a popped-out pane reports itself
-                // invisible, so the fallback alone swings on pop-out state.
-                // Only panes in the window the user is in are candidates - duplicating
-                // must not pick up the pane belonging to another open document.
-                var activeHwnd = ActiveWindowHandle();
-
-                var current = panes.FirstOrDefault(p => p == _lastRevealed && IsUsable(p) && IsForWindow(p, activeHwnd))
-                    ?? panes.FirstOrDefault(p => IsVisible(p) && IsForWindow(p, activeHwnd));
-
-                if (current == null)
-                    return null;
-
-                string baseTitle = current.Title.TrimStart('@');
-
-                var existing = panes.FirstOrDefault(p =>
-                    p != current &&
-                    IsForWindow(p, activeHwnd) &&
-                    p.Title.TrimStart('@') == baseTitle);
-
-                if (existing != null)
-                {
-                    Reveal(existing);
-                    return existing;
-                }
-
-                if (current.Control is WpfHostControl wpfHost)
-                    return WpfTaskPane.DuplicateCurrent(wpfHost, current);
-
-                var controlType = current.Control.GetType();
-                var newControl = (UserControl)Activator.CreateInstance(controlType);
-
-                var newPane = CreateNew(
-                    newControl,
-                    "@" + baseTitle,
-                    current.Width
-                );
-
-                newPane.Visible = true;
-                return newPane;
-            }
-            catch (Exception)
-            {
-                MessageBox.Show("אין אפשרות לשכפל חלונית צד זו)", "Duplicate TaskPane Error");
-                return null;
-            }
-        }
-
-        public static CustomTaskPane CreateNew(
-           UserControl userControl,
-           string title,
-           int width = 600,
-           bool matchOfficeTheme = true,
-           bool popOutBehavior = true)
-        {
-            try
-            {
-                var panes = Globals.ThisAddIn.CustomTaskPanes;
-                var type = userControl.GetType();
-                var pane = panes.Add(userControl, title);
-
-                RestoreDockPosition(pane, type.Name);
-                RestoreWidth(pane, userControl, type.Name, width);
-                AttachRemoveOnClose(pane, userControl);
-
-                TaskPanePopOut popOutHandler = null;
-                if (popOutBehavior)
-                {
-                    popOutHandler = new TaskPanePopOut(userControl, pane);
-
-                    // If the userControl has a method to set the popout toggle action, call it
-                    var setPopOutMethod = userControl.GetType().GetMethod("SetPopOutToggleAction");
-                    if (setPopOutMethod != null)
-                    {
-                        setPopOutMethod.Invoke(userControl, new object[] { new Action<bool>(popOutHandler.Toggle) });
-                    }
-                }
-
-                // window.open popups (e.g. Hameshiv) become owned windows of Word.
-                var setPopupOwnerMethod = userControl.GetType().GetMethod("SetPopupOwnerAction");
-                if (setPopupOwnerMethod != null)
-                    setPopupOwnerMethod.Invoke(userControl, new object[] { new Action<IntPtr>(TaskPanePopOut.SetOwner) });
-
-                // Elevated Word next to a normal one: the pane can offer to move this
-                // document to a normal Word. The document of the window the pane belongs
-                // to - not ActiveDocument, which can be another window's during a restore.
-                var setReopenMethod = userControl.GetType().GetMethod("SetReopenUnelevatedAction");
-                if (setReopenMethod != null)
-                {
-                    Word.Document doc = null;
-                    try { doc = (pane.Window as Word.Window)?.Document; } catch { }
-                    if (doc != null)
-                        setReopenMethod.Invoke(userControl, new object[] { new Func<bool>(() => ReopenUnelevated(doc)) });
-                }
-
-                if (matchOfficeTheme)
-                    OfficeThemeWatcher.Attach(userControl);
-
-                // Title-strip chrome: pane switcher (from the ribbon's tag="pane" buttons) and an
-                // X that really closes. Optional - falls back to a stock pane on anything unexpected.
-                TaskPaneChrome.UseRibbon(() => new KleiKodesh.Ribbon.KeliKodeshRibbon());
-                TaskPaneChrome.Attach(pane, () => _ = ClosePaneAsync(pane, userControl));
-
-                return pane;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "Error");
-                return null;
-            }
-        }
+        // ---------------- reopen in a normal (unelevated) Word ----------------
 
         /// <summary>
         /// Closes <paramref name="doc"/> in this (elevated) Word and opens it again through
@@ -452,96 +286,6 @@ namespace KleiKodesh.Helpers
             };
             timer.Start();
             return true;
-        }
-
-        static void RestoreDockPosition(CustomTaskPane pane, string type)
-        {
-            try
-            {
-                var defaultPos = GetDefaultDockPosition();
-
-                pane.DockPosition = SettingsManager.GetEnum(
-                    type,
-                    "DockPosition",
-                    defaultPos
-                );
-
-                pane.DockPositionChanged += (s, e) =>
-                    SettingsManager.Save(type, "DockPosition", pane.DockPosition);
-            }
-            catch
-            {
-                pane.DockPosition = DockPosition.msoCTPDockPositionLeft;
-            }
-        }
-
-        static DockPosition GetDefaultDockPosition()
-        {
-            int uiLang = Globals.ThisAddIn.Application
-                .LanguageSettings
-                .LanguageID[Microsoft.Office.Core.MsoAppLanguageID.msoLanguageIDUI];
-
-            return (uiLang == 1037 || uiLang == 1025)
-                ? DockPosition.msoCTPDockPositionLeft
-                : DockPosition.msoCTPDockPositionRight;
-        }
-
-        static void RestoreWidth(
-            CustomTaskPane pane,
-            UserControl userControl,
-            string type,
-            int defaultWidth)
-        {
-            try
-            {
-                pane.Width = SettingsManager.GetInt(type, "TaskPaneWidth", defaultWidth);
-
-                userControl.SizeChanged += (s, e) =>
-                    SettingsManager.Save(type, "TaskPaneWidth", pane.Width);
-            }
-            catch { /* Swallow errors silently */ }
-        }
-
-        static void AttachRemoveOnClose(CustomTaskPane pane, UserControl userControl)
-        {
-            try
-            {
-                Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
-                    .CloseEvent += async () => await ClosePaneAsync(pane, userControl);
-            }
-            catch { /* Swallow errors silently */ }
-        }
-
-        /// <summary>
-        /// Closes a pane for good: on its document closing, and on Office's X (TaskPaneChrome).
-        /// Safe to call twice - the second call finds the pane already removed.
-        /// </summary>
-        static async Task ClosePaneAsync(CustomTaskPane pane, UserControl userControl)
-        {
-            try
-            {
-                // The page's pending persistence writes (tab list, recents, reading
-                // position) go out before its WebView2 is disposed below - the pane
-                // closes without any of the page's unload events. Bounded (~500 ms
-                // worst case, normally a few ms); never throws.
-                if (userControl is KitveiHakodeshLib.AppViewer viewer && !viewer.IsDisposed)
-                    await viewer.FlushPersistenceAsync();
-
-                // Close the floating window first if the content was popped out.
-                // Disposing the host below would otherwise leave a live window
-                // owned by a document that no longer exists, with a pop-in target
-                // that has already been disposed.
-                TaskPanePopOut.For(pane)?.ClosePopOut();
-
-                // Don't leave the "last revealed" pointer on a pane that is going
-                // away - it would keep a dead pane alive and win the preference in
-                // FindReusable over a live one.
-                if (_lastRevealed == pane) _lastRevealed = null;
-
-                try { Globals.ThisAddIn.CustomTaskPanes.Remove(pane); } catch { }
-                if (userControl != null && !userControl.IsDisposed) userControl.Dispose();
-            }
-            catch { /* closing must never throw into Office */ }
         }
     }
 }

@@ -17,7 +17,7 @@ namespace KleiKodesh.Ribbon
     /// Hebrew names mirror AddinText - keep them in step when a label changes. They
     /// need Windows' "language for non-Unicode programs" set to Hebrew, as the VBA
     /// editor itself does to type them.
-    /// Deliberately NOT exposed: Settings and DuplicatePane. Both act on the add-in's
+    /// Deliberately NOT exposed: Settings and NewPane. Both act on the add-in's
     /// own panes rather than on the document, so they make no sense in a macro.
     /// Do not add them back when adding new commands here. TogglePaneFocus is the
     /// exception on purpose: moving keyboard focus is exactly what a shortcut is for.

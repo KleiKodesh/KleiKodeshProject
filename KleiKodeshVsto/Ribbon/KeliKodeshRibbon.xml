@@ -76,7 +76,7 @@
 									onAction="button_Click"
 									getVisible="getVisible"/>
 
-							<button id="DuplicatePane"
+							<button id="NewPane"
 								getLabel="getLabel"
 								getScreentip="getLabel"
 								getSupertip="getSupertip"

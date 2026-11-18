@@ -5,15 +5,12 @@ import { ref, computed, onMounted, nextTick, inject } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
 import {
-  IconOpen28Regular,
   IconChevronDoubleLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 import { useAppNavUpdateItem } from './appNavUpdateItem'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { showPopOutButton } from '@/webview-host/bridge'
-import { togglePopOut } from '@/webview-host/bridge'
 import { useEventListener } from '@vueuse/core'
 
 const emit = defineEmits<{ close: [] }>()
@@ -26,7 +23,7 @@ const menuRef = ref<HTMLElement | null>(null)
 
 const settingsStore = useSettingsStore()
 
-// The rows after the destinations, in render order. Pop-out is hosted-only, so the
+// The rows after the destinations, in render order. The update row is conditional, so the
 // keyboard indexes are read off this list rather than counted by hand.
 //
 // The sidebar row only ever offers to OPEN the sidebar: while the sidebar is up this menu
@@ -40,7 +37,7 @@ const settingsStore = useSettingsStore()
 // The update row is the Windows / Firefox one: it exists only while an update is
 // downloading, ready or installing, sits first after the divider, and a click installs.
 // There is no "later" - like Windows' orange dot it simply stays until it is clicked.
-type MenuRow = 'update' | 'settings' | 'navSidebar' | 'popOut'
+type MenuRow = 'update' | 'settings' | 'navSidebar'
 
 const { item: updateItem, install: installUpdate } = useAppNavUpdateItem()
 
@@ -48,7 +45,6 @@ const menuRows = computed<MenuRow[]>(() => [
   ...(updateItem.value ? ['update' as const] : []),
   'settings',
   'navSidebar',
-  ...(showPopOutButton ? ['popOut' as const] : []),
 ])
 
 useDropdownClose(menuRef, () => emit('close'), {
@@ -74,7 +70,6 @@ function activateIndex(index: number) {
   if (row === 'update') onInstallUpdate()
   else if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
   else if (row === 'navSidebar') onShowNavSidebar()
-  else if (row === 'popOut') onPopOut()
 }
 
 useEventListener(menuRef, 'keydown', (e: KeyboardEvent) => {
@@ -98,11 +93,6 @@ const paneId = inject<1 | 2>('paneId', 1)
 
 function onShowNavSidebar() {
   settingsStore.setNavSidebarVisible(paneId, true)
-  emit('close')
-}
-
-function onPopOut() {
-  togglePopOut()
   emit('close')
 }
 
@@ -170,17 +160,6 @@ ${APP_NAV_SETTINGS_ITEM.description}`"
       <span class="nav-icon"><IconChevronDoubleLeft20Regular /></span>
       <span class="nav-label">{{ $t('layout.sidebar') }}</span>
       <span class="nav-shortcut">Ctrl+Shift+M</span>
-    </button>
-    <button
-      v-if="showPopOutButton"
-      class="nav-row"
-      :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('popOut') }"
-      data-nav-item
-      :title="$t('layout.popOutToggle')"
-      @click="onPopOut"
-    >
-      <span class="nav-icon"><IconOpen28Regular /></span>
-      <span class="nav-label">{{ $t('layout.popOutLabel') }}</span>
     </button>
   </div>
 </template>

@@ -125,7 +125,7 @@ namespace KitveiHakodeshLib
             foreach (var form in _popupForms) SetPopupTheme(form, isDark);
         }
 
-        // Same as TaskPanePopOut: in the Word process DarkNet ignores SetWindowThemeForms
+        // In the Word process DarkNet ignores SetWindowThemeForms
         // (Light) unless SetCurrentProcessTheme(Auto) runs right before it.
         private void SetPopupTheme(Form form, bool isDark)
         {
@@ -137,7 +137,7 @@ namespace KitveiHakodeshLib
             catch { /* best-effort */ }
         }
 
-        // VSTO task pane has no host Form to borrow an icon from — same file TaskPanePopOut uses.
+        // VSTO task pane has no host Form to borrow an icon from — the add-in's own icon file.
         private static Icon _addinIcon;
 
         private static Icon AddinIcon()

@@ -20,7 +20,6 @@ namespace KitveiHakodeshDemoApp
     {
         private readonly AppViewer _viewer;
         private readonly ChromeTabsMirror _tabsMirror;
-        private Form _popoutWindow;
         private Rectangle _lastNormalBounds;
 
         /// <summary>The WebView2 user-data folder of this window (Program starts its browser early).</summary>
@@ -46,7 +45,6 @@ namespace KitveiHakodeshDemoApp
             ShowTabListButton = true;
 
             _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill };
-            _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 
             // Keeps the strip in sync with the Vue tab store, both directions.
@@ -132,84 +130,10 @@ namespace KitveiHakodeshDemoApp
             }
         }
 
-        private void Toggle(bool goFullScreen = false)
-        {
-            if (_popoutWindow == null || _popoutWindow.IsDisposed)
-                PopOut(goFullScreen);
-            else
-                PopIn();
-        }
-
-        private void PopOut(bool goFullScreen = false)
-        {
-            Controls.Remove(_viewer);
-
-            var saved = AppSettingsRegistry.GetPopoutBounds();
-            bool hasSaved = saved.X != -1 && saved.Y != -1;
-
-            _popoutWindow = new Form
-            {
-                Text = "כתבי הקודש",
-                Size = new System.Drawing.Size(saved.Width, saved.Height),
-                StartPosition = hasSaved ? FormStartPosition.Manual : FormStartPosition.CenterScreen,
-                Icon = CreateWindowIcon(),
-                RightToLeftLayout = true,
-                RightToLeft = RightToLeft.Yes,
-            };
-            if (hasSaved)
-                _popoutWindow.Location = new System.Drawing.Point(saved.X, saved.Y);
-
-            _viewer.Dock = DockStyle.Fill;
-            _popoutWindow.Controls.Add(_viewer);
-            _popoutWindow.FormClosing += OnPopoutClosing;
-            _popoutWindow.ResizeEnd += OnPopoutBoundsChanged;
-            _popoutWindow.Move += OnPopoutBoundsChanged;
-            _popoutWindow.Show();
-
-            if (goFullScreen)
-            {
-                _popoutWindow.FormBorderStyle = FormBorderStyle.None;
-                _popoutWindow.WindowState = FormWindowState.Maximized;
-            }
-        }
-
-        private void OnPopoutBoundsChanged(object sender, EventArgs e)
-        {
-            if (_popoutWindow == null || _popoutWindow.IsDisposed) return;
-            if (_popoutWindow.WindowState != FormWindowState.Normal) return;
-            SavePopoutBounds(_popoutWindow.Bounds);
-        }
-
-        private static void SavePopoutBounds(System.Drawing.Rectangle bounds) =>
-            AppSettingsRegistry.SetPopoutBounds(bounds.X, bounds.Y, bounds.Width, bounds.Height);
-
-        private void PopIn()
-        {
-            if (_popoutWindow == null || _popoutWindow.IsDisposed) return;
-
-            _popoutWindow.FormClosing -= OnPopoutClosing;
-            _popoutWindow.Controls.Remove(_viewer);
-            _popoutWindow.Close();
-            _popoutWindow.Dispose();
-            _popoutWindow = null;
-
-            _viewer.Dock = DockStyle.Fill;
-            Controls.Add(_viewer);
-        }
-
-        private void OnPopoutClosing(object sender, FormClosingEventArgs e)
-        {
-            if (_popoutWindow != null && !_popoutWindow.IsDisposed &&
-                _popoutWindow.WindowState == FormWindowState.Normal)
-                SavePopoutBounds(_popoutWindow.Bounds);
-            PopIn();
-        }
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                _popoutWindow?.Dispose();
                 _viewer?.Dispose();
             }
             base.Dispose(disposing);

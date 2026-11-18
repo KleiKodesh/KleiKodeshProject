@@ -34,32 +34,31 @@ namespace KleiKodesh.Ribbon
                         ShowKitveiHakodesh();
                         break;
                     case "Kiwix":
-                        TaskPaneManager.Show(() => new KiwixLib.KiwixWebview(), AddinText.Label("Kiwix"), 610, popOutBehavior: true);
+                        TaskPaneManager.Show(id, () => new KiwixLib.KiwixWebview(), AddinText.Label(id));
                         break;
                     case "WebSites":
-                        WpfTaskPane.Show(() => new WebSitesLib.UI.WebSitesView(), AddinText.Label("WebSites"), 510);
+                        WpfTaskPane.Show(id, () => new WebSitesLib.UI.WebSitesView(), AddinText.Label(id));
                         break;
                     // case "HebrewBooks":
                     //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
                     //     break;
                     case "DocDesign":
-                        WpfTaskPane.Show(() => new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label("DocDesign"), 520);
+                        WpfTaskPane.Show(id, () => new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
                     case "Nakdan":
-                        WpfTaskPane.Show(() => new NakdanView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label("Nakdan"), 520);
+                        WpfTaskPane.Show(id, () => new NakdanView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
                     case "RegexFind":
-                        WpfTaskPane.Show(() => new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label("RegexFind"), 600);
+                        WpfTaskPane.Show(id, () => new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
-                    case "DuplicatePane":
-                        try { TaskPaneManager.DuplicateCurrent(); } catch { }
+                    case "NewPane":
+                        TaskPaneManager.OpenNewPane();
                         break;
                     case "OpenChildDoc":
                         WordWindowHelper.OpenSoftSnapLeft();
                         break;
                     case "Settings":
-                        //TaskPaneManager.Show(new RibbonSettingsControl(ribbon), "הגדרות כלי קודש", 400);
-                        WpfTaskPane.Show(new RibbonSettingsView(Ribbon), AddinText.Label("Settings"), 400);
+                        WpfTaskPane.Show(id, () => new RibbonSettingsView(Ribbon), AddinText.Label(id));
                         break;
                     case "About":
                         OpenAboutDocument();
@@ -131,10 +130,7 @@ namespace KleiKodesh.Ribbon
         {
             try
             {
-                var viewers = TaskPaneManager.FindAllUsable(typeof(KitveiHakodeshLib.AppViewer))
-                    .Select(p => p.Control as KitveiHakodeshLib.AppViewer)
-                    .Where(v => v != null)
-                    .ToList();
+                var viewers = TaskPaneManager.FindAll<KitveiHakodeshLib.AppViewer>("KitveiHakodesh");
                 if (viewers.Count == 0)
                 {
                     MessageBox.Show(AddinUiLanguage.T("יש לפתוח את כתבי הקודש ולסמן בו את הקטע להשוואה",
@@ -245,20 +241,20 @@ namespace KleiKodesh.Ribbon
         }
 
         /// <summary>
-        /// Shows the Kitvei Hakodesh task pane, reusing the already-launched pane if
-        /// present (TaskPaneManager.Show handles the reuse), and returns its live
-        /// <see cref="KitveiHakodeshLib.AppViewer"/> so callers can drive it directly
-        /// without relaunching. The viewer is built through a factory so an open pane
-        /// does not pay for a discarded WebView2 on every context-menu search.
+        /// Shows the Kitvei Hakodesh view in the current side pane, reusing it if that side pane
+        /// already has it, and returns the live <see cref="KitveiHakodeshLib.AppViewer"/> so callers
+        /// can drive it directly. Built through a factory so a reveal never pays for a throwaway WebView2.
+        /// In Word, the page's fullscreen pops the side pane out into its window and makes that full screen.
         /// </summary>
-
         public static KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
         {
             AddinUiLanguage.Apply();
-            var pane = TaskPaneManager.Show(
-                () => new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true },
-                AddinText.Label("KitveiHakodesh"), 610, popOutBehavior: true);
-            return pane?.Control as KitveiHakodeshLib.AppViewer;
+            return TaskPaneManager.Show("KitveiHakodesh", () =>
+            {
+                var viewer = new KitveiHakodeshLib.AppViewer { IsVstoHost = true };
+                viewer.RequestFullscreenWindow = () => OfficePaneChrome.SidePanes.PopOutFullScreen(viewer);
+                return viewer;
+            }, AddinText.Label("KitveiHakodesh"));
         }
 
         /// <summary>

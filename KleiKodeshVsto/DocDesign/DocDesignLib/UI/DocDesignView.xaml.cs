@@ -15,6 +15,10 @@ namespace DocDesign
         const int StyleRefreshThrottleMs = 5000;
         int _lastStyleRefreshTick = Environment.TickCount - StyleRefreshThrottleMs;
 
+        // True until OnLoaded's deferred first load has run. The first show must not walk the
+        // styles itself: OnLoaded already does, after the first paint.
+        bool _initialLoadPending = true;
+
         /// <summary>
         /// Production constructor — called from VSTO ribbon with live Word objects.
         /// </summary>
@@ -55,19 +59,25 @@ namespace DocDesign
             };
 
             // Visibility drives two things: the style lists refresh when the
-            // pane shows (ungated on purpose - this is the recovery path for
+            // pane shows again (ungated on purpose - this is the recovery path for
             // changes a style count cannot see), and the selection watcher
             // idles while the pane is hidden, so a hidden pane costs nothing
             // per caret move. DeferredInit resyncs the spacing values on show.
+            // The refresh runs after the pane has painted: two doc.Styles walks
+            // (~370 styles, slow COM reads) synchronously here held the first
+            // paint for over a second. The first show is left to OnLoaded.
             IsVisibleChanged += (_, e) =>
             {
                 if (!(DataContext is DocDesignViewModel vm)) return;
                 bool visible = (bool)e.NewValue;
                 vm.SpacingViewModel.Live = visible;
-                if (!visible) return;
-                vm.SpacingViewModel.DeferredInit();
-                vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
+                if (!visible || _initialLoadPending) return;
+                Dispatcher.BeginInvoke(new System.Action(() =>
+                {
+                    vm.SpacingViewModel.DeferredInit();
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
+                }), DispatcherPriority.ApplicationIdle);
             };
 
             // Refresh styles when focus returns to the pane - the user may have
@@ -110,12 +120,16 @@ namespace DocDesign
             // is fully painted before any COM calls begin.
             Dispatcher.BeginInvoke(new System.Action(() =>
             {
-                if (DataContext is DocDesignViewModel vm)
+                try
                 {
-                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    vm.ParagraphsViewModel.FirstWordStyle.DeferredInit(); // also calls RefreshStyles internally
-                    vm.SpacingViewModel.DeferredInit();
+                    if (DataContext is DocDesignViewModel vm)
+                    {
+                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                        vm.ParagraphsViewModel.FirstWordStyle.DeferredInit(); // also calls RefreshStyles internally
+                        vm.SpacingViewModel.DeferredInit();
+                    }
                 }
+                finally { _initialLoadPending = false; }   // later shows refresh even if this first load failed
             }), DispatcherPriority.ApplicationIdle);
         }
     }

@@ -158,30 +158,17 @@ namespace KitveiHakodeshLib
         // ── Public API ──────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Controls whether the "חלון עצמאי / חלונית" (pop-out) button is shown in the
-        /// hamburger navigation dropdown.
-        /// Set to <c>true</c> when hosting inside the VSTO task pane (where toggling
-        /// between task-pane and floating-window makes sense).
-        /// Defaults to <c>false</c> so standalone / demo hosts don't show the button.
-        /// Must be set before the WebView2 finishes initialising (i.e. before
-        /// <see cref="InitAsyncCore"/> injects the startup script).
+        /// True when hosted in the Word task pane. Tells the page (window.__webviewIsVsto) that it runs in
+        /// the add-in - split view is disabled there. Must be set before the WebView2 finishes initialising
+        /// (i.e. before <see cref="InitAsyncCore"/> injects the startup script).
         /// </summary>
-        public bool ShowPopOutButton { get; set; } = false;
+        public bool IsVstoHost { get; set; } = false;
 
         /// <summary>
-        /// Set by the host to handle the popout toggle.
-        /// The bool parameter indicates whether to enter fullscreen mode after popping out.
+        /// Set by a host whose pane is not a window (the Word task pane): asked to put this viewer into a
+        /// full-screen window when the page requests fullscreen. Once in a window, fullscreen toggles that window.
         /// </summary>
-        public Action<bool> TogglePopOut { get; set; }
-
-        /// <summary>
-        /// Called by TaskPaneManager via reflection to wire up the popout toggle.
-        /// Accepts Action&lt;bool&gt; from the new TaskPanePopOut.Toggle(bool) signature.
-        /// </summary>
-        public void SetPopOutToggleAction(Action<bool> action)
-        {
-            TogglePopOut = action;
-        }
+        public Action RequestFullscreenWindow { get; set; }
 
         /// <summary>
         /// Called by TaskPaneManager via reflection: makes a window.open popup an owned
@@ -827,12 +814,12 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
-        /// The facts only the host knows, injected before the page loads: whether the pop-out
-        /// button belongs in the menu (VSTO task pane), and the persisted dark mode so Vue can
+        /// The facts only the host knows, injected before the page loads: whether it runs in the
+        /// Word task pane (VSTO), and the persisted dark mode so Vue can
         /// sync its theme to the title bar on startup, whichever host last saved it.
         /// </summary>
         private string HostFactsScript() =>
-            "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+            "window.__webviewIsVsto=" + (IsVstoHost ? "true" : "false") + ";" +
             "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";";
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
@@ -867,6 +854,7 @@ namespace KitveiHakodeshLib
                 _localFile?.DisposeAllHosts();
                 _serviceRelay?.Detach();
                 _webSites?.Detach();
+                _lowMemoryTimer?.Dispose();
                 if (_serviceRelay != null) KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowClosed();
 
             }
