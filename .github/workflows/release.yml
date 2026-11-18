@@ -2,6 +2,9 @@
 # Build/build.ps1 builds the setup exe (notes built in) and the portable zip.
 # Start it from the Actions tab, with Build/build.bat (option 1), or:
 #   gh workflow run release.yml
+# Test run (everything, including Gemini, but nothing is published; the setup, the
+# portable zip and the release text are kept as run artifacts):
+#   gh workflow run release.yml -f test=true
 #
 # Also checks daily and releases by itself when the last release is a week old and
 # there are new commits - never on Shabbat / Yom Tov, the day before, or the night after.
@@ -11,6 +14,11 @@ on:
   schedule:
     - cron: "0 9 * * *"     # ~11:00-12:00 Israel; the gate job decides
   workflow_dispatch:
+    inputs:
+      test:
+        description: Test run - build everything, publish nothing (files kept as artifacts)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -144,18 +152,33 @@ jobs:
           $notes = if (Test-Path release-notes.json) { 'release-notes.json' } else { '' }
           ./Build/build.ps1 -Version '${{ steps.version.outputs.version }}' -Notes $notes
 
+      - name: Release text
+        shell: pwsh
+        run: |
+          if (Test-Path release-notes.json) {
+            ./.github/scripts/notes-to-markdown.ps1 -Json release-notes.json -Out release-notes.md
+          } else {
+            Set-Content release-notes.md 'Renewal release: the add-in signing certificate is renewed. No other changes.' -Encoding utf8
+          }
+
+      - name: Keep the files (test run)
+        if: inputs.test
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-release-v${{ steps.version.outputs.version }}
+          path: |
+            Build/releases/*
+            release-notes.json
+            release-notes.md
+
       - name: Publish
+        if: ${{ !inputs.test }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         run: |
           $tag = 'v${{ steps.version.outputs.version }}'
-          if (Test-Path release-notes.json) {
-            ./.github/scripts/notes-to-markdown.ps1 -Json release-notes.json -Out release-notes.md
-          } else {
-            Set-Content release-notes.md 'Renewal release: the add-in signing certificate is renewed. No other changes.' -Encoding utf8
-          }
           gh release create $tag --title "KleiKodesh $tag" --notes-file release-notes.md --target '${{ github.sha }}' `
             "Build/releases/KleiKodeshSetup-$tag.exe" "Build/releases/KitveiHakodeshPortable-$tag.zip"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
