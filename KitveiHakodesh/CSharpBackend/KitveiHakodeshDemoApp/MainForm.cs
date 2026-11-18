@@ -44,7 +44,7 @@ namespace KitveiHakodeshDemoApp
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
 
-            _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill };
+            _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill, IsVstoHost = HostTestMode.WordPane };
             Controls.Add(_viewer);
 
             // Keeps the strip in sync with the Vue tab store, both directions.

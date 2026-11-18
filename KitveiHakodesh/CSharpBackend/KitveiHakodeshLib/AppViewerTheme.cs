@@ -148,6 +148,7 @@ namespace KitveiHakodeshLib
             if (accentColor != null) AppSettingsRegistry.SetAccentColor(accentColor);
             if (borderColor != null) AppSettingsRegistry.SetBorderColor(borderColor);
             if (uiLanguage != null) AppSettingsRegistry.SetUiLanguage(uiLanguage);
+            _ = RegisterKiwixFactsAsync();
 
             if (InvokeRequired)
                 Invoke(new Action(() =>

@@ -33,6 +33,14 @@ namespace KitveiHakodeshLib
 
         public static bool IsOn => CdpPort != 0;
 
+        public const string WordPaneEnvironmentVariable = "KH_TEST_WORD_PANE";
+
+        /// <summary>
+        /// Test mode only: the demo host behaves like the Word pane (AppViewer.IsVstoHost), so
+        /// pane-only behaviour (e.g. websites in phone layout) can be tested without Word.
+        /// </summary>
+        public static bool WordPane => IsOn && Environment.GetEnvironmentVariable(WordPaneEnvironmentVariable) == "1";
+
         /// <summary>
         /// The rig's own profile folder in test mode; null otherwise (callers keep their
         /// normal location). Test mode without a profile folder falls back to a temp one,

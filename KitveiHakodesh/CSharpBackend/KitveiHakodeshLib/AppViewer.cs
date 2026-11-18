@@ -96,7 +96,13 @@ namespace KitveiHakodeshLib
                         "--no-first-run " +
                         "--no-default-browser-check " +
                         "--js-flags=\"--max_old_space_size=512 --max_semi_space_size=4\" " +
-                        "--disable-features=CalculateNativeWinOcclusion" +
+                        "--disable-features=CalculateNativeWinOcclusion " +
+                        // The app page is served from http://kitveihakodesh-app, which Chromium does
+                        // not count as a secure context, and a frame inside a non-secure page never
+                        // is one either - so the Kiwix reader (Websites page, https://kiwix-app) lost
+                        // navigator.serviceWorker and fell back to its restricted mode. Treating the
+                        // app's own local origin as secure restores it; nothing on the web is affected.
+                        "--unsafely-treat-insecure-origin-as-secure=http://kitveihakodesh-app" +
                         // Hosted e2e rig only (HostTestMode, off unless KH_TEST_CDP_PORT is set).
                         (HostTestMode.IsOn ? " --remote-debugging-port=" + HostTestMode.CdpPort : ""),
 
@@ -723,6 +729,7 @@ namespace KitveiHakodeshLib
 
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "kitveihakodesh-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+            MapKiwixIfInstalled();
 
             // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
             // each call is a browser-process round-trip, so one call is faster than two.
@@ -831,7 +838,8 @@ namespace KitveiHakodeshLib
         /// </summary>
         private string HostFactsScript() =>
             "window.__webviewIsVsto=" + (IsVstoHost ? "true" : "false") + ";" +
-            "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";";
+            "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";" +
+            KiwixHostFact();
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
 

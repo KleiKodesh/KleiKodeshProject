@@ -62,6 +62,22 @@ namespace KitveiHakodeshLib.WebSites
             return stripper;
         }
 
+        /// <summary>
+        /// The Word pane is phone-narrow, so (like the Word add-in's Websites pane, MyWebView.cs) sites
+        /// get an iPhone identity there and serve their mobile layout. Sites that break with it
+        /// (IosExceptions) keep the real one. The page's own scripts see the same identity through
+        /// AppViewer's SiteFrameIosScript.
+        /// </summary>
+        public bool UseIosUserAgent { get; set; }
+
+        public const string IosUserAgent =
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+        private static readonly string[] IosExceptions = { "dicta" };
+
+        public static bool IsIosException(Uri uri) => IosExceptions.Any(ex => uri.Host.Contains(ex));
+
         public void Detach()
         {
             try { _core.WebResourceRequested -= OnWebResourceRequested; } catch { }
@@ -154,7 +170,12 @@ namespace KitveiHakodeshLib.WebSites
                 }
                 request.Headers.TryAddWithoutValidation(header.Key, header.Value);
             }
-            if (!request.Headers.Contains("User-Agent"))
+            if (UseIosUserAgent && !IsIosException(uri))
+            {
+                request.Headers.Remove("User-Agent");
+                request.Headers.TryAddWithoutValidation("User-Agent", IosUserAgent);
+            }
+            else if (!request.Headers.Contains("User-Agent"))
                 request.Headers.TryAddWithoutValidation("User-Agent", _core.Settings.UserAgent);
 
             List<CoreWebView2Cookie> cookies = await _core.CookieManager.GetCookiesAsync(uri.AbsoluteUri);
