@@ -115,6 +115,7 @@ export function useBookView(
   const searchHighlightLineIndex = paneNavigation.activeTab.searchHighlightLineIndex
   const searchHighlightQuery = paneNavigation.activeTab.searchHighlightQuery ?? ''
   const searchHighlightSnippet = paneNavigation.activeTab.searchHighlightSnippet
+  const searchHighlightOffset = paneNavigation.activeTab.searchHighlightOffset
   const searchHighlightTerms = paneNavigation.activeTab.searchHighlightTerms
   const openNoteIndex = paneNavigation.activeTab.openNoteIndex
   // One-shot: a later remount of this tab must not pop the note open again.
@@ -138,6 +139,7 @@ export function useBookView(
       searchHighlightLineIndex: undefined,
       searchHighlightQuery: undefined,
       searchHighlightSnippet: undefined,
+      searchHighlightOffset: undefined,
       searchHighlightTerms: undefined,
     })
 
@@ -432,6 +434,7 @@ export function useBookView(
         searchHighlightLineIndex: undefined,
         searchHighlightQuery: undefined,
         searchHighlightSnippet: undefined,
+        searchHighlightOffset: undefined,
         searchHighlightTerms: undefined,
       })
     },
@@ -766,7 +769,7 @@ export function useBookView(
     toolbarPosition,
     toolbarVisible: computed(() => bookViewStore.getToolbarVisible(paneId)),
     // tab data
-    searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+    searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightOffset, searchHighlightTerms,
     openNoteIndex,
     // book metadata
     bookHasTeamim,

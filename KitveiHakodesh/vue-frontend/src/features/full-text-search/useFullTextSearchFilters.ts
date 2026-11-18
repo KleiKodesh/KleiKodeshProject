@@ -303,6 +303,9 @@ export function useFullTextSearchFilters(
         searchHighlightLineIndex: lineIndex,
         searchHighlightQuery: executedQuery(),
         searchHighlightSnippet: snippetHtmlOf(result) ?? '',  // the clicked row is rendered, so built
+        // The snippet's first marked word, in the line's raw text: the view lands there.
+        // A footnote hit's offsets count in the note, not the line it opens.
+        searchHighlightOffset: noteIndexOf(result.lineId) == null ? result.snippetMarks?.[0] : undefined,
         // Use the concrete matched terms from FtsLib (includes fuzzy/wildcard expansions)
         // rather than splitting the raw query, so the book view highlights the actual
         // words that appeared in the line.

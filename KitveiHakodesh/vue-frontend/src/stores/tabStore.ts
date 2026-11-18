@@ -116,6 +116,10 @@ export interface Tab {
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
   searchHighlightSnippet?: string
+  // Where in the line's raw text the clicked result's snippet sits (its first marked
+  // word): the view lands there, not at the line's first mark - in a long line the
+  // search words can appear pages apart.
+  searchHighlightOffset?: number
   searchHighlightTerms?: string[]
   // A search hit on a footnote (issue #13): the note of the opened line to pop open on
   // arrival (its index in line_note). Consumed and cleared on open.
@@ -216,6 +220,7 @@ const POSITION_FIELDS = [
   'searchHighlightLineIndex',
   'searchHighlightQuery',
   'searchHighlightSnippet',
+  'searchHighlightOffset',
   'searchHighlightTerms',
   'openNoteIndex',
   'searchRestore',

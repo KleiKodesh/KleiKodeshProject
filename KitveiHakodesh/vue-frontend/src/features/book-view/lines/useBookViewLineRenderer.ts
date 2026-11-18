@@ -28,6 +28,8 @@ interface LineRenderProps {
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
   searchHighlightSnippet?: string
+  /** Raw-text position of the clicked result's snippet in searchHighlightLineIndex's line. */
+  searchHighlightOffset?: number
   searchHighlightTerms?: string[]
   getHighlightsForLine?: (lineId: number) => Highlight[]
   getNotesForLine?: (lineId: number) => Note[]
@@ -65,6 +67,23 @@ function extractSnippetTerms(snippet: string): string[] {
     }
   }
   return terms
+}
+
+/** The empty element a search result's spot is marked with; the view lands on it. */
+export const SEARCH_LANDING_CLASS = 'search-landing'
+
+/**
+ * The raw line with an empty landing element at `offset` (a raw-character index from
+ * the search). Left unmarked when the offset does not fall in text - past the end, or
+ * inside a tag or entity: the view then lands on the first mark.
+ */
+export function withSearchLandingPoint(raw: string, offset: number): string {
+  if (offset < 0 || offset >= raw.length) return raw
+  const lastOpen = raw.lastIndexOf('<', offset - 1)
+  if (lastOpen !== -1 && raw.lastIndexOf('>', offset - 1) < lastOpen) return raw   // inside a tag
+  const lastAmp = raw.lastIndexOf('&', offset - 1)
+  if (lastAmp !== -1 && offset - lastAmp <= 12 && !/[\s;<]/.test(raw.slice(lastAmp + 1, offset))) return raw   // inside an entity
+  return `${raw.slice(0, offset)}<span class="${SEARCH_LANDING_CLASS}"></span>${raw.slice(offset)}`
 }
 
 /**
@@ -461,7 +480,7 @@ export function useBookViewLineRenderer(
     const p = getProps()
     // activeVersionId wipes the whole cache on a swap; the per-entry raw text (above)
     // then catches each line whose new text arrives later.
-    return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+    return `${p.activeVersionId ?? 0}|${cleanTextFlags.value}|${settings.censorCacheKey}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightOffset ?? -1}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
   /** The in-book search query this line is marked with: '' unless the line is in the result set. */
@@ -521,8 +540,16 @@ export function useBookViewLineRenderer(
     // upstream's visible-char convention, which counts diacritics and pre-censor text.
     // The injected markup is pure tags (zero visible chars), so every later walker
     // (which all skip tags) is unaffected.
+    // The clicked search result's spot, placed before ANY rewrite for the same reason:
+    // its offset counts the stored line's raw characters. An empty tag, so no later
+    // walker sees it. Lands the view there (useBookViewLinesScroll). Only on the merged
+    // text the search read: an alternate version's characters differ, so the view
+    // lands on the line's first mark instead.
+    const landed = lineIndex === p.searchHighlightLineIndex && p.searchHighlightOffset != null && p.activeVersionId == null
+      ? withSearchLandingPoint(raw, p.searchHighlightOffset)
+      : raw
     const anchors = p.getWordLinkAnchorsForLine?.(lineId) ?? []
-    let content = anchors.length ? applyWordLinkAnchors(raw, anchors) : raw
+    let content = anchors.length ? applyWordLinkAnchors(landed, anchors) : landed
     content = cleanHebrewText(content, cleanTextFlags.value)
     content = censorDivineNames(content, settings.censorOptions)
 
