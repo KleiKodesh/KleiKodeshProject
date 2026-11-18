@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ensureMultiBookCopyAllowed } from '../bookProtection'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
@@ -582,11 +583,35 @@ const {
   },
 })
 
+/**
+ * The commentary lines a copy would hold, each with its book: every visible line on
+ * select-all, else the lines in the selected rows. Feeds the publisher's copy limit, which
+ * counts each protected commentary book's lines separately (bookProtection.ts).
+ */
+function selectedCommentaryLines(): { bookId: number; lineId: number }[] {
+  const range = isSelectAll.value
+    ? { firstRowIndex: 0, lastRowIndex: flatItems.value.length - 1 }
+    : selectedRowIndexRange()
+  if (!range) return []
+  const selected: { bookId: number; lineId: number }[] = []
+  let flatIndex = 0
+  for (const group of visibleGroups.value) {
+    flatIndex++ // the group's header row
+    for (const line of group.lines) {
+      if (flatIndex > range.lastRowIndex) return selected
+      if (flatIndex >= range.firstRowIndex) selected.push({ bookId: group.bookId, lineId: line.lineId })
+      flatIndex++
+    }
+  }
+  return selected
+}
+
 useScopedCopy(
   scrollerEl,
   () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.content)),
   isSelectAll,
   buildCommentaryFormattedHtml,
+  () => ensureMultiBookCopyAllowed(selectedCommentaryLines()),
 )
 
 function onScroll() {

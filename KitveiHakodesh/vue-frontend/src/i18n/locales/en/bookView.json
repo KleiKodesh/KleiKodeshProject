@@ -64,7 +64,8 @@
     "withNotes": "Copy with notes"
   },
   "exportReady": "Export is ready - click Export to Word again",
-  "exportRestricted": "This book cannot be exported to Word at the publisher's request. You can still read and print it as usual.",
+  "copyLimitedByPublisher": "The publisher has restricted this book: you can copy up to {max} lines at a time.",
+  "exportRestricted": "The publisher has restricted this book: it cannot be exported to Word.",
   "hebrewBooks": {
     "addFile": "Add a PDF from the computer to the list...",
     "addFromHebrewBooks": "Add from HebrewBooks to the list...",

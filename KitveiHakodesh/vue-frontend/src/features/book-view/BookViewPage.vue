@@ -6,7 +6,7 @@ import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
-import { isExportRestricted } from './exportRestriction'
+import { bookProtectionOf } from './bookProtection'
 import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
@@ -49,7 +49,7 @@ const tocTreeOverlayRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const booksDataStore = useBooksDataStore()
-// Shown when a publisher-restricted book's export is attempted anyway (see exportRestriction.ts).
+// Shown when a publisher-restricted book's export is attempted (Core's book protection).
 const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 const paneId = inject<1 | 2>('paneId', 1)
 
@@ -348,18 +348,14 @@ function toggleCommentaryPanel(slot: CommentarySlot) {
   panels[slot].visible.value = !panels[slot].visible.value
 }
 
-// Matched on the catalog title rather than the tab's: the tab title is whatever the
-// opener passed (a search result's bookTitle, a related-books row), and the restriction
-// list is keyed by library title. The tab title is only the fallback for a book the
-// catalog has not loaded yet.
-const exportRestricted = computed(() =>
-  isExportRestricted((bookId != null && booksDataStore.allBooksMap.get(bookId)?.title) || bookTitle),
-)
+// The publisher's limits for this book, from the catalog row (Core's book protection).
+const bookProtection = computed(() => bookProtectionOf(bookId))
+const exportRestricted = computed(() => bookProtection.value?.allowsEditableExport === false)
 
 // Same path as the copy menu's paste-into-Word, over the whole book (select-all), so
 // it lands at the Word cursor with the active copy flags instead of in a new document.
 //
-// Checked here as well as hiding the button, so no second entry point to the export
+// Checked here (the button stays visible, dimmed), so no entry point to the export
 // can get past the restriction.
 // Drives the toolbar button's spinner; also blocks a second click mid-export.
 const exportingToWord = ref(false)

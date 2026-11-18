@@ -155,6 +155,12 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// the one order every ranking — catalog search, full-text results, commentary
         /// panel — ties on. Rows are returned sorted by it.</summary>
         public int TreeOrder { get; set; }
+        /// <summary>The publisher's limits (Otzaria `book_protection`, schema 7+); null = none.</summary>
+        public BookProtection? Protection { get; set; }
+        /// <summary>The publisher's credit line shown above the book's text (Otzaria `banner` +
+        /// `book_banner`, schema 7+), `{title}` already expanded; may hold `[label](url)` links.
+        /// Null = none.</summary>
+        public string? PublisherBanner { get; set; }
     }
 
     /// <summary>Single-book metadata — matches BookInfo in webview-host/queries.types.ts.</summary>
