@@ -23,6 +23,7 @@ import { registerPositionCapture } from '@/webview-host/persistenceFlush'
 import type { WindowedScrollerApi } from '@/components/windowedScrollerTypes'
 import { SCROLL_LANDING_GAP_PX, SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 import { placeCaretAtViewportStart } from './lineCaret'
+import { SEARCH_LANDING_CLASS } from './useBookViewLineRenderer'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
@@ -151,6 +152,26 @@ export function useBookViewLinesScroll(
     if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
   }
 
+  /**
+   * Centres the clicked search result's spot. In a long line the search words can
+   * appear pages apart, so the spot the search located (the renderer's landing point,
+   * at the snippet's raw offset); without one, the line's first mark. Through the
+   * scroller's nudge: part of the opening landing, not the reader.
+   */
+  function centreOnSearchSpot() {
+    const element = scroller()?.scrollerElement
+    const hitRow = props.searchHighlightLineIndex != null
+      ? scroller()?.rowElement(props.searchHighlightLineIndex)
+      : null
+    const spot = hitRow?.querySelector(`.${SEARCH_LANDING_CLASS}`) ?? hitRow?.querySelector('mark.search-match')
+    if (!element || !spot) return
+    const viewportRect = element.getBoundingClientRect()
+    const spotRect = spot.getBoundingClientRect()
+    scroller()?.nudge(
+      (spotRect.top + spotRect.height / 2) - (viewportRect.top + viewportRect.height / 2),
+    )
+  }
+
   /** The scroller's first window is on screen — wired to its `opened` event (emitted for the top too). */
   function onScrollerOpened() {
     if (openingFollowUpsCancelled) return
@@ -175,16 +196,8 @@ export function useBookViewLinesScroll(
     if (takeFocus) placeCaretAtViewportStart(element)
     if (startRow == null) return
     const target = startRow
-    // FTS: the highlighted mark is in the rendered row — bring it into view.
-    // Centred through the scroller's nudge: part of the opening landing, not the reader.
-    const mark = props.searchHighlightLineIndex != null ? element?.querySelector('mark.search-match') : null
-    if (element && mark) {
-      const markRect = mark.getBoundingClientRect()
-      const viewportRect = element.getBoundingClientRect()
-      scroller()?.nudge(
-        (markRect.top + markRect.height / 2) - (viewportRect.top + viewportRect.height / 2),
-      )
-    }
+    // FTS: bring the clicked result's spot into view.
+    if (props.searchHighlightLineIndex != null) centreOnSearchSpot()
     // Deep-link open (otzaria:// / zayit://): momentarily flash the target line's
     // background so the user sees where the link landed. One-shot; the class is
     // removed imperatively after the animation.

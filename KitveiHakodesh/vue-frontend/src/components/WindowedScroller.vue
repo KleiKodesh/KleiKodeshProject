@@ -433,7 +433,13 @@ async function runLanding<T>(land: () => Promise<T>, byReader = false): Promise<
 function nudge(px: number): void {
   const viewport = viewportElement.value
   if (!viewport || px === 0) return
-  void runLanding(async () => { viewport.scrollTop += px })
+  void runLanding(async () => {
+    viewport.scrollTop += px
+    // The new place is the anchor NOW, not when the scroll event arrives a frame later:
+    // a layout change before that (rows mounting above, a re-wrap) is held against the
+    // anchor and would put the view back where the nudge started.
+    rememberAnchor()
+  })
 }
 
 /** One of the scroller's own landings is under way (or its scroll has not ended yet). */

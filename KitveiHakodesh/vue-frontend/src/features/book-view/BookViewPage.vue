@@ -73,7 +73,7 @@ const {
 
 const {
   toolbarPosition, toolbarVisible,
-  searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+  searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightOffset, searchHighlightTerms,
   openNoteIndex,
   searchVisible,
   selectedLineId, searchMode,
@@ -728,6 +728,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     @navigate-section="(direction, id) => onNavigateSection('bottom', direction, id)"
                     @toggle-filter-panel="onToggleBottomFilter()"
                     @toggle-search="openCommentarySearch('bottom')"
+                    :search-highlight-offset="searchHighlightOffset"
                     @open-book="openBookTarget"
                   />
                 </template>

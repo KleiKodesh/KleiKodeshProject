@@ -89,6 +89,8 @@ const props = defineProps<
     currentMatchOccurrence?: number
     searchHighlightQuery?: string
     searchHighlightSnippet?: string
+    /** Raw-text position of the clicked result's snippet in its line: where the view lands. */
+    searchHighlightOffset?: number
     searchHighlightTerms?: string[]
     /** The word being read aloud, marked in its line. */
     readAloudWord?: ReadAloudWordMark | null
@@ -309,6 +311,7 @@ const { lineContent, forgetLines: forgetRenderedLines } = useBookViewLineRendere
   searchHighlightLineIndex: props.searchHighlightLineIndex,
   searchHighlightQuery: props.searchHighlightQuery,
   searchHighlightSnippet: props.searchHighlightSnippet,
+  searchHighlightOffset: props.searchHighlightOffset,
   searchHighlightTerms: props.searchHighlightTerms,
   getHighlightsForLine,
   getNotesForLine,
