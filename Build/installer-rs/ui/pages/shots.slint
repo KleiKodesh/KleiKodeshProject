@@ -1,0 +1,13 @@
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+
+// One product screenshot in its four looks: images/shots/<he|en>/<light|dark>/<name>.png.
+// @image-url takes only literal paths, so each slide lists all four files.
+export struct Shot { he-light: image, he-dark: image, en-light: image, en-dark: image }
+
+// The look that matches the installer right now (language and light/dark theme).
+export global Shots {
+    public pure function pick(s: Shot) -> image {
+        return Lang.en ? (Theme.dark ? s.en-dark : s.en-light) : (Theme.dark ? s.he-dark : s.he-light);
+    }
+}

@@ -2,6 +2,7 @@
 //! presses into engine requests. The engine runs on a worker thread; it talks back
 //! through `UiReporter`, which hops onto the UI thread for every change.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -10,14 +11,88 @@ use std::sync::{Arc, Mutex};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::i18n::Text;
+use crate::install::addin_settings::{AddinSettings, TOOLS};
 use crate::install::{self, apps::RunningApp, Action, Options, Request};
 use crate::layout::{Layout, KITVEI_EXE};
 use crate::payload::Payload;
 use crate::products::{Product, ALL};
 use crate::system::{launch, registry};
-use crate::{AppWindow, Installer, Lang, Page};
+use crate::{AppWindow, Choice, Installer, Lang, Page};
 
 type Products = Rc<VecModel<crate::ProductRow>>;
+
+/// The Word add-in options: what is saved, and the copy being edited on screen.
+struct AddinOptions {
+    saved: RefCell<AddinSettings>,
+    tools: Rc<VecModel<Choice>>,
+    websites: Rc<VecModel<Choice>>,
+}
+
+impl AddinOptions {
+    fn new(saved: AddinSettings) -> Rc<Self> {
+        let options = Rc::new(Self { saved: RefCell::new(saved), tools: Rc::default(), websites: Rc::default() });
+        options.show_saved(false);
+        options
+    }
+
+    /// Puts the saved options back on screen (open, Cancel, language change keeps edits).
+    fn show_saved(&self, english: bool) {
+        let saved = self.saved.borrow();
+        self.tools.set_vec(
+            TOOLS.iter().zip(&saved.tools_visible).map(|((_, name), on)| Choice { title: name.get(english).into(), on: *on }).collect::<Vec<_>>(),
+        );
+        self.websites.set_vec(saved.sites.iter().map(|s| Choice { title: s.name.as_str().into(), on: s.visible }).collect::<Vec<_>>());
+    }
+
+    fn retitle(&self, english: bool) {
+        for (i, (_, name)) in TOOLS.iter().enumerate() {
+            if let Some(mut row) = self.tools.row_data(i) {
+                row.title = name.get(english).into();
+                self.tools.set_row_data(i, row);
+            }
+        }
+    }
+
+    /// The options as currently on screen.
+    fn edited(&self) -> AddinSettings {
+        let mut settings = self.saved.borrow().clone();
+        settings.tools_visible = self.tools.iter().map(|c| c.on).collect();
+        for (site, choice) in settings.sites.iter_mut().zip(self.websites.iter()) {
+            site.visible = choice.on;
+        }
+        settings
+    }
+}
+
+fn show_notes(ui: &AppWindow, english: bool) {
+    use crate::release_notes::LineKind;
+    let lines: Vec<crate::NoteLine> = crate::release_notes::lines(english)
+        .into_iter()
+        .map(|l| crate::NoteLine {
+            kind: match l.kind {
+                LineKind::Section => 0,
+                LineKind::Area => 1,
+                LineKind::Change => 2,
+            },
+            text: l.text.into(),
+        })
+        .collect();
+    ui.global::<Installer>().set_notes(ModelRc::new(VecModel::from(lines)));
+}
+
+/// The site list is only offered while the Websites tool is on the ribbon.
+fn show_websites_if_tool_on(ui: &AppWindow, addin: &AddinOptions) {
+    let index = TOOLS.iter().position(|(id, _)| *id == "WebSites").unwrap_or(usize::MAX);
+    let on = addin.tools.row_data(index).is_some_and(|row| row.on);
+    ui.global::<Installer>().set_websites_tool_on(on);
+}
+
+fn flip(model: &VecModel<Choice>, i: i32) {
+    if let Some(mut row) = model.row_data(i as usize) {
+        row.on = !row.on;
+        model.set_row_data(i as usize, row);
+    }
+}
 
 pub struct Context {
     pub layout: Layout,
@@ -56,11 +131,24 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     st.set_version(install::VERSION.into());
     st.set_updating(!fresh && ctx.payload.is_some());
     st.set_page(if !fresh && (ctx.start_in_manage || ctx.payload.is_none()) { Page::Manage } else { Page::Welcome });
+    let current = Options::current(&ctx.layout, english);
+    st.set_desktop_shortcut(current.desktop_shortcut);
+    st.set_file_associations(current.open_with);
+    st.set_installed_desktop_shortcut(current.desktop_shortcut);
+    st.set_installed_file_associations(current.open_with);
+
+    let addin = AddinOptions::new(AddinSettings::load(&ctx.layout));
+    addin.show_saved(english);
+    st.set_ribbon_tools(ModelRc::from(addin.tools.clone()));
+    st.set_websites(ModelRc::from(addin.websites.clone()));
+    show_websites_if_tool_on(&ui, &addin);
     retranslate(&ui, &products);
+    st.set_has_notes(crate::release_notes::any());
+    show_notes(&ui, english);
 
     let ctx = Rc::new(ctx);
     let answer: Arc<Mutex<Option<mpsc::Sender<bool>>>> = Arc::default();
-    wire(&ui, &products, &ctx, &answer);
+    wire(&ui, &products, &ctx, &answer, &addin);
 
     ui.show()?;
     {
@@ -74,8 +162,34 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     slint::run_event_loop()
 }
 
-fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mutex<Option<mpsc::Sender<bool>>>>) {
+fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mutex<Option<mpsc::Sender<bool>>>>, addin: &Rc<AddinOptions>) {
     let st = ui.global::<Installer>();
+    {
+        let (a, w) = (addin.clone(), ui.as_weak());
+        st.on_toggle_tool(move |i| {
+            flip(&a.tools, i);
+            if let Some(ui) = w.upgrade() {
+                show_websites_if_tool_on(&ui, &a);
+            }
+        });
+        let a = addin.clone();
+        st.on_toggle_website(move |i| flip(&a.websites, i));
+        let (a, w) = (addin.clone(), ui.as_weak());
+        st.on_discard_addin_options(move || {
+            if let Some(ui) = w.upgrade() {
+                a.show_saved(ui.global::<Lang>().get_en());
+                show_websites_if_tool_on(&ui, &a);
+            }
+        });
+        let (a, layout) = (addin.clone(), ctx.layout.clone());
+        st.on_save_addin_options(move || {
+            let edited = a.edited();
+            if let Err(e) = edited.save(&layout) {
+                crate::log::line(&format!("saving add-in options failed: {e}"));
+            }
+            *a.saved.borrow_mut() = edited;
+        });
+    }
     {
         let (w, p) = (ui.as_weak(), products.clone());
         st.on_toggle_product(move |i| {
@@ -92,18 +206,20 @@ fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mut
         });
     }
     {
-        let (w, p) = (ui.as_weak(), products.clone());
-        st.on_language_changed(move |_| {
+        let (w, p, a) = (ui.as_weak(), products.clone(), addin.clone());
+        st.on_language_changed(move |english| {
             if let Some(ui) = w.upgrade() {
                 retranslate(&ui, &p);
+                a.retitle(english);
+                show_notes(&ui, english);
             }
         });
     }
     let start = |action: Action| {
-        let (w, p, ctx, answer) = (ui.as_weak(), products.clone(), ctx.clone(), answer.clone());
+        let (w, p, ctx, answer, a) = (ui.as_weak(), products.clone(), ctx.clone(), answer.clone(), addin.clone());
         move || {
             if let Some(ui) = w.upgrade() {
-                start_engine(&ui, &p, &ctx, &answer, action);
+                start_engine(&ui, &p, &ctx, &answer, action, a.edited());
             }
         }
     };
@@ -136,7 +252,14 @@ fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mut
     }
 }
 
-fn start_engine(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mutex<Option<mpsc::Sender<bool>>>>, action: Action) {
+fn start_engine(
+    ui: &AppWindow,
+    products: &Products,
+    ctx: &Rc<Context>,
+    answer: &Arc<Mutex<Option<mpsc::Sender<bool>>>>,
+    action: Action,
+    addin_settings: AddinSettings,
+) {
     let st = ui.global::<Installer>();
     let english = ui.global::<Lang>().get_en();
     let wanted: HashSet<Product> = products.iter().filter(|p| p.selected).filter_map(|p| Product::from_id(&p.id)).collect();
@@ -144,7 +267,10 @@ fn start_engine(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: 
         action,
         products: wanted,
         options: Options { desktop_shortcut: st.get_desktop_shortcut(), open_with: st.get_file_associations(), english },
+        clean: action == Action::Apply && st.get_clean_install(),
+        addin_settings: Some(addin_settings),
     };
+    let from_manage = st.get_page() == Page::Manage;
     st.set_confirm_uninstall(false);
     st.set_apps_to_close(SharedString::new());
     st.set_progress(0.0);
@@ -157,7 +283,7 @@ fn start_engine(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: 
     let w = ui.as_weak();
     std::thread::spawn(move || {
         let result = install::run(&layout, payload.as_deref(), &request, &reporter);
-        let _ = w.upgrade_in_event_loop(move |ui| finish(&ui, &request, result, english));
+        let _ = w.upgrade_in_event_loop(move |ui| finish(&ui, &request, result, english, from_manage));
     });
 }
 
@@ -170,9 +296,21 @@ fn progress_title(action: Action, updating: bool) -> Text {
     }
 }
 
-fn finish(ui: &AppWindow, request: &Request, result: Result<(), install::Failure>, english: bool) {
+fn finish(ui: &AppWindow, request: &Request, result: Result<(), install::Failure>, english: bool, from_manage: bool) {
     let st = ui.global::<Installer>();
     let products = st.get_products();
+    // The Modify screen must show the new state when the user goes back to it.
+    if result.is_ok() && request.action != Action::Uninstall {
+        for i in 0..products.row_count() {
+            let mut row = products.row_data(i).unwrap();
+            row.installed = Product::from_id(&row.id).is_some_and(|p| request.products.contains(&p));
+            products.set_row_data(i, row);
+        }
+        st.set_installed_desktop_shortcut(request.options.desktop_shortcut);
+        st.set_installed_file_associations(request.options.open_with);
+        st.set_has_changes(false);
+    }
+    st.set_back_to_manage(from_manage && request.action != Action::Uninstall);
     let launch: Vec<crate::ProductRow> = match (&result, request.action) {
         (Ok(()), Action::Apply | Action::Repair) => products
             .iter()
@@ -252,6 +390,7 @@ fn refresh(ui: &AppWindow, products: &Products) {
     st.set_summary(summary.into());
     st.set_any_selected(!chosen.is_empty());
     st.set_kitvei_selected(chosen.iter().any(|p| p.id == Product::KitveiApp.id()));
+    st.set_addin_selected(chosen.iter().any(|p| p.id == Product::WordAddin.id()));
     st.set_has_changes(products.iter().any(|p| p.selected != p.installed));
 }
 

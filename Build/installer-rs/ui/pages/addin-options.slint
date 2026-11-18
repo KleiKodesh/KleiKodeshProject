@@ -1,0 +1,86 @@
+import { Button, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Lang } from "../lang.slint";
+import { Installer, Page } from "../state.slint";
+import { PageTitle, CheckRow } from "../widgets.slint";
+
+component SectionTitle inherits Text {
+    color: Theme.text;
+    font-size: 13px;
+    font-weight: 600;
+    horizontal-alignment: Lang.start;
+}
+
+// Word add-in options, edited here only: which tools the ribbon shows, which sites the
+// Websites pane lists. Two columns: tools (start side), websites (scrolls).
+export component AddinOptionsPage inherits VerticalLayout {
+    // Always opened from the install options screen; changes apply with Install / Change.
+    property <bool> from-manage: false;
+    VerticalLayout {
+        vertical-stretch: 1;
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 8px;
+        spacing: 12px;
+        PageTitle {
+            title: Lang.t("אפשרויות התוסף לוורד", "Word add-in options");
+            subtitle: Lang.t("מה יופיע בסרגל של וורד, ואילו אתרים יופיעו ב\"דרך האתרים\".", "What shows on Word's ribbon, and which sites \"Websites\" lists.");
+        }
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 24px;
+            if Lang.en: VerticalLayout {
+                width: 200px;
+                spacing: 8px;
+                SectionTitle { text: "On the ribbon"; }
+                for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+                Rectangle { vertical-stretch: 1; }
+            }
+            if !Installer.websites-tool-on: Rectangle { horizontal-stretch: 1; }
+            if Installer.websites-tool-on: VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 8px;
+                SectionTitle { text: Lang.t("אתרים מורשים ב\"דרך האתרים\"", "Allowed sites in \"Websites\""); }
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 6px;
+                    ScrollView {
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 6px;
+                            for w[i] in Installer.websites: CheckRow { text: w.title; checked: w.on; toggled => { Installer.toggle-website(i); } }
+                        }
+                    }
+                }
+            }
+            if !Lang.en: VerticalLayout {
+                width: 200px;
+                spacing: 8px;
+                SectionTitle { text: "בסרגל של וורד"; }
+                for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+    }
+    // Hebrew: [Cancel] ... [OK]. English: [OK] ... [Cancel]. From Modify, OK saves at once.
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 12px;
+        height: 52px;
+        spacing: 8px;
+        if Lang.en: Button { text: root.from-manage ? "Save" : "OK"; primary: true; min-width: 80px; clicked => { root.done(); } }
+        if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { Installer.discard-addin-options(); Installer.page = Installer.addin-options-back; } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { Installer.discard-addin-options(); Installer.page = Installer.addin-options-back; } }
+        if !Lang.en: Button { text: root.from-manage ? "שמור" : "אישור"; primary: true; min-width: 80px; clicked => { root.done(); } }
+    }
+
+    function done() {
+        if root.from-manage { Installer.save-addin-options(); }
+        Installer.page = Installer.addin-options-back;
+    }
+}

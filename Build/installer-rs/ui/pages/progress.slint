@@ -1,4 +1,4 @@
-import { ProgressIndicator, Button } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
 import { Installer } from "../state.slint";
@@ -19,7 +19,21 @@ export component ProgressPage inherits VerticalLayout {
     Rectangle { height: 24px; }
     PageTitle { centered: true; title: Installer.progress-title; subtitle: Installer.step-text; }
     Rectangle { height: 20px; }
-    ProgressIndicator { progress: Installer.progress; height: 4px; }
+    // Thin bar like Office's. Fills from the start side: right in Hebrew, left in English.
+    Rectangle {
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.border;
+        clip: true;
+        Rectangle {
+            width: parent.width * clamp(Installer.progress, 0, 1);
+            x: Lang.en ? 0px : parent.width - self.width;
+            height: parent.height;
+            border-radius: 2px;
+            background: Theme.accent;
+            animate width { duration: 150ms; }
+        }
+    }
     Rectangle { height: 16px; }
     // The engine is waiting: these programs hold our files and must close first.
     if Installer.apps-to-close != "": VerticalLayout {

@@ -4,6 +4,7 @@
           Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
 
   <PropertyGroup>
+    <ApplicationManifest>..\..\DemoShared\PaneDemo.manifest</ApplicationManifest>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{E5F6A7B8-C9D0-1234-EFAB-567890123CDE}</ProjectGuid>

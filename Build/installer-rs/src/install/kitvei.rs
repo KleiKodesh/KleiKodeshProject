@@ -13,10 +13,21 @@ const URL_SCHEME: &str = r"Software\Classes\kitveihakodeshapp";
 const OPEN_WITH: &str = r"Software\Classes\Applications\כתבי הקודש.exe";
 /// Written by old versions; removed whenever we touch associations.
 const LEGACY_PROG_ID: &str = "KitveiHakodesh.Document.1";
-const DOCUMENT_TYPES: [&str; 7] = [".pdf", ".doc", ".docx", ".rtf", ".txt", ".htm", ".html"];
+/// Offered in "Open with": PDF only.
+const OPEN_WITH_TYPES: [&str; 1] = [".pdf"];
+/// Every type older versions registered, cleaned up whenever we touch associations.
+const LEGACY_TYPES: [&str; 7] = [".pdf", ".doc", ".docx", ".rtf", ".txt", ".htm", ".html"];
 
 pub fn is_registered(layout: &Layout) -> bool {
     layout.start_menu_dir.join(SHORTCUT_NAME).exists()
+}
+
+pub fn has_open_with(layout: &Layout) -> bool {
+    Hkcu::new(layout).exists(OPEN_WITH)
+}
+
+pub fn has_desktop_shortcut(layout: &Layout) -> bool {
+    layout.desktop_dir.join(SHORTCUT_NAME).exists()
 }
 
 pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool) -> std::io::Result<()> {
@@ -46,7 +57,8 @@ pub fn register(layout: &Layout, desktop_shortcut: bool, open_with: bool) -> std
     remove_legacy_prog_id(&reg);
     if open_with {
         reg.set_str(OPEN_WITH, "FriendlyAppName", FRIENDLY_NAME)?;
-        for ext in DOCUMENT_TYPES {
+        reg.delete_tree(&format!(r"{OPEN_WITH}\SupportedTypes"));
+        for ext in OPEN_WITH_TYPES {
             reg.set_str(&format!(r"{OPEN_WITH}\SupportedTypes"), ext, "")?;
         }
         reg.set_str(&format!(r"{OPEN_WITH}\shell\open\command"), "", &command)?;
@@ -69,7 +81,7 @@ pub fn unregister(layout: &Layout) {
 
 fn remove_legacy_prog_id(reg: &Hkcu) {
     reg.delete_tree(&format!(r"Software\Classes\{LEGACY_PROG_ID}"));
-    for ext in DOCUMENT_TYPES {
+    for ext in LEGACY_TYPES {
         reg.delete_value(&format!(r"Software\Classes\{ext}\OpenWithProgids"), LEGACY_PROG_ID);
         reg.delete_value(
             &format!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{ext}\OpenWithProgids"),

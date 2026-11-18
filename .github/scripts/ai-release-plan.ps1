@@ -1,8 +1,9 @@
 ﻿# Asks Gemini to read the commits since the last release and decide
 #   1. the version bump (major / minor / patch)
 #   2. user-facing release notes, in English and Hebrew
-# Writes the notes to RELEASE_NOTES.txt (build-installer.ps1 -ReleaseNotesSource file
-# picks them up) and the bump to $env:GITHUB_OUTPUT as "bump=...".
+# Writes the notes to release-notes.json - the one notes format: the setup exe shows it
+# on its "What's new" screen, and notes-to-markdown.ps1 turns it into the GitHub release
+# text. The bump goes to $env:GITHUB_OUTPUT as "bump=...".
 #
 # Env: GEMINI_API_KEY, GH_TOKEN. Optional: GEMINI_MODEL, NOTES_MERGE_MODEL (comma lists).
 #
@@ -10,8 +11,8 @@
 # release before it) - used by rewrite-release-notes.yml.
 #
 # -Auto: this is the weekly automatic release - say so at the end of both languages.
-param([string]$OutFile = "RELEASE_NOTES.txt", [string]$Tag, [switch]$Auto,
-      # -NotesOnly: write $OutFile only - no installer notes files, no bump output.
+param([string]$OutFile = "release-notes.json", [string]$Tag, [switch]$Auto,
+      # -NotesOnly: write $OutFile only - no bump output.
       # Used by release-notes-test.yml to try the prompt without touching a release.
       [switch]$NotesOnly,
       # -Since vX.Y.Z: override the previous tag (test runs).
@@ -411,55 +412,31 @@ if ($proof) { $heText = @($proof.he) } else { Write-Host "Proofreading failed - 
 for ($k = 0; $k -lt $kept.Count; $k++) { $kept[$k] | Add-Member he $heText[$k] }
 
 Write-Host "Bump: $($plan.bump) - $($plan.reason)"
-# Markdown per language: sections in order; inside each, ONE bullet per area (areas by
-# their best rank, then amount of work), its changes as short sub-points.
-function Format-Notes([string]$lang) {
-    $heads = if ($lang -eq 'he') { @{ new = 'חדש'; improved = 'שיפורים'; fixed = 'תיקונים' } }
-             else { @{ new = 'New'; improved = 'Improved'; fixed = 'Fixed' } }
-    $out = foreach ($sec in 'new', 'improved', 'fixed') {
-        $items = @($plan.changes | Where-Object section -eq $sec)
-        if (-not $items) { continue }
-        "### $($heads[$sec])"
-        $groups = $items | Group-Object area_en | Sort-Object `
-            @{ Expression = { ($_.Group | Measure-Object rank -Minimum).Minimum } },
-            @{ Expression = { ($_.Group | Measure-Object weight -Sum).Sum }; Descending = $true }
-        foreach ($g in $groups) {
+# release-notes.json: sections in order (new, improved, fixed); inside each, one entry per
+# area (areas by their best rank, then amount of work), each with its changes in both
+# languages. notes-to-markdown.ps1 and the setup exe both read this shape.
+$sections = foreach ($kind in 'new', 'improved', 'fixed') {
+    $items = @($plan.changes | Where-Object section -eq $kind)
+    if (-not $items) { continue }
+    $groups = $items | Group-Object area_en | Sort-Object `
+        @{ Expression = { ($_.Group | Measure-Object rank -Minimum).Minimum } },
+        @{ Expression = { ($_.Group | Measure-Object weight -Sum).Sum }; Descending = $true }
+    [ordered]@{
+        kind  = $kind
+        areas = @(foreach ($g in $groups) {
             $cs = @($g.Group | Sort-Object rank, @{ Expression = 'weight'; Descending = $true })
-            $area = $cs[0]."area_$lang"
-            if ($cs.Count -eq 1) { "- **$area** - $($cs[0].$lang)" }
-            else { "- **$area**"; foreach ($c in $cs) { "  - $($c.$lang)" } }
-        }
-        ''
+            [ordered]@{
+                he      = $cs[0].area_he
+                en      = $cs[0].area_en
+                changes = @(foreach ($c in $cs) { [ordered]@{ he = $c.he; en = $c.en } })
+            }
+        })
     }
-    if ($Auto) {
-        $out += if ($lang -eq 'he') { '*גרסה זו פורסמה אוטומטית במסגרת השחרור השבועי האוטומטי.*' }
-                else { '*This version was published automatically by the weekly automatic release.*' }
-    }
-    ($out -join "`n").Trim()
 }
-$plan | Add-Member notes_en (Format-Notes 'en')
-$plan | Add-Member notes_he (Format-Notes 'he')
-
-$notes = @"
-<div dir="rtl">
-
-$($plan.notes_he.Trim())
-
-</div>
-
----
-
-$($plan.notes_en.Trim())
-"@
+$notes = [ordered]@{ auto = [bool]$Auto; sections = @($sections) } | ConvertTo-Json -Depth 8
 $utf8 = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($OutFile, $notes, $utf8)
 Write-Host $notes
 if ($NotesOnly) { return }
-
-# Each language on its own for the installer's "What's new" page (embedded when present).
-$dir = Join-Path $PSScriptRoot '..\..\Build\Installer\ReleaseNotes'
-New-Item -ItemType Directory -Force $dir | Out-Null
-[IO.File]::WriteAllText((Join-Path $dir 'notes.he.md'), $plan.notes_he.Trim(), $utf8)
-[IO.File]::WriteAllText((Join-Path $dir 'notes.en.md'), $plan.notes_en.Trim(), $utf8)
 
 if ($env:GITHUB_OUTPUT) { "bump=$($plan.bump)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8 }

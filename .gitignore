@@ -1,8 +1,6 @@
 # Project-specific ignores
 Build/releases/
-Build/Installer/KleiKodesh.zip
 # Solid-LZMA payload built by the installer prebuild target (~25 MB, regenerated each build)
-Build/Installer/KleiKodesh.pkg
 **/seforim.db
 # Byte-identical local copy of the tracked KitveiHakodeshLib Resources HebrewBooks.db —
 # 7 MB of binary that must never land in history as a second blob.
@@ -403,8 +401,11 @@ KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/hb-mirror.json
 /SearchExpansion-models/
 
 # Release notes written by CI before the installer build (embedded into the installer)
-Build/Installer/ReleaseNotes/
 
 # DB builder repos (cloned as siblings when needed; see the README.md next to each DB)
 /KitveiHakodeshDictionary/
 /SearchExpansion/
+
+# Written by .github/scripts/ai-release-plan.ps1 (CI); built into the setup exe.
+release-notes.json
+release-notes.md

@@ -34,5 +34,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          { echo "Release ${{ inputs.tag }}"; echo; cat RELEASE_NOTES.txt; } > notes.md
+          pwsh .github/scripts/notes-to-markdown.ps1 -Json release-notes.json -Out body.md
+          { echo "Release ${{ inputs.tag }}"; echo; cat body.md; } > notes.md
           gh release edit '${{ inputs.tag }}' --repo ${{ github.repository }} --notes-file notes.md

@@ -18,6 +18,7 @@ mod layout;
 mod log;
 mod payload;
 mod products;
+mod release_notes;
 mod system;
 mod ui;
 
@@ -65,7 +66,9 @@ fn run_silent(layout: &Layout, payload: Option<&Payload>, installed: &HashSet<Pr
     let request = Request {
         action: if uninstall { Action::Uninstall } else { Action::Apply },
         products,
-        options: Options { desktop_shortcut: false, open_with: false, english },
+        options: Options::current(layout, english),
+        clean: false,
+        addin_settings: None,
     };
     let reporter = SilentReporter { close_apps };
     match install::run(layout, payload, &request, &reporter) {
