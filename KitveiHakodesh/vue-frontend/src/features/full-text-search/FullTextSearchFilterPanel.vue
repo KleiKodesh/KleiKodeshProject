@@ -389,21 +389,25 @@ function onInputKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+/* A dropdown under the search bar, the options panel's twin: same anchor, surface and
+   frame. The page measures the height under the bar (see FullTextSearchLayout); 60vh is
+   the fallback when no host sets it. */
 .panel {
   position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 10;
+  inset-inline-start: 8px;
+  top: 100%;
+  z-index: 20;
   display: flex;
   flex-direction: column;
-  min-width: 180px;
-  max-width: 300px;
-  /* Same surface as the book-view side panel: flush, full height, toolbar color,
-     one edge line. */
-  background: var(--bg-toolbar);
-  --tree-bg: var(--bg-toolbar);
-  border-inline-end: 1px solid var(--border-color);
+  width: 300px;
+  max-width: calc(100% - 16px);
+  height: calc(var(--options-panel-height, 60vh) - 8px);
+  min-height: 0;
+  background: var(--bg-secondary);
+  --tree-bg: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
   overflow: hidden;
 }
 /* Menu-height rows throughout (32px, matching the nav dropdown) - the old 26px band was

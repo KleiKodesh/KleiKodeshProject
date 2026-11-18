@@ -1,5 +1,4 @@
 import { computed, type Ref } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
 /** A panel element, as useDropdownClose takes it. */
@@ -20,30 +19,18 @@ export function useFullTextSearchPanelsClose(refs: {
   isOptionsOpen: Ref<boolean>
 }) {
   const { searchBarRef, filterPanelRef, optionsPanelRef, isFilterOpen, isOptionsOpen } = refs
-  // The filter panel closes on outside-click only in narrow "overlay" mode, where
-  // it floats over the results. In wide mode (≥520px) it's a persistent side panel
-  // beside the results, so clicking the results should not dismiss it.
-  // Breakpoint mirrors the `@media (min-width: 520px)` layout switch in FullTextSearchLayout.
-  const isOverlayMode = useMediaQuery('(max-width: 519.98px)')
-
+  // Both panels are dropdowns under the search bar at every size, so both close on an
+  // outside click - which also keeps them from being open together: the other panel's
+  // button is outside.
   useDropdownClose(
     filterPanelRef,
     () => {
       if (isFilterOpen.value) isFilterOpen.value = false
     },
-    {
-      toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
-      enabled: isOverlayMode,
-      // A full-height side panel, not a popup: the viewport fit would cap it 8px short
-      // of the bottom edge (same opt-out as SidePanel).
-      fitToViewport: false,
-    },
+    { toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null) },
   )
 
-  // The options panel is a popup over the results in every size, so unlike the filter
-  // panel it closes on outside-click unconditionally — no overlay-mode gate.
-  //
-  // The toggle button has to be named, or clicking it while the panel is open would close
+  // The toggle buttons have to be named, or clicking it while the panel is open would close
   // it and then reopen it: onClickOutside runs on the CLICK, capture-phase on window, so
   // it fires before the button's own bubble-phase handler (@click.stop can't cancel a
   // capture listener that already ran). Naming the button makes the composable return

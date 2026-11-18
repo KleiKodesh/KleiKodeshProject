@@ -520,7 +520,6 @@ onBeforeUnmount(() => {
     :is-options-open="isOptionsOpen"
     :is-filter-open="isFilterOpen"
     :instance-key="String(tabId)"
-    @close-filter="isFilterOpen = false"
   >
     <template #bar>
       <FullTextSearchBar
