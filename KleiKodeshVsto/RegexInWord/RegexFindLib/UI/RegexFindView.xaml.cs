@@ -44,6 +44,9 @@ namespace RegexFindLib.UI
             IsVisibleChanged += (_, e) =>
             {
                 if (!(bool)e.NewValue || _initialLoadPending || !(DataContext is RegexFindViewModel vm)) return;
+                // Flipping between views shows this one again and again: same throttle as focus.
+                if (System.Environment.TickCount - _lastStyleRefreshTick < StyleRefreshThrottleMs) return;
+                _lastStyleRefreshTick = System.Environment.TickCount;
                 Dispatcher.BeginInvoke(new System.Action(vm.EnsureStylesLoaded),
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             };

@@ -10,7 +10,7 @@ namespace OfficePaneChrome
         public const uint WM_SIZE = 0x0005, WM_PAINT = 0x000F, WM_SETCURSOR = 0x0020, WM_NCDESTROY = 0x0082, WM_NCCALCSIZE = 0x0083,
             WM_NCHITTEST = 0x0084, WM_NCMOUSEMOVE = 0x00A0, WM_NCLBUTTONDOWN = 0x00A1, WM_NCLBUTTONUP = 0x00A2, WM_NCRBUTTONUP = 0x00A5,
             WM_SYSCOMMAND = 0x0112, WM_TIMER = 0x0113, WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202,
-            WM_LBUTTONDBLCLK = 0x0203, WM_NCMOUSELEAVE = 0x02A2, WM_MOUSELEAVE = 0x02A3, SRCCOPY = 0x00CC0020;
+            WM_LBUTTONDBLCLK = 0x0203, WM_CAPTURECHANGED = 0x0215, WM_NCLBUTTONDBLCLK = 0x00A3, WM_DPICHANGED = 0x02E0, WM_NCMOUSELEAVE = 0x02A2, WM_MOUSELEAVE = 0x02A3, SRCCOPY = 0x00CC0020;
 
         public const int HTCLIENT = 1, HTCAPTION = 2, HTMINBUTTON = 8, HTMAXBUTTON = 9, HTTOP = 12, HTCLOSE = 20;
         public const int GWLP_HWNDPARENT = -8, GA_ROOT = 2;
@@ -40,7 +40,11 @@ namespace OfficePaneChrome
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
         [DllImport("user32.dll")] public static extern IntPtr SetCursor(IntPtr c);
         [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr inst, IntPtr id);
-        [DllImport("user32.dll")] public static extern IntPtr SetWindowLongPtr(IntPtr h, int i, IntPtr v);
+        // SetWindowLongPtr is a real export only in 64-bit user32; 32-bit Office needs SetWindowLong.
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")] static extern IntPtr SetWindowLongPtr64(IntPtr h, int i, IntPtr v);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong")] static extern IntPtr SetWindowLong32(IntPtr h, int i, IntPtr v);
+        public static IntPtr SetWindowLongPtr(IntPtr h, int i, IntPtr v) => IntPtr.Size == 8 ? SetWindowLongPtr64(h, i, v) : SetWindowLong32(h, i, v);
+        [DllImport("user32.dll")] public static extern int GetSystemMetricsForDpi(int i, uint dpi);
         [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
         [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
         [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);

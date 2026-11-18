@@ -14,7 +14,8 @@ namespace OfficePaneChrome
     ///
     /// It also tells whether a hide happened while Office handled a click that went down on its X.
     /// Office destroys this window on hide and builds a new one on show: call <see cref="Attach"/> after every show.
-    /// Anything unexpected (window chain, size, not exactly Office's arrow + X, any exception) unhooks it for good.
+    /// Anything unexpected (window chain, not exactly Office's arrow + X, any exception) unhooks it: the pane is
+    /// stock until its next show (<see cref="Reattach"/>), which tries again.
     /// </summary>
     public sealed class OfficeTitleStrip : IDisposable
     {
@@ -48,8 +49,11 @@ namespace OfficePaneChrome
             // Draw at once: waiting for Office's next WM_PAINT shows a stale or empty title while a heavy view
             // keeps the UI thread busy. What the old selector covered beyond the new one is cleared here too.
             var old = _selector;
-            Draw(relayout: true, clear: old);
+            try { Draw(relayout: true, clear: old); } catch (Exception ex) { Fail(ex.Message); }
         }
+
+        /// <summary>A draw after Office already handled the message: a failure unhooks, it never reaches Office.</summary>
+        void DrawSafe(bool relayout) { try { Draw(relayout); } catch (Exception ex) { Fail(ex.Message); } }
 
         public Rectangle SelectorScreenRect()
         {
@@ -62,13 +66,17 @@ namespace OfficePaneChrome
         /// <summary>Hooks the pane's current frame; Office builds it after Visible = true returns, so retry briefly.</summary>
         public void Attach()
         {
-            if (_failed || _disposed || _bar != IntPtr.Zero || TryHook()) return;
-            _retry?.Dispose();
+            if (_failed || _disposed || _bar != IntPtr.Zero) return;
+            _retry?.Dispose(); _retry = null;
+            if (TryHook()) return;
             int tries = 0;
             _retry = new Timer { Interval = 50 };
             _retry.Tick += (s, e) => { if (TryHook() || ++tries > 60) { _retry?.Dispose(); _retry = null; } };
             _retry.Start();
         }
+
+        /// <summary>After the pane is shown again: a strip that failed before gets one new try.</summary>
+        public void Reattach() { _failed = false; Attach(); }
 
         bool TryHook()
         {
@@ -87,8 +95,10 @@ namespace OfficePaneChrome
                 _bar = bar; _workPane = work;
                 var s = StripRect();
                 Scale = Native.GetDpiForWindow(_bar) / 96f;
-                if (s.Height < 16 * Scale || s.Height > 90 * Scale || s.Width < 120 * Scale) { Fail("unexpected strip " + s); return true; }
-                if (!Native.SetWindowSubclass(_bar, _proc, (UIntPtr)1, IntPtr.Zero)) { Fail("subclass refused"); return true; }
+                // Not laid out yet (or a very narrow pane): not a failure, look again shortly.
+                if (s.Height < 16 * Scale || s.Width < 120 * Scale) { _bar = _workPane = IntPtr.Zero; return false; }
+                if (s.Height > 90 * Scale) { _bar = _workPane = IntPtr.Zero; Fail("unexpected strip " + s); return true; }
+                if (!Native.SetWindowSubclass(_bar, _proc, (UIntPtr)1, IntPtr.Zero)) { _bar = _workPane = IntPtr.Zero; Fail("subclass refused"); return true; }
                 Native.InvalidateRect(_bar, IntPtr.Zero, false);
                 return true;
             }
@@ -119,15 +129,16 @@ namespace OfficePaneChrome
                         if (HitTest(CursorInStrip()) != 0) { Native.SetCursor(Native.LoadCursor(IntPtr.Zero, (IntPtr)32512)); return (IntPtr)1; }
                         break;
                     case Native.WM_MOUSEMOVE: SetHover(HitTest(Native.PointFromLParam(lParam))); break;
-                    case Native.WM_MOUSELEAVE: SetHover(0); break;
+                    case Native.WM_MOUSELEAVE: _ourMouseDown = false; SetHover(0); break;
+                    case Native.WM_CAPTURECHANGED: _ourMouseDown = false; break;
                     case Native.WM_LBUTTONDBLCLK:
                         if (HitTest(Native.PointFromLParam(lParam)) != 0) { _ourMouseDown = true; return IntPtr.Zero; }
                         break;
                     case Native.WM_LBUTTONDOWN:
                         int hit = HitTest(Native.PointFromLParam(lParam));
+                        _ourMouseDown = hit != 0;                     // never left over from a click whose release went elsewhere
                         if (hit != 0)
                         {
-                            _ourMouseDown = true;
                             // The menu / pop-out takes the mouse, so no WM_MOUSELEAVE comes: drop the hover now.
                             _hover = 0;
                             Draw(relayout: false);
@@ -136,6 +147,7 @@ namespace OfficePaneChrome
                             var action = hit == 1 ? PopOutClicked : SelectorClicked;
                             _content.BeginInvoke((Action)(() =>
                             {
+                                if (_disposed || _bar == IntPtr.Zero) return;     // the frame went away meanwhile
                                 try { action?.Invoke(); } catch (Exception ex) { SidePanes.Log("strip click: " + ex.Message); }
                             }));
                             return IntPtr.Zero;                       // Office never sees it
@@ -145,11 +157,17 @@ namespace OfficePaneChrome
                         if (_ourMouseDown) { _ourMouseDown = false; return IntPtr.Zero; }
                         break;
                     case Native.WM_PAINT:
+                        // The strip changed size: our areas are stale. Let Office paint all of it, then lay out afresh.
+                        if (StripRect().Size != _laidOutFor && !(_popOut.IsEmpty && _selector.IsEmpty))
+                        {
+                            _popOut = _selector = Rectangle.Empty; _layoutKey = null;
+                            Native.InvalidateRect(hWnd, IntPtr.Zero, false);
+                        }
                         // Clip Office away from our areas (it would paint over them), then draw them.
                         foreach (var r in new[] { _popOut, _selector })
                             if (!r.IsEmpty) { var rc = new Native.RECT { Left = r.Left, Top = r.Top, Right = r.Right, Bottom = r.Bottom }; Native.ValidateRect(hWnd, ref rc); }
                         var painted = Native.DefSubclassProc(hWnd, msg, wParam, lParam);
-                        Draw(relayout: true);
+                        DrawSafe(relayout: true);
                         return painted;
                 }
 
@@ -168,7 +186,7 @@ namespace OfficePaneChrome
                     if (msg == Native.WM_MOUSEMOVE || msg == Native.WM_MOUSELEAVE || msg == Native.WM_TIMER || msg == Native.WM_LBUTTONUP ||
                         msg == 0x0086 /*WM_NCACTIVATE*/ || msg == 0x0006 /*WM_ACTIVATE*/ || msg == 0x0007 /*WM_SETFOCUS*/ || msg == 0x0008 /*WM_KILLFOCUS*/ ||
                         msg == 0x0047 /*WM_WINDOWPOSCHANGED*/ || msg == 0x0005 /*WM_SIZE*/ || msg == 0x000B /*WM_SETREDRAW*/)
-                        Draw(relayout: false);
+                        DrawSafe(relayout: false);
                 }
             }
             catch (Exception ex) { Fail(ex.Message); return Native.DefSubclassProc(hWnd, msg, wParam, lParam); }
@@ -189,9 +207,11 @@ namespace OfficePaneChrome
         /// content at the far side. Anything else = nothing of ours.
         /// </summary>
         string _layoutKey;
+        Size _laidOutFor;
 
         void Layout(IntPtr screenDc, Rectangle s)
         {
+            _laidOutFor = s.Size;
             var shown = Current();
             string key = s.Width + "x" + s.Height + "@" + Native.GetDpiForWindow(_bar) + "|" + shown.Title + "|" + (shown.Icon != null);
             if (key == _layoutKey && !_closeBox.IsEmpty &&
@@ -279,7 +299,11 @@ namespace OfficePaneChrome
         {
             if (_bar == IntPtr.Zero) return;
             var s = StripRect();
-            if (s.Height < 12) return;
+            if (s.Height < 12 || s.Width < 40)                    // nothing to draw into (and nothing to hit)
+            {
+                _popOut = _selector = _closeBox = Rectangle.Empty; _layoutKey = null;
+                return;
+            }
             var screenDc = Native.GetDC(_bar);
             try
             {

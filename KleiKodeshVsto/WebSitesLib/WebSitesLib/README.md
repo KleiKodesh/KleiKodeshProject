@@ -39,7 +39,7 @@ All source files are under the `UI/` subdirectory.
 This library is packaged as a task pane displayed when the user clicks the "דרך האתרים" ribbon button in the VSTO add-in.
 
 ```csharp
-WpfTaskPane.Show(new WebSitesLib.UI.WebSitesView(), "דרך האתרים", 510);
+WpfTaskPane.Show("WebSites", () => new WebSitesLib.UI.WebSitesView(), "דרך האתרים");
 ```
 
 ## Dependencies

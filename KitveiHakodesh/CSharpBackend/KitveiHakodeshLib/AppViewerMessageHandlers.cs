@@ -154,6 +154,7 @@ namespace KitveiHakodeshLib
             // Not in a window (the Word task pane): the host puts the viewer into a full-screen window.
             if (hostForm == null)
             {
+                _preFullscreenWindowState = FormWindowState.Normal;   // leaving full screen there = a normal window
                 RequestFullscreenWindow?.Invoke();
                 return;
             }

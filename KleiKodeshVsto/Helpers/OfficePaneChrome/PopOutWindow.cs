@@ -26,6 +26,21 @@ namespace OfficePaneChrome
 
         public void RefreshTitle() { Text = _side.ActiveTitle; InvalidateTitle(); }
 
+        /// <summary>Full screen = no frame and maximised (the title bar hides itself).</summary>
+        public bool IsFullScreen => FormBorderStyle == FormBorderStyle.None;
+        public void EnterFullScreen()
+        {
+            if (IsFullScreen) return;
+            _beforeFullScreen = WindowState == FormWindowState.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+            if (WindowState == FormWindowState.Maximized) WindowState = FormWindowState.Normal;   // else the frame stays
+            FormBorderStyle = FormBorderStyle.None;
+            WindowState = FormWindowState.Maximized;
+        }
+        public void LeaveFullScreen() { if (!IsFullScreen) return; FormBorderStyle = FormBorderStyle.Sizable; WindowState = _beforeFullScreen; }
+        FormWindowState _beforeFullScreen = FormWindowState.Normal;
+
+        protected override void OnActivated(EventArgs e) { base.OnActivated(e); SidePanes.MakeCurrent(_side); }
+
         protected override bool IsInteractiveContent => true;
         protected override int TitleContentWidth() => Fluent.SelectorWidth(_side.ActiveTitle, _side.ActiveIcon, DpiScale);
         protected override void PaintTitleContent(Graphics g, Rectangle r) =>
@@ -35,7 +50,8 @@ namespace OfficePaneChrome
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (!AllowClose) { e.Cancel = true; BeginInvoke((Action)(() => SidePanes.PopIn(_side))); }   // close = pop back in
+            // Close = pop back in (the views live in this window). Only Windows shutting down really closes it.
+            if (!AllowClose && e.CloseReason != CloseReason.WindowsShutDown) { e.Cancel = true; BeginInvoke((Action)(() => SidePanes.PopIn(_side))); }
             base.OnFormClosing(e);
         }
     }

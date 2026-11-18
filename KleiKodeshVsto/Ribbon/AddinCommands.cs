@@ -130,7 +130,8 @@ namespace KleiKodesh.Ribbon
         {
             try
             {
-                var viewers = TaskPaneManager.FindAll<KitveiHakodeshLib.AppViewer>("KitveiHakodesh");
+                // Only viewers on screen: one shuffled behind another view keeps its old selection, unseen.
+                var viewers = TaskPaneManager.FindAll<KitveiHakodeshLib.AppViewer>("KitveiHakodesh").Where(v => v.Visible).ToList();
                 if (viewers.Count == 0)
                 {
                     MessageBox.Show(AddinUiLanguage.T("יש לפתוח את כתבי הקודש ולסמן בו את הקטע להשוואה",

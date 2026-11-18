@@ -446,6 +446,17 @@ namespace KitveiHakodeshLib
             try
             {
                 await _webView.CoreWebView2.TrySuspendAsync();
+                // Shown again while that was running (a quick switch away and back): the show branch above ran
+                // before the suspend finished, so undo it here or the view stays blank.
+                if (Visible && !IsDisposed)
+                {
+                    _webView.Visible = true;
+                    if (_webView.CoreWebView2 != null)
+                    {
+                        if (_webView.CoreWebView2.IsSuspended) _webView.CoreWebView2.Resume();
+                        _webView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                    }
+                }
             }
             catch (Exception ex)
             {

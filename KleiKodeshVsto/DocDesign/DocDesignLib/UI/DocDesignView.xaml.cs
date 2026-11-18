@@ -72,6 +72,9 @@ namespace DocDesign
                 bool visible = (bool)e.NewValue;
                 vm.SpacingViewModel.Live = visible;
                 if (!visible || _initialLoadPending) return;
+                // Flipping between views shows this one again and again: same throttle as focus.
+                if (Environment.TickCount - _lastStyleRefreshTick < StyleRefreshThrottleMs) return;
+                _lastStyleRefreshTick = Environment.TickCount;
                 Dispatcher.BeginInvoke(new System.Action(() =>
                 {
                     vm.SpacingViewModel.DeferredInit();
