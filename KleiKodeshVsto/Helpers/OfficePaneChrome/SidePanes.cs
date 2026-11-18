@@ -90,6 +90,7 @@ namespace OfficePaneChrome
             public readonly Dictionary<string, string> Titles = new Dictionary<string, string>();
             public OfficeTitleStrip Strip;
             public PopOutWindow PopOut;
+            public bool Closing;
             public bool IsPoppedOut => PopOut != null && !PopOut.IsDisposed;
             public string ActiveTitle => ActiveId != null && Titles.TryGetValue(ActiveId, out var t) ? t : ActiveId ?? "";
             public Image ActiveIcon => Ribbon?.IconFor(ActiveId);
@@ -104,13 +105,17 @@ namespace OfficePaneChrome
 
         static readonly List<SidePane> All = new List<SidePane>();
         static SidePane _current;
+        static SidePane _target;                              // set while a menu entry opens its view: that side pane, whatever window is active
+
+        /// <summary>The side pane the user is working in (focus entered it, its window was activated).</summary>
+        internal static void MakeCurrent(SidePane side) { if (!side.Closing && All.Contains(side)) _current = side; }
 
         /// <summary>The live view with this id in the current side pane of the active window, or null.</summary>
         public static Control FindView(string id) => CurrentFor(Window(), create: false)?.Views.TryGetValue(id, out var v) == true ? v : null;
 
         /// <summary>All live views with this id, current side pane first.</summary>
         public static IEnumerable<Control> FindAllViews(string id) =>
-            All.OrderByDescending(s => s == _current).Select(s => s.Views.TryGetValue(id, out var v) ? v : null).Where(v => v != null && !v.IsDisposed);
+            All.OrderByDescending(s => s == _current).Select(s => s.Views.TryGetValue(id, out var v) ? v : null).Where(v => v != null && !v.IsDisposed).ToList();
 
         /// <summary>
         /// Shows view <paramref name="id"/> in the current side pane of the active window: swaps it in if that side
@@ -118,13 +123,16 @@ namespace OfficePaneChrome
         /// </summary>
         public static Control ShowView(string id, string title, Func<Control> create)
         {
-            var side = CurrentFor(Window(), create: true);
+            var side = _target != null && !_target.Closing && !_target.Host.IsDisposed ? _target : CurrentFor(Window(), create: true);
             if (side == null) return null;
+            Control created = null;
+            if (!side.Views.TryGetValue(id, out var existing) || existing.IsDisposed)
+                created = create();                               // its failure is the caller's to report
             try
             {
-                if (!side.Views.TryGetValue(id, out var view) || view.IsDisposed)
+                var view = created ?? existing;
+                if (created != null)
                 {
-                    view = create();
                     try { ViewCreated(id, view); } catch (Exception ex) { Log("ViewCreated: " + ex.Message); }
                     view.Dock = DockStyle.Fill;
                     view.Visible = false;
@@ -142,13 +150,26 @@ namespace OfficePaneChrome
         /// <summary>Opens another side pane in the active window, showing the current view there too.</summary>
         public static void OpenNewPane()
         {
-            var from = CurrentFor(Window(), create: false);
-            var side = CreateSidePane(Window());
+            OpenNewPane(CurrentFor(Window(), create: false));
+        }
+
+        /// <summary>Another side pane next to <paramref name="from"/> (same document window), or in the active window.</summary>
+        static void OpenNewPane(SidePane from)
+        {
+            var side = CreateSidePane(from?.Window ?? Window());
             if (side == null) return;
             _current = side;
             var entry = Ribbon?.Entries().FirstOrDefault(p => p.Id == from?.ActiveId) ?? Ribbon?.Entries().FirstOrDefault();
-            if (entry != null) entry.Open();              // the ribbon's own onAction -> ShowView into the new side pane
+            if (entry != null) OpenInto(side, entry);     // the ribbon's own onAction -> ShowView into the new side pane
             else Reveal(side);
+        }
+
+        /// <summary>Runs a ribbon entry's onAction with its ShowView aimed at <paramref name="side"/>.</summary>
+        static void OpenInto(SidePane side, RibbonPanes.Entry entry)
+        {
+            var before = _target;
+            _target = side;
+            try { entry.Open(); } finally { _target = before; }
         }
 
         /// <summary>Pops the current side pane of the active window out into its own window, or back in.</summary>
@@ -174,9 +195,9 @@ namespace OfficePaneChrome
         {
             var side = All.FirstOrDefault(s => s.Views.ContainsValue(view)) ?? CurrentFor(Window(), create: false);
             if (side == null) return;
+            if (side.Closing) return;
             if (!side.IsPoppedOut) PopOut(side);
-            side.PopOut.FormBorderStyle = FormBorderStyle.None;      // ChromeWindow hides its title bar
-            side.PopOut.WindowState = FormWindowState.Maximized;
+            if (side.IsPoppedOut) side.PopOut.EnterFullScreen();       // it may have failed to pop out
         }
 
         /// <summary>Closes every side pane of the given document window for good (e.g. its document is closing).</summary>
@@ -188,6 +209,8 @@ namespace OfficePaneChrome
         static void Activate(SidePane side, string id)
         {
             if (side.ActiveId == id && side.Views[id].Visible) return;
+            // Full screen belongs to the view that asked for it: another view gets the normal window back.
+            if (side.ActiveId != id && side.IsPoppedOut) side.PopOut.LeaveFullScreen();
             side.ActiveId = id;
             side.Strip?.Repaint();                                     // the title first: the view swap can be heavy
             side.PopOut?.RefreshTitle();
@@ -214,30 +237,44 @@ namespace OfficePaneChrome
         {
             All.RemoveAll(s => s.Host.IsDisposed);
             if (_current != null && _current.Window == window && !_current.Host.IsDisposed) return _current;
-            var side = All.LastOrDefault(s => s.Window == window);
+            // One the user can see, before a hidden one.
+            var side = All.LastOrDefault(s => s.Window == window && (s.IsPoppedOut || IsShown(s))) ?? All.LastOrDefault(s => s.Window == window);
             if (side != null) return _current = side;
             return create ? _current = CreateSidePane(window) : null;
+        }
+
+        static bool IsShown(SidePane side) { try { return side.Pane.Visible; } catch { return false; } }
+
+        /// <summary>The pop-out's place to remember; not its full-screen size.</summary>
+        static void RememberBounds(PopOutWindow win)
+        {
+            try { if (!win.IsFullScreen) SavePopOutBounds(win.WindowState == FormWindowState.Normal ? win.Bounds : win.RestoreBounds); } catch { }
         }
 
         static SidePane CreateSidePane(int window)
         {
             if (_panes == null) { Log("SidePanes.Configure() was not called"); return null; }
             var host = new HostControl();
-            var pane = _panes.Add(host, " ");                       // blank: the title is ours (the selector)
+            CustomTaskPane pane;
+            try { pane = _panes.Add(host, " "); }                   // blank: the title is ours (the selector)
+            catch (Exception ex) { Log("could not create a side pane: " + ex.Message); host.Dispose(); return null; }
             var side = new SidePane { Pane = pane, Host = host, Window = window };
             All.Add(side);
             try { PaneCreated(pane); } catch (Exception ex) { Log("PaneCreated: " + ex.Message); }
             try { pane.Width = LoadPaneWidth() ?? DefaultWidth; } catch { }   // once, before it is first shown
+            int savedWidth = 0;
             host.SizeChanged += (s, e) =>                                     // the user's drag: remember it
             {
                 try
                 {
                     var dock = pane.DockPosition;
-                    if (pane.Visible && (dock == Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionLeft || dock == Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight))
-                        SavePaneWidth(pane.Width);
+                    if (!pane.Visible || (dock != Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionLeft && dock != Microsoft.Office.Core.MsoCTPDockPosition.msoCTPDockPositionRight)) return;
+                    int w = pane.Width;
+                    if (w >= 150 && w != savedWidth) SavePaneWidth(savedWidth = w);   // not every layout pass, not a collapsing pane
                 }
                 catch { }
             };
+            host.Views.Enter += (s, e) => MakeCurrent(side);                  // focus moved into this side pane
             AttachStrip(side);
             Log("new side pane (" + All.Count(s => s.Window == window) + " in this window)");
             return side;
@@ -246,13 +283,15 @@ namespace OfficePaneChrome
         /// <summary>Closes a side pane for good: views flushed and disposed, pop-out closed, pane removed.</summary>
         static async void Close(SidePane side)
         {
+            if (side.Closing) return;
+            side.Closing = true;
             All.Remove(side);
             if (_current == side) _current = All.LastOrDefault(s => s.Window == side.Window);
+            if (side.IsPoppedOut) { RememberBounds(side.PopOut); try { side.PopOut.Hide(); } catch { } }   // gone at once, not after the flush
             foreach (var v in side.Views.Values.ToList())
                 try { if (!v.IsDisposed) await ViewClosing(v); } catch (Exception ex) { Log("ViewClosing: " + ex.Message); }
             if (side.IsPoppedOut)
             {
-                try { SavePopOutBounds(side.PopOut.WindowState == FormWindowState.Normal ? side.PopOut.Bounds : side.PopOut.RestoreBounds); } catch { }
                 side.PopOut.AllowClose = true;
                 try { side.PopOut.Dispose(); } catch { }
             }
@@ -266,6 +305,7 @@ namespace OfficePaneChrome
 
         internal static void ShowMenu(SidePane side, Rectangle anchor, IntPtr owner, Color titleBack, bool rtl, float scale)
         {
+            if (side.Closing) return;
             var rows = new List<PaneMenu.Row>();
             foreach (var entry in Ribbon?.Entries() ?? new List<RibbonPanes.Entry>())
             {
@@ -273,44 +313,58 @@ namespace OfficePaneChrome
                 rows.Add(new PaneMenu.Row
                 {
                     Text = e.Title, Image = e.Icon, Current = e.Id == side.ActiveId,
-                    Click = () => { if (e.Id == side.ActiveId) return; _current = side; e.Open(); },
+                    Click = () => { if (e.Id == side.ActiveId || side.Closing) return; _current = side; OpenInto(side, e); },
                 });
             }
             rows.Add(PaneMenu.Row.Separator);
-            rows.Add(new PaneMenu.Row { Text = NewPaneText(rtl), Glyph = Fluent.NewPane, Click = () => { _current = side; OpenNewPane(); } });
+            rows.Add(new PaneMenu.Row { Text = NewPaneText(rtl), Glyph = Fluent.NewPane, Click = () => { if (!side.Closing) OpenNewPane(side); } });
             PaneMenu.Show(MenuTitle(rtl), rows, anchor, owner, titleBack, rtl, scale);
         }
 
         // ================= pop-out =================
 
-        static void TogglePopOut(SidePane side) { if (side.IsPoppedOut) PopIn(side); else PopOut(side); }
+        static void TogglePopOut(SidePane side) { if (side.Closing) return; if (side.IsPoppedOut) PopIn(side); else PopOut(side); }
 
         static void PopOut(SidePane side)
         {
-            var win = new PopOutWindow(side);
-            side.PopOut = win;
+            if (side.Closing || side.IsPoppedOut) return;
+            PopOutWindow win = null;
             var panel = side.Host.Views;
-            side.Host.Controls.Remove(panel);
-            win.Content.Controls.Add(panel);
-            Place(win, side);
-            try { PopOutCreated(win); } catch (Exception ex) { Log("PopOutCreated: " + ex.Message); }
-            try { side.Pane.Visible = false; } catch { }            // code hide: not the X
-            // Owned by Word's frame, set right before showing (as the old pop-out). The pane's own top-level
-            // window first: the document window handle can name an inner window, whose ownership doesn't keep
-            // the pop-out above the frame.
-            var frame = side.Host.IsHandleCreated ? Native.GetAncestor(side.Host.Handle, Native.GA_ROOT) : IntPtr.Zero;
-            win.SetOwner(frame != IntPtr.Zero && frame != side.Host.Handle ? frame : (IntPtr)side.Window);
-            win.Show();
-            win.Activate();                                       // hiding the pane handed activation back to Word
-            Log("popped out " + side.ActiveId);
+            try
+            {
+                win = new PopOutWindow(side);
+                side.PopOut = win;
+                // Owned by Word's frame (as the old pop-out). The pane's own top-level window first, read while the
+                // pane is still shown: the document window handle can name an inner window, whose ownership doesn't
+                // keep the pop-out above the frame.
+                var frame = side.Host.IsHandleCreated ? Native.GetAncestor(side.Host.Handle, Native.GA_ROOT) : IntPtr.Zero;
+                side.Host.Controls.Remove(panel);
+                win.Content.Controls.Add(panel);
+                Place(win, side);
+                try { PopOutCreated(win); } catch (Exception ex) { Log("PopOutCreated: " + ex.Message); }
+                try { side.Pane.Visible = false; } catch { }            // code hide: not the X
+                win.SetOwner(frame != IntPtr.Zero && frame != side.Host.Handle ? frame : (IntPtr)side.Window);   // right before showing
+                win.Show();
+                win.Activate();                                       // hiding the pane handed activation back to Word
+                Log("popped out " + side.ActiveId);
+            }
+            catch (Exception ex)
+            {
+                // Never leave the views stranded in a window that isn't there: back into the pane.
+                Log("pop-out failed: " + ex.Message);
+                side.PopOut = null;
+                try { if (panel.Parent != side.Host) { panel.Parent?.Controls.Remove(panel); side.Host.Controls.Add(panel); } } catch { }
+                try { if (win != null) { win.AllowClose = true; win.Dispose(); } } catch { }
+                try { side.Pane.Visible = true; } catch { }
+            }
         }
 
         internal static void PopIn(SidePane side)
         {
             var win = side.PopOut;
-            if (win == null || win.IsDisposed) return;
+            if (win == null || win.IsDisposed || side.Closing) return;
             side.PopOut = null;
-            try { SavePopOutBounds(win.WindowState == FormWindowState.Normal ? win.Bounds : win.RestoreBounds); } catch { }
+            RememberBounds(win);
             var panel = side.Host.Views;
             win.Content.Controls.Remove(panel);
             if (!side.Host.IsDisposed) side.Host.Controls.Add(panel);
@@ -318,7 +372,7 @@ namespace OfficePaneChrome
             win.Close();
             win.Dispose();
             if (!side.Host.IsDisposed && side.Host.IsHandleCreated)
-                side.Host.BeginInvoke((Action)(() => { try { side.Pane.Visible = true; } catch { } }));
+                side.Host.BeginInvoke((Action)(() => { try { if (!side.Closing) side.Pane.Visible = true; } catch { } }));
             else try { side.Pane.Visible = true; } catch { }
             Log("popped in " + side.ActiveId);
         }
@@ -351,11 +405,12 @@ namespace OfficePaneChrome
                 {
                     try
                     {
+                        if (side.Closing) return;
                         if (side.Pane.Visible)
                         {
                             _current = side;
                             if (side.IsPoppedOut) { side.Host.BeginInvoke((Action)(() => PopIn(side))); return; }   // reopened while popped out
-                            side.Host.BeginInvoke((Action)strip.Attach);                                          // Office built a new frame
+                            side.Host.BeginInvoke((Action)strip.Reattach);                                          // Office built a new frame
                             return;
                         }
                         if (!strip.InOfficeClose) return;                    // not the X: stock hide

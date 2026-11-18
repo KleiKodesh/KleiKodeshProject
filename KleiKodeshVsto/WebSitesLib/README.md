@@ -39,7 +39,7 @@ The library is referenced by `KleiKodeshVsto.csproj` and displayed as a task pan
 **Ribbon integration:**
 ```csharp
 case "WebSites":
-    WpfTaskPane.Show(new WebSitesLib.WebSitesView(), "דרך האתרים", 510);
+    WpfTaskPane.Show("WebSites", () => new WebSitesLib.WebSitesView(), "דרך האתרים");
     break;
 ```
 

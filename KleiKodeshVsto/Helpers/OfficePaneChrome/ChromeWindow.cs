@@ -92,7 +92,14 @@ namespace OfficePaneChrome
         protected int TitleHeightPx => FormBorderStyle == FormBorderStyle.None ? 0 : Dpi(40);
         int CaptionButtonWidthPx => Dpi(46);
         int CaptionButtonHeightPx => Dpi(32);
-        static int ResizeBorderHeight() => Native.GetSystemMetrics(33 /*SM_CYSIZEFRAME*/) + Native.GetSystemMetrics(92 /*SM_CXPADDEDBORDER*/);
+        /// <summary>The top resize border at this window's DPI (the plain metrics are the primary monitor's).</summary>
+        int ResizeBorderHeight()
+        {
+            if (IsHandleCreated)
+                try { return Native.GetSystemMetricsForDpi(33 /*SM_CYSIZEFRAME*/, (uint)EffectiveDpi) + Native.GetSystemMetricsForDpi(92 /*SM_CXPADDEDBORDER*/, (uint)EffectiveDpi); }
+                catch (EntryPointNotFoundException) { /* before Windows 10 1607 */ }
+            return Native.GetSystemMetrics(33) + Native.GetSystemMetrics(92);
+        }
         protected Color TitleHover => Fluent.Hover(TitleBack, TitleInk);
         /// <summary>Title ink, dimmed while the window is inactive (FluentChromeTabsForm.StripTextColor).</summary>
         protected Color TitleText => _windowActive ? TitleInk : Fluent.Blend(TitleInk, TitleBack, 0.4);
@@ -163,9 +170,6 @@ namespace OfficePaneChrome
         protected override void OnActivated(EventArgs e) { base.OnActivated(e); _windowActive = true; InvalidateTitle(); }
         protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); _windowActive = false; InvalidateTitle(); _tip?.Reset(); }
         protected override void Dispose(bool disposing) { if (disposing) _tip?.Dispose(); base.Dispose(disposing); }
-
-        /// <summary>Re-applies colours (e.g. after <see cref="TitleBack"/> changed).</summary>
-        public void ApplyTheme() { if (IsHandleCreated) ApplyDwmDarkMode(); InvalidateTitle(); }
 
         void ApplyDwmDarkMode()
         {
@@ -286,6 +290,7 @@ namespace OfficePaneChrome
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            if (e.Button != MouseButtons.Left) return;
             int was = _pressed;
             if (was < ExtraBase) return;
             _pressed = 0; InvalidateTitle();
@@ -323,6 +328,21 @@ namespace OfficePaneChrome
                         if (info.ptMinTrackSize.X < minimum) { info.ptMinTrackSize.X = minimum; Marshal.StructureToPtr(info, m.LParam, false); }
                     }
                     return;
+
+                case Native.WM_DPICHANGED:
+                {
+                    // WinForms on .NET Framework raises OnDpiChanged only in its PerMonitorV2 app.config mode; Word's
+                    // add-in thread still gets this message when the window moves to a monitor with another DPI.
+                    base.WndProc(ref m);
+                    var suggested = (Native.RECT)Marshal.PtrToStructure(m.LParam, typeof(Native.RECT));
+                    var target = Rectangle.FromLTRB(suggested.Left, suggested.Top, suggested.Right, suggested.Bottom);
+                    if (Bounds != target && WindowState == FormWindowState.Normal)
+                        Native.SetWindowPos(Handle, IntPtr.Zero, target.X, target.Y, target.Width, target.Height, 0x0004 | 0x0010 /*NOZORDER|NOACTIVATE*/);
+                    _effectiveDpi = 0;
+                    UpdateMetrics();
+                    Invalidate();
+                    return;
+                }
 
                 case Native.WM_NCCALCSIZE:
                     if (m.WParam != IntPtr.Zero)
@@ -375,6 +395,7 @@ namespace OfficePaneChrome
                     break;
 
                 case Native.WM_NCLBUTTONDOWN:
+                case Native.WM_NCLBUTTONDBLCLK:      // a fast second click on a caption button is a press too
                 {
                     int hit = (int)m.WParam;
                     if (hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE)

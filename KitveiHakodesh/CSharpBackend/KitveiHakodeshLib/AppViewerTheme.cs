@@ -49,15 +49,20 @@ namespace KitveiHakodeshLib
             if (hostForm == null) return;
             bool isDark = AppSettingsRegistry.GetDarkMode();
             ApplySplashTheme(isDark);
-            // Subscribe to the host Form's HandleCreated to apply the per-window theme
-            // before the form is shown — the required moment for SetWindowThemeForms.
-            // OnHandleCreated on the UserControl fires too late (form already visible).
-            hostForm.HandleCreated -= OnHostFormHandleCreated;
-            hostForm.HandleCreated += OnHostFormHandleCreated;
-            // If the form already has a handle (re-parenting into an already-shown window),
-            // HandleCreated won't fire again — apply directly.
-            if (hostForm.IsHandleCreated)
-                OnHostFormHandleCreated(hostForm, EventArgs.Empty);
+            // In Word the window (the side pane's pop-out) follows the Office theme and is themed by its
+            // owner, not by this app's dark-mode setting.
+            if (!IsVstoHost)
+            {
+                // Subscribe to the host Form's HandleCreated to apply the per-window theme
+                // before the form is shown — the required moment for SetWindowThemeForms.
+                // OnHandleCreated on the UserControl fires too late (form already visible).
+                hostForm.HandleCreated -= OnHostFormHandleCreated;
+                hostForm.HandleCreated += OnHostFormHandleCreated;
+                // If the form already has a handle (re-parenting into an already-shown window),
+                // HandleCreated won't fire again — apply directly.
+                if (hostForm.IsHandleCreated)
+                    OnHostFormHandleCreated(hostForm, EventArgs.Empty);
+            }
 
             // When the window gains activation (launch, alt-tab back), put OS focus on the
             // web content rather than the native tab strip so wheel/keyboard gestures work
@@ -104,7 +109,7 @@ namespace KitveiHakodeshLib
             try
             {
                 Form hostForm = FindForm();
-                if (hostForm == null) return;
+                if (hostForm == null || IsVstoHost) return;   // in Word the window follows the Office theme
                 // SetWindowThemeForms is safe to call multiple times after the window
                 // is shown — this is the documented live-toggle API per the DarkNet README.
                 DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);

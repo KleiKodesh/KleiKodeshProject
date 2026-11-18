@@ -57,7 +57,7 @@ View (RegexFindView.xaml) — XAML only, minimal code-behind
 var view = new RegexFindLib.UI.RegexFindView(
     Globals.ThisAddIn.Application,
     Globals.Factory);
-WpfTaskPane.Show(view, "חיפוש רגקס", 600);
+WpfTaskPane.Show("RegexFind", () => view, "חיפוש רגקס");
 
 // From demo app (no Word required, uses mock):
 var view = new RegexFindView(new MockWordService());

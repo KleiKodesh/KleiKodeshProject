@@ -16,7 +16,7 @@ namespace Nakdan.UI
     //
     //  Usage in KeliKodeshRibbon.cs:
     //      var nakdan = new NakdanView(Globals.ThisAddIn.Application, Globals.Factory);
-    //      WpfTaskPane.Show(nakdan, "נקדן דיקטה", 520);
+    //      WpfTaskPane.Show("Nakdan", () => nakdan, "נקדן דיקטה");
     // ═══════════════════════════════════════════════════════════
     public partial class NakdanView : UserControl
     {

@@ -146,9 +146,11 @@ namespace KleiKodesh.Helpers
         /// <summary>Makes a top-level window (a window.open popup) an owned window of Word's frame.</summary>
         static void SetPopupOwner(IntPtr formHandle)
         {
-            int hwnd = ActiveWindowHandle();
-            if (hwnd == 0) return;
-            SetWindowLongPtr(formHandle, -8 /*GWLP_HWNDPARENT*/, GetAncestor((IntPtr)hwnd, 2 /*GA_ROOT*/));
+            // Popped out: the popup belongs above the pop-out window, not behind it above Word.
+            var popOut = SidePanes.CurrentPopOut;
+            IntPtr owner = popOut != null && popOut.IsHandleCreated ? popOut.Handle : (IntPtr)ActiveWindowHandle();
+            if (owner == IntPtr.Zero) return;
+            Native.SetWindowLongPtr(formHandle, Native.GWLP_HWNDPARENT, Native.GetAncestor(owner, Native.GA_ROOT));
         }
 
         static void RestoreDockPosition(Microsoft.Office.Tools.CustomTaskPane pane)
@@ -233,8 +235,6 @@ namespace KleiKodesh.Helpers
 
         [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
         [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent, IntPtr child);
-        [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr h, int i, IntPtr v);
-        [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint f);
 
         // ---------------- reopen in a normal (unelevated) Word ----------------
 
