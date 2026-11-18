@@ -206,8 +206,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// <summary>
         /// Deletes all WebView2 user-data folders written by KleiKodesh components.
         ///
-        /// Current path (v3.x+):  %LocalAppData%\KleiKodesh\WebView2Cache
-        ///   Written by: KleiKodeshWebView.cs (KitveiHakodesh panel)
+        /// Current path:  %LocalAppData%\KleiKodesh\KitveiHakodesh\webcache
+        ///   Written by: KitveiHakodeshLib AppViewer (shared CoreWebView2Environment)
         ///   Lives inside the install folder — deleted with it, but cleaned explicitly here.
         ///
         /// Legacy path (before webcache was moved into the install folder):
@@ -227,8 +227,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             {
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-                // Current path — inside the install folder
-                DeleteFolder(Path.Combine(localAppData, "KleiKodesh", "WebView2Cache"), result, log);
+                // Current path — inside the install folder (seen live in msedgewebview2's
+                // --user-data-dir). CleanFileSystem deletes the install folder anyway; this
+                // explicit step still clears it if that delete partly failed.
+                DeleteFolder(Path.Combine(localAppData, "KleiKodesh", "KitveiHakodesh", "webcache"), result, log);
 
                 // Old ghost: WebView2 creates "EBWebView" when given %LocalAppData% as root.
                 // Only delete it if it was ours — check for KleiKodesh content inside.
@@ -775,6 +777,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     // NotifiedAddins
                     DeleteNamedValuesContaining(
                         $@"{wordBase}\NotifiedAddins",
+                        result, log);
+
+                    // DoNotDisableAddinList — written by AddinInstaller.AddToDoNotDisableList
+                    DeleteNamedValuesContaining(
+                        $@"{wordBase}\Resiliency\DoNotDisableAddinList",
                         result, log);
                 }
 
