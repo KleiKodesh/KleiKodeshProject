@@ -35,6 +35,12 @@ namespace WebSitesLib.UI
         public bool IsVisible { get; set; } = true;
 
         /// <summary>
+        /// Only on the last JSON entry: extra domains (subdomains included) allowed to
+        /// load inside the pane, e.g. login pages. Such an entry is not a site.
+        /// </summary>
+        public System.Collections.Generic.List<string> AllowedUrls { get; set; }
+
+        /// <summary>
         /// Display-only label: English name of a known site (matched by Url) when
         /// the UI culture is English, otherwise Name. Name/Url stay the data keys.
         /// </summary>

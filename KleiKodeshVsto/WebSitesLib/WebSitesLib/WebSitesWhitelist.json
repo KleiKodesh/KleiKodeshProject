@@ -208,5 +208,10 @@
     "Description": "ויקיסוגיה - אתר שיתופי עבור סוגיות השס.",
     "Url": "https://www.betmidrash.org.il",
     "IsVisible": true
+  },
+  {
+    "AllowedUrls": [
+      "openathens.net"
+    ]
   }
 ]
