@@ -231,6 +231,9 @@ public sealed class Dispatcher(
                     var icon = await websiteIcons.GetAsync(a.Url, ct);
                     return RpcResponse.Ok(icon is null ? null : MsgPack.Ser(icon));
                 }
+                // The Websites & add-ins page: Otzaria's installed addins, read from its plugins folder (no index wait).
+                case "otzariaInstalledAddins":
+                    return RpcResponse.Ok(MsgPack.SerList(global::KitveiHakodesh.Core.LocalFiles.OtzariaInstalledAddins.List()));
                 case "otzariaAddinIcon":
                 {
                     // An addin's own icon from its manifest.json; empty when it has none (the page shows the puzzle piece).

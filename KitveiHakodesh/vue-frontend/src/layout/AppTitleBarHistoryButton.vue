@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, h } from 'vue'
 import { catalogBookTitle } from '@/stores/catalogBookTitle'
 import { onLongPress } from '@vueuse/core'
 import { IconArrowRight20Regular, IconArrowLeft20Regular } from '@iconify-prerendered/vue-fluent'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { documentIcon, iconKeyForEntry } from '@/utils/documentIcons'
+import OtzariaAddinIcon from '@/features/websites/OtzariaAddinIcon.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -45,8 +46,11 @@ const listItems = computed(() => {
     return {
       index,
       label: entry.tocPath ? catalogBookTitle(entry) + ' · ' + entry.tocPath : catalogBookTitle(entry),
-      iconComponent: icon.icon20,
-      iconColor: icon.color,
+      // An Otzaria addin shows its own manifest icon, as on its tab and home card.
+      iconComponent: entry.isOtzariaAddin && entry.localFilePath
+        ? () => h(OtzariaAddinIcon, { path: entry.localFilePath!, size: 20 })
+        : icon.icon20,
+      iconColor: entry.isOtzariaAddin && entry.localFilePath ? '' : icon.color,
     }
   })
   const cursor = pane.historyCursor.value
