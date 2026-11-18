@@ -114,6 +114,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             foreach (var row in list)
                 row.TreeOrder = treeOrder.TryGetValue(row.Id, out int o) ? o : int.MaxValue;
             list = list.OrderBy(b => b.TreeOrder).ToList();
+            AttachBookProtection(conn, list);
 
             if (list.Count > 0)
                 lock (_catalogCacheLock) _booksCache ??= list;

@@ -194,12 +194,26 @@ export function useScopedCopy(
   getLines: () => string[],
   isSelectAll: Ref<boolean>,
   buildFormattedHtml?: () => string | null,
+  /**
+   * The publisher's copy limit (book protection): false refuses this copy - the clipboard
+   * is left as it was and no afterCopy (paste into Word) runs. The guard tells the user why.
+   */
+  copyAllowed?: () => boolean,
 ) {
   useEventListener(scrollerEl, 'copy', (event: ClipboardEvent) => {
+    if (copyAllowed && !copyAllowed()) {
+      event.preventDefault()
+      _afterCopyCallback = null
+      return
+    }
     handleScopedCopyEvent(event, buildFormattedHtml)
   })
 
   useEventListener(scrollerEl, 'dragstart', (event: DragEvent) => {
+    if (copyAllowed && !copyAllowed()) {
+      event.preventDefault()
+      return
+    }
     if (!buildFormattedHtml) return
     const formatted = buildFormattedHtml()
     if (formatted === null) return

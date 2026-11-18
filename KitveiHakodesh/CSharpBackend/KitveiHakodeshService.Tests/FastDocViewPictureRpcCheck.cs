@@ -38,7 +38,7 @@ public static class FastDocViewPictureRpcCheck
             File.Copy(source, work);
             var documents = new FastDocViewOpenDocuments();
             var dispatcher = new Dispatcher(null!, null!, null!, null!, null!, null!, null!, null!, null!, documents,
-                null!, null!, null!, null!, null!, NullLogger<Dispatcher>.Instance);
+                null!, null!, null!, null!, null!, null!, NullLogger<Dispatcher>.Instance);
             try
             {
                 FastDocViewSummary summary = documents.Open(work);

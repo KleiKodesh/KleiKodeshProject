@@ -64,6 +64,7 @@ for (int i = 0; i < args.Length; i++)
         case "--userspace-bench": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Bench(args[++i], args[++i], args.Skip(i + 1).ToArray());
         case "--files-golden": return KitveiHakodeshService.Tests.FilesGoldenRig.Run(args[++i], args[++i], args[++i]);
         case "--notesbook-selftest": return KitveiHakodeshService.Tests.NotesBookCheck.Run() == 0 ? 0 : 1;
+        case "--bookprotection-selftest": return KitveiHakodeshService.Tests.BookProtectionCheck.Run() == 0 ? 0 : 1;
         case "--expander-selftest": expanderSelfTest = true; break;
         case "--treeorder-dump": treeOrderDump = args[++i]; break;
         case "--golden": goldenDir = args[++i]; goldenTag = args[++i]; break;

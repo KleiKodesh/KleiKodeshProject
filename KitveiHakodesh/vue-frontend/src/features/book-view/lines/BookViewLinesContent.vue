@@ -49,7 +49,8 @@ import { useWordLinkAnchors } from './useWordLinkAnchors'
 import { createLineDecorationsBatch } from './lineDecorationsBatch'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { isExportRestricted } from '../exportRestriction'
+import { bookProtectionOf, ensureCopyAllowed } from '../bookProtection'
+import BookViewPublisherBanner from '../BookViewPublisherBanner.vue'
 import { exportToWord, pasteIntoWord } from '@/webview-host/bridge'
 import { showToast } from '@/composables/useToast'
 import { useI18n } from 'vue-i18n'
@@ -223,7 +224,6 @@ const renderedLineIds = (): number[] => {
 }
 useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
-  canSelectAll: () => !exportRestricted.value,
   onCtrlF: () => emit('ctrl-f'),
   // Ctrl+C is intercepted so it takes the same path as the menu's copy: the export
   // warm-up has to be awaited before the clipboard event fires (see prepareAndCopy).
@@ -344,11 +344,21 @@ const {
   activeVersionId: () => props.activeVersionId ?? null,
 })
 const booksDataStore = useBooksDataStore()
-// Publisher-restricted books (the toolbar hides export to Word for them) get no
-// select-all either: a whole-book copy is the same export by another route.
-const exportRestricted = computed(() =>
-  isExportRestricted(booksDataStore.allBooksMap.get(bookId)?.title || bookTitle),
-)
+// The publisher's copy limit (book protection): a copy of more lines than it allows is
+// refused whole, with a message - every copy route (Ctrl+C, menu, into Word, drag) ends in
+// the copy event useScopedCopy guards below.
+const bookProtection = computed(() => bookProtectionOf(bookId))
+// The publisher's credit line, shown above the text while the book's start is in view -
+// Otzaria shows it above the first line, so it leaves once the reader moves on.
+const publisherBanner = computed(() => booksDataStore.allBooksMap.get(bookId)?.publisherBanner ?? null)
+const atBookStart = computed(() => (windowedScroller.value?.renderedRange?.start ?? 0) === 0)
+/** Lines the current copy would hold: the whole book on select-all, else the selected rows. */
+function selectedLineCount(): number {
+  if (isSelectAll.value) return props.lines.length
+  const range = selectedRowIndexRange()
+  if (range) return range.lastRowIndex - range.firstRowIndex + 1
+  return 1
+}
 // What copy-with-notes needs beyond the rendered markup: the notes and citations of
 // lines that were never scrolled into view, plus the target lines those citations
 // point at (they become endnotes). Warmed by the copy actions, never on render.
@@ -385,16 +395,12 @@ const { items: contextMenuItems, buildFormattedHtml, wholeBookReady, onCopy, onP
   resolveWordLinkTarget,
   readLines: (start, end) => props.readLines(start, end),
 })
-const visibleContextMenuItems = computed(() =>
-  exportRestricted.value
-    ? contextMenuItems.filter((item) => !('action' in item) || item.action !== selectAllInContainer)
-    : contextMenuItems,
-)
 useScopedCopy(
   scrollerEl,
   () => [],
   isSelectAll,
   buildFormattedHtml,
+  () => ensureCopyAllowed(bookProtection.value, selectedLineCount()),
 )
 useContextMenuLongPress(scrollerEl, (event) => {
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
@@ -628,7 +634,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
 
 <template>
   <div dir="rtl" class="lines-content">
-    <ContextMenu ref="contextMenuRef" :items="visibleContextMenuItems" />
+    <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <BookViewErrorReportDialog
       v-if="errorReportTarget"
       :selected-text="errorReportTarget.selectedText"
@@ -682,6 +688,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
       @close="closeNoteTooltip"
     />
     <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
+    <BookViewPublisherBanner v-if="publisherBanner && atBookStart" :text="publisherBanner" />
     <WindowedScroller
       ref="windowedScroller"
       class="scroller"
@@ -746,6 +753,13 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
 .lines-content {
   height: 100%;
   position: relative;
+  /* A column so the publisher banner (when shown) takes its height from the scroller. */
+  display: flex;
+  flex-direction: column;
+}
+.scroller {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 /* `.scroller` lands on the WindowedScroller's viewport (attributes fall through). */
 .scroller :deep(.windowed-scroller-content) {

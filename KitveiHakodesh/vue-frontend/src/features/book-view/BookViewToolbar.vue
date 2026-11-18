@@ -61,7 +61,7 @@ const props = defineProps<{
   // scoped to it, so pane 2's toolbar never reads or writes pane 1's zoom.
   tabId?: string
   bookId: number | undefined
-  // Set for books whose publisher forbids an editable export; the button is not rendered.
+  /** The publisher forbids editable export of this book (Core's book protection). */
   exportRestricted?: boolean
   // True while an export to Word runs; the button shows a spinner.
   exportingToWord?: boolean
@@ -96,6 +96,7 @@ const { zoom, commentaryZoom, toolbarPosition, autoSelectTopLine } = storeToRefs
 
 /** The export control's name - its tooltip on the toolbar, its text in the flyout. */
 const EXPORT_TO_WORD_LABEL = t('bookView.toolbar.exportToWord')
+const EXPORT_RESTRICTED_LABEL = t('bookView.exportRestricted')
 
 /** The overflow button's name - the same word the nav rail's overflow button wears. */
 const MORE_LABEL = t('bookView.toolbar.more')
@@ -270,7 +271,6 @@ const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
       // Reported by the control itself: it renders out of a list it fetches.
       case 'word-link-markers': return wordLinkMarkersPresent.value
       case 'bookmarks': return bookmarksPresent.value
-      case 'export-to-word': return !props.exportRestricted
       case 'read-aloud': return readAloudSupported
       case 'sync-commentaries': return props.hasCommentaries
       case 'related-books': return props.hasRelatedBooks
@@ -493,11 +493,14 @@ defineExpose({ tocBtnRef, createBookmark })
     </button>
 
     <!-- The shared conversion button: while the export runs it is an animated X that cancels it. -->
+    <!-- A publisher-restricted book keeps the button, dimmed, so its tooltip says why;
+         a click shows the same message (BookViewPage.onExportToWord) and exports nothing. -->
     <ConversionActionButton
-      v-if="!exportRestricted"
       v-bind="collapseAttrs('export-to-word')"
+      :class="{ 'publisher-restricted': exportRestricted }"
+      :aria-disabled="exportRestricted || undefined"
       :state="exportingToWord ? 'busy' : 'idle'"
-      :idle-title="EXPORT_TO_WORD_LABEL"
+      :idle-title="exportRestricted ? EXPORT_RESTRICTED_LABEL : EXPORT_TO_WORD_LABEL"
       :busy-title="t('bookView.toolbar.cancelExportToWord')"
       @start="$emit('exportToWord')"
       @cancel="$emit('cancelExportToWord')"
@@ -571,8 +574,10 @@ defineExpose({ tocBtnRef, createBookmark })
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
         class="overflow-row"
+        :class="{ 'publisher-restricted': exportRestricted }"
+        :aria-disabled="exportRestricted || undefined"
         :state="exportingToWord ? 'busy' : 'idle'"
-        :idle-title="EXPORT_TO_WORD_LABEL"
+        :idle-title="exportRestricted ? EXPORT_RESTRICTED_LABEL : EXPORT_TO_WORD_LABEL"
         :busy-title="t('bookView.toolbar.cancelExportToWord')"
         :label="EXPORT_TO_WORD_LABEL"
         @start="overflowOpen = false; $emit('exportToWord')"
@@ -878,4 +883,9 @@ button:disabled {
   overflow: visible;
 }
 
+
+/* Export to Word on a publisher-restricted book: present (its tooltip explains) but dimmed. */
+.publisher-restricted {
+  opacity: 0.45;
+}
 </style>

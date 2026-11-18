@@ -18,6 +18,17 @@
 
 // ── Catalog ───────────────────────────────────────────────────────────────────
 
+/** What the publisher allows for a book - computed by Core (BookProtection.cs); enforced as-is. */
+export interface BookProtection {
+  level: number
+  allowsEditableExport: boolean
+  allowsPdfExport: boolean
+  /** Most lines one copy may hold; null = no limit. */
+  maxCopyLines: number | null
+  /** Most lines one print job may hold; null = no limit. */
+  maxPrintLines: number | null
+}
+
 export interface BookRow {
   id: number
   categoryId: number
@@ -31,6 +42,10 @@ export interface BookRow {
    * the server never sees; `assignFullPaths` numbers those after the last server value.
    */
   treeOrder?: number
+  /** The publisher's limits (Core BookProtection, from Otzaria's `book_protection`); null/absent = none. */
+  protection?: BookProtection | null
+  /** The publisher's credit line shown above the text; may hold `[label](url)` links. Null = none. */
+  publisherBanner?: string | null
   parentPath?: string // category path without the book title — used for display in search results
   period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
   rootCategory?: string // First-tier category title
