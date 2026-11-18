@@ -222,6 +222,8 @@
     "close_bottom": "סגור חלונית מפרשים תחתונה (Ctrl+J)",
     "close_left": "סגור חלונית מפרשים משמאל (Ctrl+Alt+J)",
     "close_right": "סגור חלונית מפרשים מימין (Ctrl+Shift+J)",
+    "close_left_edition": "סגור חלונית מהדורה סרוקה משמאל (Ctrl+Alt+J)",
+    "close_right_edition": "סגור חלונית מהדורה סרוקה מימין (Ctrl+Shift+J)",
     "dragHint": "גרור כדי להזיז את סרגל הכלים",
     "exportToWord": "ייצא ל-Word",
     "readAloud": "הקרא בקול",

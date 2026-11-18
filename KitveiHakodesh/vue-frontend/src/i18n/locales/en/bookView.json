@@ -222,6 +222,8 @@
     "close_bottom": "Close bottom commentary panel (Ctrl+J)",
     "close_left": "Close left commentary panel (Ctrl+Alt+J)",
     "close_right": "Close right commentary panel (Ctrl+Shift+J)",
+    "close_left_edition": "Close left scanned edition panel (Ctrl+Alt+J)",
+    "close_right_edition": "Close right scanned edition panel (Ctrl+Shift+J)",
     "dragHint": "Drag to move the toolbar",
     "exportToWord": "Export to Word",
     "readAloud": "Read aloud",
