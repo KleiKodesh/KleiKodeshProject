@@ -44,14 +44,10 @@ $projects = @(
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj",
     
-    # Build tools (SvgToPng is standalone)
-    "Build/scripts/SvgToPng/SvgToPng.csproj",
     
     # VSTO add-in LAST (depends on all libraries above)
-    "KleiKodeshVsto/KleiKodeshVsto.csproj",
-    
-    # Installer LAST (depends on VSTO)
-    "Build/Installer/KleiKodeshVstoInstallerWpf.csproj"
+    "KleiKodeshVsto/KleiKodeshVsto.csproj"
+    # The setup exe is built by Build/build.ps1 (Rust).
 )
 
 $configurations = @()

@@ -1,12 +1,11 @@
-<Window x:Class="WebSitesDemo.MainWindow"
+<Window SizeToContent="WidthAndHeight" x:Class="WebSitesDemo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:websiteslib="clr-namespace:WebSitesLib.UI;assembly=WebSitesLib"
-        Title="WebSitesLib Demo" 
-        Height="450" 
-        Width="350"
+        Title="WebSitesLib Demo"
         WindowStartupLocation="CenterScreen">
-    <Grid>
+    <!-- Content = a Word task pane at width 600 px: 400 x 452 DIPs, measured live in Word at 150%. -->
+    <Grid Width="400" Height="452" >
         <websiteslib:WebSitesView />
     </Grid>
 </Window>

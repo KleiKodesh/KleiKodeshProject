@@ -78,6 +78,13 @@ namespace KiwixLib
                 await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                     "window.__khUiLanguage = '" + uiLanguage + "';");
 
+                // Kiwix.js light/dark theme follows the host theme (read by www/js/init.js).
+                // In Word the pane's BackColor is the Office theme background (OfficeThemeWatcher
+                // binds it on every pane view before it loads); the demo sets it from --theme.
+                bool dark = BackColor.GetBrightness() < 0.5f;
+                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "window.__khDarkTheme = " + (dark ? "true" : "false") + ";");
+
                 _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
 
                 _webView.Source = new Uri("https://kiwix-app/index.html");

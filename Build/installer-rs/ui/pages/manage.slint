@@ -1,11 +1,15 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
-import { Installer } from "../state.slint";
+import { Installer, Page } from "../state.slint";
 import { PageTitle, CheckRow } from "../widgets.slint";
 
 // Like Office's "Change your installation": modify components, repair, or remove.
 export component ManagePage inherits VerticalLayout {
+    // Products or install options differ from what is installed.
+    property <bool> can-change: Installer.has-changes
+        || Installer.desktop-shortcut != Installer.installed-desktop-shortcut
+        || Installer.file-associations != Installer.installed-file-associations;
     VerticalLayout {
         vertical-stretch: 1;
         padding-left: 24px;
@@ -25,6 +29,17 @@ export component ManagePage inherits VerticalLayout {
             checked: p.selected;
             toggled => { Installer.toggle-product(i); }
         }
+        HorizontalLayout {
+            alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
+            spacing: 8px;
+            Button {
+                text: Lang.t("אפשרויות…", "Options…");
+                clicked => {
+                    Installer.options-back = Page.manage;
+                    Installer.page = Page.options;
+                }
+            }
+        }
         Rectangle { vertical-stretch: 1; }
         if Installer.confirm-uninstall: Text {
             text: Lang.t("להסיר את כל רכיבי כלי קודש? לחצו שוב על \"הסר\" לאישור.", "Remove all of Klei Kodesh? Click \"Remove\" again to confirm.");
@@ -41,7 +56,7 @@ export component ManagePage inherits VerticalLayout {
         padding-bottom: 12px;
         height: 42px;
         spacing: 8px;
-        if Lang.en: Button { text: "Change"; primary: true; min-width: 80px; enabled: Installer.has-changes; clicked => { Installer.apply-changes(); } }
+        if Lang.en: Button { text: "Change"; primary: true; min-width: 80px; enabled: root.can-change; clicked => { Installer.apply-changes(); } }
         if Lang.en: Button { text: "Repair"; min-width: 80px; clicked => { Installer.repair(); } }
         if Lang.en: Button { text: "Remove"; min-width: 80px; clicked => { root.remove(); } }
         if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { Installer.quit(); } }
@@ -49,7 +64,7 @@ export component ManagePage inherits VerticalLayout {
         if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { Installer.quit(); } }
         if !Lang.en: Button { text: "הסר"; min-width: 80px; clicked => { root.remove(); } }
         if !Lang.en: Button { text: "תיקון"; min-width: 80px; clicked => { Installer.repair(); } }
-        if !Lang.en: Button { text: "שינוי"; primary: true; min-width: 80px; enabled: Installer.has-changes; clicked => { Installer.apply-changes(); } }
+        if !Lang.en: Button { text: "שינוי"; primary: true; min-width: 80px; enabled: root.can-change; clicked => { Installer.apply-changes(); } }
     }
 
     // First click asks, second click removes.

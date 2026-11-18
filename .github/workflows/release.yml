@@ -1,6 +1,7 @@
-# Builds the installer + portable zip and publishes the GitHub release -
-# the same Build/scripts/build-installer.ps1 the local build menu runs.
-# Start it from the Actions tab ("Run workflow") or: gh workflow run release.yml
+# Builds and publishes a release: Gemini picks the version bump and writes the notes,
+# Build/build.ps1 builds the setup exe (notes built in) and the portable zip.
+# Start it from the Actions tab, with Build/build.bat (option 1), or:
+#   gh workflow run release.yml
 #
 # Also checks daily and releases by itself when the last release is a week old and
 # there are new commits - never on Shabbat / Yom Tov, the day before, or the night after.
@@ -10,65 +11,24 @@ on:
   schedule:
     - cron: "0 9 * * *"     # ~11:00-12:00 Israel; the gate job decides
   workflow_dispatch:
-    inputs:
-      version_increment:
-        description: Version bump - auto lets Gemini decide (ignored when an exact version is given)
-        type: choice
-        options: [auto, patch, minor, major]
-        default: auto
-      manual_version:
-        description: Exact version, e.g. v10.3.0 (optional)
-        type: string
-        required: false
-      release_notes:
-        description: Release notes - ai = Gemini writes Hebrew + English notes from the commits
-        type: choice
-        options: [ai, commits, file, both]
-        default: ai
-      delete_fts_index:
-        description: Delete the FTS index on install (forces reindex)
-        type: boolean
-        default: false
-      force_clean_install:
-        description: Wipe + reinstall on launch
-        type: boolean
-        default: false
-      dry_run:
-        description: Dry run - build only, no release (files kept as a run artifact)
-        type: boolean
-        default: false
-      attempt:
-        description: Leave as is (counts automatic retries when Gemini is down)
-        type: string
-        default: "1"
-      auto:
-        description: Leave as is (marks retries of the weekly auto-release)
-        type: boolean
-        default: false
 
 permissions:
   contents: write
-  actions: write          # retry-later + release-issue-check dispatches
+  actions: write          # release-issue-check + drive-upload dispatches
 
 concurrency:
   group: release
   cancel-in-progress: false
 
-# Scheduled runs have no inputs: these are the defaults for them.
-env:
-  NOTES: ${{ inputs.release_notes || 'ai' }}
-  BUMP: ${{ inputs.version_increment || 'auto' }}
-  ATTEMPT: ${{ inputs.attempt || '1' }}
-  AUTO: ${{ github.event_name == 'schedule' || inputs.auto == true }}
-
 jobs:
-  # Manual first attempt: always go. Scheduled runs and automatic retries: only on a
-  # permitted day, and only when there is something new to release.
+  # Manual run: always go. Scheduled run: only on a permitted day, and only when there
+  # is something new to release.
   gate:
     runs-on: ubuntu-latest
     outputs:
       go: ${{ steps.check.outputs.go }}
       renew: ${{ steps.check.outputs.renew }}
+      last: ${{ steps.check.outputs.last }}
     steps:
       - id: check
         env:
@@ -77,7 +37,10 @@ jobs:
         run: |
           set -euo pipefail
           go() { echo "go=$1" >> "$GITHUB_OUTPUT"; echo "$2"; exit 0; }
-          if [ "$SCHEDULED" != true ] && [ "$ATTEMPT" = 1 ]; then go true "manual run"; fi
+          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --exclude-drafts --json tagName,publishedAt --jq '.[0]')
+          tag=$(jq -r .tagName <<<"$last")
+          echo "last=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$SCHEDULED" != true ]; then go true "manual run"; fi
 
           # Israel date. Friday = erev Shabbat, Saturday = Shabbat + motzaei Shabbat.
           export TZ=Asia/Jerusalem
@@ -90,26 +53,24 @@ jobs:
             || go false "hebcal unreachable - not releasing"
           if [ -n "$yt" ]; then go false "Yom Tov / erev Yom Tov ($yt) - not releasing"; fi
 
-          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --exclude-drafts --json tagName,publishedAt --jq '.[0]')
-          tag=$(jq -r .tagName <<<"$last")
           age=$(( ( $(date +%s) - $(date -d "$(jq -r .publishedAt <<<"$last")" +%s) ) / 86400 ))
           new=$(gh api "repos/$GITHUB_REPOSITORY/compare/$tag...${{ github.sha }}" --jq .ahead_by)
-          # Every build signs with a fresh 5-year certificate, so the last release's
-          # expires 5 years after it was published. 60 days before that, release again
-          # (patch, no Gemini) even with no new commits.
+          # Every build signs the add-in with a fresh 5-year certificate. 60 days before
+          # the last release's expires, release again (patch, no Gemini) even with no
+          # new commits.
           if [ "$age" -ge $(( 5 * 365 - 60 )) ]; then
             echo "renew=true" >> "$GITHUB_OUTPUT"
             go true "$tag signing certificate expires soon ($age days old) - renewal release"
           fi
           if [ "$new" -eq 0 ]; then go false "no commits since $tag"; fi
-          if [ "$SCHEDULED" = true ] && [ "$age" -lt 7 ]; then go false "$tag is only $age day(s) old"; fi
+          if [ "$age" -lt 7 ]; then go false "$tag is only $age day(s) old"; fi
           go true "$new new commit(s) since $tag ($age days)"
 
-  # Gemini first, on a cheap Linux runner. No AI notes = no build; retry-later
-  # starts the whole workflow again in an hour.
+  # Gemini on a cheap Linux runner: the version bump and release-notes.json.
+  # No notes = no release.
   plan:
     needs: gate
-    if: needs.gate.outputs.go == 'true'
+    if: needs.gate.outputs.go == 'true' && needs.gate.outputs.renew != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -117,66 +78,38 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0          # release notes read the log since the last tag
-
+          fetch-depth: 0          # the notes read the log since the last tag
       - name: Fetch release notes backfill (git notes)
-        if: needs.gate.outputs.renew != 'true'
         run: git fetch origin refs/notes/release:refs/notes/release || true
-
       - name: Gemini - version bump + release notes
         id: ai
-        if: needs.gate.outputs.renew != 'true' && (env.NOTES == 'ai' || (env.BUMP == 'auto' && !inputs.manual_version))
         shell: pwsh
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/ai-release-plan.ps1 -Auto:($env:AUTO -eq 'true')
-
+        run: .github/scripts/ai-release-plan.ps1 -Auto:('${{ github.event_name }}' -eq 'schedule')
       - uses: actions/upload-artifact@v7
-        if: steps.ai.outcome == 'success'
         with:
           name: release-notes
-          path: |
-            RELEASE_NOTES.txt
-            Build/Installer/ReleaseNotes/
-
-  retry-later:
-    needs: plan
-    if: failure() && needs.plan.result == 'failure' && fromJSON(inputs.attempt || '1') < 24
-    runs-on: ubuntu-latest
-    timeout-minutes: 70
-    steps:
-      - name: Wait an hour, then run Release again with the same inputs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sleep 3600
-          gh workflow run release.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }} \
-            -f version_increment="$BUMP" \
-            -f manual_version='${{ inputs.manual_version }}' \
-            -f release_notes="$NOTES" \
-            -f delete_fts_index=${{ inputs.delete_fts_index || false }} \
-            -f force_clean_install=${{ inputs.force_clean_install || false }} \
-            -f dry_run=${{ inputs.dry_run || false }} \
-            -f attempt=$(( ATTEMPT + 1 ))             -f auto=$AUTO
+          path: release-notes.json
 
   release:
     needs: [gate, plan]
+    # A renewal release skips Gemini, so `plan` is skipped then.
+    if: always() && needs.gate.outputs.go == 'true' && (needs.plan.result == 'success' || needs.gate.outputs.renew == 'true')
     runs-on: windows-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0          # release notes read the log since the last tag
-          submodules: recursive   # WpfLib, ChromeTabs (EasyTabs), FastDocView + its SeekableDeflate, TextEncodingDetection
+          submodules: recursive   # WpfLib, ChromeTabs, FastDocView + its submodules
 
       - uses: microsoft/setup-msbuild@v3
 
       # The runner has the Office build targets but not the VSTO runtime they load.
-      - name: Install VSTO runtime + NSIS
-        run: choco install vstor2010 nsis -y --no-progress
+      - name: Install VSTO runtime
+        run: choco install vstor2010 -y --no-progress
 
-      # The signing certificate is made by build-installer.ps1 (fresh every build).
       - name: hb-mirror.json
         shell: pwsh
         env:
@@ -186,35 +119,55 @@ jobs:
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
       - uses: actions/download-artifact@v8
-        if: needs.gate.outputs.renew != 'true' && (needs.plan.outputs.bump != '' || env.NOTES == 'ai')
+        if: needs.gate.outputs.renew != 'true'
         with:
           name: release-notes
 
-      # build-installer.ps1 also restores packages (msbuild, nuget, npm ci) and, after
-      # releasing, pings the website and starts release-issue-check.yml - same as locally.
-      - name: Build (and release)
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $last = '${{ needs.gate.outputs.last }}'.TrimStart('v')
+          $bump = if ('${{ needs.gate.outputs.renew }}' -eq 'true') { 'patch' } else { '${{ needs.plan.outputs.bump }}' }
+          $v = [version]$last
+          $next = switch ($bump) {
+            'major' { "$($v.Major + 1).0.0" }
+            'minor' { "$($v.Major).$($v.Minor + 1).0" }
+            default { "$($v.Major).$($v.Minor).$($v.Build + 1)" }
+          }
+          "version=$next" >> $env:GITHUB_OUTPUT
+          Write-Host "v$last + $bump = v$next"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $notes = if (Test-Path release-notes.json) { 'release-notes.json' } else { '' }
+          ./Build/build.ps1 -Version '${{ steps.version.outputs.version }}' -Notes $notes
+
+      - name: Publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
         run: |
-          $notes = $env:NOTES
-          $bump  = $env:BUMP
-          if ($notes -eq 'ai') { $notes = 'file' }               # Gemini wrote RELEASE_NOTES.txt
-          if ($bump -eq 'auto') { $bump = '${{ needs.plan.outputs.bump }}' }
-          if ('${{ needs.gate.outputs.renew }}' -eq 'true') { $notes = 'commits'; $bump = 'patch' }   # certificate renewal
-          $a = @{ ReleaseNotesSource = $notes; NoClean = $true }
-          if ('${{ inputs.manual_version }}') { $a.ManualVersion = '${{ inputs.manual_version }}' }
-          else { $a.VersionIncrement = $bump }
-          if ('${{ inputs.delete_fts_index }}' -eq 'true')    { $a.DeleteFtsIndex = $true }
-          if ('${{ inputs.force_clean_install }}' -eq 'true') { $a.ForceCleanInstall = $true }
-          if ('${{ inputs.dry_run }}' -eq 'true')             { $a.NoRelease = $true }
-          & .\Build\scripts\build-installer.ps1 @a
+          $tag = 'v${{ steps.version.outputs.version }}'
+          if (Test-Path release-notes.json) {
+            ./.github/scripts/notes-to-markdown.ps1 -Json release-notes.json -Out release-notes.md
+          } else {
+            Set-Content release-notes.md 'Renewal release: the add-in signing certificate is renewed. No other changes.' -Encoding utf8
+          }
+          gh release create $tag --title "KleiKodesh $tag" --notes-file release-notes.md --target '${{ github.sha }}' `
+            "Build/releases/KleiKodeshSetup-$tag.exe" "Build/releases/KitveiHakodeshPortable-$tag.zip"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      - name: Keep the built files
-        if: inputs.dry_run
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-files
-          path: Build/releases/*
+          # gh release create fires no release events with the Actions token, so start
+          # the follow-ups here. The website repo needs its own token.
+          $env:GH_TOKEN = $env:WEBSITE_DISPATCH_TOKEN
+          gh api repos/KleiKodesh/kleikodesh.github.io/dispatches -f event_type=release-changed
+          if ($LASTEXITCODE) { Write-Warning "website update dispatch failed" }
+          $env:GH_TOKEN = '${{ github.token }}'
+          gh workflow run release-issue-check.yml -f tag=$tag
+          if ($LASTEXITCODE) { Write-Warning "release-issue-check dispatch failed" }
+          gh workflow run drive-upload.yml
+          if ($LASTEXITCODE) { Write-Warning "drive-upload dispatch failed" }
+          exit 0

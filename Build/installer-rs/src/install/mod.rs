@@ -4,6 +4,7 @@
 //! running programs may be closed.
 
 pub mod addin;
+pub mod addin_settings;
 pub mod apps;
 pub mod kitvei;
 pub mod prereqs;
@@ -35,12 +36,27 @@ pub struct Options {
     pub english: bool,
 }
 
+impl Options {
+    /// What a fresh install offers, or, when already installed, what is set now - so an
+    /// update keeps the user's choices.
+    pub fn current(layout: &Layout, english: bool) -> Self {
+        if state::installed(layout).is_empty() {
+            return Self { desktop_shortcut: false, open_with: true, english };
+        }
+        Self { desktop_shortcut: kitvei::has_desktop_shortcut(layout), open_with: kitvei::has_open_with(layout), english }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Request {
     pub action: Action,
     /// The products that should be installed when done (ignored for Uninstall).
     pub products: HashSet<Product>,
     pub options: Options,
+    /// Remove the previous install first (files, caches, indexes, settings), then install.
+    pub clean: bool,
+    /// Word add-in options chosen in the installer; None = leave as they are.
+    pub addin_settings: Option<addin_settings::AddinSettings>,
 }
 
 pub trait Reporter: Send {
@@ -90,6 +106,15 @@ pub fn run(layout: &Layout, payload: Option<&Payload>, request: &Request, report
 
 fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter: &dyn Reporter) -> Result<(), Failure> {
     let wanted = &request.products;
+    if request.clean {
+        if payload.is_none() {
+            return Err(Failure::new(
+                Text::new("התקנה נקייה דורשת את קובץ ההתקנה המלא.", "A clean install needs the full setup file."),
+                "clean install without payload",
+            ));
+        }
+        remove_previous_install(layout, reporter)?;
+    }
     let before = state::installed(layout);
     let core = wanted.iter().any(|p| p.needs_core_files());
     let core_before = before.iter().any(|p| p.needs_core_files());
@@ -112,6 +137,11 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
 
     reporter.step(Text::new("רושם את הרכיבים", "Registering"));
     register_products(layout, wanted, &request.options)?;
+    if let (true, Some(settings)) = (wanted.contains(&Product::WordAddin), &request.addin_settings) {
+        settings
+            .save(layout)
+            .map_err(|e| Failure::new(Text::new("שמירת אפשרויות התוסף נכשלה.", "Saving the add-in options failed."), e.to_string()))?;
+    }
     if core_before && !core {
         remove_core_files(layout);
     }
@@ -127,6 +157,30 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     reporter.step(Text::new("מסיים", "Finishing"));
     finish(layout, payload, wanted, request.options.english)?;
     reporter.progress(1.0);
+    Ok(())
+}
+
+/// Clean install, first half: everything the previous install left goes - registrations,
+/// settings, files, caches and indexes. The service registration stays; it is pointed at
+/// the fresh files again right after.
+fn remove_previous_install(layout: &Layout, reporter: &dyn Reporter) -> Result<(), Failure> {
+    close_apps(layout, &[RunningApp::Word, RunningApp::Kitvei], reporter)?;
+    reporter.step(Text::new("מסיר את ההתקנה הקודמת", "Removing the previous install"));
+    service::stop(layout);
+    addin::unregister(layout);
+    kitvei::unregister(layout);
+    tutor::unregister(layout);
+    state::forget_everything(layout);
+    if layout.install_dir.exists() {
+        std::fs::remove_dir_all(&layout.install_dir).map_err(|e| {
+            Failure::new(
+                Text::new("לא ניתן היה למחוק את ההתקנה הקודמת. סגרו את כל התוכנות ונסו שוב.", "The previous install could not be removed. Close all programs and try again."),
+                e.to_string(),
+            )
+        })?;
+    }
+    crate::log::init(layout.install_dir.join(crate::layout::LOG_FILE));
+    reporter.progress(0.1);
     Ok(())
 }
 

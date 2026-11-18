@@ -1,4 +1,16 @@
-export enum Page { welcome, options, progress, done, manage }
+export enum Page { welcome, options, addin-options, whats-new, progress, done, manage }
+
+// One line of "What's new": kind 0 = section heading, 1 = area, 2 = change.
+export struct NoteLine {
+    kind: int,
+    text: string,
+}
+
+// One on/off line in a list (ribbon tools, websites).
+export struct Choice {
+    title: string,
+    on: bool,
+}
 
 export struct ProductRow {
     id: string,
@@ -23,8 +35,22 @@ export global Installer {
     in property <bool> any-selected;
     in property <bool> kitvei-selected;
     in property <bool> has-changes;
-    in-out property <bool> desktop-shortcut: true;
+    in-out property <bool> desktop-shortcut: false;
     in-out property <bool> file-associations: true;
+    // The options as installed now; on Modify a difference enables "Change".
+    in property <bool> installed-desktop-shortcut;
+    in property <bool> installed-file-associations;
+    // Where the install options screen returns to (welcome on install, manage on Modify).
+    in-out property <Page> options-back: Page.welcome;
+    // Remove the previous install first (offered when already installed).
+    in-out property <bool> clean-install;
+    in property <bool> addin-selected;
+    in property <[Choice]> ribbon-tools;
+    in property <[Choice]> websites;
+    // The Websites tool is shown on the ribbon: only then does its site list matter.
+    in property <bool> websites-tool-on;
+    // Where the add-in options screen returns to.
+    in-out property <Page> addin-options-back: Page.options;
 
     in property <float> progress;
     in property <string> progress-title;
@@ -32,12 +58,23 @@ export global Installer {
     // Non-empty while the engine waits for permission to close these programs.
     in property <string> apps-to-close;
 
+    in property <[NoteLine]> notes;
+    in property <bool> has-notes;
+    in-out property <Page> whats-new-back: Page.welcome;
     in property <bool> failed;
+    // The run started from the Modify screen: the last screen offers to go back there.
+    in property <bool> back-to-manage;
     in property <string> done-title;
     in property <string> done-text;
     in-out property <bool> confirm-uninstall;
 
     callback toggle-product(int);
+    callback toggle-tool(int);
+    callback toggle-website(int);
+    // From the Modify screen the add-in options apply at once (no reinstall).
+    callback save-addin-options();
+    // Cancel: back to the options as they were when the screen opened.
+    callback discard-addin-options();
     callback install();
     callback apply-changes();
     callback repair();

@@ -55,8 +55,12 @@ jobs:
           NOTES_MERGE_MODEL: ${{ inputs.merge_model }}
           NOTES_VARIANT: ${{ inputs.variant }}
           GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.md -Since '${{ inputs.since }}'
+        run: |
+          .github/scripts/ai-release-plan.ps1 -NotesOnly -OutFile test-notes.json -Since '${{ inputs.since }}'
+          .github/scripts/notes-to-markdown.ps1 -Json test-notes.json -Out test-notes.md
       - uses: actions/upload-artifact@v7
         with:
           name: release-notes-test
-          path: test-notes.md
+          path: |
+            test-notes.json
+            test-notes.md

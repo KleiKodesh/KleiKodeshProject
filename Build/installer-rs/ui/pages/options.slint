@@ -1,3 +1,4 @@
+import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
 import { Installer, Page } from "../state.slint";
@@ -13,7 +14,7 @@ export component OptionsPage inherits VerticalLayout {
         padding-top: 8px;
         spacing: 14px;
         PageTitle {
-            title: Lang.t("אפשרויות התקנה", "Install options");
+            title: Installer.options-back == Page.manage ? Lang.t("אפשרויות", "Options") : Lang.t("אפשרויות התקנה", "Install options");
             subtitle: Lang.t("ההתקנה למשתמש הנוכחי בלבד ואינה דורשת הרשאות מנהל.", "Installs for the current user only. No administrator rights needed.");
         }
         Rectangle { height: 4px; }
@@ -23,18 +24,47 @@ export component OptionsPage inherits VerticalLayout {
             toggled => { Installer.desktop-shortcut = !Installer.desktop-shortcut; }
         }
         if Installer.kitvei-selected: CheckRow {
-            text: Lang.t("הוסף את כתבי הקודש ל\"פתח באמצעות\" עבור PDF ו־DOCX", "Add Kitvei Hakodesh to \"Open with\" for PDF and DOCX");
+            text: Lang.t("הוסף את כתבי הקודש ל\"פתח באמצעות\" עבור קבצי PDF", "Add Kitvei Hakodesh to \"Open with\" for PDF files");
             detail: Lang.t("לא משנה את תוכנת ברירת המחדל.", "Does not change your default programs.");
             checked: Installer.file-associations;
             toggled => { Installer.file-associations = !Installer.file-associations; }
         }
+        if Installer.addin-selected: HorizontalLayout {
+            alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
+            Button {
+                text: Lang.t("אפשרויות התוסף לוורד…", "Word add-in options…");
+                clicked => {
+                    Installer.addin-options-back = Page.options;
+                    Installer.page = Page.addin-options;
+                }
+            }
+        }
         Rectangle { vertical-stretch: 1; }
     }
-    WizardButtons {
+    if Installer.options-back == Page.manage: HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 12px;
+        height: 42px;
+        spacing: 8px;
+        if Lang.en: Button { text: "OK"; primary: true; min-width: 80px; clicked => { Installer.page = Page.manage; } }
+        if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { root.discard(); } }
+        Rectangle { horizontal-stretch: 1; }
+        if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { root.discard(); } }
+        if !Lang.en: Button { text: "אישור"; primary: true; min-width: 80px; clicked => { Installer.page = Page.manage; } }
+    }
+    if Installer.options-back != Page.manage: WizardButtons {
         next-text: Lang.t("התקן", "Install");
         next-enabled: Installer.any-selected;
         next => { Installer.install(); }
         back => { Installer.page = Page.welcome; }
         cancel => { Installer.quit(); }
+    }
+
+    // Cancel from Modify: back to what is installed.
+    function discard() {
+        Installer.desktop-shortcut = Installer.installed-desktop-shortcut;
+        Installer.file-associations = Installer.installed-file-associations;
+        Installer.page = Page.manage;
     }
 }

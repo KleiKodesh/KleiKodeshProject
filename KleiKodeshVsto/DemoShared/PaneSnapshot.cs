@@ -52,11 +52,15 @@ namespace KleiKodesh.DemoShared
         /// </summary>
         internal static void ApplyStartupTheme(string[] args, Window window)
         {
-            if (args == null || args.Length < 2 || args[0] != "--theme") return;
+            ApplyStartupExpand(args, window);
+            // "--theme <name>" anywhere in the args, like --culture and --expand.
+            if (args == null) return;
+            var at = Array.IndexOf(args, "--theme");
+            if (at < 0 || at + 1 >= args.Length) return;
 
             foreach (var theme in Themes)
             {
-                if (!string.Equals(theme.Item1, args[1], StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(theme.Item1, args[at + 1], StringComparison.OrdinalIgnoreCase)) continue;
                 window.Background = Brush(theme.Item2);
                 window.Foreground = Brush(theme.Item3);
                 window.Loaded += (s, e) =>
@@ -66,11 +70,41 @@ namespace KleiKodesh.DemoShared
         }
 
         /// <summary>
+        /// "--expand N": opens only the pane's N-th collapsible section (Expander, in
+        /// visual-tree order, 0-based) and collapses the others - for screenshots that show
+        /// one section at a time.
+        /// </summary>
+        private static void ApplyStartupExpand(string[] args, Window window)
+        {
+            if (args == null) return;
+            var at = Array.IndexOf(args, "--expand");
+            if (at < 0 || at + 1 >= args.Length || !int.TryParse(args[at + 1], out var wanted)) return;
+            window.Loaded += (s, e) =>
+            {
+                var index = 0;
+                foreach (var expander in FindAll<System.Windows.Controls.Expander>(window))
+                    expander.IsExpanded = index++ == wanted;
+            };
+        }
+
+        private static System.Collections.Generic.IEnumerable<T> FindAll<T>(DependencyObject root) where T : DependencyObject
+        {
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match) yield return match;
+                foreach (var nested in FindAll<T>(child)) yield return nested;
+            }
+        }
+
+        /// <summary>
         /// Handles "--render &lt;dir&gt;". Returns false when the app was started
         /// normally, so the caller can carry on and show its window.
         /// </summary>
         internal static bool TryRender(string[] args, Func<Window> createWindow)
         {
+            ApplyCulture(args);
             if (args == null || args.Length < 2 || args[0] != "--render") return false;
 
             var directory = args[1];
@@ -140,6 +174,21 @@ namespace KleiKodesh.DemoShared
             return null;
         }
 
+        /// <summary>
+        /// "--culture he-IL" / "--culture en-US" anywhere in the args: the UI language the
+        /// pane is built in. The panes read CurrentUICulture on construction, the same
+        /// thing the add-in sets in Word (AddinUiLanguage.Apply).
+        /// </summary>
+        private static void ApplyCulture(string[] args)
+        {
+            if (args == null) return;
+            var at = Array.IndexOf(args, "--culture");
+            if (at < 0 || at + 1 >= args.Length) return;
+            var culture = new System.Globalization.CultureInfo(args[at + 1]);
+            System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
+            System.Threading.Thread.CurrentThread.CurrentUICulture = culture;
+        }
+
         /// <summary>Let queued layout and render work finish before the bitmap is taken.</summary>
         private static void Settle()
         {
@@ -154,11 +203,17 @@ namespace KleiKodesh.DemoShared
 
         private static void Save(Window window, string path)
         {
-            var width = (int)Math.Max(window.ActualWidth, 1);
-            var height = (int)Math.Max(window.ActualHeight, 1);
+            // Render at the monitor's real DPI (the demos are per-monitor aware), so a
+            // snapshot on a 150% / 200% screen is as sharp as the pane is in Word.
+            // Render the content (= the pane), not the window: ActualWidth/Height of a
+            // Window include the title bar and borders, which are not part of the pane.
+            var target = window.Content as FrameworkElement ?? (FrameworkElement)window;
+            var dpi = VisualTreeHelper.GetDpi(target);
+            var width = (int)Math.Max(Math.Ceiling(target.ActualWidth * dpi.DpiScaleX), 1);
+            var height = (int)Math.Max(Math.Ceiling(target.ActualHeight * dpi.DpiScaleY), 1);
 
-            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(window);
+            var bitmap = new RenderTargetBitmap(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            bitmap.Render(target);
 
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));

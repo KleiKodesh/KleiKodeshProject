@@ -36,7 +36,7 @@ export component ProductIcon inherits Rectangle {
         height: parent.height;
         // Add-in: the Word icon itself (taken from WINWORD.EXE), badged below as an add-in.
         source: root.id == "addin" ? @image-url("images/word.png")
-            : root.id == "kitvei" ? @image-url("images/kitvei-logo.png")
+            : root.id == "kitvei" ? @image-url("images/kitvei-logo.svg")
             : root.id == "kleikodesh" ? @image-url("images/kleikodesh-logo.png")
             : @image-url("images/tutor.png");
     }
@@ -185,4 +185,15 @@ export component CheckRow inherits HorizontalLayout {
     if Lang.en: Text { text: root.side-note; color: Theme.muted; font-size: 12px; vertical-alignment: top; }
     if !Lang.en && root.icon != "": VerticalLayout { alignment: start; ProductIcon { id: root.icon; size: 32px; opacity: root.enabled ? 1 : 0.5; } }
     if !Lang.en: VerticalLayout { alignment: start; CheckBox { text: ""; enabled: root.enabled; checked: root.checked; toggled => { root.toggled(); } } }
+}
+
+// A text link, e.g. "What's new".
+export component LinkText inherits Text {
+    callback clicked();
+    color: ta.has-hover ? Theme.accent.darker(15%) : Theme.accent;
+    font-size: 12.5px;
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
 }

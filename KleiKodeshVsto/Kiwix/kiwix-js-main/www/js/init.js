@@ -113,6 +113,11 @@ if (/^dark$|^auto(?!_wikimediaNative)/.test(params['appTheme'])) {
     setSetting('appTheme', params['appTheme']);
 }
 // A global parameter to turn on/off the use of Keyboard HOME Key to focus search bar
+// KleiKodesh: the theme follows the host (Word's Office theme), injected by KiwixWebview.cs as
+// window.__khDarkTheme. Not persisted: the host is the source of truth on every start.
+if (typeof window.__khDarkTheme === 'boolean') {
+    params['appTheme'] = window.__khDarkTheme ? 'dark_wikimediaNative' : 'light';
+}
 params['useHomeKeyToFocusSearchBar'] = getSetting('useHomeKeyToFocusSearchBar') === true;
 // A global parameter to turn on/off opening external links in new tab (for ServiceWorker mode)
 params['openExternalLinksInNewTabs'] = getSetting('openExternalLinksInNewTabs') !== false;

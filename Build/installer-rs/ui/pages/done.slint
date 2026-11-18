@@ -1,7 +1,7 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
-import { Installer } from "../state.slint";
+import { Installer, Page } from "../state.slint";
 import { PageTitle, ProductIcon } from "../widgets.slint";
 
 // One way into an installed product: its icon and "Open ...". The add-in opens Word.
@@ -73,8 +73,11 @@ export component DonePage inherits VerticalLayout {
         padding-right: 16px;
         padding-bottom: 12px;
         height: 42px;
+        spacing: 8px;
         if !Lang.en: Button { text: "סגור"; primary: true; min-width: 80px; clicked => { Installer.quit(); } }
         Rectangle { horizontal-stretch: 1; }
+        if Installer.has-notes && Installer.updating && !Installer.failed: Button { text: Lang.t("מה חדש", "What's new"); min-width: 80px; clicked => { Installer.whats-new-back = Page.done; Installer.page = Page.whats-new; } }
+        if Installer.back-to-manage: Button { text: Lang.t("חזרה", "Back"); min-width: 80px; clicked => { Installer.page = Page.manage; } }
         if Lang.en: Button { text: "Close"; primary: true; min-width: 80px; clicked => { Installer.quit(); } }
     }
 }

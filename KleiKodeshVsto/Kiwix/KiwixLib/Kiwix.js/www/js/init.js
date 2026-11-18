@@ -112,6 +112,11 @@ if (/^dark$|^auto(?!_wikimediaNative)/.test(params['appTheme'])) {
     params['appTheme'] = 'auto_wikimediaNative';
     setSetting('appTheme', params['appTheme']);
 }
+// KleiKodesh: the theme follows the host (Word's Office theme), injected by KiwixWebview.cs as
+// window.__khDarkTheme. Not persisted: the host is the source of truth on every start.
+if (typeof window.__khDarkTheme === 'boolean') {
+    params['appTheme'] = window.__khDarkTheme ? 'dark_wikimediaNative' : 'light';
+}
 // A global parameter to turn on/off the use of Keyboard HOME Key to focus search bar
 params['useHomeKeyToFocusSearchBar'] = getSetting('useHomeKeyToFocusSearchBar') === true;
 // A global parameter to turn on/off opening external links in new tab (for ServiceWorker mode)
@@ -122,6 +127,9 @@ params['openExternalLinksInNewTabs'] = getSetting('openExternalLinksInNewTabs') 
 params['overrideBrowserLanguage'] = window.__khUiLanguage === 'en' ? 'en' : 'he';
 document.documentElement.lang = params['overrideBrowserLanguage'];
 document.documentElement.dir = params['overrideBrowserLanguage'] === 'he' ? 'rtl' : 'ltr';
+// css/bootstrap.min.css is the mirrored RTL build (cdn.rtlcss.com) and stays mirrored whatever
+// the dir attribute says, so English must load the plain LTR build instead.
+if (params['overrideBrowserLanguage'] !== 'he') document.getElementById('bootstrapCss').href = 'css/bootstrap-ltr.min.css';
 // A parameter to disable drag-and-drop
 params['disableDragAndDrop'] = getSetting('disableDragAndDrop') === true;
 // A parameter to access the URL of any extension that this app was launched from

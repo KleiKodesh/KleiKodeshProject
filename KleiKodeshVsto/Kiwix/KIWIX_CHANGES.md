@@ -60,6 +60,17 @@ $wc.DownloadFile(
 | `node_modules/bootstrap/dist/css/bootstrap.min.css` | Replaced with Bootstrap 4 RTL build v4.5.3 from cdn.rtlcss.com. All margins, paddings, floats and flex directions are mirrored. See note above about restoring after npm install. |
 | `www/css/app.css` | Added RTL override block at end of file. Flips `border-left/right`, `padding-left/right`, `margin-left/right` for snippet indentation, TOC items, navbar, and form controls. |
 
+### 2026-11 — English UI is LTR
+
+**Source files changed:**
+
+| File | Change |
+|------|--------|
+| `www/css/bootstrap-ltr.min.css` | New file. Plain LTR Bootstrap 4.5.3 (jsdelivr), source-map comment removed. The RTL `bootstrap.min.css` is mirrored regardless of `dir`, so English kept an RTL layout. |
+| `www/index.html` | Bootstrap `<link>` got `id="bootstrapCss"`. |
+| `www/js/init.js` | When the host language is not `he`, swaps `#bootstrapCss` to `css/bootstrap-ltr.min.css` (next to the existing `lang`/`dir` setting). |
+| `KiwixLib.csproj` | `bootstrap-ltr.min.css` added as Content (copied to output). |
+
 ---
 
 ## C# Host (KiwixWebview.cs)
@@ -68,6 +79,7 @@ $wc.DownloadFile(
 |--------|--------|
 | `Load` event instead of `HandleCreated` for `InitAsync()` | `Load` fires after all Win32 handles exist. `HandleCreated` fired too early in the WinForms demo app. |
 | Removed `AddScriptToExecuteOnDocumentCreatedAsync` localStorage injection | Hebrew default is now in `init.js` source. No runtime injection needed. |
+| Injects `window.__khDarkTheme` before the page loads, from the pane's `BackColor` brightness | In Word, OfficeThemeWatcher binds the pane's BackColor to the Office theme, so Kiwix.js uses its own dark theme on a dark Office theme. |
 | `try/catch` around `InitAsync` with `MessageBox` on failure | Prevents infinite splash screen when WebView2 init fails silently. |
 
 ---
@@ -78,4 +90,5 @@ $wc.DownloadFile(
 |--------|--------|
 | Converted from WPF to pure WinForms | `KiwixWebview` is a WinForms `UserControl`. WPF wrapper was pointless overhead and caused the splash-stuck bug. |
 | `WebView2Loader.dll` as flat `Content` item in csproj | Native DLL does not propagate transitively through project references. Must be copied explicitly next to the exe. |
+| `--theme office-black` (and the other PaneSnapshot names) sets the viewer's BackColor/ForeColor | Same as the host does in Word, for themed captures. |
 | WebView2 package version updated to `1.0.3912.50` | Only this version is installed in the packages folder. |

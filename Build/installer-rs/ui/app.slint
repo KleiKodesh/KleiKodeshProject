@@ -5,6 +5,8 @@ import { TopBar } from "widgets.slint";
 import { Installer, Page } from "state.slint";
 import { WelcomePage } from "pages/welcome.slint";
 import { OptionsPage } from "pages/options.slint";
+import { AddinOptionsPage } from "pages/addin-options.slint";
+import { WhatsNewPage } from "pages/whats-new.slint";
 import { ProgressPage } from "pages/progress.slint";
 import { DonePage } from "pages/done.slint";
 import { ManagePage } from "pages/manage.slint";
@@ -26,6 +28,8 @@ export component AppWindow inherits Window {
         TopBar { }
         if Installer.page == Page.welcome: WelcomePage { vertical-stretch: 1; }
         if Installer.page == Page.options: OptionsPage { vertical-stretch: 1; }
+        if Installer.page == Page.addin-options: AddinOptionsPage { vertical-stretch: 1; }
+        if Installer.page == Page.whats-new: WhatsNewPage { vertical-stretch: 1; }
         if Installer.page == Page.progress: ProgressPage { vertical-stretch: 1; }
         if Installer.page == Page.done: DonePage { vertical-stretch: 1; }
         if Installer.page == Page.manage: ManagePage { vertical-stretch: 1; }
