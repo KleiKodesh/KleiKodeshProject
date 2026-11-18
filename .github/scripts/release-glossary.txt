@@ -28,6 +28,8 @@ Sidebar = סרגל צד
 Title bar menu = תפריט ראשי
 Theme = ערכת נושא
 Status bar (date bar at the bottom) = שורת התאריך
+Widgets & tools (title-bar tools button, floating widget windows) = ווידג'טים וכלים
+Keyboard shortcuts = קיצורי מקשים
 Update / new version = עדכון / גרסה חדשה
 
 ## Book view
