@@ -86,6 +86,19 @@ fn run() -> io::Result<()> {
     Ok(())
 }
 
+/// pdf.js ships ~113 viewer languages; the app opens it only in Hebrew or en-US
+/// (vue-frontend buildPdfViewerSrc.ts). `locale.json` itself stays.
+fn is_unused_pdf_locale(relative: &str) -> bool {
+    const MARKER: &str = r"pdfjs\web\locale\";
+    let lower = relative.to_ascii_lowercase();
+    let Some(at) = lower.find(MARKER) else { return false };
+    let rest = &lower[at + MARKER.len()..];
+    match rest.split_once('\\') {
+        Some((lang, _)) => lang != "he" && lang != "en-us",
+        None => false,
+    }
+}
+
 /// Files only a developer reads, never the running app: source maps (`*.map`, opened only
 /// by browser dev tools) and IntelliSense docs (`X.xml` next to `X.dll`). About 12.5 MB raw.
 fn is_dev_only(path: &Path) -> bool {
@@ -108,7 +121,7 @@ fn collect(root: &Path, dir: &Path, prefix: &str, out: &mut Vec<(PathBuf, String
             }
             collect(root, &path, prefix, out)?;
         } else {
-            if is_dev_only(&path) {
+            if is_dev_only(&path) || is_unused_pdf_locale(&relative) {
                 continue;
             }
             let name = if prefix.is_empty() { relative } else { format!("{prefix}\\{relative}") };
