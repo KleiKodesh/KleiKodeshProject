@@ -26,6 +26,19 @@ component MacrosSection inherits VerticalLayout {
     }
 }
 
+// Ribbon tools + macros. Scrolls when the window is too short, so the buttons stay on screen.
+component ToolsColumn inherits ScrollView {
+    in property <string> heading;
+    width: 200px;
+    VerticalLayout {
+        width: root.visible-width;
+        spacing: 8px;
+        SectionTitle { text: root.heading; }
+        for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
+        MacrosSection { }
+    }
+}
+
 // Word add-in options, edited here only: which tools the ribbon shows, which sites the
 // Websites pane lists. Two columns: tools (start side), websites (scrolls).
 export component AddinOptionsPage inherits VerticalLayout {
@@ -44,14 +57,7 @@ export component AddinOptionsPage inherits VerticalLayout {
         HorizontalLayout {
             vertical-stretch: 1;
             spacing: 24px;
-            if Lang.en: VerticalLayout {
-                width: 200px;
-                spacing: 8px;
-                SectionTitle { text: "On the ribbon"; }
-                for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
-                MacrosSection { }
-                Rectangle { vertical-stretch: 1; }
-            }
+            if Lang.en: ToolsColumn { heading: "On the ribbon"; }
             if !Installer.websites-tool-on: Rectangle { horizontal-stretch: 1; }
             if Installer.websites-tool-on: VerticalLayout {
                 horizontal-stretch: 1;
@@ -71,14 +77,7 @@ export component AddinOptionsPage inherits VerticalLayout {
                     }
                 }
             }
-            if !Lang.en: VerticalLayout {
-                width: 200px;
-                spacing: 8px;
-                SectionTitle { text: "בסרגל של וורד"; }
-                for t[i] in Installer.ribbon-tools: CheckRow { text: t.title; checked: t.on; toggled => { Installer.toggle-tool(i); } }
-                MacrosSection { }
-                Rectangle { vertical-stretch: 1; }
-            }
+            if !Lang.en: ToolsColumn { heading: "בסרגל של וורד"; }
         }
     }
     // Hebrew: [Cancel] ... [OK]. English: [OK] ... [Cancel]. From Modify, OK saves at once.
