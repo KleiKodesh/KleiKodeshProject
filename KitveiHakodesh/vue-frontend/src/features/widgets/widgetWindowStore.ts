@@ -34,17 +34,14 @@ export function widgetFitsContent(id: WidgetId): boolean {
   return FIT_CONTENT.has(id)
 }
 
-/** A widget window's size; also the size of a panel moved to its own window (DetachedWindow). */
-export const WIDGET_WINDOW_SIZE = { width: 480, height: 560 }
-const CUSTOM_SIZE = WIDGET_WINDOW_SIZE
-const DEFAULT_SIZE: Record<BuiltinWidgetId, { width: number; height: number }> = {
-  dict: { width: 400, height: 560 },
-  calendar: { width: 440, height: 560 },
-  ruler: { width: 400, height: 520 },
-  worldClock: { width: 300, height: 340 },
-  zmanim: { width: 300, height: 480 },
-  learning: { width: 380, height: 420 },
-}
+/**
+ * A widget window's first size (the calendar's, which suits every tool); also the size
+ * of a panel moved to its own window (DetachedWindow). After that the host keeps the
+ * size the user gives it.
+ */
+export const WIDGET_WINDOW_SIZE = { width: 440, height: 560 }
+/** A user-added widget is a whole web page (an Otzaria add-in): it starts larger. */
+const CUSTOM_SIZE = { width: 960, height: 720 }
 
 export const useWidgetWindowStore = defineStore('widgetWindows', () => {
   const windows = ref<WidgetWindowState[]>([])
@@ -95,7 +92,7 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 
 /** The size a widget's window first opens at; after that the host keeps the user's. */
 export function widgetWindowSize(id: WidgetId): { width: number; height: number } {
-  return id.startsWith('custom:') ? CUSTOM_SIZE : DEFAULT_SIZE[id as BuiltinWidgetId]
+  return id.startsWith('custom:') ? CUSTOM_SIZE : WIDGET_WINDOW_SIZE
 }
 
 /**
