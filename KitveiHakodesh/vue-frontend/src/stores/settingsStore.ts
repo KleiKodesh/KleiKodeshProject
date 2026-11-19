@@ -105,6 +105,7 @@ const KEYS = {
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_USER_SPACE_VIEW: 'userSpace.view',
   SETTINGS_HOME_VIEW: 'home.view',
+  SETTINGS_WEBSITES_VIEW: 'websites.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_DICTIONARY_SOURCE_FILTER: 'dictionary.sourceFilter',
@@ -214,6 +215,8 @@ const DEFAULTS = {
   // The UserSpace page's own view, never linked to the catalog's. Cards by default, like the catalog and home.
   userSpaceView: 'cards' as BooksView,
   homeView: 'cards' as HomeView,
+  // The Websites page's own view, never linked to home's.
+  websitesView: 'cards' as HomeView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   // The address a "דיווח על טעות" report is sent from. Remembered so the user types
@@ -447,6 +450,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const userSpaceView = ref<BooksView>(DEFAULTS.userSpaceView)
   /** Which layout the home page renders its suggestion cards in. */
   const homeView = ref<HomeView>(DEFAULTS.homeView)
+  const websitesView = ref<HomeView>(DEFAULTS.websitesView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -656,6 +660,8 @@ export const useSettingsStore = defineStore('settings', () => {
     if (storedUserSpaceView != null) userSpaceView.value = storedUserSpaceView
     const storedHomeView = lsGet<HomeView>(KEYS.SETTINGS_HOME_VIEW)
     if (storedHomeView === 'list' || storedHomeView === 'cards' || storedHomeView === 'tiles') homeView.value = storedHomeView
+    const storedWebsitesView = lsGet<HomeView>(KEYS.SETTINGS_WEBSITES_VIEW)
+    if (storedWebsitesView === 'list' || storedWebsitesView === 'cards' || storedWebsitesView === 'tiles') websitesView.value = storedWebsitesView
     applyCSSVariables()
   }
 
@@ -750,6 +756,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
   persistSetting(userSpaceView, KEYS.SETTINGS_USER_SPACE_VIEW)
   persistSetting(homeView, KEYS.SETTINGS_HOME_VIEW)
+  persistSetting(websitesView, KEYS.SETTINGS_WEBSITES_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -926,6 +933,7 @@ export const useSettingsStore = defineStore('settings', () => {
     booksView.value = DEFAULTS.booksView
     userSpaceView.value = DEFAULTS.userSpaceView
     homeView.value = DEFAULTS.homeView
+    websitesView.value = DEFAULTS.websitesView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
     // undone by them re-writing every key we just deleted. Clear once they have run.
@@ -970,6 +978,7 @@ export const useSettingsStore = defineStore('settings', () => {
     booksView,
     userSpaceView,
     homeView,
+    websitesView,
     init, toggleCleanText, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,
   }
