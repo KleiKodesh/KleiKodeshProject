@@ -3,7 +3,7 @@ import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
 import { CITIES } from '@/features/hebrew-calendar/calendarTypes'
 import type { CalendarZmanim, City } from '@/features/hebrew-calendar/calendarTypes'
-import { lsGet } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
 import { ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
 import type { DayZmanim } from '@/features/hebrew-calendar/itimLabinaZmanim'
 
@@ -166,10 +166,13 @@ export function useNextZman() {
 
   /** Full day table for the popup — every zman, marking the next + the passed. */
   const rows = computed<ZmanRow[]>(() => {
-    if (!ready.value || !cachedToday) return []
-    // Touch `now` so the table re-marks isNext/passed as time advances.
+    if (!ready.value) return []
+    // Touch `now` so the table re-marks isNext/passed as time advances, and
+    // `next` (which fills the day cache) BEFORE checking the cache — otherwise,
+    // with no other reader of `next`, the first run returns [] forever.
     const current = now.value
     const n = next.value
+    if (!cachedToday) return []
     const nextTime = n?.time.getTime()
     // Show the day the next zman belongs to: today's table normally, tomorrow's
     // once all of today's zmanim have passed (post-tzeit the date display has
@@ -218,5 +221,13 @@ export function useNextZman() {
     now.value = new Date()
   }, 30_000)
 
-  return { next, displayTime, tzeit, rows, city, now }
+  /** Switch city: saved like the settings page choice, zmanim recomputed now. */
+  function setCity(c: City) {
+    lsSet(KEYS.SETTINGS_ZMANIM_CITY, c.name)
+    city.value = c
+    cachedDayKey = ''
+    now.value = new Date()
+  }
+
+  return { next, displayTime, tzeit, rows, city, now, setCity }
 }
