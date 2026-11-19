@@ -101,7 +101,7 @@ public sealed partial class SeforimDbCatalogIndex
         private DocsEnum?[] _author = [];
         private DocsEnum?[] _leaf = [];
         private DocsEnum?[] _quoted = [];
-        private NumericDocValues? _bookIds, _levels, _treeOrders, _structures, _leafDistinct, _leafAdds;
+        private NumericDocValues? _bookIds, _mainWork, _levels, _treeOrders, _structures, _leafDistinct, _leafAdds;
 
         // ── Per doc ────────────────────────────────────────────────────────────────
         private readonly bool[] _onPath, _onAuthor, _onLeaf;
@@ -183,6 +183,7 @@ public sealed partial class SeforimDbCatalogIndex
             _leaf = LucenePostings.Open(reader, FieldLeafWords, _words, positions: false);
             _quoted = LucenePostings.Open(reader, FieldQuotedKey, _quotedKeys, positions: false);
             _bookIds = reader.GetNumericDocValues(FieldBookIdDv);
+            _mainWork = reader.GetNumericDocValues(FieldMainWorkDv);
             _levels = reader.GetNumericDocValues(FieldLevelDv);
             _treeOrders = reader.GetNumericDocValues(FieldTreeOrderDv);
             _structures = reader.GetNumericDocValues(FieldStructureDv);
@@ -216,6 +217,7 @@ public sealed partial class SeforimDbCatalogIndex
                 MatchesTitleOrAuthor = SeforimDbCatalogRankingKeys.EveryTokenPresent(_tokens, _present),
                 Level = level,
                 IsAltToc = level > 0 && structureId != RegularTocStructureId,
+                MainWork = (int)(_mainWork?.Get(doc) ?? 0),
             };
             if (_coveredTitles.TryGetValue(bookId, out var title))
             {
