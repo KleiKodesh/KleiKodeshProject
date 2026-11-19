@@ -228,14 +228,14 @@ public sealed partial class SeforimDbCatalogIndex
             if (level == 0)
             {
                 keys.LeafCovered = keys.TitleCovered;   // the leaf IS the title
-                foreach (var q in _quoted)
-                    if (LucenePostings.At(q, doc)) { keys.QuotedFormMatch = true; break; }
             }
             else
             {
                 keys.LeafCovered = LeafCovered(doc);
                 keys.LeafAddsWord = keys.LeafCovered && (_leafAdds?.Get(doc) ?? 0) != 0;
             }
+            foreach (var q in _quoted)
+                if (LucenePostings.At(q, doc)) { keys.QuotedFormMatch = true; break; }
             keys.WordsMatched = WordsMatched();
             _proximity?.Measure(_positionsOfOrderWord, ref keys);
 

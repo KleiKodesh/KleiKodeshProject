@@ -47,8 +47,9 @@ internal struct RankKeys
     /// <summary>A TOC line of one of the book's ALTERNATIVE tables of contents (parshiot,
     /// dapim...), not its regular one: ranked below every regular TOC line.</summary>
     public bool IsAltToc;
-    /// <summary>A level-0 hit whose stored title carries the quoted acronym the query was typed
-    /// with (an author acronym vs the ordinary word it strips to).</summary>
+    /// <summary>The hit's texts (title, TOC path, author) carry the quoted acronym the query was
+    /// typed with (an author acronym vs the ordinary word it strips to). Ranked right under
+    /// <see cref="SeforimDbCatalogRankingKeys.MatchPlace"/>.</summary>
     public bool QuotedFormMatch;
     /// <summary>How many DISTINCT query words the path holds (proximity, 2+ word queries).</summary>
     public int WordsFound;
@@ -79,10 +80,10 @@ internal static class SeforimDbCatalogRankingKeys
     ///
     ///   literal match; every word in the hit's own title/path or author; where it matched
     ///   (<see cref="MatchPlace"/>: a book, a book by its category path, a TOC line, an
-    ///   alternative-TOC line); the query names the
+    ///   alternative-TOC line); written as the typed quoted acronym; the query names the
     ///   book (then the title explaining more of the query, then the one sized like it); more
     ///   query words in the path, repeats counted; for a file, more typed words inside its
-    ///   name; the title written as the typed acronym; a base text (<see cref="RankKeys.MainWork"/>);
+    ///   name; a base text (<see cref="RankKeys.MainWork"/>);
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
     ///   in typed order, closest together; the leaf typed in full; the shallower TOC level
     ///   (chapter before verse).
@@ -99,6 +100,10 @@ internal static class SeforimDbCatalogRankingKeys
         if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
         int placeA = MatchPlace(a), placeB = MatchPlace(b);
         if (placeA != placeB) return placeA.CompareTo(placeB);
+        // Typed WITH its quote, an acronym matches tit for tat: Ro"sh means the Rosh's books,
+        // before the tractate Rosh Hashanah that only holds the plain word. Only a query
+        // typed with a quote sets it, so plain words are untouched.
+        if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
         if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
         if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
         if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
@@ -106,9 +111,6 @@ internal static class SeforimDbCatalogRankingKeys
         // A file whose name holds a typed word inside a longer word before one that has it
         // only in a folder name.
         if (a.WordsPartlyMatched != b.WordsPartlyMatched) return b.WordsPartlyMatched.CompareTo(a.WordsPartlyMatched);
-        // The book written as the typed acronym, quote and all, before lines that merely cite
-        // the acronym however tightly: above proximity.
-        if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
         // A base text before any other book once the words and the typed acronym tie:
         // "mishnah" -> the Mishnah tractates before books on them. Base or not only - ranked
         // as three tiers, or above WordsMatched / QuotedFormMatch, it put Siddur Rashi above

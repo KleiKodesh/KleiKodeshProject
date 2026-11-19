@@ -91,7 +91,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldMainWorkDv = "mainWorkValue";           // every row: its book's MainWork tier (2 base text, 1 own work, 0 commentary/targum)
     private const string FieldBookIdDv = "bookIdValue";               // every row: book id as doc-values (per-book grouping; the title search reads level 0)
     private const string FieldBookTitleWordCountDv = "bookTitleWordCount"; // level 0 only: title word count WITH repeats (the title-length ranking key)
-    private const string FieldQuotedKey = "quotedAbbreviationKey";    // level 0 only: every quoted acronym key the stored texts carry, one untokenized term each (QuotedFormMatch)
+    private const string FieldQuotedKey = "quotedAbbreviationKey";    // every row: every quoted acronym key the stored texts carry, one untokenized term each (QuotedFormMatch)
     private const string FieldLeafWords = "leafWords";                // level 1+ only: the entry's own (last) segment's words (LeafCovered)
     private const string FieldLeafDistinctWordsDv = "leafDistinctWords"; // level 1+ only: distinct leaf word count
     private const string FieldLeafAddsTitleWordDv = "leafAddsTitleWord"; // level 1+ only: 1 when the leaf has a word the title lacks (LeafAddsWord)
@@ -223,7 +223,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     //      measures stored text.
     // v30: every row carries its book's main-work tier (mainWorkValue): base text, own work,
     //      commentary/targum - so a one-word query ranks the base texts above books on them.
-    public const string IndexFormatVersion = "v30";
+    // v31: quoted-acronym keys on every row, not only book titles.
+    public const string IndexFormatVersion = "v31";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -677,11 +678,6 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             doc.Add(new StringField(FieldBookTitleJoined, string.Join(" ", titleWords), Field.Store.NO));
             doc.Add(new NumericDocValuesField(FieldBookTitleWordsDv, new HashSet<string>(titleWords, StringComparer.Ordinal).Count));
             doc.Add(new NumericDocValuesField(FieldBookTitleWordCountDv, titleWords.Count));
-            // The quoted acronyms the book's texts carry (the stored strings keep their quote
-            // glyphs; the indexed words have them stripped), one term each, so a search can
-            // tell a title written as the typed acronym from the ordinary word it strips to.
-            foreach (string key in QuotedKeysOf(fullTocPath, catalogPath, authors))
-                doc.Add(new StringField(FieldQuotedKey, key, Field.Store.NO));
         }
         else
         {
@@ -694,6 +690,12 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             doc.Add(new NumericDocValuesField(FieldLeafDistinctWordsDv, new HashSet<string>(leafWords, StringComparer.Ordinal).Count));
             doc.Add(new NumericDocValuesField(FieldLeafAddsTitleWordDv, leafWords.Exists(w => !titleWords.Contains(w)) ? 1 : 0));
         }
+        // The quoted acronyms the row's texts carry (the stored strings keep their quote
+        // glyphs; the indexed words have them stripped), one term each, so a search can tell
+        // a hit written as the typed acronym (Ro"sh) from the ordinary word it strips to
+        // (Rosh Hashanah). Every row: a TOC line carries its book's title and author too.
+        foreach (string key in QuotedKeysOf(fullTocPath, catalogPath, authors))
+            doc.Add(new StringField(FieldQuotedKey, key, Field.Store.NO));
         return doc;
     }
 
