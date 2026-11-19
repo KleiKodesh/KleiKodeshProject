@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from 'vue'
 import { t } from '@/i18n'
+import { showToast } from '@/composables/useToast'
 import { useIntervalFn } from '@vueuse/core'
 import { useHostSearchStore } from '@/stores/hostSearchStore'
 import { parseBookLink } from '@/utils/appDeepLink'
@@ -139,7 +140,7 @@ export function useHomeSearchBar(options: {
     const bookLink = parseBookLink(trimmed)
     if (bookLink) {
       reset()
-      void useHostSearchStore().openBookLink(bookLink)
+      void useHostSearchStore().openBookLink(bookLink).then((opened) => { if (!opened) showToast(t('fastDocView.bookNotInLibrary')) })
       return
     }
     // Capture before reset() blanks the query, then hand off to the page.

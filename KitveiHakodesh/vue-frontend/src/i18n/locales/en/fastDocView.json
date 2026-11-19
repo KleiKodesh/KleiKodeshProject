@@ -23,6 +23,7 @@
   "goToEndnoteReference": "Go to where this endnote is referenced in the text",
   "bookmarkNotFound": "The link target was not found in this document",
   "linkNotSupported": "The app cannot open this link",
+  "bookNotInLibrary": "This book is not in the library",
   "searchNext": "Next match (Enter)",
   "searchPrevious": "Previous match (Shift+Enter)",
   "searchClose": "Close search (Esc)",
