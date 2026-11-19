@@ -38,7 +38,7 @@ internal struct RankKeys
     public int WordsPartlyMatched;
     /// <summary>0 = a book title (a file is always one), 1+ = TOC depth. Ranked only as TITLE OR
     /// NOT (<see cref="SeforimDbCatalogRankingKeys.MatchPlace"/>): every book before every TOC
-    /// line. Depth among TOC lines decides nothing here; the catalog order does, after every key.</summary>
+    /// line; then, as the LAST key, the shallower TOC line first (chapter before verse).</summary>
     public int Level;
     /// <summary>A TOC line of one of the book's ALTERNATIVE tables of contents (parshiot,
     /// dapim...), not its regular one: ranked below every regular TOC line.</summary>
@@ -80,7 +80,8 @@ internal static class SeforimDbCatalogRankingKeys
     ///   query words in the path, repeats counted; for a file, more typed words inside its
     ///   name; the title written as the typed acronym;
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
-    ///   in typed order, closest together; the leaf typed in full.
+    ///   in typed order, closest together; the leaf typed in full; the shallower TOC level
+    ///   (chapter before verse).
     ///
     /// Proximity sits below the literal and title keys: it must not float an ordinary-word hit
     /// above the book actually written the way the query was typed.
@@ -113,6 +114,11 @@ internal static class SeforimDbCatalogRankingKeys
             if (a.WordSpan != b.WordSpan) return a.WordSpan.CompareTo(b.WordSpan);           // tighter cluster first
         }
         if (a.LeafCovered != b.LeafCovered) return a.LeafCovered ? -1 : 1;
+        // Last: a shallower TOC line before a deeper one (chapter before verse). Every key
+        // above outranks it - tried right under WordsMatched, it let "Mishnah Shabbat / Perek
+        // 15" (the word "mishnah" counted from the book title) bury the exact "mishnah 15"
+        // lines and exact one-word encyclopedia entries (golden set, 2026-11-19).
+        if (a.Level != b.Level) return a.Level.CompareTo(b.Level);
         return 0;
     }
 
