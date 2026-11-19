@@ -224,7 +224,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // v30: every row carries its book's main-work tier (mainWorkValue): base text, own work,
     //      commentary/targum - so a one-word query ranks the base texts above books on them.
     // v31: quoted-acronym keys on every row, not only book titles.
-    public const string IndexFormatVersion = "v31";
+    // v32: the "query names the book" word count leaves out the generic word "sefer".
+    public const string IndexFormatVersion = "v32";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -676,7 +677,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             var titleWords = SeforimDbCatalogTextNormalizer.Tokenize(fullTocPath);
             doc.Add(new Field(FieldBookTitle, fullTocPath, DocsOnlyText));
             doc.Add(new StringField(FieldBookTitleJoined, string.Join(" ", titleWords), Field.Store.NO));
-            doc.Add(new NumericDocValuesField(FieldBookTitleWordsDv, new HashSet<string>(titleWords, StringComparer.Ordinal).Count));
+            // Distinct title words the query must cover, the generic "sefer" left out
+            // (GenericTitleWord) unless it is the whole title.
+            var neededWords = new HashSet<string>(titleWords, StringComparer.Ordinal);
+            if (neededWords.Count > 1) neededWords.Remove(SeforimDbCatalogRankingKeys.GenericTitleWord);
+            doc.Add(new NumericDocValuesField(FieldBookTitleWordsDv, neededWords.Count));
             doc.Add(new NumericDocValuesField(FieldBookTitleWordCountDv, titleWords.Count));
         }
         else
