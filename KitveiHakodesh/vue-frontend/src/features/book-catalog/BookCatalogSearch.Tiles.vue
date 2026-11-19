@@ -3,7 +3,8 @@ import { ref, watch } from 'vue'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem } from './useBookCatalogSearch'
 import { fileIcon, fileTitle } from './fsItemFileIcon'
-import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import WindowedCardGrid from '@/components/WindowedCardGrid.vue'
 import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composables/useOpenInNewTab'
 
 // LEGACY: superseded by BookCatalogSearch.Cards.vue (same props, emits and
@@ -11,13 +12,14 @@ import { wantsNewTab, withNewTabHint, OPEN_IN_NEW_TAB_HINT_HE } from '@/composab
 const props = defineProps<{ items: SearchFsItem[] }>()
 const emit = defineEmits<{ select: [SearchFsItem, boolean] }>()
 
-const tilesEl = ref<HTMLElement | null>(null)
+// Windowed: results are never capped, so only the lines of tiles near the viewport exist.
+const gridRef = ref<InstanceType<typeof WindowedCardGrid> | null>(null)
 
 const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: (i, openInNewTab) => emit('select', props.items[i]!, openInNewTab),
-  containerElement: tilesEl,
-  getColumnsPerRow: () => countGridColumns(tilesEl.value),
+  scrollIntoView: (index) => gridRef.value?.revealIndex(index),
+  getColumnsPerRow: () => gridRef.value?.columns ?? 1,
 })
 
 watch(
@@ -54,48 +56,36 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="tilesEl" class="tiles-grid">
+  <WindowedCardGrid ref="gridRef" :count="items.length" view="tiles" :list-key="items">
+    <template #item="{ index: i }">
     <!-- A <button>, like the browse grid's and the home page's: it is a control,
          and unlike a div it does not stretch to fill its grid cell, which is what
          keeps it the same 72px as theirs. -->
     <button
-      v-for="(item, i) in items"
-      :key="item.uid"
       type="button"
       class="tile"
       data-nav-item
       tabindex="-1"
       :class="{ 'is-focused': focusedIndex === i }"
-      :title="itemTooltip(item)"
+      :title="itemTooltip(items[i]!)"
       @mousedown.prevent
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
     >
-      <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+      <div v-if="items[i]!.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(items[i]!.file).color }"><component :is="fileIcon(items[i]!.file).icon20" /></div>
         <div v-else class="tile-icon"><IconBookRtl20 /></div>
-      <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
+      <span class="tile-label"><span class="tile-label-text">{{ itemTitle(items[i]!) }}</span></span>
       <span v-if="focusedIndex === i" class="tile-expanded" aria-hidden="true">
-        <div v-if="item.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(item.file).color }"><component :is="fileIcon(item.file).icon20" /></div>
+        <div v-if="items[i]!.kind === 'file'" class="tile-icon file-icon" :style="{ color: fileIcon(items[i]!.file).color }"><component :is="fileIcon(items[i]!.file).icon20" /></div>
         <div v-else class="tile-icon"><IconBookRtl20 /></div>
-        <span class="tile-label"><span class="tile-label-text">{{ itemTitle(item) }}</span></span>
+        <span class="tile-label"><span class="tile-label-text">{{ itemTitle(items[i]!) }}</span></span>
       </span>
     </button>
-  </div>
+    </template>
+  </WindowedCardGrid>
 </template>
 
 <style scoped>
-.tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-  padding: 12px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  height: 100%;
-  box-sizing: border-box;
-  align-content: flex-start;
-}
 /* The same tile as the browse grid's (BookCatalogView.Tiles.vue), which is the
    home page's: one catalog, one tile. Only the icon differs — these are always
    books, never folders. */
