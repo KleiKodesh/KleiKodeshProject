@@ -29,8 +29,10 @@ const props = withDefaults(
     maxWidth?: number
     /** Side padding of the scroll area, in px (left + right each). */
     paddingInline?: number
+    /** Cards stretch to fill the whole width (the catalog's look) instead of stopping at their max width (home's). */
+    stretch?: boolean
   }>(),
-  { listKey: undefined, maxWidth: Infinity, paddingInline: 12 },
+  { listKey: undefined, maxWidth: Infinity, paddingInline: 12, stretch: false },
 )
 
 const hostRef = ref<HTMLElement | null>(null)
@@ -41,6 +43,10 @@ const layout = useCardGridLayout(
   props.maxWidth,
 )
 
+// Stretch keeps the column count but hands the cards the whole width.
+const gridWidth = computed(() =>
+  props.stretch ? Math.min(props.maxWidth, Math.max(0, hostWidth.value - 2 * props.paddingInline)) : layout.value.width,
+)
 const columns = computed(() => (props.view === 'list' ? 1 : layout.value.columns))
 const rowCount = computed(() => Math.ceil(props.count / columns.value))
 const rowIndexes = (row: number) => {
@@ -68,7 +74,7 @@ watch(columns, (now, before) => {
 defineExpose({
   /** The grid's width in px - a search bar above it lines up with its edges. */
   get width() {
-    return layout.value.width
+    return gridWidth.value
   },
   /** Cards per line - for useInputListNavigation's getColumnsPerRow. */
   get columns() {
@@ -85,7 +91,7 @@ defineExpose({
     ref="hostRef"
     class="windowed-card-grid"
     :style="{
-      '--grid-width': `${layout.width}px`,
+      '--grid-width': `${gridWidth}px`,
       '--grid-columns': columns,
       '--grid-padding-inline': `${paddingInline}px`,
     }"
