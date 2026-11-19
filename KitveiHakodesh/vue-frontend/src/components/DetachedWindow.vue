@@ -13,6 +13,7 @@ import { WIDGET_WINDOW_SIZE } from '@/features/widgets/widgetWindowStore'
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { provideHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { openDetachedWindow } from '@/composables/detachedWindow/openDetachedWindow'
+import ToastBanner from '@/components/ToastBanner.vue'
 
 const props = defineProps<{
   /** Stable name: the host remembers the window's size and place under it. */
@@ -46,5 +47,6 @@ onBeforeUnmount(() => handle?.close())
 <template>
   <Teleport v-if="handle" :to="handle.mountElement">
     <slot />
+    <ToastBanner />
   </Teleport>
 </template>

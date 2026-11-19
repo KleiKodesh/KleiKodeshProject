@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
+import { activeHostWindow } from '@/composables/detachedWindow/hostWindow'
 
 export type ToastVariant = 'info' | 'success' | 'error'
 
@@ -13,6 +14,8 @@ export type ToastOptions = {
 // (see ToastBanner.vue) and driven from anywhere via showToast().
 const message = ref<string | null>(null)
 const variant = ref<ToastVariant>('info')
+/** The window the banner shows in: the one the reader is working in when it is raised. */
+const targetWindow = shallowRef<Window>(window)
 
 let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -27,6 +30,7 @@ function clearTimer() {
 export function showToast(text: string, options: ToastOptions = {}) {
   const { duration = 3500, variant: v = 'info' } = options
   clearTimer()
+  targetWindow.value = activeHostWindow()
   message.value = text
   variant.value = v
   if (duration > 0) {
@@ -48,5 +52,5 @@ export function dismissToast() {
  * `showToast` / `dismissToast`.
  */
 export function useToast() {
-  return { message, variant, showToast, dismissToast }
+  return { message, variant, targetWindow, showToast, dismissToast }
 }

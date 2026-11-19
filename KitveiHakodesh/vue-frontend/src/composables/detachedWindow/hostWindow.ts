@@ -27,6 +27,22 @@ export function useHostWindow(): HostWindow {
   return hasInjectionContext() ? inject(HOST_WINDOW, window) : window
 }
 
+/** The detached windows open now; app-wide UI (the toast) shows in the one in use. */
+const openDetachedWindows = new Set<HostWindow>()
+
+export function registerDetachedWindow(detached: HostWindow): () => void {
+  openDetachedWindows.add(detached)
+  return () => openDetachedWindows.delete(detached)
+}
+
+/** The window the reader is working in: a detached one that has focus, else the app's own. */
+export function activeHostWindow(): HostWindow {
+  for (const detached of openDetachedWindows) {
+    if (!detached.closed && detached.document.hasFocus()) return detached
+  }
+  return window
+}
+
 /** True inside a detached window. Call during setup. */
 export function useIsInDetachedWindow(): boolean {
   return useHostWindow() !== window
