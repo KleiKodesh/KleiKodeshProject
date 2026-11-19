@@ -128,7 +128,7 @@ export function useCommentaryPanelSlot(
   const treeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
   const fraction = ref(DEFAULT_FRACTION[slot])
 
-  const { pinnedCommentaryGroup, isPinSettled, restorePin, setCommentator, pinExplicitly } = usePinnedCommentary(
+  const { pinnedCommentaryGroup, isPinSettled: isPinKnown, restorePin, setCommentator, pinExplicitly } = usePinnedCommentary(
     shared.bookId,
     () => source.commentaryLineId.value,
     () => source.groups.value,
@@ -145,6 +145,18 @@ export function useCommentaryPanelSlot(
     () => shared.staticFilterGroupsLoaded.value,
     () => source.commentaryLineId.value,
   )
+
+  // The scroller is created at the commentator's row, so it waits until that row can
+  // be in the list. A commentator with no text on this line is shown by a "no text"
+  // row that groupsForDisplay can only place once the full commentator list has
+  // loaded; without this wait the scroller opened at the top whenever the line's
+  // commentary arrived first.
+  const isPinSettled = computed(() => {
+    if (!isPinKnown.value) return false
+    const pinned = pinnedCommentaryGroup.value
+    if (pinned == null || shared.staticFilterGroupsLoaded.value) return true
+    return source.groups.value.some((group) => group.bookId === pinned.bookId)
+  })
 
   // Exactly the rows this panel renders. The panel's search scans this same list,
   // so a flat index means the same row in both.
