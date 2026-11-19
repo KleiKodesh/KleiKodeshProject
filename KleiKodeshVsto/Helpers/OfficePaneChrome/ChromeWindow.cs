@@ -89,7 +89,7 @@ namespace OfficePaneChrome
         protected float DpiScale => EffectiveDpi / 96f;
         protected int Dpi(int logical) => (int)Math.Round(logical * EffectiveDpi / 96.0);
         /// <summary>No title bar in full screen (FormBorderStyle.None), like FluentChromeTabs hides its strip.</summary>
-        protected int TitleHeightPx => FormBorderStyle == FormBorderStyle.None ? 0 : Dpi(40);
+        protected int TitleHeightPx => FormBorderStyle == FormBorderStyle.None ? 0 : CaptionButtonHeightPx;   // exactly the buttons: no empty band under them
         int CaptionButtonWidthPx => Dpi(46);
         int CaptionButtonHeightPx => Dpi(32);
         /// <summary>The top resize border at this window's DPI (the plain metrics are the primary monitor's).</summary>
