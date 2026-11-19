@@ -11,7 +11,7 @@ import { useAppShellPane } from '@/composables/useAppShellPane'
 import { showToast } from '@/composables/useToast'
 import { t } from '@/i18n'
 import type { Tab } from '@/stores/tabStore'
-import { useWidgetWindowStore, widgetWindowSize, type WidgetWindowState } from './widgetWindowStore'
+import { useWidgetWindowStore, widgetWindowSize, widgetFitsContent, type WidgetWindowState } from './widgetWindowStore'
 import { findWidgetItem } from './widgetItems'
 
 const props = defineProps<{ win: WidgetWindowState }>()
@@ -19,6 +19,7 @@ const store = useWidgetWindowStore()
 // removeCustom closes a widget's window before dropping it, so an open window always has its item.
 const item = computed(() => findWidgetItem(props.win.id)!)
 const size = widgetWindowSize(props.win.id)
+const fitContent = widgetFitsContent(props.win.id)
 
 // The tool pages were written as tab pages: they read "their" tab (route, saved query)
 // and write its title. Inside a widget they get a private stand-in tab, so they behave
@@ -57,10 +58,11 @@ function onBlocked() {
     :title="item.text"
     :width="size.width"
     :height="size.height"
+    :fit-content="fitContent"
     @closed="store.close(win.id)"
     @blocked="onBlocked"
   >
-    <section class="widget-body" :aria-label="item.text" :data-widget="win.id">
+    <section class="widget-body" :class="{ 'widget-body--fit': fitContent }" :aria-label="item.text" :data-widget="win.id">
       <component :is="item.page" v-bind="item.props" />
     </section>
   </DetachedWindow>
@@ -77,6 +79,9 @@ function onBlocked() {
   background: var(--bg-primary);
 }
 .widget-body > :deep(*) { flex: 1; min-height: 0; }
+/* Natural size: the window takes it (DetachedWindow fitContent). */
+.widget-body--fit { flex: none; overflow: visible; }
+.widget-body--fit > :deep(*) { flex: none; }
 /* PageCard switches to its edge-to-edge look by WINDOW width (@media); a widget's
    window is narrow, but the card's frame is still wasted room inside it. */
 .widget-body :deep(.page-card-outer) { max-width: 100%; padding: 0; }
