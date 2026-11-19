@@ -35,6 +35,7 @@ const {
   />
 
   <FontDisplaySettings
+    for-commentary
     v-model:header-font="commentaryHeaderFont"
     v-model:text-font="commentaryTextFont"
     v-model:font-size="commentaryFontSize"

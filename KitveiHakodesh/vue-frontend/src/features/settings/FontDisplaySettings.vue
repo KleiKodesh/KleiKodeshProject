@@ -11,6 +11,11 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
+/** Every label names its target (book body or commentaries) so the two panes are never confused. */
+function withTarget(label: string): string {
+  return `${label} - ${t(props.forCommentary ? 'settings.font.forCommentary' : 'settings.font.forBook')}`
+}
+
 const props = defineProps<{
   headerFont: string
   textFont: string
@@ -37,6 +42,8 @@ const props = defineProps<{
   defaultHeaderFont?: string
   defaultTextFont?: string
   defaultTeamimFont?: string
+  /** Commentary instance: labels end with "commentaries" instead of "book body". */
+  forCommentary?: boolean
 }>()
 
 /**
@@ -98,7 +105,7 @@ function onTeamimToggle() {
   <div v-bind="$attrs">
     <FontSelectorCmp
       ref="headerFontRef"
-      :label="$t('settings.font.header')"
+      :label="withTarget($t('settings.font.header'))"
       :hint="$t('settings.font.headerHint')"
       :model-value="headerFont"
       font-type="sans-serif"
@@ -108,7 +115,7 @@ function onTeamimToggle() {
     />
     <FontSelectorCmp
       ref="textFontRef"
-      :label="$t('settings.font.text')"
+      :label="withTarget($t('settings.font.text'))"
       :hint="$t('settings.font.textHint')"
       :model-value="textFont"
       font-type="serif"
@@ -119,7 +126,7 @@ function onTeamimToggle() {
     <FontSelectorCmp
       v-if="showTeamimFont"
       ref="teamimFontRef"
-      :label="$t('settings.font.taamim')"
+      :label="withTarget($t('settings.font.taamim'))"
       :hint="$t('settings.font.taamimHint')"
       :model-value="teamimTextFont ?? ''"
       font-type="serif"
@@ -128,7 +135,7 @@ function onTeamimToggle() {
       @toggle="onTeamimToggle"
     />
     <SliderSetting
-      :label="$t('settings.font.size')"
+      :label="withTarget($t('settings.font.size'))"
       :hint="$t('settings.font.sizeHint')"
       :model-value="fontSize"
       :min="50"
@@ -138,7 +145,7 @@ function onTeamimToggle() {
       @update:model-value="emit('update:fontSize', $event)"
     />
     <SliderSetting
-      :label="$t('settings.font.weight')"
+      :label="withTarget($t('settings.font.weight'))"
       :hint="$t('settings.font.weightHint')"
       :model-value="fontWeight ?? 400"
       :min="300"
@@ -148,7 +155,7 @@ function onTeamimToggle() {
       @update:model-value="emit('update:fontWeight', $event)"
     />
     <SliderSetting
-      :label="$t('settings.font.lineHeight')"
+      :label="withTarget($t('settings.font.lineHeight'))"
       :hint="$t('settings.font.lineHeightHint')"
       :model-value="linePadding"
       :min="1.2"
@@ -158,7 +165,7 @@ function onTeamimToggle() {
     />
     <SettingRow
       v-if="showFixedLineHeight"
-      :label="$t('settings.font.lineMode')"
+      :label="withTarget($t('settings.font.lineMode'))"
       :hint="$t('settings.font.lineModeHint')"
     >
       <ToggleGroup

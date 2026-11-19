@@ -29,7 +29,6 @@ const {
   commentaryFontWeight,
   commentaryLinePadding,
   linesContentMaxWidth,
-  linesLayout,
 } = storeToRefs(settings)
 
 useSettings() // wires the commentary-mirror watcher
@@ -121,21 +120,6 @@ const linesContentMaxWidthSlider = computed({
       :format-value="formatMaxWidth"
     />
 
-    <SettingRow
-      id="nav-lines-layout"
-      :data-nav-label="$t('settings.book.linesLayout')"
-      :label="$t('settings.book.linesLayout')"
-      :hint="$t('settings.book.linesLayoutHint')"
-    >
-      <ToggleGroup
-        v-model="linesLayout"
-        :options="[
-          { label: $t('settings.book.linesLayoutRows'), value: 'rows' },
-          { label: $t('settings.book.linesLayoutFlow'), value: 'flow' },
-        ]"
-      />
-    </SettingRow>
-
   </div>
 
   <!-- ── תצוגת פירושים ── -->
@@ -161,6 +145,7 @@ const linesContentMaxWidthSlider = computed({
       id="nav-commentary-font-display"
       :data-nav-label="$t('settings.commentary.fontNav')"
       ref="commentaryDisplayRef"
+      for-commentary
       v-model:header-font="commentaryHeaderFont"
       v-model:text-font="commentaryTextFont"
       v-model:font-size="commentaryFontSize"

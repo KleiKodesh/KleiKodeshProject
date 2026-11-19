@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useElementSize } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
@@ -23,6 +23,10 @@ import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcut
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
+
+// Section titles stick just below the sticky search bar, so they need its live height.
+const toolbarRef = ref<HTMLElement | null>(null)
+const { height: toolbarHeight } = useElementSize(toolbarRef, undefined, { box: 'border-box' })
 const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
 
 // Restored here rather than in onMounted so the input renders with the query on the
@@ -151,11 +155,11 @@ async function navigateToSection(sectionId: string) {
     />
 
     <!-- ── Full-width scroller — scrollbar at page edge ── -->
-    <div ref="scrollContainerRef" class="settings-body">
+    <div ref="scrollContainerRef" class="settings-body" :style="{ '--settings-toolbar-h': `${toolbarHeight}px` }">
       <div class="settings-body-inner">
 
         <!-- ── Sticky search bar + nav dropdown (narrow screen) ── -->
-        <div class="settings-toolbar">
+        <div ref="toolbarRef" class="settings-toolbar">
           <div class="search-container">
             <div class="nav-toggle-wrapper narrow-only">
               <button
@@ -374,9 +378,20 @@ async function navigateToSection(sectionId: string) {
    inside one — so no two rules can ever meet. */
 .section-label {
   font-size: 15px;
+  position: sticky;
+  top: var(--settings-toolbar-h, 0px);
+  z-index: 5;
+  background: var(--bg-secondary);
+  /* Overlays the card top edge exactly (card padding 8px + border 1px), so when
+     stuck it still reads as the rounded top of the card. */
+  margin-top: -9px;
+  margin-inline: -25px;
+  padding-inline: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px 8px 0 0;
   font-weight: 600;
   color: var(--text-primary);
-  padding-top: 14px;
+  padding-top: 21px;
   padding-bottom: 10px;
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border-color);
@@ -393,6 +408,12 @@ async function navigateToSection(sectionId: string) {
     margin: 0 0 4px;
   }
   .section-label {
+    background: var(--bg-primary);
+    margin-top: 0;
+    margin-inline: 0;
+    padding-inline: 0;
+    border-width: 0 0 1px;
+    border-radius: 0;
     padding-top: 10px;
     padding-bottom: 6px;
     margin-bottom: 12px;

@@ -54,6 +54,8 @@
     "weight600": "Semibold",
     "weight700": "Bold",
     "header": "Heading font",
+    "forBook": "book body",
+    "forCommentary": "commentaries",
     "headerHint": "Font for chapter and section headings",
     "text": "Body text font",
     "textHint": "Font for the book body text",
