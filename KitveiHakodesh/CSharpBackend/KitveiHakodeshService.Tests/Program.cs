@@ -58,6 +58,7 @@ for (int i = 0; i < args.Length; i++)
         case "--filter-groups": { int at = Array.IndexOf(args, "--ref-db"); return KitveiHakodeshService.Tests.CommentaryFilterGroupsEquivalence.Run(dbPath ?? (Array.IndexOf(args, "--db") is int d && d >= 0 ? args[d + 1] : "C:/Users/Admin/AppData/Roaming/otzaria/books/seforim.db"), at >= 0 ? args[at + 1] : null, args.Contains("--new-first")); }
         case "--related-books": return KitveiHakodeshService.Tests.RelatedBooksEquivalence.Run(dbPath ?? "C:/Users/Admin/AppData/Roaming/otzaria/books/seforim.db", args.Contains("--quick"));
         case "--toratemet-realcheck": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.RealCheck();
+        case "--hb-catalog-update": return await KitveiHakodeshService.Tests.HebrewBooksCatalogReleaseUpdate.Run(args[++i]);
         case "--toratemet-selftest": return KitveiHakodeshService.Tests.ToratEmetNamesCheck.Run() == 0 ? 0 : 1;
         case "--userspace-selftest": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.Run() == 0 ? 0 : 1;
         case "--userspace-copyindex": return KitveiHakodeshService.Tests.UserSpaceSearchCheck.CopyIndex(args[++i], args[++i]);
