@@ -280,5 +280,9 @@
     "acharonim": "Acharonim",
     "other": "Other"
   },
-  "exportLargeAsFile": "The book is large - opening it in Word as a file"
+  "exportLargeAsFile": "The book is large - opening it in Word as a file",
+  "exportFailed": "Export to Word failed",
+  "exportFailedTitle": "Export to Word failed",
+  "exportFailedDesc": "Word could not receive the book. Save it as an HTML file instead? Word can open that file.",
+  "exportSaveAsHtml": "Save as HTML file"
 }
