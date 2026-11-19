@@ -37,11 +37,12 @@ internal struct RankKeys
     /// the file's add-in name or Hebrew name alias. Below <see cref="WordsMatched"/>: whole words first.</summary>
     public int WordsPartlyMatched;
     /// <summary>0 = a book title (a file is always one), 1+ = TOC depth. Ranked only as TITLE OR
-    /// NOT: below <see cref="WordsMatched"/> — "perek 1 / mishnah 5" (2 words) beats "perek 5"
-    /// (1) — and above <see cref="LeafCovered"/>: a book whose title holds the word beats a
-    /// dictionary line named exactly that word. Depth among TOC lines decides nothing here; the
-    /// catalog order does, after every key.</summary>
+    /// NOT (<see cref="SeforimDbCatalogRankingKeys.MatchPlace"/>): every book before every TOC
+    /// line. Depth among TOC lines decides nothing here; the catalog order does, after every key.</summary>
     public int Level;
+    /// <summary>A TOC line of one of the book's ALTERNATIVE tables of contents (parshiot,
+    /// dapim...), not its regular one: ranked below every regular TOC line.</summary>
+    public bool IsAltToc;
     /// <summary>A level-0 hit whose stored title carries the quoted acronym the query was typed
     /// with (an author acronym vs the ordinary word it strips to).</summary>
     public bool QuotedFormMatch;
@@ -72,15 +73,14 @@ internal static class SeforimDbCatalogRankingKeys
     /// The ranking, most significant key first. 0 when the two hits tie on every key (the
     /// caller decides the tie, by catalog order).
     ///
-    ///   literal match; every word in the hit's own title/path or author; the query names the
+    ///   literal match; every word in the hit's own title/path or author; where it matched
+    ///   (<see cref="MatchPlace"/>: a book, a book by its category path, a TOC line, an
+    ///   alternative-TOC line); the query names the
     ///   book (then the title explaining more of the query, then the one sized like it); more
     ///   query words in the path, repeats counted; for a file, more typed words inside its
     ///   name; the title written as the typed acronym;
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
-    ///   in typed order, closest together - the typed address "hilchot 3" is the TOC line
-    ///   "hilchot 3", not a book titled "... volume 3" that merely shares its words;
-    ///   a book title before a TOC line - typing one word that names books wants the books,
-    ///   not a glossary line spelled exactly that way; the leaf typed in full.
+    ///   in typed order, closest together; the leaf typed in full.
     ///
     /// Proximity sits below the literal and title keys: it must not float an ordinary-word hit
     /// above the book actually written the way the query was typed.
@@ -88,7 +88,12 @@ internal static class SeforimDbCatalogRankingKeys
     internal static int Compare(in RankKeys a, in RankKeys b, bool proximity)
     {
         if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
+        // Every typed word in the hit's own title / TOC path or author first: a book that needed
+        // its category for a word ("perek 2" -> a book titled "Perek ...") never beats the TOC
+        // line that holds the whole address.
         if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
+        int placeA = MatchPlace(a), placeB = MatchPlace(b);
+        if (placeA != placeB) return placeA.CompareTo(placeB);
         if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
         if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
         if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
@@ -107,10 +112,19 @@ internal static class SeforimDbCatalogRankingKeys
             if (a.QueryInOrder != b.QueryInOrder) return a.QueryInOrder ? -1 : 1;
             if (a.WordSpan != b.WordSpan) return a.WordSpan.CompareTo(b.WordSpan);           // tighter cluster first
         }
-        if ((a.Level == 0) != (b.Level == 0)) return a.Level == 0 ? -1 : 1;
         if (a.LeafCovered != b.LeafCovered) return a.LeafCovered ? -1 : 1;
         return 0;
     }
+
+    /// <summary>
+    /// WHERE the hit matched, best first: 0 = a book (or file) whose own title / name or
+    /// author holds every typed word; 1 = a book (or file) that needed its category (folder)
+    /// path for some word; 2 = a line of a book's regular table of contents; 3 = a line of an
+    /// alternative table of contents. Ranked right under literal + every-word-in-own-title:
+    /// among hits that match equally fully, books first, then TOC lines, then alt-TOC lines.
+    /// </summary>
+    internal static int MatchPlace(in RankKeys k)
+        => k.Level == 0 ? (k.MatchesTitleOrAuthor ? 0 : 1) : (k.IsAltToc ? 3 : 2);
 
     /// <summary>Every word the ranking counts as typed: each alternative's words and their
     /// variants — except for an unquoted word that is also a key, which counts only as itself

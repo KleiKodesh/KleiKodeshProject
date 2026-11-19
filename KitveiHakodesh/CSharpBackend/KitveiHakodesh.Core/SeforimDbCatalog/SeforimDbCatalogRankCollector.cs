@@ -207,6 +207,7 @@ public sealed partial class SeforimDbCatalogIndex
             long treeOrder = _treeOrders?.Get(doc) ?? long.MaxValue;
             int bookId = (int)(_bookIds?.Get(doc) ?? 0);
             int globalDoc = _docBase + doc;
+            int structureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId);
             var keys = new RankKeys
             {
                 // Literal when there is no literal set (variant search never ran, so every hit
@@ -214,6 +215,7 @@ public sealed partial class SeforimDbCatalogIndex
                 IsLiteral = _literalDocIds is null || _literalDocIds.Get(globalDoc),
                 MatchesTitleOrAuthor = SeforimDbCatalogRankingKeys.EveryTokenPresent(_tokens, _present),
                 Level = level,
+                IsAltToc = level > 0 && structureId != RegularTocStructureId,
             };
             if (_coveredTitles.TryGetValue(bookId, out var title))
             {
@@ -241,7 +243,7 @@ public sealed partial class SeforimDbCatalogIndex
                 BookId = bookId,
                 Level = level,
                 TreeOrder = treeOrder,
-                StructureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId),
+                StructureId = structureId,
                 Keys = keys,
             });
         }
