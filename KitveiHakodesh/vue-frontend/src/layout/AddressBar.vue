@@ -24,6 +24,7 @@ import { opensInFastDocView } from '@/utils/fastDocViewFiles'
  */
 import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn, useResizeObserver } from '@vueuse/core'
+import { showToast } from '@/composables/useToast'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
@@ -353,7 +354,7 @@ function openTypedPath(): boolean {
   const bookLink = parseBookLink(text)
   if (bookLink) {
     close()
-    void hostSearchStore.openBookLink(bookLink)
+    void hostSearchStore.openBookLink(bookLink).then((opened) => { if (!opened) showToast(t('fastDocView.bookNotInLibrary')) })
     return true
   }
   // A pasted web address opens in a web-view tab. One that is not on the websites list
