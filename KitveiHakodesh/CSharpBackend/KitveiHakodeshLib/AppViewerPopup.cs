@@ -85,6 +85,11 @@ namespace KitveiHakodeshLib
                             form.ClientSize.Width, form.ClientSize.Height);
                 };
                 form.FormClosed += (s, _) => popupView.Dispose();
+                if (name.Length > 0)
+                {
+                    _popupFormsByName[name] = form;
+                    form.FormClosed += (s, _) => { if (_popupFormsByName.TryGetValue(name, out var f) && f == form) _popupFormsByName.Remove(name); };
+                }
 
                 e.NewWindow = popupView.CoreWebView2;
                 e.Handled = true;
@@ -98,6 +103,34 @@ namespace KitveiHakodeshLib
             {
                 deferral.Complete();
             }
+        }
+
+        // Named popups, so the page can size one to its content (resizePopup).
+        private readonly System.Collections.Generic.Dictionary<string, Form> _popupFormsByName =
+            new System.Collections.Generic.Dictionary<string, Form>();
+
+        /// <summary>
+        /// The page asks a named popup to take this client size (CSS pixels): a window
+        /// sized to its content. Kept on the screen; the top-left corner stays put.
+        /// </summary>
+        private void HandleResizePopup(System.Text.Json.JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { });
+            string name = root.TryGetProperty("name", out var n) ? n.GetString() : null;
+            if (name == null || !_popupFormsByName.TryGetValue(name, out var form) || form.IsDisposed) return;
+            if (form.WindowState != FormWindowState.Normal) return;
+            double scale = form.DeviceDpi / 96.0;
+            int width = (int)Math.Ceiling(root.GetProperty("width").GetDouble() * scale);
+            int height = (int)Math.Ceiling(root.GetProperty("height").GetDouble() * scale);
+            var area = Screen.FromControl(form).WorkingArea;
+            var chrome = form.Size - form.ClientSize;
+            width = Math.Min(width, area.Width - chrome.Width);
+            height = Math.Min(height, area.Height - chrome.Height);
+            form.ClientSize = new Size(width, height);
+            // Grown past the screen's edge: pull it back in.
+            int left = Math.Min(form.Left, area.Right - form.Width);
+            int top = Math.Min(form.Top, area.Bottom - form.Height);
+            form.Location = new Point(Math.Max(area.Left, left), Math.Max(area.Top, top));
         }
 
         // Reachable if a reasonable part of its title bar is on some screen.

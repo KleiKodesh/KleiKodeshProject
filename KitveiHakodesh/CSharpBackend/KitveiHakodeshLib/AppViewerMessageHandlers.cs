@@ -95,6 +95,7 @@ namespace KitveiHakodeshLib
                         case "readTxtFileContent":await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
+                        case "resizePopup": HandleResizePopup(root, id); break;
                         // The restored view has fetched and painted: the snapshot splash can go.
                         case "contentReady": _HideSplash(); break;
                         case "persistenceFlushed": _persistenceFlushAck?.TrySetResult(true); break;

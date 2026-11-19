@@ -24,6 +24,8 @@ export interface DetachedWindowHandle {
   setTitle: (title: string) => void
   /** Closes the popup. `onClosedByUser` does not run for this. */
   close: () => void
+  /** Gives the window this inner size (CSS pixels): a window sized to its content. */
+  resizeContent: (width: number, height: number) => void
 }
 
 /**
@@ -85,5 +87,16 @@ export function openDetachedWindow(
       popupDocument.title = title
     },
     close,
+    resizeContent(width, height) {
+      // In the app the host owns the window (AppViewerPopup.cs); in a browser the page can size its own popup.
+      if (typeof window.__webviewAction === 'function') {
+        void window.__webviewAction('resizePopup', { name: options.name, width, height }).catch(() => {})
+        return
+      }
+      popup.resizeTo(
+        Math.ceil(width + popup.outerWidth - popup.innerWidth),
+        Math.ceil(height + popup.outerHeight - popup.innerHeight),
+      )
+    },
   }
 }
