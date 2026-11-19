@@ -35,6 +35,8 @@ namespace KleiKodesh.Helpers
             SidePanes.UseRibbon(() => new KleiKodesh.Ribbon.KeliKodeshRibbon());
             SidePanes.MenuTitle = rtl => AddinUiLanguage.T("חלוניות", "Panes");
             SidePanes.NewPaneText = rtl => KleiKodesh.Ribbon.AddinText.Label("NewPane");
+            PaneMenu.Palette = () => OfficeThemeWatcher.MenuColors;
+            SidePanes.NewPaneSuperTip = rtl => KleiKodesh.Ribbon.AddinText.Tip("NewPane");
 
             try
             {

@@ -9,7 +9,7 @@ namespace OfficePaneChrome
     /// <summary>
     /// Office's title strip of one custom task pane (the MsoCommandBar it draws the title, options arrow and X
     /// into), subclassed from inside the add-in. The pane's Office title must be blank (" "): in its place this
-    /// draws a pop-out button one step past Office's arrow and a selector (icon + title + chevron) at the far
+    /// draws a pop-out button one step past Office's arrow, a hide button one step further, and a selector (icon + title + chevron) at the far
     /// side, hugging its content. Office is clipped away from both (ValidateRect) so they never flicker.
     ///
     /// It also tells whether a hide happened while Office handled a click that went down on its X.
@@ -19,9 +19,12 @@ namespace OfficePaneChrome
     /// </summary>
     public sealed class OfficeTitleStrip : IDisposable
     {
-        public event Action SelectorClicked, PopOutClicked;
+        public event Action SelectorClicked, PopOutClicked, HideClicked;
         /// <summary>What the selector shows.</summary>
         public Func<(string Title, Image Icon)> Current = () => (null, null);
+        /// <summary>Tooltip of a part: 1 pop-out, 2 selector, 3 hide; null = none.</summary>
+        public Func<int, string> TipFor = _ => null;
+        ChromeToolTip _tip;
 
         public bool InOfficeClose => _officeClickDepth > 0 && _pressedOnClose;
         public bool RightToLeft { get; private set; }
@@ -34,9 +37,10 @@ namespace OfficePaneChrome
         readonly Native.SubclassProc _proc;
         IntPtr _bar, _workPane;
         Timer _retry;
-        Rectangle _popOut = Rectangle.Empty, _selector = Rectangle.Empty, _closeBox = Rectangle.Empty;
-        bool _failed, _disposed, _ourMouseDown, _pressedOnClose;
-        int _hover, _officeClickDepth;                         // hover: 0 none, 1 pop-out, 2 selector
+        Rectangle _popOut = Rectangle.Empty, _hide = Rectangle.Empty, _selector = Rectangle.Empty, _closeBox = Rectangle.Empty;
+        bool _failed, _disposed, _pressedOnClose, _armed, _menuOpen;
+        int _hover, _pressed, _officeClickDepth;               // parts: 0 none, 1 pop-out, 2 selector, 3 hide
+        int _menuClosedAt = Environment.TickCount - 100000;
         string _lastLayout;
         static readonly int[] SampleRows = { 35, 45, 50, 55, 65 };   // % of strip height through Office's glyphs
 
@@ -105,7 +109,35 @@ namespace OfficePaneChrome
             catch (Exception ex) { Fail(ex.Message); return true; }
         }
 
-        int HitTest(Point p) => _popOut.Contains(p) ? 1 : _selector.Contains(p) ? 2 : 0;
+        /// <summary>
+        /// Runs a click's action after this message returns: it may hide the pane, and Office destroys this very window
+        /// on hide - doing that inside its own click handling leaves the mouse stuck.
+        /// </summary>
+        void Run(Action action)
+        {
+            _content.BeginInvoke((Action)(() =>
+            {
+                if (_disposed || _bar == IntPtr.Zero) return;     // the frame went away meanwhile
+                try { action?.Invoke(); } catch (Exception ex) { SidePanes.Log("strip click: " + ex.Message); }
+            }));
+        }
+
+        /// <summary>The selector shows its open (pressed) look while its menu is open; a press then closes the menu.</summary>
+        public void SetMenuOpen(bool open)
+        {
+            _menuOpen = open;
+            if (!open) _menuClosedAt = Environment.TickCount;
+            _hover = 0;
+            DrawSafe(relayout: false);
+        }
+
+        void TrackLeave()
+        {
+            var t = new Native.TRACKMOUSEEVENT { cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Native.TRACKMOUSEEVENT)), dwFlags = 0x02 /*TME_LEAVE*/, hwndTrack = _bar };
+            Native.TrackMouseEvent(ref t);
+        }
+
+        int HitTest(Point p) => _popOut.Contains(p) ? 1 : _selector.Contains(p) ? 2 : _hide.Contains(p) ? 3 : 0;
 
         IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
         {
@@ -116,7 +148,8 @@ namespace OfficePaneChrome
                 {
                     case Native.WM_NCDESTROY:
                         Native.RemoveWindowSubclass(hWnd, _proc, id);
-                        _bar = _workPane = IntPtr.Zero; _popOut = _selector = _closeBox = Rectangle.Empty; _hover = 0; _lastLayout = null; _layoutKey = null;
+                        _tip?.Reset();
+                        _bar = _workPane = IntPtr.Zero; _popOut = _hide = _selector = _closeBox = Rectangle.Empty; _hover = _pressed = 0; _armed = false; _lastLayout = null; _layoutKey = null;
                         // Office rebuilds this window on hide/show and also on its own (e.g. when the pane's width
                         // changes): hook the new one once it exists. A hidden pane just retries briefly and stops.
                         if (!_disposed && !_content.IsDisposed && _content.IsHandleCreated)
@@ -128,43 +161,69 @@ namespace OfficePaneChrome
                     case Native.WM_SETCURSOR:
                         if (HitTest(CursorInStrip()) != 0) { Native.SetCursor(Native.LoadCursor(IntPtr.Zero, (IntPtr)32512)); return (IntPtr)1; }
                         break;
-                    case Native.WM_MOUSEMOVE: SetHover(HitTest(Native.PointFromLParam(lParam))); break;
-                    case Native.WM_MOUSELEAVE: _ourMouseDown = false; SetHover(0); break;
-                    case Native.WM_CAPTURECHANGED: _ourMouseDown = false; break;
-                    case Native.WM_LBUTTONDBLCLK:
-                        if (HitTest(Native.PointFromLParam(lParam)) != 0) { _ourMouseDown = true; return IntPtr.Zero; }
+                    case Native.WM_MOUSEMOVE:
+                    {
+                        int over = HitTest(Native.PointFromLParam(lParam));
+                        if (Native.FromTouchOrPen()) { if (_pressed == 0) SetHover(0); else { bool on = over == _pressed; if (on != _armed) { _armed = on; DrawSafe(relayout: false); } } break; }
+                        if (_pressed != 0) { bool armed = over == _pressed; if (armed != _armed) { _armed = armed; DrawSafe(relayout: false); } break; }
+                        if (over != 0 && _hover == 0) TrackLeave();       // our own leave notice: Office may not ask for one
+                        SetHover(over);
+                        break;
+                    }
+                    case Native.WM_MOUSELEAVE:
+                        if (_pressed == 0) SetHover(0);
+                        break;
+                    case Native.WM_CAPTURECHANGED:                        // a press lost to another window: cancel it
+                        if (_pressed != 0) { _pressed = 0; _armed = false; _hover = 0; DrawSafe(relayout: false); }
+                        break;
+                    case 0x0008 /*WM_KILLFOCUS*/:
+                    case 0x001C /*WM_ACTIVATEAPP*/:
+                        _tip?.Reset();
+                        if (_pressed == 0) SetHover(0);
+                        break;
+                    case 0x0100 /*WM_KEYDOWN*/: case 0x0104 /*WM_SYSKEYDOWN*/: case 0x020A /*WM_MOUSEWHEEL*/: case 0x0204 /*WM_RBUTTONDOWN*/:
+                        _tip?.Reset();                                    // as a native tooltip: any key, wheel or other button hides it
                         break;
                     case Native.WM_LBUTTONDOWN:
+                    case Native.WM_LBUTTONDBLCLK:                         // a fast second click is a click too
+                    {
                         int hit = HitTest(Native.PointFromLParam(lParam));
-                        _ourMouseDown = hit != 0;                     // never left over from a click whose release went elsewhere
-                        if (hit != 0)
+                        _tip?.Reset();
+                        if (hit == 0) break;
+                        if (hit == 2)
                         {
-                            // The menu / pop-out takes the mouse, so no WM_MOUSELEAVE comes: drop the hover now.
-                            _hover = 0;
-                            Draw(relayout: false);
-                            // Run after this message returns: the action may hide the pane, and Office destroys this
-                            // very window on hide - doing that inside its own click handling leaves the mouse stuck.
-                            var action = hit == 1 ? PopOutClicked : SelectorClicked;
-                            _content.BeginInvoke((Action)(() =>
-                            {
-                                if (_disposed || _bar == IntPtr.Zero) return;     // the frame went away meanwhile
-                                try { action?.Invoke(); } catch (Exception ex) { SidePanes.Log("strip click: " + ex.Message); }
-                            }));
-                            return IntPtr.Zero;                       // Office never sees it
+                            // A dropdown opens on press (as Office's). Pressed while its menu is open, or in the same
+                            // click that just closed it: that click closes it, it doesn't reopen it.
+                            if (!_menuOpen && unchecked(Environment.TickCount - _menuClosedAt) > 300) Run(SelectorClicked);
+                            return IntPtr.Zero;
                         }
-                        break;
+                        // Buttons act on release inside them, with a pressed look while held; dragging off cancels.
+                        _pressed = hit; _armed = true;
+                        Native.SetCapture(hWnd);
+                        DrawSafe(relayout: false);
+                        return IntPtr.Zero;                               // Office never sees it
+                    }
                     case Native.WM_LBUTTONUP:
-                        if (_ourMouseDown) { _ourMouseDown = false; return IntPtr.Zero; }
+                        if (_pressed != 0)
+                        {
+                            int was = _pressed; bool fire = HitTest(Native.PointFromLParam(lParam)) == was;
+                            _pressed = 0; _armed = false;
+                            Native.ReleaseCapture();
+                            SetHover(0);                                  // the action changes the pane; a move re-hovers
+                            DrawSafe(relayout: false);
+                            if (fire) Run(was == 1 ? PopOutClicked : HideClicked);
+                            return IntPtr.Zero;
+                        }
                         break;
                     case Native.WM_PAINT:
                         // The strip changed size: our areas are stale. Let Office paint all of it, then lay out afresh.
                         if (StripRect().Size != _laidOutFor && !(_popOut.IsEmpty && _selector.IsEmpty))
                         {
-                            _popOut = _selector = Rectangle.Empty; _layoutKey = null;
+                            _popOut = _hide = _selector = Rectangle.Empty; _layoutKey = null;
                             Native.InvalidateRect(hWnd, IntPtr.Zero, false);
                         }
                         // Clip Office away from our areas (it would paint over them), then draw them.
-                        foreach (var r in new[] { _popOut, _selector })
+                        foreach (var r in new[] { _popOut, _hide, _selector })
                             if (!r.IsEmpty) { var rc = new Native.RECT { Left = r.Left, Top = r.Top, Right = r.Right, Bottom = r.Bottom }; Native.ValidateRect(hWnd, ref rc); }
                         var painted = Native.DefSubclassProc(hWnd, msg, wParam, lParam);
                         DrawSafe(relayout: true);
@@ -250,7 +309,7 @@ namespace OfficePaneChrome
                 int strongest = 0;
                 for (int x = 0; x < s.Width; x++)
                 {
-                    if ((x >= _popOut.Left && x < _popOut.Right) || (x >= _selector.Left && x < _selector.Right)) continue;   // ours
+                    if ((x >= _popOut.Left && x < _popOut.Right) || (x >= _hide.Left && x < _hide.Right) || (x >= _selector.Left && x < _selector.Right)) continue;   // ours
                     foreach (int pct in SampleRows)
                     {
                         var px = PixelAt(x, s.Height * pct / 100);
@@ -267,7 +326,7 @@ namespace OfficePaneChrome
                         else runs.Add(new[] { x, x });
                     }
 
-                Rectangle popOut = Rectangle.Empty, selector = Rectangle.Empty, closeBox = Rectangle.Empty;
+                Rectangle popOut = Rectangle.Empty, hide = Rectangle.Empty, selector = Rectangle.Empty, closeBox = Rectangle.Empty;
                 if (runs.Count == 2)
                 {
                     bool closeAtLeft = runs[0][0] < s.Width - runs[1][1];      // X sits at the strip's edge
@@ -279,17 +338,18 @@ namespace OfficePaneChrome
                     {
                         closeBox = new Rectangle(ccx - box / 2, s.Height - box, box, box);
                         popOut = new Rectangle(2 * acx - ccx - box / 2, s.Height - box, box, box);
+                        hide = new Rectangle(3 * acx - 2 * ccx - box / 2, s.Height - box, box, box);   // one more step: Office's X closes, this only hides
                         RightToLeft = step > 0;                              // X at the left: RTL UI, title reads from the right
                         int margin = (int)Math.Round(6 * Scale);
                         var cur = Current();
                         int want = Fluent.SelectorWidth(cur.Title, cur.Icon, Scale);
                         selector = step > 0
-                            ? Rectangle.FromLTRB(Math.Max(popOut.Right + margin / 2, s.Width - margin - want), s.Height - box, s.Width - margin, s.Height)
-                            : Rectangle.FromLTRB(margin, s.Height - box, Math.Min(popOut.Left - margin / 2, margin + want), s.Height);
+                            ? Rectangle.FromLTRB(Math.Max(hide.Right + margin / 2, s.Width - margin - want), s.Height - box, s.Width - margin, s.Height)
+                            : Rectangle.FromLTRB(margin, s.Height - box, Math.Min(hide.Left - margin / 2, margin + want), s.Height);
                         if (selector.Width < box) selector = Rectangle.Empty;
                     }
                 }
-                _popOut = popOut; _selector = selector; _closeBox = closeBox;
+                _popOut = popOut; _hide = selector.IsEmpty ? Rectangle.Empty : hide; _selector = selector; _closeBox = closeBox;
                 var result = "strip layout runs=" + string.Join(" ", runs.Select(r => r[0] + "-" + r[1])) + " popout=" + _popOut + " selector=" + _selector;
                 if (result != _lastLayout) { _lastLayout = result; SidePanes.Log(result); }
             }
@@ -301,7 +361,7 @@ namespace OfficePaneChrome
             var s = StripRect();
             if (s.Height < 12 || s.Width < 40)                    // nothing to draw into (and nothing to hit)
             {
-                _popOut = _selector = _closeBox = Rectangle.Empty; _layoutKey = null;
+                _popOut = _hide = _selector = _closeBox = Rectangle.Empty; _layoutKey = null;
                 return;
             }
             var screenDc = Native.GetDC(_bar);
@@ -311,18 +371,21 @@ namespace OfficePaneChrome
                 // Parts of the previous selector the new one doesn't cover go back to the strip's background.
                 if (!clear.IsEmpty && !_selector.IsEmpty)
                 {
-                    if (clear.Left < _selector.Left) Compose(screenDc, Rectangle.FromLTRB(clear.Left, clear.Top, Math.Min(clear.Right, _selector.Left), clear.Bottom), false, g => { });
-                    if (clear.Right > _selector.Right) Compose(screenDc, Rectangle.FromLTRB(Math.Max(clear.Left, _selector.Right), clear.Top, clear.Right, clear.Bottom), false, g => { });
+                    if (clear.Left < _selector.Left) Compose(screenDc, Rectangle.FromLTRB(clear.Left, clear.Top, Math.Min(clear.Right, _selector.Left), clear.Bottom), 0, g => { });
+                    if (clear.Right > _selector.Right) Compose(screenDc, Rectangle.FromLTRB(Math.Max(clear.Left, _selector.Right), clear.Top, clear.Right, clear.Bottom), 0, g => { });
                 }
-                else if (!clear.IsEmpty) Compose(screenDc, clear, false, g => { });
+                else if (!clear.IsEmpty) Compose(screenDc, clear, 0, g => { });
                 int glyphLine = (int)Math.Round(s.Height / 2f + 3);              // Office's glyph centre line
                 if (!_popOut.IsEmpty)
-                    Compose(screenDc, _popOut, _hover == 1, g =>
+                    Compose(screenDc, _popOut, StateOf(1), g =>
                         Fluent.Glyph(g, Fluent.PopOut, new Rectangle(0, glyphLine - _popOut.Top - _popOut.Width / 2, _popOut.Width, _popOut.Width), Ink, (float)Math.Round(13 * Scale)));
+                if (!_hide.IsEmpty)
+                    Compose(screenDc, _hide, StateOf(3), g =>
+                        Fluent.Glyph(g, Fluent.HidePane, new Rectangle(0, glyphLine - _hide.Top - _hide.Width / 2, _hide.Width, _hide.Width), Ink, (float)Math.Round(13 * Scale)));
                 if (!_selector.IsEmpty)
                 {
                     var cur = Current();
-                    Compose(screenDc, _selector, _hover == 2, g =>
+                    Compose(screenDc, _selector, StateOf(2), g =>
                         Fluent.PaintSelector(g, new Rectangle(0, 0, _selector.Width, _selector.Height), cur.Title, cur.Icon, Ink, RightToLeft, Scale, glyphLine - _selector.Top));
                 }
             }
@@ -330,7 +393,11 @@ namespace OfficePaneChrome
         }
 
         /// <summary>Off-screen, one blit: no flicker.</summary>
-        void Compose(IntPtr screenDc, Rectangle area, bool hover, Action<Graphics> paint)
+        /// <summary>0 normal, 1 hover, 2 pressed (held down on it, or the selector while its menu is open).</summary>
+        int StateOf(int part) =>
+            (part == 2 && _menuOpen) || (_pressed == part && _armed) ? 2 : _pressed == 0 && _hover == part ? 1 : 0;
+
+        void Compose(IntPtr screenDc, Rectangle area, int state, Action<Graphics> paint)
         {
             var dc = Native.CreateCompatibleDC(screenDc);
             var bmp = Native.CreateCompatibleBitmap(screenDc, area.Width, area.Height);
@@ -339,7 +406,7 @@ namespace OfficePaneChrome
             {
                 using (var g = Graphics.FromHdc(dc))
                 {
-                    using (var back = new SolidBrush(hover ? Fluent.Hover(Background, Ink) : Background)) g.FillRectangle(back, 0, 0, area.Width, area.Height);
+                    using (var back = new SolidBrush(state == 2 ? Fluent.Blend(Background, Ink, 0.18) : state == 1 ? Fluent.Hover(Background, Ink) : Background)) g.FillRectangle(back, 0, 0, area.Width, area.Height);
                     paint(g);
                 }
                 Native.BitBlt(screenDc, area.Left, area.Top, area.Width, area.Height, dc, 0, 0, Native.SRCCOPY);
@@ -347,7 +414,25 @@ namespace OfficePaneChrome
             finally { Native.SelectObject(dc, old); Native.DeleteObject(bmp); Native.DeleteDC(dc); }
         }
 
-        void SetHover(int which) { if (which != _hover) { _hover = which; Draw(relayout: false); } }
+        void SetHover(int which)
+        {
+            if (which == _hover) return;
+            _hover = which;
+            Draw(relayout: false);
+            ShowTip(which);
+        }
+
+        void ShowTip(int which)
+        {
+            string text = which == 0 || _bar == IntPtr.Zero || (which == 2 && _menuOpen) ? null : TipFor(which);
+            if (text == null) { _tip?.Request(null, null, Rectangle.Empty, 0, Background, Ink, RightToLeft, Scale); return; }
+            if (_tip == null || _tip.IsDisposed) _tip = new ChromeToolTip();
+            var r = which == 1 ? _popOut : which == 3 ? _hide : _selector;
+            var a = new Native.POINT { X = r.Left, Y = r.Top }; var b = new Native.POINT { X = r.Right, Y = r.Bottom };
+            Native.ClientToScreen(_bar, ref a); Native.ClientToScreen(_bar, ref b);
+            var screen = Rectangle.FromLTRB(Math.Min(a.X, b.X), a.Y, Math.Max(a.X, b.X), b.Y);
+            _tip.Request(which, text, screen, screen.Bottom + (int)Math.Round(4 * Scale), Background, Ink, RightToLeft, Scale);
+        }
 
         void Fail(string why)
         {
@@ -359,15 +444,16 @@ namespace OfficePaneChrome
 
         void Unhook()
         {
+            _tip?.Reset();
             _retry?.Dispose(); _retry = null;
             if (_bar == IntPtr.Zero) return;
             Native.RemoveWindowSubclass(_bar, _proc, (UIntPtr)1);
             var bar = _bar;
-            _bar = _workPane = IntPtr.Zero; _popOut = _selector = _closeBox = Rectangle.Empty;
+            _bar = _workPane = IntPtr.Zero; _popOut = _hide = _selector = _closeBox = Rectangle.Empty;
             Native.InvalidateRect(bar, IntPtr.Zero, true);
         }
 
-        public void Dispose() { if (!_disposed) { _disposed = true; Unhook(); } }
+        public void Dispose() { if (!_disposed) { _disposed = true; Unhook(); _tip?.Dispose(); } }
 
         Point ScreenToStrip(IntPtr l) { var p0 = Native.PointFromLParam(l); var p = new Native.POINT { X = p0.X, Y = p0.Y }; Native.ScreenToClient(_bar, ref p); return new Point(p.X, p.Y); }
         Point CursorInStrip() { Native.GetCursorPos(out var p); Native.ScreenToClient(_bar, ref p); return new Point(p.X, p.Y); }

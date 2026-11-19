@@ -92,6 +92,8 @@
 
 							<button id="Settings" tag="pane"
 									getLabel="getLabel"
+									getScreentip="getLabel"
+									getSupertip="getSupertip"
 									getImage="getImage"
 									onAction="button_Click"/>
 

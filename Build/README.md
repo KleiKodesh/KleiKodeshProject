@@ -12,8 +12,9 @@ One native setup exe (`installer-rs/`, Rust + Slint) and one build script.
 
 `build.ps1 -Version X.Y.Z [-Notes release-notes.json]` is what both run:
 
-1. Deletes every `bin\` and `obj\` folder in the repository (build output only: git-tracked
-   folders and Rust `src\bin` are kept).
+1. Empties only the folders packed whole: the add-in's and the portable app's `bin\Release`
+   and the service payload (`KitveiHakodeshService\bin\LibPayload`), so files left there by
+   running the app never ship. Other `bin\` and `obj\` folders are left alone.
 2. Restores packages; stamps the version (put back afterwards); fresh add-in signing key.
 3. Builds the Vue frontend, typing tutor, Kitvei Hakodesh service (AOT), Word add-in and
    portable app (Release).

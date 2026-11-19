@@ -15,9 +15,10 @@ namespace OfficePaneChrome
     /// </summary>
     public sealed class RibbonPanes
     {
-        public sealed class Entry { public string Id, Title; public Image Icon; public Action Open; }
+        /// <summary>A pane button: <see cref="Tip"/> / <see cref="SuperTip"/> are the ribbon's screentip and supertip.</summary>
+        public sealed class Entry { public string Id, Title, Tip, SuperTip; public Image Icon; public Action Open; }
 
-        sealed class Button { public string Id, Label, GetLabel, GetImage, GetVisible, OnAction; public bool Hidden; }
+        sealed class Button { public string Id, Label, GetLabel, GetImage, GetVisible, OnAction, Screentip, GetScreentip, Supertip, GetSupertip; public bool Hidden; }
 
         readonly Func<object> _create;
         object _ribbon;
@@ -40,6 +41,8 @@ namespace OfficePaneChrome
                     Id = (string)e.Attribute("id"), Label = (string)e.Attribute("label"),
                     GetLabel = (string)e.Attribute("getLabel"), GetImage = (string)e.Attribute("getImage"),
                     GetVisible = (string)e.Attribute("getVisible"), OnAction = (string)e.Attribute("onAction"),
+                    Screentip = (string)e.Attribute("screentip"), GetScreentip = (string)e.Attribute("getScreentip"),
+                    Supertip = (string)e.Attribute("supertip"), GetSupertip = (string)e.Attribute("getSupertip"),
                     Hidden = (string)e.Attribute("visible") == "false",
                 }).ToList();
             return _buttons;
@@ -65,6 +68,8 @@ namespace OfficePaneChrome
                 {
                     Id = b.Id,
                     Title = Invoke<string>(b.GetLabel, control) ?? b.Label ?? b.Id,
+                    Tip = Invoke<string>(b.GetScreentip, control) ?? b.Screentip,
+                    SuperTip = Invoke<string>(b.GetSupertip, control) ?? b.Supertip,
                     Icon = IconFor(b.Id),
                     Open = () => Invoke<object>(b.OnAction, control),
                 });

@@ -152,6 +152,18 @@ namespace OfficePaneChrome
         }
         protected virtual void OnTitleContentClick(Rectangle screenRect) { }
 
+        bool _contentOpen;
+        int _contentClosedAt = Environment.TickCount - 100000;
+        /// <summary>The content shows its open (pressed) look while its menu is open; a press then closes the menu, as a dropdown.</summary>
+        protected void SetTitleContentOpen(bool open)
+        {
+            _contentOpen = open;
+            if (!open) _contentClosedAt = Environment.TickCount;
+            InvalidateTitle();
+        }
+        /// <summary>Tooltip of the interactive title content, or null.</summary>
+        protected virtual string TitleContentTip => null;
+
         // ---------------- lifecycle ----------------
 
         protected override void OnHandleCreated(EventArgs e)
@@ -168,7 +180,13 @@ namespace OfficePaneChrome
         protected override void OnDpiChanged(DpiChangedEventArgs e) { base.OnDpiChanged(e); _effectiveDpi = 0; UpdateMetrics(); Invalidate(); }
         protected override void OnResize(EventArgs e) { base.OnResize(e); UpdateMetrics(); InvalidateTitle(); }
         protected override void OnActivated(EventArgs e) { base.OnActivated(e); _windowActive = true; InvalidateTitle(); }
-        protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); _windowActive = false; InvalidateTitle(); _tip?.Reset(); }
+        protected override void OnDeactivate(EventArgs e)
+        {
+            base.OnDeactivate(e);
+            _windowActive = false; _tip?.Reset();
+            if (_pressed >= ExtraBase) _pressed = 0;                 // a press lost to another window (Alt+Tab) is cancelled
+            InvalidateTitle();
+        }
         protected override void Dispose(bool disposing) { if (disposing) _tip?.Dispose(); base.Dispose(disposing); }
 
         void ApplyDwmDarkMode()
@@ -186,8 +204,8 @@ namespace OfficePaneChrome
             var g = e.Graphics;
             using (var b = new SolidBrush(TitleBack)) g.FillRectangle(b, 0, 0, ClientSize.Width, TitleHeightPx);
             var content = TitleContentRect();
-            if (IsInteractiveContent && (_hot == ContentArea || _pressed == ContentArea))
-                using (var b = new SolidBrush(TitleHover)) g.FillRectangle(b, content);
+            if (IsInteractiveContent && (_contentOpen || _hot == ContentArea))
+                using (var b = new SolidBrush(_contentOpen ? Fluent.Blend(TitleBack, TitleInk, 0.18) : TitleHover)) g.FillRectangle(b, content);
             PaintTitleContent(g, content);
             for (int i = 0; i < TitleButtons.Count; i++) DrawButton(g, ExtraBase + i);
             DrawButton(g, HTMINBUTTON);
@@ -201,7 +219,8 @@ namespace OfficePaneChrome
         void DrawButton(Graphics g, int code)
         {
             var rect = ButtonRect(code);
-            bool hot = _hot == code, pressed = _pressed == code, isClose = code == HTCLOSE;
+            // Pressed only while the mouse is still on it (dragging off shows it released, as a native button).
+            bool hot = _hot == code, pressed = _pressed == code && _hot == code, isClose = code == HTCLOSE;
             if (hot || pressed)
             {
                 var closeHover = Color.FromArgb(196, 43, 28);
@@ -262,14 +281,22 @@ namespace OfficePaneChrome
             string text = code == HTMINBUTTON ? MinimizeTip(TitleRightToLeft)
                 : code == HTMAXBUTTON ? (Native.IsZoomed(Handle) ? RestoreTip : MaximizeTip)(TitleRightToLeft)
                 : code == HTCLOSE ? CloseTip(TitleRightToLeft)
-                : code >= ExtraBase ? TitleButtons[code - ExtraBase].Tip : null;
+                : code >= ExtraBase ? TitleButtons[code - ExtraBase].Tip
+                : code == ContentArea ? TitleContentTip : null;
             if (text == null) { _tip?.Request(null, null, Rectangle.Empty, 0, TitleBack, TitleInk, TitleRightToLeft, DpiScale); return; }
             if (_tip == null || _tip.IsDisposed) _tip = new ChromeToolTip();
-            var item = RectangleToScreen(ButtonRect(code));
+            var item = RectangleToScreen(code == ContentArea ? TitleContentRect() : ButtonRect(code));
             int below = RectangleToScreen(new Rectangle(0, 0, 1, TitleHeightPx)).Bottom + Dpi(4);
             _tip.Request(code, text, item, below, TitleBack, TitleInk, TitleRightToLeft, DpiScale);
         }
-        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int h = HitArea(e.Location); SetHot(h >= ContentArea ? h : 0); }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int h = HitArea(e.Location);
+            // Touch has no hover: no hover look or tooltip, except tracking a held button (pressed look on / off it).
+            if (Native.FromTouchOrPen() && !(_pressed >= ExtraBase && h == _pressed)) h = 0;
+            SetHot(h >= ContentArea ? h : 0);
+        }
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); SetHot(0); }
 
         protected override void OnMouseDown(MouseEventArgs e)
@@ -281,7 +308,9 @@ namespace OfficePaneChrome
             if (h == ContentArea)
             {
                 SetHot(0);                                       // the menu takes the mouse: no MouseLeave will come
-                OnTitleContentClick(RectangleToScreen(TitleContentRect()));
+                // Pressed while its menu is open, or in the very click that just closed it: closes, doesn't reopen.
+                if (!_contentOpen && unchecked(Environment.TickCount - _contentClosedAt) > 300)
+                    OnTitleContentClick(RectangleToScreen(TitleContentRect()));
                 return;
             }
             if (h >= ExtraBase) { _pressed = h; InvalidateTitle(); }
@@ -315,6 +344,9 @@ namespace OfficePaneChrome
                     BeginInvoke((Action)(() => { _restoreFixPending = false; if (WindowState == FormWindowState.Normal && Bounds != expected) Bounds = expected; }));
                 }
             }
+
+            if (m.Msg == 0x0100 /*WM_KEYDOWN*/ || m.Msg == 0x0104 /*WM_SYSKEYDOWN*/ || m.Msg == 0x020A /*WM_MOUSEWHEEL*/ || m.Msg == 0x0204 /*WM_RBUTTONDOWN*/)
+                _tip?.Reset();                                       // as a native tooltip
 
             switch ((uint)m.Msg)
             {
@@ -379,7 +411,7 @@ namespace OfficePaneChrome
                 case Native.WM_NCMOUSEMOVE:
                 {
                     int hit = (int)m.WParam;
-                    bool overButton = hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE;
+                    bool overButton = (hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE) && !Native.FromTouchOrPen();
                     SetHot(overButton ? hit : 0);
                     if (overButton)
                     {

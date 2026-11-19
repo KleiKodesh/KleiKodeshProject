@@ -42,7 +42,7 @@ namespace KleiKodesh.Ribbon
             { "Nakdan", new Entry("נקדן דיקטה", "Dicta Nakdan", "נקדן דיקטה עם אפשרויות משודרגות (דרוש חיבור לאינטרנט)", "Dicta Nakdan with extended options (requires an internet connection)") },
             { "RegexFind", new Entry("חיפוש רגקס", "Regex Find", "חיפוש רגקס בוורד עם אפשרויות עיצוב קלות לשימוש", "Regex search in Word with easy-to-use formatting options") },
             { "NewPane", new Entry("פתח חלונית צד חדשה", "Open New Side Pane", "פותח חלונית צד נוספת עם התצוגה הנוכחית, כדי לעבוד עם שתי חלוניות בו זמנית", "Opens another side pane with the current view, to work with two side panes at once") },
-            { "Settings", new Entry("הגדרות", "Settings", null, null) },
+            { "Settings", new Entry("הגדרות", "Settings", "הגדרות כלי קודש", "Klei Kodesh settings") },
             { "About", new Entry("אודות", "About", null, null) },
             { "SearchText", new Entry("העתק לחיפוש בכתבי הקודש", "Search in Kitvei Hakodesh", "מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש.", "Runs the selected text as a search across all Kitvei Hakodesh books. Special characters are removed from the text before searching.") },
             { "SearchBook", new Entry("חיפוש ספר בכתבי הקודש", "Find Book in Kitvei Hakodesh", "מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו.", "Searches the selected text in the Kitvei Hakodesh book catalog - to find a book by its name.") },

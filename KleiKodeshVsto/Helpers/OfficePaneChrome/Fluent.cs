@@ -12,6 +12,9 @@ namespace OfficePaneChrome
         // Segoe Fluent Icons (falls back to Segoe MDL2 Assets, same code points).
         public const char PopOut = '', PopIn = '', Chevron = '', NewPane = '';
 
+        /// <summary>Hide the side pane (ChromeMinimize).</summary>
+        public const char HidePane = '';
+
         public static readonly string IconFont = new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" }
             .FirstOrDefault(n => { using (var f = new Font(n, 10)) return f.Name == n; }) ?? "Segoe UI Symbol";
 
