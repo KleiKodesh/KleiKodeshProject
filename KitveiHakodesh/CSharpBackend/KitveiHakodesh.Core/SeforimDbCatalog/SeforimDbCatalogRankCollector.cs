@@ -228,6 +228,11 @@ public sealed partial class SeforimDbCatalogIndex
             if (_coveredTitles.TryGetValue(bookId, out var title))
             {
                 keys.TitleCovered = true;
+                // The query names this book, spelling variants of its title included: that is
+                // a literal match on the book's own name ("Tehilim" for the book titled
+                // "Tehillim", "Kuzari" for "ha-Kuzari"). Only the WHOLE title - a variant that
+                // merely shares one title word ("shearim" / "shiurim") stays a variant.
+                keys.IsLiteral = true;
                 keys.TitleDistinctWords = title.DistinctWords;
                 keys.TitleLengthGap = title.LengthGap;
             }
