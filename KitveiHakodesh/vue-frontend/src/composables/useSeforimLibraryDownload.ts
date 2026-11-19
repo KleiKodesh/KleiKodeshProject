@@ -26,6 +26,8 @@ enum SeforimLibraryDownloadFailure {
   DiskError = 6,
   Cancelled = 7,
   Unexpected = 8,
+  ImportIncomplete = 9,
+  ImportNotALibrary = 10,
 }
 
 /** One frame of `seforimLibraryDownloadStream` (Core SeforimLibraryDownloadProgress, camelCased). */
@@ -80,6 +82,8 @@ const failureText: Record<SeforimLibraryDownloadFailure, string> = {
   [SeforimLibraryDownloadFailure.DiskError]: 'composables.libraryDownload.failedDisk',
   [SeforimLibraryDownloadFailure.Cancelled]: 'composables.libraryDownload.cancelled',
   [SeforimLibraryDownloadFailure.Unexpected]: 'composables.libraryDownload.failedUnexpected',
+  [SeforimLibraryDownloadFailure.ImportIncomplete]: 'composables.libraryDownload.failedImportIncomplete',
+  [SeforimLibraryDownloadFailure.ImportNotALibrary]: 'composables.libraryDownload.failedImportNotALibrary',
 }
 
 const phaseText: Partial<Record<SeforimLibraryDownloadPhase, string>> = {
@@ -116,9 +120,14 @@ export function useSeforimLibraryDownload() {
     frame.value = await serviceCall<SeforimLibraryDownloadFrame>('startSeforimLibraryDownload', {})
   }
 
+  /** Installs a library downloaded by hand: any file of it (the .zst, a part, the manifest). */
+  async function importArchive(path: string): Promise<void> {
+    frame.value = await serviceCall<SeforimLibraryDownloadFrame>('importSeforimLibraryArchive', { path })
+  }
+
   async function cancel(): Promise<void> {
     await serviceCall('cancelSeforimLibraryDownload', {})
   }
 
-  return { frame: readonly(frame), isRunning, statusText, start, cancel }
+  return { frame: readonly(frame), isRunning, statusText, start, importArchive, cancel }
 }

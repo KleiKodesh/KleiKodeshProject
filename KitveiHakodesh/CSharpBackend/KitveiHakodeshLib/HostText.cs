@@ -46,6 +46,8 @@ namespace KitveiHakodeshLib
         public static string AllFiles => T("כל הקבצים", "All files");
         public static string PickDatabaseTitle => T("בחר קובץ מסד נתונים", "Choose a database file");
         public static string DatabaseFiles => T("מסד נתונים", "Database");
+        public static string PickLibraryArchiveTitle => T("בחר את קובץ מאגר הספרים שהורד", "Choose the downloaded book library file");
+        public static string LibraryArchiveFiles => T("מאגר ספרים", "Book library");
         public static string PickLocalBooksFolder => T("בחר תיקיית ספרים מקומית", "Choose a local books folder");
         public static string OpenFileTitle => T("פתח קובץ", "Open file");
         public static string Documents => T("מסמכים", "Documents");

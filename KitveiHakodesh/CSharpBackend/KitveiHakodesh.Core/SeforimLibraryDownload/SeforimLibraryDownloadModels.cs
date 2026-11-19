@@ -9,7 +9,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// <summary>Nothing has run since the process started.</summary>
         Idle = 0,
 
-        /// <summary>Asking GitHub which release holds the newest database we can read.</summary>
+        /// <summary>Asking GitHub which release holds the newest library.</summary>
         FindingRelease,
 
         /// <summary>Fetching the compressed database. Resumes from the bytes already on disk.</summary>
@@ -39,7 +39,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// <summary>GitHub or the file host could not be reached. The bytes already fetched are kept.</summary>
         Network,
 
-        /// <summary>No release carries a database in a schema this app reads.</summary>
+        /// <summary>No stable release carries a library.</summary>
         NoCompatibleRelease,
 
         /// <summary>The drive holding the library folder has too little free space.</summary>
@@ -59,6 +59,12 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
 
         /// <summary>Anything else; <see cref="SeforimLibraryDownloadProgress.Detail"/> holds the exception.</summary>
         Unexpected,
+
+        /// <summary>Import: a part of the picked library is missing or not fully downloaded.</summary>
+        ImportIncomplete,
+
+        /// <summary>Import: the picked file is not a library archive.</summary>
+        ImportNotALibrary,
     }
 
     /// <summary>A snapshot of the current run, pushed to the apps while it runs.

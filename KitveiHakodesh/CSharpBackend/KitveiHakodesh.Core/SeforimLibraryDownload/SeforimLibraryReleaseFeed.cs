@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,22 +23,42 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
     }
 
     /// <summary>
-    /// Reads Otzaria's SeforimLibrary releases from the GitHub API — the same releases the
-    /// Otzaria app downloads its library from (empty_library_bloc.dart, findLatestRelease).
+    /// The whole library as one release publishes it: a zstd stream, either one file
+    /// (seforim-schemaN.db.zst) or split into parts (.part-000, .part-001, ...) that are
+    /// concatenated in order. A single file is a list of one part.
+    /// </summary>
+    /// <param name="Version">The release's library version (v38-... -> 38).</param>
+    /// <param name="SchemaVersion">The database schema, from the file name.</param>
+    /// <param name="Sha256">The whole stream's sha256 when published (split manifest or single file), else null.</param>
+    /// <param name="Parts">In concatenation order. Each carries its own sha256 when known.</param>
+    public sealed record SeforimLibraryDatabaseArchive(
+        string ReleaseTag, int Version, int SchemaVersion, string ArchiveName, long Size, string? Sha256,
+        IReadOnlyList<SeforimLibraryReleaseAsset> Parts);
+
+    /// <summary>
+    /// Reads Otzaria's SeforimLibrary releases from the GitHub API - the same releases the
+    /// Otzaria app downloads its library from (otzaria_library_updater, library_release.dart).
     ///
-    /// The database asset is named by its schema: seforim-schema6.db.zst. Otzaria's newer
-    /// releases may add a schema7 file the reader here does not know, so the search is for the
-    /// newest release that still carries a schema-6 file, not simply "latest".
+    /// The library is whatever the newest stable release carries, in whatever schema: the
+    /// reader detects a database's shape by its tables (SeforimDbSchema), so a newer schema is
+    /// taken as is. GitHub caps an asset at 2 GiB, so a large library comes split into parts
+    /// with a manifest (split_asset.dart) - both forms are handled.
     /// </summary>
     public sealed class SeforimLibraryReleaseFeed
     {
-        /// <summary>The schema this app reads (SeforimDbSchema). Bump with the reader, never ahead of it.</summary>
-        public const int SupportedSchemaVersion = 6;
-
-        public static readonly string DatabaseAssetName = $"seforim-schema{SupportedSchemaVersion}.db.zst";
-
         private const string ReleasesApiUrl =
             "https://api.github.com/repos/Otzaria/SeforimLibrary/releases?per_page=30";
+
+        private static readonly Regex SingleArchiveName =
+            new Regex(@"^seforim-schema(\d+)\.db\.zst$", RegexOptions.CultureInvariant);
+
+        private static readonly Regex SplitManifestName =
+            new Regex(@"^seforim-schema(\d+)\.db\.zst\.manifest\.json$", RegexOptions.CultureInvariant);
+
+        private static readonly Regex PartName =
+            new Regex(@"^seforim-schema(\d+)\.db\.zst\.part-(\d+)$", RegexOptions.CultureInvariant);
+
+        private static readonly Regex TagVersion = new Regex(@"^v(\d+)", RegexOptions.CultureInvariant);
 
         private readonly HttpClient _http;
 
@@ -45,7 +67,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             _http = http ?? throw new ArgumentNullException(nameof(http));
         }
 
-        /// <summary>Releases newest first. Drafts and pre-releases are left out.</summary>
+        /// <summary>Releases, newest version first. Drafts and pre-releases are left out.</summary>
         public async Task<IReadOnlyList<SeforimLibraryRelease>> ListAsync(CancellationToken cancellationToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, ReleasesApiUrl);
@@ -60,19 +82,102 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             return (releases ?? new List<GithubRelease>())
                 .Where(r => !r.Draft && !r.Prerelease && !string.IsNullOrEmpty(r.TagName))
                 .Select(ToRelease)
+                .OrderByDescending(r => VersionOfTag(r.Tag)) // stable sort: GitHub's own order breaks ties
                 .ToList();
         }
 
-        /// <summary>The newest release carrying a database this app can read, or null.</summary>
-        public async Task<(SeforimLibraryRelease Release, SeforimLibraryReleaseAsset Database)?> FindNewestDatabaseAsync(
-            CancellationToken cancellationToken)
+        /// <summary>The newest release's library, or null when no stable release carries one.</summary>
+        public async Task<SeforimLibraryDatabaseArchive?> FindNewestDatabaseAsync(CancellationToken cancellationToken) =>
+            await NewestDatabaseOfAsync(await ListAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+
+        /// <summary>The first (newest) of <paramref name="releases"/> that carries a library.</summary>
+        public async Task<SeforimLibraryDatabaseArchive?> NewestDatabaseOfAsync(
+            IReadOnlyList<SeforimLibraryRelease> releases, CancellationToken cancellationToken)
         {
-            foreach (var release in await ListAsync(cancellationToken).ConfigureAwait(false))
+            foreach (var release in releases)
             {
-                var asset = release.FindAsset(DatabaseAssetName);
-                if (asset != null && asset.Size > 0) return (release, asset);
+                var archive = await DatabaseOfAsync(release, FetchTextAsync, cancellationToken).ConfigureAwait(false);
+                if (archive != null) return archive;
             }
             return null;
+        }
+
+        /// <summary>
+        /// The library <paramref name="release"/> carries, or null. Several schemas in one release:
+        /// the highest. Per schema: the single file if there is one, else the parts as the split
+        /// manifest lists them (sizes checked against the release), else - no manifest - the
+        /// parts by number, which must run 000, 001, ... with no gap.
+        /// </summary>
+        /// <param name="fetchText">Reads a small asset (the split manifest).</param>
+        public static async Task<SeforimLibraryDatabaseArchive?> DatabaseOfAsync(
+            SeforimLibraryRelease release,
+            Func<SeforimLibraryReleaseAsset, CancellationToken, Task<string>> fetchText,
+            CancellationToken cancellationToken)
+        {
+            var schemas = release.Assets
+                .Select(a => SchemaOfName(a.Name))
+                .Where(s => s != null)
+                .Select(s => s!.Value)
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToList();
+            int version = VersionOfTag(release.Tag);
+
+            foreach (int schema in schemas)
+            {
+                string archiveName = $"seforim-schema{schema.ToString(CultureInfo.InvariantCulture)}.db.zst";
+
+                var single = release.FindAsset(archiveName);
+                if (single != null && single.Size > 0)
+                    return new SeforimLibraryDatabaseArchive(release.Tag, version, schema, archiveName, single.Size, single.Sha256, new[] { single });
+
+                var manifestAsset = release.FindAsset(archiveName + ".manifest.json");
+                if (manifestAsset != null)
+                {
+                    string json = await fetchText(manifestAsset, cancellationToken).ConfigureAwait(false);
+                    var split = SeforimLibrarySplitManifest.Parse(json, archiveName);
+                    var fromManifest = split?.ResolveAgainst(release, version, schema);
+                    if (fromManifest != null) return fromManifest;
+                    continue; // a manifest that does not hold up: this schema's parts cannot be trusted
+                }
+
+                var parts = release.Assets
+                    .Select(a => (Asset: a, Match: PartName.Match(a.Name)))
+                    .Where(p => p.Match.Success && p.Asset.Name.StartsWith(archiveName + ".part-", StringComparison.Ordinal))
+                    .Select(p => (p.Asset, Index: int.Parse(p.Match.Groups[2].Value, CultureInfo.InvariantCulture)))
+                    .OrderBy(p => p.Index)
+                    .ToList();
+                if (parts.Count > 0
+                    && parts.Select((p, i) => p.Index == i).All(ok => ok)
+                    && parts.All(p => p.Asset.Size > 0))
+                {
+                    var ordered = parts.Select(p => p.Asset).ToList();
+                    return new SeforimLibraryDatabaseArchive(release.Tag, version, schema, archiveName, ordered.Sum(p => p.Size), null, ordered);
+                }
+            }
+            return null;
+        }
+
+        private async Task<string> FetchTextAsync(SeforimLibraryReleaseAsset asset, CancellationToken cancellationToken) =>
+            await _http.GetStringAsync(asset.DownloadUrl, cancellationToken).ConfigureAwait(false);
+
+        /// <summary>The schema a database asset's name declares (single file, part or split
+        /// manifest), or null when the name is not a database asset.</summary>
+        private static int? SchemaOfName(string name)
+        {
+            foreach (var pattern in new[] { SingleArchiveName, SplitManifestName, PartName })
+            {
+                var match = pattern.Match(name);
+                if (match.Success) return int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+            }
+            return null;
+        }
+
+        /// <summary>"v32-20261010190601" -> 32; 0 when the tag carries no version.</summary>
+        public static int VersionOfTag(string tag)
+        {
+            var match = TagVersion.Match(tag);
+            return match.Success ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
         }
 
         private static SeforimLibraryRelease ToRelease(GithubRelease release) =>

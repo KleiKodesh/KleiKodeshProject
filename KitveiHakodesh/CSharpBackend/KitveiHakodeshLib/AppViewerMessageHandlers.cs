@@ -50,6 +50,7 @@ namespace KitveiHakodeshLib
                     {
                         // The dialog only: the chosen path goes to the service from the page.
                         case "pickDbPath": HandlePickDbPathDialog(id); break;
+                        case "pickLibraryArchive": HandlePickLibraryArchiveDialog(id); break;
                         case "resetSettings": HandleResetSettings(id); break;
                         // The page's "try again" after the service was unavailable: allow one more
                         // install / repair prompt and bring the service up.
@@ -238,6 +239,33 @@ namespace KitveiHakodeshLib
                     {
                         dlg.Title  = HostText.PickDatabaseTitle;
                         dlg.Filter = HostText.DatabaseFiles + " (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|" + HostText.AllFiles + " (*.*)|*.*";
+                        dlg.CheckFileExists = true;
+                        if (dlg.ShowDialog(this) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
+                        _bridge.Reply(id, new { path = dlg.FileName });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _bridge.Reply(id, new { error = ex.ToString() });
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Open-file dialog for a book library downloaded by hand (the .zst, one of its parts,
+        /// or the parts' manifest). Replies with the path only; the page sends it to the
+        /// service (importSeforimLibraryArchive), which finds the other parts beside it.
+        /// </summary>
+        private void HandlePickLibraryArchiveDialog(string id)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    using (var dlg = new OpenFileDialog())
+                    {
+                        dlg.Title  = HostText.PickLibraryArchiveTitle;
+                        dlg.Filter = HostText.LibraryArchiveFiles + " (*.zst;*.part-*;*.manifest.json)|*.zst;*.part-*;*.manifest.json|" + HostText.AllFiles + " (*.*)|*.*";
                         dlg.CheckFileExists = true;
                         if (dlg.ShowDialog(this) != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
                         _bridge.Reply(id, new { path = dlg.FileName });

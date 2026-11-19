@@ -16,7 +16,8 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
     /// THE STREAM — a fixed contract, change nothing:
     ///   per table, in hash order:  " table:&lt;name&gt; "                (even when the table is missing)
     ///   if the table exists:        "cols:&lt;sorted,names&gt;" 0x00
-    ///   per row (schema 6: ORDER BY id, else every sorted column):
+    ///   per row (before schema 7: ORDER BY id, else every sorted column;
+    ///            schema 7 on: ORDER BY the table's primary key):
     ///     per cell: tag + payload + 0x1F
     ///       NULL 0x00 | BLOB 0x01 + bytes | number 0x02 + decimal text | TEXT 0x03 + raw UTF-8
     ///     then 0xFF
@@ -29,21 +30,36 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         private const int ColumnsPerMask = 20;
 
         /// <summary>The SHA-256 of each table in <paramref name="tables"/>, lower-case hex.</summary>
-        public static Dictionary<string, string> HashTables(SqliteConnection connection, IEnumerable<string> tables)
+        /// <param name="rowOrder">Each table's row order (schema 7 on: its primary key), or null
+        /// for the older order — by id, or by every column. <see cref="SeforimLibraryPatchTables.RowOrder"/>.</param>
+        public static Dictionary<string, string> HashTables(
+            SqliteConnection connection, IEnumerable<string> tables, IReadOnlyDictionary<string, string[]>? rowOrder)
         {
             var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string table in tables)
             {
                 using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                 var sink = new HashSink(sha);
-                HashTable(connection, table, sink);
+                HashTable(connection, table, rowOrder, sink);
                 sink.Flush();
                 hashes[table] = Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
             }
             return hashes;
         }
 
-        private static void HashTable(SqliteConnection connection, string table, HashSink sink)
+        /// <summary>The whole-database hash (a manifest's toContentHash): every table of
+        /// <paramref name="tableOrder"/>, one stream.</summary>
+        public static string HashWhole(
+            SqliteConnection connection, IReadOnlyList<string> tableOrder, IReadOnlyDictionary<string, string[]>? rowOrder)
+        {
+            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var sink = new HashSink(sha);
+            foreach (string table in tableOrder) HashTable(connection, table, rowOrder, sink);
+            sink.Flush();
+            return Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
+        }
+
+        private static void HashTable(SqliteConnection connection, string table, IReadOnlyDictionary<string, string[]>? rowOrder, HashSink sink)
         {
             sink.Add(Encoding.UTF8.GetBytes(" table:" + table + " "));
             List<string>? columns = SortedColumns(connection, table);
@@ -54,7 +70,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
 
             var masks = MaskExpressions(columns);
             string select = string.Join(",", masks.Concat(columns.Select(ValueExpression)));
-            string orderBy = columns.Contains("id") ? "id" : string.Join(",", columns.Select(Quote));
+            string orderBy = OrderBy(table, columns, rowOrder);
 
             using var command = connection.CreateCommand();
             command.CommandText = $"SELECT {select} FROM {Quote(table)} ORDER BY {orderBy}";
@@ -88,6 +104,17 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
                 }
                 sink.Add(RowSeparator);
             }
+        }
+
+        /// <summary>hashOrderByClause: the table's primary key from schema 7 on; before it, id
+        /// when the table has one, else every column.</summary>
+        private static string OrderBy(string table, List<string> columns, IReadOnlyDictionary<string, string[]>? rowOrder)
+        {
+            if (rowOrder == null)
+                return columns.Contains("id") ? "id" : string.Join(",", columns.Select(Quote));
+            if (!rowOrder.TryGetValue(table, out var key) || !key.All(columns.Contains))
+                throw new InvalidOperationException($"no row order for table {table}");
+            return string.Join(",", key.Select(Quote));
         }
 
         /// <summary>Text is read as its raw bytes (CAST AS BLOB): decoding would drop a leading

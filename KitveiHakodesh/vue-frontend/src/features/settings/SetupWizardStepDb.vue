@@ -6,10 +6,11 @@ import { useSeforimLibraryDownload } from '@/composables/useSeforimLibraryDownlo
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog } from '@/webview-host/bridge'
+import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog, pickLibraryArchivePath } from '@/webview-host/bridge'
 import {
   IconFolderOpen20Regular,
   IconArrowDownload20Regular,
+  IconArchive20Regular,
 } from '@iconify-prerendered/vue-fluent'
 
 // The KitveiHakodesh service owns the path: it shows the native dialog (or validates a
@@ -63,6 +64,13 @@ async function applyDevPath() {
 // Downloads Otzaria's library into the app's own folder (service + Core); the page reloads
 // once the database is in place.
 const libraryDownload = useSeforimLibraryDownload()
+
+// A library downloaded by hand (from the website): the user picks the file, the service
+// unpacks it into the same place a download goes, and the page reloads the same way.
+async function importLibraryFile() {
+  const path = await pickLibraryArchivePath()
+  if (path) await libraryDownload.importArchive(path)
+}
 </script>
 
 <template>
@@ -71,6 +79,15 @@ const libraryDownload = useSeforimLibraryDownload()
     <span class="db-card-path placeholder">
       {{ libraryDownload.statusText.value || $t('settings.db.downloadLibrary') }}
     </span>
+  </button>
+  <button
+    class="db-pick-card"
+    data-testid="library-import"
+    :disabled="libraryDownload.isRunning.value"
+    @click="importLibraryFile"
+  >
+    <IconArchive20Regular class="db-card-icon" />
+    <span class="db-card-path placeholder">{{ $t('settings.db.importLibrary') }}</span>
   </button>
   <button class="db-pick-card" @click="pickDbPath">
     <IconFolderOpen20Regular class="db-card-icon" />

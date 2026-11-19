@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace KitveiHakodesh.Core.SeforimLibraryDownload
 {
@@ -12,7 +14,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
     /// from there, never reorder by hand.
     ///
     /// <see cref="InForeignKeyOrder"/> drives the apply (upserts in this order, deletes in
-    /// reverse). <see cref="HashOrderSchema6"/> drives the content hash a patch is verified
+    /// reverse). <see cref="HashOrder"/> drives the content hash a patch is verified
     /// with; a different order gives a different hash.
     /// </summary>
     public static class SeforimLibraryPatchTables
@@ -78,6 +80,42 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             "book_version", "version_line", "book_acronym", "alt_toc_structure", "alt_toc_entry",
             "line_alt_toc", "default_commentator", "default_targum", "schema_meta",
         };
+
+        /// <summary>Table order of the schema-7 content hash (kHashTableOrderSchema7): schema 6's
+        /// order with the six schema-7 tables inserted before schema_meta.</summary>
+        public static readonly IReadOnlyList<string> HashOrderSchema7 = HashOrderSchema6
+            .Take(HashOrderSchema6.Count - 1)
+            .Concat(new[] { "banner", "book_banner", "book_protection", "line_divine_name", "line_note", "line_note_divine_name", "schema_meta" })
+            .ToArray();
+
+        /// <summary>The first schema whose rows hash in primary-key order (kPkRowOrderSchemaVersion);
+        /// before it: by id, or by every column when a table has no id.</summary>
+        public const int PrimaryKeyRowOrderSchema = 7;
+
+        /// <summary>The library schemas whose content hash this app can compute — and so the
+        /// schemas an update patch may start from or end in (kHashTableOrderBySchemaVersion,
+        /// the schemas this app's libraries can be in). A patch to any other schema is not
+        /// applied; the update downloads the whole library instead.</summary>
+        public static bool IsHashableSchema(int schema) => schema is 6 or 7;
+
+        /// <summary>The hash's table order for <paramref name="schema"/>.</summary>
+        public static IReadOnlyList<string> HashOrder(int schema) => schema switch
+        {
+            6 => HashOrderSchema6,
+            7 => HashOrderSchema7,
+            _ => throw new ArgumentOutOfRangeException(nameof(schema), schema, "no content-hash order for this schema"),
+        };
+
+        /// <summary>The hash's row order per table for <paramref name="schema"/> (kHashRowOrderSchema7:
+        /// each table's primary key), or null for the older id-or-every-column order.</summary>
+        public static IReadOnlyDictionary<string, string[]>? RowOrder(int schema)
+        {
+            HashOrder(schema);
+            return schema >= PrimaryKeyRowOrderSchema ? RowOrderSchema7 : null;
+        }
+
+        private static readonly IReadOnlyDictionary<string, string[]> RowOrderSchema7 =
+            InForeignKeyOrder.ToDictionary(t => t.Name, t => t.PrimaryKey, StringComparer.Ordinal);
 
         /// <summary>The optimizer statistics a patch ships, applied over sqlite_stat1.</summary>
         public const string Stat1SnapshotTable = "stat1_snapshot";
