@@ -195,6 +195,24 @@ public static class OfficeThemeWatcher
     }
 
     /* ================= THEME READ ================= */
+    /// <summary>
+    /// Word's own menu colours in the current Office theme, read fresh (measured from Word's Share / Paste menus,
+    /// one theme at a time). Dark Gray's menus are light; only Black's are dark.
+    /// </summary>
+    public static OfficePaneChrome.PaneMenu.MenuPalette MenuColors
+    {
+        get
+        {
+            switch (ReadThemeCode())
+            {
+                case OfficeThemeCode.Black: return OfficePaneChrome.PaneMenu.MenuPalette.Dark;
+                case OfficeThemeCode.DarkGray: return new OfficePaneChrome.PaneMenu.MenuPalette(0xF0F0F0, 0x262626, 0xD2D2D2, 0x808080, 0xD2D2D2, 0xE0E0E0, 0x606060);
+                case OfficeThemeCode.White: return new OfficePaneChrome.PaneMenu.MenuPalette(0xFFFFFF, 0x262626, 0xE3ECFA, 0x949494, 0xE6E6E6, 0xEBEBEB, 0x6A6A6A);
+                default: return OfficePaneChrome.PaneMenu.MenuPalette.Light;   // Colorful
+            }
+        }
+    }
+
     private static OfficeTheme ReadCurrentTheme()
     {
         switch (ReadThemeCode())

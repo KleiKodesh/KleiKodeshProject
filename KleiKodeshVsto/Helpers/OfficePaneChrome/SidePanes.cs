@@ -18,6 +18,7 @@ namespace OfficePaneChrome
     ///   - Office's title is blank; its title strip shows our selector (current view's icon, name, chevron)
     ///     and a pop-out button. The selector's menu lists the ribbon's tag="pane" buttons
     ///     (<see cref="RibbonPanes"/>) plus "open new side pane" (<see cref="OpenNewPane"/>).
+    ///   - The strip's hide button only hides the side pane (views kept; the ribbon brings it back).
     ///   - Office's X closes the side pane for real: views flushed (<see cref="ViewClosing"/>), then disposed.
     ///   - Pop-out moves the side pane's content into a <see cref="ChromeWindow"/> with the same selector
     ///     and a pop-in button; showing a view while popped out uses that window.
@@ -37,8 +38,14 @@ namespace OfficePaneChrome
 
         public static Action<string> Log = s => Debug.WriteLine("[SidePanes] " + s);
         public static Func<bool, string> MenuTitle = rtl => rtl ? "חלוניות" : "Panes";
+        /// <summary>Description shown under "open new side pane" in its tooltip (e.g. the ribbon button's supertip).</summary>
+        public static Func<bool, string> NewPaneSuperTip = _ => null;
         public static Func<bool, string> NewPaneText = rtl => rtl ? "פתח חלונית צד חדשה" : "Open new side pane";
 
+        /// <summary>Tooltips of the title strip's parts, by reading direction (RTL = Hebrew by default).</summary>
+        public static Func<bool, string> PopOutTip = rtl => rtl ? "\u05E4\u05EA\u05D7 \u05D1\u05D7\u05DC\u05D5\u05DF \u05E0\u05E4\u05E8\u05D3" : "Open in its own window";
+        public static Func<bool, string> HideTip = rtl => rtl ? "\u05D4\u05E1\u05EA\u05E8 \u05D7\u05DC\u05D5\u05E0\u05D9\u05EA" : "Hide pane";
+        public static Func<bool, string> SelectorTip = rtl => rtl ? "\u05D4\u05D7\u05DC\u05E3 \u05D7\u05DC\u05D5\u05E0\u05D9\u05EA" : "Switch pane";
         public static Func<bool, string> PopInTip = rtl => rtl ? "\u05D4\u05D7\u05D6\u05E8 \u05DC\u05D7\u05DC\u05D5\u05E0\u05D9\u05EA \u05D4\u05E6\u05D3" : "Back to the side pane";
         /// <summary>The pop-out window's icon (Alt+Tab, system menu).</summary>
         public static Icon PopOutIcon;
@@ -303,22 +310,23 @@ namespace OfficePaneChrome
 
         // ================= the selector's menu =================
 
-        internal static void ShowMenu(SidePane side, Rectangle anchor, IntPtr owner, Color titleBack, bool rtl, float scale)
+        /// <param name="closed">Called when the menu closes (the opener drops its open look).</param>
+        internal static void ShowMenu(SidePane side, Rectangle anchor, IntPtr owner, Color titleBack, bool rtl, float scale, Action closed = null)
         {
-            if (side.Closing) return;
+            if (side.Closing) { closed?.Invoke(); return; }
             var rows = new List<PaneMenu.Row>();
             foreach (var entry in Ribbon?.Entries() ?? new List<RibbonPanes.Entry>())
             {
                 var e = entry;
                 rows.Add(new PaneMenu.Row
                 {
-                    Text = e.Title, Image = e.Icon, Current = e.Id == side.ActiveId,
+                    Text = e.Title, Image = e.Icon, Current = e.Id == side.ActiveId, Tip = e.Tip, SuperTip = e.SuperTip,
                     Click = () => { if (e.Id == side.ActiveId || side.Closing) return; _current = side; OpenInto(side, e); },
                 });
             }
             rows.Add(PaneMenu.Row.Separator);
-            rows.Add(new PaneMenu.Row { Text = NewPaneText(rtl), Glyph = Fluent.NewPane, Click = () => { if (!side.Closing) OpenNewPane(side); } });
-            PaneMenu.Show(MenuTitle(rtl), rows, anchor, owner, titleBack, rtl, scale);
+            rows.Add(new PaneMenu.Row { Text = NewPaneText(rtl), Glyph = Fluent.NewPane, SuperTip = NewPaneSuperTip(rtl), Click = () => { if (!side.Closing) OpenNewPane(side); } });
+            PaneMenu.Show(MenuTitle(rtl), rows, anchor, owner, titleBack, rtl, scale, closed);
         }
 
         // ================= pop-out =================
@@ -397,8 +405,14 @@ namespace OfficePaneChrome
                 var strip = new OfficeTitleStrip(side.Host);
                 side.Strip = strip;
                 strip.Current = () => (side.ActiveTitle, side.ActiveIcon);
-                strip.SelectorClicked += () => ShowMenu(side, strip.SelectorScreenRect(), strip.OwnerWindow, strip.Background, strip.RightToLeft, strip.Scale);
+                strip.TipFor = part => part == 1 ? PopOutTip(strip.RightToLeft) : part == 3 ? HideTip(strip.RightToLeft) : SelectorTip(strip.RightToLeft);
+                strip.SelectorClicked += () =>
+                {
+                    strip.SetMenuOpen(true);
+                    ShowMenu(side, strip.SelectorScreenRect(), strip.OwnerWindow, strip.Background, strip.RightToLeft, strip.Scale, () => strip.SetMenuOpen(false));
+                };
                 strip.PopOutClicked += () => TogglePopOut(side);
+                strip.HideClicked += () => { try { side.Pane.Visible = false; } catch { } };   // a code hide: views kept, unlike Office's X
 
                 EventHandler onVisible = null;
                 onVisible = (s, e) =>

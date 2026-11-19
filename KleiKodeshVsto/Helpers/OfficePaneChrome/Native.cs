@@ -49,6 +49,16 @@ namespace OfficePaneChrome
         [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
         [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
         [DllImport("user32.dll")] public static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT t);
+        [DllImport("user32.dll")] public static extern IntPtr SetCapture(IntPtr h);
+        [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern IntPtr GetMessageExtraInfo();
+        /// <summary>
+        /// The mouse message being handled came from a finger or pen (Windows marks those with 0xFF5157xx). Touch has no
+        /// hover: native controls show no hover look or tooltip for it.
+        /// </summary>
+        public static bool FromTouchOrPen() => (unchecked((uint)GetMessageExtraInfo().ToInt64()) & 0xFFFFFF00u) == 0xFF515700u;   // low 32 bits: no sign extension in 32-bit Office
+        [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
         [DllImport("user32.dll")] public static extern IntPtr GetSystemMenu(IntPtr h, bool revert);
         [DllImport("user32.dll")] public static extern int TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr h, IntPtr tpm);
         [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);

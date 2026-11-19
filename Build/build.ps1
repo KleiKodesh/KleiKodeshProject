@@ -4,9 +4,10 @@
     clean tree. Used by the release workflow and by build.bat (debug builds).
 
 .DESCRIPTION
-    1. Deletes every bin\ and obj\ folder in the repository, so nothing left from earlier
-       builds or from running an app (caches, indexes, WebView2 profiles, old DLLs) can
-       reach the setup.
+    1. Empties the folders that are packed whole (the add-in's and the portable app's
+       bin\Release, the service payload), so nothing left from earlier builds or from
+       running the app there (caches, indexes, WebView2 profiles, old DLLs) can reach the
+       setup or the zip. Other bin\ and obj\ folders are left alone.
     2. Restores packages, stamps the version, and builds: Vue frontend, typing tutor,
        Kitvei Hakodesh service (native AOT), the Word add-in (Release; includes the
        Kitvei Hakodesh app) and the portable app.
@@ -69,27 +70,21 @@ function Find-MSBuild {
 }
 
 # --- 1. Clean ----------------------------------------------------------------------
-# A bin\ or obj\ folder is build output unless it holds source: anything git tracks, or
-# a Rust crate's src\bin. Dependency and git folders are never searched; Rust builds go
-# to target\ (cargo keeps it correct on its own).
-$Skip = @("node_modules", ".git", "packages", "target", "KleiKodeshProject-work")
+# Only the folders whose whole content is packed: whatever sits in them ships. Running the
+# app from a Release folder leaves caches, indexes and WebView2 profiles there. Other bin\
+# and obj\ folders stay: Release builds keep them correct, and dev servers or other builds
+# may be using them.
+$PackedOutputs = @(
+    $CoreOutput,
+    $PortableOutput,
+    (Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshService\bin\LibPayload")
+)
 
-function Test-BuildOutput([IO.DirectoryInfo] $Folder) {
-    if ($Folder.Name -notin "bin", "obj") { return $false }
-    if (git -C $ProjectRoot ls-files -- $Folder.FullName) { return $false }
-    $crate = $Folder.Parent.Name -eq "src" -and (Test-Path (Join-Path $Folder.Parent.Parent.FullName "Cargo.toml"))
-    return -not $crate
-}
-
-function Remove-BuildFolders([string] $Dir) {
-    foreach ($child in Get-ChildItem -LiteralPath $Dir -Directory -Force) {
-        if ($Skip -contains $child.Name) { continue }
-        if (Test-BuildOutput $child) {
-            Remove-Item -LiteralPath $child.FullName -Recurse -Force
-            Write-Host "  removed $($child.FullName.Substring($ProjectRoot.Length + 1))" -ForegroundColor DarkGray
-        } elseif ($child.Name -notin "bin", "obj") {
-            Remove-BuildFolders $child.FullName
-        }
+function Clear-PackedOutputs {
+    foreach ($dir in $PackedOutputs) {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        Remove-Item -LiteralPath $dir -Recurse -Force
+        Write-Host "  removed $($dir.Substring($ProjectRoot.Length + 1))" -ForegroundColor DarkGray
     }
 }
 
@@ -124,8 +119,8 @@ function Set-SigningCertificate {
 }
 
 try {
-    Step "Delete every bin\ and obj\ folder"
-    Remove-BuildFolders $ProjectRoot
+    Step "Empty the packed output folders"
+    Clear-PackedOutputs
 
     Step "Restore packages"
     $msbuild = Find-MSBuild

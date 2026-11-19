@@ -42,11 +42,15 @@ namespace OfficePaneChrome
         protected override void OnActivated(EventArgs e) { base.OnActivated(e); SidePanes.MakeCurrent(_side); }
 
         protected override bool IsInteractiveContent => true;
+        protected override string TitleContentTip => SidePanes.SelectorTip(TitleRightToLeft);
         protected override int TitleContentWidth() => Fluent.SelectorWidth(_side.ActiveTitle, _side.ActiveIcon, DpiScale);
         protected override void PaintTitleContent(Graphics g, Rectangle r) =>
             Fluent.PaintSelector(g, r, _side.ActiveTitle, _side.ActiveIcon, TitleText, TitleRightToLeft, DpiScale, r.Top + r.Height / 2);
-        protected override void OnTitleContentClick(Rectangle screenRect) =>
-            SidePanes.ShowMenu(_side, screenRect, Handle, TitleBack, TitleRightToLeft, DpiScale);
+        protected override void OnTitleContentClick(Rectangle screenRect)
+        {
+            SetTitleContentOpen(true);
+            SidePanes.ShowMenu(_side, screenRect, Handle, TitleBack, TitleRightToLeft, DpiScale, () => SetTitleContentOpen(false));
+        }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
