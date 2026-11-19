@@ -97,6 +97,8 @@ const props = defineProps<
     getActiveTocEntry?: (lineIndex: number) => TocEntry | null
     getActiveAltTocEntry?: (lineIndex: number) => TocEntry | null
     getTocPath?: (entry: TocEntry) => string
+    /** Full path of every alt TOC covering a line — the scrollbar label. */
+    getAltTocPaths?: (lineIndex: number) => string[]
     /** The book's TOC — the scrollbar's landmarks, one tier per level. */
     tocEntries?: TocEntry[]
     selectedSectionLineIds?: number[] | null
@@ -484,6 +486,7 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
   getActiveTocEntry: () => props.getActiveTocEntry,
   getActiveAltTocEntry: () => props.getActiveAltTocEntry,
   getTocPath: () => props.getTocPath,
+  getAltTocPaths: () => props.getAltTocPaths,
 })
 
 const {

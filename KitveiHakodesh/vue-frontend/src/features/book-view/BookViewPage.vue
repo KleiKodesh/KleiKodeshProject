@@ -115,7 +115,7 @@ const {
   openContentSearch, openCommentarySearch, toggleSearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, closeSidePanel,
-  getActiveTocEntry, getActiveAltTocEntry, getTocPath,
+  getActiveTocEntry, getActiveAltTocEntry, getTocPath, getAltTocPaths,
   bookTitle,
 } = useBookView(
   () => toolbarRef.value,
@@ -778,6 +778,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :get-active-toc-entry="getActiveTocEntry"
                     :get-active-alt-toc-entry="getActiveAltTocEntry"
                     :get-toc-path="getTocPath"
+                    :get-alt-toc-paths="getAltTocPaths"
                     :toc-entries="tocEntries"
                     :selected-section-line-ids="selectedSectionLineIds"
                     :multi-select-line-ids="manualSelectionLineIds"

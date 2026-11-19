@@ -284,6 +284,31 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     return tocSearchTree.value.displayPaths.get(entry.id) ?? entry.text
   }
 
+  // Per alt structure: its entries sorted by line, and id → entry for the parent walk.
+  const altTocPathIndex = computed(() =>
+    altTocSections.value.map((s) => ({
+      sorted: s.entries.filter((e) => e.lineIndex != null).sort((a, b) => a.lineIndex! - b.lineIndex!),
+      byId: new Map(s.entries.map((e) => [e.id, e])),
+    })),
+  )
+
+  /** The full path (root → leaf) of every alt TOC that has an entry covering the line. */
+  function getAltTocPaths(lineIndex: number): string[] {
+    const paths: string[] = []
+    for (const { sorted, byId } of altTocPathIndex.value) {
+      let entry: TocEntry | null | undefined = findEntryAtLine(sorted, lineIndex)
+      const parts: string[] = []
+      const seen = new Set<number>()
+      while (entry && !seen.has(entry.id)) {
+        seen.add(entry.id)
+        if (entry.text) parts.unshift(entry.text)
+        entry = entry.parentId == null ? null : byId.get(entry.parentId)
+      }
+      if (parts.length) paths.push(parts.join(' · '))
+    }
+    return paths
+  }
+
   return {
     tocEntries,
     altTocSections,
@@ -298,5 +323,6 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     getActiveTocEntry,
     getActiveAltTocEntry,
     getTocPath,
+    getAltTocPaths,
   }
 }
