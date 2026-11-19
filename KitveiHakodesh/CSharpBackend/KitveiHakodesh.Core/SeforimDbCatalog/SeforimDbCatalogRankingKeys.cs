@@ -157,12 +157,15 @@ internal static class SeforimDbCatalogRankingKeys
     /// <summary>
     /// WHERE the hit matched, best first: 0 = a book (or file) whose own title / name or
     /// author holds every typed word; 1 = a book (or file) that needed its category (folder)
-    /// path for some word; 2 = a line of a book's regular table of contents; 3 = a line of an
-    /// alternative table of contents. Ranked right under literal + every-word-in-own-title:
-    /// among hits that match equally fully, books first, then TOC lines, then alt-TOC lines.
+    /// path for some word; 2 / 3 = a base text's main / alternative TOC line; 4 / 5 = another
+    /// book's main / alternative TOC line (the Chumash's parsha before a commentary's).
+    /// Ranked right under literal + every-word-in-own-title.
     /// </summary>
     internal static int MatchPlace(in RankKeys k)
-        => k.Level == 0 ? (k.MatchesTitleOrAuthor ? 0 : 1) : (k.IsAltToc ? 3 : 2);
+        => k.Level == 0 ? (k.MatchesTitleOrAuthor ? 0 : 1)
+            // TOC lines: a base text's main TOC, then its alternative TOC (the Chumash's own
+            // parsha division), then another book's main TOC, then another book's alternative.
+            : (k.MainWork == 2 ? 2 : 4) + (k.IsAltToc ? 1 : 0);
 
     /// <summary>Every word the ranking counts as typed: each alternative's words and their
     /// variants — except for an unquoted word that is also a key, which counts only as itself
