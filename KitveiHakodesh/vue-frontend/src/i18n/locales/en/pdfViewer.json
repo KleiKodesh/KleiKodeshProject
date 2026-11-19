@@ -33,6 +33,7 @@
     "clipboardUnavailableSaved": "Clipboard unavailable. Page {page} was saved as an image.",
     "copy": "Copy",
     "copyIntoWord": "Copy into Word",
-    "copyPageAsImage": "Copy page as image"
+    "copyPageAsImage": "Copy page as image",
+    "searchInCatalog": "Search book in Kitvei Hakodesh"
   }
 }

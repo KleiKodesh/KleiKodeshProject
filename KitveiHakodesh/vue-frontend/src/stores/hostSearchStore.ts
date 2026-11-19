@@ -158,7 +158,12 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     handleHostSearch({ event: 'hostSearch', target: 'fts', text: query })
   }
 
-  return { openBookLink, openSearchLink }
+  /** Searches the book catalog for a text (reuses an open catalog tab), as the Word ribbon does. */
+  function openCatalogSearch(text: string) {
+    handleHostSearch({ event: 'hostSearch', target: 'catalog', text })
+  }
+
+  return { openBookLink, openSearchLink, openCatalogSearch }
 })
 
 /** A title or heading compared loosely: no tags, niqqud or cantillation, '_' as space, collapsed spaces, lower case. */

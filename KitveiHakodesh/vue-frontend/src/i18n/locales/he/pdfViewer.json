@@ -33,6 +33,7 @@
     "clipboardUnavailableSaved": "הלוח אינו זמין — דף {page} נשמר כתמונה.",
     "copy": "העתק",
     "copyIntoWord": "העתק לתוך וורד",
-    "copyPageAsImage": "העתק דף כתמונה"
+    "copyPageAsImage": "העתק דף כתמונה",
+    "searchInCatalog": "חיפוש ספר בכתבי הקודש"
   }
 }
