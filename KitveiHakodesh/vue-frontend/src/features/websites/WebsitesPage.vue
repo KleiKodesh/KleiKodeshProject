@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from 'vue'
-import { useElementSize, watchDebounced } from '@vueuse/core'
+import { computed, h, onMounted, ref } from 'vue'
+import { watchDebounced } from '@vueuse/core'
 import { IconDocument20Regular } from '@iconify-prerendered/vue-fluent'
-import { useCardGridLayout } from '@/composables/useCardGridLayout'
 import { useSettingsStore } from '@/stores/settingsStore'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as HomeSuggestionCardData } from '@/features/home/homeSuggestionCard'
@@ -10,7 +9,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useHomeSearchNavigation } from '@/features/home/useHomeSearchNavigation'
 import type { FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import TopSearchBar from '@/components/TopSearchBar.vue'
-import WindowedScroller from '@/components/WindowedScroller.vue'
+import WindowedCardGrid from '@/components/WindowedCardGrid.vue'
 import ViewModeDropdown from '@/components/ViewModeDropdown.vue'
 import { fileSystemSearch } from '@/webview-host/bridge'
 import { t } from '@/i18n'
@@ -29,12 +28,6 @@ const VIEW_LABELS = {
   cards: t('home.viewMode.cards'),
   tiles: t('home.viewMode.tiles'),
 }
-
-// Same flow as the home page: whole columns that fit, cards shrink to fit one more but never stretch.
-const pageRef = ref<HTMLElement | null>(null)
-const { width: pageWidth } = useElementSize(pageRef)
-// The scroller's side padding (16px each side) is not card room.
-const layout = useCardGridLayout(() => Math.max(0, pageWidth.value - 32), () => settingsStore.websitesView, 960)
 
 const fileNavigation = useHomeSearchNavigation(() => {})
 
@@ -121,27 +114,12 @@ const fileCards = computed<HomeSuggestionCardData[]>(() =>
 
 const allCards = computed(() => [...siteCards.value, ...addinCards.value, ...fileCards.value])
 
-// A search can match thousands of HTML files, so the cards go through the windowed scroller:
-// each scroller row is one line of cards, and only the lines near the viewport are in the DOM.
-const columns = computed(() => (settingsStore.websitesView === 'list' ? 1 : layout.value.columns))
-const rowCount = computed(() => Math.ceil(allCards.value.length / columns.value))
-const rowCards = (row: number) => allCards.value.slice(row * columns.value, (row + 1) * columns.value)
-
-const scrollerRef = ref<InstanceType<typeof WindowedScroller> | null>(null)
-// The scroller's start row is an argument of its creation: a new card list opens at the top,
-// a new column count re-opens at the line holding the card that was at the top.
-const opening = ref({ key: 0, row: 0 })
-watch(allCards, () => {
-  opening.value = { key: opening.value.key + 1, row: 0 }
-})
-watch(columns, (now, before) => {
-  const firstCard = (scrollerRef.value?.readFirstVisible()?.index ?? 0) * before
-  opening.value = { key: opening.value.key + 1, row: Math.floor(firstCard / now) }
-})
+// A search can match thousands of HTML files: only the lines of cards near the viewport are in the DOM.
+const gridRef = ref<InstanceType<typeof WindowedCardGrid> | null>(null)
 </script>
 
 <template>
-  <div ref="pageRef" class="websites-page" :style="{ '--grid-width': `${layout.width}px`, '--grid-columns': layout.columns }">
+  <div class="websites-page" :style="{ '--grid-width': `${gridRef?.width ?? 960}px` }">
     <TopSearchBar class="websites-search">
       <input v-model="query" type="search" :placeholder="$t('websites.searchPlaceholder')" autocomplete="off" @keydown.esc="query = ''" />
       <template #right>
@@ -154,20 +132,11 @@ watch(columns, (now, before) => {
         />
       </template>
     </TopSearchBar>
-    <WindowedScroller
-      :key="opening.key"
-      ref="scrollerRef"
-      class="websites-scroll"
-      thin
-      :count="rowCount"
-      :initial-index="opening.row"
-    >
-      <template #row="{ index }">
-        <div class="websites-grid" :class="`websites-grid--${settingsStore.websitesView}`">
-          <HomeSuggestionCard v-for="card in rowCards(index)" :key="card.key" :card="card" :layout="settingsStore.websitesView" />
-        </div>
+    <WindowedCardGrid ref="gridRef" class="websites-scroll" :count="allCards.length" :view="settingsStore.websitesView" :list-key="allCards" :max-width="960" :padding-inline="16">
+      <template #item="{ index }">
+        <HomeSuggestionCard :card="allCards[index]!" :layout="settingsStore.websitesView" />
       </template>
-    </WindowedScroller>
+    </WindowedCardGrid>
   </div>
 </template>
 
@@ -198,29 +167,5 @@ watch(columns, (now, before) => {
 .websites-scroll {
   flex: 1;
   min-height: 0;
-}
-/* One line of cards per scroller row, centered at the grid's width. */
-.websites-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--grid-columns, 3), minmax(0, 1fr));
-  column-gap: 16px;
-  width: 100%;
-  max-width: var(--grid-width);
-  margin-inline: auto;
-  padding-bottom: 4px;
-}
-:deep(.windowed-scroller-content) {
-  padding: 12px 16px 24px;
-}
-.websites-grid--list {
-  grid-template-columns: 1fr;
-  padding-bottom: 0;
-}
-/* Gaps match HomePage.vue's tiles and useCardGridLayout. */
-.websites-grid--tiles {
-  grid-template-columns: repeat(var(--grid-columns, 9), 72px);
-  column-gap: 6px;
-  padding-bottom: 6px;
-  justify-items: center;
 }
 </style>

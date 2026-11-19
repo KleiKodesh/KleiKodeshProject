@@ -4,7 +4,8 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggestionCard'
 import type { SearchFsItem } from './useBookCatalogSearch'
-import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import WindowedCardGrid from '@/components/WindowedCardGrid.vue'
 import { titleWithAuthor } from './titleWithAuthor'
 import { stripCommentaryTarget } from './stripCommentaryTarget'
 import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
@@ -15,8 +16,8 @@ import { fileIcon, fileTitle, fileFolder } from './fsItemFileIcon'
 const props = defineProps<{ items: SearchFsItem[] }>()
 const emit = defineEmits<{ select: [SearchFsItem, boolean] }>()
 
-const cardsEl = ref<HTMLElement | null>(null)
-const CARD_CELL = ':scope > *'
+// Windowed: results are never capped, so only the lines of cards near the viewport exist.
+const gridRef = ref<InstanceType<typeof WindowedCardGrid> | null>(null)
 const BOOK_ICON = markRaw(IconBookRtl20)
 
 const itemTitle = (item: SearchFsItem) =>
@@ -46,10 +47,9 @@ const cards = computed((): CardData[] =>
 const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: (i, openInNewTab) => emit('select', props.items[i]!, openInNewTab),
-  containerElement: cardsEl,
-  // Cells are the card wrappers — see BookCatalogView.Cards.vue for why not the buttons.
-  itemSelector: CARD_CELL,
-  getColumnsPerRow: () => countGridColumns(cardsEl.value, CARD_CELL),
+  // Most cards have no element: the grid's scroller lands on the highlighted one's line.
+  scrollIntoView: (index) => gridRef.value?.revealIndex(index),
+  getColumnsPerRow: () => gridRef.value?.columns ?? 1,
 })
 
 watch(
@@ -67,47 +67,14 @@ defineExpose({
 </script>
 
 <template>
-  <!-- Host is the size container so the grid's cqi tracks the pane width. -->
-  <div class="catalog-cards-host">
-    <div ref="cardsEl" class="catalog-cards" @mousedown.prevent>
-      <HomeSuggestionCard
-        v-for="(card, i) in cards"
-        :key="card.key"
-        :card="card"
-        :class="{ 'is-focused': focusedIndex === i }"
-      />
-    </div>
-  </div>
+  <WindowedCardGrid ref="gridRef" class="catalog-cards" :count="cards.length" view="cards" :list-key="props.items" @mousedown.prevent>
+    <template #item="{ index }">
+      <HomeSuggestionCard :card="cards[index]!" :class="{ 'is-focused': focusedIndex === index }" />
+    </template>
+  </WindowedCardGrid>
 </template>
 
 <style scoped>
-.catalog-cards-host {
-  container-type: inline-size;
-  height: 100%;
-  min-height: 0;
-}
-/* Same grid as BookCatalogView.Cards.vue / the home page's .home-cards. */
-.catalog-cards {
-  display: grid;
-  /* Pure CSS, no measuring - see BookCatalogView.Cards.vue. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
-  /* Explorer-like: wide columns, tight rows, so each row reads as one line. */
-  column-gap: 16px;
-  row-gap: 4px;
-  padding: 12px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  height: 100%;
-  box-sizing: border-box;
-  align-content: flex-start;
-}
-/* Results can run to thousands: skip rendering off-screen cards without a
-   virtualizer. auto-length remembers each card's real height once rendered. */
-.catalog-cards > * {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 49px;
-}
 /* Long titles wrap to the next line instead of an ellipsis. */
 .catalog-cards :deep(.card-title) {
   white-space: normal;
