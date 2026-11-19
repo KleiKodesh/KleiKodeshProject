@@ -375,9 +375,12 @@ namespace KitveiHakodeshLib
             {
                 @event = "hostOpenBook",
                 scheme,
-                bookId = link.BookId,
-                index = link.Index,      // Otzaria positional index (null for Zayit)
-                lineId = link.LineId,    // Zayit DB line row-id (null for Otzaria)
+                bookId = link.BookId,    // null when the link names the book by title or by a line id
+                title = link.Title,      // Otzaria book:// / inline-link: the book's title (null when by id)
+                headings = link.Headings, // book://title#heading: a TOC path to open at (null when absent)
+                index = link.Index,      // positional line index (null when absent)
+                lineId = link.LineId,    // Zayit DB line row-id (null otherwise)
+                otherLibrary = link.OtherLibrary, // Otzaria ?source=user|db: - not a book of this library
                 mark = link.Mark,        // highlight the whole line
                 markText = link.MarkText // highlight a specific span (null when absent)
             });

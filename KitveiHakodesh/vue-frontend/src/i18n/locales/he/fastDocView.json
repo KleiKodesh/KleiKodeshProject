@@ -23,6 +23,7 @@
   "goToEndnoteReference": "מעבר למקום הערת הסוף בתקסט",
   "bookmarkNotFound": "יעד הקישור לא נמצא במסמך זה",
   "linkNotSupported": "האפליקציה לא יכולה לפתוח קישור זה",
+  "bookNotInLibrary": "הספר אינו בספרייה",
   "searchNext": "התואמה הבאה (Enter)",
   "searchPrevious": "התואמה הקודמת (Shift+Enter)",
   "searchClose": "סגירת החיפוש (Esc)",

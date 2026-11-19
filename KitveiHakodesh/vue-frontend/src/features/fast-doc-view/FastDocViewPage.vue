@@ -18,7 +18,7 @@ import { fastDocViewApi, parseFastDocViewOpenFailure } from '@/webview-host/fast
 import { cancelLocalFileConversion, openFileInDefaultApp, openUrlInSystemBrowser, restoreLocalFile } from '@/webview-host/bridge'
 import { useI18n } from 'vue-i18n'
 import { showToast } from '@/composables/useToast'
-import { parseBookLink } from '@/utils/appDeepLink'
+import { isLibraryAppLink, parseBookLink, parseSearchLink, type ParsedBookLink } from '@/utils/appDeepLink'
 import { useHostSearchStore } from '@/stores/hostSearchStore'
 import type { ConversionActionState } from '@/components/ConversionActionButton.vue'
 import { useFastDocViewDocument } from './useFastDocViewDocument'
@@ -710,7 +710,8 @@ function flash(element: Element | null | undefined) {
 // windowed jump - the browser never follows the # (the target may not be mounted). A table of
 // contents FastDocView built itself (a TOC field Word saved without a result) points at
 // "#block-<index>": the heading's block, reached by the same jump. Book
-// links (otzaria:// zayit:// kitveihakodeshapp://) open like a host deep link. Web and mail
+// links (otzaria:// book:// zayit:// seforim:// kitveihakodeshapp://, by id or title) open inside the app; a
+// book this library lacks says so. Web and mail
 // links keep their default (they open outside the app).
 const hostSearchStore = useHostSearchStore()
 function onLinkClick(event: MouseEvent): boolean {
@@ -731,15 +732,24 @@ function onLinkClick(event: MouseEvent): boolean {
   const bookLink = parseBookLink(href)
   if (bookLink) {
     event.preventDefault()
-    void hostSearchStore.openBookLink(bookLink)
+    void openBookLinkOrSay(bookLink)
+    return true
+  }
+  const searchQuery = parseSearchLink(href)
+  if (searchQuery) {
+    event.preventDefault()
+    hostSearchStore.openSearchLink(searchQuery)
     return true
   }
   if (href.startsWith('#')) return false
   event.preventDefault()
-  // An app link the app cannot place (no index): never hand it to the shell.
-  if (anchor.dataset.appLink) showToast(t('fastDocView.linkNotSupported'))
+  // Any other library-app link (an Otzaria tool or settings page): never hand it to the shell.
+  if (anchor.dataset.appLink || isLibraryAppLink(href)) showToast(t('fastDocView.linkNotSupported'))
   else void openUrlInSystemBrowser(href)
   return true
+}
+async function openBookLinkOrSay(bookLink: ParsedBookLink) {
+  if (!(await hostSearchStore.openBookLink(bookLink))) showToast(t('fastDocView.bookNotInLibrary'))
 }
 async function goToBlock(blockIndex: number) {
   // A block the index still building has not reached yet: the row source answers once it has.
