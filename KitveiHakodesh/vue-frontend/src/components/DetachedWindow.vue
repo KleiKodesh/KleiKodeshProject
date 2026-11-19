@@ -42,6 +42,9 @@ watch(
 )
 
 onBeforeUnmount(() => handle?.close())
+
+/** Brings the window to the front. */
+defineExpose({ focus: () => handle?.window.focus() })
 </script>
 
 <template>

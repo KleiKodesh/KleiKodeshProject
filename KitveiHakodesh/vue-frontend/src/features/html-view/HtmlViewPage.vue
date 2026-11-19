@@ -7,6 +7,7 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { getTheme, isDarkTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
@@ -21,6 +22,9 @@ const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const paneNavigation = usePaneNavigation()
+// The window this page is in: a widget's page is in a window of its own, and its
+// iframe posts its messages to that window.
+const hostWindow = useHostWindow()
 
 const src = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
@@ -211,7 +215,7 @@ function detachIframeWheelRelay() {
 }
 
 onMounted(() => {
-  window.addEventListener('message', onWindowMessage)
+  hostWindow.addEventListener('message', onWindowMessage)
   startThemeObserver()
   if (src.value) {
     loading.value = true
@@ -226,7 +230,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('message', onWindowMessage)
+  hostWindow.removeEventListener('message', onWindowMessage)
   iframeContentWindow.value = null
   detachIframeWheelRelay()
   themeObserver?.disconnect()

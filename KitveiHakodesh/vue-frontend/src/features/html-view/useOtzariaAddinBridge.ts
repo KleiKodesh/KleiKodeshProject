@@ -19,6 +19,7 @@
 
 import { onMounted, onBeforeUnmount, type Ref } from 'vue'
 import { buildBridgeStubScript } from './otzariaAddinBridgeStub'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import {
   routeDataQueryCall,
   buildAddinTheme,
@@ -38,6 +39,9 @@ export function useOtzariaAddinBridge(
    */
   isOtzariaAddinRef: Ref<boolean>,
 ) {
+  // The window the iframe is in (a widget's own window, or the app's): its messages go there.
+  const hostWindow = useHostWindow()
+
   function pushEvent(event: string, payload: unknown) {
     iframeRef.value?.contentWindow?.postMessage({ type: 'otzaria-event', event, payload }, '*')
   }
@@ -80,10 +84,10 @@ export function useOtzariaAddinBridge(
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-  onMounted(() => window.addEventListener('message', handleMessage))
+  onMounted(() => hostWindow.addEventListener('message', handleMessage))
 
   onBeforeUnmount(() => {
-    window.removeEventListener('message', handleMessage)
+    hostWindow.removeEventListener('message', handleMessage)
     if (bootTimer !== null) {
       clearTimeout(bootTimer)
       bootTimer = null
