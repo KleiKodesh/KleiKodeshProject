@@ -48,9 +48,6 @@ function onBlocked() {
   showToast(t('layout.widgets.windowBlocked'), { variant: 'error' })
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.code === 'Escape') { e.stopPropagation(); store.close(props.win.id) }
-}
 </script>
 
 <template>
@@ -63,7 +60,7 @@ function onKeydown(e: KeyboardEvent) {
     @closed="store.close(win.id)"
     @blocked="onBlocked"
   >
-    <section class="widget-body" :aria-label="item.text" :data-widget="win.id" @keydown="onKeydown">
+    <section class="widget-body" :aria-label="item.text" :data-widget="win.id">
       <component :is="item.page" v-bind="item.props" />
     </section>
   </DetachedWindow>
