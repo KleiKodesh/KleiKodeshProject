@@ -162,6 +162,24 @@ jobs:
           $notes = if (Test-Path release-notes.json) { 'release-notes.json' } else { '' }
           ./Build/build.ps1 -Version '${{ steps.version.outputs.version }}' -Notes $notes
 
+      # Every build: the setup must really install (into a sandbox folder and test registry
+      # key, nothing on the runner itself) before anything is kept or published.
+      - name: Test install
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem Build/releases -Filter 'KleiKodeshSetup-*.exe' | Select-Object -First 1
+          $sandbox = Join-Path $env:RUNNER_TEMP 'setup-sandbox'
+          $p = Start-Process $setup.FullName -ArgumentList '--silent', '--sandbox', $sandbox, '--lang', 'en' -PassThru -Wait
+          Write-Host "setup $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB) exit code $($p.ExitCode)"
+          Get-Content (Join-Path $sandbox 'Install/setup.log') -ErrorAction SilentlyContinue
+          $install = Join-Path $sandbox 'Install'
+          $files = @(Get-ChildItem $install -Recurse -File -ErrorAction SilentlyContinue)
+          Write-Host "installed files: $($files.Count)"
+          $required = 'KleiKodesh.vsto', 'KitveiHakodeshService/KitveiHakodeshService.exe', 'TypingTutor/index.html'
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $install $_)) }
+          Get-ChildItem (Join-Path $sandbox 'StartMenu') -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "start menu: $($_.Name)" }
+          if ($p.ExitCode -ne 0 -or $missing) { throw "test install failed; missing: $($missing -join ', ')" }
+
       - name: Release text
         shell: pwsh
         run: |
