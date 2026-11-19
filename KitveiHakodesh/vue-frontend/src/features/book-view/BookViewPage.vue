@@ -6,6 +6,7 @@ import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { bookProtectionOf } from './bookProtection'
 import type { BookBookmark } from '@/stores/bookBookmarks'
 import BookViewToolbar from './BookViewToolbar.vue'
@@ -396,14 +397,37 @@ async function onExportToWord() {
   exportingToWord.value = true
   exportInFlight = true
   const generation = ++exportGeneration
-  // One id for the whole export: the paste, or its fallback to a file for a large book.
-  exportRequestId = crypto.randomUUID()
   try {
-    await linesContentRef.value?.pasteAllIntoWord(exportRequestId, () => generation !== exportGeneration)
+    // One id for the whole export: the paste, or its fallback to a file for a large book.
+    // Not crypto.randomUUID: it exists only in a secure context, which the host page may not be.
+    exportRequestId = newExportRequestId()
+    const result = await linesContentRef.value?.pasteAllIntoWord(exportRequestId, () => generation !== exportGeneration)
+    if (result?.failedHtml) exportFailedHtml.value = result.failedHtml
+  } catch {
+    showToast(t('bookView.exportFailed'), { variant: 'error' })
   } finally {
     exportInFlight = false
     if (generation === exportGeneration) exportingToWord.value = false
   }
+}
+/** The book's HTML after Word could not take it: drives the "save as HTML file" offer. */
+const exportFailedHtml = ref<string | null>(null)
+/** Saved through a blob link (works outside a secure context, unlike the file-picker API). */
+function saveFailedExportAsHtml() {
+  const html = exportFailedHtml.value
+  exportFailedHtml.value = null
+  if (!html) return
+  const doc = html.startsWith('<html') ? html : `<!doctype html><html><head><meta charset="utf-8"></head><body dir="rtl">${html}</body></html>`
+  const url = URL.createObjectURL(new Blob([doc], { type: 'text/html;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${(bookTitle || 'book').replace(/[\\/:*?"<>|]/g, '_')}.html`
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+function newExportRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
 }
 /** Bumped by a cancel: the export that was running no longer drives the button. */
 let exportGeneration = 0
@@ -585,6 +609,15 @@ function getSideEditionOutlineTarget(): string | undefined {
 
 <template>
   <div class="book-view" ref="bookViewRoot">
+    <!-- Word could not take the export: offer the same content as an HTML file. -->
+    <ConfirmDialog
+      v-if="exportFailedHtml"
+      :title="t('bookView.exportFailedTitle')"
+      :desc="t('bookView.exportFailedDesc')"
+      :confirm-label="t('bookView.exportSaveAsHtml')"
+      @confirm="saveFailedExportAsHtml"
+      @cancel="exportFailedHtml = null"
+    />
     <!-- Top toolbar -->
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'top'"

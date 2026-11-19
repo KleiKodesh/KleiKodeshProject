@@ -579,35 +579,40 @@ function focusScroller() {
  */
 const PASTE_INTO_WORD_MAX_HTML_CHARS = 6_000_000
 
-async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean = () => false): Promise<void> {
+/** Resolves to the book's HTML when Word could not take it (the caller offers to save it as a file). */
+async function pasteAllIntoWord(requestId?: string, isCancelled: () => boolean = () => false): Promise<{ failedHtml?: string }> {
   // The whole book is exported, and lines are kept only near the reader: read it now.
   let rows: LineItem[] = []
   try { rows = await wholeBookReady() } catch { /* export what is loaded */ }
   // Cancelled while the book loaded: nothing reached Word yet, so nothing is sent.
-  if (isCancelled()) return
+  if (isCancelled()) return {}
   selectAllInContainer()
   if (settingsStore.copyWithNotes) {
     try { await prepareForLines(rows.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
   if (isCancelled()) {
     window.getSelection()?.removeAllRanges()
-    return
+    return {}
   }
+  let failedHtml: string | undefined
   // Held so the caller's progress spinner lasts until Word has the paste.
   let pasting: Promise<unknown> = Promise.resolve()
   const copied = triggerCopy((html) => {
     if (html.length > PASTE_INTO_WORD_MAX_HTML_CHARS) {
       showToast(t('bookView.exportLargeAsFile'))
       pasting = exportToWord(html, bookTitle, requestId)
-        .then((result) => { if (result.error) showToast(result.error, { variant: 'error' }) })
-        .catch(() => {})
+        .then((result) => { if (result.error && !result.cancelled) failedHtml = html })
+        .catch(() => { failedHtml = html })
     } else {
-      pasting = pasteIntoWord(requestId).catch(() => {})
+      pasting = pasteIntoWord(requestId)
+        .then((result) => { if (result.error && !result.cancelled) failedHtml = html })
+        .catch(() => { failedHtml = html })
     }
   })
   window.getSelection()?.removeAllRanges()
   await pasting
   if (!copied) showToast(t('bookView.exportReady'))
+  return isCancelled() ? {} : { failedHtml }
 }
 
 /**
