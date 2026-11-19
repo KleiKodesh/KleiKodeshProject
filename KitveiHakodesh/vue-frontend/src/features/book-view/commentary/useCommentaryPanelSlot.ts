@@ -122,7 +122,7 @@ export function useCommentaryPanelSlot(
 
   // The line this panel shows and its commentary: the book's, unless the panel is in
   // its own window and was told to stop following the book.
-  const detachment = useCommentaryPanelDetach()
+  const detachment = useCommentaryPanelDetach(slot)
   const source = useCommentaryPanelSource(slot, shared.bookId, shared, detachment.followsBook)
 
   const treeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })

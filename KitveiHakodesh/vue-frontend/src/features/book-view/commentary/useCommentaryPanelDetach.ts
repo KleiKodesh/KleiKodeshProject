@@ -6,16 +6,22 @@
  * the panel inside a DetachedWindow), so this file knows nothing about windows.
  *
  * A panel in its place inside the book view always follows the book; the choice
- * exists only for a detached one, and returning it to its place resets it.
+ * applies only while it is detached. The reader's last choice is remembered per
+ * panel (bottom / side / left side) and applied the next time that panel detaches.
  */
 import { ref } from 'vue'
+import { lsGet, lsSet } from '@/utils/persistence'
+import type { CommentarySlot } from '../bookViewTypes'
 
-export function useCommentaryPanelDetach() {
+const followsBookKey = (slot: CommentarySlot) => `commentary-detached-follows-book.${slot}`
+
+export function useCommentaryPanelDetach(slot: CommentarySlot) {
   const isDetached = ref(false)
   const followsBook = ref(true)
 
   function detach() {
     isDetached.value = true
+    followsBook.value = lsGet<boolean>(followsBookKey(slot)) ?? true
   }
 
   function attach() {
@@ -30,6 +36,7 @@ export function useCommentaryPanelDetach() {
 
   function toggleFollowsBook() {
     followsBook.value = !followsBook.value
+    lsSet(followsBookKey(slot), followsBook.value)
   }
 
   return { isDetached, followsBook, detach, attach, toggleDetached, toggleFollowsBook }
