@@ -57,9 +57,10 @@ fn run() -> io::Result<()> {
     // the antivirus grab the fresh exe in between (os error 33, lock violation).
     let mut target = fs::File::create(&out)?;
     let offset = io::copy(&mut fs::File::open(&exe)?, &mut target)?;
-    // xz / LZMA2, preset 9 extreme, 128 MB dictionary: the smallest payload we measured
-    // (37 MB vs 41 MB for zstd 19), still unpacks in under ten seconds. Packing takes a few
-    // minutes, once, in CI. The setup's decoder reads any dictionary size.
+    // xz / LZMA2, preset 9 extreme, in independent 16 MB blocks (one standard .xz stream).
+    // Blocks cost ~0.5 MB against one solid stream (36.65 vs 36.15 MB) but can be unpacked
+    // in parallel one day (measured 3.9 s -> 1.4 s on 4 cores); today the setup still
+    // reads them one after another. Blocks also let packing use two threads.
     let mut options = xz2::stream::LzmaOptions::new_preset(9 | format::PRESET_EXTREME)?;
     options.dict_size(format::DICT_SIZE);
     // BCJ x86 first: turns relative call/jump targets in machine code into absolute ones,
@@ -68,7 +69,12 @@ fn run() -> io::Result<()> {
     let mut filters = xz2::stream::Filters::new();
     filters.x86();
     filters.lzma2(&options);
-    let stream = xz2::stream::Stream::new_stream_encoder(&filters, xz2::stream::Check::Crc32)?;
+    let stream = xz2::stream::MtStreamBuilder::new()
+        .filters(filters)
+        .block_size(format::BLOCK_SIZE)
+        .threads(2)
+        .check(xz2::stream::Check::Crc32)
+        .encoder()?;
     let mut encoder = xz2::write::XzEncoder::new_stream(target, stream);
     {
         let mut tar = tar::Builder::new(&mut encoder);

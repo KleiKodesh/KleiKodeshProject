@@ -8,9 +8,12 @@
 
 pub const MAGIC: &[u8; 8] = b"KKPAYLD2";
 
-/// LZMA2 dictionary (128 MB) the packer uses; the setup needs about this much RAM to unpack.
+/// Independent xz blocks of 16 MB uncompressed; the dictionary matches (a larger one
+/// can't reach past its block). The setup needs about this much RAM per block it unpacks.
 #[allow(dead_code)] // used by pack-payload
-pub const DICT_SIZE: u32 = 128 << 20;
+pub const BLOCK_SIZE: u64 = 16 << 20;
+#[allow(dead_code)]
+pub const DICT_SIZE: u32 = BLOCK_SIZE as u32;
 /// liblzma's "extreme" preset flag (LZMA_PRESET_EXTREME).
 #[allow(dead_code)]
 pub const PRESET_EXTREME: u32 = 0x8000_0000;
