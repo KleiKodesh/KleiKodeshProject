@@ -1,20 +1,27 @@
 <script setup lang="ts">
-import { onBeforeUnmount } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { useToast } from '@/composables/useToast'
+import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 
 // Global toast, Fluent 2 style: a compact card anchored to the bottom corner,
 // NOT a full-width banner. Mount ONCE at the app root; trigger from anywhere
 // with `import { showToast } from '@/composables/useToast'`.
-const { message, variant, dismissToast } = useToast()
+// Also mounted in each detached window (DetachedWindow.vue): each copy shows the
+// banner only when it was raised in its own window.
+const { message, variant, targetWindow, dismissToast } = useToast()
+const hostWindow = useHostWindow()
+const isHere = computed(() => targetWindow.value === hostWindow)
 
-onBeforeUnmount(dismissToast)
+onBeforeUnmount(() => {
+  if (isHere.value) dismissToast()
+})
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="hostWindow.document.body">
     <Transition name="toast-pop">
       <div
-        v-if="message"
+        v-if="message && isHere"
         class="toast"
         :class="`toast-${variant}`"
         role="status"

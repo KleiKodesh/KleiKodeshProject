@@ -7,6 +7,7 @@
  */
 import type { HostWindow } from './hostWindow'
 import { mirrorPageStyles } from './mirrorPageStyles'
+import { registerDetachedWindow } from './hostWindow'
 
 export interface DetachedWindowOptions {
   /** Stable name: the host remembers the window's size and place under it. */
@@ -47,6 +48,7 @@ export function openDetachedWindow(
   popupDocument.title = options.title
 
   const stopMirroring = mirrorPageStyles(document, popupDocument)
+  const unregister = registerDetachedWindow(popup)
 
   // Created by the popup's own document so it is a plain element there.
   const mountElement = popupDocument.createElement('div')
@@ -69,6 +71,7 @@ export function openDetachedWindow(
     'pagehide',
     () => {
       stopMirroring()
+      unregister()
       window.removeEventListener('pagehide', close)
       if (!closedByUs) onClosedByUser()
     },
