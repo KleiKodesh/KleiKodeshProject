@@ -292,7 +292,7 @@ function lineIdsIn(start: number, end: number): number[] {
 // Rows of text fetched beyond the ones the scroller asks for, on the side it is moving
 // to: the window grows a few rows at a time, and a request per step leaves a fast
 // scroll waiting at the end of the mounted rows.
-const READ_AHEAD_ROWS = 0
+const READ_AHEAD_ROWS = 200
 
 /** The scroller's row source: the text of a range's lines, fetched before the range mounts. */
 function ensureRows(start: number, end: number): Promise<void> {

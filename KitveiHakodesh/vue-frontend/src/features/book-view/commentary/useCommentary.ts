@@ -257,8 +257,12 @@ export function useCommentary(
    * it, so a row is never on screen without its text. Lines another fetch already
    * has in flight are awaited, not requested again. Rejects when a fetch fails, so
    * the scroller mounts nothing rather than empty rows.
+   *
+   * `readAheadLineIds` are the lines the scroller will ask for next. They ride on the
+   * request these lines need, and never cause one of their own - so scrolling costs
+   * one request per read-ahead run, not one per extension of the window.
    */
-  async function ensureLineContents(lineIds: number[]): Promise<void> {
+  async function ensureLineContents(lineIds: number[], readAheadLineIds: number[] = []): Promise<void> {
     if (!linesById.size) return
     const waits: Promise<void>[] = []
     const wanted: number[] = []
@@ -269,6 +273,13 @@ export function useCommentary(
       const inFlight = contentFetches.get(id)
       if (inFlight) waits.push(inFlight)
       else if (linesById.has(id)) wanted.push(id)
+    }
+    if (wanted.length) {
+      for (const id of readAheadLineIds) {
+        if (id <= 0 || contentSettled.has(id) || seen.has(id) || contentFetches.has(id) || !linesById.has(id)) continue
+        seen.add(id)
+        wanted.push(id)
+      }
     }
     for (let i = 0; i < wanted.length; i += FETCH_CHUNK) {
       waits.push(fetchContentsInto(wanted.slice(i, i + FETCH_CHUNK)))
