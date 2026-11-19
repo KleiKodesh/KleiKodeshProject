@@ -338,7 +338,15 @@ fn finish(ui: &AppWindow, request: &Request, result: Result<(), install::Failure
         (Err(failure), _) => (Text::new("ההתקנה לא הושלמה", "Setup did not finish"), failure.text),
         (Ok(()), Action::Uninstall) => (Text::new("כלי קודש הוסר", "Klei Kodesh was removed"), Text::new("תודה שהשתמשתם בכלי קודש.", "Thank you for using Klei Kodesh.")),
         (Ok(()), Action::Repair) => (Text::new("התיקון הושלם", "Repair complete"), Text::new("כל הרכיבים נבדקו ונרשמו מחדש.", "Everything was checked and registered again.")),
-        (Ok(()), Action::Apply) => (Text::new("הכל מוכן", "You're all set"), Text::new("כלי קודש מופיע גם בתפריט ההתחלה.", "Klei Kodesh is also in the Start menu.")),
+        // Only Kitvei Hakodesh gets a Start-menu entry worth pointing at.
+        (Ok(()), Action::Apply) => (
+            Text::new("הכל מוכן", "You're all set"),
+            if request.products.contains(&Product::KitveiApp) {
+                Text::new("כתבי הקודש מופיע גם בתפריט ההתחלה.", "Kitvei Hakodesh is also in the Start menu.")
+            } else {
+                Text::new("", "")
+            },
+        ),
     };
     st.set_failed(result.is_err());
     st.set_done_title(title.get(english).into());
