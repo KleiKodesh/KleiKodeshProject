@@ -4,10 +4,13 @@
  *
  * Positioning: the parent passes anchorRect (the marker's DOMRect relative to
  * the viewport). The bubble is Teleported to body and positioned with fixed
- * coordinates derived from anchorRect, flipped if too close to a viewport edge.
+ * coordinates derived from anchorRect, flipped above the marker when too close
+ * to the bottom. A small arrow points at the marker.
  *
  * Lifecycle:
- *   - Mounts with empty textarea and auto-focuses it.
+ *   - Mounts and auto-focuses the text (cursor at the end).
+ *   - The text area grows with its content (up to a cap, then scrolls).
+ *   - Esc, Ctrl+Enter or the close button close the bubble.
  *   - Auto-saves (UPDATE_NOTE) on unmount — so closing the bubble for any
  *     reason (click-outside, scroll, navigation) persists the current text.
  *   - Delete button calls deleteNote() and emits 'deleted' so the parent can
@@ -15,7 +18,9 @@
  */
 import { useHostWindow } from '@/composables/detachedWindow/hostWindow'
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { IconDelete24Regular } from '@iconify-prerendered/vue-fluent'
+import { useTextareaAutosize } from '@vueuse/core'
+import { IconDelete24Regular, IconNote20Regular } from '@iconify-prerendered/vue-fluent'
+import { HDate } from '@hebcal/hdate'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import type { Note } from './useBookViewNotes'
 
@@ -24,6 +29,8 @@ const props = defineProps<{
   anchorRect: DOMRect
   updateNote: (note: Note, text: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
+  /** Opened by hover: don't take focus until the user clicks in. */
+  preview?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,58 +38,58 @@ const emit = defineEmits<{
   deleted: []
 }>()
 
+const MARGIN = 8
+const ARROW = 7
+const MAX_WIDTH = 380
+
 const bubbleRef = ref<HTMLElement | null>(null)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const noteText = ref(props.note.note)
 const isDeleting = ref(false)
+const { textarea: textareaRef, input: noteText } = useTextareaAutosize({ input: props.note.note })
 
 // Resolved position — updated after mount with real bubble dimensions
 const resolvedTop = ref<number | null>(null)
 const resolvedLeft = ref<number | null>(null)
 const resolvedWidth = ref<number | null>(null)
+const placedAbove = ref(false)
+const arrowX = ref(0)
 
 const hostWindow = useHostWindow()
 
 function computePosition() {
-  const MARGIN = 8
-  const MAX_WIDTH = 360
+  const bubbleWidth = Math.min(MAX_WIDTH, hostWindow.innerWidth - MARGIN * 2)
+  const anchorCenter = (props.anchorRect.left + props.anchorRect.right) / 2
 
-  const availableWidth = hostWindow.innerWidth - MARGIN * 2
-  const bubbleWidth = Math.min(MAX_WIDTH, availableWidth)
+  // Center on the marker, then keep inside the window
+  let left = anchorCenter - bubbleWidth / 2
+  left = Math.min(Math.max(MARGIN, left), hostWindow.innerWidth - bubbleWidth - MARGIN)
 
-  let left = props.anchorRect.left
-  let top = props.anchorRect.bottom + MARGIN
-
-  // Clamp left so bubble doesn't overflow the right viewport edge
-  if (left + bubbleWidth > hostWindow.innerWidth - MARGIN) {
-    left = Math.max(MARGIN, hostWindow.innerWidth - bubbleWidth - MARGIN)
-  }
-
-  // Use real bubble height when available, fall back to a safe estimate
-  const bubbleHeight = bubbleRef.value?.offsetHeight ?? 320
-
-  // Flip vertically if too close to bottom
+  const bubbleHeight = bubbleRef.value?.offsetHeight ?? 220
+  let top = props.anchorRect.bottom + ARROW + 2
+  placedAbove.value = false
   if (top + bubbleHeight > hostWindow.innerHeight - MARGIN) {
-    top = props.anchorRect.top - bubbleHeight - MARGIN
+    const above = props.anchorRect.top - bubbleHeight - ARROW - 2
+    if (above >= MARGIN) {
+      top = above
+      placedAbove.value = true
+    }
   }
-
-  // Clamp top so bubble never goes above the viewport
   top = Math.max(MARGIN, top)
 
   resolvedTop.value = top
   resolvedLeft.value = left
   resolvedWidth.value = bubbleWidth
+  arrowX.value = Math.min(Math.max(14, anchorCenter - left), bubbleWidth - 14)
 }
 
 // Initial style — rendered off-screen so we can measure before showing
 const style = computed(() => {
+  const width = resolvedWidth.value ?? Math.min(MAX_WIDTH, hostWindow.innerWidth - MARGIN * 2)
   if (resolvedTop.value === null) {
-    // Not yet measured: render invisible so layout can be measured on mount
     return {
       position: 'fixed' as const,
       top: '-9999px',
       left: '-9999px',
-      width: `${Math.min(360, hostWindow.innerWidth - 16)}px`,
+      width: `${width}px`,
       zIndex: '9998',
       visibility: 'hidden' as const,
     }
@@ -91,40 +98,50 @@ const style = computed(() => {
     position: 'fixed' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    width: `${resolvedWidth.value}px`,
+    width: `${width}px`,
     zIndex: '9998',
+    '--arrow-x': `${arrowX.value}px`,
   }
 })
 
-// Format timestamp as a locale date-time string
+// Hebrew date in letters + time, e.g. "<day> <month> <year>, 14:05"
 function formatTimestamp(ms: number): string {
-  return new Date(ms).toLocaleString('he-IL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const d = new Date(ms)
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+  return `${new HDate(d).renderGematriya(true)}, ${time}`
 }
+
+const isEdited = computed(() => props.note.updatedAt !== props.note.createdAt)
 
 useDropdownClose(bubbleRef, () => {
   if (!isDeleting.value) emit('close')
 })
 
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
+    e.preventDefault()
+    e.stopPropagation()
+    emit('close')
+  }
+}
+
 onMounted(() => {
   nextTick(async () => {
-    // Measure real bubble height then resolve position so it's never clipped
     computePosition()
     // A visibility:hidden element cannot take focus: wait for Vue to render the
     // bubble at its resolved (visible) position, then focus.
     await nextTick()
-    textareaRef.value?.focus()
+    const ta = textareaRef.value
+    if (ta && !props.preview) {
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    }
   })
 })
 
 onBeforeUnmount(async () => {
-  if (!isDeleting.value) {
-    await props.updateNote(props.note, noteText.value)
+  if (!isDeleting.value && (noteText.value ?? '') !== props.note.note) {
+    await props.updateNote(props.note, noteText.value ?? '')
   }
 })
 
@@ -138,25 +155,36 @@ async function onDelete() {
 
 <template>
   <Teleport :to="hostWindow.document.body">
-    <div dir="rtl" ref="bubbleRef" class="note-bubble" :style="style" @click.stop>
+    <div
+      dir="rtl"
+      ref="bubbleRef"
+      class="note-bubble"
+      :class="{ above: placedAbove }"
+      :style="style"
+      @click.stop
+      @keydown="onKeydown"
+    >
       <div class="note-bubble-header">
-        <span class="note-bubble-quote" :title="note.quote">{{ note.quote }}</span>
-        <button class="delete-button" :aria-label="$t('bookView.note.delete')" @click="onDelete">
+        <IconNote20Regular class="note-icon" />
+        <span
+          class="note-bubble-time"
+          :title="isEdited ? $t('bookView.note.updated', { time: formatTimestamp(note.updatedAt) }) : undefined"
+        >
+          {{ formatTimestamp(isEdited ? note.updatedAt : note.createdAt) }}
+        </span>
+        <button class="icon-button delete-button" :title="$t('bookView.note.delete')" :aria-label="$t('bookView.note.delete')" @click="onDelete">
           <IconDelete24Regular />
         </button>
       </div>
+      <div v-if="note.quote" class="note-bubble-quote" dir="rtl" :title="note.quote">{{ note.quote }}</div>
       <textarea
         ref="textareaRef"
         v-model="noteText"
         class="note-textarea"
-        dir="auto"
+        dir="rtl"
+        rows="3"
         :placeholder="$t('bookView.note.placeholder')"
-        rows="7"
       />
-      <div class="note-bubble-timestamps">
-        <span>{{ formatTimestamp(note.createdAt) }}</span>
-        <span v-if="note.updatedAt !== note.createdAt">{{ $t('bookView.note.updated', { time: formatTimestamp(note.updatedAt) }) }}</span>
-      </div>
     </div>
   </Teleport>
 </template>
@@ -165,37 +193,77 @@ async function onDelete() {
 .note-bubble {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.15),
-    0 16px 40px rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
+  padding: 8px 10px 6px;
   direction: rtl;
+  text-align: right;
 }
 
 .note-bubble-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.note-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-color);
+  flex-shrink: 0;
 }
 
 .note-bubble-quote {
-  flex: 1;
-  font-size: 11px;
+  font-family: var(--text-font);
+  font-size: 13px;
   color: var(--text-secondary);
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border-inline-end: 2px solid var(--accent-color);
-  padding-inline-end: 6px;
+  background: color-mix(in srgb, var(--accent-color) 6%, transparent);
+  border-inline-start: 2px solid var(--accent-color);
+  border-radius: 3px;
+  padding: 3px 8px;
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.delete-button {
+.note-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--text-font);
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 0;
+  outline: none;
+  direction: rtl;
+  text-align: right;
+  min-height: calc(1.6em * 3);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.note-textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.note-bubble-time {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.icon-button {
   width: 24px;
   height: 24px;
   border-radius: 4px;
@@ -206,45 +274,11 @@ async function onDelete() {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   padding: 0;
 }
 
 .delete-button:hover {
   color: var(--status-danger);
   background: color-mix(in srgb, var(--status-danger) 10%, transparent);
-}
-
-.delete-button:active {
-  transform: scale(0.98);
-}
-
-.note-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--input-bg, var(--bg-primary));
-  color: var(--text-primary);
-  font-family: var(--text-font);
-  font-size: 13px;
-  line-height: 1.6;
-  padding: 6px 8px;
-  outline: none;
-  min-height: 140px;
-}
-
-.note-textarea:focus {
-  border-color: var(--accent-color);
-}
-
-.note-bubble-timestamps {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 10px;
-  color: var(--text-secondary);
-  opacity: 0.7;
 }
 </style>
