@@ -36,6 +36,10 @@ internal struct RankKeys
     /// targum on another book (catalog only; a file is 0, and so is every file it is compared
     /// with). Ranked as base text or not, below WordsMatched and QuotedFormMatch.</summary>
     public int MainWork;
+    /// <summary>A base text whose category supplies the typed words its title lacks: the
+    /// query names its collection ("bavli" -> the Bavli tractates). Counts as a title match
+    /// (<see cref="MatchesTitleOrAuthor"/>) and ranks right under the title-covered keys.</summary>
+    public bool CollectionNamed;
     /// <summary>Local files only (0 for a catalog hit): how many typed words the file's name
     /// holds WITHOUT being a whole word of it - inside a longer word, in the extension, or in
     /// the file's add-in name or Hebrew name alias. Below <see cref="WordsMatched"/>: whole words first.</summary>
@@ -81,7 +85,8 @@ internal static class SeforimDbCatalogRankingKeys
     ///   literal match; every word in the hit's own title/path or author; where it matched
     ///   (<see cref="MatchPlace"/>: a book, a book by its category path, a TOC line, an
     ///   alternative-TOC line); written as the typed quoted acronym; the query names the
-    ///   book (then the title explaining more of the query, then the one sized like it); more
+    ///   book (then the title explaining more of the query, then the one sized like it); a
+    ///   base text whose collection the query names (<see cref="RankKeys.CollectionNamed"/>); more
     ///   query words in the path, repeats counted; for a file, more typed words inside its
     ///   name; a base text (<see cref="RankKeys.MainWork"/>);
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
@@ -107,6 +112,9 @@ internal static class SeforimDbCatalogRankingKeys
         if (a.TitleCovered != b.TitleCovered) return a.TitleCovered ? -1 : 1;
         if (a.TitleCovered && a.TitleDistinctWords != b.TitleDistinctWords) return b.TitleDistinctWords.CompareTo(a.TitleDistinctWords);
         if (a.TitleCovered && a.TitleLengthGap != b.TitleLengthGap) return a.TitleLengthGap.CompareTo(b.TitleLengthGap);
+        // The query names the collection: "bavli" -> the tractates themselves, before a
+        // commentary that merely has "al haBavli" in its title.
+        if (a.CollectionNamed != b.CollectionNamed) return a.CollectionNamed ? -1 : 1;
         if (a.WordsMatched != b.WordsMatched) return b.WordsMatched.CompareTo(a.WordsMatched);
         // A file whose name holds a typed word inside a longer word before one that has it
         // only in a folder name.
