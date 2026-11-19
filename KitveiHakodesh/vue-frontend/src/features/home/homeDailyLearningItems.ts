@@ -1,4 +1,18 @@
-import { parseDafYomiString } from './dafYomiNavigation'
+import {
+  bavliDafTarget,
+  chofetzChaimTarget,
+  mishnahPerekTarget,
+  parseDafYomiString,
+  parshaTarget,
+  rambamTarget,
+  shemiratHalashonGateName,
+  shemiratHalashonTarget,
+  simanTarget,
+  tanachPerekTarget,
+  tehillimMonthDayTarget,
+  yerushalmiDafTarget,
+} from './homeDailyLearningTargets'
+import { normalizeHeadingText } from './homeDailyLearningBookMatch'
 import { t } from '@/i18n'
 import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
 
@@ -9,23 +23,7 @@ import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
  * homeDailyLearningResolver.ts.
  */
 
-const GERESH_PATTERN = /[׳״'"]/g
-const NIQQUD_PATTERN = /[֑-ֽֿ-ׇ]/g
-
-function cleanHebrew(text: string): string {
-  return text.replace(NIQQUD_PATTERN, '').replace(GERESH_PATTERN, '').trim()
-}
-
-/** TOC patterns for a heading "<word> <letters>" — exact first, then followed by more text. */
-function headingTocPatterns(headingWord: string, letters: string): string[] {
-  return [`${headingWord} ${letters}`, `${headingWord} ${letters} %`, `${headingWord} ${letters},%`]
-}
-
-/** TOC patterns for a daf "דף <letters>", optionally narrowed to an amud first. */
-function dafTocPatterns(dafLetters: string, amudLetter?: string): string[] {
-  const amudPatterns = amudLetter ? [`דף ${dafLetters} עמוד ${amudLetter}%`] : []
-  return [...amudPatterns, `דף ${dafLetters} %`, `דף ${dafLetters}`, `דף ${dafLetters}%`]
-}
+const cleanHebrew = normalizeHeadingText
 
 /** Torah book exact title for a 1-based parsha number from hebcal's sedra lookup. */
 function torahBookTitleForParshaNumber(parshaNumber: number): string {
@@ -67,11 +65,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'weekly-parsha',
       label: t('home.daily.parsha'),
       location: parshaNames.join('-'),
-      target: {
-        bookQueries: [torahBookTitleForParshaNumber(parshaNumber)],
-        matchTitleExactly: true,
-        tocPatterns: [`פרשת ${firstParshaName}`, `פרשת ${firstParshaName} %`, `%${firstParshaName}%`],
-      },
+      target: parshaTarget(torahBookTitleForParshaNumber(parshaNumber), firstParshaName),
     }
   })
 
@@ -87,27 +81,19 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'nach-yomi',
       label: t('home.daily.nach'),
       location: `${bookName} ${chapterLetters}`,
-      target: {
-        bookQueries: [bookName],
-        matchTitleExactly: true,
-        tocPatterns: headingTocPatterns('פרק', chapterLetters),
-      },
+      target: tanachPerekTarget(bookName, chapterLetters),
     }
   })
 
   tryAdd(() => {
-    // dailyPsalms → [firstChapter, lastChapter] by day of the Hebrew month.
+    // dailyPsalms → [firstChapter, lastChapter] by day of the Hebrew month (the 30-day cycle).
     const [firstChapter, lastChapter] = learning.dailyPsalms(hebrewDate) as [number, number]
     const firstLetters = toLetters(firstChapter)
     return {
       key: 'daily-psalms',
       label: t('home.daily.tehillim'),
       location: `תהילים ${firstLetters}-${toLetters(lastChapter)}`,
-      target: {
-        bookQueries: ['תהילים', 'תהלים'],
-        matchTitleExactly: true,
-        tocPatterns: headingTocPatterns('פרק', firstLetters),
-      },
+      target: tehillimMonthDayTarget(toLetters(hebrewDate.getDate()), firstLetters),
     }
   })
 
@@ -122,7 +108,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'mishnah-yomit',
       label: t('home.daily.mishnaYomit'),
       location: `${tractate} ${toLetters(chapter)}${mishnah ? `:${toLetters(mishnah)}` : ''}`,
-      target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', toLetters(chapter)) },
+      target: mishnahPerekTarget(tractate, toLetters(chapter)),
     }
   })
 
@@ -135,7 +121,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'perek-yomi',
       label: t('home.daily.perekYomi'),
       location: `${tractate} ${chapterLetters}`,
-      target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', chapterLetters) },
+      target: mishnahPerekTarget(tractate, chapterLetters),
     }
   })
 
@@ -148,7 +134,10 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'pirkei-avot',
       label: t('home.daily.avot'),
       location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
-      target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
+      target: (() => {
+        const avot = mishnahPerekTarget('אבות', firstLetters)
+        return { ...avot, books: [...avot.books, { title: 'פרקי אבות' }] }
+      })(),
     }
   })
 
@@ -160,10 +149,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'daf-yomi',
       label: t('home.daily.dafYomi'),
       location: dafText,
-      target: {
-        bookQueries: [`בבלי ${parsed.tractate}`],
-        tocPatterns: [`${parsed.dafPrefix} %`, parsed.dafPrefix, `${parsed.dafPrefix}%`],
-      },
+      target: bavliDafTarget(parsed.tractate, parsed.dafLetters),
     }
   })
 
@@ -175,10 +161,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'daf-weekly',
       label: t('home.daily.dafWeekly'),
       location: dafText,
-      target: {
-        bookQueries: [`בבלי ${parsed.tractate}`],
-        tocPatterns: [`${parsed.dafPrefix} %`, parsed.dafPrefix, `${parsed.dafPrefix}%`],
-      },
+      target: bavliDafTarget(parsed.tractate, parsed.dafLetters),
     }
   })
 
@@ -193,7 +176,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'amud-yomi',
       label: t('home.daily.amudYomi'),
       location: hebrewPart,
-      target: { bookQueries: [`בבלי ${tractate}`], tocPatterns: dafTocPatterns(dafLetters!, amudLetter) },
+      target: bavliDafTarget(tractate!, dafLetters!, amudLetter as 'א' | 'ב' | undefined),
     }
   })
 
@@ -206,7 +189,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'yerushalmi-yomi',
       label: t('home.daily.yerushalmi'),
       location: `${tractate} דף ${dafLetters}`,
-      target: { bookQueries: [`ירושלמי ${tractate}`], tocPatterns: dafTocPatterns(dafLetters) },
+      target: yerushalmiDafTarget(tractate, dafLetters),
     }
   })
 
@@ -220,7 +203,13 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     if (!first) return null
     const toPerekText = (perek: number | string) => (typeof perek === 'number' ? toLetters(perek) : String(perek))
     const firstName = cleanHebrew(Locale.gettext(first.name, 'he'))
-    const firstPerek = toPerekText(first.perek)
+    // Some readings are ranges: chapters ("8-9" = from chapter 8), mitzvah counts ("1-83"), the
+    // contents list ("1:1-4:8"). Open at the first number's chapter; a book with no such
+    // chapter heading (the mitzvah lists) opens at its start.
+    const firstPerekNumber = typeof first.perek === 'number' ? first.perek : parseInt(first.perek, 10)
+    const firstPerekLetters = firstPerekNumber > 0 ? toLetters(firstPerekNumber) : null
+    // A range without ":" may be a mitzvah count; used only when the book has no such chapter.
+    const mitzvahLetters = typeof first.perek === 'string' && !first.perek.includes(':') ? firstPerekLetters : null
     return {
       key,
       label,
@@ -237,10 +226,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
         }, [])
         .map((group) => `${group.name} ${group.perakim.join(' ')}`)
         .join(', '),
-      target: {
-        bookQueries: [`רמבם ${firstName}`, `משנה תורה ${firstName}`, firstName],
-        tocPatterns: headingTocPatterns('פרק', firstPerek),
-      },
+      target: rambamTarget(firstName, firstPerekLetters, mitzvahLetters),
     }
   }
 
@@ -251,38 +237,33 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     // chofetzChaim → { k: section, b: klal.seif, e: klal.seif } (numbers like 2.5).
     const reading = learning.chofetzChaim(hebrewDate) as { k: string; b: number | string; e: number | string }
     const section = CHOFETZ_CHAIM_SECTION_HEBREW[reading.k]
-    const klal = Math.floor(Number(reading.b))
+    // b is "klal.seif" in the halachic parts (2.5, '2.10'), the illustration number in Tziyurim.
+    const [klal = NaN, seif = NaN] = String(reading.b ?? '').split('.').map((part) => parseInt(part, 10))
     const klalLetters = klal > 0 ? toLetters(klal) : null
+    const seifLetters = seif > 0 ? toLetters(seif) : null
     return {
       key: 'chofetz-chaim',
       label: t('home.daily.chofetzChaim'),
       location: section && klalLetters ? `${section} כלל ${klalLetters}` : `חפץ חיים ${reading.b}-${reading.e}`,
-      target: {
-        bookQueries: ['חפץ חיים'],
-        tocPatterns: klalLetters
-          ? [...(section ? [`%${section}%כלל ${klalLetters}%`] : []), ...headingTocPatterns('כלל', klalLetters)]
-          : [],
-      },
+      target: chofetzChaimTarget(reading.k, klalLetters, seifLetters),
     }
   })
 
   tryAdd(() => {
     // shemiratHaLashon → { bk: part number, k: gate name (English), b: chapter.section, e }.
-    const reading = learning.shemiratHaLashon(hebrewDate) as { bk: number; b: number | string }
+    const reading = learning.shemiratHaLashon(hebrewDate) as { bk: number; k: string; b: number | string }
     if (!reading) return null
     const chapter = Math.floor(Number(reading.b))
     const partLetters = toLetters(reading.bk)
     const chapterLetters = chapter > 0 ? toLetters(chapter) : null
+    const gate = shemiratHalashonGateName(reading.k)
     return {
       key: 'shemirat-halashon',
       label: t('home.daily.shmirasHalashon'),
-      location: `חלק ${partLetters}${chapterLetters ? ` פרק ${chapterLetters}` : ''}`,
-      target: {
-        bookQueries: ['שמירת הלשון'],
-        tocPatterns: chapterLetters
-          ? [`%חלק ${partLetters}%פרק ${chapterLetters}%`, ...headingTocPatterns('פרק', chapterLetters)]
-          : [],
-      },
+      location: [`חלק ${partLetters}`, gate, chapterLetters && gate !== 'הקדמה' ? `פרק ${chapterLetters}` : null]
+        .filter(Boolean)
+        .join(' '),
+      target: shemiratHalashonTarget(reading.bk, reading.k, chapterLetters),
     }
   })
 
@@ -296,10 +277,7 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       key: 'kitzur-shulchan-aruch',
       label: t('home.daily.kitzur'),
       location: cleanHebrew(new learning.KitzurShulchanAruchEvent(hebrewDate, reading).renderBrief('he')),
-      target: {
-        bookQueries: ['קיצור שולחן ערוך'],
-        tocPatterns: simanLetters ? headingTocPatterns('סימן', simanLetters) : [],
-      },
+      target: simanTarget({ title: 'קיצור שולחן ערוך' }, simanLetters),
     }
   })
 

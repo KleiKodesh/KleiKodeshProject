@@ -88,6 +88,17 @@ public sealed class LinesSubstringSearchResult
     public int[] Counts { get; set; } = Array.Empty<int>();
 }
 
+/// <summary>A page marker to find in one book's text: overlay name (e.g. "Vilna Pages") and accepted values, in [FromIndex, ToIndex].</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineByPageMarkerArgs { public int BookId { get; set; } public string Overlay { get; set; } = ""; public List<string> Values { get; set; } = new(); public int FromIndex { get; set; } public int ToIndex { get; set; } = int.MaxValue; }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineByHeRefSuffixArgs { public int BookId { get; set; } public string Suffix { get; set; } = ""; }
+
+/// <summary>The found lineIndex, -1 when none.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class FoundLineIndexResult { public int LineIndex { get; set; } = -1; }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIdsByRangeArgs { public int BookId { get; set; } public int FromIndex { get; set; } public int ToIndex { get; set; } }
 

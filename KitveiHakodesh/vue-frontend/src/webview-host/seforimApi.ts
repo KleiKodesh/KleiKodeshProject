@@ -84,6 +84,25 @@ export async function getLineIds(bookId: number, fromIndex: number, toIndex: num
   return (await seforimOp<{ ids: number[] }>('getLineIds', { bookId, fromIndex, toIndex })).ids
 }
 
+/**
+ * First lineIndex in [fromIndex, toIndex] of one book whose text holds a page marker
+ * (`data-overlay="<overlay>" data-value="<one of values>"`); -1 when none. Reads that book only.
+ */
+export async function findLineByPageMarker(
+  bookId: number,
+  overlay: string,
+  values: string[],
+  fromIndex = 0,
+  toIndex = 2147483647,
+): Promise<number> {
+  return (await seforimOp<{ lineIndex: number }>('findLineByPageMarker', { bookId, overlay, values, fromIndex, toIndex })).lineIndex
+}
+
+/** First lineIndex of one book whose heRef ends with `suffix` (exact); -1 when none. */
+export async function findLineByHeRefSuffix(bookId: number, suffix: string): Promise<number> {
+  return (await seforimOp<{ lineIndex: number }>('findLineByHeRefSuffix', { bookId, suffix })).lineIndex
+}
+
 /** A snippet's text (mirror of FtsSnippetText in SeforimDbFtsModels.cs): the matched line's
  *  own text, and for a short window the same book's neighbour lines before / after it. */
 export interface FtsSnippetText {

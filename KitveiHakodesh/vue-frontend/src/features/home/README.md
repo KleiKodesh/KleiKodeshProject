@@ -34,7 +34,9 @@ Folders get **half** the dynamic tile budget (rounded down) or `MAX_FOLDER_CARDS
 
 **homeDateInfo.ts** — loads the Hebrew date and Daf Yomi for the date bar. No `use` prefix: a plain module with lazy-loaded shared state, not a reactive composable.
 
-**dafYomiNavigation.ts** — navigates to the Daf Yomi book and line when the user taps the Daf Yomi entry. No `use` prefix, same reason.
+**homeDailyLearningTargets.ts** — pure: for each daily-learning cycle, which book (title + library section) and which TOC path to open (daf, perek, klal/seif, gate/chapter).
+
+**homeDailyLearningBookMatch.ts** — pure: spelling-folded title match that prefers the base text over its commentaries, and the TOC path walk.
 
 **useNextZman.ts** / **NextZmanPopup.vue** — nearest-zman computation (date bar) and the all-times list (the zmanim widget).
 
