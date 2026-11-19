@@ -16,7 +16,43 @@ namespace KitveiHakodeshLib
     public partial class AppViewer
     {
         private void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
-            => _hb.OnDownloadStarting(sender, e);
+        {
+            // A file the page itself builds (blob: link, e.g. a failed Word export saved as HTML):
+            // the user picks where it goes, never the default Downloads folder.
+            if ((e.DownloadOperation.Uri ?? "").StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
+            {
+                AskWhereToSave(e);
+                return;
+            }
+            _hb.OnDownloadStarting(sender, e);
+        }
+
+        private void AskWhereToSave(CoreWebView2DownloadStartingEventArgs e)
+        {
+            var deferral = e.GetDeferral();
+            BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    string suggested = e.ResultFilePath ?? "";
+                    string ext = System.IO.Path.GetExtension(suggested).TrimStart('.');
+                    using (var dlg = new SaveFileDialog())
+                    {
+                        dlg.Title = HostText.SaveFileTitle;
+                        dlg.FileName = System.IO.Path.GetFileName(suggested);
+                        dlg.Filter = ext.Length > 0 ? ext.ToUpperInvariant() + " (*." + ext + ")|*." + ext : "*.*|*.*";
+                        if (dlg.ShowDialog(this) == DialogResult.OK)
+                        {
+                            e.ResultFilePath = dlg.FileName;
+                            e.Handled = true; // no download bubble: the user just chose the place
+                        }
+                        else e.Cancel = true;
+                    }
+                }
+                catch { e.Cancel = true; }
+                finally { deferral.Complete(); }
+            }));
+        }
 
         private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {

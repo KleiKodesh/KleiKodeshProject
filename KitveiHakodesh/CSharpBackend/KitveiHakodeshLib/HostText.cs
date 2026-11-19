@@ -52,6 +52,7 @@ namespace KitveiHakodeshLib
         public static string OpenFileTitle => T("פתח קובץ", "Open file");
         public static string Documents => T("מסמכים", "Documents");
         public static string SaveBookTitle => T("שמור ספר", "Save book");
+        public static string SaveFileTitle => T("שמירת קובץ", "Save file");
 
         // ── Local files ──
         public static string FileNotFound => T("הקובץ לא נמצא", "File not found");
