@@ -53,3 +53,8 @@ cache, download, snapshot, log and temp file goes in a subfolder beside the app.
   push that too, right away (don't wait for Dependabot).
 - Local builds use the submodule folders on disk, not the pins. Never enable
   `submodule.recurse`: a pull would reset those folders to an older pinned commit.
+- After every pull, and before any local build, compare each submodule folder with its pin
+  (`git submodule status`: a leading `+` means they differ). If the folder is clean and
+  behind the pin (`git merge-base --is-ancestor HEAD <pin>` inside it), fast-forward it:
+  `git -C <path> merge --ff-only <pin>`. Never move a folder backward or touch one with
+  uncommitted changes; report those instead.
