@@ -40,8 +40,8 @@ export function widgetFitsContent(id: WidgetId): boolean {
  * size the user gives it.
  */
 export const WIDGET_WINDOW_SIZE = { width: 440, height: 560 }
-/** A user-added widget is a whole web page (an Otzaria add-in): it starts larger. */
-const CUSTOM_SIZE = { width: 960, height: 720 }
+/** A user-added widget is a whole web page (an Otzaria add-in): it starts larger, at the installer window's size. */
+const CUSTOM_SIZE = { width: 640, height: 460 }
 
 export const useWidgetWindowStore = defineStore('widgetWindows', () => {
   const windows = ref<WidgetWindowState[]>([])
