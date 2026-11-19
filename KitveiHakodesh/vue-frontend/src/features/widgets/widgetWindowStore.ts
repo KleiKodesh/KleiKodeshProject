@@ -4,9 +4,10 @@ import { lsGet, lsSet } from '@/utils/persistence'
 
 /**
  * Widgets & tools: small tools (dictionary, calendar, halachic units, and the home date
- * bar's world clock, zmanim and daily learning) that open in a
- * floating window over the app instead of taking over a tab. One window per widget;
- * opening an open one brings it to the front.
+ * bar's world clock, zmanim and daily learning) that open in a window of their own
+ * (DetachedWindow, the same way a commentary panel does) instead of taking over a tab.
+ * One window per widget; opening an open one brings it to the front. Where each window
+ * sits and how big it is the host remembers, by the window's name.
  */
 export type BuiltinWidgetId = 'dict' | 'calendar' | 'ruler' | 'worldClock' | 'zmanim' | 'learning'
 /** A widget the user added: a local HTML page or an Otzaria add-in. */
@@ -23,19 +24,10 @@ const CUSTOM_WIDGETS_KEY = 'widgets.custom'
 
 export interface WidgetWindowState {
   id: WidgetId
-  x: number
-  y: number
-  width: number
-  height: number
-  z: number
-  /**
-   * Sized to its content (the small date-bar widgets): no empty space, no scrollbar
-   * unless the content outgrows the screen. Resizing by hand turns it off.
-   */
-  fitContent: boolean
+  /** Bumped to bring an already open window to the front. */
+  focusRequest: number
 }
 
-const FIT_CONTENT = new Set<WidgetId>(['worldClock', 'zmanim', 'learning'])
 /** A widget window's size; also the size of a panel moved to its own window (DetachedWindow). */
 export const WIDGET_WINDOW_SIZE = { width: 480, height: 560 }
 const CUSTOM_SIZE = WIDGET_WINDOW_SIZE
@@ -50,24 +42,10 @@ const DEFAULT_SIZE: Record<BuiltinWidgetId, { width: number; height: number }> =
 
 export const useWidgetWindowStore = defineStore('widgetWindows', () => {
   const windows = ref<WidgetWindowState[]>([])
-  // Last place each widget sat, so reopening puts it back where the user left it.
-  const lastBounds = new Map<WidgetId, Omit<WidgetWindowState, 'id' | 'z'>>()
-  let topZ = 1
 
   function open(id: WidgetId): void {
-    const existing = windows.value.find((w) => w.id === id)
-    if (existing) { focus(id); return }
-    const size = id.startsWith('custom:') ? CUSTOM_SIZE : DEFAULT_SIZE[id as BuiltinWidgetId]
-    const width = Math.min(size.width, window.innerWidth - 32)
-    const height = Math.min(size.height, window.innerHeight - 80)
-    const cascade = windows.value.length * 28
-    const bounds = lastBounds.get(id) ?? {
-      width,
-      height,
-      x: Math.max(16, (window.innerWidth - width) / 2 + cascade),
-      y: Math.max(48, (window.innerHeight - height) / 2 + cascade),
-    }
-    windows.value.push({ id, fitContent: FIT_CONTENT.has(id), ...bounds, z: ++topZ })
+    if (windows.value.some((w) => w.id === id)) { focus(id); return }
+    windows.value.push({ id, focusRequest: 0 })
   }
 
   function toggle(id: WidgetId): void {
@@ -77,12 +55,10 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 
   function focus(id: WidgetId): void {
     const w = windows.value.find((win) => win.id === id)
-    if (w && w.z !== topZ) w.z = ++topZ
+    if (w) w.focusRequest++
   }
 
   function close(id: WidgetId): void {
-    const w = windows.value.find((win) => win.id === id)
-    if (w) lastBounds.set(id, { x: w.x, y: w.y, width: w.width, height: w.height, fitContent: w.fitContent })
     windows.value = windows.value.filter((win) => win.id !== id)
   }
 
@@ -110,6 +86,11 @@ export const useWidgetWindowStore = defineStore('widgetWindows', () => {
 
   return { windows, open, toggle, focus, close, isOpen, customWidgets, addCustom, removeCustom }
 })
+
+/** The size a widget's window first opens at; after that the host keeps the user's. */
+export function widgetWindowSize(id: WidgetId): { width: number; height: number } {
+  return id.startsWith('custom:') ? CUSTOM_SIZE : DEFAULT_SIZE[id as BuiltinWidgetId]
+}
 
 /**
  * index.html says nothing (every add-in's entry point is called that), so the folder

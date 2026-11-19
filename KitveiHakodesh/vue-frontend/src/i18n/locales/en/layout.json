@@ -92,6 +92,7 @@
     "remove": "Remove from widgets",
     "htmlOnly": "Choose an HTML file (.html or .htm).",
     "fileMissing": "Could not open {path}",
+    "windowBlocked": "The widget window could not be opened",
     "worldClock": {
       "label": "World clock",
       "description": "The time in other cities"

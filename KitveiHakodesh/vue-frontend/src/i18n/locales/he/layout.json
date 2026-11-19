@@ -92,6 +92,7 @@
     "remove": "הסר מהווידג'טים",
     "htmlOnly": "בחר קובץ HTML (‎.html או .htm‎).",
     "fileMissing": "לא ניתן לפתוח את {path}",
+    "windowBlocked": "לא ניתן היה לפתוח את חלון הווידג'ט",
     "worldClock": {
       "label": "שעון עולמי",
       "description": "השעה בערים אחרות"
