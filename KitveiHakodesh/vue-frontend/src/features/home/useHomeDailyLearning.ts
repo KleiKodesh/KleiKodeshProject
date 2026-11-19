@@ -68,7 +68,9 @@ export function useDailyLearningOpener() {
   }
 }
 
-type DailyLearningItemWithTarget = HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }
+// resolved: null = book not in the library; 'failed' = the lookup errored (service/library
+// not answering) — not cached, and resolved again when opened.
+type DailyLearningItemWithTarget = HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null | 'failed' }
 
 // Today's resolved items, shared by the date bar and the cards and kept across home remounts.
 let todayItems: { dateKey: string; items: DailyLearningItemWithTarget[] } | null = null
@@ -85,17 +87,20 @@ function loadTodayItems(dateKey: string): Promise<DailyLearningItemWithTarget[]>
     const withTargets = await Promise.all(
       items.map(async (item) => ({
         ...item,
-        resolved: (await resolveHomeDailyLearningTarget(item.target).catch(() => null)) ?? null,
+        resolved: await resolveHomeDailyLearningTarget(item.target).catch(() => 'failed' as const),
       })),
     )
-    // Cleared meanwhile (library went away): don't put the old library's ids back.
-    if (epoch === libraryEpoch) todayItems = { dateKey, items: withTargets }
+    // Cleared meanwhile (library went away): don't put the old library's ids back. A failed
+    // lookup isn't "not in the library": leave today uncached so the next visit asks again.
+    const anyFailed = withTargets.some((item) => item.resolved === 'failed')
+    if (epoch === libraryEpoch && !anyFailed) todayItems = { dateKey, items: withTargets }
     return withTargets
   })()
   todayItemsPending = { dateKey, promise }
-  promise.catch(() => {
-    if (todayItemsPending?.promise === promise) todayItemsPending = null
-  })
+  const forgetPending = () => {
+    if (todayItemsPending?.promise === promise && todayItems?.dateKey !== dateKey) todayItemsPending = null
+  }
+  promise.then(forgetPending, forgetPending)
   return promise
 }
 
@@ -109,7 +114,9 @@ function useDailyLearningState() {
     todayItems?.dateKey === todayKey.value ? todayItems.items : [],
   )
   const resolvedItems = computed(() =>
-    allItems.value.filter((item): item is ResolvedDailyLearningItem => item.resolved !== null),
+    allItems.value.filter(
+      (item): item is ResolvedDailyLearningItem => item.resolved !== null && item.resolved !== 'failed',
+    ),
   )
   // True once today's items are known (or there is no library to resolve them in).
   const settled = shallowRef(todayItems?.dateKey === todayKey.value)
@@ -143,7 +150,10 @@ function useDailyLearningState() {
   )
 
   function open(item: ResolvedDailyLearningItem, openInNewTab: boolean) {
-    const { resolved } = item
+    openResolved(item.resolved, openInNewTab)
+  }
+
+  function openResolved(resolved: HomeDailyLearningResolvedTarget, openInNewTab: boolean) {
     paneNavigation.openOrUpdateActiveTab(
       {
         route: '/book-view',
@@ -159,12 +169,21 @@ function useDailyLearningState() {
   const icon = documentIcon('book')
   const entries = computed<HomeDailyLearningEntry[]>(() =>
     allItems.value.map((item) => {
-      const resolvedItem = item.resolved ? (item as ResolvedDailyLearningItem) : null
+      const { resolved } = item
       return {
         key: item.key,
         label: item.label,
         location: item.location,
-        open: resolvedItem ? (openInNewTab: boolean) => open(resolvedItem, openInNewTab) : null,
+        open:
+          resolved === 'failed'
+            ? (openInNewTab: boolean) => {
+                void resolveHomeDailyLearningTarget(item.target)
+                  .then((retried) => retried && openResolved(retried, openInNewTab))
+                  .catch(() => {})
+              }
+            : resolved
+              ? (openInNewTab: boolean) => openResolved(resolved, openInNewTab)
+              : null,
       }
     }),
   )

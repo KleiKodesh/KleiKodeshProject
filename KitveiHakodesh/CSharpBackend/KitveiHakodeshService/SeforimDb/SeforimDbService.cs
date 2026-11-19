@@ -130,6 +130,12 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public int[] GetLineIds(int bookId, int fromIndex, int toIndex) =>
         Run(() => _queries.GetLineIds(bookId, fromIndex, toIndex), Array.Empty<int>(), "getLineIds");
 
+    public int FindLineByPageMarker(int bookId, string overlay, List<string> values, int fromIndex, int toIndex) =>
+        Run(() => _queries.FindLineByPageMarker(bookId, overlay, values, fromIndex, toIndex), -1, "findLineByPageMarker");
+
+    public int FindLineByHeRefSuffix(int bookId, string suffix) =>
+        Run(() => _queries.FindLineByHeRefSuffix(bookId, suffix), -1, "findLineByHeRefSuffix");
+
     public int[]? GetLineCharCounts(int bookId) =>
         Run(() => _queries.GetLineCharCounts(bookId), null, "getLineCharCounts");
 

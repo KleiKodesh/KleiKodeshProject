@@ -883,6 +883,18 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new LineIdsByRangeResult { Ids = seforim.GetLineIds(a.BookId, a.FromIndex, a.ToIndex) }));
                 }
 
+                case "findLineByPageMarker":
+                {
+                    var a = MsgPack.De<LineByPageMarkerArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new FoundLineIndexResult { LineIndex = seforim.FindLineByPageMarker(a.BookId, a.Overlay, a.Values, a.FromIndex, a.ToIndex) }));
+                }
+
+                case "findLineByHeRefSuffix":
+                {
+                    var a = MsgPack.De<LineByHeRefSuffixArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new FoundLineIndexResult { LineIndex = seforim.FindLineByHeRefSuffix(a.BookId, a.Suffix) }));
+                }
+
                 case "getLineCharCounts":
                 {
                     var a = MsgPack.De<LineCharCountsArgs>(req.Args);

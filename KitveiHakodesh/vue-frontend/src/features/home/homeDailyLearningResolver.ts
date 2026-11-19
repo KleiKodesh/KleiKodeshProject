@@ -1,10 +1,13 @@
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { searchBookTitleIds } from '../book-catalog/bookTitleSearch'
 import {
+  findLineByHeRefSuffix,
+  findLineByPageMarker,
   getAllAltTocEntries,
+  getAllTocEntries,
   getAltTocStructures,
-  getTocEntryByTextPrefix,
 } from '@/webview-host/seforimApi'
+import { buildBookTitleIndex, findTocPathEntry, pickBook, type BookTitleIndex } from './homeDailyLearningBookMatch'
+import type { BookRow } from '@/webview-host/queries.types'
 import type { HomeDailyLearningTarget } from './homeDailyLearningTypes'
 
 /** A daily-learning target resolved against the library: the book to open and, when found, the TOC entry. */
@@ -15,111 +18,76 @@ export interface HomeDailyLearningResolvedTarget {
   tocLineIndex?: number
 }
 
-async function findBookByName(target: HomeDailyLearningTarget): Promise<{ id: number; title: string } | null> {
-  for (const bookQuery of target.bookQueries) {
-    const book = await findBookByQuery(bookQuery, target.matchTitleExactly ?? false)
-    if (book) return book
-  }
-  return null
-}
+// Folded-title index per loaded book list (the store swaps the array when the library changes).
+const titleIndexes = new WeakMap<readonly BookRow[], BookTitleIndex<BookRow>>()
 
-// Same query from several cycles (daf yomi + daf weekly, mishnah + perek) shares one lookup while in flight.
-const bookQueriesInFlight = new Map<string, Promise<{ id: number; title: string } | null>>()
-
-function findBookByQuery(bookQuery: string, matchTitleExactly: boolean): Promise<{ id: number; title: string } | null> {
-  const key = `${matchTitleExactly ? '=' : '~'}${bookQuery}`
-  const inFlight = bookQueriesInFlight.get(key)
-  if (inFlight) return inFlight
-  const promise = lookUpBook(bookQuery, matchTitleExactly)
-  bookQueriesInFlight.set(key, promise)
-  const forget = () => bookQueriesInFlight.delete(key)
-  promise.then(forget, forget)
-  return promise
-}
-
-async function lookUpBook(bookQuery: string, matchTitleExactly: boolean): Promise<{ id: number; title: string } | null> {
-  const store = useBooksDataStore()
-  await store.ensureLoaded()
-
-  if (matchTitleExactly) {
-    // Local twin of `SELECT id FROM book WHERE title = @title` (first row = lowest id): no round-trip.
-    let book: { id: number; title: string } | undefined
-    for (const candidate of store.allBooks) {
-      if (candidate.title === bookQuery && (!book || candidate.id < book.id)) book = candidate
-    }
-    return book ? { id: book.id, title: book.title } : null
-  }
-
-  if (!bookQuery.trim()) return null
-  const bookIds = await searchTitleIdsOneAtATime(bookQuery.trim())
-  const book = bookIds?.length ? store.allBooksMap.get(bookIds[0]!) : undefined
-  return book ? { id: book.id, title: book.title } : null
-}
-
-// The catalog title search is single-flight: a newer search supersedes the running one,
-// so parallel cycles would cancel each other and retry-loop. Queue them instead.
-let titleSearchQueue: Promise<unknown> = Promise.resolve()
-
-function searchTitleIdsOneAtATime(query: string): Promise<number[] | null> {
-  const result = titleSearchQueue.then(() => searchBookTitleIds(query))
-  titleSearchQueue = result.catch(() => null)
-  return result
+function titleIndexFor(books: readonly BookRow[]): BookTitleIndex<BookRow> {
+  let index = titleIndexes.get(books)
+  if (!index) titleIndexes.set(books, (index = buildBookTitleIndex(books)))
+  return index
 }
 
 /**
- * Resolve a daily-learning target BY NAME: catalog lookup for the book, then the
- * first TOC pattern that matches. Returns null when the book is not in the library
- * (the card is hidden); a missing TOC entry still opens the book at its start.
+ * Resolve a daily-learning target BY NAME against the loaded catalog, then walk its TOC
+ * path. Returns null only when the book is not in the library (the card is hidden); a
+ * missing TOC entry still opens the book at its start. Throws when the library or the
+ * service can't answer, so callers can tell "not there" from "try again".
  */
 export async function resolveHomeDailyLearningTarget(
   target: HomeDailyLearningTarget,
 ): Promise<HomeDailyLearningResolvedTarget | null> {
-  const book = await findBookByName(target)
-  if (!book) return null
+  const store = useBooksDataStore()
+  await store.ensureLoaded()
+  if (!store.loaded) throw new Error(store.error ?? 'Book list not loaded')
 
-  // All patterns in parallel; the first match in pattern order still wins.
-  const rowsPerPattern = await Promise.all(target.tocPatterns.map((pattern) => getTocEntryByTextPrefix(book.id, pattern)))
-  for (const rows of rowsPerPattern) {
-    const tocEntry = rows[0]
-    if (tocEntry) {
-      return {
-        bookId: book.id,
-        bookTitle: book.title,
-        tocEntryId: tocEntry.id,
-        tocLineIndex: tocEntry.lineIndex ?? undefined,
-      }
-    }
+  const titleIndex = titleIndexFor(store.allBooks)
+  let book: BookRow | undefined
+  for (const name of target.books) {
+    book = pickBook(titleIndex, name)
+    if (book) break
   }
+  if (!book) return null
+  const found = { bookId: book.id, bookTitle: book.title }
+  if (!target.tocPath.length) return withLineAnchor(found, target)
 
-  const altTocLineIndex = await findAltTocLineIndex(book.id, target.tocPatterns)
-  if (altTocLineIndex != null) return { bookId: book.id, bookTitle: book.title, tocLineIndex: altTocLineIndex }
-  return { bookId: book.id, bookTitle: book.title }
-}
+  const mainEntries = await getAllTocEntries(book.id)
+  const tocEntry = findTocPathEntry(mainEntries, target.tocPath)
+  if (tocEntry) return { ...found, tocEntryId: tocEntry.id, tocLineIndex: tocEntry.lineIndex ?? undefined }
 
-/** SQL LIKE pattern (only `%` used) → anchored, case-insensitive RegExp. */
-function likePatternToRegExp(pattern: string): RegExp {
-  const body = pattern
-    .split('%')
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('.*')
-  return new RegExp(`^${body}$`, 'i')
+  // Headings that live only in an alt TOC (Torah parshiyot, Yerushalmi dapim). Alt entry
+  // ids aren't main-TOC ids, so only the line index is returned.
+  const structures = (await getAltTocStructures(book.id)).filter(
+    (structure) => !target.altTocKey || structure.key === target.altTocKey,
+  )
+  for (const structure of structures) {
+    const altEntry = findTocPathEntry(await getAllAltTocEntries(structure.id), target.tocPath)
+    if (altEntry?.lineIndex != null) return { ...found, tocLineIndex: altEntry.lineIndex }
+  }
+  if (target.fallbackTocPath?.length) {
+    const fallbackEntry = findTocPathEntry(mainEntries, target.fallbackTocPath)
+    if (fallbackEntry) return { ...found, tocEntryId: fallbackEntry.id, tocLineIndex: fallbackEntry.lineIndex ?? undefined }
+  }
+  return withLineAnchor(found, target)
 }
 
 /**
- * Fallback for books whose heading lives only in an alt TOC (e.g. Torah parshiyot):
- * first alt-TOC entry, across all structures, matching a pattern in pattern order.
- * Alt entry ids aren't main-TOC ids, so only the line index is returned.
+ * Last resort when no TOC has the place: the target's line anchor (a page marker in the text,
+ * or a heRef ending), one small query over this book only. The book start when that misses.
  */
-async function findAltTocLineIndex(bookId: number, tocPatterns: string[]): Promise<number | null> {
-  if (!tocPatterns.length) return null
-  const structures = await getAltTocStructures(bookId)
-  if (!structures.length) return null
-  const entryLists = await Promise.all(structures.map((structure) => getAllAltTocEntries(structure.id)))
-  const entries = entryLists.flat().filter((entry) => entry.lineIndex != null)
-  for (const pattern of tocPatterns) {
-    const regExp = likePatternToRegExp(pattern)
-    const entry = entries.find((candidate) => regExp.test(candidate.text.trim()))
-    if (entry) return entry.lineIndex
+async function withLineAnchor(
+  found: HomeDailyLearningResolvedTarget,
+  target: HomeDailyLearningTarget,
+): Promise<HomeDailyLearningResolvedTarget> {
+  const anchor = target.lineAnchor
+  if (!anchor) return found
+  if (anchor.pageMarker) {
+    const lineIndex = await findLineByPageMarker(found.bookId, anchor.pageMarker.overlay, anchor.pageMarker.values)
+    if (lineIndex >= 0) return { ...found, tocLineIndex: lineIndex }
   }
-  return null
+  if (anchor.heRefSuffix) {
+    const lineIndex = await findLineByHeRefSuffix(found.bookId, anchor.heRefSuffix)
+    if (lineIndex >= 0) return { ...found, tocLineIndex: lineIndex }
+  }
+  return found
 }
+

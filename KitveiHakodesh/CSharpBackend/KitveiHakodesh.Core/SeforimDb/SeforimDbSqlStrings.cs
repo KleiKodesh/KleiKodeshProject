@@ -65,6 +65,15 @@ namespace KitveiHakodesh.Core.SeforimDb
             WHERE bookId = @bookId
             ORDER BY lineIndex";
 
+        /// <summary>A book's first line whose heRef ends with @suffix (exact compare).</summary>
+        public const string FindLineByHeRefSuffix = @"
+            SELECT lineIndex
+            FROM line
+            WHERE bookId = @bookId AND heRef IS NOT NULL
+              AND substr(heRef, -length(@suffix)) = @suffix
+            ORDER BY lineIndex
+            LIMIT 1";
+
         /// <summary>The ids of a book's lines in [from, to) by lineIndex — no text.</summary>
         public const string GetLineIds = @"
             SELECT lineIndex, id
