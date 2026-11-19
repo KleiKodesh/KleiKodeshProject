@@ -42,7 +42,7 @@ import WordLinkTooltip from './WordLinkTooltip.vue'
 import { useWordLinkTooltip } from './useWordLinkTooltip'
 import { useLineNotes, useLineNotesTooltip } from './useLineNotes'
 import { markerForNote } from './lineNotes'
-import { useNoteTooltip } from './useNoteTooltip'
+import { useNoteHoverBubble } from './useNoteHoverBubble'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
 import { useWordLinkAnchors } from './useWordLinkAnchors'
@@ -267,6 +267,7 @@ const {
   deleteNote,
   activeBubbleNote,
   activeBubbleAnchorRect,
+  openNoteBubble,
   closeNoteBubble,
   onHighlight,
   onClearHighlight,
@@ -413,9 +414,15 @@ useContextMenuLongPress(scrollerEl, (event) => {
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 
-// User-note hover preview — the marker carries its text in data-note-text, so this
-// replaces the native title tooltip the marker used to have.
-const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
+// Hovering a user-note marker opens the note editor bubble itself.
+const { hoverOpened: noteBubbleHoverOpened } = useNoteHoverBubble(scrollerEl, {
+  open: (marker) => {
+    const note = getNoteById(parseInt(marker.dataset['noteId'] ?? '', 10))
+    if (note) openNoteBubble(note, marker)
+  },
+  close: () => closeNoteBubble(),
+  isOpen: () => activeBubbleNote.value !== null,
+})
 
 // Inline notes (footnotes): hover preview of a marker's note (useLineNotesTooltip).
 const {
@@ -661,8 +668,10 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
     />
     <BookViewNoteBubble
       v-if="activeBubbleNote && activeBubbleAnchorRect"
+      :key="activeBubbleNote.id"
       :note="activeBubbleNote"
       :anchor-rect="activeBubbleAnchorRect"
+      :preview="noteBubbleHoverOpened"
       :update-note="updateNote"
       :delete-note="deleteNote"
       @close="closeNoteBubble"
@@ -690,13 +699,6 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
       @pointer-leave="releaseLineNoteTooltip"
       @select-start="beginLineNoteTooltipSelection"
       @close="closeLineNoteTooltip"
-    />
-    <WordLinkTooltip
-      v-if="noteTooltip"
-      :key="`note-${noteTooltip.id}`"
-      :data="noteTooltip"
-      :interactive="false"
-      @close="closeNoteTooltip"
     />
     <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
     <BookViewPublisherBanner v-if="publisherBanner && atBookStart" :text="publisherBanner" />

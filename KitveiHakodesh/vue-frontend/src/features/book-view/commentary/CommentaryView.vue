@@ -31,7 +31,7 @@ import WordLinkTooltip from '../lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '../lines/useWordLinkTooltip'
 import { useLineNotesTooltip } from '../lines/useLineNotes'
 import type { LineNote } from '@/webview-host/queries.types'
-import { useNoteTooltip } from '../lines/useNoteTooltip'
+import { useNoteHoverBubble } from '../lines/useNoteHoverBubble'
 import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
@@ -703,9 +703,20 @@ const {
   onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
 })
 
-// User-note hover preview — the marker carries its text in data-note-text, so this
-// replaces the native title tooltip the marker used to have.
-const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
+// Hovering a user-note marker opens the note editor bubble itself.
+const { hoverOpened: noteBubbleHoverOpened } = useNoteHoverBubble(scrollerEl, {
+  open: (marker) => {
+    const noteId = parseInt(marker.dataset['noteId'] ?? '', 10)
+    const lineId = parseInt(
+      (marker.closest('[data-line-id]') as HTMLElement | null)?.dataset['lineId'] ?? '',
+      10,
+    )
+    const note = props.getNotesForLine(lineId).find((n) => n.id === noteId)
+    if (note) openNoteBubble(note, marker)
+  },
+  close: () => closeNoteBubble(),
+  isOpen: () => activeBubbleNote.value !== null,
+})
 
 // Inline notes (footnotes): hover preview of a marker's note, as in the lines view.
 const {
@@ -769,8 +780,10 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
     />
     <BookViewNoteBubble
       v-if="activeBubbleNote && activeBubbleAnchorRect"
+      :key="activeBubbleNote.id"
       :note="activeBubbleNote"
       :anchor-rect="activeBubbleAnchorRect"
+      :preview="noteBubbleHoverOpened"
       :update-note="props.updateNote"
       :delete-note="props.deleteNote"
       @close="closeNoteBubble"
@@ -793,13 +806,6 @@ const { scrollbarTocTooltip, onScrollerMove, onScrollerMoveEnd } = useBookViewSc
       @pointer-leave="releaseLineNoteTooltip"
       @select-start="beginLineNoteTooltipSelection"
       @close="closeLineNoteTooltip"
-    />
-    <WordLinkTooltip
-      v-if="noteTooltip"
-      :key="`note-${noteTooltip.id}`"
-      :data="noteTooltip"
-      :interactive="false"
-      @close="closeNoteTooltip"
     />
     <BookViewAbbrevTooltip
       v-if="abbrevTooltip"
