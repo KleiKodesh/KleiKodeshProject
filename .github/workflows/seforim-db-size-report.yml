@@ -1,0 +1,72 @@
+name: Seforim DB size report
+
+# Measures per-table and per-index bytes (dbstat) of the public Otzaria and Zayit seforim.db releases.
+# Results are printed in the log and uploaded as an artifact. Nothing is committed or published.
+# Doc home: C:\Users\Public\Documents\SeforimDbDocs (wiki/efficiency/measurements.md)
+
+on:
+  workflow_dispatch:
+    inputs:
+      which:
+        description: "Which DB to measure"
+        type: choice
+        options: [both, otzaria, zayit]
+        default: both
+
+permissions:
+  contents: read
+
+jobs:
+  otzaria:
+    if: inputs.which == 'both' || inputs.which == 'otzaria'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: .github/scripts, sparse-checkout-cone-mode: true }
+      - name: Prepare
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zstd sqlite3
+          sudo mkdir -p /mnt/work && sudo chown "$USER" /mnt/work
+          sqlite3 :memory: "select count(*) from dbstat" >/dev/null && echo "dbstat OK"
+      - name: Download and decompress (streamed, no compressed copy kept)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag=$(gh api "repos/Otzaria/SeforimLibrary/releases?per_page=30" --jq '[.[]|select(.assets|map(.name)|any(startswith("seforim-schema7.db.zst.part")))][0].tag_name')
+          echo "Otzaria release: $tag"
+          urls=$(gh api "repos/Otzaria/SeforimLibrary/releases/tags/$tag" --jq '.assets|map(select(.name|startswith("seforim-schema7.db.zst.part")))|sort_by(.name)|.[].browser_download_url')
+          for u in $urls; do curl -sSL --retry 5 "$u"; done | zstd -d -q -o /mnt/work/seforim.db
+          ls -l /mnt/work/seforim.db; echo "$tag" > /mnt/work/tag.txt
+      - name: Measure
+        run: |
+          python3 .github/scripts/seforim_db_size_report.py /mnt/work/seforim.db otzaria "$(cat /mnt/work/tag.txt)" | tee otzaria-size.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: otzaria-size-report, path: "otzaria-size.*" }
+
+  zayit:
+    if: inputs.which == 'both' || inputs.which == 'zayit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: .github/scripts, sparse-checkout-cone-mode: true }
+      - name: Prepare
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zstd sqlite3
+          sudo mkdir -p /mnt/work && sudo chown "$USER" /mnt/work
+          sqlite3 :memory: "select count(*) from dbstat" >/dev/null && echo "dbstat OK"
+      - name: Download and extract seforim.db only (streamed)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag=$(gh api "repos/kdroidFilter/SeforimLibrary/releases?per_page=30" --jq '[.[]|select(.assets|map(.name)|any(startswith("seforim_bundle.tar.zst.part")))][0].tag_name')
+          echo "Zayit release: $tag"
+          urls=$(gh api "repos/kdroidFilter/SeforimLibrary/releases/tags/$tag" --jq '.assets|map(select(.name|startswith("seforim_bundle.tar.zst.part")))|sort_by(.name)|.[].browser_download_url')
+          cd /mnt/work
+          for u in $urls; do curl -sSL --retry 5 "$u"; done | zstd -d -q | tar -x --wildcards '*seforim.db' 
+          find . -name seforim.db -exec mv {} /mnt/work/seforim.db \; 2>/dev/null || true
+          ls -l /mnt/work/seforim.db; echo "$tag" > /mnt/work/tag.txt
+      - name: Measure
+        run: |
+          python3 .github/scripts/seforim_db_size_report.py /mnt/work/seforim.db zayit "$(cat /mnt/work/tag.txt)" | tee zayit-size.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: zayit-size-report, path: "zayit-size.*" }
