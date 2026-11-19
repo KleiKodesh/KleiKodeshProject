@@ -52,7 +52,9 @@ const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, 
   isBlocked: () => pdfOcrStore.isActive,
   notify: showToast,
   searchInLibrary: (query) => paneNavigation.openBookTarget({ route: '/search', title: t('bookView.copy.searchTabTitle', { query }), searchQuery: query }),
+  searchInCatalog: (query) => useHostSearchStore().openCatalogSearch(query),
 })
+import { useHostSearchStore } from '@/stores/hostSearchStore'
 
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'

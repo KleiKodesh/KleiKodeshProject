@@ -169,7 +169,12 @@ function selectionToText(win: Window): string {
 export function usePdfContextMenu(
   getIframe: () => HTMLIFrameElement | null,
   menuRef: Ref<InstanceType<typeof ContextMenu> | null>,
-  options: { isBlocked?: () => boolean; notify?: (message: string) => void; searchInLibrary?: (query: string) => void } = {},
+  options: {
+    isBlocked?: () => boolean
+    notify?: (message: string) => void
+    searchInLibrary?: (query: string) => void
+    searchInCatalog?: (query: string) => void
+  } = {},
 ) {
   const items = ref<ContextMenuItem[]>([])
 
@@ -244,6 +249,11 @@ export function usePdfContextMenu(
   function onSearchInLibrary(): void {
     const query = toHebrewSearchQuery(capturedText)
     if (query) options.searchInLibrary?.(query)
+  }
+
+  function onSearchInCatalog(): void {
+    const query = toHebrewSearchQuery(capturedText)
+    if (query) options.searchInCatalog?.(query)
   }
 
   async function copyPageAsImage(): Promise<void> {
@@ -332,6 +342,7 @@ export function usePdfContextMenu(
       list.push({ label: t('pdfViewer.menu.copy'), action: onCopy, shortcut: 'Ctrl+C' })
       list.push({ label: t('pdfViewer.menu.copyIntoWord'), action: onCopyIntoWord })
       if (options.searchInLibrary) list.push({ label: t('bookView.copy.toSearch'), action: onSearchInLibrary, shortcut: 'Ctrl+Shift+C' })
+      if (options.searchInCatalog) list.push({ label: t('pdfViewer.menu.searchInCatalog'), action: onSearchInCatalog })
     }
     list.push({ label: t('pdfViewer.menu.copyPageAsImage'), action: () => void copyPageAsImage() })
     return list
