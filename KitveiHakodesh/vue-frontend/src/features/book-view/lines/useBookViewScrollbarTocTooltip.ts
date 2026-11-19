@@ -63,6 +63,8 @@ export function useBookViewScrollbarTocTooltip(
     getActiveTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getActiveAltTocEntry?: () => ((lineIndex: number) => TocEntry | null) | undefined
     getTocPath?: () => ((entry: TocEntry) => string) | undefined
+    /** Full path of every alt TOC covering a line; replaces the single alt label. */
+    getAltTocPaths?: () => ((lineIndex: number) => string[]) | undefined
     /**
      * Title and path for a row, for a list whose rows each belong to their own book
      * (the commentary panel's groups). Given, it replaces getBookTitle and the TOC
@@ -180,11 +182,14 @@ export function useBookViewScrollbarTocTooltip(
     const getPath = options.getTocPath?.()
     const entry = getEntry && getPath ? getEntry(index) : null
     const path = entry ? getPath!(entry) || entry.text || '' : ''
-    // The alternate TOC's label for the same line joins the path (not a line of its
-    // own), unless the path already says it.
-    const altLabel = options.getActiveAltTocEntry?.()?.(index)?.text ?? ''
-    if (!altLabel || path.includes(altLabel)) return path
-    return path ? `${path} · ${altLabel}` : altLabel
+    // Every alternate TOC covering the line adds its own full path, one per line.
+    const getAltPaths = options.getAltTocPaths?.()
+    const altPaths = getAltPaths
+      ? getAltPaths(index)
+      : [options.getActiveAltTocEntry?.()?.(index)?.text ?? ''].filter(Boolean)
+    const lines = path ? [path] : []
+    for (const alt of altPaths) if (!lines.some((l) => l.includes(alt))) lines.push(alt)
+    return lines.join('\n')
   }
 
   function titleAt(index: number | null): string {

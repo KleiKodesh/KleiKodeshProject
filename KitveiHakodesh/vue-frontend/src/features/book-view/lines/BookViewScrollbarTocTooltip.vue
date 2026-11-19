@@ -114,6 +114,8 @@ const style = computed(() => {
 }
 .toc-path {
   opacity: 0.75;
+  /* Main path and each alt TOC path on its own line. */
+  white-space: pre-line;
 }
 @keyframes scrollbar-toc-tooltip-in {
   from {

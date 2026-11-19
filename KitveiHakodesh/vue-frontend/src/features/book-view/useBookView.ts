@@ -147,7 +147,7 @@ export function useBookView(
   // ── Data loading ─────────────────────────────────────────────────────────
 
   const {
-    getActiveTocEntry, getActiveAltTocEntry, getTocPath,
+    getActiveTocEntry, getActiveAltTocEntry, getTocPath, getAltTocPaths,
     altTocSections, tocLabelSections, tocLabelPrintingNumbers, altTocPane,
     tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
@@ -859,6 +859,6 @@ export function useBookView(
     onModeChange: searchPanel.onModeChange,
     toggleTocPanel: sidePanel.toggleTocPanel,
     closeSidePanel: sidePanel.closeSidePanel,
-    getActiveTocEntry, getActiveAltTocEntry, getTocPath,
+    getActiveTocEntry, getActiveAltTocEntry, getTocPath, getAltTocPaths,
   }
 }
