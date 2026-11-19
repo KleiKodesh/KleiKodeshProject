@@ -226,7 +226,7 @@ watch(
 }
 /* The label takes the rest of the row, so every row is the same width and a hover band
    covers all of it. */
-.toolbar-overflow-menu :deep(.overflow-row > span) {
+.toolbar-overflow-menu :deep(.overflow-row > span:not(.conversion-action-icon)) {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;

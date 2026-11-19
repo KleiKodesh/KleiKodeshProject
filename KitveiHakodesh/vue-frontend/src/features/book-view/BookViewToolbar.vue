@@ -587,7 +587,7 @@ defineExpose({ tocBtnRef, createBookmark })
         :class="{ 'publisher-restricted': exportRestricted }"
         :aria-disabled="exportRestricted || undefined"
         :state="exportingToWord ? 'busy' : 'idle'"
-        :idle-title="exportRestricted ? EXPORT_RESTRICTED_LABEL : EXPORT_TO_WORD_LABEL"
+        :idle-title="exportRestricted ? EXPORT_RESTRICTED_LABEL : ''"
         :busy-title="t('bookView.toolbar.cancelExportToWord')"
         :label="EXPORT_TO_WORD_LABEL"
         @start="overflowOpen = false; $emit('exportToWord')"
