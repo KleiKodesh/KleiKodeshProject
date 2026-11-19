@@ -72,6 +72,11 @@ internal struct RankKeys
 /// </summary>
 internal static class SeforimDbCatalogRankingKeys
 {
+    /// <summary>"Sefer": a word that names no book by itself. Left out when deciding whether
+    /// the query names a book's whole title, so "Zohar" names "Sefer haZohar" and
+    /// "Chasidim" names "Sefer Chasidim".</summary>
+    internal const string GenericTitleWord = "\u05E1\u05E4\u05E8";
+
     /// <summary>The accuracy keys alone (a 1-word query): see <see cref="Compare"/>.</summary>
     internal static int CompareFieldAccuracy(in RankKeys a, in RankKeys b) => Compare(a, b, proximity: false);
 
@@ -156,7 +161,8 @@ internal static class SeforimDbCatalogRankingKeys
     /// variants — except for an unquoted word that is also a key, which counts only as itself
     /// (<see cref="SeforimDbCatalogTextNormalizer.QueryToken.PreferLiteral"/>): "bamidbar"
     /// must not make Bamidbar Rabbah's title look fully typed.</summary>
-    internal static HashSet<string> QueryWordSet(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, SeforimDbCatalogIndex.VariantLookup? variants)
+    internal static HashSet<string> QueryWordSet(List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, SeforimDbCatalogIndex.VariantLookup? variants,
+        bool titleForms = false)
     {
         var queryWords = new HashSet<string>(StringComparer.Ordinal);
         foreach (var token in tokens)
@@ -167,7 +173,7 @@ internal static class SeforimDbCatalogRankingKeys
                 {
                     queryWords.Add(word);
                     if (variants != null)
-                        foreach (var variant in variants.Lookup(word)) queryWords.Add(variant);
+                        foreach (var variant in titleForms ? variants.LookupTitleForms(word) : variants.Lookup(word)) queryWords.Add(variant);
                 }
         }
         return queryWords;

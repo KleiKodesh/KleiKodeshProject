@@ -54,6 +54,8 @@ public sealed partial class SeforimDbCatalogIndex
             DocsEnum? docs = null;
             foreach (var word in queryWords)
             {
+                // "sefer" is not counted on the book side either (see GenericTitleWord).
+                if (string.Equals(word, SeforimDbCatalogRankingKeys.GenericTitleWord, StringComparison.Ordinal)) continue;
                 if (!te.SeekExact(new BytesRef(word))) continue;
                 docs = te.Docs(atomic.LiveDocs, docs, DocsFlags.NONE);
                 int d;
@@ -233,6 +235,8 @@ public sealed partial class SeforimDbCatalogIndex
                 // "Tehillim", "Kuzari" for "ha-Kuzari"). Only the WHOLE title - a variant that
                 // merely shares one title word ("shearim" / "shiurim") stays a variant.
                 keys.IsLiteral = true;
+                // ...and every typed word is on the book's own title.
+                keys.MatchesTitleOrAuthor = true;
                 keys.TitleDistinctWords = title.DistinctWords;
                 keys.TitleLengthGap = title.LengthGap;
             }

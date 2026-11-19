@@ -234,7 +234,10 @@ public sealed partial class SeforimDbCatalogIndex
         var queryQuotedKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(query);
         // The books the query names — CoveredTitles stays unscoped on purpose: it only marks
         // books, and a book outside the scope never reaches the collector to be marked.
-        var coveredTitles = CoveredTitles(searcher.IndexReader, queryWords, queryWordCount);
+        // The books the query names, the title's he-prefix and spelling taken together
+        // ("Zohar" names "Sefer haZohar"): see VariantLookup.LookupTitleForms.
+        var coveredTitles = CoveredTitles(searcher.IndexReader,
+            SeforimDbCatalogRankingKeys.QueryWordSet(tokens, variants, titleForms: true), queryWordCount);
 
         // Accuracy-first ranking: literal (exact / non-variant) matches rank ahead of
         // variant/fuzzy-only ones. To tag each hit, run the strict literal query (no
@@ -578,30 +581,55 @@ public sealed partial class SeforimDbCatalogIndex
             string withHe = "ה" + word;
             if (IsIndexed(withHe)) Add(withHe);
 
-            var decomp = SeforimDbCatalogTextNormalizer.DecomposeSkeleton(word);
+            foreach (var candidate in SkeletonVariants(word)) Add(candidate);
+
+            _memo[word] = extra;
+            return extra;
+        }
+
+        /// <summary>
+        /// <see cref="Lookup"/> plus the full / short spellings of the word's he-prefixed and
+        /// he-stripped forms: "Zohar" (full) is "haZohar" (short) only through both at once.
+        /// Used ONLY to decide whether the query names a book's whole title - matching the
+        /// search with it pulls in unrelated words (tried 2026-11-19: Mizrachi, Eruvin lost #1).
+        /// </summary>
+        public List<string> LookupTitleForms(string word)
+        {
+            var forms = new List<string>(Lookup(word));
+            void Add(string term)
+            {
+                if (term != word && !forms.Contains(term)) forms.Add(term);
+            }
+            foreach (var candidate in SkeletonVariants("ה" + word)) Add(candidate);
+            string? stripped = SeforimDbCatalogTextNormalizer.StripHePrefix(word);
+            if (stripped is not null)
+                foreach (var candidate in SkeletonVariants(stripped)) Add(candidate);
+            return forms;
+        }
+
+        /// <summary>The indexed words that are a full / short spelling of <paramref name="form"/>
+        /// (the skeleton field's terms under its skeleton).</summary>
+        private List<string> SkeletonVariants(string form)
+        {
+            var found = new List<string>();
             if (_skeletons is null)
             {
                 var terms = MultiFields.GetTerms(reader, FieldVariantSkeleton);
                 _skeletons = terms?.GetEnumerator();
             }
-            if (_skeletons is not null)
+            if (_skeletons is null) return found;
+            var decomp = SeforimDbCatalogTextNormalizer.DecomposeSkeleton(form);
+            string prefix = decomp.Skeleton + SkeletonSeparator;
+            var prefixBytes = new BytesRef(prefix);
+            if (_skeletons.SeekCeil(prefixBytes) == TermsEnum.SeekStatus.END) return found;
+            do
             {
-                string prefix = decomp.Skeleton + SkeletonSeparator;
-                var prefixBytes = new BytesRef(prefix);
-                if (_skeletons.SeekCeil(prefixBytes) != TermsEnum.SeekStatus.END)
-                {
-                    do
-                    {
-                        if (!StringHelper.StartsWith(_skeletons.Term, prefixBytes)) break;
-                        string candidate = _skeletons.Term.Utf8ToString().Substring(prefix.Length);
-                        if (SeforimDbCatalogTextNormalizer.AreSkeletonVariants(decomp, SeforimDbCatalogTextNormalizer.DecomposeSkeleton(candidate)))
-                            Add(candidate);
-                    } while (_skeletons.MoveNext());
-                }
-            }
-
-            _memo[word] = extra;
-            return extra;
+                if (!StringHelper.StartsWith(_skeletons.Term, prefixBytes)) break;
+                string candidate = _skeletons.Term.Utf8ToString().Substring(prefix.Length);
+                if (SeforimDbCatalogTextNormalizer.AreSkeletonVariants(decomp, SeforimDbCatalogTextNormalizer.DecomposeSkeleton(candidate)))
+                    found.Add(candidate);
+            } while (_skeletons.MoveNext());
+            return found;
         }
 
         private bool IsIndexed(string term)
