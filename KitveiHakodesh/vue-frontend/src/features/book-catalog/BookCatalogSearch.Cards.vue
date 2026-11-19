@@ -67,7 +67,7 @@ defineExpose({
 </script>
 
 <template>
-  <WindowedCardGrid ref="gridRef" class="catalog-cards" :count="cards.length" view="cards" :list-key="props.items" @mousedown.prevent>
+  <WindowedCardGrid ref="gridRef" class="catalog-cards" :count="cards.length" view="cards" :list-key="props.items" stretch @mousedown.prevent>
     <template #item="{ index }">
       <HomeSuggestionCard :card="cards[index]!" :class="{ 'is-focused': focusedIndex === index }" />
     </template>
@@ -75,11 +75,15 @@ defineExpose({
 </template>
 
 <style scoped>
-/* Long titles wrap to the next line instead of an ellipsis. */
-.catalog-cards :deep(.card-title) {
+/* Title and path each wrap to at most 2 lines, then end with an ellipsis - as the browse cards (BookCatalogView.Cards.vue). */
+.catalog-cards :deep(.card-title),
+.catalog-cards :deep(.card-path) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 .is-focused :deep(.card) {
