@@ -93,18 +93,20 @@ public sealed partial class SeforimDbCatalogIndex
         private readonly int[] _orderWord;             // per order word: the slot
         private readonly int[] _leafWord;              // the slots of the query words (leaf coverage)
         private readonly Func<string, bool> _present;
+        private readonly Func<string, bool> _presentWithCatalog;
         private readonly Func<int, List<int>> _positionsOfOrderWord;
 
         // ── Per segment ────────────────────────────────────────────────────────────
         private int _docBase;
         private DocsEnum?[] _path = [];                // positions-capable when the field has them
         private DocsEnum?[] _author = [];
+        private DocsEnum?[] _catalog = [];
         private DocsEnum?[] _leaf = [];
         private DocsEnum?[] _quoted = [];
         private NumericDocValues? _bookIds, _mainWork, _levels, _treeOrders, _structures, _leafDistinct, _leafAdds;
 
         // ── Per doc ────────────────────────────────────────────────────────────────
-        private readonly bool[] _onPath, _onAuthor, _onLeaf;
+        private readonly bool[] _onPath, _onAuthor, _onLeaf, _onCatalog;
         private readonly int[] _pathFreq;
         private readonly List<int>[] _positions;       // per word: its positions in this doc's path
         private static readonly List<int> NoPositions = [];
@@ -154,10 +156,12 @@ public sealed partial class SeforimDbCatalogIndex
             _onPath = new bool[_words.Count];
             _onAuthor = new bool[_words.Count];
             _onLeaf = new bool[_words.Count];
+            _onCatalog = new bool[_words.Count];
             _pathFreq = new int[_words.Count];
             _positions = new List<int>[_words.Count];
             for (int i = 0; i < _positions.Length; i++) _positions[i] = [];
             _present = PresentOnPathOrAuthor;
+            _presentWithCatalog = PresentOnPathAuthorOrCatalog;
             _positionsOfOrderWord = i => _positions[_orderWord[i]];
         }
 
@@ -180,6 +184,7 @@ public sealed partial class SeforimDbCatalogIndex
             _docBase = context.DocBase;
             _path = LucenePostings.Open(reader, FieldFullTocPath, _words, positions: true);
             _author = LucenePostings.Open(reader, FieldAuthor, _words, positions: false);
+            _catalog = LucenePostings.Open(reader, FieldCatalog, _words, positions: false);
             _leaf = LucenePostings.Open(reader, FieldLeafWords, _words, positions: false);
             _quoted = LucenePostings.Open(reader, FieldQuotedKey, _quotedKeys, positions: false);
             _bookIds = reader.GetNumericDocValues(FieldBookIdDv);
@@ -200,6 +205,7 @@ public sealed partial class SeforimDbCatalogIndex
             {
                 _onAuthor[i] = LucenePostings.At(_author[i], doc);
                 _onLeaf[i] = LucenePostings.At(_leaf[i], doc);
+                _onCatalog[i] = LucenePostings.At(_catalog[i], doc);
                 _pathFreq[i] = LucenePostings.FreqAndPositions(_path[i], doc, _positions[i]);
                 _onPath[i] = _pathFreq[i] > 0;
             }
@@ -234,6 +240,15 @@ public sealed partial class SeforimDbCatalogIndex
                 keys.LeafCovered = LeafCovered(doc);
                 keys.LeafAddsWord = keys.LeafCovered && (_leafAdds?.Get(doc) ?? 0) != 0;
             }
+            // A base text whose category supplies the typed words the title lacks: the query
+            // names its collection ("bavli" -> the tractates, "midrash rabbah" -> Bereshit
+            // Rabbah). It then counts as a match on its own name.
+            if (level == 0 && keys.MainWork == 2 && !keys.MatchesTitleOrAuthor
+                && SeforimDbCatalogRankingKeys.EveryTokenPresent(_tokens, _presentWithCatalog))
+            {
+                keys.CollectionNamed = true;
+                keys.MatchesTitleOrAuthor = true;
+            }
             foreach (var q in _quoted)
                 if (LucenePostings.At(q, doc)) { keys.QuotedFormMatch = true; break; }
             keys.WordsMatched = WordsMatched();
@@ -257,6 +272,17 @@ public sealed partial class SeforimDbCatalogIndex
             if (_onPath[i] || _onAuthor[i]) return true;
             foreach (int v in _variantsOf[i])
                 if (_onPath[v] || _onAuthor[v]) return true;
+            return false;
+        }
+
+        /// <summary>The word, by its own form or any variant, is in the path, the author or the
+        /// category path.</summary>
+        private bool PresentOnPathAuthorOrCatalog(string word)
+        {
+            int i = _wordIndex[word];
+            if (_onPath[i] || _onAuthor[i] || _onCatalog[i]) return true;
+            foreach (int v in _variantsOf[i])
+                if (_onPath[v] || _onAuthor[v] || _onCatalog[v]) return true;
             return false;
         }
 
