@@ -61,6 +61,8 @@ export component ProductIcon inherits Rectangle {
 
 component BarButton inherits Rectangle {
     callback clicked();
+    accessible-role: button;
+    accessible-action-default => { root.clicked(); }
     width: 30px;
     height: 30px;
     border-radius: 4px;
@@ -74,6 +76,7 @@ component BarButton inherits Rectangle {
 
 // Light/dark switch.
 component ThemeToggle inherits BarButton {
+    accessible-label: Lang.en ? (Theme.dark ? "Light theme" : "Dark theme") : (Theme.dark ? "ערכת נושא בהירה" : "ערכת נושא כהה");
     Image {
         width: 16px;
         height: 16px;
@@ -88,6 +91,7 @@ component ThemeToggle inherits BarButton {
 
 // Hebrew / English switch: shows the language it switches to.
 component LanguageToggle inherits BarButton {
+    accessible-label: Lang.en ? "עברית" : "English";
     Text { text: Lang.en ? "עב" : "EN"; color: Theme.muted; font-size: 12px; font-weight: 600; }
     clicked => {
         Lang.en = !Lang.en;

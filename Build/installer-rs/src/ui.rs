@@ -123,13 +123,15 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
 
     let word_installed = registry::hklm_exists(r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Winword.exe");
     let fresh = ctx.installed.is_empty();
+    // The landing page (install or update) offers every program ticked; Modify shows what is installed.
+    let landing = !(!fresh && (ctx.start_in_manage || ctx.payload.is_none()));
     let products: Products = Rc::new(VecModel::from(
         ALL.iter()
             .map(|&p| {
                 let available = p != Product::WordAddin || word_installed;
                 crate::ProductRow {
                     id: p.id().into(),
-                    selected: available && (fresh || ctx.installed.contains(&p)),
+                    selected: available && (landing || ctx.installed.contains(&p)),
                     installed: ctx.installed.contains(&p),
                     available,
                     ..Default::default()
@@ -140,7 +142,7 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     st.set_products(ModelRc::from(products.clone()));
     st.set_version(install::VERSION.into());
     st.set_updating(!fresh && ctx.payload.is_some());
-    st.set_page(if !fresh && (ctx.start_in_manage || ctx.payload.is_none()) { Page::Manage } else { Page::Welcome });
+    st.set_page(if landing { Page::Welcome } else { Page::Manage });
     let current = Options::current(&ctx.layout, english);
     st.set_desktop_shortcut(current.desktop_shortcut);
     st.set_file_associations(current.open_with);
