@@ -38,12 +38,26 @@ namespace KitveiHakodeshLib
             Form form = null;
             try
             {
-                // The host owns the bounds: the last ones the user left, else the page's
-                // requested size, centred on the app's screen.
+                // Where the window opens: the last bounds the user left, else the page's
+                // requested size, centred on the app's screen. A page that keeps those bounds
+                // itself (the app's detached windows - its saved settings, so a settings reset
+                // clears them) names the window "name@x,y,w,h", or "name@" for none saved yet;
+                // the host then reports the new bounds back (popupBounds) instead of storing
+                // them. Any other named popup keeps its bounds in the registry.
                 string name = e.Name ?? "";
-                var (x, y, width, height) = name.Length == 0
-                    ? (-1, -1, (int)features.Width, (int)features.Height)
-                    : AppSettingsRegistry.GetPopupBounds(name, (int)features.Width, (int)features.Height);
+                bool pageKeepsBounds = name.IndexOf('@') >= 0;
+                var (x, y, width, height) = (-1, -1, (int)features.Width, (int)features.Height);
+                if (pageKeepsBounds)
+                {
+                    string pageBounds = name.Substring(name.IndexOf('@') + 1);
+                    name = name.Substring(0, name.IndexOf('@'));
+                    var parts = pageBounds.Split(',');
+                    if (parts.Length == 4 && int.TryParse(parts[0], out int sx) && int.TryParse(parts[1], out int sy)
+                        && int.TryParse(parts[2], out int sw) && int.TryParse(parts[3], out int sh) && sw > 0 && sh > 0)
+                        (x, y, width, height) = (sx, sy, sw, sh);
+                }
+                else if (name.Length > 0)
+                    (x, y, width, height) = AppSettingsRegistry.GetPopupBounds(name, (int)features.Width, (int)features.Height);
 
                 form = new Form
                 {
@@ -80,7 +94,14 @@ namespace KitveiHakodeshLib
                 popupView.CoreWebView2.WindowCloseRequested += (s, _) => form.Close();
                 form.FormClosing += (s, _) =>
                 {
-                    if (name.Length > 0 && form.WindowState == FormWindowState.Normal)
+                    if (name.Length == 0 || form.WindowState != FormWindowState.Normal) return;
+                    if (pageKeepsBounds)
+                        _bridge?.PushEvent(new
+                        {
+                            @event = "popupBounds", name,
+                            x = form.Left, y = form.Top, width = form.ClientSize.Width, height = form.ClientSize.Height,
+                        });
+                    else
                         AppSettingsRegistry.SetPopupBounds(name, form.Left, form.Top,
                             form.ClientSize.Width, form.ClientSize.Height);
                 };
