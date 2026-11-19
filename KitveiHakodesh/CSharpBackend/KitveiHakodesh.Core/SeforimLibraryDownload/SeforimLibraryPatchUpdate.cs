@@ -49,7 +49,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             if (local == null) return SeforimLibraryUpdateOutcome.Unversioned;
 
             progress.Phase(SeforimLibraryDownloadPhase.FindingRelease);
-            var plan = await _planner.PlanAsync(local.Value.DbVersion, cancellationToken).ConfigureAwait(false);
+            var plan = await _planner.PlanAsync(local.Value.DbVersion, local.Value.SchemaVersion, cancellationToken).ConfigureAwait(false);
             if (plan.IsUpToDate) return SeforimLibraryUpdateOutcome.UpToDate;
             if (plan.NeedsFullDownload) return SeforimLibraryUpdateOutcome.NeedsFullDownload;
 
@@ -66,8 +66,8 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         {
             var file = step.Manifest.PatchFiles[0];
             var asset = step.Patch with { Sha256 = file.Sha256 };
-            string part = SeforimLibraryDownloadLocations.PatchPartPath(asset.Name);
-            string record = SeforimLibraryDownloadLocations.PatchResumeRecordPath(asset.Name);
+            string part = SeforimLibraryDownloadLocations.DownloadPath(asset.Name);
+            string record = SeforimLibraryDownloadLocations.DownloadResumeRecordPath(asset.Name);
             string patchDb = SeforimLibraryDownloadLocations.PatchDatabasePath(asset.Name);
             // True once this patch has a definite answer — applied, or never will be. Until
             // then (offline, cancelled, host stopping) its downloaded bytes stay for a resume.
@@ -102,7 +102,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
                 settled = true;
                 return true;
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (ex is InvalidDataException or SeforimLibraryArchiveException)
             {
                 // The patch cannot apply to this library — permanent. A cancel, host stop or
                 // transient disk/SQLite error is not, and keeps the verified download.

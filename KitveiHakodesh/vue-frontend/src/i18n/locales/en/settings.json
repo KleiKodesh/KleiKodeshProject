@@ -308,7 +308,8 @@
   "db": {
     "notFound": "The file was not found at that path",
     "saveFailed": "Saving the path failed",
-    "downloadLibrary": "Download the book library (about 1.9 GB)",
+    "downloadLibrary": "Download the book library (about 2.2 GB)",
+    "importLibrary": "Already downloaded the library from the website? Choose the file to install it",
     "pick": "Choose a database file",
     "devPlaceholder": "Full path to seforim.db"
   },

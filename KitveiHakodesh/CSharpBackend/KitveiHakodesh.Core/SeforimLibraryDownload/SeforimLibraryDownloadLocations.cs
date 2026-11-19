@@ -21,12 +21,6 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// <summary>The finished database.</summary>
         public static string DatabasePath => Path.Combine(Folder, "seforim.db");
 
-        /// <summary>The compressed download, growing until complete. Kept across restarts.</summary>
-        public static string ArchivePartPath => Path.Combine(Folder, "seforim.db.zst.part");
-
-        /// <summary>What <see cref="ArchivePartPath"/> is a part of — read on restart to resume.</summary>
-        public static string ResumeRecordPath => Path.Combine(Folder, "seforim.db.zst.part.json");
-
         /// <summary>The database being unpacked. Renamed to <see cref="DatabasePath"/> once whole.</summary>
         public static string ExtractingPath => Path.Combine(Folder, "seforim.db.extracting");
 
@@ -34,11 +28,12 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// (<see cref="SeforimLibraryStagedDatabase"/>).</summary>
         public static string StagedPath => Path.Combine(Folder, "seforim.db.next");
 
-        /// <summary>A downloaded update patch, compressed, growing until complete.</summary>
-        public static string PatchPartPath(string assetName) => Path.Combine(Folder, assetName + ".part");
+        /// <summary>A release file being downloaded (a library part, an update patch), growing
+        /// until complete. Kept across restarts; each part of a split library has its own.</summary>
+        public static string DownloadPath(string assetName) => Path.Combine(Folder, assetName + ".part");
 
-        /// <summary>What <see cref="PatchPartPath"/> is a part of.</summary>
-        public static string PatchResumeRecordPath(string assetName) => Path.Combine(Folder, assetName + ".part.json");
+        /// <summary>What <see cref="DownloadPath"/> is a download of - read on restart to resume.</summary>
+        public static string DownloadResumeRecordPath(string assetName) => Path.Combine(Folder, assetName + ".part.json");
 
         /// <summary>An update patch unpacked: itself a SQLite file, attached while applying.</summary>
         public static string PatchDatabasePath(string assetName) => Path.Combine(Folder, assetName + ".db");

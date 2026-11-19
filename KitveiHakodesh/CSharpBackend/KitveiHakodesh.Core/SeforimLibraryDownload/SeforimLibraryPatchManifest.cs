@@ -32,13 +32,19 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         [JsonPropertyName("toTableContentHashes")] public Dictionary<string, string>? ToTableContentHashes { get; set; }
         [JsonPropertyName("patchFiles")] public List<SeforimLibraryPatchFile> PatchFiles { get; set; } = new();
 
-        /// <summary>True when this edge can be applied here: a real patch, one zstd file, a
-        /// format we read, and a schema this app reads on both ends.</summary>
+        /// <summary>True when this edge can be applied here — the planner's validEdges and
+        /// supportedEdges in one (library_update_planner.dart): a real patch (not a fullRebase
+        /// barrier), schemas that only move forward, a patch format we read, both schemas ones
+        /// whose content hash we can compute (a schema-changing patch, 6 -> 7, included), and
+        /// one zstd file.</summary>
         public bool IsApplicable =>
             !FullRebase
-            && PatchFormatVersion is >= 1 and <= SupportedPatchFormatVersion
-            && FromSchemaVersion == SeforimLibraryReleaseFeed.SupportedSchemaVersion
-            && ToSchemaVersion == SeforimLibraryReleaseFeed.SupportedSchemaVersion
+            && FromSchemaVersion >= 1
+            && ToSchemaVersion >= FromSchemaVersion
+            && (ToSchemaVersion < 4 || PatchFormatVersion != null)
+            && (PatchFormatVersion == null || PatchFormatVersion is >= 1 and <= SupportedPatchFormatVersion)
+            && SeforimLibraryPatchTables.IsHashableSchema(FromSchemaVersion)
+            && SeforimLibraryPatchTables.IsHashableSchema(ToSchemaVersion)
             && PatchFiles.Count == 1
             && PatchFiles[0].Compression == "zstd";
 

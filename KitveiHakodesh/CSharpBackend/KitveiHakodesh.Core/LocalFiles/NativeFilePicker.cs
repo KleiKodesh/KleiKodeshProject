@@ -75,6 +75,14 @@ public static class NativeFilePicker
         "מסד נתונים (*.db;*.sqlite;*.sqlite3)\0*.db;*.sqlite;*.sqlite3\0" +
         "כל הקבצים (*.*)\0*.*\0\0";
 
+    /// <summary>A book library downloaded by hand: the .zst, one of its parts, or the parts' manifest.</summary>
+    public const string LibraryArchiveFilter =
+        "מאגר ספרים (*.zst;*.part-*;*.manifest.json)\0*.zst;*.part-*;*.manifest.json\0" +
+        "כל הקבצים (*.*)\0*.*\0\0";
+
+    /// <summary>Title of the library-archive picker.</summary>
+    public const string LibraryArchiveDialogTitle = "בחר את קובץ מאגר הספרים שהורד";
+
     /// <summary>Title of the seforim DB path picker (both hosts).</summary>
     public const string DatabaseDialogTitle = "בחר קובץ מסד נתונים";
 

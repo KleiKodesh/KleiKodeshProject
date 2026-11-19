@@ -1499,6 +1499,25 @@ export async function pickDbPath(options: { throwSaveErrors?: boolean } = {}): P
   }
 }
 
+/**
+ * Show the open-file dialog for a book library the user downloaded by hand (the .zst, one of
+ * its parts, or the parts' manifest) and return the chosen path - nothing is installed yet.
+ * Null on cancel or failure. Hosted: the window's own dialog; dev: the service shows it.
+ */
+export async function pickLibraryArchivePath(): Promise<string | null> {
+  try {
+    const picked = typeof window.__webviewAction === 'function'
+      ? await action<{ path?: string; cancelled?: boolean; error?: string }>('pickLibraryArchive')
+      : await serviceCall<{ path?: string; cancelled?: boolean; error?: string }>('pickSeforimLibraryArchive', {})
+    if (picked?.error) console.error('[bridge] pickLibraryArchive failed in the host: ' + picked.error)
+    if (!picked || picked.cancelled || !picked.path) return null
+    return picked.path
+  } catch (err) {
+    console.error('[bridge] pickLibraryArchivePath failed:', err)
+    return null
+  }
+}
+
 /** setDbPath, retried for a few seconds while the service is unreachable (e.g. restarting).
  *  A real error (file not found, ...) is thrown at once. */
 async function setDbPathRetryingWhileUnavailable(path: string): Promise<void> {

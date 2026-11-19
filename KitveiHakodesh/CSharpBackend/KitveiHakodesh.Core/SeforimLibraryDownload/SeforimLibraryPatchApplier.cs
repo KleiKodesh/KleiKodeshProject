@@ -30,6 +30,11 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         /// nothing was changed. The caller falls back to a full download.</exception>
         public static void Apply(string dbPath, string patchPath, SeforimLibraryPatchManifest manifest)
         {
+            // Both hash orders must be known before anything is opened or written.
+            if (!SeforimLibraryPatchTables.IsHashableSchema(manifest.FromSchemaVersion)
+                || !SeforimLibraryPatchTables.IsHashableSchema(manifest.ToSchemaVersion))
+                throw new InvalidDataException($"no content hash for schema {manifest.FromSchemaVersion} -> {manifest.ToSchemaVersion}");
+
             using var db = SqliteConnectionFactory.OpenBundledWrite(dbPath);
             Execute(db, "PRAGMA foreign_keys = ON");
             Execute(db, "PRAGMA cache_size = -262144");
@@ -172,26 +177,37 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
         }
 
         /// <summary>
-        /// Re-hashes every table the patch could have changed and compares with the manifest.
-        /// A mismatch throws, which rolls the whole transaction back. A manifest without
-        /// per-table hashes cannot be verified this cheaply and is refused.
+        /// Checks the patched database against the manifest, in the TARGET schema's hash order
+        /// (a schema-changing patch, 6 -> 7, ends in schema 7). With a consistent pair of per-table
+        /// maps, only the tables the patch could have changed are re-hashed (plus schema_meta);
+        /// otherwise the whole database is hashed against toContentHash, as Otzaria does
+        /// (patch_applier.dart, _tablesToVerify). A mismatch throws, which rolls the whole
+        /// transaction back.
         /// </summary>
         private static void VerifyChangedTables(SqliteConnection db, SeforimLibraryPatchManifest manifest)
         {
+            var fromOrder = SeforimLibraryPatchTables.HashOrder(manifest.FromSchemaVersion);
+            var toOrder = SeforimLibraryPatchTables.HashOrder(manifest.ToSchemaVersion);
+            var toRows = SeforimLibraryPatchTables.RowOrder(manifest.ToSchemaVersion);
             var from = manifest.FromTableContentHashes;
             var to = manifest.ToTableContentHashes;
-            var order = SeforimLibraryPatchTables.HashOrderSchema6;
-            if (from == null || to == null || !SameKeys(to.Keys, order))
-                throw new InvalidDataException("the manifest has no per-table hashes for this schema");
 
-            var tables = order.Where(t =>
+            if (from == null || to == null || !SameKeys(from.Keys, fromOrder) || !SameKeys(to.Keys, toOrder))
+            {
+                string whole = SeforimLibraryContentHasher.HashWhole(db, toOrder, toRows);
+                if (!string.Equals(whole, manifest.ToContentHash, StringComparison.Ordinal))
+                    throw new InvalidDataException($"the library differs from the release after patching: {whole}, expected {manifest.ToContentHash}");
+                return;
+            }
+
+            var tables = toOrder.Where(t =>
                     t == "schema_meta"
                     || !string.Equals(from.GetValueOrDefault(t), to[t], StringComparison.Ordinal)
                     || PatchHasRows(db, "upsert_" + t)
                     || PatchHasRows(db, "delete_" + t))
                 .ToList();
 
-            var actual = SeforimLibraryContentHasher.HashTables(db, tables);
+            var actual = SeforimLibraryContentHasher.HashTables(db, tables, toRows);
             var mismatched = tables.Where(t => !string.Equals(actual[t], to[t], StringComparison.Ordinal)).ToList();
             if (mismatched.Count > 0)
                 throw new InvalidDataException("tables differ from the release after patching: " + string.Join(", ", mismatched));

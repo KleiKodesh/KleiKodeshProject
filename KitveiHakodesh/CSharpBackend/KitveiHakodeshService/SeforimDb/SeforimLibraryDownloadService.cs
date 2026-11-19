@@ -64,6 +64,13 @@ public sealed class SeforimLibraryDownloadService(
         _ = Task.Run(() => _downloader.StartAsync(_stopping));
     }
 
+    /// <summary>Installs a library the user downloaded by hand, in the background. Returns at once.</summary>
+    public void Import(string pickedPath)
+    {
+        logger.LogInformation("Library import requested: {Path}", pickedPath);
+        _ = Task.Run(() => _downloader.ImportAsync(pickedPath, _stopping));
+    }
+
     public bool Cancel() => _downloader.Cancel();
 
     /// <summary>Stops a run in progress and waits for it to let go of its files. False when it

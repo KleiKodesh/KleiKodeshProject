@@ -130,6 +130,24 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             SeforimLibraryDownloadPendingFlag.Clear();
         }
 
+        // -- Import ---------------------------------------------------------------------
+
+        /// <summary>
+        /// Installs a library the user downloaded by hand (<see cref="SeforimLibraryArchiveImport"/>):
+        /// any file of it - the .zst, one of its parts, or the parts' manifest. Progress and the
+        /// end are reported exactly like a download. Over our own copy while it is open, the new
+        /// file is staged and swapped in at the next start. Returns at once when a run is going.
+        /// </summary>
+        public Task ImportAsync(string pickedPath, CancellationToken hostStopping) =>
+            RunExclusiveAsync(async ct =>
+            {
+                string destination = IsOwnLibraryInUse ? SeforimLibraryDownloadLocations.StagedPath : SeforimLibraryDownloadLocations.DatabasePath;
+                if (!await SeforimLibraryArchiveImport.RunAsync(pickedPath, destination, _progress, ct).ConfigureAwait(false)) return;
+                SeforimLibraryDownloadPendingFlag.Clear(); // a pending download is answered
+                _progress.Phase(SeforimLibraryDownloadPhase.Completed);
+                Completed?.Invoke();
+            }, hostStopping);
+
         /// <summary>
         /// Stops the run and drops the request. The bytes already fetched stay on disk, so asking
         /// again later resumes rather than restarts.
@@ -231,7 +249,7 @@ namespace KitveiHakodesh.Core.SeforimLibraryDownload
             {
                 _progress.Fail(SeforimLibraryDownloadFailure.Network, ex.ToString());
             }
-            catch (InvalidDataException ex)
+            catch (Exception ex) when (ex is InvalidDataException or SeforimLibraryArchiveException)
             {
                 _progress.Fail(SeforimLibraryDownloadFailure.CorruptArchive, ex.ToString());
             }

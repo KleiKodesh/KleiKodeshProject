@@ -29,6 +29,8 @@
     "failedCorrupt": "The downloaded library could not be unpacked. Click again to try again.",
     "failedDisk": "Saving the library failed. Check that the disk is accessible and click again.",
     "cancelled": "The download was cancelled. Click again to continue from where it stopped.",
-    "failedUnexpected": "The download failed unexpectedly. Click again to try again."
+    "failedUnexpected": "The download failed unexpectedly. Click again to try again.",
+    "failedImportIncomplete": "A part of the library is missing or was not fully downloaded. Put all the parts in one folder and try again.",
+    "failedImportNotALibrary": "The chosen file is not a book library file. Choose the file downloaded from the website."
   }
 }

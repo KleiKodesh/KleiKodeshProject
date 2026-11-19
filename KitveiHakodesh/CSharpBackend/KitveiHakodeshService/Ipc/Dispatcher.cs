@@ -633,6 +633,27 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = cancelled }));
                 }
 
+                // Install a library the user downloaded by hand: any file of it (the .zst, a
+                // part, the parts' manifest). Progress arrives on seforimLibraryDownloadStream.
+                case "importSeforimLibraryArchive":
+                {
+                    var a = MsgPack.De<DbPathArgs>(req.Args);
+                    if (string.IsNullOrWhiteSpace(a.Path))
+                        return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+                    libraryDownload.Import(a.Path);
+                    return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
+                }
+
+                // Dev (no WebView2 host): the service shows the open-file dialog for the import.
+                case "pickSeforimLibraryArchive":
+                {
+                    string? picked = await NativeFilePicker.PickAsync(
+                        NativeFilePicker.LibraryArchiveFilter, NativeFilePicker.LibraryArchiveDialogTitle);
+                    return RpcResponse.Ok(MsgPack.Ser(picked is null
+                        ? new DbPathResult { InstanceId = InstanceId, Cancelled = true }
+                        : new DbPathResult { InstanceId = InstanceId, Path = picked }));
+                }
+
                 case "seforimLibraryDownloadStatus":
                     return RpcResponse.Ok(MsgPack.Ser(libraryDownload.Progress));
 
