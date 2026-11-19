@@ -90,7 +90,15 @@ public static class SeforimDbCatalogTextNormalizer
         if (!hasGlyph) return null;
 
         string candidate = StripQuoteGlyphs(word.Substring(a, b - a));
-        return Abbrev.ContainsKey(candidate) ? candidate : null;
+        if (Abbrev.ContainsKey(candidate)) return candidate;
+        // A prefix letter glued to the acronym: "ha-Ari", "ve-ha-Gra" (\u05D4 / \u05D5) name
+        // the same person as the bare acronym, which is the key both sides must agree on.
+        while (candidate.Length > 2 && (candidate[0] == '\u05D4' || candidate[0] == '\u05D5'))
+        {
+            candidate = candidate.Substring(1);
+            if (Abbrev.ContainsKey(candidate)) return candidate;
+        }
+        return null;
     }
 
     /// <summary>Every distinct quoted-acronym key in <paramref name="text"/> (see
