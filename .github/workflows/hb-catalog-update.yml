@@ -1,0 +1,47 @@
+# Monthly: new HebrewBooks ids into the bundled catalog, committed to master so the next
+# release builds them in. Up to ~30 min (1 request/s, stops after 1500 empty ids in a row).
+# Run by hand: gh workflow run hb-catalog-update.yml
+name: HebrewBooks catalog update
+
+on:
+  schedule:
+    - cron: "0 2 1 * *"     # the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hb-catalog-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive   # the test harness builds the service and its libraries
+
+      - name: Update HebrewBooks catalog
+        shell: pwsh
+        run: |
+          $db = 'KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\HebrewBooksCatalog.db'
+          dotnet run -c Release --project KitveiHakodesh\CSharpBackend\KitveiHakodeshService.Tests -- --hb-catalog-update $db
+          if ($LASTEXITCODE) { Write-Warning "walk stopped early (exit $LASTEXITCODE) - committing what was added" }
+          exit 0
+
+      - name: Commit
+        shell: pwsh
+        run: |
+          $rel = 'KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/HebrewBooksCatalog.db'
+          git diff --quiet -- $rel
+          if (-not $LASTEXITCODE) { Write-Host "catalog unchanged"; exit 0 }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $rel
+          git commit -m "HebrewBooks catalog: monthly update`n`nUser-facing: none"
+          git pull --rebase origin master
+          git push origin HEAD:master
+          exit $LASTEXITCODE

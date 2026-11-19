@@ -108,7 +108,7 @@ jobs:
     # A renewal release skips Gemini, so `plan` is skipped then.
     if: always() && needs.gate.outputs.go == 'true' && (needs.plan.result == 'success' || needs.gate.outputs.renew == 'true' || inputs.test)
     runs-on: windows-latest
-    timeout-minutes: 180
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
         with:
@@ -155,36 +155,6 @@ jobs:
           }
           "version=$next" >> $env:GITHUB_OUTPUT
           Write-Host "v$last + $bump = v$next"
-
-      # New HebrewBooks ids into the bundled catalog before it is built in. Up to ~30 min
-      # (1 request/s, stops after 1500 empty ids in a row). A walk that stops early
-      # (site unreachable from the runner) only warns: the release ships what it has.
-      - name: Update HebrewBooks catalog
-        shell: pwsh
-        timeout-minutes: 60
-        run: |
-          $db = 'KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\HebrewBooksCatalog.db'
-          dotnet run -c Release --project KitveiHakodesh\CSharpBackend\KitveiHakodeshService.Tests -- --hb-catalog-update $db
-          if ($LASTEXITCODE) { Write-Warning "HebrewBooks catalog update stopped early (exit $LASTEXITCODE)" }
-          exit 0
-
-      # Keep the one working copy in the repo current too (not on test runs).
-      - name: Commit HebrewBooks catalog
-        if: ${{ !inputs.test }}
-        shell: pwsh
-        run: |
-          $rel = 'KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks/HebrewBooksCatalog.db'
-          git diff --quiet -- $rel
-          if (-not $LASTEXITCODE) { Write-Host "catalog unchanged"; exit 0 }
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin master
-          git worktree add "$env:RUNNER_TEMP/hbwt" origin/master
-          Copy-Item $rel "$env:RUNNER_TEMP/hbwt/$rel" -Force
-          git -C "$env:RUNNER_TEMP/hbwt" commit -am "HebrewBooks catalog: new books from the release update`n`nUser-facing: none"
-          git -C "$env:RUNNER_TEMP/hbwt" push origin HEAD:master
-          if ($LASTEXITCODE) { Write-Warning "catalog commit push failed" }
-          exit 0
 
       - name: Build
         shell: pwsh
