@@ -88,6 +88,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     private const string FieldBookTitle = "bookTitleWords";           // level 0 only: the title's words (title ranking, "query names the book")
     private const string FieldBookTitleJoined = "bookTitleJoined";    // level 0 only: the title's words joined by spaces, untokenized (starts-with)
     private const string FieldBookTitleWordsDv = "bookTitleDistinctWords"; // level 0 only: distinct title word count
+    private const string FieldMainWorkDv = "mainWorkValue";           // every row: its book's MainWork tier (2 base text, 1 own work, 0 commentary/targum)
     private const string FieldBookIdDv = "bookIdValue";               // every row: book id as doc-values (per-book grouping; the title search reads level 0)
     private const string FieldBookTitleWordCountDv = "bookTitleWordCount"; // level 0 only: title word count WITH repeats (the title-length ranking key)
     private const string FieldQuotedKey = "quotedAbbreviationKey";    // level 0 only: every quoted acronym key the stored texts carry, one untokenized term each (QuotedFormMatch)
@@ -220,7 +221,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     // v29: every ranking key is index data — positions on the TOC path, leaf-segment words,
     //      title word count, quoted-acronym keys, book id on every row — so the search never
     //      measures stored text.
-    public const string IndexFormatVersion = "v29";
+    // v30: every row carries its book's main-work tier (mainWorkValue): base text, own work,
+    //      commentary/targum - so a one-word query ranks the base texts above books on them.
+    public const string IndexFormatVersion = "v30";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -316,6 +319,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // The ONE precedence order (also what GetAllBooks ships and the full-text index
         // stores by). Re-reads the two catalog queries, milliseconds against the build.
         var bookRank = SeforimDbBookTreeOrder.Load(conn);
+        _mainWorkByBook = SeforimDbBookTreeOrder.LoadMainWork(conn);
         var altStructures = LoadAltStructures(conn);
 
         // Full catalog (category) path per book — part of SearchText so a query can
@@ -387,7 +391,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 level: 0,
                 treeOrder: TreeOrder(b.Id),
                 structureId: RegularTocStructureId,
-                categoryAncestors: ancestorsByBook.GetValueOrDefault(b.Id, [])));
+                categoryAncestors: ancestorsByBook.GetValueOrDefault(b.Id, []),
+                mainWork: _mainWorkByBook.GetValueOrDefault(b.Id)));
             docCount++;
         }
 
@@ -421,7 +426,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         // documents (same fields, analyzer, ordering). 6. Final commit here. The writer
         // is left OPEN — the caller writes the ver file, does the final NRT refresh (so
         // the verses become visible), then disposes it.
-        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ancestorsByBook, ct);
+        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ancestorsByBook, _mainWorkByBook, ct);
         writer.Commit();
         return docCount;
     }
@@ -463,7 +468,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         IndexWriter writer, SqliteConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
         Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, Dictionary<int, int[]> ancestorsByBook,
-        CancellationToken ct)
+        Dictionary<int, int> mainWorkByBook, CancellationToken ct)
     {
         // One probe and one dictionary load for the whole Tanach scan, rather than per book.
         var schema = SeforimDbSchema.Probe(conn);
@@ -539,7 +544,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                         // Generated from the regular TOC's chapters, so they truncate
                         // together with it — a chapter hit outranks its verse hits.
                         structureId: RegularTocStructureId,
-                        categoryAncestors: categoryAncestors));
+                        categoryAncestors: categoryAncestors,
+                        mainWork: mainWorkByBook.GetValueOrDefault(book.Id)));
                     added++;
                     expectedVerse++;
                 }
@@ -621,10 +627,12 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
         string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int titleLength, int level,
-        long treeOrder, int structureId, int[] categoryAncestors)
+        long treeOrder, int structureId, int[] categoryAncestors, int mainWork)
     {
         var doc = new Document
         {
+            // The book's main-work tier on every row (RankKeys.MainWork).
+            new NumericDocValuesField(FieldMainWorkDv, mainWork),
             new Field(FieldFullTocPath, fullTocPath, StoredPositionedText),
             new StoredField(FieldBookId, bookId),
             new StoredField(FieldLineIndex, lineIndex),
@@ -706,6 +714,9 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// each entry gets a doc with its full path, its depth as Level, and the next
     /// per-book sequence number as TreeOrder. <paramref name="catalogPath"/> is folded
     /// into SearchText only — never into the display path.</summary>
+    /// <summary>bookId -> main-work tier, for the build in progress (<see cref="SeforimDbBookTreeOrder.LoadMainWork"/>).</summary>
+    private Dictionary<int, int> _mainWorkByBook = new();
+
     private int IndexTocTree(
         IndexWriter writer, List<TocRow> rows,
         (int Id, string Title, int CategoryId, string? Authors) book,
@@ -750,7 +761,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
                 level: level,
                 treeOrder: treeOrder(book.Id),
                 structureId: structureId,
-                categoryAncestors: categoryAncestors));
+                categoryAncestors: categoryAncestors,
+                mainWork: _mainWorkByBook.GetValueOrDefault(book.Id)));
             added++;
         }
         return added;

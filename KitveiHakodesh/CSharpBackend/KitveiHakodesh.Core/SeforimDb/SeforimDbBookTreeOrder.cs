@@ -65,6 +65,27 @@ namespace KitveiHakodesh.Core.SeforimDb
             return Compute(categories, books);
         }
 
+        /// <summary>
+        /// bookId -> main-work tier for the catalog search ranking: 2 = a base text (isBaseBook),
+        /// 1 = a work of its own (no dependenceType: Moreh Nevuchim, Zohar Chadash), 0 = a book on
+        /// another (commentary, targum, ...). A library without the columns gives every book 1.
+        /// </summary>
+        public static Dictionary<int, int> LoadMainWork(SqliteConnection connection)
+        {
+            bool hasIsBaseBook = SeforimDbSchema.ColumnExists(connection, "book", "isBaseBook");
+            bool hasDependenceType = SeforimDbSchema.ColumnExists(connection, "book", "dependenceType");
+            var tiers = new Dictionary<int, int>();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBooks(hasIsBaseBook, hasDependenceType);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var book = ReadBookInput(r);
+                tiers[book.Id] = book.IsBaseBook ? 2 : book.IsDependent ? 0 : 1;
+            }
+            return tiers;
+        }
+
         /// <summary>Reads a <see cref="SeforimDbSqlStrings.CatalogIndexBooks"/> row's tree-order
         /// columns (id, categoryId, title, authors, isBaseBook, dependenceType).</summary>
         public static BookInput ReadBookInput(SqliteDataReader r) => new(

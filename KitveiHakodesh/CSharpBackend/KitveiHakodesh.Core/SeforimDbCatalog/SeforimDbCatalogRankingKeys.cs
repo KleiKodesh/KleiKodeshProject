@@ -32,6 +32,10 @@ internal struct RankKeys
     public bool LeafAddsWord;
     /// <summary>How many of the query's words, COUNTED WITH REPETITION, the path holds.</summary>
     public int WordsMatched;
+    /// <summary>The hit's book: 2 = a base text, 1 = a work of its own, 0 = a commentary /
+    /// targum on another book (catalog only; a file is 0, and so is every file it is compared
+    /// with). Ranked as base text or not, below WordsMatched and QuotedFormMatch.</summary>
+    public int MainWork;
     /// <summary>Local files only (0 for a catalog hit): how many typed words the file's name
     /// holds WITHOUT being a whole word of it - inside a longer word, in the extension, or in
     /// the file's add-in name or Hebrew name alias. Below <see cref="WordsMatched"/>: whole words first.</summary>
@@ -78,7 +82,7 @@ internal static class SeforimDbCatalogRankingKeys
     ///   alternative-TOC line); the query names the
     ///   book (then the title explaining more of the query, then the one sized like it); more
     ///   query words in the path, repeats counted; for a file, more typed words inside its
-    ///   name; the title written as the typed acronym;
+    ///   name; the title written as the typed acronym; a base text (<see cref="RankKeys.MainWork"/>);
     ///   for a 2+ word query (<paramref name="proximity"/>): more of the query's words found,
     ///   in typed order, closest together; the leaf typed in full; the shallower TOC level
     ///   (chapter before verse).
@@ -105,6 +109,12 @@ internal static class SeforimDbCatalogRankingKeys
         // The book written as the typed acronym, quote and all, before lines that merely cite
         // the acronym however tightly: above proximity.
         if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
+        // A base text before any other book once the words and the typed acronym tie:
+        // "mishnah" -> the Mishnah tractates before books on them. Base or not only - ranked
+        // as three tiers, or above WordsMatched / QuotedFormMatch, it put Siddur Rashi above
+        // Rashi on the Torah and the tractate Rosh Hashanah above the Rosh (audit 2026-11-19).
+        bool baseA = a.MainWork == 2, baseB = b.MainWork == 2;
+        if (baseA != baseB) return baseA ? -1 : 1;
         if (proximity)
         {
             if (a.WordsFound != b.WordsFound) return b.WordsFound.CompareTo(a.WordsFound);   // more words found first
