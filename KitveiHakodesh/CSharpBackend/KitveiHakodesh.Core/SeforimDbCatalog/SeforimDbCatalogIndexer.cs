@@ -225,7 +225,8 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     //      commentary/targum - so a one-word query ranks the base texts above books on them.
     // v31: quoted-acronym keys on every row, not only book titles.
     // v32: the "query names the book" word count leaves out the generic word "sefer".
-    public const string IndexFormatVersion = "v32";
+    // v33: authors' quoted acronyms also indexed bare (no glued he-prefix) in the author field.
+    public const string IndexFormatVersion = "v33";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="SeforimDbContentFingerprint"/>, prefixed with this index's format version so a
@@ -667,6 +668,11 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         {
             doc.Add(new Field(FieldAuthor, authors, StoredDocsOnlyText));
             doc.Add(new Field(FieldVariantSkeleton, authors, DocsOnlyText));
+            // The author's quoted acronym once more WITHOUT a glued he-prefix ("[haRambam]" ->
+            // "Rambam"), so typing the bare acronym is an exact author match.
+            var authorKeys = SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKeys(authors);
+            if (authorKeys is not null)
+                doc.Add(new Field(FieldAuthor, string.Join(" ", authorKeys), DocsOnlyText));
         }
         // One untokenized term per ancestor category: a scoped search filters any-of these,
         // and the stored values tell it which scope root a hit fell under.

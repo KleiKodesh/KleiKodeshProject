@@ -45,6 +45,7 @@ internal static class GoldenExplain
         if (k.MatchesTitleOrAuthor) flags.Append(" title/author");
         if (k.TitleCovered) flags.Append($" titleCovered({k.TitleDistinctWords},gap{k.TitleLengthGap})");
         if (k.CollectionNamed) flags.Append(" collection");
+        if (k.AuthorNamed) flags.Append(" authorNamed");
         if (k.MainWork == 2) flags.Append(" base");
         if (k.LeafCovered) flags.Append(" leafCovered");
         if (k.LeafAddsWord) flags.Append(" leafAdds");

@@ -96,6 +96,7 @@ public sealed partial class SeforimDbCatalogIndex
         private readonly int[] _leafWord;              // the slots of the query words (leaf coverage)
         private readonly Func<string, bool> _present;
         private readonly Func<string, bool> _presentWithCatalog;
+        private readonly Func<string, bool> _presentInAuthor;
         private readonly Func<int, List<int>> _positionsOfOrderWord;
 
         // ── Per segment ────────────────────────────────────────────────────────────
@@ -164,6 +165,7 @@ public sealed partial class SeforimDbCatalogIndex
             for (int i = 0; i < _positions.Length; i++) _positions[i] = [];
             _present = PresentOnPathOrAuthor;
             _presentWithCatalog = PresentOnPathAuthorOrCatalog;
+            _presentInAuthor = PresentInAuthor;
             _positionsOfOrderWord = i => _positions[_orderWord[i]];
         }
 
@@ -260,6 +262,7 @@ public sealed partial class SeforimDbCatalogIndex
             }
             foreach (var q in _quoted)
                 if (LucenePostings.At(q, doc)) { keys.QuotedFormMatch = true; break; }
+            keys.AuthorNamed = SeforimDbCatalogRankingKeys.EveryTokenPresent(_tokens, _presentInAuthor);
             keys.WordsMatched = WordsMatched();
             _proximity?.Measure(_positionsOfOrderWord, ref keys);
 
@@ -283,6 +286,9 @@ public sealed partial class SeforimDbCatalogIndex
                 if (_onPath[v] || _onAuthor[v]) return true;
             return false;
         }
+
+        /// <summary>The word, by its own form (no variant), is in the author field.</summary>
+        private bool PresentInAuthor(string word) => _onAuthor[_wordIndex[word]];
 
         /// <summary>The word, by its own form or any variant, is in the path, the author or the
         /// category path.</summary>

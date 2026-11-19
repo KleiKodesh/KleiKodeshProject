@@ -40,6 +40,10 @@ internal struct RankKeys
     /// query names its collection ("bavli" -> the Bavli tractates). Counts as a title match
     /// (<see cref="MatchesTitleOrAuthor"/>) and ranks right under the title-covered keys.</summary>
     public bool CollectionNamed;
+    /// <summary>Every typed word is (exactly) in the hit's author: the query names the author
+    /// ("Rambam"). Among such hits the author's base texts come first (Mishneh Torah before
+    /// his commentary on the Mishnah), ahead of the word counts.</summary>
+    public bool AuthorNamed;
     /// <summary>Local files only (0 for a catalog hit): how many typed words the file's name
     /// holds WITHOUT being a whole word of it - inside a longer word, in the extension, or in
     /// the file's add-in name or Hebrew name alias. Below <see cref="WordsMatched"/>: whole words first.</summary>
@@ -120,6 +124,9 @@ internal static class SeforimDbCatalogRankingKeys
         // The query names the collection: "bavli" -> the tractates themselves, before a
         // commentary that merely has "al haBavli" in its title.
         if (a.CollectionNamed != b.CollectionNamed) return a.CollectionNamed ? -1 : 1;
+        // The query names the author: his base texts first, before the word counts (a title
+        // repeating "Rambam" must not put his commentaries above Mishneh Torah).
+        if (a.AuthorNamed && b.AuthorNamed && (a.MainWork == 2) != (b.MainWork == 2)) return a.MainWork == 2 ? -1 : 1;
         if (a.WordsMatched != b.WordsMatched) return b.WordsMatched.CompareTo(a.WordsMatched);
         // A file whose name holds a typed word inside a longer word before one that has it
         // only in a folder name.
