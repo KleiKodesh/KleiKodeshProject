@@ -1,20 +1,38 @@
 need a smarter bookmarks system
 
-in teh zmanie hyom widget need to eb able to change the city
-
 add a search in many docs pane with the fast doc view logic also support wild cards and fuzzy search 
 
 daress bar settings remove that section and inteasd introduce over floew
+rts 
 
-הוסף הערה ui needs some work
+commentary toolbar push aside the bookview toolbar
 
-user space wil show results ased on order so dragging to reorder can really affect order of results too?!
+allow tearing a tab to tool window and back
+change split view to behave like bwroser
 
-catlog page and the user space page ned to limit hight of ttle in cards to 2 lines with css also in teh search results
-and similarly allow 2 lines in the full path 
-(these changes should not affect home page cards!?
+chrime tabs ui is too isntnt
+aloow תלישה
+allow splitview like in edge
 
-bookview scrollbar tooltip is not showing teh al tocs ful path
+typing utor needs to eb clear teh methd is read - plan - type 
+fint size in typing area same as eth prompt area so they keep up wth each other
+it is wrong to expect seed prefer acuuracy over speed
+
+taskpane drop down etc disapeears once i click in teh document and come back once i hover over the taskpnes title area need to stay visible also when lose focus or maybe its a fight who comes on top
+
+raltove books i was in בראשית םרק יז פסוק י
+it navigated to ramban פסוק יז even though tehre is רמב"ן on פסוק יב which is earlie and also visible
+also rashi navigated to wrong 
+onkelos nvagted to correct though
+
+script to download all hebre books files in teh coputer maybe also add adownload option eg create a dedicated repo for that
+
+add teh no sleep mode to te widgets
+
+widget for לימוד יומי is small andt resize it - bug extis in all three last widgets but not in the frts three probably left over code fighting eh size trying to size t cnetnt but i wasled that they all be by default same size as teh calendar widget window and not size to conetent
+
+profile what teh vsto does when msword sta
+maybe it taking time on stuff like system text json that we can cut
 ---------------------------------
 
 fts:
@@ -25,8 +43,6 @@ aramaic to Hebrew?
 address bar go back need tos ave satet
 
 fts result bug ctnrl click didint navigate to teh result but then when switching to another tab and back it corrected itself this only happen in one case only
-
-emphises the difference between comntry fonts ans main fronts
 
 bokview:
 search: option for side panel
