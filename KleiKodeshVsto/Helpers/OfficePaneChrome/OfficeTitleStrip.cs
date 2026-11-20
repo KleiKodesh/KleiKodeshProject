@@ -53,28 +53,35 @@ namespace OfficePaneChrome
         // it starts repaints the titles the same way. So the frame is subclassed too, and our parts are put back
         // right after Office handled those messages.
         readonly Native.SubclassProc _frameProc;
-        IntPtr _frame;
+        readonly List<IntPtr> _frames = new List<IntPtr>();
         static int _nextFrameId = 100;
         readonly UIntPtr _frameId = (UIntPtr)System.Threading.Interlocked.Increment(ref _nextFrameId);   // one per strip on a shared frame
 
+        /// <summary>
+        /// The strip's top-level window, and Word's main window when that is another one: a floating (undocked) pane is
+        /// its own top-level window, owned by Word's, and Office repaints its title on Word's activation too.
+        /// </summary>
         void HookFrame()
         {
-            var frame = Native.GetAncestor(_bar, Native.GA_ROOT);
-            if (frame == _frame || frame == IntPtr.Zero) return;
-            UnhookFrame();
-            if (Native.SetWindowSubclass(frame, _frameProc, _frameId, IntPtr.Zero)) _frame = frame;
+            var root = Native.GetAncestor(_bar, Native.GA_ROOT);
+            var wanted = new List<IntPtr>();
+            if (root != IntPtr.Zero) wanted.Add(root);
+            var owner = root == IntPtr.Zero ? IntPtr.Zero : Native.GetWindow(root, 4 /*GW_OWNER*/);
+            if (owner != IntPtr.Zero && !wanted.Contains(owner)) wanted.Add(owner);
+            foreach (var f in _frames.Where(f => !wanted.Contains(f)).ToList()) { Native.RemoveWindowSubclass(f, _frameProc, _frameId); _frames.Remove(f); }
+            foreach (var f in wanted)
+                if (!_frames.Contains(f) && Native.SetWindowSubclass(f, _frameProc, _frameId, IntPtr.Zero)) _frames.Add(f);
         }
 
         void UnhookFrame()
         {
-            if (_frame == IntPtr.Zero) return;
-            Native.RemoveWindowSubclass(_frame, _frameProc, _frameId);
-            _frame = IntPtr.Zero;
+            foreach (var f in _frames) Native.RemoveWindowSubclass(f, _frameProc, _frameId);
+            _frames.Clear();
         }
 
         IntPtr FrameProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
         {
-            if (msg == Native.WM_NCDESTROY) { Native.RemoveWindowSubclass(hWnd, _frameProc, id); _frame = IntPtr.Zero; return Native.DefSubclassProc(hWnd, msg, wParam, lParam); }
+            if (msg == Native.WM_NCDESTROY) { Native.RemoveWindowSubclass(hWnd, _frameProc, id); _frames.Remove(hWnd); return Native.DefSubclassProc(hWnd, msg, wParam, lParam); }
             var result = Native.DefSubclassProc(hWnd, msg, wParam, lParam);
             if (_failed || _disposed || _bar == IntPtr.Zero) return result;
             try { AfterFrameMessage(msg, wParam); } catch (Exception ex) { Fail(ex.Message); }   // never into Word's own window proc
@@ -383,7 +390,8 @@ namespace OfficePaneChrome
                     }
 
                 Rectangle popOut = Rectangle.Empty, hide = Rectangle.Empty, selector = Rectangle.Empty, closeBox = Rectangle.Empty;
-                string anchorFor = s.Width + "x" + s.Height + "@" + Native.GetDpiForWindow(_bar);
+                // Size, DPI and the strip's direction (mirrored DC = RTL): anchors from another direction would mirror our parts.
+                string anchorFor = s.Width + "x" + s.Height + "@" + Native.GetDpiForWindow(_bar) + (Native.GetLayout(screenDc) != 0 ? "rtl" : "ltr");
                 int ccx = 0, acx = 0; bool found = false;
                 int box = (int)Math.Round(32 * Scale);
                 if (runs.Count == 2)

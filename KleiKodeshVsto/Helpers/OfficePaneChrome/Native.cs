@@ -27,6 +27,7 @@ namespace OfficePaneChrome
         [DllImport("comctl32.dll")] public static extern IntPtr DefSubclassProc(IntPtr h, uint m, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
         [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint f);
+        [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
         [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);

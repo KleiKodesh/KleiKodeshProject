@@ -189,9 +189,11 @@ namespace KleiKodesh.Helpers
         /// </summary>
         static void RepaintTitleWhenLoaded(Control view)
         {
+            // Already done by the time we listen: redraw now too.
             if (view is KitveiHakodeshLib.AppViewer viewer)
             {
                 viewer.SplashHidden += (s, e) => SidePanes.RepaintTitle(view);
+                if (!viewer.IsSplashShowing) SidePanes.RepaintTitle(view);
                 return;
             }
             var wpf = view.Controls.OfType<System.Windows.Forms.Integration.ElementHost>().FirstOrDefault()?.Child as System.Windows.FrameworkElement;
@@ -204,7 +206,7 @@ namespace KleiKodesh.Helpers
                     // After the view's own deferred first load (queued at the same idle priority from its Loaded).
                     wpf.Dispatcher.BeginInvoke(new Action(() => SidePanes.RepaintTitle(view)), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 };
-                wpf.Loaded += loaded;
+                if (wpf.IsLoaded) loaded(wpf, null); else wpf.Loaded += loaded;
                 return;
             }
             var web = Descendants(view).OfType<Microsoft.Web.WebView2.WinForms.WebView2>().FirstOrDefault();
@@ -213,6 +215,7 @@ namespace KleiKodesh.Helpers
                 EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs> done = null;
                 done = (s, e) => { web.NavigationCompleted -= done; SidePanes.RepaintTitle(view); };
                 web.NavigationCompleted += done;
+                if (web.CoreWebView2 != null && web.Source != null) SidePanes.RepaintTitle(view);   // a page is already there
             }
         }
 
