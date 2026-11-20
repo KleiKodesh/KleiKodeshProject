@@ -142,6 +142,26 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     st.set_products(ModelRc::from(products.clone()));
     st.set_version(install::VERSION.into());
     st.set_updating(!fresh && ctx.payload.is_some());
+    // Dev builds only: KK_FAKE_UPDATE=patch|minor|major previews that update screen.
+    #[cfg(debug_assertions)]
+    let fake = std::env::var("KK_FAKE_UPDATE").ok();
+    #[cfg(debug_assertions)]
+    if fake.is_some() {
+        st.set_updating(true);
+    }
+    #[cfg(debug_assertions)]
+    let fake_kind = fake.as_deref().map(|f| match f { "major" => 2, "minor" => 1, _ => 0 });
+    #[cfg(not(debug_assertions))]
+    let fake_kind: Option<i32> = None;
+    let kind = if let Some(k) = fake_kind {
+        k
+    } else if st.get_updating() {
+        install::state::installed_version(&ctx.layout).map_or(0, |old| install::state::update_kind(&old, install::VERSION))
+    } else {
+        0
+    };
+    st.set_update_kind(kind);
+    st.set_clean_install(kind == 2);
     st.set_page(if landing { Page::Welcome } else { Page::Manage });
     let current = Options::current(&ctx.layout, english);
     st.set_desktop_shortcut(current.desktop_shortcut);
@@ -282,7 +302,7 @@ fn start_engine(
         action,
         products: wanted,
         options: Options { desktop_shortcut: st.get_desktop_shortcut(), open_with: st.get_file_associations(), english },
-        clean: action == Action::Apply && st.get_clean_install(),
+        clean: action == Action::Apply && (st.get_clean_install() || st.get_update_kind() == 2),
         addin_settings: Some(addin_settings),
     };
     let from_manage = st.get_page() == Page::Manage;
