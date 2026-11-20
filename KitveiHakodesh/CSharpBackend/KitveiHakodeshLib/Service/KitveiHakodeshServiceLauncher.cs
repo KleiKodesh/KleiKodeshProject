@@ -291,7 +291,8 @@ namespace KitveiHakodeshLib.Service
             catch { return false; } // not registered, or the SCM refused the query
         }
 
-        private static bool IsRegistered()
+        /// <summary>True when the product's Windows service (KitveiHakodeshSvc) is registered, i.e. this is an installed copy.</summary>
+        public static bool IsRegistered()
         {
             try
             {
@@ -371,7 +372,8 @@ namespace KitveiHakodeshLib.Service
         /// still install / repair that service, never run beside it. Only that exe is ever
         /// registered; a portable or dev copy's own exe never asks for admin rights.
         /// </summary>
-        private static string InstalledExecutable()
+        /// <summary>The installed product's service exe (%LocalAppData%\KleiKodesh\KitveiHakodeshService), or null when it is not there.</summary>
+        public static string InstalledExecutable()
         {
             string candidate = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

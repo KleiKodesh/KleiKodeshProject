@@ -121,7 +121,15 @@
             <TextBlock x:Name="MacrosHint" Style="{StaticResource Muted}"/>
             <Border Style="{StaticResource SectionDivider}"/>
 
+            <!-- Updates: status, check now, install, and the shared turn-off switch. -->
+            <TextBlock x:Name="UpdatesHeader" Style="{StaticResource SectionHeading}"/>
+            <TextBlock x:Name="UpdateInstalledText" Style="{StaticResource Muted}"/>
+            <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Muted}" Margin="0,2,0,10"/>
+            <Button x:Name="BtnInstallUpdate" Margin="0,0,0,8" Visibility="Collapsed"/>
+            <Button x:Name="BtnCheckUpdates" Margin="0,0,0,12"/>
             <CheckBox x:Name="ChkTurnOffUpdates" Margin="0,0,0,16"/>
+            <Border Style="{StaticResource SectionDivider}"/>
+
             <Button x:Name="BtnReset"/>
 
         </StackPanel>

@@ -166,7 +166,7 @@ namespace OfficePaneChrome
             var side = CreateSidePane(from?.Window ?? Window());
             if (side == null) return;
             _current = side;
-            var entry = Ribbon?.Entries().FirstOrDefault(p => p.Id == from?.ActiveId) ?? Ribbon?.Entries().FirstOrDefault();
+            var entry = Ribbon?.Entries().FirstOrDefault(p => p.Id == from?.ActiveId) ?? Ribbon?.Entries().FirstOrDefault(p => !p.IsAction);
             if (entry != null) OpenInto(side, entry);     // the ribbon's own onAction -> ShowView into the new side pane
             else Reveal(side);
         }

@@ -45,7 +45,7 @@ public sealed class Dispatcher(
     /// <summary>Ops a host sends on a timer or to poll state, not because the user did
     /// something. They never touch the idle clock (see DispatchAsync).</summary>
     private static bool IsHousekeepingOp(string op) => op is
-        "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
+        "ping" or "getHttpPort" or "registerOwner" or "releaseOwner" or "stopIfUnowned"
         or "getSeforimDbPath" or "getUpdateStatus"
         or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress"
         or "indexBuildReasons" or "seforimLibraryDownloadStatus";
@@ -463,6 +463,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
                 case "releaseOwner":
                     owners.Release(MsgPack.De<OwnerArgs>(req.Args).Pid);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+
+                // The Word add-in started this service only for its update check and is done:
+                // go away now unless a program owns it (see OwnerRegistry.StopIfUnowned).
+                case "stopIfUnowned":
+                    owners.StopIfUnowned();
                     return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
 
                 // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync

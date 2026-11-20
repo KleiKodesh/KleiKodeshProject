@@ -17,6 +17,16 @@
 
 						<menu itemSize="large">
 
+							<!-- Shown only while a downloaded update waits; its colour follows its age. tag="paneAction": the
+								 side-pane switcher lists it too (as an action row), but it is never a pane to open. -->
+							<button id="Update" tag="paneAction"
+									getLabel="getUpdateLabel"
+									getScreentip="getUpdateLabel"
+									getSupertip="getSupertip"
+									getImage="getImage"
+									onAction="button_Click"
+									getVisible="getUpdateVisible"/>
+
 							<button id="KitveiHakodesh" tag="pane"
 									getLabel="getLabel"
 									getScreentip="getLabel"

@@ -201,6 +201,9 @@
     <Compile Include="..\KitveiHakodesh.Core\Settings\AppSettingsRegistry.cs">
       <Link>Core\Settings\AppSettingsRegistry.cs</Link>
     </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\Updates\UpdateInstallers.cs">
+      <Link>Core\Updates\UpdateInstallers.cs</Link>
+    </Compile>
     <Compile Include="..\KitveiHakodesh.Core\Settings\UserProfile.cs">
       <Link>Core\Settings\UserProfile.cs</Link>
     </Compile>

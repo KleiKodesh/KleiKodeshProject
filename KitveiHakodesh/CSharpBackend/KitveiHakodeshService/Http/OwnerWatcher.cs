@@ -68,6 +68,28 @@ public sealed class OwnerRegistry(
         if (_owners.IsEmpty) StopSoon("the last owner released it");
     }
 
+    /// <summary>
+    /// A program that started this service only to ask it one thing (the Word add-in's weekly
+    /// update check) says "I am done": stops the service when NO program owns it, even while a
+    /// background index build runs. Without this such a start would leave the service up for as
+    /// long as its indexes take, for a program that never uses them; an interrupted build
+    /// simply restarts the next time a program really uses the service. Never while any owner is
+    /// registered (a pane or another program is using it), and never while an update download
+    /// runs. Same short grace as <see cref="StopSoon"/>: a program that is just starting registers
+    /// within it and keeps the service.
+    /// </summary>
+    public void StopIfUnowned()
+    {
+        if (!_owners.IsEmpty) return;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(StopGrace);
+            if (!_owners.IsEmpty || updater.IsBusy) return;
+            logger.LogInformation("Stopping: it was started only for an update check and no program owns it");
+            lifetime.StopApplication();
+        });
+    }
+
     /// <summary>Drops owners that have exited; stops the service when none is left (or, never
     /// having had one, once it has been idle long enough).</summary>
     public void PruneExited()

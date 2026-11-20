@@ -1,4 +1,5 @@
 ﻿using KleiKodesh.Helpers;
+using KleiKodesh.Helpers.AddinUpdate;
 using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools.Ribbon;
 using Nakdan;
@@ -61,6 +62,7 @@ namespace KleiKodesh.Ribbon
         {
             this.ribbon = ribbonUI;
             AddinCommands.Ribbon = ribbonUI;
+            AddinUpdateRibbon.Attach(ribbonUI);
         }
 
         public void button_Click(Office.IRibbonControl control)
@@ -102,7 +104,11 @@ namespace KleiKodesh.Ribbon
             AddinCommands.IsKitveiHakodeshEnabled();
 
         public System.Drawing.Image getImage(Office.IRibbonControl control)
-            => LoadResourceImage(control.Id);
+            => control.Id == "Update" ? AddinUpdateRibbon.Image() : LoadResourceImage(control.Id);
+
+        public bool getUpdateVisible(Office.IRibbonControl control) => AddinUpdateRibbon.IsVisible();
+
+        public string getUpdateLabel(Office.IRibbonControl control) => AddinUpdateRibbon.Label();
 
         // Shared "כתבי הקודש" icon for all Kitvei Hakodesh context-menu items, so they
         // read as one feature. Reusable getImage callback — point any control at it.
