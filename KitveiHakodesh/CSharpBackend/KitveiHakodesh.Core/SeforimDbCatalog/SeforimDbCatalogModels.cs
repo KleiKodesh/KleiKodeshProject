@@ -66,6 +66,8 @@ public sealed class CatalogTocSearchResult
     /// <summary>Not built yet; a timed retry is pending (DB mid-update, index lock held by
     /// another writer). Transient: keep polling, show "building", not a failure.</summary>
     public bool Waiting { get; set; }
+    /// <summary>A build is running. With <see cref="Ready"/> = true the results are partial.</summary>
+    public bool Indexing { get; set; }
 }
 
 /// <summary>Result of a book-title search (catalogTitleSearch wire shape). The not-ready
