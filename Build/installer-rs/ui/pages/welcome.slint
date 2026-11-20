@@ -1,11 +1,11 @@
 import { Button, CheckBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
-import { Shots } from "shots.slint";
+import { Shots, Shot } from "shots.slint";
 import { Installer, Page } from "../state.slint";
 import { PageTitle, ShotCard, ProductIcon, CheckRow, Divider, LinkText } from "../widgets.slint";
 
-struct Slide { title: string, shot: image }
+struct Slide { title: string, shot: Shot }
 
 // One product: checkbox + icon + name on top, screenshot(s) below with a caption.
 // More than one slide = a small gallery that cycles, with the current pane's name and dots.
@@ -57,7 +57,7 @@ component ProductCard inherits Rectangle {
             // 600 x 678 shown at 160 x 181: exact ratio, nothing cropped.
             width: 160px;
             height: 181px;
-            source: root.slides[root.at].shot;
+            source: Shots.pick(root.slides[root.at].shot);
             opacity: root.selected ? 1 : 0.45;
         }
         Text {
@@ -89,22 +89,22 @@ component AddinCard inherits ProductCard {
     available: Installer.products[0].available;
     selected: Installer.products[0].selected;
     slides: [
-        { title: Lang.t("כתבי הקודש", "Kitvei Hakodesh"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-home.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-home.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-home.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-home.png") }) },
-        { title: Lang.t("עיצוב תורני — פסקאות", "Torah formatting: paragraphs"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-docdesign.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-docdesign.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign.png") }) },
-        { title: Lang.t("עיצוב תורני — איזון טורים", "Torah formatting: columns"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-docdesign-columns.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign-columns.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-docdesign-columns.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign-columns.png") }) },
-        { title: Lang.t("עיצוב תורני — מרווחים", "Torah formatting: spacing"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-docdesign-spacing.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign-spacing.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-docdesign-spacing.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign-spacing.png") }) },
-        { title: Lang.t("ניקוד", "Nakdan"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-nakdan.png"), he-dark: @image-url("../images/shots/he/dark/pane-nakdan.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-nakdan.png"), en-dark: @image-url("../images/shots/en/dark/pane-nakdan.png") }) },
-        { title: Lang.t("חיפוש רגקס", "Regex search"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-regex.png"), he-dark: @image-url("../images/shots/he/dark/pane-regex.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-regex.png"), en-dark: @image-url("../images/shots/en/dark/pane-regex.png") }) },
-        { title: Lang.t("דרך האתרים", "Websites"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-websites.png"), he-dark: @image-url("../images/shots/he/dark/pane-websites.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-websites.png"), en-dark: @image-url("../images/shots/en/dark/pane-websites.png") }) },
-        { title: Lang.t("קיוויקס", "Kiwix"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/pane-kiwix.png"), he-dark: @image-url("../images/shots/he/dark/pane-kiwix.png"),
-                                 en-light: @image-url("../images/shots/en/light/pane-kiwix.png"), en-dark: @image-url("../images/shots/en/dark/pane-kiwix.png") }) },
+        { title: Lang.t("כתבי הקודש", "Kitvei Hakodesh"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-home.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-home.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-home.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-home.png") } },
+        { title: Lang.t("עיצוב תורני — פסקאות", "Torah formatting: paragraphs"), shot: { he-light: @image-url("../images/shots/he/light/pane-docdesign.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-docdesign.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign.png") } },
+        { title: Lang.t("עיצוב תורני — איזון טורים", "Torah formatting: columns"), shot: { he-light: @image-url("../images/shots/he/light/pane-docdesign-columns.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign-columns.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-docdesign-columns.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign-columns.png") } },
+        { title: Lang.t("עיצוב תורני — מרווחים", "Torah formatting: spacing"), shot: { he-light: @image-url("../images/shots/he/light/pane-docdesign-spacing.png"), he-dark: @image-url("../images/shots/he/dark/pane-docdesign-spacing.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-docdesign-spacing.png"), en-dark: @image-url("../images/shots/en/dark/pane-docdesign-spacing.png") } },
+        { title: Lang.t("ניקוד", "Nakdan"), shot: { he-light: @image-url("../images/shots/he/light/pane-nakdan.png"), he-dark: @image-url("../images/shots/he/dark/pane-nakdan.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-nakdan.png"), en-dark: @image-url("../images/shots/en/dark/pane-nakdan.png") } },
+        { title: Lang.t("חיפוש רגקס", "Regex search"), shot: { he-light: @image-url("../images/shots/he/light/pane-regex.png"), he-dark: @image-url("../images/shots/he/dark/pane-regex.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-regex.png"), en-dark: @image-url("../images/shots/en/dark/pane-regex.png") } },
+        { title: Lang.t("דרך האתרים", "Websites"), shot: { he-light: @image-url("../images/shots/he/light/pane-websites.png"), he-dark: @image-url("../images/shots/he/dark/pane-websites.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-websites.png"), en-dark: @image-url("../images/shots/en/dark/pane-websites.png") } },
+        { title: Lang.t("קיוויקס", "Kiwix"), shot: { he-light: @image-url("../images/shots/he/light/pane-kiwix.png"), he-dark: @image-url("../images/shots/he/dark/pane-kiwix.png"),
+                                 en-light: @image-url("../images/shots/en/light/pane-kiwix.png"), en-dark: @image-url("../images/shots/en/dark/pane-kiwix.png") } },
     ];
     toggled => { Installer.toggle-product(0); }
 }
@@ -115,24 +115,24 @@ component KitveiCard inherits ProductCard {
     blurb: Lang.t("הספרייה כתוכנה עצמאית, בלי וורד", "The library as its own app, no Word needed");
     selected: Installer.products[1].selected;
     slides: [
-        { title: Lang.t("כתבי הקודש", "Kitvei Hakodesh"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-home.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-home.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-home.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-home.png") }) },
-        { title: Lang.t("עיון בספר", "Reading a book"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-book.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-book.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-book.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-book.png") }) },
-        { title: Lang.t("חיפוש בכל הספרייה", "Search the whole library"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-search.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-search.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-search.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-search.png") }) },
-        { title: Lang.t("חיפוש קבצים במחשב", "Find files on this computer"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-filesearch.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-filesearch.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-filesearch.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-filesearch.png") }) },
-        { title: Lang.t("מציג מסמכים", "Document viewer"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-docx.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-docx.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-docx.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-docx.png") }) },
-        { title: Lang.t("מציג PDF", "PDF viewer"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-pdf.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-pdf.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-pdf.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-pdf.png") }) },
-        { title: Lang.t("היברו-בוקס", "HebrewBooks"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-hebrewbooks.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-hebrewbooks.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-hebrewbooks.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-hebrewbooks.png") }) },
-        { title: Lang.t("מילון", "Dictionary"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-dictionary.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-dictionary.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-dictionary.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-dictionary.png") }) },
-        { title: Lang.t("לוח שנה", "Calendar"), shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/kitvei-calendar.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-calendar.png"),
-                                 en-light: @image-url("../images/shots/en/light/kitvei-calendar.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-calendar.png") }) },
+        { title: Lang.t("כתבי הקודש", "Kitvei Hakodesh"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-home.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-home.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-home.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-home.png") } },
+        { title: Lang.t("עיון בספר", "Reading a book"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-book.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-book.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-book.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-book.png") } },
+        { title: Lang.t("חיפוש בכל הספרייה", "Search the whole library"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-search.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-search.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-search.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-search.png") } },
+        { title: Lang.t("חיפוש קבצים במחשב", "Find files on this computer"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-filesearch.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-filesearch.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-filesearch.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-filesearch.png") } },
+        { title: Lang.t("מציג מסמכים", "Document viewer"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-docx.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-docx.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-docx.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-docx.png") } },
+        { title: Lang.t("מציג PDF", "PDF viewer"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-pdf.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-pdf.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-pdf.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-pdf.png") } },
+        { title: Lang.t("היברו-בוקס", "HebrewBooks"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-hebrewbooks.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-hebrewbooks.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-hebrewbooks.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-hebrewbooks.png") } },
+        { title: Lang.t("מילון", "Dictionary"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-dictionary.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-dictionary.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-dictionary.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-dictionary.png") } },
+        { title: Lang.t("לוח שנה", "Calendar"), shot: { he-light: @image-url("../images/shots/he/light/kitvei-calendar.png"), he-dark: @image-url("../images/shots/he/dark/kitvei-calendar.png"),
+                                 en-light: @image-url("../images/shots/en/light/kitvei-calendar.png"), en-dark: @image-url("../images/shots/en/dark/kitvei-calendar.png") } },
     ];
     toggled => { Installer.toggle-product(1); }
 }
@@ -142,9 +142,70 @@ component TutorCard inherits ProductCard {
     title: Installer.products[2].title;
     blurb: Lang.t("שיעורים, מקלדת וידיים על המסך", "Lessons, on-screen keyboard and hands");
     selected: Installer.products[2].selected;
-    slides: [{ title: "", shot: Shots.pick({ he-light: @image-url("../images/shots/he/light/tutor.png"), he-dark: @image-url("../images/shots/he/dark/tutor.png"),
-                                 en-light: @image-url("../images/shots/en/light/tutor.png"), en-dark: @image-url("../images/shots/en/dark/tutor.png") }) }];
+    slides: [{ title: "", shot: { he-light: @image-url("../images/shots/he/light/tutor.png"), he-dark: @image-url("../images/shots/he/dark/tutor.png"),
+                                 en-light: @image-url("../images/shots/en/light/tutor.png"), en-dark: @image-url("../images/shots/en/dark/tutor.png") } }];
     toggled => { Installer.toggle-product(2); }
+}
+
+// Warning triangle with "!", drawn (no font glyph dependence), in the colour of its message.
+component WarnIcon inherits Rectangle {
+    in property <color> tint;
+    width: 18px;
+    height: 18px;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        commands: "M 8 1.5 L 15 14 L 1 14 Z";
+        fill: root.tint;
+        stroke: root.tint;
+        stroke-width: 1.5px;
+        stroke-line-join: round;
+    }
+    Text { x: 0; y: 4px; width: 100%; height: 14px; text: "!"; color: white; font-size: 11px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+}
+
+// The clean-install slot in the bottom row; same one-line height as the checkbox row it replaces.
+// Patch update: the usual checkbox. Minor: checkbox + orange recommendation. Major: forced, message only.
+component CleanChoice inherits VerticalLayout {
+    in property <string> en-text;
+    in property <string> he-text;
+    property <string> caption: Lang.en ? root.en-text : root.he-text;
+    horizontal-stretch: 1;
+    alignment: center;
+    if Installer.update-kind == 0: CheckRow { text: root.caption; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
+    if Installer.update-kind == 1: HorizontalLayout {
+        spacing: 8px;
+        if Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
+        VerticalLayout { alignment: center; WarnIcon { tint: #e8820c; } }
+        Text {
+            horizontal-stretch: 1;
+            color: #e8820c;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: Lang.start;
+            wrap: word-wrap;
+            max-height: 32px;
+            text: Lang.t("מומלץ התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
+        }
+        if !Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
+    }
+    if Installer.update-kind == 2: HorizontalLayout {
+        spacing: 8px;
+        if Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: #d92d20; } }
+        Text {
+        color: #d92d20;
+        font-size: 12px;
+        vertical-alignment: center;
+        horizontal-alignment: Lang.start;
+        wrap: word-wrap;
+        max-height: 32px;
+        text: Lang.t("גרסה חדשה עם שינויים שוברים: תתבצע התקנה נקייה כדי שהכול יעבוד", "Major version with breaking changes: a clean install will be done so everything works");
+        horizontal-stretch: 1;
+        }
+        if !Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: #d92d20; } }
+    }
 }
 
 export component WelcomePage inherits VerticalLayout {
@@ -184,13 +245,13 @@ export component WelcomePage inherits VerticalLayout {
     Rectangle { height: 10px; }
     HorizontalLayout {
         spacing: 8px;
-        if Lang.en && Installer.updating: VerticalLayout { horizontal-stretch: 1; alignment: center; CheckRow { text: "Clean install (removes settings, caches and indexes first)"; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } } }
+        if Lang.en && Installer.updating: CleanChoice { en-text: "Clean install (removes settings, caches and indexes first)"; he-text: ""; }
         if Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; vertical-alignment: center; overflow: elide; }
         if Lang.en: Button { text: "Options…"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
         if Lang.en: Button { text: Installer.updating ? "Update" : "Install"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
         if !Lang.en: Button { text: Installer.updating ? "עדכן" : "התקן"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
         if !Lang.en: Button { text: "אפשרויות…"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
-        if !Lang.en && Installer.updating: VerticalLayout { horizontal-stretch: 1; alignment: center; CheckRow { text: "התקנה נקייה (מסיר קודם הגדרות, מטמון ואינדקסים)"; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } } }
+        if !Lang.en && Installer.updating: CleanChoice { en-text: ""; he-text: "התקנה נקייה (מסיר קודם הגדרות, מטמון ואינדקסים)"; }
         if !Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
     }
 }

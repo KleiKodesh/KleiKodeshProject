@@ -29,6 +29,8 @@ export global Installer {
     in property <string> version;
     // True when the product is already installed and this setup carries a newer payload.
     in property <bool> updating;
+    // Update step size: 0 patch (normal choice), 1 minor (warning), 2 major (clean install forced).
+    in property <int> update-kind;
     in property <[ProductRow]> products;
     in property <[ProductRow]> launchables;
     in property <string> summary;

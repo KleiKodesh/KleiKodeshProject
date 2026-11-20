@@ -35,6 +35,32 @@ pub fn installed(layout: &Layout) -> HashSet<Product> {
     }
 }
 
+/// The version recorded by the last install, if any.
+pub fn installed_version(layout: &Layout) -> Option<String> {
+    Hkcu::new(layout).get_str(STATE_KEY, "Version")
+}
+
+/// How big a step this update is, from the installed version to the one in this setup.
+/// 0 = patch or not newer (usual clean-install choice), 1 = minor (warn), 2 = major (forced).
+pub fn update_kind(installed: &str, new: &str) -> i32 {
+    fn parts(v: &str) -> [u32; 3] {
+        let mut out = [0u32; 3];
+        for (i, p) in v.trim().trim_start_matches('v').split('.').take(3).enumerate() {
+            let digits: String = p.chars().take_while(|c| c.is_ascii_digit()).collect();
+            out[i] = digits.parse().unwrap_or(0);
+        }
+        out
+    }
+    let (old, new) = (parts(installed), parts(new));
+    if new[0] > old[0] {
+        2
+    } else if new[0] == old[0] && new[1] > old[1] {
+        1
+    } else {
+        0
+    }
+}
+
 pub fn save(layout: &Layout, products: &HashSet<Product>, version: &str) -> std::io::Result<()> {
     let reg = Hkcu::new(layout);
     let ids: Vec<&str> = ALL.into_iter().filter(|p| products.contains(p)).map(Product::id).collect();
