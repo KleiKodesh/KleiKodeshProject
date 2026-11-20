@@ -607,6 +607,8 @@ export type CatalogTocSearchResult = {
   retryingAfterBuildFailure?: boolean
   /** Not built yet; a timed retry is pending (DB mid-update, index locked). Transient. */
   waiting?: boolean
+  /** A build is running; with ready = true the results are partial. */
+  indexing?: boolean
 }
 
 /** Where the catalog TOC index stands (catalogTocStatus wire shape, camelCased). */

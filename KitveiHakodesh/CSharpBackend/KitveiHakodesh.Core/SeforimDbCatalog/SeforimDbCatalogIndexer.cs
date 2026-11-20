@@ -380,10 +380,17 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
 
         int docCount = 0, bookNo = 0;
 
+        // Progress is reported from the very start (0 of N) so the UI shows a percentage
+        // instead of a bare spinner while the title docs are written.
+        onProgress?.Invoke(0, books.Count);
+
         // Book-title docs — Level 0, pointing at the book's first line.
         foreach (var b in books)
         {
             ct.ThrowIfCancellationRequested();
+            // Refresh the live reader during the title pass too, so book titles are
+            // searchable long before the first 1000 TOC books are done.
+            if (docCount > 0 && docCount % 2000 == 0) lock (_lock) RefreshNrtLocked();
             writer.AddDocument(MakeDoc(
                 catalogPath: catalogPathByBook.GetValueOrDefault(b.Id, ""),
                 authors: b.Authors,

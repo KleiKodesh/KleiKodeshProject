@@ -683,6 +683,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 return result;
             }
             result.Ready = true;
+            result.Indexing = IsIndexing;
+            result.BuiltBooks = BuiltBooks;
+            result.TotalBooks = TotalBooks;
             if (string.IsNullOrWhiteSpace(query)) return result;
 
             using var cts = new CancellationTokenSource();

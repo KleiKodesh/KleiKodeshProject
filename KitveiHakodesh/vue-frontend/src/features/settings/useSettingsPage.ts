@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { watchFullTextSearchIndexStatus } from '@/features/full-text-search/useFullTextSearchIndexingStatus'
+import { refreshCatalogTocStatus } from '@/composables/useSearchIndexStatus'
 import { resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, resetCatalogTocIndex as bridgeResetCatalogTocIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
@@ -40,6 +41,8 @@ export function useSettings() {
 
   async function resetCatalogTocIndexAction() {
     await bridgeResetCatalogTocIndex()
+    // Reset returns at once and rebuilds in the background; show its progress now.
+    await refreshCatalogTocStatus()
   }
 
   // Awaited: reset() only clears localStorage after the persist watchers have flushed, so

@@ -117,6 +117,16 @@ interface CatalogTocIndexState {
   buildFailure?: string | null
   retryingAfterBuildFailure?: boolean
   waiting?: boolean
+  /** A build is running right now. `ready` can already be true (partial results from the
+   *  live reader), so progress must show while this is set, not only while not ready. */
+  indexing?: boolean
+}
+
+/** Ask the service where the catalog index stands and report it — starts the background
+ *  poll when a build is running (used right after a reset, when no search is pending). */
+export async function refreshCatalogTocStatus(): Promise<void> {
+  const status = await catalogTocIndexStatus()
+  if (status) reportCatalogTocSearchResponse(status)
 }
 
 /**
@@ -128,7 +138,7 @@ export function reportCatalogTocSearchResponse(response: CatalogTocIndexState): 
     reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'buildFailed' })
   } else if (response.dbMissing) {
     reportSearchIndexStatus('catalogToc', { kind: 'unavailable', reason: 'dbMissing' })
-  } else if (!response.ready) {
+  } else if (!response.ready || response.indexing) {
     // Includes a pending retry (retryingAfterBuildFailure / waiting): the service retries on
     // its own timer and reports buildFailure only once its retry budget is spent, so a
     // transient failure shows as "building" and keeps the background poll alive.
