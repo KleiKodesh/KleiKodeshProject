@@ -127,12 +127,19 @@ namespace KitveiHakodeshLib
             _splash.BackColor = BackColor;
         }
 
+        /// <summary>
+        /// The loading splash is gone and the page shows. A host that draws around the viewer (e.g. the Word side
+        /// pane's title) redraws then: removing the splash moves focus into the page, and Office repaints its pane.
+        /// </summary>
+        public event EventHandler SplashHidden;
+
         internal void _HideSplash()
         {
             if (_splash == null) return;
             if (InvokeRequired) { Invoke(new Action(_HideSplash)); return; }
             _splash.FadeOut();
             _splash = null;
+            SplashHidden?.Invoke(this, EventArgs.Empty);
         }
     }
 }

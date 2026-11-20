@@ -68,6 +68,8 @@ namespace KleiKodesh.Ribbon
             string id = control.Id == "KleiKodesh_Main"
                 ? SettingsManager.Get("Ribbon", "DefaultButton", "Settings")
                 : control.Id;
+            // The settings save Torah Design under its old id ("KleiKodesh_Option" radio -> "KleiKodesh").
+            if (id == "KleiKodesh") id = "DocDesign";
 
             AddinCommands.Run(id);
         }
