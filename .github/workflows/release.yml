@@ -1,7 +1,8 @@
 # Builds and publishes a release: Gemini picks the version bump and writes the notes,
 # Build/build.ps1 builds the setup exe (notes built in) and the portable zip.
 # Start it from the Actions tab, with Build/build.bat (option 1), or:
-#   gh workflow run release.yml
+#   gh workflow run release.yml -f bump=minor     (major / minor / patch; default patch)
+# Gemini still writes the notes; it only decides the bump in the automatic weekly run.
 # Test run (everything, including Gemini, but nothing is published; the setup, the
 # portable zip and the release text are kept as run artifacts):
 #   gh workflow run release.yml -f test=true
@@ -15,6 +16,11 @@ on:
     - cron: "0 9 * * *"     # ~11:00-12:00 Israel; the gate job decides
   workflow_dispatch:
     inputs:
+      bump:
+        description: Version bump (major = first number, minor = second, patch = third). Only the automatic weekly run lets Gemini decide.
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       test:
         description: Test run - build everything, publish nothing (files kept as artifacts)
         type: boolean
@@ -146,7 +152,10 @@ jobs:
         shell: pwsh
         run: |
           $last = '${{ needs.gate.outputs.last }}'.TrimStart('v')
-          $bump = if ('${{ needs.gate.outputs.renew }}' -eq 'true') { 'patch' } else { '${{ needs.plan.outputs.bump }}' }
+          # Manual run: the bump you chose. Scheduled run: Gemini's. Renewal: patch.
+          $bump = if ('${{ needs.gate.outputs.renew }}' -eq 'true') { 'patch' }
+                  elseif ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.bump }}' }
+                  else { '${{ needs.plan.outputs.bump }}' }
           $v = [version]$last
           $next = switch ($bump) {
             'major' { "$($v.Major + 1).0.0" }
