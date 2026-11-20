@@ -132,6 +132,8 @@ namespace KitveiHakodeshLib
         /// pane's title) redraws then: removing the splash moves focus into the page, and Office repaints its pane.
         /// </summary>
         public event EventHandler SplashHidden;
+        /// <summary>The loading splash is still up (<see cref="SplashHidden"/> not raised yet).</summary>
+        public bool IsSplashShowing => _splash != null;
 
         internal void _HideSplash()
         {
