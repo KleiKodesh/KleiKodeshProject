@@ -42,6 +42,10 @@ public sealed class OwnerRegistry(
     /// host that is just starting (a pane reopened, another window) may register meanwhile.</summary>
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(10);
 
+    /// <summary>How often <see cref="StopIfUnowned"/> looks again while an update download runs, and how many times (about 15 minutes).</summary>
+    private static readonly TimeSpan BusyRecheck = TimeSpan.FromSeconds(10);
+    private const int BusyRecheckLimit = 90;
+
     /// <summary>pid -> process start time, so a recycled pid is not mistaken for the owner.</summary>
     private readonly ConcurrentDictionary<int, DateTime> _owners = new();
     private int _everHadOwner;
@@ -75,15 +79,23 @@ public sealed class OwnerRegistry(
     /// long as its indexes take, for a program that never uses them; an interrupted build
     /// simply restarts the next time a program really uses the service. Never while any owner is
     /// registered (a pane or another program is using it), and never while an update download
-    /// runs. Same short grace as <see cref="StopSoon"/>: a program that is just starting registers
-    /// within it and keeps the service.
+    /// runs: it looks again every <see cref="BusyRecheck"/> until the download ends (at most
+    /// <see cref="BusyRecheckLimit"/> times, then the ordinary stop rules apply). Same short grace
+    /// as <see cref="StopSoon"/>: a program that is just starting registers within it and keeps
+    /// the service.
     /// </summary>
     public void StopIfUnowned()
     {
         if (!_owners.IsEmpty) return;
         _ = Task.Run(async () =>
         {
-            await Task.Delay(StopGrace);
+            try
+            {
+                await Task.Delay(StopGrace, lifetime.ApplicationStopping);
+                for (int i = 0; i < BusyRecheckLimit && _owners.IsEmpty && updater.IsBusy; i++)
+                    await Task.Delay(BusyRecheck, lifetime.ApplicationStopping);
+            }
+            catch (OperationCanceledException) { return; }   // the service is already stopping
             if (!_owners.IsEmpty || updater.IsBusy) return;
             logger.LogInformation("Stopping: it was started only for an update check and no program owns it");
             lifetime.StopApplication();

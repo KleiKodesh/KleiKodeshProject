@@ -304,9 +304,13 @@ namespace KleiKodesh.Helpers.AddinUpdate
     /// only when a week has passed (stamp UpdateChecker/LastCheckUtc), it starts the service in
     /// the background and asks it to check now (a download included). Word is never registered
     /// as one of the service's owners, so there is nothing to release and nothing that can fail
-    /// to be released: a service nobody owns stops itself after 5 idle minutes (it waits for a
-    /// download in progress), and if the pane's own app uses it meanwhile, that app owns it.
-    /// No timer, no heartbeat, no event subscription is created here. Between checks nothing runs.
+    /// to be released. Two rules end the service, whichever applies: when THIS call started it,
+    /// the add-in asks it to stop right after the check (stopIfUnowned: about 10 s later, even
+    /// while its index builds run, unless a program owns it or a download is still running -
+    /// it then keeps looking until the download ends); when it was already running for someone
+    /// else, that program owns it and the service's own rules apply (it stops itself once
+    /// nobody owns it and its background work is done). No timer, no heartbeat, no event
+    /// subscription is created here. Between checks nothing runs.
     ///
     /// The tone ages like the app's button: the moment a version was first seen ready is saved
     /// (UpdateChecker/ReadySeen*), so it survives a Word restart.
