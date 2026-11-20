@@ -1,4 +1,5 @@
 ﻿using KleiKodesh.Helpers;
+using KleiKodesh.Helpers.AddinUpdate;
 using Nakdan.UI;
 using System;
 using System.Collections.Generic;
@@ -62,6 +63,9 @@ namespace KleiKodesh.Ribbon
                         break;
                     case "About":
                         OpenAboutDocument();
+                        break;
+                    case "Update":
+                        AddinUpdateInstall.PromptAndInstall();
                         break;
                     default:
                         MessageBox.Show(AddinUiLanguage.T($"אירעה שגיאה במהלך טעינת {id}", $"An error occurred while loading {id}"));

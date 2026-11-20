@@ -1,4 +1,5 @@
 using KleiKodesh.Helpers;
+using KleiKodesh.Helpers.AddinUpdate;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,6 +9,8 @@ namespace KleiKodesh.Ribbon
     public partial class RibbonSettingsView : UserControl
     {
         private readonly Microsoft.Office.Core.IRibbonUI _ribbon;
+        // The Updates section (all its logic is in Helpers/AddinUpdate.cs).
+        private AddinUpdateSettingsSection _updates;
 
         public RibbonSettingsView(Microsoft.Office.Core.IRibbonUI ribbon)
         {
@@ -17,6 +20,8 @@ namespace KleiKodesh.Ribbon
             InitializeControls();
             InitializeLanguage();
             InitializeMacros();
+            _updates = new AddinUpdateSettingsSection(UpdatesHeader, UpdateInstalledText,
+                UpdateStatusText, BtnInstallUpdate, BtnCheckUpdates, ChkTurnOffUpdates);
         }
 
         // ── VBA macros template ──────────────────────────────────────────────────
@@ -64,8 +69,8 @@ namespace KleiKodesh.Ribbon
             LanguageHeader.Text = AddinUiLanguage.T("שפת ממשק", "Interface language");
             LanguageHint.Text   = AddinUiLanguage.T("ייתכן שחלק מההגדרות יחולו רק לאחר הפעלה מחדש של Word.",
                                                     "Some settings may only take effect after Word is restarted.");
-            ChkTurnOffUpdates.Content = AddinUiLanguage.T("כבה בדיקת עדכונים אוטומטית", "Turn off automatic update checks");
-            BtnReset.Content          = AddinUiLanguage.T("איפוס התוכנה", "Reset the add-in");
+            _updates?.ApplyTexts();
+            BtnReset.Content         = AddinUiLanguage.T("איפוס התוכנה", "Reset the add-in");
 
             bool english = AddinUiLanguage.IsEnglish;
             MacrosHeader.Text          = VbaMacrosTemplate.HeaderText(english);
@@ -141,10 +146,6 @@ namespace KleiKodesh.Ribbon
                 rb.Checked += (_, __) =>
                     SettingsManager.Save("Ribbon", "DefaultButton", rb.Name.Replace("_Option", ""));
             }
-
-            ChkTurnOffUpdates.IsChecked = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
-            ChkTurnOffUpdates.Checked   += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", true);
-            ChkTurnOffUpdates.Unchecked += (_, __) => SettingsManager.Save("UpdateChecker", "TurnOffUpdates", false);
 
             BtnReset.Click += (_, __) =>
             {

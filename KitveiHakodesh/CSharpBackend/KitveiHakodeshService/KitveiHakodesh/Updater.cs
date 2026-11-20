@@ -97,7 +97,6 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
         }
     }
 
-    private const string RegistryKeyPath = @"SOFTWARE\KleiKodesh";
     private const string LatestReleaseApiUrl =
         "https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest";
 
@@ -114,31 +113,12 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
     public static (string Path, string Version)? ReadyInstaller()
     {
         if (AppSettingsRegistry.GetTurnOffUpdates()) return null;
-        string? installed = InstalledVersion();
-        if (string.IsNullOrEmpty(installed) || !Directory.Exists(DownloadFolder)) return null;
-
-        (string Path, string Version)? best = null;
-        foreach (string file in Directory.EnumerateFiles(DownloadFolder, "KleiKodeshSetup-*.exe"))
-        {
-            string tag = Path.GetFileNameWithoutExtension(file).Substring("KleiKodeshSetup-".Length);
-            int variantDash = tag.IndexOf('-');
-            if (variantDash > 0) tag = tag.Substring(0, variantDash);
-            if (CompareVersions(tag, installed) <= 0) continue;
-            if (best is null || CompareVersions(tag, best.Value.Version) > 0) best = (file, tag);
-        }
-        return best;
+        return global::KitveiHakodesh.Core.Updates.UpdateInstallers.ReadyInstaller(DownloadFolder, InstalledVersion());
     }
 
     /// <summary>The installer's own stamp; null when this is not an installed copy.</summary>
-    public static string? InstalledVersion()
-    {
-        try
-        {
-            using var key = UserProfile.Hive.OpenSubKey(RegistryKeyPath);
-            return key?.GetValue("Version")?.ToString();
-        }
-        catch { return null; }
-    }
+    public static string? InstalledVersion() =>
+        global::KitveiHakodesh.Core.Updates.UpdateInstallers.InstalledVersion(UserProfile.Hive);
 
     /// <summary>
     /// The installer of a release newer than the installed one, on disk and complete; null
@@ -302,24 +282,9 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
         }
     }
 
-    /// <summary>
-    /// Orders two version strings. A longer string wins over a shorter one ("1.2.3.1" over
-    /// "1.2.3") before components are compared - the rule the release tags were built around.
-    /// </summary>
-    public static int CompareVersions(string? candidate, string? installed)
-    {
-        string left = candidate?.TrimStart('v') ?? "";
-        string right = installed?.TrimStart('v') ?? "";
-        if (Version.TryParse(left, out Version? leftVersion) && Version.TryParse(right, out Version? rightVersion))
-        {
-            int byComponentCount = ComponentCount(leftVersion).CompareTo(ComponentCount(rightVersion));
-            return byComponentCount != 0 ? byComponentCount : leftVersion.CompareTo(rightVersion);
-        }
-        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int ComponentCount(Version version) =>
-        version.Revision >= 0 ? 4 : version.Build >= 0 ? 3 : 2;
+    /// <summary>Orders two version strings (the rule lives in Core, shared with the Word add-in).</summary>
+    public static int CompareVersions(string? candidate, string? installed) =>
+        global::KitveiHakodesh.Core.Updates.UpdateInstallers.CompareVersions(candidate, installed);
 }
 
 /// <summary>A release as the GitHub API reports it (somebody else's JSON).</summary>

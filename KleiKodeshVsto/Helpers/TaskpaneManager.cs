@@ -100,6 +100,9 @@ namespace KleiKodesh.Helpers
 
         static void OnPaneCreated(Microsoft.Office.Tools.CustomTaskPane pane)
         {
+            // A fresh pane: the moment the weekly update check may run (in the background).
+            try { KleiKodesh.Helpers.AddinUpdate.AddinUpdateState.PaneOpened(); } catch { }
+
             RestoreDockPosition(pane);
             OfficeThemeWatcher.Attach(pane.Control);
 

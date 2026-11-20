@@ -295,6 +295,7 @@
     <Compile Include="Helpers\AddinUiLanguage.cs" />
     <Compile Include="Helpers\VbaMacrosTemplate.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
+    <Compile Include="Helpers\AddinUpdate.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />
     <Compile Include="Helpers\OfficePaneChrome\Native.cs" />
     <Compile Include="Helpers\OfficePaneChrome\Fluent.cs" />

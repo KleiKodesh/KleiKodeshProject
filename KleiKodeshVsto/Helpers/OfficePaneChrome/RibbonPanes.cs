@@ -11,14 +11,16 @@ namespace OfficePaneChrome
     /// <summary>
     /// The add-in's panes as its ribbon describes them: every ribbon &lt;button tag="pane"&gt;, with label, image and
     /// visibility from the ribbon object's OWN callbacks (getLabel / getImage / getVisible), opened by its onAction.
-    /// The XML is parsed once; labels and visibility are asked fresh each time.
+    /// A &lt;button tag="paneAction"&gt; is listed the same way but is an ACTION, not a view (e.g. "update available"):
+    /// its onAction does something instead of showing a view, so it is never "current" and is never what a new
+    /// side pane opens. The XML is parsed once; labels and visibility are asked fresh each time.
     /// </summary>
     public sealed class RibbonPanes
     {
         /// <summary>A pane button: <see cref="Tip"/> / <see cref="SuperTip"/> are the ribbon's screentip and supertip.</summary>
-        public sealed class Entry { public string Id, Title, Tip, SuperTip; public Image Icon; public Action Open; }
+        public sealed class Entry { public string Id, Title, Tip, SuperTip; public Image Icon; public Action Open; public bool IsAction; }
 
-        sealed class Button { public string Id, Label, GetLabel, GetImage, GetVisible, OnAction, Screentip, GetScreentip, Supertip, GetSupertip; public bool Hidden; }
+        sealed class Button { public string Id, Label, GetLabel, GetImage, GetVisible, OnAction, Screentip, GetScreentip, Supertip, GetSupertip; public bool Hidden, IsAction; }
 
         readonly Func<object> _create;
         object _ribbon;
@@ -34,7 +36,7 @@ namespace OfficePaneChrome
             _ribbon = _create();
             string xml = (_ribbon as Office.IRibbonExtensibility)?.GetCustomUI("");
             _buttons = string.IsNullOrEmpty(xml) ? new List<Button>() : XDocument.Parse(xml).Descendants()
-                .Where(e => e.Name.LocalName == "button" && (string)e.Attribute("tag") == "pane" && e.Attribute("id") != null)
+                .Where(e => e.Name.LocalName == "button" && ((string)e.Attribute("tag") == "pane" || (string)e.Attribute("tag") == "paneAction") && e.Attribute("id") != null)
                 .GroupBy(e => (string)e.Attribute("id")).Select(g => g.First())
                 .Select(e => new Button
                 {
@@ -44,6 +46,7 @@ namespace OfficePaneChrome
                     Screentip = (string)e.Attribute("screentip"), GetScreentip = (string)e.Attribute("getScreentip"),
                     Supertip = (string)e.Attribute("supertip"), GetSupertip = (string)e.Attribute("getSupertip"),
                     Hidden = (string)e.Attribute("visible") == "false",
+                    IsAction = (string)e.Attribute("tag") == "paneAction",
                 }).ToList();
             return _buttons;
         }
@@ -51,8 +54,9 @@ namespace OfficePaneChrome
         public Image IconFor(string id)
         {
             if (id == null) return null;
-            if (_icons.TryGetValue(id, out var icon)) return icon;
             var b = Buttons().FirstOrDefault(x => x.Id == id);
+            if (b != null && b.IsAction) return Invoke<Image>(b.GetImage, new Control(b.Id));
+            if (_icons.TryGetValue(id, out var icon)) return icon;
             return _icons[id] = b == null ? null : Invoke<Image>(b.GetImage, new Control(b.Id));
         }
 
@@ -71,6 +75,7 @@ namespace OfficePaneChrome
                     Tip = Invoke<string>(b.GetScreentip, control) ?? b.Screentip,
                     SuperTip = Invoke<string>(b.GetSupertip, control) ?? b.Supertip,
                     Icon = IconFor(b.Id),
+                    IsAction = b.IsAction,
                     Open = () => Invoke<object>(b.OnAction, control),
                 });
             }
