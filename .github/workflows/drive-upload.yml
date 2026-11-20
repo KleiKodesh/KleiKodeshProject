@@ -71,7 +71,11 @@ jobs:
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
                    --limit 2 --json tagName --jq '.[].tagName')
           [ -n "$tags" ] || { echo "No releases - nothing to sync."; exit 1; }
-          sudo apt-get install -y -qq pandoc > /dev/null
+          for i in 1 2 3; do
+            sudo apt-get update -qq && sudo apt-get install -y -qq -o Acquire::Retries=3 pandoc > /dev/null && break
+            [ "$i" = 3 ] && exit 1
+            sleep 10
+          done
           sub=""
           for tag in $tags; do
             mkdir -p "mirror/$sub" "notes/$sub"
