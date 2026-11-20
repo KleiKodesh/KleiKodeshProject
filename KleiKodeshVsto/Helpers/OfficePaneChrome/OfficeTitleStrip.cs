@@ -44,7 +44,58 @@ namespace OfficePaneChrome
         string _lastLayout;
         static readonly int[] SampleRows = { 35, 45, 50, 55, 65 };   // % of strip height through Office's glyphs
 
-        public OfficeTitleStrip(Control paneContent) { _content = paneContent; _proc = WndProc; Attach(); }
+        public OfficeTitleStrip(Control paneContent) { _content = paneContent; _proc = WndProc; _frameProc = FrameProc; Attach(); }
+
+        // ---- Word's frame: Office repaints the strip while handling the frame's messages ----
+        // Measured: when Word is activated / deactivated, Office paints the pane titles' active / inactive look while
+        // its main window (OpusApp) handles WM_NCACTIVATE / WM_ACTIVATE / WM_ACTIVATEAPP - the strip window itself
+        // gets no message at all. A click anywhere in Word reaches the frame as WM_PARENTNOTIFY, and the focus change
+        // it starts repaints the titles the same way. So the frame is subclassed too, and our parts are put back
+        // right after Office handled those messages.
+        readonly Native.SubclassProc _frameProc;
+        IntPtr _frame;
+        static int _nextFrameId = 100;
+        readonly UIntPtr _frameId = (UIntPtr)System.Threading.Interlocked.Increment(ref _nextFrameId);   // one per strip on a shared frame
+
+        void HookFrame()
+        {
+            var frame = Native.GetAncestor(_bar, Native.GA_ROOT);
+            if (frame == _frame || frame == IntPtr.Zero) return;
+            UnhookFrame();
+            if (Native.SetWindowSubclass(frame, _frameProc, _frameId, IntPtr.Zero)) _frame = frame;
+        }
+
+        void UnhookFrame()
+        {
+            if (_frame == IntPtr.Zero) return;
+            Native.RemoveWindowSubclass(_frame, _frameProc, _frameId);
+            _frame = IntPtr.Zero;
+        }
+
+        IntPtr FrameProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
+        {
+            if (msg == Native.WM_NCDESTROY) { Native.RemoveWindowSubclass(hWnd, _frameProc, id); _frame = IntPtr.Zero; return Native.DefSubclassProc(hWnd, msg, wParam, lParam); }
+            var result = Native.DefSubclassProc(hWnd, msg, wParam, lParam);
+            if (_failed || _disposed || _bar == IntPtr.Zero) return result;
+            try { AfterFrameMessage(msg, wParam); } catch (Exception ex) { Fail(ex.Message); }   // never into Word's own window proc
+            return result;
+        }
+
+        void AfterFrameMessage(uint msg, IntPtr wParam)
+        {
+            if (msg == 0x0086 /*WM_NCACTIVATE*/ || msg == 0x0006 /*WM_ACTIVATE*/ || msg == 0x001C /*WM_ACTIVATEAPP*/)
+            {
+                _tip?.Reset();
+                DrawSafe(relayout: true);                               // Office just painted the new look: put ours back
+            }
+            else if (msg == 0x0210 /*WM_PARENTNOTIFY*/)
+            {
+                int what = (int)(wParam.ToInt64() & 0xFFFF);
+                if ((what == 0x0201 || what == 0x0204 || what == 0x0207) && _content.IsHandleCreated && !_content.IsDisposed)
+                    // The click's focus change repaints the titles after this returns: draw once the click is handled.
+                    _content.BeginInvoke((Action)(() => { if (!_failed && !_disposed && _bar != IntPtr.Zero) DrawSafe(relayout: true); }));
+            }
+        }
 
         /// <summary>Redraw after the selector's content changed (it may shrink: Office repaints what it no longer covers).</summary>
         public void Repaint()
@@ -104,6 +155,7 @@ namespace OfficePaneChrome
                 if (s.Height > 90 * Scale) { _bar = _workPane = IntPtr.Zero; Fail("unexpected strip " + s); return true; }
                 if (!Native.SetWindowSubclass(_bar, _proc, (UIntPtr)1, IntPtr.Zero)) { _bar = _workPane = IntPtr.Zero; Fail("subclass refused"); return true; }
                 Native.InvalidateRect(_bar, IntPtr.Zero, false);
+                HookFrame();
                 return true;
             }
             catch (Exception ex) { Fail(ex.Message); return true; }
@@ -267,6 +319,10 @@ namespace OfficePaneChrome
         /// </summary>
         string _layoutKey;
         Size _laidOutFor;
+        // Where Office's X and arrow were last seen, for this strip size and DPI. Office paints its inactive look
+        // (pane not active: another window clicked) with fainter or no X and arrow, so a scan then finds nothing:
+        // the last seen anchors stay valid until the strip itself changes size or DPI.
+        int _anchorClose, _anchorArrow; string _anchorFor;
 
         void Layout(IntPtr screenDc, Rectangle s)
         {
@@ -327,14 +383,24 @@ namespace OfficePaneChrome
                     }
 
                 Rectangle popOut = Rectangle.Empty, hide = Rectangle.Empty, selector = Rectangle.Empty, closeBox = Rectangle.Empty;
+                string anchorFor = s.Width + "x" + s.Height + "@" + Native.GetDpiForWindow(_bar);
+                int ccx = 0, acx = 0; bool found = false;
+                int box = (int)Math.Round(32 * Scale);
                 if (runs.Count == 2)
                 {
                     bool closeAtLeft = runs[0][0] < s.Width - runs[1][1];      // X sits at the strip's edge
                     var close = closeAtLeft ? runs[0] : runs[1];
                     var arrow = closeAtLeft ? runs[1] : runs[0];
-                    int ccx = (close[0] + close[1]) / 2, acx = (arrow[0] + arrow[1]) / 2;
-                    int box = (int)Math.Round(32 * Scale), step = acx - ccx;
-                    if (Math.Abs(step) >= box * 0.8 && Math.Abs(step) <= box * 3)
+                    ccx = (close[0] + close[1]) / 2; acx = (arrow[0] + arrow[1]) / 2;
+                    int d = Math.Abs(acx - ccx);
+                    found = d >= box * 0.8 && d <= box * 3;
+                    if (found) { _anchorClose = ccx; _anchorArrow = acx; _anchorFor = anchorFor; }
+                }
+                if (!found && _anchorFor == anchorFor) { ccx = _anchorClose; acx = _anchorArrow; found = true; }   // inactive look
+                if (!found) _layoutKey = null;                                 // nothing known: look again on the next paint
+                {
+                    int step = acx - ccx;
+                    if (found)
                     {
                         closeBox = new Rectangle(ccx - box / 2, s.Height - box, box, box);
                         popOut = new Rectangle(2 * acx - ccx - box / 2, s.Height - box, box, box);
@@ -446,6 +512,7 @@ namespace OfficePaneChrome
         {
             _tip?.Reset();
             _retry?.Dispose(); _retry = null;
+            UnhookFrame();
             if (_bar == IntPtr.Zero) return;
             Native.RemoveWindowSubclass(_bar, _proc, (UIntPtr)1);
             var bar = _bar;

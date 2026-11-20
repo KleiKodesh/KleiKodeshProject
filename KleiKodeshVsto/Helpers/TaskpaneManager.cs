@@ -119,6 +119,9 @@ namespace KleiKodesh.Helpers
             // Office theme colours: the watcher follows controls added to the root it is given, so each view is a root.
             OfficeThemeWatcher.Attach(view);
 
+            // A view finishing its load makes Office repaint the pane: redraw our title controls then.
+            RepaintTitleWhenLoaded(view);
+
             // window.open popups (e.g. Hameshiv) become owned windows of Word.
             var setPopupOwner = view.GetType().GetMethod("SetPopupOwnerAction");
             setPopupOwner?.Invoke(view, new object[] { new Action<IntPtr>(SetPopupOwner) });
@@ -177,6 +180,45 @@ namespace KleiKodesh.Helpers
             return (uiLang == 1037 || uiLang == 1025)
                 ? DockPosition.msoCTPDockPositionLeft
                 : DockPosition.msoCTPDockPositionRight;
+        }
+
+        /// <summary>
+        /// When a view finishes loading (moves focus, swaps its content), Office repaints the side pane and draws over
+        /// our title controls without telling us. Each kind of view says when it is done, and the title is redrawn:
+        /// Kitvei Hakodesh when its splash goes, a WPF view after its first load (idle), a web view after its first page.
+        /// </summary>
+        static void RepaintTitleWhenLoaded(Control view)
+        {
+            if (view is KitveiHakodeshLib.AppViewer viewer)
+            {
+                viewer.SplashHidden += (s, e) => SidePanes.RepaintTitle(view);
+                return;
+            }
+            var wpf = view.Controls.OfType<System.Windows.Forms.Integration.ElementHost>().FirstOrDefault()?.Child as System.Windows.FrameworkElement;
+            if (wpf != null)
+            {
+                System.Windows.RoutedEventHandler loaded = null;
+                loaded = (s, e) =>
+                {
+                    wpf.Loaded -= loaded;
+                    // After the view's own deferred first load (queued at the same idle priority from its Loaded).
+                    wpf.Dispatcher.BeginInvoke(new Action(() => SidePanes.RepaintTitle(view)), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                };
+                wpf.Loaded += loaded;
+                return;
+            }
+            var web = Descendants(view).OfType<Microsoft.Web.WebView2.WinForms.WebView2>().FirstOrDefault();
+            if (web != null)
+            {
+                EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs> done = null;
+                done = (s, e) => { web.NavigationCompleted -= done; SidePanes.RepaintTitle(view); };
+                web.NavigationCompleted += done;
+            }
+        }
+
+        static IEnumerable<Control> Descendants(Control root)
+        {
+            foreach (Control c in root.Controls) { yield return c; foreach (var d in Descendants(c)) yield return d; }
         }
 
         // ---------------- focus toggle (macro shortcut) ----------------

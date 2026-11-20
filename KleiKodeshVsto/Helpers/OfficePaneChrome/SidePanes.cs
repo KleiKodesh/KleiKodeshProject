@@ -207,6 +207,17 @@ namespace OfficePaneChrome
             if (side.IsPoppedOut) side.PopOut.EnterFullScreen();       // it may have failed to pop out
         }
 
+        /// <summary>
+        /// Redraws the title strip of the side pane holding <paramref name="view"/>, once Office has handled what is
+        /// in the queue - for a view that knows it just made Office repaint the pane (e.g. it finished loading).
+        /// </summary>
+        public static void RepaintTitle(Control view)
+        {
+            var side = All.FirstOrDefault(s => s.Views.ContainsValue(view));
+            if (side?.Strip == null || side.Closing || side.Host.IsDisposed || !side.Host.IsHandleCreated) return;
+            side.Host.BeginInvoke((Action)(() => { if (!side.Closing) side.Strip?.Repaint(); }));
+        }
+
         /// <summary>Closes every side pane of the given document window for good (e.g. its document is closing).</summary>
         public static void CloseAllFor(int window)
         {
