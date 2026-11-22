@@ -302,7 +302,7 @@ fn start_engine(
         action,
         products: wanted,
         options: Options { desktop_shortcut: st.get_desktop_shortcut(), open_with: st.get_file_associations(), english },
-        clean: action == Action::Apply && (st.get_clean_install() || st.get_update_kind() == 2),
+        clean: action == Action::Apply && st.get_clean_install(),
         addin_settings: Some(addin_settings),
     };
     let from_manage = st.get_page() == Page::Manage;

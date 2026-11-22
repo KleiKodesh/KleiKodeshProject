@@ -167,44 +167,32 @@ component WarnIcon inherits Rectangle {
 }
 
 // The clean-install slot in the bottom row; same one-line height as the checkbox row it replaces.
-// Patch update: the usual checkbox. Minor: checkbox + orange recommendation. Major: forced, message only.
+// Patch update: the usual checkbox. Minor: checkbox + orange recommendation. Major: same in red, ticked by default.
 component CleanChoice inherits VerticalLayout {
     in property <string> en-text;
     in property <string> he-text;
     property <string> caption: Lang.en ? root.en-text : root.he-text;
+    property <color> warn-color: Installer.update-kind == 2 ? #d92d20 : #e8820c;
     horizontal-stretch: 1;
     alignment: center;
     if Installer.update-kind == 0: CheckRow { text: root.caption; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
-    if Installer.update-kind == 1: HorizontalLayout {
+    if Installer.update-kind > 0: HorizontalLayout {
         spacing: 8px;
         if Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
-        VerticalLayout { alignment: center; WarnIcon { tint: #e8820c; } }
+        VerticalLayout { alignment: center; WarnIcon { tint: root.warn-color; } }
         Text {
             horizontal-stretch: 1;
-            color: #e8820c;
+            color: root.warn-color;
             font-size: 12px;
             vertical-alignment: center;
             horizontal-alignment: Lang.start;
             wrap: word-wrap;
             max-height: 32px;
-            text: Lang.t("מומלץ התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
+            text: Installer.update-kind == 2
+                ? Lang.t("מומלץ להתקין התקנה נקייה: בגרסה החדשה יש שינויים גדולים, וכך הכול יעבוד בצורה חלקה", "Clean install recommended: this version has big changes, and a fresh start keeps everything running smoothly")
+                : Lang.t("מומלץ להתקין התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
         }
         if !Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
-    }
-    if Installer.update-kind == 2: HorizontalLayout {
-        spacing: 8px;
-        if Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: #d92d20; } }
-        Text {
-        color: #d92d20;
-        font-size: 12px;
-        vertical-alignment: center;
-        horizontal-alignment: Lang.start;
-        wrap: word-wrap;
-        max-height: 32px;
-        text: Lang.t("גרסה חדשה עם שינויים שוברים: תתבצע התקנה נקייה כדי שהכול יעבוד", "Major version with breaking changes: a clean install will be done so everything works");
-        horizontal-stretch: 1;
-        }
-        if !Lang.en: VerticalLayout { alignment: center; WarnIcon { tint: #d92d20; } }
     }
 }
 

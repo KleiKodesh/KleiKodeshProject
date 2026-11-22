@@ -41,7 +41,7 @@ pub fn installed_version(layout: &Layout) -> Option<String> {
 }
 
 /// How big a step this update is, from the installed version to the one in this setup.
-/// 0 = patch or not newer (usual clean-install choice), 1 = minor (warn), 2 = major (forced).
+/// 0 = patch or not newer (usual choice), 1 = minor (orange warning), 2 = major (red warning, ticked).
 pub fn update_kind(installed: &str, new: &str) -> i32 {
     fn parts(v: &str) -> [u32; 3] {
         let mut out = [0u32; 3];
