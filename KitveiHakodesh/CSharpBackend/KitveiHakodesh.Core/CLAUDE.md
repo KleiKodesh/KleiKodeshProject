@@ -73,7 +73,7 @@ is not. Split at that seam: the query is Core's, the algorithm is FtsLib's.
 ## 6. One target: net10.0-windows
 
 `<TargetFramework>net10.0-windows</TargetFramework>` only (since e1e30b36). The net48 hosts
-(Word VSTO add-in, `KitveiHakodeshDemoApp`) no longer reference Core: they reach it through
+(Word VSTO add-in, `KitveiHakodeshDesktopApp`) no longer reference Core: they reach it through
 the service (`KitveiHakodesh.ServiceClient`), and `KitveiHakodeshLib` holds no Core, SQLite,
 Lucene, FtsLib or MessagePack DLL. Don't add a net48 leg back; host-only needs go in Lib.
 

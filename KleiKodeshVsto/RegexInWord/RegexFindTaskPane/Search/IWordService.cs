@@ -1,0 +1,27 @@
+using Microsoft.Office.Interop.Word;
+using System.Collections.Generic;
+
+namespace RegexFindTaskPane.Search
+{
+    /// <summary>
+    /// Abstracts all Word Interop access so the model (RegexSearch) and ViewModel
+    /// never reference Vsto, Globals, or any infrastructure directly.
+    /// Implemented once in RegexFindTaskPane.Helpers.WordService and injected at construction.
+    /// </summary>
+    public interface IWordService
+    {
+        Application Application { get; }
+        Document ActiveDocument { get; }
+        Selection Selection { get; }
+
+        /// <summary>Returns all in-use style names from the active document.</summary>
+        IEnumerable<string> GetStyleNames();
+
+        /// <summary>
+        /// The active document's total style count, or -1 with no document. One
+        /// COM read, used as a cheap has-anything-changed check before paying for
+        /// a full GetStyleNames enumeration.
+        /// </summary>
+        int GetStylesCount();
+    }
+}

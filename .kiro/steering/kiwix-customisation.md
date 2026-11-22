@@ -9,7 +9,7 @@ fileMatchPattern: "KleiKodeshVsto/Kiwix/**"
 
 All Kiwix UI changes go in the **source**: `KleiKodeshVsto/Kiwix/kiwix-js-main/`
 
-Never edit files in `KleiKodeshVsto/Kiwix/KiwixLib/Kiwix.js/` directly — they are build output and will be overwritten.
+Never edit files in `KleiKodeshVsto/Kiwix/KiwixTaskPane/Kiwix.js/` directly — they are build output and will be overwritten.
 
 ## Build and Deploy
 
@@ -18,10 +18,10 @@ Never edit files in `KleiKodeshVsto/Kiwix/KiwixLib/Kiwix.js/` directly — they 
 Set-Location KleiKodeshVsto/Kiwix/kiwix-js-main
 npm run build-src
 
-# 2. Copy dist to KiwixLib
+# 2. Copy dist to KiwixTaskPane
 Set-Location ..
 $src = Resolve-Path "kiwix-js-main/dist"
-$dst = Resolve-Path "KiwixLib/Kiwix.js"
+$dst = Resolve-Path "KiwixTaskPane/Kiwix.js"
 Get-ChildItem $src -Recurse -File | ForEach-Object {
     $rel  = $_.FullName.Substring($src.Path.Length + 1)
     $dest = Join-Path $dst $rel

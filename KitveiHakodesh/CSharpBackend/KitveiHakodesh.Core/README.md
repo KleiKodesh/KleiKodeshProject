@@ -98,7 +98,7 @@ There is **no `CoreOptions`** and no injected path bag. Core finds its own files
 `Common/AppFileLocator`, which probes candidate roots in order and takes the first that
 exists, falling back to the installer's `%LocalAppData%\KleiKodesh`. This is not a
 preference: the service keeps data beside its binary, the VSTO add-in is shadow-copied so its
-own location is a temp folder, and the **portable** DemoApp runs from a path that changes per
+own location is a temp folder, and the **portable** DesktopApp runs from a path that changes per
 run and may be read-only. Probing answers all three. Reading and writing are separate
 questions — `ResolveWritablePath` *tests* writability rather than assuming it.
 

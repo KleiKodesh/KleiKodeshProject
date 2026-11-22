@@ -6,7 +6,7 @@ import { nextTick } from 'vue'
  *
  * A browser tab closing fires visibilitychange / pagehide / beforeunload, and
  * installBrowserPersistenceFlush below runs the flush on those. The WinForms WebView2
- * hosts (the demo app, the Word task pane) close their window and dispose the
+ * hosts (the desktop app, the Word task pane) close their window and dispose the
  * WebView2 WITHOUT firing any of them, so a write still sitting in its trailing timer
  * was lost. The host now calls `window.__khsFlushPersistence()` first and waits for
  * the `persistenceFlushed` message before disposing (AppViewer.FlushPersistenceAsync).

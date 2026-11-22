@@ -43,7 +43,7 @@ This frontend runs in a WebView2 control hosted by `KitveiHakodeshLib` (C# backe
 
 ## Hosted end-to-end rig (real WebView2 host)
 
-`node e2e-hosted/run-hosted-rig.mjs` drives the real desktop host (KitveiHakodeshDemoApp)
+`node e2e-hosted/run-hosted-rig.mjs` drives the real desktop host (KitveiHakodeshDesktopApp)
 through the real relay -> service -> Core path with Playwright over CDP, then tears it all down.
 
 - Builds the host into a temp folder (MSBuild; the shared AOT payload and `dist/` are reused,

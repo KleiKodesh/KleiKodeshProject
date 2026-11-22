@@ -2,7 +2,7 @@
   <Project Path="ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
   <Project Path="FtsLib-Csharp/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
   <Project Path="KitveiHakodesh.Core/KitveiHakodesh.Core.csproj" Id="d94b9d83-0308-46e0-aebb-c06aeedcd28a" />
-  <Project Path="KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
+  <Project Path="KitveiHakodeshDesktopApp/KitveiHakodeshDesktopApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
   <Project Path="KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj" />
   <Project Path="KitveiHakodeshService/KitveiHakodeshService.csproj" />

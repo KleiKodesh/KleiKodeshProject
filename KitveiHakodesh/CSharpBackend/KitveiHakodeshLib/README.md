@@ -2,7 +2,7 @@
 
 A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 control and bridges it to native Windows APIs (file system, SQLite, PDF handling, HebrewBooks downloads, FtsLib full-text search).
 
-The C# side is a thin shell: one `AppViewer` UserControl owning one WebView2, hosted by a WinForms form (`MainForm` in the demo app) or the VSTO task pane. All UI beyond the window chrome lives in Vue — there is no C# tab UI at all; tabs, panes, and split view are purely frontend concepts. The bridge is a Promise-based RPC: action messages come in via `window.__webviewAction`, replies and push events go out via `window.__onWebviewEvent`. Dark mode is driven by Vue — the frontend sends a `setTheme` action on every theme change, and `AppViewerTheme.cs` applies it to the host window title bar via DarkNet (initial state is passed to Vue at startup via the injected `window.__webviewIsDark`).
+The C# side is a thin shell: one `AppViewer` UserControl owning one WebView2, hosted by a WinForms form (`MainForm` in the desktop app) or the VSTO task pane. All UI beyond the window chrome lives in Vue — there is no C# tab UI at all; tabs, panes, and split view are purely frontend concepts. The bridge is a Promise-based RPC: action messages come in via `window.__webviewAction`, replies and push events go out via `window.__onWebviewEvent`. Dark mode is driven by Vue — the frontend sends a `setTheme` action on every theme change, and `AppViewerTheme.cs` applies it to the host window title bar via DarkNet (initial state is passed to Vue at startup via the injected `window.__webviewIsDark`).
 
 ## How It Integrates with the VSTO Add-in
 

@@ -27,7 +27,7 @@ All other version stamps are derived from this value by `UpdateVersion.ps1` duri
 | -------------------------------------------------------------- | ---------------------- | ----------------------- |
 | `Build/Installer/Helpers/AddinInstaller.cs`         | `const string Version` | `"vX.Y.Z"`              |
 | `Build/Installer/KleiKodeshVstoInstallerWpf.csproj` | `<Version>`            | `X.Y.Z` (no `v` prefix) |
-| `KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/Properties/AssemblyInfo.cs` | `AssemblyVersion`, `AssemblyFileVersion` | `X.Y.Z.0` (four parts)  |
+| `KitveiHakodesh/CSharpBackend/KitveiHakodeshDesktopApp/Properties/AssemblyInfo.cs` | `AssemblyVersion`, `AssemblyFileVersion` | `X.Y.Z.0` (four parts)  |
 
 The third row is the KitveiHakodesh app exe. Its project is an old-style (non-SDK)
 csproj, so the version lives in `AssemblyInfo.cs` rather than the csproj — which is why

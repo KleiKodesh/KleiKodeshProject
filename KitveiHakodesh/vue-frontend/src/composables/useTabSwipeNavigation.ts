@@ -36,7 +36,7 @@ const REARM_SPIKE_RATIO = 2
 const REARM_SPIKE_FLOOR_PX = 12
 // Deep-decay gate on the re-strike: the reference must have decayed to at most this
 // before a spike may re-arm. Calibrated from two REAL __tabSwipeTrace captures
-// (2026-07-19, user's precision touchpad in the demo app):
+// (2026-07-19, user's precision touchpad in the desktop app):
 //   • real repeat swipes re-struck off DEEPLY decayed tails — ref 3-6px, spikes 9-22×
 //     (3→62, 4→89, 6→55);
 //   • finger SPEED PULSES inside one continuous swipe rose off still-fat bases — ref

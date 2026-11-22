@@ -1,6 +1,6 @@
 ﻿using KleiKodesh.Helpers;
 using KleiKodesh.Helpers.AddinUpdate;
-using Nakdan.UI;
+using NakdanTaskPane.UI;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -35,22 +35,22 @@ namespace KleiKodesh.Ribbon
                         ShowKitveiHakodesh();
                         break;
                     case "Kiwix":
-                        TaskPaneManager.Show(id, () => new KiwixLib.KiwixWebview(), AddinText.Label(id));
+                        TaskPaneManager.Show(id, () => new KiwixTaskPane.KiwixWebview(), AddinText.Label(id));
                         break;
                     case "WebSites":
-                        WpfTaskPane.Show(id, () => new WebSitesLib.UI.WebSitesView(), AddinText.Label(id));
+                        WpfTaskPane.Show(id, () => new WebSitesTaskPane.UI.WebSitesView(), AddinText.Label(id));
                         break;
                     // case "HebrewBooks":
                     //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
                     //     break;
                     case "DocDesign":
-                        WpfTaskPane.Show(id, () => new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
+                        WpfTaskPane.Show(id, () => new DocDesignTaskPane.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
                     case "Nakdan":
                         WpfTaskPane.Show(id, () => new NakdanView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
                     case "RegexFind":
-                        WpfTaskPane.Show(id, () => new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
+                        WpfTaskPane.Show(id, () => new RegexFindTaskPane.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory), AddinText.Label(id));
                         break;
                     case "NewPane":
                         TaskPaneManager.OpenNewPane();

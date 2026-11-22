@@ -6,10 +6,10 @@ Regex find & replace functionality for Word, displayed as a WPF task pane.
 
 | Project | Description |
 |---------|-------------|
-| `RegexFindLib/` | WPF class library — UserControl + MVVM + search model |
-| `RegexFindDemo/` | Standalone WPF demo app for UI debugging (no Word required) |
+| `RegexFindTaskPane/` | WPF class library — UserControl + MVVM + search model |
+| `RegexFindTaskPaneDemo/` | Standalone WPF demo app for UI debugging (no Word required) |
 
-## Architecture (RegexFindLib)
+## Architecture (RegexFindTaskPane)
 
 Strict MVVM with injected `IWordService` interface:
 
@@ -54,7 +54,7 @@ View (RegexFindView.xaml) — XAML only, minimal code-behind
 
 ```csharp
 // From VSTO ribbon (KeliKodeshRibbon.cs -> "RegexFind" tag):
-var view = new RegexFindLib.UI.RegexFindView(
+var view = new RegexFindTaskPane.UI.RegexFindView(
     Globals.ThisAddIn.Application,
     Globals.Factory);
 WpfTaskPane.Show("RegexFind", () => view, "חיפוש רגקס");
@@ -63,7 +63,7 @@ WpfTaskPane.Show("RegexFind", () => view, "חיפוש רגקס");
 var view = new RegexFindView(new MockWordService());
 ```
 
-## Themes (RegexFindLib/UI/Themes/)
+## Themes (RegexFindTaskPane/UI/Themes/)
 
 | File | Contents |
 |------|----------|
@@ -78,8 +78,8 @@ var view = new RegexFindView(new MockWordService());
 ## Running the Demo
 
 ```powershell
-msbuild KleiKodeshVsto\RegexInWord\RegexFindDemo\RegexFindDemo.csproj
-.\KleiKodeshVsto\RegexInWord\RegexFindDemo\bin\Debug\RegexFindDemo.exe
+msbuild KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\RegexFindTaskPaneDemo.csproj
+.\KleiKodeshVsto\RegexInWord\RegexFindTaskPaneDemo\bin\Debug\RegexFindTaskPaneDemo.exe
 ```
 
 The demo uses `MockWordService` that operates on an in-memory string — no Word installation required.

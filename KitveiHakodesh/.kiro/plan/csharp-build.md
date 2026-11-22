@@ -21,7 +21,7 @@ Restore commands (run from the workspace root):
 .\nuget.exe restore "CSharpBackend\KitveiHakodesh.slnx"
 ```
 
-The first restore (`FtsLib.slnx`) covers the FtsLib custom search engine; the second restore (`KitveiHakodesh.slnx`) covers `KitveiHakodeshLib`, `KitveiHakodeshDemoApp`, `FtsLib`, `DocumentLocator.Client`, `DocumentLocator.Service`, and the core `DocumentLocator` library — their packages folder is `CSharpBackend\packages\` (the default, no `-PackagesDirectory` override needed).
+The first restore (`FtsLib.slnx`) covers the FtsLib custom search engine; the second restore (`KitveiHakodesh.slnx`) covers `KitveiHakodeshLib`, `KitveiHakodeshDesktopApp`, `FtsLib`, `DocumentLocator.Client`, `DocumentLocator.Service`, and the core `DocumentLocator` library — their packages folder is `CSharpBackend\packages\` (the default, no `-PackagesDirectory` override needed).
 
 ## Building
 

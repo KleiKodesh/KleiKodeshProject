@@ -268,7 +268,7 @@ const DEFAULTS = {
   splitViewEnabled: false,
   splitViewFraction: 0.5,
   // The always-on icon rail beside the page (AppNavSidebar). On by default in the standalone
-  // demo app, which has the width for it and no other chrome competing down that side; off in
+  // desktop app, which has the width for it and no other chrome competing down that side; off in
   // the VSTO task pane (too narrow to give 44px away) and in the dev browser, which mirrors
   // the task pane so that is the path we exercise day to day. hasNativeChromeTabs is exactly
   // that distinction - the demo host has the bridge and is not VSTO - so it is reused rather

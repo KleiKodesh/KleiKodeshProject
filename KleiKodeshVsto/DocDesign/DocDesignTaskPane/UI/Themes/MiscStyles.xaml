@@ -1,0 +1,37 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:kk="http://schemas.kleikodesh.org/wpf"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:WpfLib.Converters;assembly=WpfLib"
+                    xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
+    <ResourceDictionary.MergedDictionaries>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+
+    <converters:ReverseBoolConverter x:Key="ReverseBoolConverter"/>
+
+    <!-- ── TextBlock ─────────────────────────────────────────────── -->
+    <!-- The palette's text block. It also wraps, which this did not. -->
+    <Style TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}"/>
+
+    <!-- CheckBox comes from WpfLib/Themes/CheckBoxStyles.xaml (via OfficePalette). -->
+
+    <!-- ── Separator ─────────────────────────────────────────────── -->
+    <Style TargetType="Separator" BasedOn="{StaticResource OfficeSeparator}">
+        <Setter Property="Margin" Value="0,2"/>
+    </Style>
+
+    <!-- UpDownTextBox and UpDownFloatTextBox come from
+         WpfLib/Themes/UpDownTextBoxStyles.xaml. -->
+
+    <!-- ── Delete overlay — red diagonal line (same as RegexFindTaskPane FormatToggle false state) ── -->
+    <!-- Usage: add as a sibling inside a Grid alongside the icon Viewbox -->
+    <Style x:Key="DeleteOverlay" TargetType="Canvas">
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
+    <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml (via OfficePalette). -->
+
+</ResourceDictionary>

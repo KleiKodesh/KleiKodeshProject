@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Hosted end-to-end rig: drives the REAL desktop host (KitveiHakodeshDemoApp, WebView2) through
+ * Hosted end-to-end rig: drives the REAL desktop host (KitveiHakodeshDesktopApp, WebView2) through
  * the real relay -> service -> Core path with Playwright over CDP. See README.md beside this file.
  *
  *   node e2e-hosted/run-hosted-rig.mjs [--aot] [--host-dir <folder>] [--keep] [--doc <file.docx>] [--pictures <file.docx>]
@@ -86,7 +86,7 @@ function buildHost() {
   fs.writeFileSync(khsStamp, '')
   fs.utimesSync(khsStamp, future, future)
   runStep('host build', findMsBuild(), [
-    path.join(backendDir, 'KitveiHakodeshDemoApp', 'KitveiHakodeshDemoApp.csproj'),
+    path.join(backendDir, 'KitveiHakodeshDesktopApp', 'KitveiHakodeshDesktopApp.csproj'),
     '/p:Configuration=Debug', `/p:OutDir=${hostDir}\\`, `/p:VueBuildStamp=${stamp}`, `/p:KhsPublishedExe=${khsStamp}`,
     '/v:m', '/nr:false', '/m:1', '/restore',
   ])

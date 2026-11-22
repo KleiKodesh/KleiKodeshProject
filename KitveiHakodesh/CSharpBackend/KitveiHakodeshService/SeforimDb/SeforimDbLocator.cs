@@ -5,7 +5,7 @@ namespace KitveiHakodeshService.SeforimDb;
 /// <summary>
 /// Thin adapter over <see cref="SeforimDbPathResolver"/>, which owns WHERE the seforim database
 /// lives and the registry value it is persisted in (shared with the hosted app, the VSTO add-in
-/// and the DemoApp, so all of them read one setting).
+/// and the DesktopApp, so all of them read one setting).
 ///
 /// It exists only to keep the service's string-shaped call sites working. Core answers with a
 /// <see cref="SeforimDbPathResolver.SeforimDbLocation"/> that distinguishes "found here" from

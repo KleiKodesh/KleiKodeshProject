@@ -19,7 +19,7 @@ namespace KitveiHakodesh.Core.Common
     ///                          Assembly.Location is a temp folder holding no data, and
     ///                          AppDomain.BaseDirectory is WINWORD.EXE's folder — Office's
     ///                          install directory, which is not ours either.
-    ///   DemoApp (PORTABLE)     runs from anywhere — a USB stick, a network share, a locked
+    ///   DesktopApp (PORTABLE)     runs from anywhere — a USB stick, a network share, a locked
     ///                          folder. Data should travel beside the exe, but that folder is
     ///                          not guaranteed writable and its path changes between runs.
     ///
@@ -95,7 +95,7 @@ namespace KitveiHakodesh.Core.Common
             //    copy); the same folder otherwise, deduplicated by CandidateRoots.
             yield return SafeDirectory(() => DataRoot);
 
-            // 1. Next to the running assembly. Correct for the portable DemoApp and for the
+            // 1. Next to the running assembly. Correct for the portable DesktopApp and for the
             //    service; under VSTO this is the shadow-copy folder and simply will not match.
             yield return SafeDirectory(() => AppContext.BaseDirectory);
 

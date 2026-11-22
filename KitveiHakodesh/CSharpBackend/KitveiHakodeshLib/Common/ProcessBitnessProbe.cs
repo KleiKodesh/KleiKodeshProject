@@ -9,7 +9,7 @@ namespace KitveiHakodeshLib.Common
     ///
     /// Sounds trivial and is the first question worth asking whenever a native library fails
     /// to load: a VSTO add-in runs inside WINWORD.EXE and inherits ITS bitness, so the same
-    /// build can be 32-bit in Word and 64-bit in the demo app.
+    /// build can be 32-bit in Word and 64-bit in the desktop app.
     /// </summary>
     public static class ProcessBitnessProbe
     {

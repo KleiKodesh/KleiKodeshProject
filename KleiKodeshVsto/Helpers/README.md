@@ -65,4 +65,4 @@ Shared utilities for the KleiKodesh VSTO Word add-in. These handle task pane lif
 
 - **One side pane, many views** — ribbon buttons shuffle views into the current side pane instead of opening a pane each; a second side pane is opened on purpose ("open new side pane").
 - **Theme propagation** — WPF task panes subscribe to `OfficeThemeWatcher.ThemeChanged` and update their resource dictionaries dynamically.
-- **RAII for Word interop** — Operations that modify the Word document use `ScreenFreeze` and `UndoRecord` wrappers (defined in DocDesignLib) to prevent flicker and group undo steps.
+- **RAII for Word interop** — Operations that modify the Word document use `ScreenFreeze` and `UndoRecord` wrappers (defined in DocDesignTaskPane) to prevent flicker and group undo steps.

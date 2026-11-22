@@ -137,6 +137,9 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
 
     reporter.step(Text::new("רושם את הרכיבים", "Registering"));
     register_products(layout, wanted, &request.options)?;
+    if wanted.contains(&Product::WordAddin) {
+        addin_settings::migrate_sites_file(layout); // also on silent updates, which carry no settings
+    }
     if let (true, Some(settings)) = (wanted.contains(&Product::WordAddin), &request.addin_settings) {
         settings
             .save(layout)

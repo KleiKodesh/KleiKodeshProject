@@ -9,13 +9,13 @@ namespace KitveiHakodesh.Core.Common
     /// files outside it (a portable copy must carry all its data with it). Each kind of file has
     /// its own subfolder, named by the constants below.
     ///
-    /// The host (DemoApp / KitveiHakodeshLib, net48, at the top of the app folder) and the service
+    /// The host (DesktopApp / KitveiHakodeshLib, net48, at the top of the app folder) and the service
     /// (the KitveiHakodeshService\ subfolder, AOT net10) run from different exe folders, so the
     /// rule is "the folder that HOLDS KitveiHakodeshService\". In order:
     ///   1. KHS_APP_ROOT, when set (dev rig, tests): taken as is.
     ///   2. Start = KHS_DATA_DIR or the exe folder. Inside a source checkout (an ancestor
     ///      named CSharpBackend): CSharpBackend\bin\AppRoot - gitignored, shared by the dev host
-    ///      (DemoApp bin), the dev service (its KHS_DATA_DIR points into the service's bin) and a
+    ///      (DesktopApp bin), the dev service (its KHS_DATA_DIR points into the service's bin) and a
     ///      service the dev host spawned from its own bin. Checked first so all of them agree.
     ///   3. Start named KitveiHakodeshService: its parent (the service, installed or portable).
     ///   4. Start holds a KitveiHakodeshService\ folder: start (the host, installed or portable).

@@ -241,7 +241,7 @@ namespace KleiKodeshVstoInstallerWpf
         /// <summary>
         /// Loads the default whitelist JSON.
         /// Tries the exe directory first (dev/debug), then the embedded resource.
-        /// The embedded resource is linked directly from WebSitesLib2/WebSitesWhitelist.json
+        /// The embedded resource is linked directly from WebSitesTaskPane2/WebSitesWhitelist.json
         /// — do not add a second copy anywhere.
         /// </summary>
         private static string LoadDefaultJson()
@@ -250,7 +250,7 @@ namespace KleiKodeshVstoInstallerWpf
             string candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebSitesWhitelist.json");
             if (File.Exists(candidate)) return File.ReadAllText(candidate);
 
-            // Release: embedded resource compiled from WebSitesLib2/WebSitesWhitelist.json
+            // Release: embedded resource compiled from WebSitesTaskPane2/WebSitesWhitelist.json
             var asm = Assembly.GetExecutingAssembly();
             using (var stream = asm.GetManifestResourceStream("KleiKodeshVstoInstallerWpf.WebSitesWhitelist.json"))
             {

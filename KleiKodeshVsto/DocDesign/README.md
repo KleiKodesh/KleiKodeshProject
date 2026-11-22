@@ -6,8 +6,8 @@ A WPF class library providing formatting tools tailored for Hebrew Torah documen
 
 | Project | Type | Purpose |
 |---------|------|---------|
-| `DocDesignLib/` | Class library | The actual library — all logic and UI |
-| `DocDesignDemo/` | WPF exe | Standalone debug host — no Word/VSTO needed |
+| `DocDesignTaskPane/` | Class library | The actual library — all logic and UI |
+| `DocDesignTaskPaneDemo/` | WPF exe | Standalone debug host — no Word/VSTO needed |
 
 ## How It Integrates with the VSTO Add-in
 
@@ -15,13 +15,13 @@ A WPF class library providing formatting tools tailored for Hebrew Torah documen
 
 ## Running the Demo
 
-Open `DocDesignDemo` as the startup project and run. It hosts `DocDesignView` with no Word installation required — all commands will no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test the dark Office theme.
+Open `DocDesignTaskPaneDemo` as the startup project and run. It hosts `DocDesignView` with no Word installation required — all commands will no-op gracefully since `Vsto` is null. Uncomment the dark-mode lines in `MainWindow.xaml.cs` to test the dark Office theme.
 
 ## Folder Structure
 
 ```
 DocDesign/
-├── DocDesignLib/               — Class library
+├── DocDesignTaskPane/               — Class library
 │   ├── UI/
 │   │   ├── DocDesignView.xaml/.cs     — Root UserControl (task pane UI)
 │   │   ├── DocDesignViewModel.cs      — Main ViewModel; coordinates sub-ViewModels
@@ -49,7 +49,7 @@ DocDesign/
 │       ├── ScreenFreeze.cs            — RAII: disables screen updates during bulk operations
 │       ├── UndoRecord.cs              — RAII: wraps operations in a named Word undo record
 │       └── RangePageData.cs           — DTO: FirstPage, LastPage, PageCount for a Range
-└── DocDesignDemo/              — Standalone WPF debug host
+└── DocDesignTaskPaneDemo/              — Standalone WPF debug host
     ├── MainWindow.xaml/.cs            — Hosts DocDesignView with no Word dependency
     └── App.xaml/.cs
 ```
@@ -70,4 +70,4 @@ Follows MVVM. Each feature area has its own ViewModel inheriting `ViewModelBase`
 
 ## Visual Style
 
-Matches `RegexFindLib` and `WebSitesLib` — same adaptive mid-gray color tokens, same `Segoe UI` font, same icon button pattern (`Viewbox/Canvas/Path`). Section headers use a custom `Expander` template styled as a title bar with a chevron indicator.
+Matches `RegexFindTaskPane` and `WebSitesTaskPane` — same adaptive mid-gray color tokens, same `Segoe UI` font, same icon button pattern (`Viewbox/Canvas/Path`). Section headers use a custom `Expander` template styled as a title bar with a chevron indicator.

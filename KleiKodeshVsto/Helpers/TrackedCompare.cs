@@ -72,7 +72,7 @@ namespace KleiKodesh.Helpers
 
             // One custom undo record so a single Ctrl+Z reverts the whole comparison.
             // No Find/Replace in here: wdReplaceAll inside an open UndoRecord crashes
-            // Word (see DocDesignLib) - all edits go through Range operations.
+            // Word (see DocDesignTaskPane) - all edits go through Range operations.
             app.UndoRecord.StartCustomRecord(AddinUiLanguage.T("השוואה עם כתבי הקודש", "Compare with Kitvei Hakodesh"));
             try
             {

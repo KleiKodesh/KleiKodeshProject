@@ -4,7 +4,7 @@
     catalog indexes. ONE consumer: KitveiHakodeshService, which publishes native AOT.
 
     This used to multi-target net48 as well, for the WebView2 host (KitveiHakodeshLib), the
-    Word VSTO add-in and KitveiHakodeshDemoApp. Those reach the data through the service's
+    Word VSTO add-in and KitveiHakodeshDesktopApp. Those reach the data through the service's
     named pipe now (KitveiHakodesh.ServiceClient) and reference nothing in here - which is the
     point: SQLite, Lucene, FtsLib and MessagePack are referenced by the service alone. The
     host-only pieces that lived on the net48 leg (Word COM finder + thesaurus, the environment

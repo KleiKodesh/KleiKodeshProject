@@ -339,7 +339,7 @@ The backend is **not** uniformly net48 — the language rules depend on which pr
 
 | Project | Target | Language rules |
 | --- | --- | --- |
-| `KitveiHakodeshLib`, `KitveiHakodeshDemoApp` | net48 | C# 7.3 — the restrictions below apply |
+| `KitveiHakodeshLib`, `KitveiHakodeshDesktopApp` | net48 | C# 7.3 — the restrictions below apply |
 | `DocumentLocator.Client`, `.Service`, `.Tests`, `.Demo` | net48 | C# 7.3 — the restrictions below apply |
 | `KitveiHakodeshService` | net10.0-windows | modern C#, AOT-published |
 | `KitveiHakodeshService.Tests`, `FtsLibTest` | net10.0 | modern C# |

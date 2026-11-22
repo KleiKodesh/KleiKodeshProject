@@ -406,7 +406,7 @@ namespace KitveiHakodeshLib
             VisibleChanged += OnVisibleChanged;
             // SetCurrentProcessTheme(Auto) must be called before any window in this
             // process is shown — do it here unconditionally so it runs in both the
-            // standalone demo app and the VSTO (Word) process.
+            // standalone desktop app and the VSTO (Word) process.
             DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
             ParentChanged += OnParentChanged;
             Controls.Add(_webView);

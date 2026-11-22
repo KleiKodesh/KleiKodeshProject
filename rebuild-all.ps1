@@ -19,30 +19,30 @@ $projects = @(
     "KleiKodeshVsto/WpfLib/WpfLib/WpfLib.csproj",
     
     # DocDesign (depends on WpfLib)
-    "KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj",
-    "KleiKodeshVsto/DocDesign/DocDesignDemo/DocDesignDemo.csproj",
+    "KleiKodeshVsto/DocDesign/DocDesignTaskPane/DocDesignTaskPane.csproj",
+    "KleiKodeshVsto/DocDesign/DocDesignTaskPaneDemo/DocDesignTaskPaneDemo.csproj",
     
     # RegexFind (depends on WpfLib)
-    "KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj",
-    "KleiKodeshVsto/RegexInWord/RegexFindDemo/RegexFindDemo.csproj",
+    "KleiKodeshVsto/RegexInWord/RegexFindTaskPane/RegexFindTaskPane.csproj",
+    "KleiKodeshVsto/RegexInWord/RegexFindTaskPaneDemo/RegexFindTaskPaneDemo.csproj",
     
     # WebSites (depends on WpfLib)
-    "KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesLib.csproj",
-    "KleiKodeshVsto/WebSitesLib/WebSitesDemo/WebSitesDemo.csproj",
+    "KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPane/WebSitesTaskPane.csproj",
+    "KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPaneDemo/WebSitesTaskPaneDemo.csproj",
     
     # Kiwix (no WpfLib dependency)
-    "KleiKodeshVsto/Kiwix/KiwixLib/KiwixLib.csproj",
-    "KleiKodeshVsto/Kiwix/KiwixDemoApp/KiwixDemoApp.csproj",
+    "KleiKodeshVsto/Kiwix/KiwixTaskPane/KiwixTaskPane.csproj",
+    "KleiKodeshVsto/Kiwix/KiwixTaskPaneDemoApp/KiwixTaskPaneDemoApp.csproj",
     
     # Nakdan (depends on WpfLib)
-    "KleiKodeshVsto/Nakdan/Nakdan/Nakdan.csproj",
-    "KleiKodeshVsto/Nakdan/NakdanDemo/NakdanDemo.csproj",
+    "KleiKodeshVsto/Nakdan/NakdanTaskPane/NakdanTaskPane.csproj",
+    "KleiKodeshVsto/Nakdan/NakdanTaskPaneDemo/NakdanTaskPaneDemo.csproj",
     
     # KitveiHakodesh backend
     "KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLib/FtsLib.csproj",
     "KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLibTest/FtsLibTest.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj",
-    "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj",
+    "KitveiHakodesh/CSharpBackend/KitveiHakodeshDesktopApp/KitveiHakodeshDesktopApp.csproj",
     
     
     # VSTO add-in LAST (depends on all libraries above)

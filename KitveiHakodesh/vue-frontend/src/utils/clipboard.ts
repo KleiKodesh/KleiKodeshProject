@@ -6,7 +6,7 @@
  * `navigator.clipboard` is not exposed there at all and reaching for `.writeText`
  * throws outright. Dev is served from http://localhost, a secure context where the
  * async API works — which is exactly why a clipboard call written against it looks
- * fine in dev and silently does nothing in the demo app and the add-in.
+ * fine in dev and silently does nothing in the desktop app and the add-in.
  *
  * `execCommand('copy')` over an off-screen textarea is the one path both contexts
  * share; it is the same primitive every other copy path in the app already goes

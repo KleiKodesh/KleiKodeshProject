@@ -32,7 +32,7 @@ export const useThemeStore = defineStore('theme', () => {
     // If the C# host injected a persisted dark mode value, use it to override
     // the localStorage theme on startup. This ensures the Vue theme always
     // matches the title bar when multiple hosts share the same registry setting
-    // (e.g. user set dark mode in VSTO, then opens the standalone demo app).
+    // (e.g. user set dark mode in VSTO, then opens the standalone desktop app).
     const hostIsDark = window.__webviewIsDark
     if (typeof hostIsDark === 'boolean') {
       const currentIsDark = themePreset.value.includes('-dark')

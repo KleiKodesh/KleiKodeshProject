@@ -2,8 +2,8 @@
 using KleiKodesh.Helpers.AddinUpdate;
 using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools.Ribbon;
-using Nakdan;
-using Nakdan.UI;
+using NakdanTaskPane;
+using NakdanTaskPane.UI;
 using System;
 using System.Collections.Generic;
 using System.IO;

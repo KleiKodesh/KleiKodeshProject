@@ -117,7 +117,7 @@ namespace KitveiHakodeshLib
 
         /// <summary>
         /// Raised when Vue asks to toggle the native chrome tab-strip's tab-list dropdown
-        /// (Ctrl+T in the standalone/demo app). ChromeTabsMirror handles it by calling
+        /// (Ctrl+T in the standalone/desktop app). ChromeTabsMirror handles it by calling
         /// <c>ShowTabListMenu</c> on the strip form; it must work even in fullscreen.
         ///
         /// A non-zero <see cref="ChromeTabListToggleEventArgs.QuickSwitchStep" /> means the

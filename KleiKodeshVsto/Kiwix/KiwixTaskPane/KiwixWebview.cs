@@ -1,0 +1,110 @@
+﻿using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+using System;
+using System.IO;
+using System.Reflection;
+using System.Drawing;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace KiwixTaskPane
+{
+    public class KiwixWebview : UserControl
+    {
+        private static readonly string AppDir =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Kiwix.js");
+
+        // Shared environment — same UDF means same browser process across instances.
+        private static Task<CoreWebView2Environment> _sharedEnvTask;
+
+        private static Task<CoreWebView2Environment> GetSharedEnv()
+        {
+            if (_sharedEnvTask == null)
+                _sharedEnvTask = CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "kiwix-webcache"));
+            return _sharedEnvTask;
+        }
+
+        private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
+        private SplashOverlay _splash;
+
+        public KiwixWebview()
+        {
+            AutoScaleMode = AutoScaleMode.None;
+            Controls.Add(_webView);
+            _InitSplash();
+            // Load fires after the form is shown and all handles are created.
+            Load += (_, __) => _ = InitAsync();
+        }
+
+        private void _InitSplash()
+        {
+            Image logo = null;
+            using (var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("kiwix-256.png"))
+            {
+                if (stream != null)
+                    logo = Image.FromStream(stream);
+            }
+
+            _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
+            Controls.Add(_splash);
+            _splash.BringToFront();
+        }
+
+        private void _HideSplash()
+        {
+            if (_splash == null) return;
+            if (InvokeRequired) { Invoke(new Action(_HideSplash)); return; }
+            _splash.FadeOut();
+            _splash = null;
+        }
+
+        private async Task InitAsync()
+        {
+            try
+            {
+                var env = await GetSharedEnv();
+
+                await _webView.EnsureCoreWebView2Async(env);
+
+                _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "kiwix-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
+
+                // Kiwix.js UI language + direction follow the add-in UI culture (read by www/js/init.js).
+                string uiLanguage = System.Threading.Thread.CurrentThread.CurrentUICulture
+                    .TwoLetterISOLanguageName == "en" ? "en" : "he";
+                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "window.__khUiLanguage = '" + uiLanguage + "';");
+
+                // Kiwix.js light/dark theme follows the host theme (read by www/js/init.js).
+                // In Word the pane's BackColor is the Office theme background (OfficeThemeWatcher
+                // binds it on every pane view before it loads); the demo sets it from --theme.
+                bool dark = BackColor.GetBrightness() < 0.5f;
+                await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "window.__khDarkTheme = " + (dark ? "true" : "false") + ";");
+
+                _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+
+                _webView.Source = new Uri("https://kiwix-app/index.html");
+            }
+            catch (Exception ex)
+            {
+                // Surface the error and dismiss the splash so the app is not stuck.
+                _HideSplash();
+                MessageBox.Show(
+                    "Kiwix failed to initialise:\n\n" + ex.Message,
+                    "Kiwix",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            _HideSplash();
+        }
+    }
+}

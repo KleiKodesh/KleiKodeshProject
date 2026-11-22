@@ -12,15 +12,15 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `Build/Installer` — WPF installer (the main app, see above)
 - `KleiKodeshVsto` — VSTO Word add-in (installed by the WPF installer)
 - `KleiKodeshVsto/DocDesign` — WPF library for Torah document formatting (columns, paragraphs, spacing)
-- `KleiKodeshVsto/RegexInWord/RegexFindLib` — WPF library for regex find & replace in Word
-- `KleiKodeshVsto/WebSitesLib` — WPF library for curated website browser task pane
+- `KleiKodeshVsto/RegexInWord/RegexFindTaskPane` — WPF library for regex find & replace in Word
+- `KleiKodeshVsto/WebSitesTaskPane` — WPF library for curated website browser task pane
 - `UpdateCheckerLib` — Library for checking and downloading updates from GitHub
 - `WpfLib` — Shared WPF utilities and helpers
 - `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
 - `KitveiHakodesh/CSharpBackend/FtsLib-Csharp` — Ftslib-based search engine
 - `KitveiHakodesh/CSharpBackend/DocumentLocator` — NTFS MFT-based document indexing service for fast local file search
-- `KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp` — Standalone WinForms demo app for testing KitveiHakodeshLib
+- `KitveiHakodesh/CSharpBackend/KitveiHakodeshDesktopApp` — Standalone WinForms desktop app for testing KitveiHakodeshLib
 - `KleiKodeshVsto/Kiwix` — WinForms + WebView2 ZIM file reader (offline wiki browser)
 - `KleiKodeshVsto/Nakdan` — Hebrew diacritical mark helper (OOXML parsing, Dicta API integration)
 - `hebrew-typing-tutor` — Browser-based Hebrew touch-typing tutor (separate project, Vue/TypeScript)
@@ -30,7 +30,7 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 
 The installer lets users customize the website list before installation via `AdvancedPage` → `WhitelistEditorDialog`.
 
-**Single source of truth:** `KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesWhitelist.json`
+**Single source of truth:** `KleiKodeshVsto/WebSitesTaskPane/WebSitesTaskPane/WebSitesWhitelist.json`
 
 **How it works:**
 - User never opens the dialog → whitelist untouched (existing file preserved on update, default extracted on fresh install)
@@ -87,8 +87,8 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`Build/Installer/README.md`](../../Build/Installer/README.md)                                                       | WPF installer: extraction, registry keys, version management       |
 | [`KleiKodeshVsto/README.md`](../../KleiKodeshVsto/README.md)                                                         | VSTO add-in: ribbon, task panes, helpers                           |
 | [`KleiKodeshVsto/DocDesign/README.md`](../../KleiKodeshVsto/DocDesign/README.md)                                                                   | Torah formatting library: Columns, Paragraphs, Spacing             |
-| [`KleiKodeshVsto/RegexInWord/RegexFindLib/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindLib/README.md)                                         | Regex find & replace library for Word                              |
-| [`KleiKodeshVsto/WebSitesLib/README.md`](../../KleiKodeshVsto/WebSitesLib/README.md)                                                               | Curated website browser task pane                                  |
+| [`KleiKodeshVsto/RegexInWord/RegexFindTaskPane/README.md`](../../KleiKodeshVsto/RegexInWord/RegexFindTaskPane/README.md)                                         | Regex find & replace library for Word                              |
+| [`KleiKodeshVsto/WebSitesTaskPane/README.md`](../../KleiKodeshVsto/WebSitesTaskPane/README.md)                                                               | Curated website browser task pane                                  |
 | [`KleiKodeshVsto/Kiwix/README.md`](../../KleiKodeshVsto/Kiwix/README.md)                                                                           | ZIM file reader: WebView2 host, kiwix-js integration               |
 | [`KleiKodeshVsto/Nakdan/README.md`](../../KleiKodeshVsto/Nakdan/README.md)                                                                         | Hebrew diacritical marks: Dicta API, OOXML parsing                 |
 | [`WpfLib/README.md`](../../WpfLib/README.md)                                                                                                       | Shared WPF utilities: ViewModelBase, converters, custom controls   |

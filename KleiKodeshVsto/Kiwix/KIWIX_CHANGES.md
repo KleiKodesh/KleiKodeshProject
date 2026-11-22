@@ -2,7 +2,7 @@
 
 All modifications to the upstream [kiwix-js](https://github.com/kiwix/kiwix-js) source are documented here.
 Source: `KleiKodeshVsto/Kiwix/kiwix-js-main/`
-Built output: `KleiKodeshVsto/Kiwix/KiwixLib/Kiwix.js/`
+Built output: `KleiKodeshVsto/Kiwix/KiwixTaskPane/Kiwix.js/`
 
 ---
 
@@ -10,7 +10,7 @@ Built output: `KleiKodeshVsto/Kiwix/KiwixLib/Kiwix.js/`
 
 1. Make changes in `kiwix-js-main/` source files.
 2. Run `npm run build-src` from `kiwix-js-main/`.
-3. Copy `dist/` output to `KiwixLib/Kiwix.js/`.
+3. Copy `dist/` output to `KiwixTaskPane/Kiwix.js/`.
 4. Document the change below.
 
 ```powershell
@@ -20,7 +20,7 @@ npm run build-src
 Set-Location ..
 
 $src = Resolve-Path "kiwix-js-main/dist"
-$dst = Resolve-Path "KiwixLib/Kiwix.js"
+$dst = Resolve-Path "KiwixTaskPane/Kiwix.js"
 Get-ChildItem $src -Recurse -File | ForEach-Object {
     $rel  = $_.FullName.Substring($src.Path.Length + 1)
     $dest = Join-Path $dst $rel
@@ -69,9 +69,9 @@ $wc.DownloadFile(
 | `www/css/bootstrap-ltr.min.css` | New file. Plain LTR Bootstrap 4.5.3 (jsdelivr), source-map comment removed. The RTL `bootstrap.min.css` is mirrored regardless of `dir`, so English kept an RTL layout. |
 | `www/index.html` | Bootstrap `<link>` got `id="bootstrapCss"`. |
 | `www/js/init.js` | When the host language is not `he`, swaps `#bootstrapCss` to `css/bootstrap-ltr.min.css` (next to the existing `lang`/`dir` setting). |
-| `KiwixLib.csproj` | `bootstrap-ltr.min.css` added as Content (copied to output). |
+| `KiwixTaskPane.csproj` | `bootstrap-ltr.min.css` added as Content (copied to output). |
 
-Only in `KiwixLib/Kiwix.js`: the source copy `kiwix-js-main` does NOT have this LTR swap
+Only in `KiwixTaskPane/Kiwix.js`: the source copy `kiwix-js-main` does NOT have this LTR swap
 (no `bootstrap-ltr.min.css`, no `id="bootstrapCss"`). The host-theme block in `init.js`
 (`window.__khDarkTheme`, 2026-11) IS mirrored there. Carry both over when re-copying.
 
@@ -88,7 +88,7 @@ Only in `KiwixLib/Kiwix.js`: the source copy `kiwix-js-main` does NOT have this 
 
 ---
 
-## Demo App (KiwixDemoApp)
+## Demo App (KiwixTaskPaneDemoApp)
 
 | Change | Reason |
 |--------|--------|

@@ -30,10 +30,10 @@ Custom ribbon tab injected into Microsoft Word. Defines buttons, their icons, to
 | Tag | Label | Tool | Implementation |
 |-----|-------|------|----------------|
 | `KitveiHakodesh` | כתבי הקודש | Seforim viewer | `KitveiHakodeshLib.AppViewer` in WebView2 task pane |
-| `RegexFind` | חיפוש רגקס | Regex find & replace | `RegexFindLib.UI.RegexFindView` in WPF task pane |
-| `DocDesign` | עיצוב תורני | Torah formatting | `DocDesignLib.DocDesignView` in WPF task pane |
-| `WebSites` | דרך האתרים | Website browser | `WebSitesLib.WebSitesView` in WPF task pane |
-| `Kiwix` | קורא קיוויקס | ZIM file reader | `KiwixLib.KiwixWebview` in WinForms task pane |
+| `RegexFind` | חיפוש רגקס | Regex find & replace | `RegexFindTaskPane.UI.RegexFindView` in WPF task pane |
+| `DocDesign` | עיצוב תורני | Torah formatting | `DocDesignTaskPane.DocDesignView` in WPF task pane |
+| `WebSites` | דרך האתרים | Website browser | `WebSitesTaskPane.WebSitesView` in WPF task pane |
+| `Kiwix` | קורא קיוויקס | ZIM file reader | `KiwixTaskPane.KiwixWebview` in WinForms task pane |
 | `Settings` | הגדרות | Add-in settings | `RibbonSettingsView` dialog |
 
 ## How to Add a New Ribbon Button

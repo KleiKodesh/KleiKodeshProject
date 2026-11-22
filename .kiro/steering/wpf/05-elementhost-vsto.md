@@ -167,7 +167,7 @@ or
 XamlParseException: Cannot find resource named 'Icon.ChevronDown'. Resource names are case sensitive.
 ```
 
-**Root cause:** `StaticResource` inside a `ControlTemplate` body is resolved when the template is *instantiated* (applied to a control), not when the XAML is parsed. If the control is instantiated inside a `Window` (or any separate `HwndSource` — including `Popup`, `ContextMenu`, `WhiteListDialog`, `WebSitesDemo`), WPF cannot walk up to find resources defined in a merged `ResourceDictionary` that was loaded by a different `UserControl`.
+**Root cause:** `StaticResource` inside a `ControlTemplate` body is resolved when the template is *instantiated* (applied to a control), not when the XAML is parsed. If the control is instantiated inside a `Window` (or any separate `HwndSource` — including `Popup`, `ContextMenu`, `WhiteListDialog`, `WebSitesTaskPaneDemo`), WPF cannot walk up to find resources defined in a merged `ResourceDictionary` that was loaded by a different `UserControl`.
 
 This affects:
 - Any `ControlTemplate` defined in a theme file (e.g. `Themes/ButtonStyles.xaml`) that is merged into a `UserControl`, but whose controls are also used in a `Window`

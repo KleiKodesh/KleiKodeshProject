@@ -29,7 +29,7 @@ Consequences to design for:
 
 ### Non-blocking requirement
 
-The scan must never be on the critical path of a page load. The first attempt regressed demo-app load time by wiring the re-scan into `booksDataStore.ensureLoaded()`, which is called from ~7 unrelated places (every book open, every commentary panel load, the FTS page, daf-yomi, app boot warmup) — so each of those awaited a recursive disk walk.
+The scan must never be on the critical path of a page load. The first attempt regressed desktop-app load time by wiring the re-scan into `booksDataStore.ensureLoaded()`, which is called from ~7 unrelated places (every book open, every commentary panel load, the FTS page, daf-yomi, app boot warmup) — so each of those awaited a recursive disk walk.
 
 Rules:
 

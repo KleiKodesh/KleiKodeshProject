@@ -10,8 +10,8 @@ Adds a custom ribbon tab to Word and opens task panes for each tool:
 | ------------------------ | ------------------------- | ---------------------------------------------- |
 | כתבי הקודש (KitveiHakodesh)           | Seforim viewer & search   | `KitveiHakodeshLib.AppViewer` in WebView2 task pane   |
 | עיצוב תורני (KleiKodesh) | Torah document formatting | `DocDesign.DocDesignView` in WPF task pane     |
-| דרך האתרים (WebSites)    | Curated website browser   | `WebSitesLib.WebSitesView` in WPF task pane    |
-| חיפוש רגקס (RegexFind)   | Regex find & replace      | `RegexFindLib.UI.RegexFindView` in WPF task pane       |
+| דרך האתרים (WebSites)    | Curated website browser   | `WebSitesTaskPane.WebSitesView` in WPF task pane    |
+| חיפוש רגקס (RegexFind)   | Regex find & replace      | `RegexFindTaskPane.UI.RegexFindView` in WPF task pane       |
 | הגדרות (Settings)        | Add-in settings           | WPF task pane                                  |
 | About                    | About page                | Opens the About page in the browser            |
 
@@ -36,15 +36,15 @@ KleiKodeshVsto/
 │   ├── MsgBox.cs             — Themed message box wrapper
 │   └── JsonExtensions.cs     — JSON serialization helpers
 ├── DocDesign/                — Torah document formatting (WPF, see DocDesign/README.md)
-├── RegexInWord/              — Regex find & replace (WPF, see RegexFindLib/README.md)
-│   ├── RegexFindLib/         — WPF library (UserControl + MVVM)
-│   └── RegexFindDemo/        — Standalone WPF demo app (no Word required)
-├── WebSitesLib/              — Curated website browser (WPF + WebView2, see WebSitesLib/README.md)
-│   ├── WebSitesLib/          — WPF library
-│   └── WebSitesDemo/         — Standalone WPF demo app
+├── RegexInWord/              — Regex find & replace (WPF, see RegexFindTaskPane/README.md)
+│   ├── RegexFindTaskPane/         — WPF library (UserControl + MVVM)
+│   └── RegexFindTaskPaneDemo/        — Standalone WPF demo app (no Word required)
+├── WebSitesTaskPane/              — Curated website browser (WPF + WebView2, see WebSitesTaskPane/README.md)
+│   ├── WebSitesTaskPane/          — WPF library
+│   └── WebSitesTaskPaneDemo/         — Standalone WPF demo app
 ├── Kiwix/                    — ZIM file reader (WinForms + kiwix-js, see KIWIX_CHANGES.md)
-│   ├── KiwixLib/             — WinForms UserControl host
-│   ├── KiwixDemoApp/         — Standalone WinForms demo app
+│   ├── KiwixTaskPane/             — WinForms UserControl host
+│   ├── KiwixTaskPaneDemoApp/         — Standalone WinForms demo app
 │   └── kiwix-js-main/        — Upstream kiwix-js source (customised for Hebrew/RTL)
 └── Resources/                — Embedded resource files
 ```

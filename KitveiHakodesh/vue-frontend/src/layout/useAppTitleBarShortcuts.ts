@@ -249,7 +249,7 @@ export function useAppTitleBarShortcuts(options: {
       case 'KeyE':
         options.toggleAddressBar()
         return true
-      // Only the demo-app host has somewhere to put a new tab. The VSTO task pane
+      // Only the desktop-app host has somewhere to put a new tab. The VSTO task pane
       // shows one tab with no strip, and the dev browser has no strip either — in
       // both, Ctrl+T would open a tab the user can never navigate back to.
       // Ctrl+Shift+T is the tab list, and the native strip is the only thing that has one.

@@ -332,7 +332,7 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
-    <!-- RegexFind logic moved to RegexFindLib project reference -->
+    <!-- RegexFind logic moved to RegexFindTaskPane project reference -->
     <Compile Include="Ribbon\RibbonSettingsControl.cs" />
     <Compile Include="Ribbon\ContextMenuXmlBuilder.cs" />
     <Compile Include="Ribbon\AddinCommands.cs" />
@@ -348,7 +348,7 @@
     <Content Include="KleiKodesh_Main.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <!-- RegexFind HTML removed — replaced by XAML UI in RegexFindLib -->
+    <!-- RegexFind HTML removed — replaced by XAML UI in RegexFindTaskPane -->
     <Content Include="Resources\Nakdan.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -412,33 +412,33 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\KitveiHakodeshDemoApp.csproj">
+    <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodeshDesktopApp\KitveiHakodeshDesktopApp.csproj">
       <Project>{2b6e5acb-2062-4281-aacb-c46681fcfe42}</Project>
-      <Name>KitveiHakodeshDemoApp</Name>
+      <Name>KitveiHakodeshDesktopApp</Name>
     </ProjectReference>
     <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodeshLib\KitveiHakodeshLib.csproj">
       <Project>{a1b2c3d4-e5f6-7890-abcd-ef1234567890}</Project>
       <Name>KitveiHakodeshLib</Name>
     </ProjectReference>
-    <ProjectReference Include="Nakdan\Nakdan\Nakdan.csproj">
+    <ProjectReference Include="Nakdan\NakdanTaskPane\NakdanTaskPane.csproj">
       <Project>{FB53810F-E350-4554-9F5B-D8F42FBE1E9D}</Project>
-      <Name>Nakdan</Name>
+      <Name>NakdanTaskPane</Name>
     </ProjectReference>
-    <ProjectReference Include="RegexInWord\RegexFindLib\RegexFindLib.csproj">
+    <ProjectReference Include="RegexInWord\RegexFindTaskPane\RegexFindTaskPane.csproj">
       <Project>{c3d4e5f6-a7b8-9012-cdef-123456789abc}</Project>
-      <Name>RegexFindLib</Name>
+      <Name>RegexFindTaskPane</Name>
     </ProjectReference>
-    <ProjectReference Include="DocDesign\DocDesignLib\DocDesignLib.csproj">
+    <ProjectReference Include="DocDesign\DocDesignTaskPane\DocDesignTaskPane.csproj">
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
-      <Name>DocDesignLib</Name>
+      <Name>DocDesignTaskPane</Name>
     </ProjectReference>
-    <ProjectReference Include="Kiwix\KiwixLib\KiwixLib.csproj">
+    <ProjectReference Include="Kiwix\KiwixTaskPane\KiwixTaskPane.csproj">
       <Project>{235001E0-16C9-4AEA-9260-99CF489A79C2}</Project>
-      <Name>KiwixLib</Name>
+      <Name>KiwixTaskPane</Name>
     </ProjectReference>
-    <ProjectReference Include="WebSitesLib\WebSitesLib\WebSitesLib.csproj">
+    <ProjectReference Include="WebSitesTaskPane\WebSitesTaskPane\WebSitesTaskPane.csproj">
       <Project>{8100C454-B34E-45A2-98B5-7F766487C9FF}</Project>
-      <Name>WebSitesLib</Name>
+      <Name>WebSitesTaskPane</Name>
     </ProjectReference>
     <ProjectReference Include="WpfLib\WpfLib\WpfLib.csproj">
       <Project>{494b02c1-54f2-4244-9a90-23c9984970e7}</Project>
@@ -489,7 +489,7 @@
   <!-- Copy Kiwix.js static app to {OutDir}\Kiwix.js\ so KiwixWebview virtual host mapping works -->
   <Target Name="CopyKiwixJsToVsto" AfterTargets="Build">
     <PropertyGroup>
-      <KiwixJsSrc>$(MSBuildThisFileDirectory)Kiwix\KiwixLib\Kiwix.js</KiwixJsSrc>
+      <KiwixJsSrc>$(MSBuildThisFileDirectory)Kiwix\KiwixTaskPane\Kiwix.js</KiwixJsSrc>
       <KiwixJsDst>$(OutDir)Kiwix.js</KiwixJsDst>
     </PropertyGroup>
     <MakeDir Directories="$(KiwixJsDst)" />

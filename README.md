@@ -24,8 +24,8 @@
 | [`Build`](Build/README.md) | WPF + NSIS + PowerShell | המתקין (`Build/Installer`), עטיפת NSIS וסקריפטי הבנייה וההפצה |
 | [`KleiKodeshVsto`](KleiKodeshVsto/README.md) | VSTO (.NET Framework 4.8) | **פרויקט התוסף הראשי** — Ribbon, חלוניות, וכלי המשנה שבתוכו (שורות הבאות) |
 | [`KleiKodeshVsto/DocDesign`](KleiKodeshVsto/DocDesign/README.md) | WPF Class Library | עיצוב מסמכים תורניים |
-| [`KleiKodeshVsto/RegexInWord`](KleiKodeshVsto/RegexInWord/README.md) | WPF Class Library | חיפוש והחלפה ברגקס (`RegexFindLib`) |
-| [`KleiKodeshVsto/WebSitesLib`](KleiKodeshVsto/WebSitesLib/README.md) | WPF + WebView2 | דפדפן אתרים תורניים |
+| [`KleiKodeshVsto/RegexInWord`](KleiKodeshVsto/RegexInWord/README.md) | WPF Class Library | חיפוש והחלפה ברגקס (`RegexFindTaskPane`) |
+| [`KleiKodeshVsto/WebSitesTaskPane`](KleiKodeshVsto/WebSitesTaskPane/README.md) | WPF + WebView2 | דפדפן אתרים תורניים |
 | [`KleiKodeshVsto/Kiwix`](KleiKodeshVsto/Kiwix/README.md) | WinForms + WebView2 | קורא קבצי ZIM עם kiwix-js מותאם |
 | [`KleiKodeshVsto/Nakdan`](KleiKodeshVsto/Nakdan/README.md) | .NET Library | ניקוד — OOXML + Dicta API |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md) | Vue 3 + C# | כתבי הקודש — ממשק Vue, שכבות C# (ראה ארכיטקטורה למטה), סקריפטי נתונים |
@@ -47,7 +47,7 @@
 Build/Installer ──installs──▶ KleiKodeshVsto (Word add-in, net48)
                                  │
        ┌──────────────┬──────────┴───┬──────────────┬─────────┐
-   DocDesign     RegexFindLib    WebSitesLib      Kiwix     Nakdan
+   DocDesign     RegexFindTaskPane    WebSitesTaskPane      Kiwix     Nakdan
                                                       (WpfLib shared by the WPF panes)
                                  │
                        KitveiHakodesh pane
@@ -60,7 +60,7 @@ vue-frontend (Vue 3 UI)          features/html-view also hosts Otzaria addins
    │  MessagePack {op,args}       (window.Otzaria, data-query API only)
    ▼
 host (WebView2)                   KitveiHakodeshLib (net48): the VSTO pane and
-   │                              KitveiHakodeshDemoApp (standalone app, ChromeTabs)
+   │                              KitveiHakodeshDesktopApp (standalone app, ChromeTabs)
    │  hosted: relays http://kitvei-service/rpc → named pipe (ServiceRpcRelay)
    │  dev:    browser → loopback HTTP 127.0.0.1 (port via vite /khs-endpoint)
    ▼
@@ -125,7 +125,7 @@ npm run dev
 | Add a ribbon button | `KleiKodeshVsto/Ribbon/KeliKodeshRibbon.xml` + `KeliKodeshRibbon.cs` (click handler) + `RibbonSettingsControl.cs` (visibility toggle) |
 | Change task pane behavior | `KleiKodeshVsto/Helpers/TaskpaneManager.cs` |
 | Change startup/shutdown logic | `KleiKodeshVsto/ThisAddIn.cs` |
-| Change a tool's UI | The tool's own library under `KleiKodeshVsto/` (DocDesign, RegexInWord, WebSitesLib, Kiwix, Nakdan) |
+| Change a tool's UI | The tool's own library under `KleiKodeshVsto/` (DocDesign, RegexInWord, WebSitesTaskPane, Kiwix, Nakdan) |
 | Change shared WPF styles | `KleiKodeshVsto/WpfLib/WpfLib/Themes/OfficePalette.xaml` |
 | Change installer pages | `Build/Installer/Pages/` |
 

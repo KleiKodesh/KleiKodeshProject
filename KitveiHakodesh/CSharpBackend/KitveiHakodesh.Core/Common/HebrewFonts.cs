@@ -12,7 +12,7 @@ namespace KitveiHakodesh.Core.Common
     /// THE ONE COPY. This replaces three identical implementations — KitveiHakodeshLib's
     /// FontsProvider, the service's former HebrewFontsProvider and WpfLib's FontsProvider — which
     /// differed only in the factory import and in which subset of the surface each exposed.
-    /// This is the union: every consumer (the font dropdown, WpfLib's FontsHelper, RegexFindLib's
+    /// This is the union: every consumer (the font dropdown, WpfLib's FontsHelper, RegexFindTaskPane's
     /// picker) reads it, and an enumeration or cmap bug now gets fixed once. The service no longer serves fonts.
     ///
     /// WHY DIRECTWRITE AND NOT WPF (verified 2026-08-20): WPF's Fonts.SystemFontFamilies is a

@@ -28,8 +28,8 @@ are gone. Do not reintroduce them:
 ## Rules for projects in the add-in chain
 
 ```
-WpfLib  RegexFindLib  DocDesignLib  KiwixLib  WebSitesLib
-KitveiHakodeshLib  ←── KitveiHakodeshDemoApp
+WpfLib  RegexFindTaskPane  DocDesignTaskPane  KiwixTaskPane  WebSitesTaskPane
+KitveiHakodeshLib  ←── KitveiHakodeshDesktopApp
   └─→ KleiKodeshVsto
 ```
 
