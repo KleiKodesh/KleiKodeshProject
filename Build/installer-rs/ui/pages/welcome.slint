@@ -189,7 +189,7 @@ component CleanChoice inherits VerticalLayout {
             wrap: word-wrap;
             max-height: 32px;
             text: Installer.update-kind == 2
-                ? Lang.t("מומלץ להתקין התקנה נקייה: בגרסה החדשה יש שינויים גדולים, וכך הכול יעבוד בצורה חלקה", "Clean install recommended: this version has big changes, and a fresh start keeps everything running smoothly")
+                ? Lang.t("מומלץ להתקין התקנה נקייה: בגרסה החדשה יש שינויים גדולים, כדי שהכל יעבוד בצורה חלקה", "Clean install recommended: this version has big changes, and a fresh start keeps everything running smoothly")
                 : Lang.t("מומלץ להתקין התקנה נקייה: בלעדיה ייתכן שחלק מהתכונות החדשות לא יעבדו", "Clean install recommended: some new features may not work without it");
         }
         if !Lang.en: CheckBox { text: ""; checked: Installer.clean-install; toggled => { Installer.clean-install = !Installer.clean-install; } }
