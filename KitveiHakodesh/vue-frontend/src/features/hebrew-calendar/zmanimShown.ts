@@ -46,13 +46,25 @@ const saved = lsGet<unknown>(KEY)
 /** The user's own selection; null = the default. */
 const custom = ref<string[] | null>(Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : null)
 
-/** The names to show, in library order: the user's selection, or the default plus the community's lines. */
+/**
+ * A preset's lines: the default (Ashkenaz) list, where each of the community's lines takes the place of
+ * that zman's default lines - unless the default already shows it (then that zman stays as it is).
+ */
+export function presetLines(primary: readonly string[]): Set<string> {
+  const lines = new Set(DEFAULT_SHOWN)
+  for (const name of primary) {
+    if (lines.has(name)) continue
+    const group = zmanGroup(name)
+    for (const l of [...lines]) if (zmanGroup(l) === group) lines.delete(l)
+    lines.add(name)
+  }
+  return lines
+}
+
+/** The names to show: the user's own edits, else the chosen preset (community custom) - Ashkenaz by default. */
 export function useShownZmanNames() {
   const primary = usePrimaryZmanNames()
-  return computed<Set<string>>(() => {
-    if (custom.value) return new Set(custom.value)
-    return new Set([...DEFAULT_SHOWN, ...primary.value])
-  })
+  return computed<Set<string>>(() => (custom.value ? new Set(custom.value) : presetLines(primary.value)))
 }
 
 export const isCustomSelection = computed(() => custom.value !== null)

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 // The "Community custom" setting: a native select (settings page and setup wizard).
 import { onMounted, ref } from 'vue'
-import { chosenCommunity, communityOptions, setCommunity } from './zmanimCommunity'
+import { chosenCommunity, communityOptions, DEFAULT_COMMUNITY, setCommunity } from './zmanimCommunity'
+import { resetZmanShown } from './zmanimShown'
+
+/** Choosing a preset sets the shown lines to that preset (the user's own edits start over from it). */
+function choose(id: string) {
+  setCommunity(id === DEFAULT_COMMUNITY ? '' : id)
+  resetZmanShown()
+}
 
 const options = ref<Array<{ id: string, name: string }>>([])
 onMounted(async () => { options.value = await communityOptions() })
@@ -11,10 +18,9 @@ onMounted(async () => { options.value = await communityOptions() })
   <select
     class="community-select"
     data-testid="community-select"
-    :value="chosenCommunity"
-    @change="setCommunity(($event.target as HTMLSelectElement).value)"
+    :value="chosenCommunity || DEFAULT_COMMUNITY"
+    @change="choose(($event.target as HTMLSelectElement).value)"
   >
-    <option value="">{{ $t('settings.calendar.communityDefault') }}</option>
     <option v-for="c in options" :key="c.id" :value="c.id">{{ c.name }}</option>
   </select>
 </template>

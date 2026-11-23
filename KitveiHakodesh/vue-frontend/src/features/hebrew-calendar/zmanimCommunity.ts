@@ -1,12 +1,14 @@
 // The user's community custom (minhag): which opinion line is primary for each zman group.
 // Unset = the custom of the zmanim place's city (e.g. Jerusalem), else none (general).
 import { ref, watch } from 'vue'
-import { defaultCommunityFor, listCommunities, primaryZmanim, ZMAN_GROUPS, type ZmanName } from 'kleikodesh-zmanim'
+import { listCommunities, primaryZmanim, ZMAN_GROUPS, type ZmanName } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
 import { lsDelete, lsGet, lsSet } from '@/utils/persistence'
 import { JERUSALEM_ID } from './zmanimPlaces'
 
 const KEY = 'zmanim.community'
+/** The default preset. */
+export const DEFAULT_COMMUNITY = 'ashkenaz'
 /** Stored value meaning "no community": the general lines. */
 const NONE = 'none'
 
@@ -39,7 +41,8 @@ function startWatching() {
   watch([chosenCommunity, communityPlaceId], async ([chosen, placeId]) => {
     const mine = ++generation
     try {
-      const community = chosen === NONE ? null : chosen || (await defaultCommunityFor(placeId))
+      // Nothing chosen = the default preset, Ashkenaz (candle lighting still follows the place's custom).
+      const community = chosen === NONE ? null : chosen || DEFAULT_COMMUNITY
       const groups = await primaryZmanim(community, placeId)
       if (mine !== generation) return
       primaryNames.value = ZMAN_GROUPS.map((g) => groups[g]).filter((n): n is ZmanName => !!n)
