@@ -3,8 +3,10 @@ import type { DailyLearning } from './hebrewCalendarLearning'
 export interface CalendarZmanim {
   chatzotNight: string | null
   alot: string | null
+  alot90: string | null
   misheyakir: string | null
   sunrise: string | null
+  sunriseElevated: string | null
   sofShmaGra: string | null
   sofShmaMga: string | null
   sofTfillaGra: string | null
@@ -13,9 +15,15 @@ export interface CalendarZmanim {
   minchaGedola: string | null
   minchaKetana: string | null
   plag: string | null
+  plagMga: string | null
   sunset: string | null
+  sunsetElevated: string | null
+  tzeitGeonim: string | null
   tzeit: string | null
 }
+
+/** Zmanim seen from the place's height; null (and hidden) where the place is not above sea level. */
+export const ELEVATED_ZMANIM: ReadonlySet<string> = new Set(['sunriseElevated', 'sunsetElevated'])
 
 export interface CalendarDay {
   date: Date

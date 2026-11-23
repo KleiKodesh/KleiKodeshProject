@@ -855,20 +855,21 @@ function devSqlitePlugin(): Plugin {
 // to zmanim/ beside index.html. src/features/hebrew-calendar/zmanimPlaces.ts points the
 // library at that folder.
 const ZMANIM_ASSETS_DIR = fileURLToPath(new URL('../kleikodesh-zmanim.js/assets/', import.meta.url))
-const ZMANIM_ASSET_FILES = ['names-he.txt', 'names-en.txt', 'places.bin', 'tz.json']
+// Every file in the library's assets/ folder ships, so new data files need no change here.
+const zmanimAssetFiles = (): string[] => fs.readdirSync(ZMANIM_ASSETS_DIR, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)
 function zmanimAssets(): Plugin {
   return {
     name: 'zmanim-assets',
     configureServer(server) {
       server.middlewares.use('/zmanim/', (req, res, next) => {
         const file = (req.url ?? '').split('?')[0]!.replace(/^\//, '')
-        if (!ZMANIM_ASSET_FILES.includes(file)) return next()
+        if (!zmanimAssetFiles().includes(file)) return next()
         res.setHeader('Content-Type', 'application/octet-stream')
         res.end(fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)))
       })
     },
     generateBundle() {
-      for (const file of ZMANIM_ASSET_FILES) {
+      for (const file of zmanimAssetFiles()) {
         this.emitFile({ type: 'asset', fileName: `zmanim/${file}`, source: fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)) })
       }
     },

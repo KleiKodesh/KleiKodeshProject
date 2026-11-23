@@ -1,7 +1,7 @@
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
-import type { CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
+import { ELEVATED_ZMANIM, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
 import { lsSet } from '@/utils/persistence'
 import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
 import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
@@ -9,7 +9,7 @@ import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPla
 const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 
 /**
- * Chronological order + Hebrew labels for the zmanim we surface on the home bar.
+ * Display order (each variant beside its counterpart) + labels for the zmanim we surface on the home bar.
  * Also drives the "all times" popup, so this is the full day list.
  */
 export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
@@ -19,8 +19,10 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   // midpoint can fall before civil midnight, on date D-1.)
   { key: 'chatzotNight', label: t('home.zman.chatzotNight') },
   { key: 'alot', label: t('home.zman.alot') },
+  { key: 'alot90', label: t('home.zman.alot90') },
   { key: 'misheyakir', label: t('home.zman.misheyakir') },
   { key: 'sunrise', label: t('home.zman.sunrise') },
+  { key: 'sunriseElevated', label: t('home.zman.sunriseElevated') },
   // MGA's day starts at alot, so each MGA deadline lands BEFORE its GRA
   // counterpart — and tfilla-MGA still lands after shma-GRA (gap = one GRA
   // hour minus 24 min, positive at any habitable latitude).
@@ -32,7 +34,10 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   { key: 'minchaGedola', label: t('home.zman.minchaGedola') },
   { key: 'minchaKetana', label: t('home.zman.minchaKetana') },
   { key: 'plag', label: t('home.zman.plag') },
+  { key: 'plagMga', label: t('home.zman.plagMga') },
   { key: 'sunset', label: t('home.zman.sunset') },
+  { key: 'sunsetElevated', label: t('home.zman.sunsetElevated') },
+  { key: 'tzeitGeonim', label: t('home.zman.tzeitGeonim') },
   { key: 'tzeit', label: t('home.zman.tzeit') },
 ]
 
@@ -126,12 +131,19 @@ export function useNextZman() {
     // advance (HomePageDateBar's dateReference) is display-only and never leaks
     // in here. Search today's ordered zmanim, then roll into tomorrow's once all
     // passed, so the bar always has an upcoming zman to show.
+    // The list keeps each variant beside its counterpart, so it is not strictly
+    // chronological: take the earliest upcoming zman of the day, not the first listed.
     for (const src of [cachedToday, cachedTomorrow]) {
+      let best: { key: keyof CalendarZmanim; label: string; zman: NonNullable<DayTimedZmanim[keyof DayTimedZmanim]> } | null = null
       for (const { key, label } of ZMAN_ORDER) {
         const zman = src[key]
-        if (!zman) continue
+        if (!zman || zman.time.getTime() <= current.getTime()) continue
+        if (!best || zman.time.getTime() < best.zman.time.getTime()) best = { key, label, zman }
+      }
+      if (best) {
+        const { key, label, zman } = best
         const t = zman.time
-        if (t.getTime() > current.getTime()) {
+        {
           const minutesUntil = Math.max(0, Math.round((t.getTime() - current.getTime()) / 60000))
           const urgency: ZmanUrgency =
             minutesUntil <= IMMINENT_MIN ? 'imminent' : minutesUntil <= SOON_MIN ? 'soon' : 'normal'
@@ -171,7 +183,7 @@ export function useNextZman() {
     // the next zman is actually present to highlight).
     const fromTomorrow = !!n && cachedToday![n.key]?.time.getTime() !== nextTime
     const day = fromTomorrow && cachedTomorrow ? cachedTomorrow : cachedToday!
-    return ZMAN_ORDER.map(({ key, label }) => {
+    return ZMAN_ORDER.filter(({ key }) => !(ELEVATED_ZMANIM.has(key) && day[key] == null)).map(({ key, label }) => {
       const zman = day[key]
       const t = zman?.time
       return {

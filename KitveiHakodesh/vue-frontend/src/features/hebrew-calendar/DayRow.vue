@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
-import type { CalendarDay } from './calendarTypes'
+import { ELEVATED_ZMANIM, type CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
 import { useDailyLearningOpener } from '@/features/home/useHomeDailyLearning'
@@ -25,8 +25,10 @@ const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = 
   // in winter it can fall before civil midnight, on date D-1.
   { key: 'chatzotNight', label: t('hebrewCalendar.zmanim.chatzotNight') },
   { key: 'alot', label: t('hebrewCalendar.zmanim.alot') },
+  { key: 'alot90', label: t('hebrewCalendar.zmanim.alot90') },
   { key: 'misheyakir', label: t('hebrewCalendar.zmanim.misheyakir') },
   { key: 'sunrise', label: t('hebrewCalendar.zmanim.sunrise') },
+  { key: 'sunriseElevated', label: t('hebrewCalendar.zmanim.sunriseElevated') },
   // MGA's day starts at alot, so each MGA deadline lands before its GRA
   // counterpart (shma-MGA → shma-GRA → tfilla-MGA → tfilla-GRA).
   { key: 'sofShmaMga', label: t('hebrewCalendar.zmanim.sofShmaMga') },
@@ -37,7 +39,10 @@ const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = 
   { key: 'minchaGedola', label: t('hebrewCalendar.zmanim.minchaGedola') },
   { key: 'minchaKetana', label: t('hebrewCalendar.zmanim.minchaKetana') },
   { key: 'plag', label: t('hebrewCalendar.zmanim.plag') },
+  { key: 'plagMga', label: t('hebrewCalendar.zmanim.plagMga') },
   { key: 'sunset', label: t('hebrewCalendar.zmanim.sunset') },
+  { key: 'sunsetElevated', label: t('hebrewCalendar.zmanim.sunsetElevated') },
+  { key: 'tzeitGeonim', label: t('hebrewCalendar.zmanim.tzeitGeonim') },
   { key: 'tzeit', label: t('hebrewCalendar.zmanim.tzeit') },
 ]
 
@@ -137,7 +142,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         <span v-if="day.molad" class="ev muted">{{ day.molad }}</span>
       </div>
       <div class="zmanim-grid">
-        <template v-for="z in ZMANIM_ROWS" :key="z.key">
+        <template v-for="z in ZMANIM_ROWS.filter((r) => !(ELEVATED_ZMANIM.has(r.key) && day.zmanim[r.key] == null))" :key="z.key">
           <span class="zg-label">{{ z.label }}</span>
           <span class="zg-value">{{ day.zmanim[z.key] ?? '—' }}</span>
         </template>

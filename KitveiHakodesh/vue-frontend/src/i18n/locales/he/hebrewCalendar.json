@@ -9,8 +9,10 @@
   "zmanim": {
     "chatzotNight": "חצות הלילה",
     "alot": "עלות השחר",
+    "alot90": "עלות השחר (90 דקות)",
     "misheyakir": "משיכיר",
     "sunrise": "הנץ החמה",
+    "sunriseElevated": "הנץ מהגובה",
     "sofShmaMga": "סו״ז ק״ש מג״א",
     "sofShmaGra": "סו״ז ק״ש גר״א",
     "sofTfillaMga": "סו״ז תפילה מג״א",
@@ -19,7 +21,10 @@
     "minchaGedola": "מנחה גדולה",
     "minchaKetana": "מנחה קטנה",
     "plag": "פלג המנחה",
+    "plagMga": "פלג המנחה (מגן אברהם)",
     "sunset": "שקיעה",
+    "sunsetElevated": "שקיעה מהגובה",
+    "tzeitGeonim": "צאת הכוכבים (גאונים)",
     "tzeit": "צאת הכוכבים"
   },
   "learning": {

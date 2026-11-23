@@ -25,9 +25,9 @@ const HEBCAL_LOCATION: Record<number, string> = {
 }
 
 const NO_ZMANIM: CalendarZmanim = {
-  chatzotNight: null, alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
+  chatzotNight: null, alot: null, alot90: null, sunriseElevated: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
   sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null, minchaKetana: null,
-  plag: null, sunset: null, tzeit: null,
+  plag: null, plagMga: null, sunset: null, sunsetElevated: null, tzeitGeonim: null, tzeit: null,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -9,8 +9,10 @@
   "zmanim": {
     "chatzotNight": "Midnight",
     "alot": "Dawn (Alot HaShachar)",
+    "alot90": "Dawn (90 min)",
     "misheyakir": "Misheyakir",
     "sunrise": "Sunrise",
+    "sunriseElevated": "Sunrise (from elevation)",
     "sofShmaMga": "Latest Shema (MGA)",
     "sofShmaGra": "Latest Shema (GRA)",
     "sofTfillaMga": "Latest Shacharit (MGA)",
@@ -19,7 +21,10 @@
     "minchaGedola": "Mincha Gedola",
     "minchaKetana": "Mincha Ketana",
     "plag": "Plag HaMincha",
+    "plagMga": "Plag hamincha (MGA)",
     "sunset": "Sunset",
+    "sunsetElevated": "Sunset (from elevation)",
+    "tzeitGeonim": "Nightfall (Geonim)",
     "tzeit": "Nightfall (Tzeit)"
   },
   "learning": {

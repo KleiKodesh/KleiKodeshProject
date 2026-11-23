@@ -8,7 +8,9 @@ import {
   toCivilDate, ZMAN_NAMES, zmanInstants, type Lang, type Place, type ZmanName,
 } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
-import type { CalendarZmanim } from './calendarTypes'
+import { ELEVATED_ZMANIM, type CalendarZmanim } from './calendarTypes'
+
+export { ELEVATED_ZMANIM }
 
 export type { Place }
 
@@ -79,7 +81,7 @@ export function dayTimedZmanim(place: Place, date: Date): DayTimedZmanim {
   }
   for (const name of ZMAN_NAMES) {
     const ns = instants[name]
-    if (ns == null) { day[name] = null; continue }
+    if (ns == null || (place.elevation <= 0 && ELEVATED_ZMANIM.has(name))) { day[name] = null; continue }
     const ms = epochMs(ns)
     day[name] = { time: new Date(ms), printed: formatTime(ms, ROUNDING[name], place.tzid) }
   }
