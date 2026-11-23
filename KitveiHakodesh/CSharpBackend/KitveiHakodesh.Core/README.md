@@ -88,8 +88,6 @@ UserAnnotations/      highlights + notes — user CONTENT, the only write path h
                       (Preferences are Settings/; the DB file keeps its old
                       user_settings.db name because existing installs hold real data.)
 Dictionary/ HebrewBooks/  Dictionary.db, HebrewBooksCatalog.db — ONE copy of each, ever (Content in Core csproj)
-HebrewBooksCatalog.db is not in git: it lives in the private repo KleiKodesh/HebrewBooksCatalog. Fetch it with
-`gh release download catalog-latest -R KleiKodesh/HebrewBooksCatalog -p HebrewBooksCatalog.db -D KitveiHakodesh/CSharpBackend/KitveiHakodesh.Core/HebrewBooks --clobber`
 ```
 
 `Common/` holds genuinely reusable code — file location, SQLite connections, update

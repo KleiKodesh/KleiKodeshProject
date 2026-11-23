@@ -141,18 +141,6 @@ jobs:
           [IO.File]::WriteAllText('KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks\hb-mirror.json',
             $env:HB_MIRROR_JSON, (New-Object System.Text.UTF8Encoding($false)))
 
-      # The HebrewBooks book list is kept in the private repo KleiKodesh/HebrewBooksCatalog
-      # (release catalog-latest), never committed here.
-      - name: HebrewBooks catalog
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.HB_CATALOG_TOKEN }}
-        run: |
-          if (-not $env:GH_TOKEN) { Write-Error "Secret HB_CATALOG_TOKEN is missing (fine-grained PAT, Contents read on KleiKodesh/HebrewBooksCatalog)"; exit 1 }
-          gh release download catalog-latest -R KleiKodesh/HebrewBooksCatalog -p HebrewBooksCatalog.db `
-            -D KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\HebrewBooks --clobber
-          if ($LASTEXITCODE) { Write-Error "HebrewBooks catalog download failed"; exit 1 }
-
       - uses: actions/download-artifact@v8
         if: needs.gate.outputs.renew != 'true'
         continue-on-error: ${{ inputs.test == true }}   # no notes when Gemini was down
