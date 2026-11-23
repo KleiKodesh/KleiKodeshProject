@@ -28,12 +28,6 @@ export interface WidgetWindowState {
   focusRequest: number
 }
 
-/** Sized to their content: the small date-bar widgets (no empty space, no scrollbar). */
-const FIT_CONTENT = new Set<WidgetId>(['worldClock', 'zmanim', 'learning'])
-export function widgetFitsContent(id: WidgetId): boolean {
-  return FIT_CONTENT.has(id)
-}
-
 /**
  * A widget window's first size (the calendar's, which suits every tool); also the size
  * of a panel moved to its own window (DetachedWindow). After that the host keeps the
