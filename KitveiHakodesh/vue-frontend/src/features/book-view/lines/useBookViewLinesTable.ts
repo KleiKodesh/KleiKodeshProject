@@ -1,7 +1,8 @@
 import { onScopeDispose, ref, shallowRef, triggerRef, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
-import type { BookVersionRow, HebrewBooksEdition } from '@/webview-host/queries.types'
+import { getBookById, getBookVersions, getHebrewBooksEditions, getLineCharCounts, getLineDecorationsForLines, getLineIds, getLinesPaged } from '@/webview-host/seforimApi'
+import type { BookVersionRow, HebrewBooksEdition, LineNote, WordLinkAnchor } from '@/webview-host/queries.types'
+import { applyWordLinkTreatments, type WordLinkTreatmentsFor } from './useWordLinkAnchors'
 import { LinesTable } from './linesTable'
 import type { LineItem } from './linesTable'
 
@@ -31,6 +32,30 @@ export interface UseLinesOptions {
   retainedRanges?: () => ReadonlyArray<readonly [number, number]>
   /** The ids of lines whose text was just released — for per-line stores keyed by line id. */
   onTextEvicted?: (lineIds: number[]) => void
+  /**
+   * The book's word-link marker treatments. Given, each fetched window brings its word-link
+   * anchors and inline notes WITH its text: one write, so a row is first drawn at its final
+   * height and the scroller never corrects for markers landing later.
+   */
+  wordLinkTreatments?: WordLinkTreatmentsFor
+}
+
+const NO_ANCHORS: WordLinkAnchor[] = []
+const NO_NOTES: LineNote[] = []
+
+function groupByLine<T extends { lineId: number }>(rows: T[], into: Map<number, T[]>, lineIds: number[]) {
+  for (const id of lineIds) into.delete(id)
+  for (const row of rows) {
+    let list = into.get(row.lineId)
+    if (!list) into.set(row.lineId, (list = []))
+    list.push(row)
+  }
+}
+
+/** Read side of the anchors and notes that arrive with each window's text. */
+export interface LineDecorations {
+  anchorsFor(lineId: number): WordLinkAnchor[]
+  notesFor(lineId: number): LineNote[]
 }
 
 export function useLines(bookId: () => number | undefined, options: UseLinesOptions = {}) {
@@ -74,6 +99,23 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
   let inFlight: { start: number; end: number; done: Promise<void> }[] = []
   // Ranges an ensureLines is working on: never evicted before its final check.
   const activeEnsures = new Set<readonly [number, number]>()
+  // The word-link anchors and inline notes of the lines whose text is loaded, by line id:
+  // written and released with the text (rows re-render on linesRevision).
+  const anchorsByLine = new Map<number, WordLinkAnchor[]>()
+  const notesByLine = new Map<number, LineNote[]>()
+
+  /** The text's rows plus, when the view wants them, their anchors and notes - all landed. */
+  async function fetchWindow(id: number, start: number, end: number, version: number | null) {
+    const rows = await getLinesPaged(id, end - start, start, version ?? 0)
+    const treatmentsFor = options.wordLinkTreatments
+    if (!treatmentsFor) return { rows, anchors: null, notes: null, lineIds: null }
+    const lineIds = rows.map((row) => row.id).filter((lineId) => lineId > 0)
+    const [decorations] = await Promise.all([getLineDecorationsForLines(lineIds, lineIds), treatmentsFor(id)])
+    // Notes that failed reject the window: written without them, its rows would grow later.
+    if (decorations.notes instanceof Error) throw decorations.notes
+    await applyWordLinkTreatments(decorations.anchors, treatmentsFor)
+    return { rows, anchors: decorations.anchors, notes: decorations.notes, lineIds }
+  }
 
   function fetchRun(id: number, start: number, end: number): Promise<void> {
     // Captured with the book id: a version swap keeps the book, so the book guard alone
@@ -81,9 +123,13 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     const version = activeVersionId.value
     const runs = inFlight
     const entry = { start, end, done: Promise.resolve() }
-    entry.done = getLinesPaged(id, end - start, start, version ?? 0)
-      .then((rows) => {
+    entry.done = fetchWindow(id, start, end, version)
+      .then(({ rows, anchors, notes, lineIds }) => {
         if (currentBookId !== id || activeVersionId.value !== version) return
+        if (anchors && notes && lineIds) {
+          groupByLine(anchors, anchorsByLine, lineIds)
+          groupByLine(notes, notesByLine, lineIds)
+        }
         const table = lines.value
         let maxIndex = -1
         for (const row of rows) if (row.lineIndex > maxIndex) maxIndex = row.lineIndex
@@ -113,6 +159,10 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
       (index) => (index >= low && index < high) || retained.some(([start, end]) => index >= start && index < end),
     )
     if (!released.length) return
+    for (const lineId of released) {
+      anchorsByLine.delete(lineId)
+      notesByLine.delete(lineId)
+    }
     options.onTextEvicted?.(released)
     linesWritten()
   }
@@ -254,6 +304,10 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     currentBookId = id
     lines.value = new LinesTable()
     inFlight = []
+    anchorsByLine.clear()
+    notesByLine.clear()
+    // The marker treatments scan the whole book's links: ask now, alongside the first text.
+    void options.wordLinkTreatments?.(id)
     versions.value = []
     activeVersionId.value = null
     hebrewBooksEditions.value = []
@@ -315,7 +369,13 @@ export function useLines(bookId: () => number | undefined, options: UseLinesOpti
     { immediate: true },
   )
 
+  const lineDecorations: LineDecorations = {
+    anchorsFor: (lineId) => anchorsByLine.get(lineId) ?? NO_ANCHORS,
+    notesFor: (lineId) => notesByLine.get(lineId) ?? NO_NOTES,
+  }
+
   return {
+    lineDecorations,
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
     hasCommentaries, hasRelatedBooks, hasTeamim, isCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,

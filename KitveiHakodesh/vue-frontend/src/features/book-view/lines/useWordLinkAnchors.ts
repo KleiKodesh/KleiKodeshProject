@@ -13,12 +13,68 @@
  */
 import { onScopeDispose, shallowRef, triggerRef, watch } from 'vue'
 import { getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
-import { injectBookWordLinkTargets } from './bookWordLinkTargets'
+import { injectBookWordLinkTargets, type BookWordLinkTargets } from './bookWordLinkTargets'
 import { buildWordLinkTreatments, type WordLinkTreatment } from './wordLinkAnchors'
 import { getConnectionTypeName, normalizeConnectionTypeName } from '../commentary/commentaryConnectionTypes'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 
 const EMPTY: WordLinkAnchor[] = []
+
+export type WordLinkTreatmentsFor = (sourceBookId: number) => Promise<Map<number, WordLinkTreatment>>
+
+/**
+ * Per-source-book fallback treatments (rank by ascending target book id, plus the
+ * sign-vocabulary guard — see buildWordLinkTreatments). Promise-cached so each book's
+ * targets are queried once and every batch shares the same, stable assignment.
+ */
+export function createWordLinkTreatments(wordLinkTargets: BookWordLinkTargets): WordLinkTreatmentsFor {
+  const treatmentsByBook = new Map<number, Promise<Map<number, WordLinkTreatment>>>()
+  return function treatmentsFor(sourceBookId) {
+    const cached = treatmentsByBook.get(sourceBookId)
+    if (cached) return cached
+    const p = wordLinkTargets.targetsFor(sourceBookId)
+      .then((targets) => {
+        // null = transient failure (DB not ready/swapped): drop the cache entry so a
+        // later batch retries; this batch falls back to the splicer's modulo bucket.
+        // [] is a real answer (a book whose anchors are all range links) and caches.
+        if (targets == null) {
+          treatmentsByBook.delete(sourceBookId)
+          return new Map<number, WordLinkTreatment>()
+        }
+        // Pass a connection type mapper for Ein Mishpat prioritization
+        return buildWordLinkTreatments(targets, (typeId) => {
+          const dbName = getConnectionTypeName(typeId)
+          return normalizeConnectionTypeName(dbName)
+        })
+      })
+      .catch(() => {
+        // Transport error (dev service call) — same retry contract as a null result.
+        treatmentsByBook.delete(sourceBookId)
+        return new Map<number, WordLinkTreatment>()
+      })
+    treatmentsByBook.set(sourceBookId, p)
+    return p
+  }
+}
+
+/** Writes each anchor's treatment (color bucket, enclosure, underline) onto the row. */
+export async function applyWordLinkTreatments(rows: WordLinkAnchor[], treatmentsFor: WordLinkTreatmentsFor): Promise<void> {
+  if (!rows.length) return
+  const books = [...new Set(rows.map((r) => r.sourceBookId))]
+  const maps = new Map(await Promise.all(books.map(async (b) => [b, await treatmentsFor(b)] as const)))
+  for (const row of rows) {
+    const t = maps.get(row.sourceBookId)?.get(row.targetBookId)
+    if (!t) continue
+    row.colorBucket = t.bucket
+    if (t.open != null) {
+      row.encOpen = t.open
+      row.encClose = t.close
+    }
+    if (t.underline) {
+      ;(row as any).decoration = 'underline'
+    }
+  }
+}
 
 /**
  * Chunk size for the immediate export load. The viewport path asks for a screenful,
@@ -68,38 +124,7 @@ export function useWordLinkAnchors(
     })
   }
 
-  // Per-source-book fallback treatments (rank by ascending target book id, plus the
-  // sign-vocabulary guard — see buildWordLinkTreatments). Promise-cached so each book's
-  // targets are queried once and every batch shares the same, stable assignment.
-  const wordLinkTargets = injectBookWordLinkTargets()
-  const treatmentsByBook = new Map<number, Promise<Map<number, WordLinkTreatment>>>()
-
-  function treatmentsFor(sourceBookId: number): Promise<Map<number, WordLinkTreatment>> {
-    const cached = treatmentsByBook.get(sourceBookId)
-    if (cached) return cached
-    const p = wordLinkTargets.targetsFor(sourceBookId)
-      .then((targets) => {
-        // null = transient failure (DB not ready/swapped): drop the cache entry so a
-        // later batch retries; this batch falls back to the splicer's modulo bucket.
-        // [] is a real answer (a book whose anchors are all range links) and caches.
-        if (targets == null) {
-          treatmentsByBook.delete(sourceBookId)
-          return new Map<number, WordLinkTreatment>()
-        }
-        // Pass a connection type mapper for Ein Mishpat prioritization
-        return buildWordLinkTreatments(targets, (typeId) => {
-          const dbName = getConnectionTypeName(typeId)
-          return normalizeConnectionTypeName(dbName)
-        })
-      })
-      .catch(() => {
-        // Transport error (dev service call) — same retry contract as a null result.
-        treatmentsByBook.delete(sourceBookId)
-        return new Map<number, WordLinkTreatment>()
-      })
-    treatmentsByBook.set(sourceBookId, p)
-    return p
-  }
+  const treatmentsFor = createWordLinkTreatments(injectBookWordLinkTargets())
 
   function scheduleLoad(lineIds: number[]) {
     const pending = lineIds.filter((id) => id > 0 && !requested.has(id))
@@ -125,21 +150,7 @@ export function useWordLinkAnchors(
       // Annotate every anchor with its book's treatment BEFORE exposing it — the
       // splicer renders whatever is on the row, so assignment happens exactly once
       // and never shifts as more lines load.
-      const books = [...new Set(rows.map((r) => r.sourceBookId))]
-      const maps = new Map(await Promise.all(books.map(async (b) => [b, await treatmentsFor(b)] as const)))
-      for (const row of rows) {
-        const t = maps.get(row.sourceBookId)?.get(row.targetBookId)
-        if (t) {
-          row.colorBucket = t.bucket
-          if (t.open != null) {
-            row.encOpen = t.open
-            row.encClose = t.close
-          }
-          if (t.underline) {
-            ;(row as any).decoration = 'underline'
-          }
-        }
-      }
+      await applyWordLinkTreatments(rows, treatmentsFor)
       const byLine = new Map<number, WordLinkAnchor[]>()
       for (const row of rows) {
         let list = byLine.get(row.lineId)

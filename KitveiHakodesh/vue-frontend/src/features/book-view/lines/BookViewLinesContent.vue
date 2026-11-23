@@ -46,6 +46,7 @@ import { useNoteHoverBubble } from './useNoteHoverBubble'
 import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
 import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
 import { useWordLinkAnchors } from './useWordLinkAnchors'
+import type { LineDecorations } from './useBookViewLinesTable'
 import { createLineDecorationsBatch } from './lineDecorationsBatch'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -79,6 +80,8 @@ const props = defineProps<
     linesRevision?: number
     /** Resolves once the lines of [start, end) have their text — the scroller's row source. */
     ensureLines: (start: number, end: number) => Promise<void>
+    /** The anchors and inline notes that arrive with each window's text (useLines). */
+    lineDecorations?: LineDecorations
     /** Reads the lines of [start, end) for a copy or export, without keeping them. */
     readLines: (start: number, end: number) => Promise<LineItem[]>
     altTocLabelMap?: Map<number, AltTocLineLabels>
@@ -303,9 +306,22 @@ const { onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cance
 // a no-op on DBs without the table.
 // Anchors and inline notes of a window come in ONE service call (lineDecorationsBatch).
 const lineDecorations = createLineDecorationsBatch()
-const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = useWordLinkAnchors(renderedLineIds, lineDecorations.anchorsFor)
-// Inline notes (line_note, Otzaria schema 7+) - lazy, viewport-driven, a no-op on DBs without the table.
-const { getLineNotesForLine, evictLineNotesForLines } = useLineNotes(renderedLineIds, lineDecorations.notesFor)
+// With props.lineDecorations they come WITH the text (no viewport watch): a row is drawn once,
+// at its final height. The id-based loader stays for exports of lines never loaded.
+const withText = props.lineDecorations
+const anchorLoader = useWordLinkAnchors(withText ? undefined : renderedLineIds, lineDecorations.anchorsFor)
+const { loadWordLinkAnchorsForLines, evictWordLinkAnchorsForLines } = anchorLoader
+// Inline notes (line_note, Otzaria schema 7+) - a no-op on DBs without the table.
+const noteLoader = useLineNotes(withText ? undefined : renderedLineIds, lineDecorations.notesFor)
+const { evictLineNotesForLines } = noteLoader
+const getWordLinkAnchorsForLine = (lineId: number) => {
+  const own = withText?.anchorsFor(lineId)
+  return own?.length ? own : anchorLoader.getWordLinkAnchorsForLine(lineId)
+}
+const getLineNotesForLine = (lineId: number) => {
+  const own = withText?.notesFor(lineId)
+  return own?.length ? own : noteLoader.getLineNotesForLine(lineId)
+}
 
 const { lineContent, forgetLines: forgetRenderedLines } = useBookViewLineRenderer(settingsStore, cleanTextFlags, () => ({
   activeVersionId: props.activeVersionId,

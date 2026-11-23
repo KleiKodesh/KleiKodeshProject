@@ -91,7 +91,7 @@ const {
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
-  tabId, bookId, lines, linesRevision, ensureLines, readLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
+  tabId, bookId, lines, linesRevision, lineDecorations, ensureLines, readLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   bookIsCommentary,
   versions, activeVersionId, selectVersion, versionPersistState,
@@ -749,6 +749,7 @@ function getSideEditionOutlineTarget(): string | undefined {
                     :lines="lines"
                     :lines-revision="linesRevision"
                     :ensure-lines="ensureLines"
+                    :line-decorations="lineDecorations"
                     :read-lines="readLines"
                     :read-aloud-word="readAloudWord"
                     :line-character-counts="lineCharacterCounts"

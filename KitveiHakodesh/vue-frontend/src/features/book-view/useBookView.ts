@@ -54,6 +54,8 @@ import type {
 import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 import type { Highlight } from './lines/useBookViewHighlights'
 import type { Note } from './lines/useBookViewNotes'
+import { createWordLinkTreatments } from './lines/useWordLinkAnchors'
+import { injectBookWordLinkTargets } from './lines/bookWordLinkTargets'
 import type { LineNote, TocEntry, WordLinkAnchor } from '@/webview-host/queries.types'
 export type { SearchMode } from './bookViewTypes'
 
@@ -154,6 +156,7 @@ export function useBookView(
   } = useToc(() => bookId, () => bookTitle)
 
   const {
+    lineDecorations,
     lines, linesRevision, prefetch, ensureLines, ensureLineIds, readLines,
     hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim, isCommentary: bookIsCommentary, lineCharacterCounts,
     versions, activeVersionId, setVersion,
@@ -161,6 +164,7 @@ export function useBookView(
   } = useLines(() => bookId, {
     retainedRanges: () => linesContentRef()?.retainedLineRanges() ?? [],
     onTextEvicted: (lineIds) => linesContentRef()?.onLinesTextEvicted(lineIds),
+    wordLinkTreatments: createWordLinkTreatments(injectBookWordLinkTargets()),
   })
 
   // Warm up the connection type ID table immediately — single tiny query that must
@@ -826,6 +830,7 @@ export function useBookView(
     tocPersistState,
     // data
     tabId, bookId,
+    lineDecorations,
     lines, linesRevision, ensureLines, readLines, lineCharacterCounts, hasCommentaries, hasRelatedBooks, hasToc,
     groups, filterGroups, commentaryLoading, commentaryLoadError, ensureLineContents, trimLineContents,
     tocEntries, tocSearchTree, altTocSections, altTocPane, tocLoading, tocError,
