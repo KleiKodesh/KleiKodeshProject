@@ -46,7 +46,9 @@ jobs:
           names() { { gh api "repos/$1/contents/$DIR?ref=$2" --jq '.[].name' 2>/dev/null || true
                       gh api "repos/$1/contents/$DIR/kosherZmanim/calculators?ref=$2" --jq '.[].name' 2>/dev/null || true; } | grep -v '^{' || true; }
           bad=()
-          for f in $(gh api "repos/$repo/forks" --paginate --jq '.[].full_name'); do
+          # Every fork at every level (forks of forks too).
+          allforks() { for f in $(gh api "repos/$1/forks" --paginate --jq '.[].full_name' 2>/dev/null || true); do echo "$f"; allforks "$f"; done; }
+          for f in $(allforks "$repo" | sort -u); do
             for b in $(gh api "repos/$f/branches" --paginate --jq '.[].name' 2>/dev/null || true); do
               hit=0
               while read -r n; do
