@@ -32,12 +32,21 @@ export component ManagePage inherits VerticalLayout {
         HorizontalLayout {
             alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
             spacing: 8px;
-            Button {
-                text: Lang.t("אפשרויות…", "Options…");
+            // Same split as the home page: add-in options and the rest, each only when relevant.
+            if Lang.en && Installer.addin-selected: Button {
+                text: "Add-in options";
+                clicked => { Installer.addin-options-back = Page.manage; Installer.page = Page.addin-options; }
+            }
+            if Installer.apps-selected: Button {
+                text: Lang.t("אפשרויות", "Options");
                 clicked => {
                     Installer.options-back = Page.manage;
                     Installer.page = Page.options;
                 }
+            }
+            if !Lang.en && Installer.addin-selected: Button {
+                text: "אפשרויות התוסף";
+                clicked => { Installer.addin-options-back = Page.manage; Installer.page = Page.addin-options; }
             }
         }
         Rectangle { vertical-stretch: 1; }

@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Lang } from "../lang.slint";
 import { Installer, Page } from "../state.slint";
-import { PageTitle, WizardButtons, CheckRow } from "../widgets.slint";
+import { PageTitle, CheckRow } from "../widgets.slint";
 
 // The install folder is fixed (%LOCALAPPDATA%\KleiKodesh): the apps and the service
 // recognise an installed product by that path, so it is not offered here.
@@ -29,42 +29,32 @@ export component OptionsPage inherits VerticalLayout {
             checked: Installer.file-associations;
             toggled => { Installer.file-associations = !Installer.file-associations; }
         }
-        if Installer.addin-selected: HorizontalLayout {
-            alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
-            Button {
-                text: Lang.t("אפשרויות התוסף לוורד…", "Word add-in options…");
-                clicked => {
-                    Installer.addin-options-back = Page.options;
-                    Installer.page = Page.addin-options;
-                }
-            }
-        }
         Rectangle { vertical-stretch: 1; }
     }
-    if Installer.options-back == Page.manage: HorizontalLayout {
+    // Same OK / Cancel as the add-in options page, from the home page and from Modify alike.
+    HorizontalLayout {
         padding-left: 16px;
         padding-right: 16px;
         padding-bottom: 12px;
         height: 42px;
         spacing: 8px;
-        if Lang.en: Button { text: "OK"; primary: true; min-width: 80px; clicked => { Installer.page = Page.manage; } }
+        if Lang.en: Button { text: "OK"; primary: true; min-width: 80px; clicked => { Installer.page = Installer.options-back; } }
         if !Lang.en: Button { text: "ביטול"; min-width: 80px; clicked => { root.discard(); } }
         Rectangle { horizontal-stretch: 1; }
         if Lang.en: Button { text: "Cancel"; min-width: 80px; clicked => { root.discard(); } }
-        if !Lang.en: Button { text: "אישור"; primary: true; min-width: 80px; clicked => { Installer.page = Page.manage; } }
-    }
-    if Installer.options-back != Page.manage: WizardButtons {
-        next-text: Lang.t("התקן", "Install");
-        next-enabled: Installer.any-selected;
-        next => { Installer.install(); }
-        back => { Installer.page = Page.welcome; }
-        cancel => { Installer.quit(); }
+        if !Lang.en: Button { text: "אישור"; primary: true; min-width: 80px; clicked => { Installer.page = Installer.options-back; } }
     }
 
-    // Cancel from Modify: back to what is installed.
+    // The values as they were when this page opened; Cancel puts them back.
+    property <bool> opened-desktop-shortcut;
+    property <bool> opened-file-associations;
+    init => {
+        root.opened-desktop-shortcut = Installer.desktop-shortcut;
+        root.opened-file-associations = Installer.file-associations;
+    }
     function discard() {
-        Installer.desktop-shortcut = Installer.installed-desktop-shortcut;
-        Installer.file-associations = Installer.installed-file-associations;
-        Installer.page = Page.manage;
+        Installer.desktop-shortcut = root.opened-desktop-shortcut;
+        Installer.file-associations = root.opened-file-associations;
+        Installer.page = Installer.options-back;
     }
 }

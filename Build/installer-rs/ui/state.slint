@@ -36,6 +36,8 @@ export global Installer {
     in property <string> summary;
     in property <bool> any-selected;
     in property <bool> kitvei-selected;
+    // A product other than the Word add-in is ticked: only then do the general options matter.
+    in property <bool> apps-selected;
     in property <bool> has-changes;
     in-out property <bool> desktop-shortcut: false;
     in-out property <bool> file-associations: true;

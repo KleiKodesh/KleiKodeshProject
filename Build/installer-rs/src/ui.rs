@@ -433,6 +433,7 @@ fn refresh(ui: &AppWindow, products: &Products) {
     st.set_summary(summary.into());
     st.set_any_selected(!chosen.is_empty());
     st.set_kitvei_selected(chosen.iter().any(|p| p.id == Product::KitveiApp.id()));
+    st.set_apps_selected(chosen.iter().any(|p| p.id != Product::WordAddin.id()));
     st.set_addin_selected(chosen.iter().any(|p| p.id == Product::WordAddin.id()));
     st.set_has_changes(products.iter().any(|p| p.selected != p.installed));
 }

@@ -234,12 +234,14 @@ export component WelcomePage inherits VerticalLayout {
     HorizontalLayout {
         spacing: 8px;
         if Lang.en && Installer.updating: CleanChoice { en-text: "Clean install (removes settings, caches and indexes first)"; he-text: ""; }
-        if Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; vertical-alignment: center; overflow: elide; }
-        if Lang.en: Button { text: "Options…"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
+        if Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; vertical-alignment: center; wrap: word-wrap; }
+        if Lang.en && Installer.addin-selected: Button { text: "Add-in options"; min-width: 100px; clicked => { Installer.addin-options-back = Page.welcome; Installer.page = Page.addin-options; } }
+        if Lang.en && Installer.apps-selected: Button { text: "Options"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
         if Lang.en: Button { text: Installer.updating ? "Update" : "Install"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
         if !Lang.en: Button { text: Installer.updating ? "עדכן" : "התקן"; primary: true; min-width: 100px; enabled: Installer.any-selected; clicked => { Installer.install(); } }
-        if !Lang.en: Button { text: "אפשרויות…"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
+        if !Lang.en && Installer.apps-selected: Button { text: "אפשרויות"; min-width: 100px; clicked => { Installer.options-back = Page.welcome; Installer.page = Page.options; } }
+        if !Lang.en && Installer.addin-selected: Button { text: "אפשרויות התוסף"; min-width: 100px; clicked => { Installer.addin-options-back = Page.welcome; Installer.page = Page.addin-options; } }
         if !Lang.en && Installer.updating: CleanChoice { en-text: ""; he-text: "התקנה נקייה (מסיר קודם הגדרות, מטמון ואינדקסים)"; }
-        if !Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+        if !Lang.en && !Installer.updating: Text { horizontal-stretch: 1; text: Installer.summary; color: Theme.muted; font-size: 12px; horizontal-alignment: right; vertical-alignment: center; wrap: word-wrap; }
     }
 }
