@@ -75,9 +75,12 @@ export interface BookState {
  * so callers reach it through the store as before.
  */
 
-/** Resolved per call, never cached — switching workspaces must change which keys we address. */
+/**
+ * Resolved per call, never cached — switching workspaces must change which keys we address.
+ * The STORAGE id: the workspace within this window (windowScope.ts).
+ */
 function workspaceId(): string {
-  return useWorkspaceStore().activeId
+  return useWorkspaceStore().storageId
 }
 
 // ── In-memory cache ───────────────────────────────────────────────────────────

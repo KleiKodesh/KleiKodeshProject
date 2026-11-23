@@ -344,7 +344,8 @@ export const useTabStore = defineStore('tabs', () => {
   // Synchronous — tab list is in localStorage
   function init() {
     const wsStore = useWorkspaceStore()
-    const wsId = wsStore.activeId
+    // This window's storage id for the active workspace (windowScope.ts).
+    const wsId = wsStore.storageId
     const saved = lsGet<PersistedTabList>(tabsListKey(wsId))
     // The plain-text viewer is gone: a tab saved on it reopens in FastDocView, which reads
     // the same localFilePath itself.
@@ -433,7 +434,9 @@ export const useTabStore = defineStore('tabs', () => {
   // must still go to the workspace these tabs belong to.
   function persistTabs(wsId: string) {
     // A workspace deleted while its write was pending must not come back as an orphan key.
-    if (!useWorkspaceStore().workspaces.some((w) => w.id === wsId)) return
+    // Checked against the shared list, so a workspace another window deleted stays deleted.
+    // Workspace ids never contain '@' (windowScope.ts), so the part before it is the workspace.
+    if (!useWorkspaceStore().existsInSharedList(wsId.split('@')[0]!)) return
     // Settings is the one destination that survives a restart: reopening on the
     // settings page (and its scroll, see settingsViewMemory) is where the user left off.
     const persistable = tabs.value.filter(
@@ -757,7 +760,7 @@ export const useTabStore = defineStore('tabs', () => {
   let pendingTabsWorkspaceId = ''
   const tabsWrite = useCoalescedWrite(() => persistTabs(pendingTabsWorkspaceId))
   watch([_persistedSnapshot, activeTabId, accessOrder], () => {
-    const wsId = useWorkspaceStore().activeId
+    const wsId = useWorkspaceStore().storageId
     // A write still pending for the previous workspace goes out as-is first.
     if (pendingTabsWorkspaceId !== wsId) tabsWrite.flush()
     pendingTabsWorkspaceId = wsId
@@ -774,7 +777,7 @@ export const useTabStore = defineStore('tabs', () => {
   watch(
     recentLocations,
     () => {
-      const wsId = useWorkspaceStore().activeId
+      const wsId = useWorkspaceStore().storageId
       if (pendingRecentsWorkspaceId !== wsId) recentsWrite.flush()
       pendingRecentsWorkspaceId = wsId
       recentsWrite.schedule()

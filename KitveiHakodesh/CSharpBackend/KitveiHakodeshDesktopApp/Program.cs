@@ -17,7 +17,13 @@ namespace KitveiHakodeshDesktopApp
         private const string MutexName = "KitveiHakodesh-SingleInstance-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
         private const string PipeName  = "KitveiHakodesh-OpenFile-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
 
-        private static MainForm _mainForm;
+        // Sent by a launch with nothing to open: the running app opens a new empty window
+        // (VS Code's window.openWithoutArgumentsInNewWindow). Never a file or a link, so a
+        // running instance older than this drops it in MainForm.OpenRequest.
+        private const string NewWindowRequest = "--new-window";
+
+        // The window a forwarded file or link opens in: the last one activated.
+        private static MainForm _activeWindow;
 
         // Main touches ONLY the BCL until it knows it is the first instance. A file opened
         // from Explorer while the app runs launches a second copy of this exe whose only
@@ -57,14 +63,16 @@ namespace KitveiHakodeshDesktopApp
                 else
                 {
                     // An instance is already running. Forward the request to it and exit —
-                    // a second window is never opened, for a deep link exactly as for a file:
-                    // the running instance turns it into a new tab.
+                    // there is only ever one process (the VS Code model). A file or a deep
+                    // link becomes a new tab in its last active window; a launch with
+                    // nothing to open asks it for a new empty window.
                     // Forwarded RAW: MainForm.OpenRequest validates whatever arrives over the
                     // pipe, so parsing it here would only cost the lib load this path avoids.
-                    string request = args.Length > 1 ? args[1] : null;
+                    string request = args.Length > 1 ? args[1] : NewWindowRequest;
+                    bool newWindow = request == NewWindowRequest;
                     // A relative path must resolve against OUR working directory, not the
                     // running instance's. Links pass through untouched.
-                    if (!string.IsNullOrEmpty(request) && request.IndexOf("://", StringComparison.Ordinal) < 0)
+                    if (!newWindow && !string.IsNullOrEmpty(request) && request.IndexOf("://", StringComparison.Ordinal) < 0)
                         try { request = Path.GetFullPath(request); } catch { }
                     if (!string.IsNullOrEmpty(request))
                     {
@@ -81,6 +89,9 @@ namespace KitveiHakodeshDesktopApp
                         if (!SendOpenRequestByCopyData(request))
                             SendOpenRequestToPipe(request);
                     }
+
+                    // A new window shows itself; nothing to restore.
+                    if (newWindow) return;
 
                     // Only restore if minimized — do NOT call SetForegroundWindow on the
                     // OTHER process's window from here. (The running instance calls it on its
@@ -118,11 +129,133 @@ namespace KitveiHakodeshDesktopApp
             // launches that race our startup (a multi-file Explorer open) find it.
             _receiver = new OpenRequestReceiver();
             StartPipeListener();
-            // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
-            var form = new MainForm(GetOpenRequestArgument());
-            form.HandleCreated += (s, e) => form.BeginInvoke(new Action(DrainEarlyRequests));
-            lock (EarlyRequestsLock) _mainForm = form;
-            Application.Run(form);
+
+            // Every window open when the app last quit comes back, each with its own tabs.
+            // A file path or kitveihakodeshapp:// deep link we were started with (see
+            // GetOpenRequestArgument) opens in the first of them.
+            string[] windowIds = AppSettingsRegistry.GetOpenWindowIds();
+            var first = CreateWindow(windowIds[0], GetOpenRequestArgument());
+            first.HandleCreated += (s, e) => first.BeginInvoke(new Action(DrainEarlyRequests));
+            lock (EarlyRequestsLock) _activeWindow = first;
+            for (int i = 1; i < windowIds.Length; i++)
+                if (Array.IndexOf(windowIds, windowIds[i]) == i) // a damaged list must not open one id twice
+                    CreateWindow(windowIds[i], null).Show();
+            // Last, so it is the one in front and the one a forwarded file goes to.
+            first.Show();
+            SaveOpenWindowIds();
+            Application.Run(AppContext);
+        }
+
+        // ── Windows ───────────────────────────────────────────────────────────────
+        // One process, any number of windows (the VS Code model). UI thread only.
+
+        // Quits the message loop when the last window has closed.
+        private static readonly ApplicationContext AppContext = new ApplicationContext();
+        private static readonly System.Collections.Generic.List<MainForm> OpenWindows = new System.Collections.Generic.List<MainForm>();
+        // Windows whose close has started, for any reason. Never a target for a forwarded
+        // request, and never "a window that stays open" when another window decides.
+        private static readonly System.Collections.Generic.HashSet<MainForm> ClosingWindows = new System.Collections.Generic.HashSet<MainForm>();
+        // The closing windows that delete their saved tabs (ClosesForGood).
+        private static readonly System.Collections.Generic.HashSet<MainForm> WindowsClosingForGood = new System.Collections.Generic.HashSet<MainForm>();
+
+        // How long a closing window waits, hidden, before it decides its tabs are gone for
+        // good. "Close all windows" on the taskbar closes them one after another; within
+        // this pause the others start closing too, so all of them are kept, as on a quit.
+        private const int CloseAllGraceMs = 1000;
+
+        private static MainForm CreateWindow(string windowId, string initialRequest)
+        {
+            var form = new MainForm(initialRequest, windowId) { ClosesForGood = ClosesForGood };
+            form.Activated += (s, e) => { lock (EarlyRequestsLock) _activeWindow = form; };
+            // Every close completes (AppViewer holds the first one only to save), so the
+            // window stops being a target the moment it starts.
+            form.FormClosing += (s, e) => OnWindowClosing(form);
+            form.FormClosed += (s, e) => OnWindowClosed(form);
+            OpenWindows.Add(form);
+            return form;
+        }
+
+        // A new window beside the one it was opened from: empty for a launch with nothing to
+        // open, or holding a forwarded request that found no window to go to. Its id is the
+        // lowest number no open window has, so ids stay short however often windows come and go.
+        private static void OpenNewWindow(MainForm openedFrom, string initialRequest = null)
+        {
+            var used = new System.Collections.Generic.HashSet<string>();
+            foreach (MainForm open in OpenWindows) used.Add(open.WindowId);
+            string id;
+            int n = 1;
+            while (used.Contains(id = n.ToString(System.Globalization.CultureInfo.InvariantCulture))) n++;
+
+            MainForm form = CreateWindow(id, initialRequest);
+            form.OpenedFrom = openedFrom;
+            form.Show();
+            form.Activate();
+            SetForegroundWindow(form.Handle);
+            SaveOpenWindowIds();
+        }
+
+        private static bool AnotherWindowStays(MainForm form)
+        {
+            foreach (MainForm other in OpenWindows)
+                if (other != form && !ClosingWindows.Contains(other)) return true;
+            return false;
+        }
+
+        // A window closing while another stays open is gone for good, like closing one
+        // VS Code window: its saved tabs are deleted and it is not reopened. The last window
+        // keeps its tabs for the next start, and so does every window when Windows shuts
+        // down, the app is quit from outside, or all windows close together.
+        private static async System.Threading.Tasks.Task<bool> ClosesForGood(MainForm form, FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.WindowsShutDown || e.CloseReason == CloseReason.TaskManagerClosing
+                || e.CloseReason == CloseReason.ApplicationExitCall)
+                return false;
+            if (!AnotherWindowStays(form)) return false;
+            // Gone from the screen at once; the decision waits for the grace period.
+            form.Hide();
+            await System.Threading.Tasks.Task.Delay(CloseAllGraceMs);
+            if (!AnotherWindowStays(form)) return false;
+            WindowsClosingForGood.Add(form);
+            SaveOpenWindowIds();
+            return true;
+        }
+
+        private static void OnWindowClosing(MainForm form)
+        {
+            ClosingWindows.Add(form);
+            lock (EarlyRequestsLock)
+            {
+                if (_activeWindow != form) return;
+                for (int i = OpenWindows.Count - 1; i >= 0; i--)
+                {
+                    if (ClosingWindows.Contains(OpenWindows[i])) continue;
+                    _activeWindow = OpenWindows[i];
+                    return;
+                }
+            }
+        }
+
+        private static void OnWindowClosed(MainForm form)
+        {
+            OpenWindows.Remove(form);
+            ClosingWindows.Remove(form);
+            WindowsClosingForGood.Remove(form);
+            lock (EarlyRequestsLock)
+            {
+                if (_activeWindow == form)
+                    _activeWindow = OpenWindows.Count > 0 ? OpenWindows[OpenWindows.Count - 1] : null;
+            }
+            if (OpenWindows.Count == 0) AppContext.ExitThread();
+        }
+
+        // The windows the next start reopens: every open one not closing for good.
+        private static void SaveOpenWindowIds()
+        {
+            var ids = new System.Collections.Generic.List<string>();
+            foreach (MainForm open in OpenWindows)
+                if (!WindowsClosingForGood.Contains(open)) ids.Add(open.WindowId);
+            if (ids.Count == 0) return; // the last window keeps the list as it is
+            try { AppSettingsRegistry.SetOpenWindowIds(ids); } catch { /* registry unwritable: next start opens one window */ }
         }
 
         // The service stops itself soon after the last window closes, so a normal launch has to
@@ -154,7 +287,7 @@ namespace KitveiHakodeshDesktopApp
             StartServiceEarly();
             AppViewer.StartSharedEnvironment(MainForm.WebCacheFolder);
             var form = new MainForm(GetOpenRequestArgument());
-            lock (EarlyRequestsLock) _mainForm = form;
+            lock (EarlyRequestsLock) _activeWindow = form;
             Application.Run(form);
         }
 
@@ -239,15 +372,17 @@ namespace KitveiHakodeshDesktopApp
         private static void EnqueueOrDispatch(string request)
         {
             bool ready;
+            MainForm target;
             lock (EarlyRequestsLock)
             {
-                ready = _mainForm != null && _mainForm.IsHandleCreated;
+                target = _activeWindow;
+                ready = target != null && target.IsHandleCreated;
                 if (!ready) EarlyRequests.Add(request);
             }
             // BeginInvoke even on the UI thread: the sender is blocked in SendMessage
             // until we return, so opening the tab must not happen inside it.
             if (ready)
-                _mainForm.BeginInvoke(new Action(() => DispatchRequest(request)));
+                target.BeginInvoke(new Action(() => DispatchRequest(request)));
         }
 
         private static void DrainEarlyRequests()
@@ -264,8 +399,23 @@ namespace KitveiHakodeshDesktopApp
         // UI thread only.
         private static void DispatchRequest(string request)
         {
-            if (IsIconic(_mainForm.Handle))
-                ShowWindow(_mainForm.Handle, SW_RESTORE);
+            MainForm window;
+            lock (EarlyRequestsLock) window = _activeWindow;
+            if (window == null || window.IsDisposed) return; // the app is shutting down
+            if (request == NewWindowRequest)
+            {
+                OpenNewWindow(window);
+                return;
+            }
+            // Every window is closing: the request gets a window of its own rather than a
+            // tab in one that is about to go.
+            if (ClosingWindows.Contains(window))
+            {
+                OpenNewWindow(null, request);
+                return;
+            }
+            if (IsIconic(window.Handle))
+                ShowWindow(window.Handle, SW_RESTORE);
             // In-process, on our own UI thread, so this is not the
             // cross-process SetForegroundWindow the caller avoids.
             // Without it a link clicked in Word or a browser opens a
@@ -279,9 +429,9 @@ namespace KitveiHakodeshDesktopApp
             // SetForegroundWindow below succeed; Activate() stays as
             // the fallback for callers that cannot do that (a launch
             // arriving over the pipe from anywhere else).
-            _mainForm.Activate();
-            SetForegroundWindow(_mainForm.Handle);
-            _mainForm.OpenRequest(request);
+            window.Activate();
+            SetForegroundWindow(window.Handle);
+            window.OpenRequest(request);
         }
 
         // ── WM_COPYDATA IPC (the Notepad++ model) ─────────────────────────────────

@@ -173,6 +173,14 @@ namespace KitveiHakodeshLib
         public bool IsVstoHost { get; set; } = false;
 
         /// <summary>
+        /// Which desktop-app window this viewer fills: "" for the first window (and every other
+        /// host), else a short id. The page keeps each window's tabs under its own storage keys
+        /// (window.__webviewWindowId, vue-frontend/src/stores/windowScope.ts). Set before the
+        /// WebView2 finishes initialising, like <see cref="IsVstoHost"/>.
+        /// </summary>
+        public string WindowId { get; set; } = "";
+
+        /// <summary>
         /// Set by a host whose pane is not a window (the Word task pane): asked to put this viewer into a
         /// full-screen window when the page requests fullscreen. Once in a window, fullscreen toggles that window.
         /// </summary>
@@ -287,7 +295,19 @@ namespace KitveiHakodeshLib
         /// Never throws; returns at once when the page is gone or not loaded.
         /// UI thread only (ExecuteScriptAsync).
         /// </summary>
-        public async Task FlushPersistenceAsync(int timeoutMs = 500)
+        public Task FlushPersistenceAsync(int timeoutMs = 500)
+            => RunPersistenceScriptAsync("__khsFlushPersistence", timeoutMs);
+
+        /// <summary>
+        /// Like <see cref="FlushPersistenceAsync"/>, but for a desktop window closing while
+        /// other windows stay open: the page deletes everything this window saved (its tabs,
+        /// per-tab state and recents) instead of writing it out. Bounded the same way; the
+        /// deletes are IndexedDB prefix scans, hence the longer default.
+        /// </summary>
+        public Task DiscardWindowDataAsync(int timeoutMs = 2000)
+            => RunPersistenceScriptAsync("__khsDiscardWindowData", timeoutMs);
+
+        private async Task RunPersistenceScriptAsync(string pageFunction, int timeoutMs)
         {
             if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null) return;
 
@@ -301,7 +321,7 @@ namespace KitveiHakodeshLib
                 // a page that never mounted, or a navigation away from the app) means
                 // there is nothing to wait for.
                 Task<string> script = _webView.CoreWebView2.ExecuteScriptAsync(
-                    "typeof window.__khsFlushPersistence==='function'?window.__khsFlushPersistence():'none'");
+                    "typeof window." + pageFunction + "==='function'?window." + pageFunction + "():'none'");
                 Task first = await Task.WhenAny(script, ack.Task, deadline);
                 if (first == script && script.Status == TaskStatus.RanToCompletion && script.Result == "\"pending\"")
                     await Task.WhenAny(ack.Task, deadline);
@@ -321,7 +341,12 @@ namespace KitveiHakodeshLib
         /// await on the UI thread, so the close is delayed by the ack and nothing else.
         /// A Windows shutdown is never held - the flush is fired and the close proceeds.
         /// </summary>
-        public async void CloseAfterPersistenceFlush(Form form, FormClosingEventArgs e)
+        /// <param name="discardWindowData">
+        /// Asked once the close is under way: true when this window closes for good while
+        /// others stay open, so its saved data is deleted (<see cref="DiscardWindowDataAsync"/>)
+        /// rather than flushed. Null = always flush (the only window, the Word task pane).
+        /// </param>
+        public async void CloseAfterPersistenceFlush(Form form, FormClosingEventArgs e, Func<Task<bool>> discardWindowData = null)
         {
             if (form == null || e == null || e.Cancel || _hostCloseFlushDone) return;
             _hostCloseFlushDone = true;
@@ -332,8 +357,16 @@ namespace KitveiHakodeshLib
             }
 
             e.Cancel = true;
-            if (form.WindowState != FormWindowState.Minimized) await SaveSnapshotAsync();
-            await FlushPersistenceAsync();
+            if (discardWindowData != null && await discardWindowData())
+            {
+                // No snapshot either: the startup snapshot shows the window that comes back.
+                await DiscardWindowDataAsync();
+            }
+            else
+            {
+                if (form.WindowState != FormWindowState.Minimized) await SaveSnapshotAsync();
+                await FlushPersistenceAsync();
+            }
             try
             {
                 // Closed by the user again while we waited: nothing left to do.
@@ -862,6 +895,7 @@ namespace KitveiHakodeshLib
         /// </summary>
         private string HostFactsScript() =>
             "window.__webviewIsVsto=" + (IsVstoHost ? "true" : "false") + ";" +
+            (string.IsNullOrEmpty(WindowId) ? "" : "window.__webviewWindowId=" + KitveiHakodeshLib.Bridge.JsonPayloadWriter.ToJson(WindowId) + ";") +
             "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";" +
             KiwixHostFact();
 

@@ -26,8 +26,32 @@ namespace KitveiHakodeshDesktopApp
         internal const string WebCacheFolder = "webcache-standalone";
 
 
-        public MainForm(string initialRequest = null)
+        /// <summary>
+        /// This window's id among the app's windows: "" for the first window, else a short
+        /// number. Keys the page's saved tabs (AppViewer.WindowId) and this window's size.
+        /// </summary>
+        internal string WindowId { get; }
+
+        /// <summary>
+        /// Asked when the window closes: true when it closes for good while other windows
+        /// stay open, so its saved tabs are deleted instead of kept. Set by Program.
+        /// </summary>
+        internal Func<MainForm, FormClosingEventArgs, System.Threading.Tasks.Task<bool>> ClosesForGood { get; set; }
+
+        /// <summary>
+        /// The window a new empty window was opened from (Program.OpenNewWindow): the new one
+        /// takes its size, a little down and across, or is maximized like it - not the size
+        /// saved for this id, which may belong to an earlier window long closed.
+        /// </summary>
+        internal MainForm OpenedFrom { get; set; }
+
+        // The first window keeps the single-window settings names, so an existing
+        // install opens where it was.
+        private string FormSettingsName => "KitveiHakodeshMain" + (WindowId.Length == 0 ? "" : "-" + WindowId);
+
+        public MainForm(string initialRequest = null, string windowId = "")
         {
+            WindowId = windowId ?? "";
             Text = "כתבי הקודש";
             ClientSize = new System.Drawing.Size(1000, 750);
             StartPosition = FormStartPosition.CenterScreen;
@@ -44,7 +68,7 @@ namespace KitveiHakodeshDesktopApp
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
 
-            _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill, IsVstoHost = HostTestMode.WordPane };
+            _viewer = new AppViewer(WebCacheFolder) { Dock = DockStyle.Fill, IsVstoHost = HostTestMode.WordPane, WindowId = WindowId };
             Controls.Add(_viewer);
 
             // Keeps the strip in sync with the Vue tab store, both directions.
@@ -92,24 +116,37 @@ namespace KitveiHakodeshDesktopApp
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+            if (OpenedFrom != null && !OpenedFrom.IsDisposed)
+            {
+                Rectangle from = OpenedFrom.WindowState == FormWindowState.Normal ? OpenedFrom.Bounds : OpenedFrom._lastNormalBounds;
+                int step = SystemInformation.CaptionHeight;
+                StartPosition = FormStartPosition.Manual;
+                Bounds = new Rectangle(from.X + step, from.Y + step, from.Width, from.Height);
+                _lastNormalBounds = Bounds;
+                if (OpenedFrom.WindowState == FormWindowState.Maximized)
+                    WindowState = FormWindowState.Maximized;
+                return;
+            }
+            FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", FormSettingsName);
             _lastNormalBounds = Bounds;
-            if (AppSettingsRegistry.GetMainWindowMaximized())
+            if (AppSettingsRegistry.GetWindowMaximized(WindowId))
                 WindowState = FormWindowState.Maximized;
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
-            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
+            AppSettingsRegistry.SetWindowMaximized(WindowId, WindowState == FormWindowState.Maximized);
+            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", FormSettingsName, _lastNormalBounds);
             // The page's pending persistence writes go out before the WebView2 is
             // disposed: the first close is held for the page's ack, the second runs through.
-            _viewer.CloseAfterPersistenceFlush(this, e);
+            // A window closed while others stay open deletes its saved tabs instead.
+            _viewer.CloseAfterPersistenceFlush(this, e,
+                ClosesForGood == null ? (Func<System.Threading.Tasks.Task<bool>>)null : () => ClosesForGood(this, e));
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)
         {
-            AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
+            AppSettingsRegistry.SetWindowMaximized(WindowId, WindowState == FormWindowState.Maximized);
         }
 
         private void MainForm_BoundsChanged(object sender, EventArgs e)

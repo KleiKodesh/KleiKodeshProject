@@ -115,7 +115,7 @@ restoreLocalFileTabsLazily()
 if (hasHostBridge) {
   // The host closes its window without firing pagehide/beforeunload; this is how it
   // asks for every pending persistence write first (AppViewer.FlushPersistenceAsync).
-  installHostPersistenceFlush()
+  installHostPersistenceFlush(() => useWorkspaceStore().discardWindowData())
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
   // The desktop host keeps its last-session snapshot up until this: hiding it on
   // 'appReady' would show the restored view empty while its content is still loading.

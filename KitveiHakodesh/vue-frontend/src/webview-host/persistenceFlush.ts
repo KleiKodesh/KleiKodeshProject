@@ -1,4 +1,5 @@
 import { nextTick } from 'vue'
+import { sealLocalStorageKeys } from '@/utils/persistence'
 
 /**
  * Everything that still owes a persistence write, so it can all be written at once
@@ -105,15 +106,35 @@ declare global {
      * `{ action: 'persistenceFlushed' }` once every write has settled.
      */
     __khsFlushPersistence?: () => 'pending'
+    /**
+     * Called by the desktop host (AppViewer.DiscardWindowDataAsync) instead of
+     * __khsFlushPersistence when this window closes while other windows stay open: the
+     * window is gone for good, so what it saved is deleted rather than written out.
+     * Same contract: 'pending' now, `persistenceFlushed` once done.
+     */
+    __khsDiscardWindowData?: () => 'pending'
   }
 }
 
-/** Installs the host entry point. Call once at startup when a C# host is present. */
-export function installHostPersistenceFlush(): void {
+/**
+ * Installs the host entry points. Call once at startup when a C# host is present.
+ * `discardWindowData` deletes this window's saved data; it is passed in because the
+ * stores that own those keys import this module.
+ */
+export function installHostPersistenceFlush(discardWindowData: () => Promise<void>): void {
+  const ack = () => window.chrome?.webview?.postMessage({ id: '0', action: 'persistenceFlushed' })
   window.__khsFlushPersistence = () => {
-    void flushAllPersistence().finally(() => {
-      window.chrome?.webview?.postMessage({ id: '0', action: 'persistenceFlushed' })
-    })
+    void flushAllPersistence().finally(ack)
+    return 'pending'
+  }
+  window.__khsDiscardWindowData = () => {
+    // Pending writes go out first, so none of them lands after the delete and brings a
+    // key back; then nothing more may be written - this page is about to die.
+    void flushAllPersistence()
+      .then(() => discardWindowData())
+      .then(() => sealLocalStorageKeys(''))
+      .catch(() => undefined)
+      .finally(ack)
     return 'pending'
   }
 }

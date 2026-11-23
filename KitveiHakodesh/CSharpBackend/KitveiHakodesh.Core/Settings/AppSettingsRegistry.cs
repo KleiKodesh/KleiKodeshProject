@@ -108,6 +108,37 @@ namespace KitveiHakodesh.Core.Settings
         public static void SetMainWindowMaximized(bool maximized) =>
             Set(AppKitveiHakodesh, "MainWindow", "Maximized", maximized ? "1" : "0");
 
+        // ── Desktop app windows ───────────────────────────────────────────────────────
+        // The desktop app can show several windows; each has an id ("" = the first window,
+        // which keeps the single-window keys above). The list is the windows that were open
+        // when the app last quit, so the next start brings all of them back.
+
+        /// <summary>Ids of the windows to open at startup, in order. Never empty: a missing
+        /// value is the single first window.</summary>
+        public static string[] GetOpenWindowIds()
+        {
+            string stored = Get(AppKitveiHakodesh, "MainWindow", "OpenWindows", "");
+            if (stored.Length == 0) return new[] { "" };
+            // Each id is stored with a leading "w" so the first window's "" survives the join.
+            string[] ids = stored.Split('|');
+            for (int i = 0; i < ids.Length; i++) ids[i] = ids[i].Length > 0 ? ids[i].Substring(1) : "";
+            return ids;
+        }
+
+        public static void SetOpenWindowIds(System.Collections.Generic.IEnumerable<string> ids) =>
+            Set(AppKitveiHakodesh, "MainWindow", "OpenWindows", string.Join("|", System.Linq.Enumerable.Select(ids, id => "w" + id)));
+
+        public static bool GetWindowMaximized(string windowId) =>
+            string.IsNullOrEmpty(windowId)
+                ? GetMainWindowMaximized()
+                : Get(AppKitveiHakodesh, "MainWindow", "Maximized-" + windowId, "0") == "1";
+
+        public static void SetWindowMaximized(string windowId, bool maximized)
+        {
+            if (string.IsNullOrEmpty(windowId)) SetMainWindowMaximized(maximized);
+            else Set(AppKitveiHakodesh, "MainWindow", "Maximized-" + windowId, maximized ? "1" : "0");
+        }
+
 
         /// <summary>
         /// Last bounds of a window.open popup, keyed by its window name (e.g. "hameshiv").
