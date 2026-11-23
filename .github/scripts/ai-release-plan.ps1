@@ -443,3 +443,7 @@ Write-Host $notes
 if ($NotesOnly) { return }
 
 if ($env:GITHUB_OUTPUT) { "bump=$($plan.bump)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8 }
+
+# A failed native call earlier (e.g. a missing git note) leaves $LASTEXITCODE set, and the
+# Actions pwsh wrapper would fail the step with it even though the notes are written.
+exit 0
