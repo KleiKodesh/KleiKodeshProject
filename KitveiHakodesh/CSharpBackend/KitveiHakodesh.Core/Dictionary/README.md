@@ -12,7 +12,7 @@ That repo holds everything needed to reproduce this DB:
 - `sources.json` - every source with its origin URL, pin (commit / date), sha256 and license
 - `fetch/` - downloads the re-fetchable upstream files and checks their sha256
 - `import/` - the import scripts (Otzaria acronyms and Aramaic, Laaz Rashi, Hebrew lexicon,
-  seforim headword index, synonym links) and their audit data
+  seforim headword index) and their audit data
 - `build.py` / `export.py` / `verify.py` - build the DB from `source/`, write a DB back to
   `source/`, row-diff two DBs
 - CI on every push: builds the DB and runs a round-trip check (no releases)

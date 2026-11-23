@@ -28,11 +28,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// channel, source, PK(lemma, rank)). A surface may READ as several lemmas; weight is that
     /// reading's share (0..1). Older artifacts have fold(surface PK, lemma, source) with no
     /// weight column — one reading per surface at weight 1, detected once per expander. Policy, stored in the artifact's meta and enforced here: synonym rows
-    /// are trusted only from the validated 'tanach' side and the human-reviewed 'word-thesaurus'
-    /// links; inflection and bridge rows from every source. Word-thesaurus links reached only
-    /// through a grammar prefix/suffix form (source 'word-thesaurus-affix') are taken only for a
-    /// word that also asks for inflections ('+') or carries a grammar '%' prefix and/or suffix
-    /// ("%word=", "word%=", "%word%="); synonyms alone never get them.
+    /// are trusted only from the validated 'tanach' side and the open synonym sources
+    /// 'wiktionary' (Hebrew Wiktionary), 'omw-heb' (Hebrew WordNet) and 'wikidata' (Wikidata
+    /// lexemes); inflection and bridge rows from every source.
     ///
     /// Two independent per-word channels, picked by the word's markers (FtsLib WordMarkers):
     /// '+' = INFLECTIONS (channel 'infl'); '=' = SYNONYMS (channel 'syn' under the trust policy,
@@ -121,12 +119,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             : channel == "syn" || channel == "bridge" ? synonyms
             : false;
 
-        /// <summary>The artifact's synonym trust policy: 'tanach' and exact 'word-thesaurus'
-        /// links always; affix-derived 'word-thesaurus-affix' links only when the word also asks
-        /// for inflections or a grammar prefix/suffix (<paramref name="affixAllowed"/>).</summary>
-        private static bool SynonymSourceTrusted(string source, bool affixAllowed) =>
-            source == "tanach" || source == "word-thesaurus"
-            || (affixAllowed && source == "word-thesaurus-affix");
+        /// <summary>The artifact's synonym trust policy: 'tanach' and the open synonym sources
+        /// (Hebrew Wiktionary, Hebrew WordNet, Wikidata lexemes).</summary>
+        private static bool SynonymSourceTrusted(string source) =>
+            source == "tanach" || source == "wiktionary" || source == "omw-heb" || source == "wikidata";
 
 
         private string RewriteCore(string query, int perTerm)
@@ -167,10 +163,6 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     continue;
                 }
                 string core = PeelMarkers(unmarked, out string lead, out string trail);
-                // Grammar prefix/suffix ('%' on either side, also from the all-words toggles,
-                // which the frontend writes into the query text) or inflections open the
-                // affix-derived Word-thesaurus links.
-                bool affixAllowed = inflections || lead.IndexOf('%') >= 0 || trail.IndexOf('%') >= 0;
                 if (ketiv) lead = "^" + lead;
 
                 string bare = BareHebrew(core);
@@ -203,7 +195,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
                             if (!ChannelRequested(channel, inflections, synonyms)) continue;
                             // The artifact's trust policy (see SynonymSourceTrusted).
-                            if (channel == "syn" && !SynonymSourceTrusted(source, affixAllowed)) continue;
+                            if (channel == "syn" && !SynonymSourceTrusted(source)) continue;
                             if (form == bare || forms.Contains(form)) continue;
 
                             // DROP-GUARD. A form the query parser would itself drop — too short or

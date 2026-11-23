@@ -26,6 +26,25 @@ expansion (`build/tools/slim_equivalence.py`: Python port of the reader, 0 diffe
 
 If the reader changes (new channel, trust rule, table), update make_slim.py first.
 
+## Synonym sources and licenses
+
+Besides the Tanach synonyms, the `syn` rows come from three open sources (column `source`):
+
+- `wiktionary` - Hebrew Wiktionary synonym sections, by the Wiktionary contributors
+  (https://he.wiktionary.org), licensed CC BY-SA 4.0. These derived rows stay under
+  CC BY-SA 4.0.
+- `omw-heb` - Hebrew WordNet, via the Open Multilingual Wordnet (omwn/omw-data).
+  Hebrew WordNet Copyright 2007 by Noam Ordan and Shuly Wintner. All rights reserved.
+  Used under the University of Haifa license, which permits use, copying, modification
+  and distribution provided this notice and its disclaimer appear on all copies:
+  THIS SOFTWARE AND DATABASE IS PROVIDED "AS IS" AND the University of Haifa MAKES NO
+  REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED (full text: `inputs/omw-heb/LICENSE`
+  in KleiKodesh/SearchExpansion).
+- `wikidata` - Wikidata Hebrew lexemes (senses sharing an item, or linked as synonyms),
+  CC0.
+
+Pins, sha256 and fetch scripts are in that repo's `sources.json`.
+
 ## Built by
 
 [KleiKodesh/SearchExpansion](https://github.com/KleiKodesh/SearchExpansion) (private).

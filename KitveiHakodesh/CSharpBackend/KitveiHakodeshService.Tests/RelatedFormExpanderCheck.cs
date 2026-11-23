@@ -69,18 +69,16 @@ public static class RelatedFormExpanderCheck
             Expect(RewriteMarked(channelDb, ab), ab, "channels: no marker -> unchanged");
             Expect(SeforimDbFtsRelatedFormExpander.HasRelatedMarker(ab + "=") ? "y" : "n", "y", "channels: HasRelatedMarker sees '='");
 
-            // WORD-THESAURUS AFFIX links: exact 'word-thesaurus' always with '='; affix-derived
-            // 'word-thesaurus-affix' only when the word also has '+' or a grammar '%' side.
-            string affixDb = Path.Combine(dir, "affix.db");
-            Build(affixDb, weighted: true,
+            // OPEN SYNONYM SOURCES: 'wiktionary', 'omw-heb' and 'wikidata' are trusted like
+            // 'tanach'; any other syn source (here 'bavli') is skipped.
+            string openDb = Path.Combine(dir, "open.db");
+            Build(openDb, weighted: true,
                 fold: [("ab", "ga", 1.0)],
-                exp: [("ga", "na", "syn-wt"), ("ga", "ma", "syn-affix"), ("ga", "ka", "infl")]);
-            Expect(RewriteMarked(affixDb, ab + "="), ab + "= | " + H("na"), "affix: '=' alone excludes affix links");
-            Expect(RewriteMarked(affixDb, ab + "+="), ab + "+= | " + string.Join(" | ", new[] { "na", "ma", "ka" }.Select(H)), "affix: '+=' includes affix links");
-            Expect(RewriteMarked(affixDb, "%" + ab + "="), "%" + ab + "= | %" + H("na") + " | %" + H("ma"), "affix: '%word=' includes affix links");
-            Expect(RewriteMarked(affixDb, ab + "%="), ab + "%= | " + H("na") + "% | " + H("ma") + "%", "affix: 'word%=' includes affix links");
-            Expect(RewriteMarked(affixDb, "%" + ab + "%="), "%" + ab + "%= | %" + H("na") + "% | %" + H("ma") + "%", "affix: '%word%=' includes affix links");
-            Expect(RewriteMarked(affixDb, ab + "+"), ab + "+ | " + H("ka"), "affix: '+' alone takes no synonyms");
+                exp: [("ga", "na", "syn-wikt"), ("ga", "sb", "syn-bavli"), ("ga", "ma", "syn-omw"),
+                      ("ga", "pa", "syn-wd"), ("ga", "ka", "infl")]);
+            Expect(RewriteMarked(openDb, ab + "="), ab + "= | " + string.Join(" | ", new[] { "na", "ma", "pa" }.Select(H)), "open sources: '=' takes wiktionary, omw-heb, wikidata");
+            Expect(RewriteMarked(openDb, "%" + ab + "="), "%" + ab + "= | " + string.Join(" | ", new[] { "na", "ma", "pa" }.Select(w => "%" + H(w))), "open sources: '%word=' same rows, markers kept");
+            Expect(RewriteMarked(openDb, ab + "+"), ab + "+ | " + H("ka"), "open sources: '+' alone takes no synonyms");
 
             // NEW schema.
             string newDb = Path.Combine(dir, "new.db");
@@ -137,10 +135,15 @@ public static class RelatedFormExpanderCheck
         foreach (var (lemma, form, channel) in exp)
         {
             // "syn" rows are trusted (tanach); "syn-bavli" is a syn row from the untrusted side.
-            // "syn-wt" / "syn-affix" are Word-thesaurus exact / affix-derived links.
-            bool untrusted = channel == "syn-bavli";
-            string source = untrusted ? "bavli" : channel == "syn-wt" ? "word-thesaurus"
-                : channel == "syn-affix" ? "word-thesaurus-affix" : "tanach";
+            // "syn-wikt" / "syn-omw" / "syn-wd" are the open synonym sources.
+            string source = channel switch
+            {
+                "syn-bavli" => "bavli",
+                "syn-wikt" => "wiktionary",
+                "syn-omw" => "omw-heb",
+                "syn-wd" => "wikidata",
+                _ => "tanach",
+            };
             using var insert = connection.CreateCommand();
             insert.CommandText = "INSERT INTO exp VALUES(@l, @r, @f, @c, @src)";
             insert.Parameters.AddWithValue("@l", H(lemma));
