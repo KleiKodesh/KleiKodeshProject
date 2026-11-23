@@ -1,5 +1,6 @@
 import { ref, shallowRef, watch } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
+import { communityPlaceId } from './zmanimCommunity'
 import { loadPlace, nearestPlace, placeName, type Place } from './zmanimPlaces'
 
 /**
@@ -24,6 +25,7 @@ export function useZmanim() {
   let pickedByUser = false
 
   watch(activeCity, async (place) => {
+    if (place) communityPlaceId.value = place.id
     activeCityName.value = place ? await placeName(place.id) : ''
   })
 

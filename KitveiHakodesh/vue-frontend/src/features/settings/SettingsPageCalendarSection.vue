@@ -9,6 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import { useZmanim } from '@/features/hebrew-calendar/useZmanim'
 import { usePlacePicker } from '@/features/hebrew-calendar/usePlacePicker'
 import PlaceTreePicker from '@/features/hebrew-calendar/PlaceTreePicker.vue'
+import CommunityPicker from '@/features/hebrew-calendar/CommunityPicker.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 const { showClock } = storeToRefs(useSettingsStore())
@@ -96,6 +97,10 @@ function pickCity(id: number) {
           </div>
         </div>
       </Teleport>
+    </SettingRow>
+
+    <SettingRow :label="$t('settings.calendar.community')" :hint="$t('settings.calendar.communityHint')">
+      <CommunityPicker />
     </SettingRow>
 
     <SettingRow :label="$t('settings.calendar.clock')" :hint="$t('settings.calendar.clockHint')">

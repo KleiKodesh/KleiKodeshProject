@@ -127,7 +127,10 @@
     "cityHint": "Calendar prayer times are calculated for this city",
     "clock": "Show clock in full screen",
     "clockHint": "A transparent clock in the bottom-left corner while in full screen",
-    "cityHintWizard": "The city used to calculate calendar prayer times"
+    "cityHintWizard": "The city used to calculate calendar prayer times",
+    "community": "Community custom",
+    "communityHint": "Decides which time is shown first for each zman. \"City custom\" follows the custom of the chosen city",
+    "communityDefault": "City custom (general)"
   },
   "censor": {
     "section": "Divine name covering",

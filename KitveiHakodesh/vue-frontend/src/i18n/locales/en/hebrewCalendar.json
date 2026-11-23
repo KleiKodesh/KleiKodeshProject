@@ -82,5 +82,6 @@
     "nov": "November",
     "dec": "December"
   },
-  "zmanimNotReached": "The sun does not reach this angle tonight"
+  "zmanimNotReached": "The sun does not reach this angle tonight",
+  "otherOpinions": "Other opinions"
 }

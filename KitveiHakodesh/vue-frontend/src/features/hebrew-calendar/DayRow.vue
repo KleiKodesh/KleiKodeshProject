@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import ZmanimDisclaimer from './ZmanimDisclaimer.vue'
+import { usePrimaryZmanNames } from './zmanimCommunity'
 import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
@@ -26,6 +28,13 @@ const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 // chatzotNight of date D is the midpoint of the night ending at D's sunrise (in winter it can
 // fall before civil midnight, on date D-1).
 const ZMANIM_ROWS = ZMAN_NAMES.map((key) => ({ key, label: t(zmanLabelKey(key)) }))
+const primaryZmanNames = usePrimaryZmanNames()
+/** The community's primary lines first (their group order), then every other line. */
+const zmanRows = computed(() => {
+  const shown = ZMANIM_ROWS.filter((r) => !(ELEVATED_ZMANIM.has(r.key) && props.day.zmanim[r.key] == null))
+  const primary = primaryZmanNames.value.flatMap((name) => shown.filter((r) => r.key === name))
+  return { primary, other: shown.filter((r) => !primary.includes(r)) }
+})
 
 // `homeKey` is the same cycle in the home date-bar dropdown, which knows how to open it.
 const LEARNING_ROWS: Array<{ key: keyof DailyLearning; homeKey: HomeDailyLearningItem['key']; label: string }> = [
@@ -123,7 +132,13 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
         <span v-if="day.molad" class="ev muted">{{ day.molad }}</span>
       </div>
       <div class="zmanim-grid">
-        <template v-for="z in ZMANIM_ROWS.filter((r) => !(ELEVATED_ZMANIM.has(r.key) && day.zmanim[r.key] == null))" :key="z.key">
+        <template v-for="z in zmanRows.primary" :key="z.key">
+          <span class="zg-label primary" data-primary-zman>{{ z.label }}</span>
+          <span v-if="day.zmanim[z.key] != null" class="zg-value primary">{{ day.zmanim[z.key] }}</span>
+          <span v-else class="zg-value primary" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
+        </template>
+        <span v-if="zmanRows.primary.length" class="zg-heading">{{ $t('hebrewCalendar.otherOpinions') }}</span>
+        <template v-for="z in zmanRows.other" :key="z.key">
           <span class="zg-label">{{ z.label }}</span>
           <span v-if="day.zmanim[z.key] != null" class="zg-value">{{ day.zmanim[z.key] }}</span>
           <span v-else class="zg-value" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
@@ -332,6 +347,18 @@ button.chip {
   color: var(--text-secondary);
   padding: 3px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 20%, transparent);
+}
+.zg-label.primary, .zg-value.primary {
+  color: var(--text-primary);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+.zg-heading {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 8px 0 2px;
 }
 .zg-value {
   font-size: 12px;
