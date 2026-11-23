@@ -1,7 +1,8 @@
 import { ref, shallowRef, watch } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
 import { communityPlaceId } from './zmanimCommunity'
-import { loadPlace, nearestPlace, placeName, type Place } from './zmanimPlaces'
+import { loadPlace, nearestPlace, type Place } from './zmanimPlaces'
+import { savedPlaceName } from './savedPlaceName'
 
 /**
  * Disk name for the selected zmanim place (its numeric place id). Exported because the
@@ -26,7 +27,7 @@ export function useZmanim() {
 
   watch(activeCity, async (place) => {
     if (place) communityPlaceId.value = place.id
-    activeCityName.value = place ? await placeName(place.id) : ''
+    activeCityName.value = place ? await savedPlaceName(place.id) : ''
   })
 
   async function init() {

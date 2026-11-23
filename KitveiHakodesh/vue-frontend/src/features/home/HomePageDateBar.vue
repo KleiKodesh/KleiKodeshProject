@@ -16,7 +16,7 @@ import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
 const HomeCalendarPopup = defineAsyncComponent(() => import('./HomeCalendarPopup.vue'))
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
-import { placeName } from '@/features/hebrew-calendar/zmanimPlaces'
+import { savedPlaceName } from '@/features/hebrew-calendar/savedPlaceName'
 import { useWidgetWindowStore } from '@/features/widgets/widgetWindowStore'
 
 const props = defineProps<{
@@ -177,7 +177,7 @@ function toggleCalendarPopup() {
   }
 }
 
-const zmanCityName = computedAsync(() => (zmanCity.value ? placeName(zmanCity.value.id) : ''), '')
+const zmanCityName = computedAsync(() => (zmanCity.value ? savedPlaceName(zmanCity.value.id) : ''), '')
 
 // "Open full calendar" opens the calendar widget.
 function openHebrewCalendar() {
