@@ -800,6 +800,14 @@ public sealed class Dispatcher(
                 }
 
                 // Automatic update of the library this app downloaded. true = turned OFF.
+                // THIRD-PARTY-NOTICES.txt shipped beside the service exe (or the app folder);
+                // "" when missing. Settings -> About opens it with openFileInDefaultApp.
+                case "thirdPartyNoticesPath":
+                    return RpcResponse.Ok(MsgPack.Ser(new StringResult
+                    {
+                        Value = global::KitveiHakodesh.Core.Common.AppFileLocator.FindFile("THIRD-PARTY-NOTICES.txt") ?? "",
+                    }));
+
                 case "isOwnSeforimLibraryInUse":
                     return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = global::KitveiHakodesh.Core.SeforimLibraryDownload.SeforimLibraryDownloader.IsOwnLibraryInUse }));
 

@@ -20,6 +20,7 @@ import SettingsPageUpdatesSection from './SettingsPageUpdatesSection.vue'
 import SettingsPageAdvancedSection from './SettingsPageAdvancedSection.vue'
 import SettingsPageResetSection from './SettingsPageResetSection.vue'
 import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcutsSection.vue'
+import SettingsPageAboutSection from './SettingsPageAboutSection.vue'
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
@@ -203,6 +204,7 @@ async function navigateToSection(sectionId: string) {
         <SettingsPageResetSection />
         <SettingsPageUpdatesSection />
         <SettingsPageKeyboardShortcutsSection />
+        <SettingsPageAboutSection />
 
       </div>
     </div>

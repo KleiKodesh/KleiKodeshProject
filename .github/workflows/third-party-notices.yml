@@ -1,0 +1,45 @@
+# Writes THIRD-PARTY-NOTICES.txt the way a release build does (npm, NuGet and Cargo packages
+# plus the curated list in KitveiHakodesh/ThirdPartyNotices) and keeps it as a run artifact.
+# The release itself generates it inside Build/build.ps1; this is the quick check.
+name: Third-party notices
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'KitveiHakodesh/ThirdPartyNotices/**'
+
+jobs:
+  notices:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/checkout@v7
+        with:
+          repository: KleiKodesh/hebrew-typing-tutor
+          path: hebrew-typing-tutor
+      - name: npm packages
+        shell: pwsh
+        run: |
+          foreach ($dir in 'KitveiHakodesh/vue-frontend', 'hebrew-typing-tutor') {
+            Push-Location $dir; npm ci --ignore-scripts --no-audit --no-fund; Pop-Location
+          }
+      - name: NuGet packages
+        shell: pwsh
+        run: |
+          dotnet restore KitveiHakodesh/CSharpBackend/KitveiHakodeshService/KitveiHakodeshService.csproj
+          foreach ($config in git ls-files '*packages.config') {
+            nuget restore $config -PackagesDirectory (Join-Path (Split-Path $config) '..\packages') -NonInteractive
+          }
+      - name: Generate
+        shell: pwsh
+        run: |
+          node KitveiHakodesh/ThirdPartyNotices/generate-third-party-notices.mjs
+          Get-Content KitveiHakodesh/ThirdPartyNotices/bin/THIRD-PARTY-NOTICES.txt -TotalCount 40
+      - uses: actions/upload-artifact@v7
+        with:
+          name: THIRD-PARTY-NOTICES
+          path: KitveiHakodesh/ThirdPartyNotices/bin/THIRD-PARTY-NOTICES.txt

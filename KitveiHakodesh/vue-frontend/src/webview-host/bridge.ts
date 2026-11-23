@@ -1582,6 +1582,16 @@ export async function getTurnOffUpdates(): Promise<boolean | null> {
 }
 
 /** True when the library in use is the copy this app downloaded. False when the service cannot answer. */
+/** Full path of THIRD-PARTY-NOTICES.txt shipped with the app; '' when the service cannot find it. */
+export async function getThirdPartyNoticesPath(): Promise<string> {
+  try {
+    const res = await serviceCall<{ value?: string }>('thirdPartyNoticesPath')
+    return res?.value ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export async function isOwnSeforimLibraryInUse(): Promise<boolean> {
   try {
     const res = await serviceCall<{ value?: boolean }>('isOwnSeforimLibraryInUse')

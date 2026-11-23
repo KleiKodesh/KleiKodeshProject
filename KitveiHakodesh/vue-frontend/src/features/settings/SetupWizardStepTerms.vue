@@ -6,6 +6,7 @@
  */
 import { ref, watch } from 'vue'
 import { useScroll } from '@vueuse/core'
+import { ZAYIT_ATTRIBUTION } from './credits'
 
 const agreed = defineModel<boolean>({ default: false })
 
@@ -50,6 +51,11 @@ watch(
       <h3>{{ $t('settings.terms.p12') }}</h3>
       <p>{{ $t('settings.terms.p13') }}</p>
       <p>{{ $t('settings.terms.p14') }}</p>
+
+      <h3>{{ $t('settings.terms.p18') }}</h3>
+      <p>{{ $t('settings.terms.p19') }}</p>
+      <!-- Required word for word by the SeforimLibrary / Zayit license. -->
+      <p dir="ltr" class="terms-attribution" data-testid="terms-zayit">{{ ZAYIT_ATTRIBUTION }}</p>
     </div>
 
     <label class="terms-agree" :class="{ disabled: !reachedBottom }">
@@ -92,6 +98,11 @@ watch(
 .terms-box p {
   margin: 0 0 6px;
   color: var(--text-secondary);
+}
+
+.terms-box p.terms-attribution {
+  text-align: start;
+  font-weight: 600;
 }
 
 .terms-agree {

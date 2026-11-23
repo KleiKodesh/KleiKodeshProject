@@ -92,6 +92,22 @@
          (IsAotCompatible) because this project publishes native AOT. -->
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj" />
   </ItemGroup>
+  <!-- THIRD-PARTY-NOTICES.txt: written fresh on every build from the curated list and the
+       installed npm / NuGet / Cargo packages (KitveiHakodesh\ThirdPartyNotices), then shipped
+       beside the exe (build and publish output). KitveiHakodeshLib also copies it to the app
+       folder. Settings -> About opens it (op thirdPartyNoticesPath). Needs node, like the
+       frontend; without node the build warns and ships no notices file, and Build\build.ps1
+       refuses to pack a release without it. -->
+  <PropertyGroup>
+    <ThirdPartyNoticesDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\ThirdPartyNotices'))\</ThirdPartyNoticesDir>
+    <ThirdPartyNoticesFile>$(ThirdPartyNoticesDir)bin\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticesFile>
+  </PropertyGroup>
+  <Target Name="GenerateThirdPartyNotices" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="node &quot;$(ThirdPartyNoticesDir)generate-third-party-notices.mjs&quot; &quot;$(ThirdPartyNoticesFile)&quot;" ContinueOnError="WarnAndContinue" />
+    <ItemGroup Condition="Exists('$(ThirdPartyNoticesFile)')">
+      <Content Include="$(ThirdPartyNoticesFile)" Link="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
   <!-- A release must ship the HebrewBooks download fallbacks. hb-mirror.json is kept out of git
        (it holds the R2 keys), so a machine without it would publish a service that silently
        downloads from the official handler only. Publish-only: dev builds are not blocked. -->

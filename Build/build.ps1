@@ -166,6 +166,14 @@ try {
     & $msbuild $PortableProject /p:Configuration=Release /p:Platform=AnyCPU /nologo /v:minimal
     Assert-Success "Portable app build"
 
+    # The service build writes THIRD-PARTY-NOTICES.txt (KitveiHakodesh\ThirdPartyNotices) and
+    # the library copies it into every app folder; a release never ships without it.
+    foreach ($dir in $CoreOutput, $PortableOutput) {
+        foreach ($rel in "THIRD-PARTY-NOTICES.txt", "KitveiHakodeshService\THIRD-PARTY-NOTICES.txt") {
+            if (-not (Test-Path (Join-Path $dir $rel))) { throw "Missing $rel in $dir (is node on PATH?)" }
+        }
+    }
+
     Step "Setup exe (Rust)"
     Push-Location $InstallerDir
     try {

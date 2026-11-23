@@ -171,6 +171,12 @@ jobs:
           $notes = if (Test-Path release-notes.json) { 'release-notes.json' } else { '' }
           ./Build/build.ps1 -Version '${{ steps.version.outputs.version }}' -Notes $notes
 
+      # The build wrote THIRD-PARTY-NOTICES.txt into the app (build.ps1 fails without it);
+      # print what it lists and anything it could not list.
+      - name: Third-party notices
+        shell: pwsh
+        run: node KitveiHakodesh/ThirdPartyNotices/generate-third-party-notices.mjs
+
       # Every build: the setup must really install (into a sandbox folder and test registry
       # key, nothing on the runner itself) before anything is kept or published.
       - name: Test install

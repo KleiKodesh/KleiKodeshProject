@@ -334,7 +334,10 @@
     "p15": "Otzaria",
     "p16": "Kitvei Hakodesh uses the book database and other materials of the Otzaria Project (otzaria.org), such as dictionaries and acronym lists, with its permission. All rights in these materials belong to the Otzaria Project and are subject to its license terms. Credit: the Otzaria Project (otzaria.org).",
     "p17": "The books in the Otzaria library are not covered by the Otzaria software license. Each book remains subject to its own license and permissions, as set by its source and rights holders.",
-    "agree": "I have read and agree to the terms"
+    "agree": "I have read and agree to the terms",
+    "p18": "Credits and licenses",
+    "p19": "The books, data, code and fonts this app uses, and their licenses, are listed in Settings, under Credits and licenses.",
+    "p20": "Powered by the technologies that drive Zayit — https://zayitapp.com/"
   },
   "shortcutsList": {
     "tabManagement": "Tab management",
@@ -426,5 +429,56 @@
     "never": "Never",
     "toastOn": "Keep screen on: ON",
     "toastOff": "Keep screen on: OFF"
+  },
+  "credits": {
+    "section": "Credits and licenses",
+    "intro": "Kitvei Hakodesh is built on the work of many people. These are the books, data, code, libraries and fonts it uses, each under its own license.",
+    "groups": {
+      "data": "Book library and data",
+      "ported": "Code we ported",
+      "libraries": "Libraries",
+      "fonts": "Fonts and icons"
+    },
+    "packagesNote": "Every package the app is built with, with its copyright and full license text, is listed in the full license texts file.",
+    "openNotices": "Open full license texts",
+    "noticesMissing": "The license texts file was not found in the app folder.",
+    "use": {
+      "otzaria": "The book library and its lists",
+      "zayit": "The library database format and search word data",
+      "sefaria": "Many of the texts, and the dictionaries (including Jastrow) used by search",
+      "dicta": "Abbreviation expansions",
+      "hebrewbooks": "Scanned books",
+      "wiktionary": "Synonyms for search",
+      "wikidata": "Synonyms for search and place coordinates",
+      "omw": "Synonyms for search",
+      "bhsa": "Tanach word data for search",
+      "tomer": "Word forms for search",
+      "hspell": "Word forms for search",
+      "wikipedia": "Acronyms in the dictionary",
+      "hamichlol": "Dictionary entries",
+      "geonames": "The city list of the calendar",
+      "openmeteo": "Place elevations for zmanim",
+      "an earlier zmanim library": "Zmanim calculations",
+      "otzariaSearch": "How search splits Hebrew words",
+      "midotjs": "The halachic units converter",
+      "uchardet": "Recognizing the encoding of text files",
+      "libreofficeShapes": "Drawing shapes in Word documents",
+      "numbertext": "Spelled-out list numbers in Word documents",
+      "hebcal": "The Hebrew calendar, holidays and daily learning",
+      "pdfjs": "The PDF viewer",
+      "tesseract": "Text recognition in scanned pages",
+      "kiwix": "The Wikipedia reader in Word",
+      "vue": "The app interface",
+      "lucene": "Searching book titles and tables of contents",
+      "messagepack": "Fast messages between the app and its service",
+      "zstd": "Compressed library files",
+      "sqlite": "Reading the book library",
+      "slint": "The setup program",
+      "culmus": "Book text fonts",
+      "frankruhl": "Book text font",
+      "heebo": "Interface font",
+      "notorashi": "Rashi script font",
+      "fluent": "Interface icons"
+    }
   }
 }
