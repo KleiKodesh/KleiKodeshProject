@@ -18,20 +18,14 @@ const { t } = useI18n()
 // The nav dropdown's items, always on. Same list, same order, same actions - the only
 // difference is that a row here is its icon alone with the label as its tooltip, because
 // the rail is deliberately too narrow for text. Whether it is showing is a setting
-// (settingsStore, keyed by pane), so it survives a restart. Each pane's rail is its own:
-// closing this one never touches the other pane's.
-//
-// One rail per pane, like the title bar beside it: navigateInNewTab goes through
-// usePaneNavigation, so each rail opens its destination in its own pane's tabs.
+// (settingsStore), so it survives a restart.
 const { navigateInNewTab } = useAppNavigation()
 const settingsStore = useSettingsStore()
 
-// Which pane this rail belongs to - it closes its own rail, not both panes'.
-
 // Home and workspaces are both deliberately NOT on the rail: they live in the title bar,
-// side by side, and only there. The hamburger and the split-view toggle move in here
-// while the rail is up because they are about the rail and the window, so the rail can
-// speak for them - but home is a destination and workspaces is a picker, and each had one
+// side by side, and only there. The hamburger moves in here
+// while the rail is up because it is about the rail, so the rail can
+// speak for it - but home is a destination and workspaces is a picker, and each had one
 // place already. What is left on the rail is the destinations and its own controls.
 
 /** The rail's own sheet - the surface the overflow flyout must open beside, never over. */
@@ -191,7 +185,7 @@ ${updateItem.text}` : t('layout.moreItems')"
   z-index: 20;
 }
 
-/* The app menu as a rail docked to this pane's edge, the full height of the pane: the
+/* The app menu as a rail docked to the shell's edge, its full height: the
    chrome surface itself, with no frame, radius or margin, so it reads as the window's frame
    running down one side and continuing the title bar.
 
@@ -266,7 +260,7 @@ ${updateItem.text}` : t('layout.moreItems')"
   color: inherit;
 }
 
-/* Glyphs Fluent only ships at 20 (the double chevron, the split-view pair) are drawn at
+/* Glyphs Fluent only ships at 20 (the double chevron) are drawn at
    20 rather than scaled up to the rail's 24. */
 .nav-btn-sm svg {
   width: var(--nav-glyph-size-sm);
@@ -309,9 +303,7 @@ ${updateItem.text}` : t('layout.moreItems')"
    the glyphs dropped a size so they still sit in their target rather than filling it edge
    to edge. Everything else - the order, the tooltips, the flyout - is unchanged.
 
-   `app-pane` is the PANE's width, not the window's (AppShell declares it): a pane in split
-   view is a fraction of the window, and a narrow pane inside a wide window wants the
-   compact rail just as much.
+   `app-pane` is the shell's width, not the window's (AppShell declares it).
 
    Only the inline axis moves. The button height, the vertical padding and the gap are what
    useAppNavSidebarOverflow mirrors to decide how many buttons fit, so touching them here

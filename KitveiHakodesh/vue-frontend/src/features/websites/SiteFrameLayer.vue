@@ -12,7 +12,7 @@ import { displayHost, websiteForUrl, websiteName } from './websitesList'
 /**
  * Every live website iframe, mounted ONCE here at the app root and never moved (moving an iframe
  * reloads it). Each one is positioned over its tab's placeholder in WebViewPage with CSS anchor
- * positioning (the browser keeps it in place through resizes and split-view drags) and hidden
+ * positioning (the browser keeps it in place through resizes) and hidden
  * with visibility when its tab is not shown, so a hidden site keeps all its state. Rendered
  * after the panes (an anchor must come first in the document) and below dialogs and menus.
  * See siteFrames.ts for the lifecycle and memory rules.
@@ -88,7 +88,7 @@ useEventListener(window, 'message', (e: MessageEvent) => {
   }
 })
 
-// Split-view divider drags: an iframe under the pointer would swallow the drag.
+// Divider drags (side panels): an iframe under the pointer would swallow the drag.
 const dragging = ref(false)
 useEventListener(document, 'pointerdown', (e: PointerEvent) => {
   if ((e.target as Element | null)?.closest?.('[data-split-divider]')) dragging.value = true

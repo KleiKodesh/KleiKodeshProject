@@ -7,7 +7,7 @@ import { useLocalFileStore } from './localFileStore'
  * the previous session, done lazily.
  *
  * Restoring a file tab is real work — a HebrewBooks download or a virtual-host grant
- * on the C# side — so at boot only the tab the reader actually sees in each pane is
+ * on the C# side — so at boot only the tab the reader actually sees is
  * restored. Every other persisted file tab keeps its title and icon in the strip and
  * is restored through the same `restoreTab` path the first time it becomes active.
  * Closing a tab that was never restored is safe: its view never mounted and nothing

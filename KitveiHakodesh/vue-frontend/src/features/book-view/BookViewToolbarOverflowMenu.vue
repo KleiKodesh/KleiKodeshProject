@@ -13,7 +13,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
  * the toolbar. This panel owns only where the sheet lands and when it closes.
  *
  * Teleported to the body like every floating panel here: the toolbar sits inside panes and
- * split-view containers that clip and stack, and a panel positioned inside it would be
+ * containers that clip and stack, and a panel positioned inside it would be
  * clipped by them.
  */
 const props = defineProps<{

@@ -33,14 +33,14 @@ export interface PaneNavigation {
 export const PANE_NAVIGATION_KEY: InjectionKey<PaneNavigation> = Symbol('paneNavigation')
 
 /**
- * Returns the pane-scoped navigation interface injected by the nearest AppShell.
- * Falls back to pane 1 behaviour when called outside a shell.
+ * Returns the navigation interface injected by the nearest AppShell (or a widget window's
+ * stand-in tab). Falls back to the window's tabs when called outside a shell.
  */
 export function usePaneNavigation(): PaneNavigation {
   const injected = inject(PANE_NAVIGATION_KEY, null)
   if (injected) return injected
 
-  // Fallback: construct pane 1 navigation directly
+  // Fallback: the window's tabs directly
   const pane = useAppShellPane()
   return {
     updateActiveTab: pane.updateActiveTab,

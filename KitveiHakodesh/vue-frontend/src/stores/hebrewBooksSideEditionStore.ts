@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 /**
- * Per split-view pane: which HebrewBooks edition the book view shows side by side in its
+ * Which HebrewBooks edition the book view shows side by side in its
  * left side panel, and whether one is on screen right now.
  *
  * A store rather than local state because three places far apart in the tree need it - the

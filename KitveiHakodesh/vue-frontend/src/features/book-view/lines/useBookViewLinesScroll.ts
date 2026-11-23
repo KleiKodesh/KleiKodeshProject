@@ -80,7 +80,6 @@ export interface BookViewLinesScrollStoreRefs {
   zoom: Ref<number>
   tabId: string
   bookId: number
-  /** Which split-view pane these lines are in: a background pane never takes focus on open. */
 }
 
 /** Matches the `.flash-open` animation in BookViewLinesContent.vue. */

@@ -33,7 +33,7 @@ export function useAppShellPane() {
     tabStore.switchTab(id)
   }
 
-  // ── Back / Forward within the pane's active tab ───────────────────────────
+  // ── Back / Forward within the active tab ───────────────────────────
   // The browser model: these move through the ACTIVE TAB's own history, not
   // between tabs. Ctrl+Tab still switches tabs (cycleTab below).
 
@@ -59,7 +59,7 @@ export function useAppShellPane() {
   }
 
   /**
-   * Step the active tab by ±1 through this pane's tabs, wrapping at both ends.
+   * Step the active tab by ±1 through the tabs, wrapping at both ends.
    * Walks `tabs` — the stable strip order — not `mruTabs`, so repeated steps
    * advance through the list instead of oscillating between the last two.
    * Still used by Ctrl+Tab, which keeps its tab-switching meaning.
@@ -134,7 +134,7 @@ export function useAppShellPane() {
     else openTab(patch)
   }
 
-  // Each gesture opens its own home tab in this pane — see openNewHomeTab in tabStore
+  // Each gesture opens its own home tab — see openNewHomeTab in tabStore
   // for why home is deliberately not unique.
   function openNewHomeTab() {
     tabStore.openNewHomeTab()

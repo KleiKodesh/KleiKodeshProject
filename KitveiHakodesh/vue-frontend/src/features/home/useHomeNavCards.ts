@@ -26,7 +26,7 @@ function navDestination(key: DocumentIconKey, label: string) {
 /**
  * The navigation destinations as home cards.
  *
- * Hidden while this pane's nav rail is showing — the rail offers every one of them
+ * Hidden while the nav rail is showing — the rail offers every one of them
  * on every page (see README). The first two swap when no database is available.
  * Keep the list in sync with `AppTitleBarNavDropdown.vue`; neither is derived from
  * the other.

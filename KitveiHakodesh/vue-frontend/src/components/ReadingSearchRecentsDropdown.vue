@@ -29,8 +29,8 @@ const props = defineProps<{
   openUp?: boolean
   /**
    * DOM id for the listbox, so the field's aria-controls can point at it. Supplied by
-   * the bar rather than fixed here: split view mounts two bars at once, and a constant
-   * id would duplicate across them and aim one field at the other pane's list.
+   * the bar rather than fixed here: a page can mount two bars at once, and a constant
+   * id would duplicate across them and aim one field at the other bar's list.
    */
   listboxId: string
 }>()

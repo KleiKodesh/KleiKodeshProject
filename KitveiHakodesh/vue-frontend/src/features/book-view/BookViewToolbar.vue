@@ -59,8 +59,8 @@ const props = defineProps<{
   hasToc: boolean
   hasCommentaries: boolean
   hasRelatedBooks: boolean
-  // This pane's active tab — zoom actions and the displayed percentages are
-  // scoped to it, so pane 2's toolbar never reads or writes pane 1's zoom.
+  // The active tab — zoom actions and the displayed percentages are
+  // scoped to it, so a toolbar never reads or writes another tab's zoom.
   tabId?: string
   bookId: number | undefined
   /** The publisher forbids editable export of this book (Core's book protection). */
@@ -171,8 +171,7 @@ const autoSelectTopLineTitle = computed(() =>
     : t('bookView.toolbar.syncOffTitle'),
 )
 
-// Pane-scoped zoom percentages — the store's `zoom`/`commentaryZoom` computeds
-// always reflect pane 1's active tab, so read this tab's values directly.
+// This tab's zoom percentages, read directly by tab and book id.
 const linesZoomPct = computed(() =>
   props.tabId != null && props.bookId != null
     ? bookViewStore.getLinesZoom(props.tabId, props.bookId)
@@ -305,7 +304,7 @@ function collapseAttrs(key: ToolbarOverflowKey) {
 const overflowOpen = ref(false)
 const overflowButtonEl = ref<HTMLElement | null>(null)
 
-// Both toolbars in a split view render this row, so the id has to be unique per instance or
+// More than one toolbar can render this row (the toolbar and its overflow copy), so the id has to be unique per instance or
 // the second one's group points at the first one's label.
 const zoomRowLabelId = `bv-zoom-row-${useId()}`
 

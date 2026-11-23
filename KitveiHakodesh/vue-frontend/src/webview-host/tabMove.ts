@@ -60,14 +60,14 @@ export async function packTab(tabId: string): Promise<MovedTab> {
 
 /**
  * Step 2, in the target page. Returns the new tab's id once its records are stored -
- * only then may the source close its copy. `pane1Index` is where the tab was dropped
- * among pane 1's tabs (-1 = at the end).
+ * only then may the source close its copy. `position` is where the tab was dropped
+ * among the window's tabs (-1 = at the end).
  */
-export async function unpackTab(moved: MovedTab, pane1Index: number): Promise<string> {
+export async function unpackTab(moved: MovedTab, position: number): Promise<string> {
   if (!moved || moved.format !== 1 || !moved.entry?.route) throw new Error('not a moved tab')
   const tabStore = useTabStore()
   let writes: Promise<void> = Promise.resolve()
-  const tab = tabStore.adoptMovedTab(moved.entry, pane1Index, (newTabId) => {
+  const tab = tabStore.adoptMovedTab(moved.entry, position, (newTabId) => {
     writes = writeAllStateForTab(newTabId, moved.records ?? { tabState: null, bookStates: [] })
   })
   const pin = moved.searchCacheKey
@@ -106,7 +106,7 @@ interface ArrivingTab {
 declare global {
   interface Window {
     __khsPackTab?: (requestId: string, tabId: string) => 'pending'
-    __khsUnpackTab?: (requestId: string, movedJson: string, pane1Index: number) => 'pending'
+    __khsUnpackTab?: (requestId: string, movedJson: string, position: number) => 'pending'
     __khsCloseMovedTab?: (tabId: string) => 'closed'
     __khsArrivingTab?: ArrivingTab
   }
@@ -125,8 +125,8 @@ function postResult(requestId: string, work: Promise<unknown>): 'pending' {
 /** Installs the functions the C# host calls. Once, at startup, when a host is present. */
 export function installTabMoveHost(): void {
   window.__khsPackTab = (requestId, tabId) => postResult(requestId, packTab(String(tabId)))
-  window.__khsUnpackTab = (requestId, movedJson, pane1Index) =>
-    postResult(requestId, Promise.resolve().then(() => unpackTab(JSON.parse(movedJson) as MovedTab, Number(pane1Index))))
+  window.__khsUnpackTab = (requestId, movedJson, position) =>
+    postResult(requestId, Promise.resolve().then(() => unpackTab(JSON.parse(movedJson) as MovedTab, Number(position))))
   window.__khsCloseMovedTab = (tabId) => {
     closeMovedTab(String(tabId))
     return 'closed'

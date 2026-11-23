@@ -12,10 +12,10 @@ import type { TocEntry } from '@/webview-host/queries.types'
 import { COMMENTARY_SLOTS } from '@/features/book-view/bookViewTypes'
 import type { CommentarySlot } from '@/features/book-view/bookViewTypes'
 
-// The toolbar/split-view preferences this store used to persist itself now live in
+// The toolbar preferences this store used to persist itself now live in
 // settingsStore, so one reset() covers them along with the fonts they sit beside in the
 // settings UI. This store reads them through that store and keeps only the session
-// state built on top (per-pane toolbar visibility, focused pane).
+// state built on top.
 export type { ToolbarPosition } from './settingsStore'
 import type { ToolbarPosition } from './settingsStore'
 
@@ -298,10 +298,10 @@ export const useBookViewStore = defineStore('bookView', () => {
   }
 
   // Resolve which tab's zoom a zoom action targets. Callers inside a pane pass
-  // their own (tabId, bookId) so pane 2's controls change pane 2's book — the
-  // no-arg fallback (pane 1's active tab) exists for legacy callers only. An
-  // explicit tabId with no bookId means "this pane isn't showing a book": no-op,
-  // never fall through to pane 1.
+  // their own (tabId, bookId) so each view's controls change its own book — the
+  // no-arg fallback (the active tab) exists for legacy callers only. An
+  // explicit tabId with no bookId means "this view isn't showing a book": no-op,
+  // never fall through to the active tab.
   function zoomTarget(tabId?: string, bookId?: number): { tabId: string; bookId: number } | null {
     if (tabId != null) return bookId != null ? { tabId, bookId } : null
     const tab = tabStore.activeTab

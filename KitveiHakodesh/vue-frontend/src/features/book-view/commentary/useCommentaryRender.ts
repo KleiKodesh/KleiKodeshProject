@@ -17,7 +17,7 @@ import type { Note } from '../lines/useBookViewNotes'
  *
  * `getCommentaryZoom` must be a pane-scoped getter — never pass the store-level
  * `commentaryZoom` computed here, as that always reads the globally active tab and
- * will cross-contaminate pane 2's render cycle when split view is active.
+ * will cross-contaminate another instance's render cycle.
  */
 export function useCommentaryRender(
   groups: () => any[],

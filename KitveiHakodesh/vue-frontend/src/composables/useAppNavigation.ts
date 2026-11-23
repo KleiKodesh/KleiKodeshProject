@@ -21,8 +21,8 @@ const WIDGET_LABELS: Partial<Record<string, WidgetId>> = {
  * shows one thing at a time, and nothing here is unique across tabs.
  * Side-effects (file picker, external links) are handled here too.
  *
- * Uses the PANE_NAVIGATION_KEY injection provided by AppShell so all navigation
- * operates on the correct pane's tab set. Defaults to pane 1 when outside a shell.
+ * Uses the PANE_NAVIGATION_KEY injection (AppShell's, or a widget window's stand-in tab),
+ * falling back to the window's tabs outside a shell.
  */
 export function useAppNavigation() {
   const pane = usePaneNavigation()
@@ -50,9 +50,9 @@ export function useAppNavigation() {
     const result = await pickLocalFile(newTab, initialDir)
     if (!result) return
     // Navigation is driven by push events in BOTH modes (pane-aware in localFileStore, so
-    // the file opens only in the pane that initiated the pick): hosted gets real C# pushes,
+    // the file opens once): hosted gets real C# pushes,
     // dev replays the same events after its service round-trips (see pickLocalFile). We must
-    // NOT navigate again here or the file would also open in pane 1. The reply finalizes a
+    // NOT navigate again here or the file would open twice. The reply finalizes a
     // conversion whose placeholder is still up (cached hosted conversions push no
     // conversionReady; dev conversions finalize from the reply by design).
     useLocalFileStore().finalizeConvertingFromReply(result)

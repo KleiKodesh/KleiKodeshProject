@@ -7,8 +7,7 @@ import { useTabStore } from '@/stores/tabStore'
 /**
  * UI chrome visibility, in two halves:
  *
- * Per-pane, session-only — each pane has its own independent titleBarVisible
- * ref so Ctrl+H in one pane does not affect the other pane's title bar.
+ * Session-only — the title bar's visibility (Ctrl+H).
  * Resets to defaults on page reload. Handled in AppTitleBar's pane-scoped
  * keydown block.
  *

@@ -751,7 +751,7 @@ export const useTabStore = defineStore('tabs', () => {
       .filter((t) => t.route === '/settings' || !DESTINATION_ROUTES.includes(t.route))
       .map((t) => WATCHED_FIELDS.map((f) => t[f])),
   )
-  // accessOrder is included so a pane-2 switch (which changes neither the snapshot
+  // accessOrder is included so a recency change (which changes neither the snapshot
   // nor activeTabId) still persists the new recency.
   // Both writes are coalesced (trailing ~300ms, flushed on hide/unload): a scroll moves
   // the breadcrumb on every tick, and each move used to rewrite the whole tab list and
@@ -822,7 +822,7 @@ export const useTabStore = defineStore('tabs', () => {
       .map(({ t }) => t)
   }
 
-  // Stamp whichever tab each pane switches to. Deliberately NOT immediate: these
+  // Stamp whichever tab the window switches to. Deliberately NOT immediate: these
   // watchers are created during store setup, before init() runs, so an immediate
   // call would stamp the placeholder default tab and persist it before the saved
   // list is even read. The restored active tab already carries the highest saved
@@ -1043,9 +1043,7 @@ export const useTabStore = defineStore('tabs', () => {
     releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     disposeClosedTab(id)
-    // The next active tab must be the closed tab's neighbor among the tabs pane 1
-    // can display — picking by index from the mixed array could land on a pane-2
-    // tab, making both panes render the same tab.
+    // The next active tab is the closed tab's neighbor.
     const visIdx = tabs.value.findIndex((t) => t.id === id)
     tabs.value.splice(idx, 1)
     if (activeTabId.value === id) {
@@ -1180,13 +1178,13 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   /**
-   * Opens a tab that came from another window: a new id here, pane 1 (a split-view
-   * tab lands in pane 1), placed at `pane1Index` among pane 1's tabs, and active.
+   * Opens a tab that came from another window: a new id here, placed at `position`
+   * among this window's tabs, and active.
    * `seedState` writes its per-tab state under the new id before the tab is listed, so
    * the view finds its place on mount and the history seed below reads it. Back/Forward does not
    * travel; the stack starts where the tab is, as after a restart.
    */
-  function adoptMovedTab(entry: Tab, pane1Index: number, seedState: (newTabId: string) => void): Tab {
+  function adoptMovedTab(entry: Tab, position: number, seedState: (newTabId: string) => void): Tab {
     // Settings holds app-wide state, so one per pane: a moved one becomes the one here.
     if (SINGLE_TAB_ROUTES.includes(entry.route)) {
       const existing = tabs.value.find((t) => t.route === entry.route)
@@ -1201,7 +1199,7 @@ export const useTabStore = defineStore('tabs', () => {
     const tab: Tab = { ...moved, id: String(++nextId) }
     seedState(tab.id)
     const visible = tabs.value
-    const before = pane1Index >= 0 && pane1Index < visible.length ? visible[pane1Index] : undefined
+    const before = position >= 0 && position < visible.length ? visible[position] : undefined
     const at = before ? tabs.value.indexOf(before) : tabs.value.length
     tabs.value.splice(at < 0 ? tabs.value.length : at, 0, tab)
     activeTabId.value = tab.id

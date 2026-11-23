@@ -8,8 +8,8 @@ import { dbGet, dbSet, dbDelete } from '@/utils/persistence'
  * Keyed by book id alone: global, not per tab and not per workspace. One record per book
  * holds that book's whole list, so opening the bookmarks dropdown costs one read.
  *
- * Every loaded list is also held in ONE reactive map shared by all readers - both panes
- * of a split view, and the toolbar's dropdown and its copy in the "more" flyout - so a
+ * Every loaded list is also held in ONE reactive map shared by all readers - the
+ * toolbar's dropdown and its copy in the "more" flyout - so a
  * bookmark made or deleted in one shows up in all of them at once.
  */
 

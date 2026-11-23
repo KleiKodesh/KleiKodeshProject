@@ -8,7 +8,7 @@ import { opensInFastDocView } from '@/utils/fastDocViewFiles'
  * typing on the home page: instant catalog matches, debounced HebrewBooks/file
  * results, and Enter → full-text search in the active tab.
  *
- * The dropdown doubles as the pane's tab list (replacing the old title-bar tab
+ * The dropdown doubles as the tab list (replacing the old title-bar tab
  * dropdown): it is open for the whole life of the address bar, showing the tab
  * list whenever there are no search results — empty input, a too-short query, or
  * a query that matched nothing. Results otherwise.
@@ -203,7 +203,7 @@ const clearAllLocationsTitle = hasNativeChromeTabs
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
 // Width rule: on a narrow ("android-width") shell the dropdown fills the whole
 // shell; otherwise it matches the input. The SHELL's rect is what's measured —
-// not the viewport — because in split view each shell is only part of the window.
+// not the viewport — the shell is only part of the window (the nav rail takes the rest).
 const NARROW_SHELL_WIDTH = 600
 // The dropdown never grows past this — enough for a comfortable list of rows
 // while leaving the field feeling like an address bar, not a full-height panel.
@@ -296,7 +296,6 @@ function computeAnchor() {
 // for window resizes. The shell is what decides both the merge (its width against
 // NARROW_SHELL_WIDTH) and the panel's left/right edges, and it changes size in
 // ways that fire no window resize event at all:
-//   - dragging the split-view divider, which just rewrites a CSS grid fraction
 //   - toggling the nav sidebar, which adds/removes a flex sibling
 // Missing those left the field and the panel disagreeing about whether they are
 // one slab — the exact half-merged frame isPanelMerged exists to prevent — and
@@ -411,7 +410,7 @@ function close() {
   emit('close')
 }
 
-// ── Result selection — mirrors HomePage, routed through this pane ─────────────
+// ── Result selection — mirrors HomePage, routed through the shell ─────────────
 // A Ctrl/⌘/middle-click opens a new tab (openInNewTab); a plain click navigates
 // the active tab in place. For the async cases (HebrewBook, File) the target tab
 // id is captured up front and patched by id, because the awaited work can change

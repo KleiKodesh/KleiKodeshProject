@@ -12,7 +12,7 @@ export const SIDE_PANEL_MAX_FRACTION = 0.5
  * page with a sash to resize it, an overlay on a narrow one. The panel sits on the physical
  * right (RTL inline-start), so the drag measures from the resize area's right edge.
  *
- * `pageElement`: the page root, whose width decides inline vs overlay (each split-view pane
+ * `pageElement`: the page root, whose width decides inline vs overlay (each
  * answers to its own width). `resizeArea`: the row holding panel + sash + content, the
  * whole that the fraction is of. `fraction`: optional storage for the width (null = the
  * panel's own CSS width) - a page that persists it passes its own ref.

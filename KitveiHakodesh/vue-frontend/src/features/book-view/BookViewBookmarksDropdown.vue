@@ -60,7 +60,7 @@ const submenuStyle = useToolbarOverflowSubmenu(() => !!props.inOverflow, isOpen,
 
 // ── The book's list ───────────────────────────────────────────────────────────
 //
-// Read from the store's shared per-book list, so the other pane and the flyout's copy of
+// Read from the store's shared per-book list, so the flyout's copy of
 // this dropdown see a change the moment it is saved. Every change goes through
 // updateBookBookmarks, which edits the STORED list - never this display copy.
 

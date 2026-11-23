@@ -8,10 +8,10 @@ import { loadWebsites, websiteForUrl, websitesRef } from '@/features/websites/we
 import { iconKeyForEntry } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
 import {
-  activateTabAnyPane,
-  closeTabAnyPane,
-  openNewTabInPane,
-} from '@/composables/useCrossPaneTabActions'
+  activateStripTab,
+  closeStripTab,
+  openNewStripTab,
+} from '@/composables/stripTabActions'
 import type { Tab } from '@/stores/tabStore'
 import type { MirroredTab } from './bridge'
 
@@ -128,13 +128,13 @@ export function initTabMirror(): void {
   onWebviewEvent((msg) => {
     switch (msg.event) {
       case 'chromeTabActivated':
-        activateTabAnyPane(String(msg.tabId))
+        activateStripTab(String(msg.tabId))
         break
       case 'chromeTabCloseRequested':
-        closeTabAnyPane(String(msg.tabId))
+        closeStripTab(String(msg.tabId))
         break
       case 'chromeTabNewRequested':
-        openNewTabInPane()
+        openNewStripTab()
         break
     }
   })

@@ -89,7 +89,6 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Space</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.toggleResultPreview') }}</span></div>
     <!-- Display -->
     <div class="shortcuts-group-label">{{ $t('settings.shortcutsList.view') }}</div>
-    <div class="shortcut-row" v-if="!isVstoEnvironment"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>|</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.splitView') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.showHideToolbar') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.zoomIn') }}</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd></div><span class="shortcut-description">{{ $t('settings.shortcutsList.zoomOut') }}</span></div>
@@ -112,7 +111,7 @@ import { isVstoEnvironment, hasNativeChromeTabs } from '@/webview-host/bridge'
 
 // Mirrors BookViewPage's isWideScreen threshold, the gate the side commentary
 // shortcuts actually hit. That one measures the book pane; this measures the
-// window, which is the same thing outside split view and close enough inside it.
+// window, which is close enough to it.
 const SIDE_COMMENTARY_MIN_WIDTH = 650
 const { width: windowWidth } = useWindowSize()
 const hasRoomForSideCommentary = computed(() => windowWidth.value >= SIDE_COMMENTARY_MIN_WIDTH)

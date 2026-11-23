@@ -10,11 +10,10 @@ import type { HebrewBooksEdition } from '@/webview-host/queries.types'
 import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles, revealHbLocalFile } from '@/webview-host/bridge'
 
 /**
- * Where an edition opened from a text book lands in a tab. Only 'newTab' is wired; 'splitView'
- * is reserved - only `resolveEditionTabId` would change. Side by side in the book view's left
+ * Where an edition opened from a text book lands: a new tab. Side by side in the book view's left
  * panel is not a tab at all: BookViewHebrewBooksSideEdition fetches the PDF itself.
  */
-export type HebrewBooksEditionTarget = 'newTab' | 'splitView'
+export type HebrewBooksEditionTarget = 'newTab'
 
 /** An edition as the HebrewBooks book record the history and download flow key on. */
 export function editionAsHebrewBook(edition: HebrewBooksEdition): HebrewBook {

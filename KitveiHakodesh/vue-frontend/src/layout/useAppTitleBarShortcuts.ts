@@ -19,24 +19,19 @@ import type { useAppShellPane } from '@/composables/useAppShellPane'
 type Pane = ReturnType<typeof useAppShellPane>
 
 /**
- * Every keyboard shortcut owned by the title bar, for one pane.
+ * Every keyboard shortcut owned by the title bar, in two groups:
  *
- * Each pane installs its own handler, which splits the shortcuts in two:
+ *   Page — tab operations, book-view panels, navigation within the page.
+ *   App-wide — fullscreen, widgets, scrollbars and the like.
  *
- *   Pane-scoped — tab operations, book-view panels, navigation within a pane.
- *     Fire only when this pane is focused (always, when split view is off).
- *   App-wide — fullscreen, split view. Handled by **pane 1 only**, so they do
- *     not fire twice while split view is open.
- *
- * Deciding which half a new shortcut belongs to is the whole point of this file:
- * an app-wide shortcut added to the pane-scoped block fires once per open pane.
+ * Page shortcuts get the first try; an app-wide one runs when no page shortcut took the key.
  *
  * `Ctrl+1`..`Ctrl+9` and `F1` go through `navigateInNewTab` with the Hebrew
  * destination labels, so they stay in sync with the home tiles and the nav
  * dropdown — see `useAppNavigation`.
  *
  * F1 differs from `Ctrl+1`..`Ctrl+9` in where it lands, not in how it is wired:
- * settings is the one destination unique per pane, so a second F1 switches to the
+ * settings is the one destination unique per window, so a second F1 switches to the
  * open settings tab rather than opening another. That rule lives with the tab
  * store's `SINGLE_TAB_ROUTES`, not here.
  *
@@ -85,7 +80,7 @@ export function useAppTitleBarShortcuts(options: {
   ]
 
   // Shortcut keys pressed inside an iframe, replayed into the top-level keydown pipeline.
-  // Registered once (pane 1's instance); the replayed event reaches both panes' handlers.
+  // The replayed event reaches the handlers below like any keydown.
   //  - App frames (HTML/txt viewer, PDF.js) post 'iframeKeydown' (JsBridge.IframeScrollScript).
   //  - A Torah website's frame: hosted, the host takes the keys and pushes 'siteFrameShortcut'
   //    (AppViewerSiteShortcuts.cs); in dev the dev proxy's injected forwarder posts 'iframeKeydown'.
@@ -117,7 +112,7 @@ export function useAppTitleBarShortcuts(options: {
   }
 
   /** Returns true when the event was consumed. */
-  function handlePaneScoped(e: KeyboardEvent): boolean {
+  function handlePageShortcut(e: KeyboardEvent): boolean {
     if (!e.ctrlKey) {
       if (e.code === 'F1') {
         navigateInNewTab('הגדרות')
@@ -257,7 +252,7 @@ export function useAppTitleBarShortcuts(options: {
         return true
       case 'KeyH':
         // Ctrl+Shift+H is the app-wide hidden-scrollbars toggle — let it fall
-        // through to handleAppWide instead of also flipping this pane's title bar.
+        // through to handleAppWide instead of also flipping the title bar.
         if (e.shiftKey) return false
         titleBarVisible.value = !titleBarVisible.value
         return true
@@ -266,9 +261,7 @@ export function useAppTitleBarShortcuts(options: {
         return true
       case 'KeyM':
         // Ctrl+M opens the nav menu as a dropdown, Ctrl+Shift+M docks the same menu
-        // as this pane's rail — one family, since they are two presentations of one
-        // menu. Pane-scoped because each pane owns its own rail, like every other
-        // per-pane chrome toggle.
+        // as the rail — one family, since they are two presentations of one menu.
         if (e.shiftKey) {
           settingsStore.setNavSidebarVisible(!settingsStore.getNavSidebarVisible())
           return true
@@ -280,10 +273,10 @@ export function useAppTitleBarShortcuts(options: {
     }
   }
 
-  /** Returns true when the event was consumed. Pane 1 only. */
+  /** Returns true when the event was consumed. */
   function handleAppWide(e: KeyboardEvent): boolean {
     // Ctrl+Shift+1..6 — the widgets & tools (dictionary, calendar, halachic units, world
-    // clock, zmanim, daily learning). App-wide: focus may sit inside a widget, outside both panes.
+    // clock, zmanim, daily learning). App-wide: focus may sit inside a widget, outside the page.
     if (e.ctrlKey && e.shiftKey && !e.altKey && e.code.startsWith('Digit')) {
       const widget = WIDGET_ITEMS[Number(e.code.slice(5)) - 1]
       if (!widget) return false
@@ -335,7 +328,7 @@ export function useAppTitleBarShortcuts(options: {
   useEventListener(
     'keydown',
     (e: KeyboardEvent) => {
-      if (handlePaneScoped(e)) {
+      if (handlePageShortcut(e)) {
         e.preventDefault()
         return
       }

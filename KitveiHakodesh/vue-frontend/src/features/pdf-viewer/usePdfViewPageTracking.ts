@@ -236,7 +236,7 @@ export function usePdfViewPageTracking() {
   let attachGeneration = 0
   // The bridge object this instance registered — detach only unregisters its
   // OWN bridge, so a late detach (cross-pane moves, load-event ordering) can't
-  // delete a bridge another pane just registered for the same tab.
+  // delete a bridge a newer view just registered for the same tab.
   let registeredBridge: PdfBridge | null = null
   let pagechangingHandler: ((data: unknown) => void) | null = null
   let documentloadedHandler: ((data: unknown) => void) | null = null

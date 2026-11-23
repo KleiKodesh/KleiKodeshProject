@@ -9,12 +9,12 @@ import { t } from '@/i18n'
  */
 
 /** Activate a strip tab. */
-export function activateTabAnyPane(tabId: string) {
+export function activateStripTab(tabId: string) {
   useTabStore().switchTab(tabId)
 }
 
 /** Close a strip tab. */
-export function closeTabAnyPane(tabId: string) {
+export function closeStripTab(tabId: string) {
   useTabStore().closeTab(tabId)
 }
 
@@ -27,7 +27,7 @@ const NEW_TAB_ROUTES: Record<string, { title: string; route: TabRoute }> = {
 }
 
 /** Open a new tab, honoring the user's configured new-tab page setting. */
-export function openNewTabInPane() {
+export function openNewStripTab() {
   const tabStore = useTabStore()
   const target =
     NEW_TAB_ROUTES[useSettingsStore().newTabPage] ?? { title: t('stores.tabTitle.home'), route: '/' as TabRoute }

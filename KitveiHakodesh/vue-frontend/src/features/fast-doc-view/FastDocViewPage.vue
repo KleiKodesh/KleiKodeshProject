@@ -373,9 +373,9 @@ function toggleToc(toggleButton?: HTMLElement | null) {
   tocVisible.value = !tocVisible.value
 }
 
-// The book view's app-level keys, routed to this pane's page (useAppTitleBarShortcuts):
+// The book view's app-level keys, routed to this page (useAppTitleBarShortcuts):
 // Ctrl+K table of contents, Ctrl+J notes pane, Ctrl+F search, Ctrl+B toolbar (the same
-// per-pane toolbar setting the book view uses).
+// toolbar setting the book view uses).
 const bookViewStore = useBookViewStore()
 const toolbarVisible = computed(() => bookViewStore.getToolbarVisible())
 /** Which edge the toolbar is docked to: the book view's app-wide setting (dragging either toolbar moves both). */

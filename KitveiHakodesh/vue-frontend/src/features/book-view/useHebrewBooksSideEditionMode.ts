@@ -1,14 +1,14 @@
 import { computed } from 'vue'
 import { useSettingsStore, type HbEditionSide } from '@/stores/settingsStore'
 import type { CommentarySlot } from './bookViewTypes'
-import { useSideBySideRoom } from '@/layout/useSplitViewAvailable'
+import { useSideBySideRoom } from '@/layout/useSideBySideRoom'
 
 /**
- * Whether a HebrewBooks edition picked in this pane's book view opens side by side (in the
+ * Whether a HebrewBooks edition picked in the book view opens side by side (in the
  * side panel the reader chose - left or right, one setting for all books and panes) or in
  * a new tab.
  *
- * Side by side needs the same room as split view - never in the VSTO task pane, and only on
+ * Side by side needs room - never in the VSTO task pane, and only on
  * a wide window - so it shares that rule. Where it is not available the toggle is hidden and
  * every pick opens a new tab, whatever the persisted toggle says.
  */

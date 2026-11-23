@@ -74,8 +74,6 @@ namespace KitveiHakodeshLib
             _form.TabPressed += OnTabPressed;
             _form.TabClosing += OnTabClosing;
             _form.NewTabRequested += OnNewTabRequested;
-            _form.SplitRatioChanged += OnSplitRatioChanged;
-            _form.TabDraggedToGroup += OnTabDraggedToGroup;
 
             _viewer.TabsStateChanged += OnTabsStateChanged;
             _viewer.TabIconsChanged += OnTabIconsChanged;
@@ -215,25 +213,8 @@ namespace KitveiHakodeshLib
         private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
         {
             e.Cancel = true;
-            _viewer.NotifyChromeNewTabRequested(e.Group == 1 ? 2 : 1);
+            _viewer.NotifyChromeNewTabRequested();
             _viewer.FocusWebContent();
-        }
-
-        private void OnTabDraggedToGroup(object sender, FluentTabGroupEventArgs e)
-        {
-            if (_syncing) return;
-            // Region 0 = pane 1, region 1 = pane 2. Vue moves the tab between panes and
-            // pushes back a fresh snapshot, which reconciles the strip's Group/Highlighted.
-            if (e.Tab?.Tag is string tabId)
-                _viewer.NotifyChromeTabMovedToPane(tabId, e.Group == 1 ? 2 : 1);
-        }
-
-        private void OnSplitRatioChanged(object sender, EventArgs e)
-        {
-            if (_syncing) return;
-            // The strip's SplitRatio is region 0's (pane 1's) share; Vue's splitViewFraction
-            // is pane 2's share — mirror images of the same divider.
-            _viewer.NotifyChromeSplitFractionChanged(1.0 - _form.SplitRatio);
         }
 
         // ── Vue Ctrl+T / Ctrl+Tab → open the strip's tab-list dropdown ──────────────
@@ -254,15 +235,11 @@ namespace KitveiHakodeshLib
         {
             if (_form.IsDisposed) return;
 
-            // Group 0 is the normal (non-split) region; when split, the focused pane's
-            // region owns the visible active tab, so target the region of the selected tab.
-            int group = _form.SelectedTabGroup;
-
             // Works whether or not the strip is painted: ShowTabListMenu anchors to the
             // tab-list button's rect, which the strip keeps computing from StripHeight
             // regardless of StripVisible. So a hidden strip (fullscreen, Ctrl+H) still
             // drops the popup exactly where a visible one would — no reveal, no flash.
-            _form.ShowTabListMenu(group, quickSwitchStep);
+            _form.ShowTabListMenu(0, quickSwitchStep);
         }
 
         // ── Vue snapshots → strip ───────────────────────────────────────────────────
@@ -320,28 +297,6 @@ namespace KitveiHakodeshLib
             _syncing = true;
             try
             {
-                _form.SplitStrip = e.SplitView;
-
-                if (e.SplitView)
-                {
-                    // Keep the ratio as the drag baseline / fallback...
-                    _form.SplitRatio = 1.0 - e.SplitFraction;
-
-                    // ...but pin the divider to the exact device pixels Vue rendered, so the
-                    // two bars form one seamless line at any window width. Vue measures from
-                    // the viewport's left edge; the mirrored (RTL) strip's client X axis runs
-                    // the other way, so flip.
-                    if (e.DividerLeftPx >= 0 && e.DividerWidthPx > 0)
-                    {
-                        // -1 in the mirrored flip: GDI renders fills in a WS_EX_LAYOUTRTL
-                        // window shifted one device pixel (measured constant across widths).
-                        int left = _form.RightToLeftLayout
-                            ? _form.ClientSize.Width - e.DividerLeftPx - e.DividerWidthPx - 1
-                            : e.DividerLeftPx;
-                        _form.SetSplitDividerPixels(left, e.DividerWidthPx);
-                    }
-                }
-
                 var wanted = new HashSet<string>(e.Tabs.Select(t => t.Id));
 
                 // A tab that has left for another window is held until the page drops it.
@@ -391,19 +346,10 @@ namespace KitveiHakodeshLib
                         tab.Icon = LookupIcon(info.IconKey);
                     }
 
-                    // Group follows the pane only while split view is open; an adopted
-                    // orphan (pane 2, split off) lives in region 0 and can be pane 1's
-                    // active tab — so the highlight follows the region, not the pane.
-                    int group = e.SplitView && info.Pane == 2 ? 1 : 0;
-                    tab.Group = group;
-                    tab.Highlighted = group == 1
-                        ? info.Id == e.Pane2ActiveTabId
-                        : info.Id == e.ActiveTabId;
                 }
 
-                // Selection follows the focused pane's active tab.
-                string focusedActiveId = e.SplitView && e.FocusedPane == 2 ? e.Pane2ActiveTabId : e.ActiveTabId;
-                if (focusedActiveId != null && byId.TryGetValue(focusedActiveId, out var active))
+                // Selection follows the page's active tab.
+                if (e.ActiveTabId != null && byId.TryGetValue(e.ActiveTabId, out var active))
                     _form.SelectedTab = active;
             }
             finally
@@ -422,7 +368,7 @@ namespace KitveiHakodeshLib
         // shows, and the first System.Text.Json deserialize on net48 (type loading + JIT of
         // the serializer) cost ~1 s there. BinaryReader is already loaded and costs nothing.
         // Bump SessionFormat when the layout changes; an unknown version reads as no session.
-        private const int SessionFormat = 1;
+        private const int SessionFormat = 2;
 
         public void SaveSession(string path)
         {
@@ -441,13 +387,8 @@ namespace KitveiHakodeshLib
                         WriteNullable(w, t.Title);
                         WriteNullable(w, t.ListTitle);
                         WriteNullable(w, t.IconKey);
-                        w.Write(t.Pane);
                     }
                     WriteNullable(w, s.ActiveTabId);
-                    WriteNullable(w, s.Pane2ActiveTabId);
-                    w.Write(s.SplitView);
-                    w.Write(s.FocusedPane);
-                    w.Write(s.SplitFraction);
                     w.Write(_tabIcons.Count);
                     foreach (var pair in _tabIcons)
                         using (var ms = new MemoryStream())
@@ -465,10 +406,7 @@ namespace KitveiHakodeshLib
         public void RestoreSession(string path)
         {
             var tabs = new List<MirroredTabInfo>();
-            string activeTabId, pane2ActiveTabId;
-            bool splitView;
-            int focusedPane;
-            double splitFraction;
+            string activeTabId;
             var icons = new Dictionary<string, Image>();
             try
             {
@@ -481,13 +419,9 @@ namespace KitveiHakodeshLib
                         tabs.Add(new MirroredTabInfo
                         {
                             Id = ReadNullable(r), Title = ReadNullable(r), ListTitle = ReadNullable(r),
-                            IconKey = ReadNullable(r), Pane = r.ReadInt32(),
+                            IconKey = ReadNullable(r),
                         });
                     activeTabId = ReadNullable(r);
-                    pane2ActiveTabId = ReadNullable(r);
-                    splitView = r.ReadBoolean();
-                    focusedPane = r.ReadInt32();
-                    splitFraction = r.ReadDouble();
                     int iconCount = r.ReadInt32();
                     for (int i = 0; i < iconCount; i++)
                     {
@@ -502,8 +436,7 @@ namespace KitveiHakodeshLib
             if (tabs.Count == 0) return;
 
             _tabIcons = icons;
-            Reconcile(new TabsStateChangedEventArgs(
-                tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction, -1, 0));
+            Reconcile(new TabsStateChangedEventArgs(tabs, activeTabId));
         }
 
         private static void WriteNullable(BinaryWriter w, string value)
@@ -571,7 +504,6 @@ namespace KitveiHakodeshLib
         private void ApplyTheme(bool isDark, string chromeColorHex, string accentColorHex, string borderColorHex)
         {
             _form.AccentColor = TryParseColor(accentColorHex, out Color accent) ? accent : (Color?) null;
-            _form.SplitDividerColor = TryParseColor(borderColorHex, out Color border) ? border : (Color?) null;
 
             if (TryParseColor(chromeColorHex, out Color color))
                 _form.CustomThemeColor = color;

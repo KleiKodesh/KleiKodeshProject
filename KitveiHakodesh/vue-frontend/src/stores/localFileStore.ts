@@ -525,9 +525,8 @@ export const useLocalFileStore = defineStore('localFile', () => {
   /**
    * Opens a document from the recently opened history.
    * Re-registers the virtual host for PDF/HTML files (the previous session's URL is gone),
-   * re-downloads HebrewBooks PDFs if needed, and navigates the FOCUSED pane's active tab
-   * to the result — recents picked from pane 2 (address bar, home tiles) must not land
-   * in pane 1. Follow-up patches after awaits go by tabId, not "whatever is active now".
+   * re-downloads HebrewBooks PDFs if needed, and navigates the active tab
+   * to the result. Follow-up patches after awaits go by tabId, not "whatever is active now".
    */
   async function openFromHistory(
     entry: import('@/stores/recentlyOpenedStore').RecentlyOpenedEntry,

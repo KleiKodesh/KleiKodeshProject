@@ -63,7 +63,7 @@ const booksDataStore = useBooksDataStore()
 const EXPORT_RESTRICTED_MESSAGE = t('bookView.exportRestricted')
 
 // Track the shell's own width instead of the viewport width so that in split
-// view each pane responds to its own size, not the full window size.
+// view responds to its own size, not the full window size.
 const shellWidth = ref(window.innerWidth)
 useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
 const isWideScreen = computed(() => shellWidth.value >= 650)
@@ -474,7 +474,7 @@ watchDebounced(
   [() => SIDE_COMMENTARY_SLOTS.map((slot) => panels[slot].visible.value && !isDetached(slot)), isWideScreen],
   () => {
     if (isWideScreen.value) return
-    // A panel in its own window does not depend on this pane's width.
+    // A panel in its own window does not depend on this view's width.
     for (const slot of SIDE_COMMENTARY_SLOTS) if (!isDetached(slot)) panels[slot].visible.value = false
   },
   { debounce: 300 },

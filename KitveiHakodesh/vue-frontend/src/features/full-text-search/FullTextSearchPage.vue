@@ -25,7 +25,7 @@ import FullTextSearchLayout from './FullTextSearchLayout.vue'
 
 const paneNavigation = usePaneNavigation()
 // For the page's own keyboard shortcuts: which pane this is, and whether it is the
-// focused one while split view is open (see the window handler below).
+// focused one (see the window handler below).
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
@@ -339,8 +339,8 @@ function focusedElementOwnsEnter(element: Element | null): boolean {
 // never arrives. That is the Word task pane's normal state, which is where it was
 // reported.
 //
-// Guarded like the title bar's and the book view's shortcuts: this pane focused, and
-// this pane's active tab actually being the search page. That guard IS the rule for
+// Guarded like the title bar's and the book view's shortcuts: the active tab
+// actually being the search page. That guard IS the rule for
 // where the caret keeps the arrows and where the list takes them: the book view's
 // lines pane is another route, where this page is not mounted at all and the caret
 // goes on being driven by the arrows exactly as before. Caret browsing is never

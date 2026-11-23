@@ -23,7 +23,7 @@ const size = widgetWindowSize(props.win.id)
 // The tool pages were written as tab pages: they read "their" tab (route, saved query)
 // and write its title. Inside a widget they get a private stand-in tab, so they behave
 // as the active page and never touch the user's real tabs. Anything that opens a real
-// document (a book link in the dictionary) still goes to pane 1.
+// document (a book link in the dictionary) still opens in a real tab.
 const pane = useAppShellPane()
 const widgetTab = reactive<Tab>({ id: `widget:${props.win.id}`, title: item.value.text, route: item.value.route })
 const navigation: PaneNavigation = {

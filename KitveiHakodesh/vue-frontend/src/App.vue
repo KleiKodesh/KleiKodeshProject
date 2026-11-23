@@ -19,7 +19,7 @@ import { storeToRefs } from 'pinia'
 import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { useIndexBuildReasonLog } from '@/composables/useIndexBuildReasonLog'
 import { useKeepScreenOn } from '@/composables/useKeepScreenOn'
-import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
+import { activateStripTab } from '@/composables/stripTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 import { detectAvailableFonts } from '@/webview-host/fontsApi'
@@ -76,7 +76,7 @@ async function pdfCloseSaveAs() {
   }
   pdfSaveAsBusy.value = true
   try {
-    activateTabAnyPane(pending.tabId)
+    activateStripTab(pending.tabId)
     // Wait for the viewer bridge AND for it to report dirty — the bridge
     // registers on documentloaded, but the parked-edit rehydration lands
     // later; saving in that window would write the file WITHOUT the edits
@@ -123,7 +123,7 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <SiteFrameLayer />
     <HomePageDateBar v-if="settingsStore.dateBarPinned" status-bar class="app-status-bar" />
 
-    <!-- Widgets & tools: floating tool windows over both panes. -->
+    <!-- Widgets & tools: floating tool windows over the page. -->
     <WidgetWindowLayer />
     <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone || !termsAccepted" />

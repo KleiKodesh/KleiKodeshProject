@@ -106,8 +106,7 @@ const widgetsBtnRef = ref<HTMLElement | null>(null)
 //   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
 // )
 
-// bookViewStore.isBookViewActive reads from tabStore.activeTab (pane 1).
-// For pane 2 we compute these directly from the pane's active tab.
+// Computed from the active tab the shell shows.
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 /** Catalog title for a catalog book, the stored title otherwise (see catalogBookTitle). */
 const activeTabTitle = computed(() => (activeTab.value ? catalogBookTitle(activeTab.value) : ''))
@@ -217,7 +216,7 @@ function measureTitleCramped() {
   )
 }
 
-// The bar resizing is one trigger (window, split-view divider, sidebar toggle);
+// The bar resizing is one trigger (window, sidebar toggle);
 // the CONTENT changing is the other, and it fires no resize at all when the new
 // title happens to fill the same box. Re-measure after the DOM settles, since
 // the labels' widths are only known once Vue has patched them in.
@@ -322,7 +321,7 @@ ${updateItem.text}` : t('layout.menu')"
         </button>
       </div>
       <!-- Navigation sits beside the nav dropdown. Home stays put whether or not
-           this pane's rail is up — it is a destination, and the bar is where it belongs. -->
+           the rail is up — it is a destination, and the bar is where it belongs. -->
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
            not between tabs (Ctrl+Tab still does that). Click steps once
            (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.

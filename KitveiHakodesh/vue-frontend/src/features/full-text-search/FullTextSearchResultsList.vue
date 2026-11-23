@@ -737,7 +737,7 @@ defineExpose({
 }
 /* On a wide pane give the results a bit more breathing room from the edges
    (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so it
-   reacts to THIS pane's width, not the viewport (split-shell aware). */
+   reacts to the shell's width, not the viewport. */
 @container app-shell (min-width: 600px) {
   .result-item {
     padding-inline: 24px;

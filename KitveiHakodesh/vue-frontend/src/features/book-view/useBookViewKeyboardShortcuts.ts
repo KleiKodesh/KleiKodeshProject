@@ -26,7 +26,7 @@ type CommentaryViewInstance = Record<string, unknown>
 
 export function useBookViewKeyboardShortcuts(
   linesContentRef: () => (LinesContentInstance & { $el?: HTMLElement }) | null,
-  /** Every commentary scroller in this pane — one per commentary panel. */
+  /** Every commentary scroller of this book view — one per commentary panel. */
   commentaryViewRefs: Array<() => (CommentaryViewInstance & { $el?: HTMLElement }) | null>,
   hasToc: () => boolean,
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
@@ -45,7 +45,7 @@ export function useBookViewKeyboardShortcuts(
   const paneNavigation = usePaneNavigation()
 
   useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-    // Only respond when the active tab in this pane is a book view.
+    // Only respond when the active tab is a book view.
     if (paneNavigation.activeTab.route !== '/book-view') return
     const ctrl = event.ctrlKey || event.metaKey
 
@@ -123,8 +123,8 @@ export function useBookViewKeyboardShortcuts(
     // If a scroller owns focus, its own useZoomHandler handles the zoom — skip.
     if (focusInScroller) return
 
-    // Zoom this pane's own tab — the no-arg forms target pane 1's active tab,
-    // which is the wrong book when these shortcuts fire in pane 2.
+    // Zoom this view's own tab — the no-arg forms target the active tab,
+    // which is not always the book these shortcuts fire for.
     const tab = paneNavigation.activeTab
     if (isZoomIn) bookViewStore.zoomIn(tab.id, tab.bookId)
     else if (isZoomOut) bookViewStore.zoomOut(tab.id, tab.bookId)

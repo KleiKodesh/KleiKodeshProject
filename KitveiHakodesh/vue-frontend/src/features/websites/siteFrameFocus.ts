@@ -3,7 +3,7 @@ import { reportSiteFrameFocus } from '@/webview-host/bridge'
 /**
  * Whether ANY Torah website frame has keyboard focus, reported to the host once per change
  * (AppViewerSiteShortcuts.cs takes the app's shortcut keys while it does). One app-wide state, so
- * two web-view tabs in split view cannot leave the host flag wrong when focus moves between them.
+ * two web-view tabs cannot leave the host flag wrong when focus moves between them.
  */
 let reported = false
 

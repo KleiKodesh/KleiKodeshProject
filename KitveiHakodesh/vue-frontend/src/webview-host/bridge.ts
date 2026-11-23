@@ -27,7 +27,7 @@ declare global {
  * True only when running inside the Word task-pane host (C# injects
  * window.__webviewIsVsto = true there).
  * Use this to conditionally hide features that don't make sense in the narrow
- * task-pane environment (e.g. split view).
+ * task-pane environment.
  */
 export const isVstoEnvironment = window.__webviewIsVsto === true
 
@@ -1038,7 +1038,7 @@ export interface TabsSnapshot {
 
 /**
  * Push a full snapshot of the Vue tab store to the C# host so the native chrome
- * tab strip can mirror it (membership, titles, per-pane active tabs, split state).
+ * tab strip can mirror it (membership, titles, the active tab).
  * Fire-and-forget.
  */
 export function notifyTabsChanged(snapshot: TabsSnapshot): void {

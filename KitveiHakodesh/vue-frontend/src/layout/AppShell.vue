@@ -13,7 +13,7 @@ import { watchFullTextSearchIndexStatus } from '@/features/full-text-search/useF
 
 const pane = useAppShellPane()
 // App-wide: a failed full-text-search index build must toast even with its page closed.
-// Idempotent, so the second pane's shell does not open a second stream.
+// Idempotent, so a remount does not open a second stream.
 watchFullTextSearchIndexStatus()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
@@ -37,8 +37,8 @@ provide(PANE_NAVIGATION_KEY, {
 
 <template>
   <div class="app-shell">
-    <!-- The nav menu as an always-on panel docked to this pane's edge: it owns the edge
-         for the pane's full height, and everything belonging to the document - title bar
+    <!-- The nav menu as an always-on panel docked to the shell's edge: it owns the edge
+         for the full height, and everything belonging to the document - title bar
          included, since that is where the tab's title, breadcrumb and per-tab controls
          live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
          rail splits with it. -->
@@ -55,15 +55,15 @@ provide(PANE_NAVIGATION_KEY, {
 <style scoped>
 .app-shell {
   display: flex;
-  /* A row, not a column: the nav rail owns the pane's edge for its full height and the
+  /* A row, not a column: the nav rail owns the shell's edge for its full height and the
      title-bar-plus-content column sits beside it. */
   flex-direction: row;
   height: 100%;
   overflow: hidden;
   min-width: 0;
-  /* Named container so this pane's own chrome - the nav rail, which is a sibling of the
+  /* Named container so the shell's own chrome - the nav rail, which is a sibling of the
      content and so cannot read the `app-shell` container declared below - can size itself
-     off THIS pane's width. In split view a pane is a fraction of the window, so the
+     off the shell's own width. The rail and side panels take part of the window, so the
      viewport is the wrong thing to ask: a narrow pane in a wide window needs the compact
      rail just as much as a narrow window does. */
   container: app-pane / inline-size;
@@ -83,8 +83,8 @@ provide(PANE_NAVIGATION_KEY, {
   min-width: 0;
   overflow: hidden;
   /* Named container so page content (lines view, search results) can widen its
-     side padding based on THIS pane's width, not the whole viewport — matters
-     for split-shell where each pane is only part of the window. */
+     side padding based on the shell's width, not the whole viewport — matters
+     for a shell that is only part of the window. */
   container: app-shell / inline-size;
   background: var(--bg-primary);
 }

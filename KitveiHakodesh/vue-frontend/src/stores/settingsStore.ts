@@ -75,9 +75,6 @@ const KEYS = {
   SETTINGS_SETUP_DONE: 'app.setupDone',
   SETTINGS_ADDRESS_BAR_HINT_DONE: 'app.addressBarHintDone',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
-  // One per pane: a pane is a whole shell with its own tabs and its own chrome, so its
-  // rail is its own state and its own stored value. Pane 1 keeps the original key so an
-  // existing preference carries over.
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
   SETTINGS_HB_EDITION_IN_SIDE_PANEL: 'app.hbEditionInSidePanel',
   SETTINGS_HB_EDITION_SIDE: 'app.hbEditionSide',
@@ -390,7 +387,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const linesLayout = ref<LinesLayout>(DEFAULTS.linesLayout)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
-  // Book-view chrome preferences. bookViewStore reads these; the per-pane fan-out
+  // Book-view chrome preferences. bookViewStore reads these; the session state
   // (toolbar visible per pane, focused pane) stays there because it is session state.
   const toolbarVisible = ref(DEFAULTS.toolbarVisible)
   const toolbarPosition = ref<ToolbarPosition>(DEFAULTS.toolbarPosition)

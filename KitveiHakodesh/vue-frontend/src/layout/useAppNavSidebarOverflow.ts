@@ -58,7 +58,7 @@ export function useAppNavSidebarOverflow(
   )
 
   // Every COLLAPSIBLE button, in visual order - hide-rail is deliberately not among them
-  // (see above), so it has no key at all. The conditional ones (update, split view) are
+  // (see above), so it has no key at all. The conditional one (update) is
   // simply absent when unavailable, so visible and collapsed are always read off one list.
   // Destinations - settings included - are keyed by their labels, because the label IS the
   // routing key; the buttons that are not destinations get names of their own.

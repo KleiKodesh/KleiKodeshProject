@@ -108,7 +108,7 @@ const props = defineProps<
     multiSelectLineIds?: number[] | null
     /**
      * This book's text carries cantillation marks. Switches the body font to the
-     * teamim family. Per-pane rather than a global attribute, so a split view showing
+     * teamim family. Per book view rather than a global attribute, so two views showing
      * a teamim book beside a plain one renders each in its own font.
      */
     bookHasTeamim?: boolean
@@ -291,7 +291,7 @@ const {
     ),
 )
 
-// Focus on open is onScrollerOpened's (the scroller's `opened`), with the split-view guard.
+// Focus on open is onScrollerOpened's (the scroller's `opened`).
 const { onScroll, onScrollerOpened, captureScrollPos, readCurrentPosition, cancelOpeningFollowUps } =
   useBookViewLinesScroll(
   scroller,
@@ -797,7 +797,7 @@ defineExpose({ scrollerElement: () => scrollerEl.value, scrollerApi: () => scrol
    from the shared reading-column stylesheet (assets/styles/readingColumn.css) through
    the row's `reading-column-line` class. Only the book view's own decorations live here. */
 /* Books whose text carries cantillation marks get their own body font — set on the
-   scroller so each pane in a split view follows its own book, not a global flag. */
+   scroller so each book view follows its own book, not a global flag. */
 .scroller[data-teamim='true'] .line {
   font-family: var(--teamim-text-font);
 }

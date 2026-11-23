@@ -155,8 +155,8 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'Escape') onClose()
 }
 
-// Unique per bar: split view mounts two, and duplicate DOM ids would cross-wire
-// each field's aria-controls to the other pane's listbox.
+// Unique per bar: a page can mount more than one, and duplicate DOM ids would cross-wire
+// each field's aria-controls to the other bar's listbox.
 const listboxId = `book-view-recents-${Math.random().toString(36).slice(2)}`
 
 const RECENTS_TITLE = t('bookView.search.recents')
@@ -368,7 +368,7 @@ defineExpose({ focus: focusInput })
 
 <style scoped>
 /* Anchored to the pane's .content-area (position: relative), NOT the viewport:
-   in split view each pane centers its own bar over its own content. */
+   each bar centers itself over its own content. */
 .search-bar {
   position: absolute;
   z-index: 9999;

@@ -104,7 +104,6 @@ export function useBookView(
   const { toolbarPosition } = storeToRefs(bookViewStore)
 
   // ── Tab state captured at mount (stable for component lifetime) ──────────
-  // Read from paneNavigation so pane 2 gets its own active tab, not pane 1's.
 
   const tabId = paneNavigation.activeTabId
   const bookId = paneNavigation.activeTab.bookId

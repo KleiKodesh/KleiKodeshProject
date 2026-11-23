@@ -246,7 +246,7 @@ watch(() => paneNavigation.activeTab.localFileConverting ?? false, (isConverting
   if (isConverting) pageTracking.detach()
 })
 
-// Computed pane-specific converting state (localFileStore.converting reads pane 1 only)
+// This tab's converting state, read from the tab itself
 const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
 const loadingType = computed(() => paneNavigation.activeTab.localFileLoadingType ?? 'converting')
 const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
