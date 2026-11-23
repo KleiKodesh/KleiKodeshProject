@@ -1,5 +1,6 @@
 import type { ZmanName } from 'kleikodesh-zmanim'
 import type { DailyLearning } from './hebrewCalendarLearning'
+import type { SpecialZmanRow } from './specialDayZmanim'
 
 /** Every library zman, printed HH:MM; null where the sun never reaches it that day. */
 export type CalendarZmanim = Record<ZmanName, string | null>
@@ -38,6 +39,8 @@ export interface CalendarDay {
   learning: DailyLearning
   // zmanim
   zmanim: CalendarZmanim
+  /** Lines of erev Pesach, a minor fast or the kiddush levana window; empty on other days. */
+  specialZmanim: SpecialZmanRow[]
 }
 
 export interface CalendarWeek {

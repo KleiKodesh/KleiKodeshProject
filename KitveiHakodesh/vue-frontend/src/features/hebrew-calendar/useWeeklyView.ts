@@ -7,6 +7,7 @@ import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
+import { specialDayRows } from './specialDayZmanim'
 import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
 
@@ -162,6 +163,7 @@ function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek
       fastEnd,
       learning: getDailyLearning(hd),
       zmanim: city ? dayPrintedZmanim(city, date) : NO_ZMANIM,
+      specialZmanim: city ? specialDayRows(city, date) : [],
     })
   }
 
