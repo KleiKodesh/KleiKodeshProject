@@ -4,7 +4,7 @@
 // are read on first need: names only when a picker opens, the coordinates when zmanim
 // are first computed.
 import {
-  configure, epochMs, formatTime, getPlace, listPlaces, placeCount, ROUNDING, searchPlaces,
+  configure, epochMs, formatTime, getPlace, listPlaceGeo, listPlaces, placeCount, ROUNDING, searchPlaces,
   toCivilDate, ZMAN_NAMES, zmanInstants, type Lang, type Place, type ZmanName,
 } from 'kleikodesh-zmanim'
 import { uiLanguage } from '@/i18n'
@@ -60,6 +60,57 @@ export async function nearestPlace(lat: number, lng: number): Promise<Place> {
     if (distance < bestDistance) { bestDistance = distance; best = place }
   }
   return best
+}
+
+/** A name with what it stands for: a country (ISO code) or a place (id). */
+export interface PlaceOption<K> { key: K, name: string }
+
+/**
+ * Every place grouped country > city > neighbourhood, names in the UI language, each list
+ * sorted by name: the three-step place picker.
+ */
+export interface PlaceTree {
+  countries: readonly PlaceOption<string>[]
+  citiesOf: (country: string) => readonly PlaceOption<number>[]
+  /** The city first, then its neighbourhoods; just the city when it has none. */
+  placesOf: (city: number) => readonly PlaceOption<number>[]
+  countryOf: (id: number) => string
+  cityOf: (id: number) => number
+}
+
+const collator = new Intl.Collator(lang)
+const byName = <K>(a: PlaceOption<K>, b: PlaceOption<K>) => collator.compare(a.name, b.name)
+/** "Jaffa (Tel Aviv)" lists as "Jaffa" under Tel Aviv. */
+const withoutParent = (name: string) => name.replace(/\s*\([^()]*\)\s*$/, '')
+
+let placeTreeLoad: Promise<PlaceTree> | null = null
+
+export function placeTree(): Promise<PlaceTree> {
+  return (placeTreeLoad ??= Promise.all([listPlaceGeo(), placeNames()]).then(([geo, names]) => {
+    const countryName = new Intl.DisplayNames([lang], { type: 'region' })
+    const cities = new Map<string, PlaceOption<number>[]>()
+    const members = new Map<number, PlaceOption<number>[]>()
+    for (let id = 1; id <= geo.count; id++) {
+      const city = geo.cityOf(id)
+      if (city === id) {
+        const country = geo.countryOf(id)
+        if (!cities.has(country)) cities.set(country, [])
+        cities.get(country)!.push({ key: id, name: names[id] ?? '' })
+      } else {
+        if (!members.has(city)) members.set(city, [])
+        members.get(city)!.push({ key: id, name: withoutParent(names[id] ?? '') })
+      }
+    }
+    for (const list of [...cities.values(), ...members.values()]) list.sort(byName)
+    const countries = [...cities.keys()].map((code) => ({ key: code, name: countryName.of(code) ?? code })).sort(byName)
+    return {
+      countries,
+      citiesOf: (country: string) => cities.get(country) ?? [],
+      placesOf: (city: number) => [{ key: city, name: names[city] ?? '' }, ...(members.get(city) ?? [])],
+      countryOf: geo.countryOf,
+      cityOf: geo.cityOf,
+    }
+  }).catch((e) => { placeTreeLoad = null; throw e }))
 }
 
 /** One zman: its instant and its printed HH:MM. */

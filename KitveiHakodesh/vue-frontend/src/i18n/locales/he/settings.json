@@ -118,6 +118,11 @@
   "calendar": {
     "section": "לוח שנה ושעון",
     "city": "עיר לזמני היום",
+    "country": "מדינה",
+    "cityOnly": "עיר",
+    "neighbourhood": "שכונה",
+    "wholeCity": "כל העיר",
+    "pickCity": "בחרו עיר",
     "citySearch": "חיפוש מקום",
     "cityHint": "זמני היום בלוח השנה יחושבו לפי מיקום העיר",
     "clock": "הצג שעון במצב מסך מלא",

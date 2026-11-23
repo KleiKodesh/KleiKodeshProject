@@ -7,6 +7,7 @@ import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import { useZmanim } from '@/features/hebrew-calendar/useZmanim'
 import { usePlacePicker } from '@/features/hebrew-calendar/usePlacePicker'
+import PlaceTreePicker from '@/features/hebrew-calendar/PlaceTreePicker.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 const { showClock } = storeToRefs(useSettingsStore())
@@ -68,6 +69,7 @@ function pickCity(id: number) {
           class="city-select-chevron"
         />
       </div>
+      <PlaceTreePicker class="city-tree" :place-id="activeCity?.id" @pick="setCity" />
       <Teleport to="body">
         <div
           v-if="cityOpen"
@@ -108,6 +110,7 @@ function pickCity(id: number) {
 </template>
 
 <style scoped>
+.city-tree { margin-top: 6px; }
 .city-select-box {
   display: flex;
   align-items: center;

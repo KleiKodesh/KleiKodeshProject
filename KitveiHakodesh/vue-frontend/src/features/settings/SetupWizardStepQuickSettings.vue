@@ -7,6 +7,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { pickFolder, clearHbLocalFolder } from '@/webview-host/bridge'
 import { useZmanim } from '@/features/hebrew-calendar/useZmanim'
 import { usePlacePicker } from '@/features/hebrew-calendar/usePlacePicker'
+import PlaceTreePicker from '@/features/hebrew-calendar/PlaceTreePicker.vue'
 import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -103,6 +104,7 @@ function pickCity(id: number) {
         class="select-chevron"
       />
     </div>
+    <PlaceTreePicker class="city-tree" :place-id="activeCity?.id" @pick="setCity" />
     <Teleport to="body">
       <div
         v-if="cityOpen"
@@ -146,6 +148,7 @@ function pickCity(id: number) {
 </template>
 
 <style scoped>
+.city-tree { margin-top: 6px; }
 .select-box {
   display: flex;
   align-items: center;
