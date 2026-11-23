@@ -43,8 +43,8 @@ jobs:
           # The withdrawn files, identified by the SHA-256 of their file names (first 16 hex digits), so the
           # names themselves are not written here.
           WITHDRAWN="af498c06822ef135 8f5660169213ed7c 96bca057ad4601b7 76244de7b00c605b 8d12534b3c4f0b0a a838ea8951be0840 a8481046205a1df3 e3592944d6c34b8e ffe985ec46c06b90 bfb4fbbfe55f5acb f6cce9984d10e942 603df10ef4c4fcdc"
-          names() { { gh api "repos/$1/contents/$DIR?ref=$2" --jq '.[].name' 2>/dev/null || true
-                      gh api "repos/$1/contents/$DIR/kosherZmanim/calculators?ref=$2" --jq '.[].name' 2>/dev/null || true; } | grep -v '^{' || true; }
+          # Every file name anywhere under the zmanim folder (any depth), from the branch's tree.
+          names() { gh api "repos/$1/git/trees/$2?recursive=1" --jq ".tree[] | select(.type==\"blob\") | .path | select(startswith(\"$DIR/\")) | split(\"/\") | last" 2>/dev/null | grep -v '^{' || true; }
           bad=()
           # Every fork at every level (forks of forks too).
           allforks() { for f in $(gh api "repos/$1/forks" --paginate --jq '.[].full_name' 2>/dev/null || true); do echo "$f"; allforks "$f"; done; }
