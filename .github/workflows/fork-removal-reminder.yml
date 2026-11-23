@@ -40,15 +40,21 @@ jobs:
           if gh api "repos/$repo/issues/$ISSUE/comments" --paginate --jq '.[].body' | grep -q '<!-- fork-reminder:all-clear -->'; then
             echo "All clear was already posted."; exit 0; fi
 
+          # The withdrawn files, identified by the SHA-256 of their file names (first 16 hex digits), so the
+          # names themselves are not written here.
+          WITHDRAWN="af498c06822ef135 8f5660169213ed7c 96bca057ad4601b7 76244de7b00c605b 8d12534b3c4f0b0a a838ea8951be0840 a8481046205a1df3 e3592944d6c34b8e ffe985ec46c06b90 bfb4fbbfe55f5acb f6cce9984d10e942 603df10ef4c4fcdc"
+          names() { { gh api "repos/$1/contents/$DIR?ref=$2" --jq '.[].name' 2>/dev/null || true
+                      gh api "repos/$1/contents/$DIR/kosherZmanim/calculators?ref=$2" --jq '.[].name' 2>/dev/null || true; } | grep -v '^{' || true; }
           bad=()
           for f in $(gh api "repos/$repo/forks" --paginate --jq '.[].full_name'); do
-            # Every branch of the fork: look for the removed files in the folder listing.
             for b in $(gh api "repos/$f/branches" --paginate --jq '.[].name' 2>/dev/null || true); do
-              names=$( { gh api "repos/$f/contents/$DIR?ref=$b" --jq '.[].name' 2>/dev/null || true
-                         gh api "repos/$f/contents/$DIR/kosherZmanim/calculators?ref=$b" --jq '.[].name' 2>/dev/null || true; } )
-              if grep -qiE '^(x|cityClimates|horizonRefraction|atmosphere|spaCalculator|spaTables|solarPosition|climateRefraction)' <<<"$names"; then
-                echo "STILL HAS FILES: $f ($b)"; bad+=("${f%%/*}"); break
-              fi
+              hit=0
+              while read -r n; do
+                [ -z "$n" ] && continue
+                h=$(printf '%s' "$n" | sha256sum | cut -c1-16)
+                case " $WITHDRAWN " in *" $h "*) hit=1; break;; esac
+              done < <(names "$f" "$b")
+              if [ $hit -eq 1 ]; then echo "STILL HAS FILES: $f ($b)"; bad+=("${f%%/*}"); break; fi
             done
           done
           mapfile -t owners < <(printf '%s\n' "${bad[@]:-}" | grep . | sort -u || true)
