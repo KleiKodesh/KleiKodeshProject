@@ -33,12 +33,17 @@ const IMMINENT_MIN = 8
  */
 const CRITICAL_KEYS: ReadonlySet<keyof CalendarZmanim> = new Set([
   'alot',
+  'alot90',
   'sofShmaGra',
   'sofShmaMga',
+  'sofShmaMga16',
   'sofTfillaGra',
   'sofTfillaMga',
+  'sofTfillaMga16',
   'sunset',
+  'sunsetTerrain',
   'tzeit',
+  'tzeit18Sun',
 ])
 
 export type ZmanUrgency = 'normal' | 'soon' | 'imminent'

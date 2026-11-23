@@ -10,9 +10,9 @@ const KEY = 'zmanim.shown'
 
 /** The common default lines. Names the library doesn't have (yet) are simply skipped. */
 export const DEFAULT_SHOWN: readonly string[] = [
-  'chatzotNight', 'alot', 'alot90', 'misheyakir10p2', 'sunrise', 'sunriseElevated',
-  'sofShmaMga19', 'sofShmaGra', 'sofTfillaMga19', 'sofTfillaGra', 'chatzot', 'minchaGedola30',
-  'minchaKetana', 'plag', 'sunsetElevated', 'sunset', 'tzeit18Sun', 'tzeitRt72',
+  'chatzotNight', 'alot90', 'misheyakir', 'sunriseTerrain', 'sunrise',
+  'sofShmaMga16', 'sofShmaGra', 'sofTfillaMga16', 'sofTfillaGra', 'chatzot', 'minchaGedola30',
+  'minchaKetana', 'plagAlot90Tzeit645', 'sunset', 'sunsetTerrain', 'tzeit18Sun',
 ]
 
 /** Candle-lighting lines belong to Fridays and the eve of Yom Tov only. */
