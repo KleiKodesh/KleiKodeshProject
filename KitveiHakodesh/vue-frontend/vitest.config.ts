@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      'kleikodesh-zmanim': fileURLToPath(new URL('../kleikodesh-zmanim.js/src/index.ts', import.meta.url)),
     },
   },
   test: {

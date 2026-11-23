@@ -1,11 +1,10 @@
-import { ref, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
-import { CITIES } from '@/features/hebrew-calendar/calendarTypes'
-import type { CalendarZmanim, City } from '@/features/hebrew-calendar/calendarTypes'
-import { lsGet, lsSet } from '@/utils/persistence'
-import { ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
-import type { DayZmanim } from '@/features/hebrew-calendar/dayZmanim'
+import type { CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
+import { lsSet } from '@/utils/persistence'
+import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
+import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
 
 const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 
@@ -83,20 +82,11 @@ export interface ZmanRow {
   passed: boolean
 }
 
-function resolveCity(): City {
-  const saved = lsGet<string>(KEYS.SETTINGS_ZMANIM_CITY)
-  if (saved) {
-    const found = CITIES.find((c) => c.name === saved)
-    if (found) return found
-  }
-  return CITIES[0]! // Jerusalem
-}
-
 /**
  * Tracks the nearest upcoming zman for the home date bar and exposes the full
  * day's table for the "all times" popup.
  *
- * Load-time safety: the heavy zmanim engine (kosherZmanim) is
+ * Load-time safety: the zmanim engine (kleikodesh-zmanim) is
  * pulled in via a dynamic import fired in onMounted (mirroring homeDateInfo),
  * so it never lands in the home page's eager bundle and never blocks first
  * paint. Until it resolves, `next` and `rows` are empty and the bar renders
@@ -104,18 +94,19 @@ function resolveCity(): City {
  */
 export function useNextZman() {
   const now = ref(new Date())
-  const city = ref<City>(CITIES[0]!)
+  /** The place the times are for; null until loaded. */
+  const city = shallowRef<Place | null>(null)
 
   // Lazily-loaded engine + per-day cached Date computations.
-  let calc: ((city: City, date: Date) => DayZmanim) | null = null
+  let calc: ((place: Place, date: Date) => DayTimedZmanim) | null = null
   const ready = ref(false)
 
   let cachedDayKey = ''
-  let cachedToday: DayZmanim | null = null
-  let cachedTomorrow: DayZmanim | null = null
+  let cachedToday: DayTimedZmanim | null = null
+  let cachedTomorrow: DayTimedZmanim | null = null
 
   function ensureDay(reference: Date) {
-    if (!calc) return
+    if (!calc || !city.value) return
     const dayKey = reference.toDateString()
     if (dayKey === cachedDayKey && cachedToday) return
     cachedDayKey = dayKey
@@ -196,23 +187,11 @@ export function useNextZman() {
   })
 
   onMounted(async () => {
-    city.value = resolveCity()
-    cachedDayKey = '' // force rebuild against the resolved city
     // Deferred load — keeps the zmanim engine out of the home page's critical bundle.
-    const { dayZmanim } = await import('@/features/hebrew-calendar/dayZmanim')
-    calc = (c, date): DayZmanim => {
-      const empty = {
-        chatzotNight: null,
-        alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
-        sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null,
-        minchaKetana: null, plag: null, sunset: null, tzeit: null,
-      }
-      try {
-        return dayZmanim(c, date)
-      } catch {
-        return empty
-      }
-    }
+    const places = await import('@/features/hebrew-calendar/zmanimPlaces')
+    city.value = await places.loadPlace(savedPlaceId())
+    cachedDayKey = '' // force rebuild against the resolved place
+    calc = places.dayTimedZmanim
     now.value = new Date()
     ready.value = true
   })
@@ -221,10 +200,11 @@ export function useNextZman() {
     now.value = new Date()
   }, 30_000)
 
-  /** Switch city: saved like the settings page choice, zmanim recomputed now. */
-  function setCity(c: City) {
-    lsSet(KEYS.SETTINGS_ZMANIM_CITY, c.name)
-    city.value = c
+  /** Switch place: saved like the settings page choice, zmanim recomputed now. */
+  async function setCity(id: number) {
+    lsSet(KEYS.SETTINGS_ZMANIM_CITY, id)
+    const { loadPlace } = await import('@/features/hebrew-calendar/zmanimPlaces')
+    city.value = await loadPlace(id)
     cachedDayKey = ''
     now.value = new Date()
   }

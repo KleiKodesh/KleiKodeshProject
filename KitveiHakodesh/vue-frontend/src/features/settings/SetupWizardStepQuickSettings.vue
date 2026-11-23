@@ -5,8 +5,8 @@ import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prere
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { pickFolder, clearHbLocalFolder } from '@/webview-host/bridge'
-import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
-import { cityDisplayName } from '@/features/hebrew-calendar/cityDisplayName'
+import { useZmanim } from '@/features/hebrew-calendar/useZmanim'
+import { usePlacePicker } from '@/features/hebrew-calendar/usePlacePicker'
 import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -29,12 +29,13 @@ async function resetHebrewBooksFolder() {
   hebrewBooksLocalFolder.value = ''
 }
 
-const { activeCity, setCity, init: initZmanim } = useZmanim()
+const { activeCity, activeCityName, setCity, init: initZmanim } = useZmanim()
 
 const cityBoxRef = ref<HTMLElement | null>(null)
 const cityDropdownRef = ref<HTMLElement | null>(null)
 const cityOpen = ref(false)
 const cityDropdownStyle = ref<Record<string, string>>({})
+const { query: placeQuery, options: placeOptions } = usePlacePicker(cityOpen)
 
 useDropdownClose(
   cityDropdownRef,
@@ -75,8 +76,8 @@ async function toggleCityDropdown() {
   }
 }
 
-function pickCity(name: string) {
-  setCity(CITIES.find((c) => c.name === name) ?? null)
+function pickCity(id: number) {
+  setCity(id)
   cityOpen.value = false
 }
 </script>
@@ -96,7 +97,7 @@ function pickCity(name: string) {
   </SettingRow>
   <SettingRow :label="$t('settings.calendar.city')" :hint="$t('settings.calendar.cityHintWizard')">
     <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
-      <span class="select-display">{{ cityDisplayName(activeCity) }}</span>
+      <span class="select-display">{{ activeCityName }}</span>
       <component
         :is="cityOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
         class="select-chevron"
@@ -110,14 +111,20 @@ function pickCity(name: string) {
         :style="cityDropdownStyle"
         @click.stop
       >
+        <input
+          v-model="placeQuery"
+          type="search"
+          class="city-search"
+          :placeholder="$t('settings.calendar.citySearch')"
+        />
         <div
-          v-for="c in CITIES"
-          :key="c.name"
+          v-for="c in placeOptions"
+          :key="c.id"
           class="city-option"
-          :class="{ selected: activeCity.name === c.name }"
-          @click="pickCity(c.name)"
+          :class="{ selected: activeCity?.id === c.id }"
+          @click="pickCity(c.id)"
         >
-          {{ cityDisplayName(c) }}
+          {{ c.name }}
         </div>
       </div>
     </Teleport>
@@ -177,6 +184,22 @@ function pickCity(name: string) {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
+.city-search {
+  position: sticky;
+  top: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
 .city-option {
   height: 26px;
   padding: 0 10px;

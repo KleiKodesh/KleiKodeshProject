@@ -5,8 +5,8 @@ import { flags } from '@hebcal/core/dist/esm/event'
 import { isShownEvent } from './isShownModernHoliday'
 import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
-import { calcDayZmanim } from './useZmanim'
-import type { City, CalendarDay, CalendarWeek } from './calendarTypes'
+import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
+import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -18,10 +18,16 @@ const MONTH_NAMES: Record<number, string> = {
   7: 'תשרי', 8: 'חשון', 9: 'כסלו', 10: 'טבת', 11: 'שבט', 12: 'אדר', 13: 'אדר ב׳',
 }
 
-const LOOKUP: Record<string, string> = {
-  ירושלים: 'Jerusalem', 'תל אביב': 'Tel Aviv', חיפה: 'Haifa',
-  'באר שבע': 'Beer Sheva', אילת: 'Eilat', טבריה: 'Tiberias',
-  'ניו יורק': 'New York', לונדון: 'London', מונטריאול: 'Montreal',
+/** Places that hebcal knows by name (it has their customary candle-lighting minutes), by place id. */
+const HEBCAL_LOCATION: Record<number, string> = {
+  [JERUSALEM_ID]: 'Jerusalem', 45: 'Tel Aviv', 52: 'Haifa', 60: 'Beer Sheva', 97: 'Eilat', 100: 'Tiberias',
+  105: 'New York', 109: 'London', 154: 'Montreal',
+}
+
+const NO_ZMANIM: CalendarZmanim = {
+  chatzotNight: null, alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
+  sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null, minchaKetana: null,
+  plag: null, sunset: null, tzeit: null,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -41,12 +47,12 @@ function sundayOf(d: Date): Date {
   return s
 }
 
-function resolveLocation(city: City): InstanceType<typeof Location> {
-  const en = LOOKUP[city.name]
+function resolveLocation(place: Place | null): InstanceType<typeof Location> {
+  const en = HEBCAL_LOCATION[place?.id ?? JERUSALEM_ID]
   const found = en ? Location.lookup(en) : null
   if (found) return found
-  const il = city.tzid === 'Asia/Jerusalem'
-  return new Location(city.lat, city.lng, il, city.tzid, city.name, il ? 'IL' : undefined)
+  const il = place!.tzid === 'Asia/Jerusalem'
+  return new Location(place!.lat, place!.lng, il, place!.tzid, String(place!.id), il ? 'IL' : undefined)
 }
 
 function rangeLabel(aMonth: string, aYear: string, bMonth: string, bYear: string): string {
@@ -57,7 +63,7 @@ function rangeLabel(aMonth: string, aYear: string, bMonth: string, bYear: string
 
 // ── Build week ────────────────────────────────────────────────────────────────
 
-function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
+function buildWeek(sunday: Date, city: Place | null, today0: Date): CalendarWeek {
   const saturday = new Date(sunday)
   saturday.setDate(sunday.getDate() + 6)
 
@@ -158,7 +164,7 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
       fastStart,
       fastEnd,
       learning: getDailyLearning(hd),
-      zmanim: calcDayZmanim(city, date),
+      zmanim: city ? dayPrintedZmanim(city, date) : NO_ZMANIM,
     })
   }
 
@@ -181,7 +187,7 @@ function buildWeek(sunday: Date, city: City, today0: Date): CalendarWeek {
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
-export function useWeeklyView(city: { value: City }) {
+export function useWeeklyView(city: { value: Place | null }) {
   const today0 = new Date()
   today0.setHours(0, 0, 0, 0)
 

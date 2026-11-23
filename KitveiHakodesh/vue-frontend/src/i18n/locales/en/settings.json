@@ -118,6 +118,7 @@
   "calendar": {
     "section": "Calendar and clock",
     "city": "City for prayer times",
+    "citySearch": "Search a place",
     "cityHint": "Calendar prayer times are calculated for this city",
     "clock": "Show clock in full screen",
     "clockHint": "A transparent clock in the bottom-left corner while in full screen",

@@ -849,6 +849,32 @@ function devSqlitePlugin(): Plugin {
   }
 }
 
+// ── Zmanim library data (kleikodesh-zmanim.js submodule) ─────────────────────────
+// The place list ships as small files read on first need (never inlined, never from the
+// internet): dev serves them from the submodule's assets/ folder, the build writes them
+// to zmanim/ beside index.html. src/features/hebrew-calendar/zmanimPlaces.ts points the
+// library at that folder.
+const ZMANIM_ASSETS_DIR = fileURLToPath(new URL('../kleikodesh-zmanim.js/assets/', import.meta.url))
+const ZMANIM_ASSET_FILES = ['names-he.txt', 'names-en.txt', 'places.bin', 'tz.json']
+function zmanimAssets(): Plugin {
+  return {
+    name: 'zmanim-assets',
+    configureServer(server) {
+      server.middlewares.use('/zmanim/', (req, res, next) => {
+        const file = (req.url ?? '').split('?')[0]!.replace(/^\//, '')
+        if (!ZMANIM_ASSET_FILES.includes(file)) return next()
+        res.setHeader('Content-Type', 'application/octet-stream')
+        res.end(fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)))
+      })
+    },
+    generateBundle() {
+      for (const file of ZMANIM_ASSET_FILES) {
+        this.emitFile({ type: 'asset', fileName: `zmanim/${file}`, source: fs.readFileSync(path.join(ZMANIM_ASSETS_DIR, file)) })
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     devSqlitePlugin(),
@@ -857,10 +883,13 @@ export default defineConfig({
     // Precompiles src/i18n/locales/**/*.json so the runtime-only vue-i18n build ships (no message compiler).
     VueI18nPlugin({ include: [fileURLToPath(new URL('./src/i18n/locales/**', import.meta.url))], runtimeOnly: true, compositionOnly: true, fullInstall: false }),
     viteSingleFile(),
+    zmanimAssets(),
   ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The zmanim library, compiled from its TypeScript source in the submodule.
+      'kleikodesh-zmanim': fileURLToPath(new URL('../kleikodesh-zmanim.js/src/index.ts', import.meta.url)),
       // @hebcal/core (molad.js) imports temporal-polyfill/global as a side-effectful
       // install of Temporal onto globalThis. Redirect to our conditional stub which
       // only runs the polyfill when native Temporal is absent (Chromium < 138 /

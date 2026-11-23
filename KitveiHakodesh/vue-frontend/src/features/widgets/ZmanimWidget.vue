@@ -1,16 +1,17 @@
 <script setup lang="ts">
+import { onMounted, shallowRef } from 'vue'
 import NextZmanPopup from '@/features/home/NextZmanPopup.vue'
 import { useNextZman } from '@/features/home/useNextZman'
-import { cityLabelWithCountry, citiesByCountry } from '@/features/hebrew-calendar/cityDisplayName'
-import { CITIES } from '@/features/hebrew-calendar/calendarTypes'
+import { placeNames } from '@/features/hebrew-calendar/zmanimPlaces'
 
 const { rows, city, setCity } = useNextZman()
 
-const sortedCities = citiesByCountry(CITIES)
+/** Place names in the UI language; index = place id (index 0 is empty). */
+const names = shallowRef<readonly string[]>([])
+onMounted(async () => { names.value = await placeNames() })
 
 function onPick(e: Event) {
-  const found = CITIES.find((c) => c.name === (e.target as HTMLSelectElement).value)
-  if (found) setCity(found)
+  setCity(Number((e.target as HTMLSelectElement).value))
 }
 </script>
 
@@ -18,11 +19,13 @@ function onPick(e: Event) {
   <div class="zmanim-widget">
     <select
       class="zw-city"
-      :value="city.name"
+      :value="city?.id"
       :title="$t('settings.calendar.city')"
       @change="onPick"
     >
-      <option v-for="c in sortedCities" :key="c.name" :value="c.name">{{ cityLabelWithCountry(c) }}</option>
+      <template v-for="(name, id) in names" :key="id">
+        <option v-if="id > 0" :value="id">{{ name }}</option>
+      </template>
     </select>
     <NextZmanPopup :rows="rows" :city-name="''" />
   </div>

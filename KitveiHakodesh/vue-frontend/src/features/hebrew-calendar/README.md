@@ -12,17 +12,16 @@ Hebrew calendar widget (features/widgets): opens in a floating window, not a tab
 
 **CalendarHeader.vue** — navigation header shared by both views: prev/next buttons, today button, and the Hebrew + Gregorian period label.
 
-**calendarTypes.ts** — TypeScript types for `CalendarDay`, `CalendarWeek`, and `City`. Import types from here.
+**calendarTypes.ts** — TypeScript types for `CalendarDay`, `CalendarWeek` and `CalendarZmanim`. Import types from here.
 
 **useMonthlyView.ts** — month navigation state. Keeps Gregorian and Hebrew month/year in sync. Use `jumpToHebrew(year, month)` to navigate to a specific Hebrew month.
 
 **useWeeklyView.ts** — week navigation state and data. Builds a full `CalendarWeek` for the current week using `@hebcal/core`, including all events, candle lighting times, and daily learning via `hebrewCalendarLearning.ts`. Rebuilds automatically when the city changes. Requesting a week that includes a molad event causes `@hebcal/core/molad.js` to run, which requires `Temporal.ZonedDateTime` — covered by the conditional polyfill in `src/stubs/temporal-polyfill-stub.ts`.
 
-**useZmanim.ts** — city selection and the day's printed zmanim (`calcDayZmanim`, used by `useWeeklyView`). Tries geolocation first, falls back to Jerusalem. Persists the selected city to localStorage via `KEYS.SETTINGS_ZMANIM_CITY`. Exports `CITIES` (the full city list) and `useZmanim` (the composable for the city picker UI).
+**useZmanim.ts** — place selection. Tries geolocation first (nearest listed place), falls back to Jerusalem. Persists the selected place id to localStorage via `KEYS.SETTINGS_ZMANIM_CITY` (a saved value that is not a valid id means Jerusalem).
 
-Zmanim are computed on the device with `kosherZmanim/` (a port of an earlier zmanim library / KosherZmanim, LGPL-2.1) using the standard NOAA calculator (`calculators/noaaCalculator.ts`, the calendar's default) and sea-level sunrise/sunset:
+**usePlacePicker.ts** — options for the settings / setup-wizard place pickers (search box over the place names).
 
-- **dayZmanim.ts** - `dayZmanim(city, date)`: each row's instant and printed time, using standard definitions (alot 16.1 deg, misheyakir 11.5 deg, shma/tfila GRA and MGA 72 minutes, chatzot, mincha gedola/ketana, plag GRA, tzeit 8.5 deg, chatzot halaila = solar midnight). Times are printed HH:MM with stringent rounding: starts round up, deadlines round down, chatzot to the nearest minute (the `ROUNDING` table). Also used by the home page's next-zman bar.
+**zmanimPlaces.ts** — the app's door to the `kleikodesh-zmanim` library (submodule `../kleikodesh-zmanim.js`, imported through the `kleikodesh-zmanim` alias in vite.config.ts, vitest.config.ts and tsconfig.app.json; LGPL-2.1, a port of an earlier zmanim library, NOAA calculator, sea-level sunrise/sunset). Places are numeric ids; names come from the library in the UI language. `dayPrintedZmanim` feeds the weekly view, `dayTimedZmanim` the home page's next-zman bar. The library's data files ship beside the app in `zmanim/` (the `zmanimAssets` plugin in vite.config.ts serves them in dev and writes them into the build) and are read on first need. Definitions and rounding: see the library README.
 
-City list (`calendarTypes.ts`): Contains data from GeoNames (geonames.org), licensed under CC BY 4.0.
-Some neighbourhood coordinates come from Wikidata (CC0). Where Wikidata has no elevation, it comes from the Open-Meteo elevation API (CC BY 4.0), based on the Copernicus DEM GLO-90 (produced using Copernicus WorldDEM-90 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA; all rights reserved).
+Place data: contains data from GeoNames (geonames.org), licensed under CC BY 4.0 (details in the library README).
