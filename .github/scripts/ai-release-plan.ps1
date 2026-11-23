@@ -29,7 +29,10 @@ $ErrorActionPreference = 'Stop'
 # No AI notes = no release (the step fails, nothing is built).
 $models = if ($env:GEMINI_MODEL) { @($env:GEMINI_MODEL -split ',' | ForEach-Object Trim) } else { @('gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest') }
 
-$tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName')   # newest first
+# Newest first BY VERSION: the list's own order follows release dates, which the
+# 2026-11-22 history rewrite reshuffled (v5.2.1 came first and the notes spanned months).
+$tags = @(gh release list --limit 200 --exclude-drafts --json tagName --jq '.[].tagName' |
+    Where-Object { $_ -match '^v\d+(\.\d+){1,3}$' } | Sort-Object { [version]$_.TrimStart('v') } -Descending)
 $previousTag = if ($Since) { $Since } elseif ($Tag) { $tags[[array]::IndexOf($tags, $Tag) + 1] } else { $tags[0] }
 $end     = if ($Tag) { $Tag } else { 'HEAD' }
 $range   = if ($previousTag) { "$previousTag..$end" } else { "-30" }

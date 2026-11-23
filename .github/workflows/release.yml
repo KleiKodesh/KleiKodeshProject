@@ -51,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           go() { echo "go=$1" >> "$GITHUB_OUTPUT"; echo "$2"; exit 0; }
-          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --exclude-drafts --json tagName,publishedAt --jq '.[0]')
+          last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-drafts --json tagName,publishedAt --jq '[.[] | select(.tagName | test("^v[0-9]+([.][0-9]+)+$"))] | sort_by(.tagName | ltrimstr("v") | split(".") | map(tonumber)) | last')   # highest version, not newest date
           tag=$(jq -r .tagName <<<"$last")
           echo "last=$tag" >> "$GITHUB_OUTPUT"
           if [ "$SCHEDULED" != true ]; then go true "manual run"; fi
