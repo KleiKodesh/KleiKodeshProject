@@ -4,7 +4,6 @@ import { ZENITH_11_POINT_5 } from './kosherZmanim/calendars/complexZmanimCalenda
 import { ZENITH_16_POINT_1, ZENITH_8_POINT_5 } from './kosherZmanim/calendars/zmanimCalendar'
 import type { Instant } from './kosherZmanim/instant'
 import type { CalendarZmanim, City } from './calendarTypes'
-import { CITY_CLIMATES } from './cityClimates'
 
 /** One row of the day: the instant, and the printed time. */
 export interface Zman {
@@ -43,7 +42,7 @@ const ROUNDING: Record<keyof CalendarZmanim, Rounding> = {
 }
 
 /** Standard, widely published definitions, all from sea-level sunrise/sunset
- * (climate refraction calculator ported from an earlier zmanim library). */
+ * (standard NOAA calculator). */
 function rowInstants(today: ComplexZmanimCalendar, yesterday: ComplexZmanimCalendar): Record<keyof CalendarZmanim, Instant | null> {
   return {
     // The midnight that opens this day is yesterday's solar midnight.
@@ -72,7 +71,6 @@ function calendarOn(city: City, date: Date): ComplexZmanimCalendar {
     tzid: city.tzid,
     date: { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() },
     useElevation: false,
-    climate: CITY_CLIMATES[city.key],
   })
 }
 
@@ -96,15 +94,8 @@ export function formatZmanTime(time: Date, rounding: Rounding, timeZone: string)
   return clock(rounded * MINUTE_MS, timeZone)
 }
 
-/** A day costs tens of ms (the calculator bisects the sun's position), so recent days are kept. */
-const DAY_CACHE_SIZE = 64
-const dayCache = new Map<string, DayZmanim>()
-
-/** The day's zmanim rows for a city; recent days are cached. */
+/** The day's zmanim rows for a city. */
 export function dayZmanim(city: City, date: Date): DayZmanim {
-  const cacheKey = `${city.key}|${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
-  const cached = dayCache.get(cacheKey)
-  if (cached) return cached
   const instants = rowInstants(
     calendarOn(city, date),
     calendarOn(city, new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)),
@@ -115,7 +106,5 @@ export function dayZmanim(city: City, date: Date): DayZmanim {
     const time = instant === null ? null : new Date(instant.toEpochMilliseconds())
     day[row] = time && { time, printed: formatZmanTime(time, ROUNDING[row], city.tzid) }
   }
-  if (dayCache.size >= DAY_CACHE_SIZE) dayCache.delete(dayCache.keys().next().value!)
-  dayCache.set(cacheKey, day)
   return day
 }
