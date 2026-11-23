@@ -29,6 +29,16 @@ export component ManagePage inherits VerticalLayout {
             checked: p.selected;
             toggled => { Installer.toggle-product(i); }
         }
+        // The calendar app is a Kitvei Hakodesh option; once installed (or ticked) it is listed
+        // here too, so it can be updated or removed like the others.
+        if Installer.calendar-installed || Installer.calendar-selected: CheckRow {
+            text: Installer.calendar-installed ? Lang.t("לוח שנה (מותקן)", "Calendar (installed)") : Lang.t("לוח שנה", "Calendar");
+            detail: Lang.t("לוח שנה עם זמני היום ולימוד יומי, כתוכנה קטנה בחלון משלה.", "The calendar with zmanim and daily learning as a small app in its own window.");
+            side-note: Lang.t("כ־1 MB", "about 1 MB");
+            icon: "calendar";
+            checked: Installer.calendar-selected;
+            toggled => { Installer.toggle-calendar(); }
+        }
         HorizontalLayout {
             alignment: Lang.en ? LayoutAlignment.start : LayoutAlignment.end;
             spacing: 8px;

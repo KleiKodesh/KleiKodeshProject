@@ -29,6 +29,12 @@ export component OptionsPage inherits VerticalLayout {
             checked: Installer.file-associations;
             toggled => { Installer.file-associations = !Installer.file-associations; }
         }
+        if Installer.kitvei-selected: CheckRow {
+            text: Lang.t("התקן גם את לוח השנה כתוכנה נפרדת", "Also install the calendar as its own app");
+            detail: Lang.t("לוח שנה עם זמני היום ולימוד יומי בחלון משלו, בלי לפתוח את כתבי הקודש. לחיצה על לימוד פותחת אותו בכתבי הקודש.", "The calendar with zmanim and daily learning in its own window, without opening Kitvei Hakodesh. A click on a learning opens it in Kitvei Hakodesh.");
+            checked: Installer.calendar-selected;
+            toggled => { Installer.toggle-calendar(); }
+        }
         Rectangle { vertical-stretch: 1; }
     }
     // Same OK / Cancel as the add-in options page, from the home page and from Modify alike.

@@ -1,9 +1,10 @@
 //! Build tool: packs the product files and appends them to the bare setup exe.
 //!
 //!   pack-payload --exe <bare kleikodesh-setup.exe> --core <add-in build output folder>
-//!                --tutor <typing tutor dist folder> --out <KleiKodeshSetup.exe>
+//!                --tutor <typing tutor dist folder> --calendar <calendar app dist folder>
+//!                --out <KleiKodeshSetup.exe>
 //!
-//! Core files go to the archive root, the tutor under `TypingTutor\`.
+//! Core files go to the archive root, the tutor under `TypingTutor\`, the calendar under `Calendar\`.
 
 #[path = "../payload/format.rs"]
 mod format;
@@ -46,11 +47,12 @@ fn run() -> io::Result<()> {
             .map(PathBuf::from)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("missing {name}")))
     };
-    let (exe, core, tutor, out) = (arg("--exe")?, arg("--core")?, arg("--tutor")?, arg("--out")?);
+    let (exe, core, tutor, calendar, out) = (arg("--exe")?, arg("--core")?, arg("--tutor")?, arg("--calendar")?, arg("--out")?);
 
     let mut files = Vec::new();
     collect(&core, &core, "", &mut files)?;
     collect(&tutor, &tutor, "TypingTutor", &mut files)?;
+    collect(&calendar, &calendar, "Calendar", &mut files)?;
     let total_bytes: u64 = files.iter().map(|(source, _)| fs::metadata(source).map(|m| m.len()).unwrap_or(0)).sum();
 
     // One handle from start to finish: copying the exe and reopening it to append lets

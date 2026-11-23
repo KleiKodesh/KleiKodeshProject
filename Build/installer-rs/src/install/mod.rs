@@ -6,6 +6,8 @@
 pub mod addin;
 pub mod addin_settings;
 pub mod apps;
+pub mod calendar;
+pub mod edge_app;
 pub mod kitvei;
 pub mod prereqs;
 pub mod service;
@@ -15,7 +17,7 @@ pub mod tutor;
 use std::collections::HashSet;
 
 use crate::i18n::Text;
-use crate::layout::{Layout, SETUP_EXE, TUTOR_DIR, LOG_FILE};
+use crate::layout::{Layout, CALENDAR_DIR, SETUP_EXE, TUTOR_DIR, LOG_FILE};
 use crate::payload::{self, Payload, Selection};
 use crate::products::Product;
 use apps::RunningApp;
@@ -138,7 +140,7 @@ fn apply(layout: &Layout, payload: Option<&Payload>, request: &Request, reporter
     }
 
     reporter.step(Text::new("מעתיק קבצים", "Copying files"));
-    let selection = Selection { core, kitvei, tutor: wanted.contains(&Product::TypingTutor) };
+    let selection = Selection { core, kitvei, tutor: wanted.contains(&Product::TypingTutor), calendar: wanted.contains(&Product::CalendarApp) };
     copy_files(layout, payload, selection, reporter)?;
     reporter.progress(0.75);
 
@@ -186,6 +188,7 @@ fn remove_previous_install(layout: &Layout, reporter: &dyn Reporter) -> Result<(
     addin::unregister(layout);
     kitvei::unregister(layout);
     tutor::unregister(layout);
+    calendar::unregister(layout);
     state::forget_everything(layout);
     if layout.install_dir.exists() {
         std::fs::remove_dir_all(&layout.install_dir).map_err(|e| {
@@ -211,6 +214,7 @@ fn uninstall(layout: &Layout, reporter: &dyn Reporter) -> Result<(), Failure> {
     addin::unregister(layout);
     kitvei::unregister(layout);
     tutor::unregister(layout);
+    calendar::unregister(layout);
     state::forget_everything(layout);
     for dir in layout.start_menu_dirs() {
         let _ = std::fs::remove_dir(dir);
@@ -244,8 +248,11 @@ fn check_prerequisites(layout: &Layout, wanted: &HashSet<Product>, reporter: &dy
         prereqs::install_webview2(&layout.install_dir.join("setup-downloads"))
             .map_err(|e| Failure::new(Text::new("התקנת WebView2 נכשלה.", "Installing WebView2 failed."), e))?;
     }
-    if wanted.contains(&Product::TypingTutor) && tutor::edge_exe().is_none() {
+    if wanted.contains(&Product::TypingTutor) && edge_app::edge_exe().is_none() {
         return Err(Failure::new(Text::new("ההקלדה העיוורת דורשת את Microsoft Edge.", "Touch Typing needs Microsoft Edge."), "edge missing"));
+    }
+    if wanted.contains(&Product::CalendarApp) && edge_app::edge_exe().is_none() {
+        return Err(Failure::new(Text::new("לוח השנה דורש את Microsoft Edge.", "The calendar needs Microsoft Edge."), "edge missing"));
     }
     Ok(())
 }
@@ -276,10 +283,11 @@ fn copy_files(layout: &Layout, payload: Option<&Payload>, selection: Selection, 
     let missing_core = selection.core
         && (!layout.file(crate::layout::VSTO_MANIFEST).exists() || (selection.kitvei && !layout.service_exe().exists()));
     let missing_tutor = selection.tutor && !tutor::is_installed(layout);
+    let missing_calendar = selection.calendar && !calendar::is_installed(layout);
     let Some(payload) = payload else {
         // The setup copy kept in the install folder carries no files: fine for changing
         // registrations, not for adding files that are not there.
-        if missing_core || missing_tutor {
+        if missing_core || missing_tutor || missing_calendar {
             return Err(Failure::new(
                 Text::new("כדי להוסיף רכיב זה הריצו את קובץ ההתקנה המלא של כלי קודש.", "To add this part, run the full Klei Kodesh setup file."),
                 "no payload",
@@ -313,6 +321,11 @@ fn register_products(layout: &Layout, wanted: &HashSet<Product>, options: &Optio
     } else {
         tutor::unregister(layout);
     }
+    if wanted.contains(&Product::CalendarApp) {
+        calendar::register(layout, options.desktop_shortcut, options.english).map_err(failed)?;
+    } else {
+        calendar::unregister(layout);
+    }
     Ok(())
 }
 
@@ -331,12 +344,12 @@ fn finish(layout: &Layout, payload: Option<&Payload>, wanted: &HashSet<Product>,
 }
 
 /// Neither the add-in nor the app is wanted any more: remove their files, keep the
-/// tutor, the setup copy and the log.
+/// tutor, the calendar, the setup copy and the log.
 fn remove_core_files(layout: &Layout) {
     let Ok(entries) = std::fs::read_dir(&layout.install_dir) else { return };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if [TUTOR_DIR, SETUP_EXE, LOG_FILE].iter().any(|keep| name.eq_ignore_ascii_case(keep)) {
+        if [TUTOR_DIR, CALENDAR_DIR, SETUP_EXE, LOG_FILE].iter().any(|keep| name.eq_ignore_ascii_case(keep)) {
             continue;
         }
         let path = entry.path();

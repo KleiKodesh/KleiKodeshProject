@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 
-use crate::install::{addin, kitvei, tutor};
+use crate::install::{addin, calendar, kitvei, tutor};
 use crate::layout::{Layout, DISPLAY_NAME_EN, DISPLAY_NAME_HE, PRODUCT_KEY, PUBLISHER_EN, PUBLISHER_HE};
 use crate::products::{Product, ALL};
 use crate::system::registry::Hkcu;
@@ -30,6 +30,7 @@ pub fn installed(layout: &Layout) -> HashSet<Product> {
                 Product::WordAddin => addin::is_registered(layout),
                 Product::KitveiApp => kitvei::is_registered(layout),
                 Product::TypingTutor => tutor::is_installed(layout),
+                Product::CalendarApp => calendar::is_installed(layout),
             })
             .collect(),
     }

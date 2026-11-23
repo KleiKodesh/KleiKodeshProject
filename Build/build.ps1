@@ -147,7 +147,11 @@ try {
 
     Step "Vue frontend"
     Push-Location $VueDir
-    try { npm run build; Assert-Success "Vue build" } finally { Pop-Location }
+    try {
+        npm run build; Assert-Success "Vue build"
+        # The calendar app: the same calendar code as one offline page (dist-calendar\calendar.html).
+        npx vite build --config vite.calendar.config.ts; Assert-Success "Calendar app build"
+    } finally { Pop-Location }
 
     Step "Typing tutor"
     Push-Location $TutorDir
@@ -190,7 +194,7 @@ try {
     New-Item -ItemType Directory -Force $ReleasesDir | Out-Null
     & (Join-Path $InstallerDir "target\release\pack-payload.exe") `
         --exe (Join-Path $InstallerDir "target\release\kleikodesh-setup.exe") `
-        --core $CoreOutput --tutor (Join-Path $TutorDir "dist") --out $SetupFile
+        --core $CoreOutput --tutor (Join-Path $TutorDir "dist") --calendar (Join-Path $VueDir "dist-calendar") --out $SetupFile
     Assert-Success "Pack"
     if (Test-Path $PortableZip) { Remove-Item $PortableZip }
     Add-Type -AssemblyName System.IO.Compression.FileSystem

@@ -40,6 +40,9 @@ export global Installer {
     in property <bool> kitvei-installed;
     // When it is unticked: also delete its files and indexes (the user's choice).
     in-out property <bool> delete-kitvei-files: true;
+    // The calendar app (a Kitvei Hakodesh option, kept out of the products list): ticked / installed now.
+    in-out property <bool> calendar-selected;
+    in property <bool> calendar-installed;
     // A product other than the Word add-in is ticked: only then do the general options matter.
     in property <bool> apps-selected;
     in property <bool> has-changes;
@@ -79,6 +82,7 @@ export global Installer {
     in-out property <bool> confirm-uninstall;
 
     callback toggle-product(int);
+    callback toggle-calendar();
     callback toggle-tool(int);
     callback toggle-website(int);
     callback toggle-macros();

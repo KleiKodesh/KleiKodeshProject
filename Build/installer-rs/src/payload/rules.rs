@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::layout::TUTOR_DIR;
+use crate::layout::{CALENDAR_DIR, TUTOR_DIR};
 
 /// User data and runtime-built indexes/caches. Never shipped as real content, expensive
 /// or impossible to rebuild, so an existing copy always wins over the payload.
@@ -78,6 +78,10 @@ pub fn delete_kitvei_files(install_dir: &Path) {
 
 pub fn is_tutor_file(relative: &Path) -> bool {
     starts_with_ignore_case(&normalize(relative), &format!("{TUTOR_DIR}\\"))
+}
+
+pub fn is_calendar_file(relative: &Path) -> bool {
+    starts_with_ignore_case(&normalize(relative), &format!("{CALENDAR_DIR}\\"))
 }
 
 pub fn purge_stale_files(install_dir: &Path) {

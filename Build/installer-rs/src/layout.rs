@@ -22,6 +22,7 @@ pub const KITVEI_EXE: &str = "כתבי הקודש.exe";
 pub const SERVICE_DIR: &str = "KitveiHakodeshService";
 pub const SERVICE_EXE: &str = "KitveiHakodeshService.exe";
 pub const TUTOR_DIR: &str = "TypingTutor";
+pub const CALENDAR_DIR: &str = "Calendar";
 pub const LOG_FILE: &str = "setup.log";
 
 #[derive(Clone, Debug)]

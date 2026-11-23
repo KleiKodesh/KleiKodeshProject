@@ -128,6 +128,7 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
     let landing = !(!fresh && (ctx.start_in_manage || ctx.payload.is_none()));
     let products: Products = Rc::new(VecModel::from(
         ALL.iter()
+            .filter(|p| p.in_main_list())
             .map(|&p| {
                 let available = p != Product::WordAddin || word_installed;
                 crate::ProductRow {
@@ -141,6 +142,10 @@ pub fn run(ctx: Context, english: bool) -> Result<(), slint::PlatformError> {
             .collect::<Vec<_>>(),
     ));
     st.set_products(ModelRc::from(products.clone()));
+    // The calendar app: a Kitvei Hakodesh option, off on a fresh install; an update keeps it as it is.
+    let calendar_installed = ctx.installed.contains(&Product::CalendarApp);
+    st.set_calendar_installed(calendar_installed);
+    st.set_calendar_selected(calendar_installed);
     st.set_version(install::VERSION.into());
     st.set_updating(!fresh && ctx.payload.is_some());
     // Dev builds only: KK_FAKE_UPDATE=patch|minor|major previews that update screen.
@@ -242,6 +247,16 @@ fn wire(ui: &AppWindow, products: &Products, ctx: &Rc<Context>, answer: &Arc<Mut
         });
     }
     {
+        let (w, p) = (ui.as_weak(), products.clone());
+        st.on_toggle_calendar(move || {
+            if let Some(ui) = w.upgrade() {
+                let st = ui.global::<Installer>();
+                st.set_calendar_selected(!st.get_calendar_selected());
+                refresh(&ui, &p);
+            }
+        });
+    }
+    {
         let (w, p, a) = (ui.as_weak(), products.clone(), addin.clone());
         st.on_language_changed(move |english| {
             if let Some(ui) = w.upgrade() {
@@ -298,7 +313,10 @@ fn start_engine(
 ) {
     let st = ui.global::<Installer>();
     let english = ui.global::<Lang>().get_en();
-    let wanted: HashSet<Product> = products.iter().filter(|p| p.selected).filter_map(|p| Product::from_id(&p.id)).collect();
+    let mut wanted: HashSet<Product> = products.iter().filter(|p| p.selected).filter_map(|p| Product::from_id(&p.id)).collect();
+    if st.get_calendar_selected() {
+        wanted.insert(Product::CalendarApp);
+    }
     let request = Request {
         action,
         products: wanted,
@@ -343,16 +361,34 @@ fn finish(ui: &AppWindow, request: &Request, result: Result<(), install::Failure
             row.installed = Product::from_id(&row.id).is_some_and(|p| request.products.contains(&p));
             products.set_row_data(i, row);
         }
+        st.set_calendar_installed(request.products.contains(&Product::CalendarApp));
         st.set_installed_desktop_shortcut(request.options.desktop_shortcut);
         st.set_installed_file_associations(request.options.open_with);
         st.set_has_changes(false);
     }
     st.set_back_to_manage(from_manage && request.action != Action::Uninstall);
     let launch: Vec<crate::ProductRow> = match (&result, request.action) {
-        (Ok(()), Action::Apply | Action::Repair) => products
-            .iter()
-            .filter(|p| Product::from_id(&p.id).is_some_and(|prod| request.products.contains(&prod)))
-            .collect(),
+        (Ok(()), Action::Apply | Action::Repair) => {
+            let mut rows: Vec<crate::ProductRow> = products
+                .iter()
+                .filter(|p| Product::from_id(&p.id).is_some_and(|prod| request.products.contains(&prod)))
+                .collect();
+            // Not in the products list (a Kitvei Hakodesh option), but launchable like the others.
+            if request.products.contains(&Product::CalendarApp) {
+                let p = Product::CalendarApp;
+                rows.push(crate::ProductRow {
+                    id: p.id().into(),
+                    title: p.title().get(english).into(),
+                    description: p.description().get(english).into(),
+                    size: p.size().get(english).into(),
+                    selected: true,
+                    installed: true,
+                    available: true,
+                    ..Default::default()
+                });
+            }
+            rows
+        }
         _ => vec![],
     };
     st.set_launchables(ModelRc::new(VecModel::from(launch)));
@@ -438,7 +474,7 @@ fn refresh(ui: &AppWindow, products: &Products) {
     st.set_kitvei_installed(products.iter().any(|p| p.id == Product::KitveiApp.id() && p.installed));
     st.set_apps_selected(chosen.iter().any(|p| p.id != Product::WordAddin.id()));
     st.set_addin_selected(chosen.iter().any(|p| p.id == Product::WordAddin.id()));
-    st.set_has_changes(products.iter().any(|p| p.selected != p.installed));
+    st.set_has_changes(products.iter().any(|p| p.selected != p.installed) || st.get_calendar_selected() != st.get_calendar_installed());
 }
 
 fn launch_product(layout: &Layout, id: &str) {
@@ -449,13 +485,16 @@ fn launch_product(layout: &Layout, id: &str) {
         Some(Product::KitveiApp) => {
             let _ = launch::open(&layout.file(KITVEI_EXE), &[]);
         }
-        Some(Product::TypingTutor) => {
-            if let Some(edge) = install::tutor::edge_exe() {
-                let url = format!("--app=file:///{}", install::tutor::page(layout).display().to_string().replace('\\', "/"));
-                let _ = launch::open(&edge, &[&url]);
-            }
-        }
+        Some(Product::TypingTutor) => launch_edge_app(&install::tutor::page(layout)),
+        Some(Product::CalendarApp) => launch_edge_app(&install::calendar::page(layout)),
         None => {}
+    }
+}
+
+/// Opens an installed offline page as an Edge app window.
+fn launch_edge_app(page: &std::path::Path) {
+    if let Some(edge) = install::edge_app::edge_exe() {
+        let _ = launch::open(&edge, &[&format!("--app={}", install::edge_app::page_url(page))]);
     }
 }
 

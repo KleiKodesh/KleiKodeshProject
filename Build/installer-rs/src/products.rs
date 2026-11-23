@@ -1,4 +1,4 @@
-//! The three things the user can install, in display order.
+//! The things the user can install, in display order.
 
 use crate::i18n::Text;
 
@@ -10,9 +10,12 @@ pub enum Product {
     KitveiApp,
     /// The Hebrew typing tutor: a single offline page opened as an Edge app window.
     TypingTutor,
+    /// The calendar (zmanim, daily learning) as its own small app: one offline page in an Edge
+    /// app window, no service. Offered among Kitvei Hakodesh's options, not in the main list.
+    CalendarApp,
 }
 
-pub const ALL: [Product; 3] = [Product::WordAddin, Product::KitveiApp, Product::TypingTutor];
+pub const ALL: [Product; 4] = [Product::WordAddin, Product::KitveiApp, Product::TypingTutor, Product::CalendarApp];
 
 impl Product {
     /// Stable id shared with the UI (`Product.id` in state.slint).
@@ -21,11 +24,17 @@ impl Product {
             Product::WordAddin => "addin",
             Product::KitveiApp => "kitvei",
             Product::TypingTutor => "tutor",
+            Product::CalendarApp => "calendar",
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
         ALL.into_iter().find(|p| p.id() == id)
+    }
+
+    /// In the home page's product list. The calendar is a Kitvei Hakodesh option instead.
+    pub fn in_main_list(self) -> bool {
+        self != Product::CalendarApp
     }
 
     /// The add-in and the app share one set of files (the add-in's build output, which
@@ -39,6 +48,7 @@ impl Product {
             Product::WordAddin => Text::new("תוסף לוורד", "Word add-in"),
             Product::KitveiApp => Text::new("כתבי הקודש", "Kitvei Hakodesh"),
             Product::TypingTutor => Text::new("הקלדה עיוורת", "Touch Typing"),
+            Product::CalendarApp => Text::new("לוח שנה", "Calendar"),
         }
     }
 
@@ -56,6 +66,10 @@ impl Product {
                 "לימוד הקלדה עיוורת בעברית. נפתח בחלון משלו ועובד גם בלי אינטרנט.",
                 "Learn Hebrew touch typing. Opens in its own window and works offline.",
             ),
+            Product::CalendarApp => Text::new(
+                "לוח שנה עם זמני היום ולימוד יומי, כתוכנה קטנה בחלון משלה. לחיצה על לימוד פותחת אותו בכתבי הקודש.",
+                "The calendar with zmanim and daily learning as a small app in its own window. A click on a learning opens it in Kitvei Hakodesh.",
+            ),
         }
     }
 
@@ -64,6 +78,7 @@ impl Product {
             Product::WordAddin => Text::new("כ־120 MB", "about 120 MB"),
             Product::KitveiApp => Text::new("כ־180 MB", "about 180 MB"),
             Product::TypingTutor => Text::new("פחות מ־1 MB", "under 1 MB"),
+            Product::CalendarApp => Text::new("כ־1 MB", "about 1 MB"),
         }
     }
 

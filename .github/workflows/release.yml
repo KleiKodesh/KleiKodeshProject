@@ -189,7 +189,7 @@ jobs:
           $install = Join-Path $sandbox 'Install'
           $files = @(Get-ChildItem $install -Recurse -File -ErrorAction SilentlyContinue)
           Write-Host "installed files: $($files.Count)"
-          $required = 'KleiKodesh.vsto', 'KitveiHakodeshService/KitveiHakodeshService.exe', 'TypingTutor/index.html'
+          $required = 'KleiKodesh.vsto', 'KitveiHakodeshService/KitveiHakodeshService.exe', 'TypingTutor/index.html', 'Calendar/calendar.html'
           $missing = $required | Where-Object { -not (Test-Path (Join-Path $install $_)) }
           Get-ChildItem (Join-Path $sandbox 'StartMenu') -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "start menu: $($_.Name)" }
           if ($p.ExitCode -ne 0 -or $missing) { throw "test install failed; missing: $($missing -join ', ')" }

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use format::{Footer, FOOTER_LEN};
-pub use rules::{delete_kitvei_files, is_kitvei_file, is_tutor_file, purge_stale_files};
+pub use rules::{delete_kitvei_files, is_calendar_file, is_kitvei_file, is_tutor_file, purge_stale_files};
 
 pub struct Payload {
     exe: PathBuf,
@@ -23,6 +23,7 @@ pub struct Selection {
     /// Kitvei Hakodesh's own files (see `rules::is_kitvei_file`); only together with `core`.
     pub kitvei: bool,
     pub tutor: bool,
+    pub calendar: bool,
 }
 
 impl Payload {
@@ -72,6 +73,8 @@ impl Payload {
             let size = entry.header().size()?;
             let wanted = if is_tutor_file(&relative) {
                 selection.tutor
+            } else if is_calendar_file(&relative) {
+                selection.calendar
             } else if is_kitvei_file(&relative) {
                 selection.core && selection.kitvei
             } else {
