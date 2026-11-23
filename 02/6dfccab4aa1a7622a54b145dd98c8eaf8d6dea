@@ -1,0 +1,4 @@
+User-facing: new - Open file: the clean-text button (Ctrl+D) removes vowels, cantillation marks and punctuation from Word documents, with the same options as the book view
+User-facing-he: כפתור הטקסט הנקי (Ctrl+D) מסיר ניקוד, טעמים וסימני פיסוק ממסמכי וורד, עם אותן אפשרויות כמו בתצוגת ספר
+User-facing: new - Open file: right-click on a Word document's text to copy, copy into Word or search the library for the selected words
+User-facing-he: לחיצה ימנית על טקסט במסמך וורד מאפשרת להעתיק, להעתיק לוורד או לחפש במאגר את המילים המסומנות
