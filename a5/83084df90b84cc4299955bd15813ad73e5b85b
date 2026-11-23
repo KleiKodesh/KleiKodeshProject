@@ -1,0 +1,4 @@
+User-facing: fixed - Macros: keyboard shortcuts on the add-in's macros now work on every computer, not only ones set to Hebrew
+User-facing-he: קיצורי מקלדת על המאקרו של התוסף עובדים בכל מחשב, ולא רק במחשבים שמוגדרים לעברית
+User-facing: new - Macros: a macro that moves the keyboard between the document and the open side pane, for use with a keyboard shortcut
+User-facing-he: מאקרו שמעביר את המקלדת בין המסמך לחלונית הצד הפתוחה, לשימוש עם קיצור מקלדת
