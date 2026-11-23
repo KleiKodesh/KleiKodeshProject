@@ -5,9 +5,8 @@
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import NextZmanPopup from '@/features/home/NextZmanPopup.vue'
 import { useNextZman } from '@/features/home/useNextZman'
-import PlaceTreePicker from '@/features/hebrew-calendar/PlaceTreePicker.vue'
-import CommunityPicker from '@/features/hebrew-calendar/CommunityPicker.vue'
-import ZmanimOpinionsPanel from '@/features/hebrew-calendar/ZmanimOpinionsPanel.vue'
+import { IconSettings20Regular } from '@iconify-prerendered/vue-fluent'
+import ZmanimSettingsDialog from '@/features/hebrew-calendar/ZmanimSettingsDialog.vue'
 import { placeTree, type PlaceTree } from '@/features/hebrew-calendar/zmanimPlaces'
 
 const { rows, city, setCity } = useNextZman()
@@ -41,17 +40,10 @@ const placePath = computed(() => {
         :class="{ on: settingsOpen }"
         :aria-expanded="settingsOpen"
         :title="$t('hebrewCalendar.zmanimSettings')"
-        @click="settingsOpen = !settingsOpen"
-      >⚙</button>
+        @click="settingsOpen = true"
+      ><IconSettings20Regular /></button>
     </div>
-    <div v-if="settingsOpen" class="zw-settings" role="dialog" :aria-label="$t('hebrewCalendar.zmanimSettings')">
-      <label class="zw-label">{{ $t('settings.calendar.city') }}</label>
-      <PlaceTreePicker :place-id="city?.id" @pick="setCity" />
-      <label class="zw-label">{{ $t('settings.calendar.community') }}</label>
-      <CommunityPicker />
-      <label class="zw-label">{{ $t('hebrewCalendar.chooseOpinions') }}</label>
-      <ZmanimOpinionsPanel />
-    </div>
+    <ZmanimSettingsDialog v-if="settingsOpen" :place-id="city?.id" @pick="setCity" @close="settingsOpen = false" />
     <NextZmanPopup :rows="rows" :city-name="''" />
   </div>
 </template>
@@ -75,10 +67,12 @@ const placePath = computed(() => {
 }
 .zw-gear {
   flex: none;
-  width: 24px;
-  height: 24px;
-  font-size: 14px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -89,24 +83,6 @@ const placePath = computed(() => {
 .zw-gear.on {
   color: var(--text-primary);
   border-color: var(--border-color);
-}
-.zw-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 8px 0;
-  padding: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  max-height: 60vh;
-  overflow-y: auto;
-}
-.zw-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  margin-top: 4px;
 }
 /* The popup's own frame goes: the widget window (or the calendar's side column) is the frame. */
 .zmanim-widget :deep(.zman-popup) { border: none; box-shadow: none; border-radius: 0; max-height: none; }

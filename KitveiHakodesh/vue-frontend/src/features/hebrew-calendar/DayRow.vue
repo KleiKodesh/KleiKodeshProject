@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import ZmanimDisclaimer from './ZmanimDisclaimer.vue'
-import ZmanimOpinionsPanel from './ZmanimOpinionsPanel.vue'
 import { usePrimaryZmanNames } from './zmanimCommunity'
 import { isCandleLine, useShownZmanNames } from './zmanimShown'
 import { OPTIONAL_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
@@ -33,7 +32,6 @@ const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const ZMANIM_ROWS = ZMAN_NAMES.map((key) => ({ key, label: t(zmanLabelKey(key)) }))
 const primaryZmanNames = usePrimaryZmanNames()
 const shownNames = useShownZmanNames()
-const optionsOpen = ref(false)
 /** The chosen lines (default: the common ones + the community's), in the library's chronological order. */
 const zmanRows = computed(() =>
   ZMANIM_ROWS.filter((r) => shownNames.value.has(r.key)
@@ -148,10 +146,6 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
           <span v-else class="zg-value" :class="{ primary: z.primary }" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
         </template>
       </div>
-      <button class="zg-options" type="button" @click="optionsOpen = !optionsOpen">
-        ⚙ {{ $t('hebrewCalendar.chooseOpinions') }}
-      </button>
-      <ZmanimOpinionsPanel v-if="optionsOpen" />
       <ZmanimDisclaimer />
     </div>
 
@@ -360,19 +354,6 @@ button.chip {
   color: var(--text-primary);
   font-weight: 700;
   background: color-mix(in srgb, var(--accent-color) 10%, transparent);
-}
-.zg-options {
-  margin-top: 6px;
-  font-size: 11px;
-  background: none;
-  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
-  border-radius: 4px;
-  padding: 2px 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.zg-options:hover {
-  color: var(--text-primary);
 }
 .zg-value {
   font-size: 12px;

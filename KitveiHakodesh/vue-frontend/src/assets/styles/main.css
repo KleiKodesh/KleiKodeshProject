@@ -637,3 +637,10 @@ html.is-reorder-dragging,
 html.is-reorder-dragging * {
   cursor: grabbing !important;
 }
+
+/* Every dialog (and anything inside it) scrolls with a thin scrollbar. */
+[role='dialog'],
+[role='dialog'] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
+}
