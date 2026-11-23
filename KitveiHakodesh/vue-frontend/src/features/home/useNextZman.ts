@@ -4,6 +4,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import { OPTIONAL_ZMANIM, zmanLabelKey, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
 import { lsSet } from '@/utils/persistence'
+import { isCandleLine, useShownZmanNames } from '@/features/hebrew-calendar/zmanimShown'
 import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
 import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
 
@@ -76,6 +77,8 @@ export interface ZmanRow {
  * without the zman item.
  */
 export function useNextZman() {
+  /** Only the lines the user shows in the zmanim tool (default: the common ones). */
+  const shownNames = useShownZmanNames()
   const now = ref(new Date())
   /** The place the times are for; null until loaded. */
   const city = shallowRef<Place | null>(null)
@@ -114,6 +117,9 @@ export function useNextZman() {
     for (const src of [cachedToday, cachedTomorrow]) {
       let best: { key: keyof CalendarZmanim; label: string; zman: NonNullable<DayTimedZmanim[keyof DayTimedZmanim]> } | null = null
       for (const { key, label } of ZMAN_ORDER) {
+        if (!shownNames.value.has(key)) continue
+        // Candle lighting only on Fridays here (the calendar view also covers the eve of Yom Tov).
+        if (isCandleLine(key) && src[key]?.time.getDay() !== 5) continue
         const zman = src[key]
         if (!zman || zman.time.getTime() <= current.getTime()) continue
         if (!best || zman.time.getTime() < best.zman.time.getTime()) best = { key, label, zman }
@@ -161,7 +167,8 @@ export function useNextZman() {
     // the next zman is actually present to highlight).
     const fromTomorrow = !!n && cachedToday![n.key]?.time.getTime() !== nextTime
     const day = fromTomorrow && cachedTomorrow ? cachedTomorrow : cachedToday!
-    return ZMAN_ORDER.filter(({ key }) => !(OPTIONAL_ZMANIM.has(key) && day[key] == null)).map(({ key, label }) => {
+    return ZMAN_ORDER.filter(({ key }) => shownNames.value.has(key) && !(OPTIONAL_ZMANIM.has(key) && day[key] == null)
+      && !(isCandleLine(key) && day[key]?.time.getDay() !== 5)).map(({ key, label }) => {
       const zman = day[key]
       const t = zman?.time
       return {

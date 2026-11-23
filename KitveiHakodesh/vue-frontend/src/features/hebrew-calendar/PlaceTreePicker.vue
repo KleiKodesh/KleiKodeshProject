@@ -58,10 +58,12 @@ const pickNumber = (e: Event) => Number((e.target as HTMLSelectElement).value)
 </template>
 
 <style scoped>
-.place-tree { display: flex; flex-direction: column; gap: 4px; }
+/* Side by side, sharing the width equally. */
+.place-tree { display: flex; gap: 4px; }
 .place-tree-select {
   display: block;
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
   height: 26px;
   font-size: 12px;
   color: var(--text-primary);
