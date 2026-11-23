@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
@@ -12,6 +13,12 @@ namespace KitveiHakodesh.Core.WebsiteIcons;
 /// not fetched from every site on every render. An icon is refetched when its copy is older than
 /// <see cref="RefetchAfter"/>; if that refetch fails the old copy is still served.
 ///
+/// A failed download is remembered too, so it is not repeated on every request: a site that
+/// answered without an icon is asked again after <see cref="RetryRefusedAfter"/> (an empty
+/// "&lt;hash&gt;.failed" file holds the time), a site that could not be reached after
+/// <see cref="RetryUnreachableAfter"/> (in memory only, so going online is noticed soon).
+/// Requests for one icon while it downloads share that one download.
+///
 /// Only image responses (Content-Type image/*) up to <see cref="MaxIconBytes"/> are accepted.
 /// Each icon is two files named by the SHA-256 of its address: "&lt;hash&gt;" (the bytes) and
 /// "&lt;hash&gt;.content-type" (one line).
@@ -24,12 +31,18 @@ namespace KitveiHakodesh.Core.WebsiteIcons;
 public sealed class WebsiteIconCache
 {
     public static readonly TimeSpan RefetchAfter = TimeSpan.FromDays(7);
+    public static readonly TimeSpan RetryRefusedAfter = TimeSpan.FromDays(1);
+    public static readonly TimeSpan RetryUnreachableAfter = TimeSpan.FromMinutes(5);
     public const int MaxIconBytes = 2 * 1024 * 1024;
     public const int MaxIcons = 200;
 
     private static readonly HttpClient Http = CreateBrowserLikeClient();
 
     private readonly string _folder;
+    /// <summary>Downloads under way, by icon file path.</summary>
+    private readonly ConcurrentDictionary<string, Lazy<Task<WebsiteIcon?>>> _downloads = new();
+    /// <summary>When each unreachable icon (by file path) was last tried.</summary>
+    private readonly ConcurrentDictionary<string, DateTime> _unreachableAtUtc = new();
 
     public WebsiteIconCache(string? folder = null) =>
         _folder = folder ?? AppFileLocator.ResolveWritablePath("website-icons");
@@ -48,10 +61,71 @@ public sealed class WebsiteIconCache
         if (cached is not null && DateTime.UtcNow - File.GetLastWriteTimeUtc(bytesPath) < RefetchAfter)
             return cached;
 
-        WebsiteIcon? downloaded = await TryDownloadAsync(uri, ct);
-        if (downloaded is null) return cached;
-        TryWrite(bytesPath, typePath, downloaded);
-        return downloaded;
+        if (FailedRecently(bytesPath)) return cached;
+
+        // Not the caller's token: other callers share this download; the client's timeout ends it.
+        Task<WebsiteIcon?> download = _downloads.GetOrAdd(bytesPath,
+            _ => new Lazy<Task<WebsiteIcon?>>(() => DownloadAndKeepAsync(uri, bytesPath, typePath))).Value;
+        return await download.WaitAsync(ct) ?? cached;
+    }
+
+    private async Task<WebsiteIcon?> DownloadAndKeepAsync(Uri uri, string bytesPath, string typePath)
+    {
+        try
+        {
+            (WebsiteIcon? downloaded, bool siteAnswered) = await TryDownloadAsync(uri, CancellationToken.None);
+            if (downloaded is not null)
+            {
+                _unreachableAtUtc.TryRemove(bytesPath, out _);
+                TryWrite(bytesPath, typePath, downloaded);
+            }
+            else if (siteAnswered) TryMarkRefused(bytesPath);
+            else _unreachableAtUtc[bytesPath] = DateTime.UtcNow;
+            return downloaded;
+        }
+        finally
+        {
+            _downloads.TryRemove(bytesPath, out _);
+        }
+    }
+
+    private bool FailedRecently(string bytesPath)
+    {
+        if (_unreachableAtUtc.TryGetValue(bytesPath, out DateTime triedAt) && DateTime.UtcNow - triedAt < RetryUnreachableAfter)
+            return true;
+        try
+        {
+            string marker = bytesPath + FailedSuffix;
+            return File.Exists(marker) && DateTime.UtcNow - File.GetLastWriteTimeUtc(marker) < RetryRefusedAfter;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    private const string FailedSuffix = ".failed";
+
+    /// <summary>A failed write only means the next request tries the site again.</summary>
+    private void TryMarkRefused(string bytesPath)
+    {
+        try
+        {
+            Directory.CreateDirectory(_folder);
+            File.WriteAllBytes(bytesPath + FailedSuffix, []);
+            DeleteExpiredRefusedMarkers();
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private void DeleteExpiredRefusedMarkers()
+    {
+        foreach (FileInfo marker in new DirectoryInfo(_folder).GetFiles("*" + FailedSuffix))
+        {
+            if (DateTime.UtcNow - marker.LastWriteTimeUtc < RetryRefusedAfter) continue;
+            try { marker.Delete(); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     private static WebsiteIcon? ReadCached(string bytesPath, string typePath)
@@ -65,15 +139,17 @@ public sealed class WebsiteIconCache
         catch (UnauthorizedAccessException) { return null; }
     }
 
-    private static async Task<WebsiteIcon?> TryDownloadAsync(Uri uri, CancellationToken ct)
+    /// <summary>The icon, or null with whether the site answered (without a usable icon) or
+    /// could not be reached at all.</summary>
+    private static async Task<(WebsiteIcon? Icon, bool SiteAnswered)> TryDownloadAsync(Uri uri, CancellationToken ct)
     {
         try
         {
             using var response = await Http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode) return (null, true);
             string? contentType = response.Content.Headers.ContentType?.MediaType;
-            if (contentType is null || !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return null;
-            if (response.Content.Headers.ContentLength > MaxIconBytes) return null;
+            if (contentType is null || !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return (null, true);
+            if (response.Content.Headers.ContentLength > MaxIconBytes) return (null, true);
 
             await using var body = await response.Content.ReadAsStreamAsync(ct);
             using var buffer = new MemoryStream();
@@ -81,15 +157,15 @@ public sealed class WebsiteIconCache
             int read;
             while ((read = await body.ReadAsync(chunk, ct)) > 0)
             {
-                if (buffer.Length + read > MaxIconBytes) return null;
+                if (buffer.Length + read > MaxIconBytes) return (null, true);
                 buffer.Write(chunk, 0, read);
             }
-            if (buffer.Length == 0) return null;
-            return new WebsiteIcon { ContentType = contentType, Bytes = buffer.ToArray() };
+            if (buffer.Length == 0) return (null, true);
+            return (new WebsiteIcon { ContentType = contentType, Bytes = buffer.ToArray() }, true);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; } // HttpClient timeout
-        catch (HttpRequestException) { return null; }
-        catch (IOException) { return null; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return (null, false); } // HttpClient timeout
+        catch (HttpRequestException) { return (null, false); }
+        catch (IOException) { return (null, false); }
     }
 
     /// <summary>Writes through temp files and a rename, so a reader never sees half an icon.
@@ -104,6 +180,7 @@ public sealed class WebsiteIconCache
             File.WriteAllBytes(bytesPath + suffix, icon.Bytes);
             File.Move(typePath + suffix, typePath, overwrite: true);
             File.Move(bytesPath + suffix, bytesPath, overwrite: true);
+            File.Delete(bytesPath + FailedSuffix);
             TrimToMaxIcons();
         }
         catch (IOException) { }
