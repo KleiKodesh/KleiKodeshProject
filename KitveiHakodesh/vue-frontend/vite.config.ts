@@ -1,8 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import { appResolve, vueSingleFilePlugins, ZMANIM_ASSETS_DIR, zmanimAssetFiles } from './vite.shared.js'
 import { fileURLToPath, URL } from 'node:url'
-import { viteSingleFile } from 'vite-plugin-singlefile'
-import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import type { Plugin } from 'vite'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -854,9 +852,6 @@ function devSqlitePlugin(): Plugin {
 // internet): dev serves them from the submodule's assets/ folder, the build writes them
 // to zmanim/ beside index.html. src/features/hebrew-calendar/zmanimPlaces.ts points the
 // library at that folder.
-const ZMANIM_ASSETS_DIR = fileURLToPath(new URL('../kleikodesh-zmanim.js/assets/', import.meta.url))
-// Every file in the library's assets/ folder ships, so new data files need no change here.
-const zmanimAssetFiles = (): string[] => fs.readdirSync(ZMANIM_ASSETS_DIR, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)
 function zmanimAssets(): Plugin {
   return {
     name: 'zmanim-assets',
@@ -880,25 +875,10 @@ export default defineConfig({
   plugins: [
     devSqlitePlugin(),
     websitesDevProxy(),
-    vue(),
-    // Precompiles src/i18n/locales/**/*.json so the runtime-only vue-i18n build ships (no message compiler).
-    VueI18nPlugin({ include: [fileURLToPath(new URL('./src/i18n/locales/**', import.meta.url))], runtimeOnly: true, compositionOnly: true, fullInstall: false }),
-    viteSingleFile(),
+    ...vueSingleFilePlugins(),
     zmanimAssets(),
   ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // The zmanim library, compiled from its TypeScript source in the submodule.
-      'kleikodesh-zmanim': fileURLToPath(new URL('../kleikodesh-zmanim.js/src/index.ts', import.meta.url)),
-      // @hebcal/core (molad.js) imports temporal-polyfill/global as a side-effectful
-      // install of Temporal onto globalThis. Redirect to our conditional stub which
-      // only runs the polyfill when native Temporal is absent (Chromium < 138 /
-      // WebView2 < 1.0.3912). On Chromium 138+ the native implementation is used
-      // as-is, saving the 118KB polyfill from the bundle.
-      'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
-    },
-  },
+  resolve: appResolve,
   server: {
     warmup: {
       clientFiles: [

@@ -81,8 +81,11 @@ namespace KitveiHakodeshDesktopApp
             if (string.IsNullOrEmpty(request)) return;
 
             HostLink link = HostLink.TryParse(request);
+            DailyLearningLink dailyLearning;
             if (link != null)
                 _viewer.OpenBookFromHost(link);
+            else if ((dailyLearning = DailyLearningLink.TryParse(request)) != null)
+                _viewer.OpenDailyLearningFromHost(dailyLearning);
             else if (System.IO.File.Exists(request))
                 _viewer.OpenFileFromPath(request);
         }

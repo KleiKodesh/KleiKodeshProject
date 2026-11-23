@@ -4,3 +4,4 @@ obj/
 
 # 684 MB generated lexicon dump - regenerate locally, never commit
 sefaria-lexicon.db
+dist-calendar/

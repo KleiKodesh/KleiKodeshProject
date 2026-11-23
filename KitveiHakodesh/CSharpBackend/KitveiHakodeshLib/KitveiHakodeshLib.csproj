@@ -160,6 +160,7 @@
     </Compile>
     <Compile Include="ChromeTabsMirror.cs" />
     <Compile Include="HostLink.cs" />
+    <Compile Include="DailyLearningLink.cs" />
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <!-- Host-only helpers that used to live in KitveiHakodesh.Core's net48 leg: the Word COM
          finder + thesaurus (this process shares Word with the VSTO add-in) and the

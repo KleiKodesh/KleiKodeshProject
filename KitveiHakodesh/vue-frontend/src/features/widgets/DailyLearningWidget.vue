@@ -1,8 +1,22 @@
 <script setup lang="ts">
+import { inject, shallowRef, type Ref } from 'vue'
 import { wantsNewTab } from '@/composables/useOpenInNewTab'
-import { useHomeDailyLearningEntries } from '@/features/home/useHomeDailyLearning'
+import { DAILY_LEARNING_OPENER_KEY, useHomeDailyLearningEntries, type HomeDailyLearningEntry } from '@/features/home/useHomeDailyLearning'
+import { computeHomeDailyLearningItems } from '@/features/home/homeDailyLearningItems'
 
-const entries = useHomeDailyLearningEntries()
+// The standalone calendar has no library to look the books up in: it lists every cycle
+// and hands the click to its opener (a link into the app). Inside the app, as before.
+const standaloneOpener = inject(DAILY_LEARNING_OPENER_KEY, null)
+const entries: Ref<HomeDailyLearningEntry[]> = standaloneOpener ? shallowRef([]) : useHomeDailyLearningEntries()
+if (standaloneOpener) {
+  const today = new Date()
+  void computeHomeDailyLearningItems(today).then((items) => {
+    entries.value = items.map((item) => ({
+      key: item.key, label: item.label, location: item.location,
+      open: (openInNewTab: boolean) => standaloneOpener(today, item.key, openInNewTab),
+    }))
+  })
+}
 </script>
 
 <template>

@@ -386,6 +386,12 @@ namespace KitveiHakodeshLib
                 _pendingOpenBook = null;
                 PushOpenBook(link);
             }
+            if (_pendingDailyLearning != null)
+            {
+                var dailyLearning = _pendingDailyLearning;
+                _pendingDailyLearning = null;
+                PushOpenDailyLearning(dailyLearning);
+            }
         }
 
         /// <summary>The Hebrew-capable font families on THIS machine, enumerated in this process

@@ -151,6 +151,8 @@ namespace KitveiHakodeshLib
         // An open-book (deep link) request queued before the Vue app is ready. Same
         // dispatch-on-'appReady' pattern; only the last request is kept.
         private HostLink _pendingOpenBook;
+        // A daily-learning link (standalone calendar) waiting for 'appReady'; only the last is kept.
+        private DailyLearningLink _pendingDailyLearning;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
         // Completed by the page's 'persistenceFlushed' message while FlushPersistenceAsync
@@ -357,6 +359,25 @@ namespace KitveiHakodeshLib
                 _pendingOpenBook = link;
             else
                 PushOpenBook(link);
+        }
+
+        /// <summary>
+        /// Opens one daily-learning cycle's reading (a link from the standalone calendar, see
+        /// <see cref="DailyLearningLink"/>); the frontend finds the book and place. Queued until
+        /// 'appReady' like <see cref="OpenBookFromHost"/>.
+        /// </summary>
+        public void OpenDailyLearningFromHost(DailyLearningLink link)
+        {
+            if (link == null) return;
+            if (!_appReady)
+                _pendingDailyLearning = link;
+            else
+                PushOpenDailyLearning(link);
+        }
+
+        private void PushOpenDailyLearning(DailyLearningLink link)
+        {
+            _bridge.PushEvent(new { @event = "hostOpenDailyLearning", cycle = link.Cycle, date = link.Date });
         }
 
         private void PushOpenBook(HostLink link)

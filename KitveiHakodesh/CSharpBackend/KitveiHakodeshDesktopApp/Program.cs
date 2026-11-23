@@ -165,7 +165,7 @@ namespace KitveiHakodeshDesktopApp
             Application.SetCompatibleTextRenderingDefault(false);
             string request = GetOpenRequestArgument();
             // The plain harness hosts a file, so a deep link has nowhere to go here.
-            Application.Run(new PlainDebugForm(HostLink.TryParse(request) == null ? request : null));
+            Application.Run(new PlainDebugForm(HostLink.TryParse(request) == null && DailyLearningLink.TryParse(request) == null ? request : null));
         }
 
         // ── Command-line argument parsing ─────────────────────────────────────────
@@ -186,7 +186,7 @@ namespace KitveiHakodeshDesktopApp
             if (args.Length < 2) return null;
             string candidate = args[1];
             // Order matters only for clarity: a URL can never be an existing file path.
-            if (HostLink.TryParse(candidate) != null) return candidate;
+            if (HostLink.TryParse(candidate) != null || DailyLearningLink.TryParse(candidate) != null) return candidate;
             return File.Exists(candidate) ? candidate : null;
         }
 

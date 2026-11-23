@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { useTabStore } from './tabStore'
 import { useBooksDataStore } from './booksDataStore'
-import { onWebviewEvent } from '@/webview-host/seforimDb'
+import { until } from '@vueuse/core'
+import { dbReady, onWebviewEvent } from '@/webview-host/seforimDb'
+import { dailyLearningTab } from '@/features/home/useHomeDailyLearning'
+import { dateFromLocalKey, type DailyLearningCycle } from '@/utils/dailyLearningLink'
 import { getAllTocEntries, getBookIdByExactTitle, getLineIndexFromLineId } from '@/webview-host/seforimApi'
 import type { ParsedBookLink } from '@/utils/appDeepLink'
 import { t } from '@/i18n'
@@ -10,7 +13,7 @@ import { t } from '@/i18n'
  * Receives "navigate from the VSTO host" pushes and routes them to a page.
  *
  * The Word ribbon's right-click context menu calls into the C# AppViewer, which
- * pushes one of two events:
+ * pushes one of these events:
  *
  * 1. hostSearch — "העתק לחיפוש בכתבי הקודש" / "חיפוש ספר בכתבי הקודש":
  *      { event: 'hostSearch', target: 'fts' | 'catalog', text: '<cleaned selection>' }
@@ -41,6 +44,8 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
       handleHostSearch(msg)
     } else if (msg.event === 'hostOpenBook') {
       handleHostOpenBook(msg)
+    } else if (msg.event === 'hostOpenDailyLearning') {
+      void handleHostOpenDailyLearning(msg)
     }
   })
 
@@ -68,6 +73,21 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     const ftsText = text.replace(/@/g, ' ').replace(/\s+/g, ' ').trim()
     if (!ftsText) return
     tabStore.openTab({ route: '/search', title: t('stores.tabTitle.searchQuery', { query: ftsText }), searchQuery: ftsText })
+  }
+
+  /**
+   * 3. hostOpenDailyLearning - a daily-learning link (the standalone calendar):
+   *      { event: 'hostOpenDailyLearning', cycle: 'daf-yomi' | ..., date: 'YYYY-MM-DD' | null }
+   *    Opens that cycle's book at the day's place, once the library is up (a cold start
+   *    receives this before it is). A cycle or book not in the library opens nothing.
+   */
+  async function handleHostOpenDailyLearning(msg: Record<string, unknown>) {
+    const cycle = typeof msg.cycle === 'string' ? msg.cycle : ''
+    const date = typeof msg.date === 'string' ? dateFromLocalKey(msg.date) : new Date()
+    if (!cycle || !date) return
+    await until(dbReady).toBe(true, { timeout: 120_000 })
+    const tab = await dailyLearningTab(date, cycle as DailyLearningCycle)
+    if (tab) tabStore.openTab(tab)
   }
 
   function handleHostOpenBook(msg: Record<string, unknown>) {

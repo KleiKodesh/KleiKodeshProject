@@ -1,4 +1,4 @@
-import { computed, shallowRef, watch } from 'vue'
+import { computed, inject, shallowRef, watch, type InjectionKey } from 'vue'
 import { documentIcon } from '@/utils/documentIcons'
 import { useNow } from '@vueuse/core'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -9,6 +9,7 @@ import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
 import { bookResumePath } from './homeResumePath'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import type { Tab } from '@/stores/tabStore'
 
 const DROPDOWN_ONLY_KEYS = new Set<HomeDailyLearningItem['key']>([
   'rambam-1',
@@ -46,25 +47,38 @@ export function useHomeDailyLearningEntries() {
   return useDailyLearningState().entries
 }
 
+/** Opens one cycle's reading for a date. */
+export type DailyLearningOpener = (date: Date, key: HomeDailyLearningItem['key'], openInNewTab: boolean) => void
+
+/**
+ * Overrides how a cycle opens. The standalone calendar (no library of its own) provides
+ * one that hands a daily-learning link to the app; inside the app nothing is provided.
+ */
+export const DAILY_LEARNING_OPENER_KEY: InjectionKey<DailyLearningOpener> = Symbol('dailyLearningOpener')
+
+/** The book tab for one cycle's reading on a date; null when its book is not in the library. */
+export async function dailyLearningTab(date: Date, key: HomeDailyLearningItem['key']): Promise<Omit<Tab, 'id'> | null> {
+  if (!dbReady.value) return null
+  const item = (await computeHomeDailyLearningItems(date)).find((i) => i.key === key)
+  if (!item) return null
+  const resolved = await resolveHomeDailyLearningTarget(item.target).catch(() => null)
+  if (!resolved) return null
+  return {
+    route: '/book-view',
+    title: resolved.bookTitle,
+    bookId: resolved.bookId,
+    openTocEntryId: resolved.tocEntryId,
+    openTocLineIndex: resolved.tocLineIndex,
+  }
+}
+
 /** Opens one cycle's reading for any date (calendar page); no-op when its book is not in the library. */
-export function useDailyLearningOpener() {
+export function useDailyLearningOpener(): DailyLearningOpener {
+  const provided = inject(DAILY_LEARNING_OPENER_KEY, null)
+  if (provided) return provided
   const paneNavigation = usePaneNavigation()
-  return async (date: Date, key: HomeDailyLearningItem['key'], openInNewTab: boolean) => {
-    if (!dbReady.value) return
-    const item = (await computeHomeDailyLearningItems(date)).find((i) => i.key === key)
-    if (!item) return
-    const resolved = await resolveHomeDailyLearningTarget(item.target).catch(() => null)
-    if (!resolved) return
-    paneNavigation.openOrUpdateActiveTab(
-      {
-        route: '/book-view',
-        title: resolved.bookTitle,
-        bookId: resolved.bookId,
-        openTocEntryId: resolved.tocEntryId,
-        openTocLineIndex: resolved.tocLineIndex,
-      },
-      openInNewTab,
-    )
+  return (date, key, openInNewTab) => {
+    void dailyLearningTab(date, key).then((tab) => tab && paneNavigation.openOrUpdateActiveTab(tab, openInNewTab))
   }
 }
 
