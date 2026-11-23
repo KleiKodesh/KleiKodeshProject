@@ -8,9 +8,9 @@
   },
   "zmanim": {
     "chatzotNight": "Midnight",
-    "alot": "Dawn (Alot HaShachar)",
-    "alot90": "Dawn (90 min)",
-    "misheyakir": "Misheyakir",
+    "alot": "Dawn 16.1 deg",
+    "alot90": "Dawn 19.8 deg (90 min)",
+    "misheyakir": "Misheyakir 11.5 deg",
     "sunrise": "Sunrise",
     "sunriseElevated": "Sunrise (from elevation)",
     "sofShmaMga": "Latest Shema (MGA)",
@@ -24,8 +24,22 @@
     "plagMga": "Plag hamincha (MGA)",
     "sunset": "Sunset",
     "sunsetElevated": "Sunset (from elevation)",
-    "tzeitGeonim": "Nightfall (Geonim)",
-    "tzeit": "Nightfall (Tzeit)"
+    "tzeitGeonim": "Nightfall Geonim 3.7 deg",
+    "tzeit": "Nightfall 8.5 deg",
+    "alot90Visible": "Dawn 19.8 deg (visible horizon)",
+    "alot90Chatzot": "Dawn 19.8 deg, or midnight when not reached",
+    "alotVisible": "Dawn 16.1 deg (visible horizon)",
+    "alotChatzot": "Dawn 16.1 deg, or midnight when not reached",
+    "misheyakirVisible": "Misheyakir 11.5 deg (visible horizon)",
+    "misheyakirChatzot": "Misheyakir 11.5 deg, or midnight when not reached",
+    "misheyakir11": "Misheyakir 11 deg",
+    "misheyakir10p2": "Misheyakir 10.2 deg",
+    "sofShmaMga16": "Latest Shema MGA (16.1 deg day)",
+    "sofTfillaMga16": "Latest Shacharit MGA (16.1 deg day)",
+    "minchaGedola30": "Mincha gedola (30 min or half hour, the later)",
+    "tzeitGeonimVisible": "Nightfall Geonim 3.7 deg (visible horizon)",
+    "tzeit7083": "Nightfall 7.08 deg (3 medium stars)",
+    "tzeitVisible": "Nightfall 8.5 deg (visible horizon)"
   },
   "learning": {
     "dafYomi": "Daf Yomi",
@@ -59,5 +73,6 @@
     "oct": "October",
     "nov": "November",
     "dec": "December"
-  }
+  },
+  "zmanimNotReached": "The sun does not reach this angle tonight"
 }

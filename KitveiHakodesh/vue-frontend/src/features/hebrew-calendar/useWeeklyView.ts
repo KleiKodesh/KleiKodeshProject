@@ -5,6 +5,7 @@ import { flags } from '@hebcal/core/dist/esm/event'
 import { isShownEvent } from './isShownModernHoliday'
 import { Location } from '@hebcal/core/dist/esm/location'
 import { getDailyLearning } from './hebrewCalendarLearning'
+import { ZMAN_NAMES } from 'kleikodesh-zmanim'
 import { dayPrintedZmanim, JERUSALEM_ID, type Place } from './zmanimPlaces'
 import type { CalendarDay, CalendarWeek, CalendarZmanim } from './calendarTypes'
 import { GREG_MONTHS } from './useMonthlyView'
@@ -24,11 +25,7 @@ const HEBCAL_LOCATION: Record<number, string> = {
   105: 'New York', 109: 'London', 154: 'Montreal',
 }
 
-const NO_ZMANIM: CalendarZmanim = {
-  chatzotNight: null, alot: null, alot90: null, sunriseElevated: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
-  sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null, minchaKetana: null,
-  plag: null, plagMga: null, sunset: null, sunsetElevated: null, tzeitGeonim: null, tzeit: null,
-}
+const NO_ZMANIM = Object.fromEntries(ZMAN_NAMES.map((name) => [name, null])) as CalendarZmanim
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

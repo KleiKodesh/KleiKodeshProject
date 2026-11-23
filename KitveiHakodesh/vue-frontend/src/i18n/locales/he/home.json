@@ -49,27 +49,6 @@
     "title": "לחץ להצגת שעון עולמי"
   },
   "zmanimTitle": "זמני היום",
-  "zman": {
-    "chatzotNight": "חצות הלילה",
-    "alot": "עלות השחר",
-    "alot90": "עלות השחר (90 דקות)",
-    "misheyakir": "משיכיר",
-    "sunrise": "הנץ החמה",
-    "sunriseElevated": "הנץ מהגובה",
-    "sofShmaMga": "סו״ז ק״ש (מג״א)",
-    "sofShmaGra": "סו״ז ק״ש (גר״א)",
-    "sofTfillaMga": "סו״ז תפילה (מג״א)",
-    "sofTfillaGra": "סו״ז תפילה (גר״א)",
-    "chatzot": "חצות היום",
-    "minchaGedola": "מנחה גדולה",
-    "minchaKetana": "מנחה קטנה",
-    "plag": "פלג המנחה",
-    "plagMga": "פלג המנחה (מגן אברהם)",
-    "sunset": "שקיעה",
-    "sunsetElevated": "שקיעה מהגובה",
-    "tzeitGeonim": "צאת הכוכבים (גאונים)",
-    "tzeit": "צאת הכוכבים"
-  },
   "searchHint": {
     "quick": "חיפוש מהיר בכל המאגרים...",
     "enter": "לחץ אנטר לחיפוש תוכן במאגר",

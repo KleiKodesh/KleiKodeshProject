@@ -49,27 +49,6 @@
     "title": "Click to show the world clock"
   },
   "zmanimTitle": "Today's zmanim",
-  "zman": {
-    "chatzotNight": "Midnight (Chatzot)",
-    "alot": "Dawn (Alot)",
-    "alot90": "Dawn (90 min)",
-    "misheyakir": "Misheyakir",
-    "sunrise": "Sunrise",
-    "sunriseElevated": "Sunrise (from elevation)",
-    "sofShmaMga": "Latest Shema (MGA)",
-    "sofShmaGra": "Latest Shema (GRA)",
-    "sofTfillaMga": "Latest Tefilla (MGA)",
-    "sofTfillaGra": "Latest Tefilla (GRA)",
-    "chatzot": "Midday (Chatzot)",
-    "minchaGedola": "Mincha Gedola",
-    "minchaKetana": "Mincha Ketana",
-    "plag": "Plag HaMincha",
-    "plagMga": "Plag hamincha (MGA)",
-    "sunset": "Sunset",
-    "sunsetElevated": "Sunset (from elevation)",
-    "tzeitGeonim": "Nightfall (Geonim)",
-    "tzeit": "Nightfall (Tzeit)"
-  },
   "searchHint": {
     "quick": "Quick search across all libraries...",
     "enter": "Press Enter to search content",

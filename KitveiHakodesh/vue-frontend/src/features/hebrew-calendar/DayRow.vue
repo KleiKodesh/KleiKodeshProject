@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
-import { ELEVATED_ZMANIM, type CalendarDay } from './calendarTypes'
+import { ZMAN_NAMES } from 'kleikodesh-zmanim'
+import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarDay } from './calendarTypes'
 import type { DailyLearning } from '@/features/hebrew-calendar/hebrewCalendarLearning'
 import type { HomeDailyLearningItem } from '@/features/home/homeDailyLearningTypes'
 import { useDailyLearningOpener } from '@/features/home/useHomeDailyLearning'
@@ -20,31 +21,10 @@ defineEmits<{
 
 const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
-const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = [
-  // chatzotNight of date D is the midpoint of the night ending at D's sunrise;
-  // in winter it can fall before civil midnight, on date D-1.
-  { key: 'chatzotNight', label: t('hebrewCalendar.zmanim.chatzotNight') },
-  { key: 'alot', label: t('hebrewCalendar.zmanim.alot') },
-  { key: 'alot90', label: t('hebrewCalendar.zmanim.alot90') },
-  { key: 'misheyakir', label: t('hebrewCalendar.zmanim.misheyakir') },
-  { key: 'sunrise', label: t('hebrewCalendar.zmanim.sunrise') },
-  { key: 'sunriseElevated', label: t('hebrewCalendar.zmanim.sunriseElevated') },
-  // MGA's day starts at alot, so each MGA deadline lands before its GRA
-  // counterpart (shma-MGA → shma-GRA → tfilla-MGA → tfilla-GRA).
-  { key: 'sofShmaMga', label: t('hebrewCalendar.zmanim.sofShmaMga') },
-  { key: 'sofShmaGra', label: t('hebrewCalendar.zmanim.sofShmaGra') },
-  { key: 'sofTfillaMga', label: t('hebrewCalendar.zmanim.sofTfillaMga') },
-  { key: 'sofTfillaGra', label: t('hebrewCalendar.zmanim.sofTfillaGra') },
-  { key: 'chatzot', label: t('hebrewCalendar.zmanim.chatzot') },
-  { key: 'minchaGedola', label: t('hebrewCalendar.zmanim.minchaGedola') },
-  { key: 'minchaKetana', label: t('hebrewCalendar.zmanim.minchaKetana') },
-  { key: 'plag', label: t('hebrewCalendar.zmanim.plag') },
-  { key: 'plagMga', label: t('hebrewCalendar.zmanim.plagMga') },
-  { key: 'sunset', label: t('hebrewCalendar.zmanim.sunset') },
-  { key: 'sunsetElevated', label: t('hebrewCalendar.zmanim.sunsetElevated') },
-  { key: 'tzeitGeonim', label: t('hebrewCalendar.zmanim.tzeitGeonim') },
-  { key: 'tzeit', label: t('hebrewCalendar.zmanim.tzeit') },
-]
+// The library's own order: chronological by opinion group, each variant beside its siblings.
+// chatzotNight of date D is the midpoint of the night ending at D's sunrise (in winter it can
+// fall before civil midnight, on date D-1).
+const ZMANIM_ROWS = ZMAN_NAMES.map((key) => ({ key, label: t(zmanLabelKey(key)) }))
 
 // `homeKey` is the same cycle in the home date-bar dropdown, which knows how to open it.
 const LEARNING_ROWS: Array<{ key: keyof DailyLearning; homeKey: HomeDailyLearningItem['key']; label: string }> = [
@@ -144,7 +124,8 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
       <div class="zmanim-grid">
         <template v-for="z in ZMANIM_ROWS.filter((r) => !(ELEVATED_ZMANIM.has(r.key) && day.zmanim[r.key] == null))" :key="z.key">
           <span class="zg-label">{{ z.label }}</span>
-          <span class="zg-value">{{ day.zmanim[z.key] ?? '—' }}</span>
+          <span v-if="day.zmanim[z.key] != null" class="zg-value">{{ day.zmanim[z.key] }}</span>
+          <span v-else class="zg-value" :title="$t('hebrewCalendar.zmanimNotReached')">—</span>
         </template>
       </div>
     </div>

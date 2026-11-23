@@ -1,7 +1,8 @@
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { t } from '@/i18n'
 import { useIntervalFn } from '@vueuse/core'
-import { ELEVATED_ZMANIM, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
+import { ZMAN_NAMES } from 'kleikodesh-zmanim'
+import { ELEVATED_ZMANIM, zmanLabelKey, type CalendarZmanim } from '@/features/hebrew-calendar/calendarTypes'
 import { lsSet } from '@/utils/persistence'
 import { savedPlaceId, ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
 import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPlaces'
@@ -9,37 +10,12 @@ import type { DayTimedZmanim, Place } from '@/features/hebrew-calendar/zmanimPla
 const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 
 /**
- * Display order (each variant beside its counterpart) + labels for the zmanim we surface on the home bar.
- * Also drives the "all times" popup, so this is the full day list.
+ * Every library zman with its label, in the library's order (chronological by opinion group,
+ * each variant beside its siblings). Drives the bar and the "all times" popup.
+ * chatzotNight of date D is the midpoint of the night ending at D's sunrise, so it opens the day.
  */
-export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
-  // chatzotNight of date D is the midpoint of the night ending at D's sunrise —
-  // always before alot(D) and after tzeit(D-1), so it opens the civil day and
-  // the ordered scan below keeps its ascending-times invariant. (In winter that
-  // midpoint can fall before civil midnight, on date D-1.)
-  { key: 'chatzotNight', label: t('home.zman.chatzotNight') },
-  { key: 'alot', label: t('home.zman.alot') },
-  { key: 'alot90', label: t('home.zman.alot90') },
-  { key: 'misheyakir', label: t('home.zman.misheyakir') },
-  { key: 'sunrise', label: t('home.zman.sunrise') },
-  { key: 'sunriseElevated', label: t('home.zman.sunriseElevated') },
-  // MGA's day starts at alot, so each MGA deadline lands BEFORE its GRA
-  // counterpart — and tfilla-MGA still lands after shma-GRA (gap = one GRA
-  // hour minus 24 min, positive at any habitable latitude).
-  { key: 'sofShmaMga', label: t('home.zman.sofShmaMga') },
-  { key: 'sofShmaGra', label: t('home.zman.sofShmaGra') },
-  { key: 'sofTfillaMga', label: t('home.zman.sofTfillaMga') },
-  { key: 'sofTfillaGra', label: t('home.zman.sofTfillaGra') },
-  { key: 'chatzot', label: t('home.zman.chatzot') },
-  { key: 'minchaGedola', label: t('home.zman.minchaGedola') },
-  { key: 'minchaKetana', label: t('home.zman.minchaKetana') },
-  { key: 'plag', label: t('home.zman.plag') },
-  { key: 'plagMga', label: t('home.zman.plagMga') },
-  { key: 'sunset', label: t('home.zman.sunset') },
-  { key: 'sunsetElevated', label: t('home.zman.sunsetElevated') },
-  { key: 'tzeitGeonim', label: t('home.zman.tzeitGeonim') },
-  { key: 'tzeit', label: t('home.zman.tzeit') },
-]
+export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> =
+  ZMAN_NAMES.map((key) => ({ key, label: t(zmanLabelKey(key)) }))
 
 /**
  * Minutes-remaining thresholds that drive the color cue. Kept tight so the
@@ -83,6 +59,8 @@ export interface ZmanRow {
   key: keyof CalendarZmanim
   label: string
   time: string // as the calendar prints it, or '—'
+  /** The sun never reaches this zman's angle today. */
+  missing: boolean
   isNext: boolean
   passed: boolean
 }
@@ -190,6 +168,7 @@ export function useNextZman() {
         key,
         label,
         time: zman ? zman.printed : '—',
+        missing: !zman,
         // Match by exact instant, not key, so a rolled-over next zman can never
         // highlight a same-named row from the wrong day.
         isNext: !!t && t.getTime() === nextTime,
